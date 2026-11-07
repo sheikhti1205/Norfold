@@ -8,6 +8,7 @@ import { copyStateEnvelope, type StateChangeEnvelope } from "./stateChanges";
 import { copyMediaMetadata, sameMediaIdentity, type MediaMetadata } from "./media";
 import type { createMediaTransport, MediaDelivery } from "./mediaTransport";
 import { PhotoUnavailableError } from "./mediaTransport";
+import { logError } from "../../utils/log";
 
 type MediaTransportFactory = (scope: MessagingScope, signal: AbortSignal) => ReturnType<typeof createMediaTransport>;
 
@@ -377,7 +378,7 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
           mediaRetryAt.set(metadata.id, Date.now() + MEDIA_RETRY_COOLDOWN_MS);
           // One attachment id and a reason: enough to name the defect from
           // logcat, never message text or bytes.
-          console.warn("chat media delivery failed:",
+          logError("chat media delivery failed:",
             metadata.id, metadata.mime, error instanceof Error ? error.message : String(error));
           return false;
         }
