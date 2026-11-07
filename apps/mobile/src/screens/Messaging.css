@@ -82,6 +82,13 @@
 .fb-chat-actions button:first-child { background:var(--fb-primary-container); color:var(--fb-on-primary-container); }
 .fb-chat-transcript { display:flex; flex-direction:column; gap:.55rem; padding-block:.5rem 1rem; }
 .fb-chat-line { display:flex; align-items:center; max-width:100%; }
+/* One chip per calendar day. It stays at the top of the transcript while that
+   day is on screen, so a long thread never needs a date on every bubble. */
+.fb-chat-day { position:sticky; top:0; z-index:2; display:flex; justify-content:center; padding:.2rem 0 .1rem;
+  pointer-events:none; }
+.fb-chat-day span { padding:.2rem .65rem; border-radius:.75rem; background:var(--fb-surface-container-high, var(--fb-surface));
+  color:var(--fb-on-surface-variant); font-size:.75rem; font-weight:600; letter-spacing:.01em;
+  box-shadow:0 1px 2px rgb(0 0 0 / .08); }
 .fb-chat-line-own { flex-direction:row-reverse; }
 .fb-chat-message-options { color:var(--fb-on-surface-variant); }
 .fb-chat-message { align-self:flex-start; max-width:min(calc(100% - 44px), 34rem); padding:.6rem .8rem; border-radius:1rem 1rem 1rem .25rem; background:var(--fb-surface-container); overflow-wrap:anywhere; min-width:0; }

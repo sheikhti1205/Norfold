@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { Archive, ArrowLeft, BellOff, ChevronDown, Ellipsis, Flag, ImageOff, Images, ListFilter, LogOut, MapPin, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCw, Search, Settings2, ShieldBan, Square, Trash2, UserRound, X } from "lucide-react";
@@ -11,7 +11,7 @@ import { useAuth } from "../auth";
 import { UserAvatar } from "../components/UserAvatar";
 import { ChatIdentity } from "../components/ChatIdentity";
 import { StatusChip } from "../components/StatusChip";
-import { formatEventDate, timeAgo } from "../utils/dates";
+import { formatChatDay, formatEventDate, timeAgo } from "../utils/dates";
 import { haptic } from "../utils/haptics";
 import { convertEmoticons, isEmojiOnly } from "../utils/emoji";
 import { SplitView, type SplitPaneState } from "../components/SplitView";
@@ -1366,11 +1366,18 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         </div>}
       </div>}
       <ol className="fb-chat-transcript" aria-label="Messages">
-        {messages.map((message) => {
+        {messages.map((message, index) => {
           const own = message.authorId === accountId;
           const pending = outbox.find((entry) => entry.messageId === message.id);
           const attachment = media.find((entry) => entry.messageId === message.id);
-          return <li key={message.id} data-chat-message={message.id} tabIndex={-1}
+          // One day chip per calendar day keeps a long thread readable without
+          // making every bubble carry a date.
+          const day = message.createdAt ? formatChatDay(message.createdAt) : "";
+          const before = index > 0 ? messages[index - 1] : undefined;
+          const opensDay = !!day && day !== (before?.createdAt ? formatChatDay(before.createdAt) : "");
+          return <Fragment key={message.id}>
+            {opensDay && <li className="fb-chat-day" role="presentation"><span>{day}</span></li>}
+          <li data-chat-message={message.id} tabIndex={-1}
             className={own ? "fb-chat-line fb-chat-line-own" : "fb-chat-line"}
             onPointerDown={(event) => startPress(event, message.id)}
             onPointerMove={(event) => {
@@ -1425,7 +1432,8 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             </div>
             {message.server && <button type="button" className="fb-chat-icon fb-chat-message-options" aria-label={own ? "Options for your message" : "Options for received message"}
               onClick={(event) => openMessageMenu(message.id, event.currentTarget.parentElement)}><Ellipsis size={16} aria-hidden="true" /></button>}
-          </li>;
+          </li>
+          </Fragment>;
         })}
       </ol>
       {view?.ownBlocked && <p className="fb-chat-secondary">You’ve blocked this account. Manage blocked accounts in Privacy settings.</p>}
