@@ -129,7 +129,8 @@ describe.each(["sqlite", "web"] as const)("%s canonical media session", (backend
         remote.set(key, { metadata, bytes: body!.slice(0) });
         if (lostUpload) return new Response(null, { status: 503 });
         return Response.json({ attachmentId: key, sha256: metadata.sha256, mime: metadata.mime,
-          bytes: metadata.byteSize, width: metadata.width, height: metadata.height });
+          bytes: metadata.byteSize, width: metadata.width, height: metadata.height,
+          durationMs: metadata.durationMs });
       },
       rpc: async ({ name, args, signal }) => {
         expect(signal.aborted).toBe(false);
@@ -139,7 +140,7 @@ describe.each(["sqlite", "web"] as const)("%s canonical media session", (backend
           return [...remote.values()].filter(({ metadata }) => !acknowledged.has(metadata.id)).slice(0, 100)
             .map(({ metadata: m }) => ({ version: 1, attachmentId: m.id, messageId: m.messageId,
               sha256: m.sha256, mime: m.mime, bytes: m.byteSize, width: m.width, height: m.height,
-              expiresAt: new Date(m.expiresAt!).toISOString() }));
+              durationMs: m.durationMs, expiresAt: new Date(m.expiresAt!).toISOString() }));
         }
         const key = args.p_attachment_id!; acks.push(key);
         // Mutating production to ACK a fetched/in-memory copy fails these reads.

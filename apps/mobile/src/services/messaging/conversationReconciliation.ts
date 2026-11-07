@@ -91,7 +91,8 @@ export async function reconcileConversation(scope: MessagingScope, history: Mess
         await history.recordConversationUnavailable(unavailable);
       }
       live();
-      if (entry.kind === "MEDIA" || ("envelope" in entry && entry.envelope.event.message.messageType === "MEDIA")) onMedia();
+      if (entry.kind === "MEDIA" || ("envelope" in entry
+        && ["MEDIA", "VOICE"].includes(entry.envelope.event.message.messageType ?? ""))) onMedia();
     }
     after = validated.through;
     if (after === target.position) {

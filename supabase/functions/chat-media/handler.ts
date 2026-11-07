@@ -1,7 +1,7 @@
 // Edge bundles require the pinned npm: specifier, not a project-wide import map.
 // deno-lint-ignore no-import-prefix
 import { withSupabase, type SupabaseEnv } from "npm:@supabase/server@1.6.0";
-import { MAX_BYTES, uploadChatMedia, type GatewayPorts } from "../_shared/chatMediaGateway.ts";
+import { MAX_BYTES, MAX_VOICE_MS, MIN_VOICE_MS, uploadChatMedia, type GatewayPorts } from "../_shared/chatMediaGateway.ts";
 import { downloadChatMedia } from "../_shared/chatMediaDownload.ts";
 import { corsHeaders, corsJson, preflight } from "../_shared/cors.js";
 
@@ -9,7 +9,7 @@ type Database = { public: { Tables: Record<string, never>; Views: Record<string,
   findback_reserve_chat_media: { Args: { p_account_id: string; p_message_id: string; p_attachment_id: string }; Returns: string };
   findback_device_admission: { Args: Record<string, never>; Returns: unknown };
   findback_chat_media_target_client: { Args: { p_attachment_id: string; p_mode: string }; Returns: unknown };
-  findback_commit_chat_media_for_device: { Args: { p_actor: string; p_session: string; p_device: string; p_enrollment: string; p_attachment_id: string; p_generation: string; p_object_key: string; p_sha: string; p_mime: string; p_bytes: number; p_width: number; p_height: number }; Returns: undefined };
+  findback_commit_chat_media_for_device: { Args: { p_actor: string; p_session: string; p_device: string; p_enrollment: string; p_attachment_id: string; p_generation: string; p_object_key: string; p_sha: string; p_mime: string; p_bytes: number; p_width: number; p_height: number; p_duration_ms: number | null }; Returns: undefined };
 }; Enums: Record<string, never>; CompositeTypes: Record<string, never> } };
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // Bearer-token API, never cookie credentials. The outer endpoint owns CORS so
@@ -31,8 +31,16 @@ export function createChatMediaEndpoint(env?: Partial<SupabaseEnv>, transport: t
     const options=preflight(request); if (options) return options;
     if (request.method!=="POST" && request.method!=="GET") return respond({error:"Method not allowed"},405);
     const messageId=request.headers.get("x-message-id"), attachmentId=request.headers.get("x-attachment-id"), mime=request.headers.get("content-type")?.trim().toLowerCase();
+    const durationHeader=request.headers.get("x-duration-ms");
     if (!attachmentId || !UUID.test(attachmentId) || (request.method==="POST" && (!messageId || !UUID.test(messageId)))) return respond({error:"Invalid request"},400);
-    if (request.method==="POST" && (!mime || !["image/jpeg","image/png","image/webp"].includes(mime))) return respond({error:"Invalid request"},415);
+    if (request.method==="POST" && (!mime || !["image/jpeg","image/png","image/webp","audio/webm","audio/mp4"].includes(mime))) return respond({error:"Invalid request"},415);
+    // The recorder measures, the server bounds. A still image must not carry a
+    // length, and audio must carry exactly one integer in the accepted range.
+    const audioMime=mime?.startsWith("audio/") ?? false;
+    if (audioMime && (durationHeader===null || !/^\d+$/.test(durationHeader)
+      || Number(durationHeader)<MIN_VOICE_MS || Number(durationHeader)>MAX_VOICE_MS)) return respond({error:"Invalid request"},415);
+    if (!audioMime && durationHeader!==null) return respond({error:"Invalid request"},415);
+    const durationMs=audioMime ? Number(durationHeader) : null;
     const length=request.headers.get("content-length"); if (request.method==="POST" && length!==null && (!/^\d+$/.test(length) || Number(length)>MAX_BYTES)) return respond({error:"Invalid request"},413);
     const controller=new AbortController(); const signal=AbortSignal.any([controller.signal,request.signal]); const timer=setTimeout(()=>controller.abort(),90_000); let activeSignal=signal;
     const boundedFetch: typeof fetch=(input,init)=>transport(input,{...init,signal:AbortSignal.any([signal,activeSignal,...(init?.signal?[init.signal]:[]),...(input instanceof Request?[input.signal]:[])])});
@@ -61,9 +69,9 @@ export function createChatMediaEndpoint(env?: Partial<SupabaseEnv>, transport: t
           async uploadTarget(_actor,id,s) { activeSignal=s; const {data,error}=await user.rpc("findback_chat_media_target_client",{p_attachment_id:id,p_mode:"UPLOAD"}).abortSignal(s); if (error) throw Error(); return data; },
           async write(t,b,s) { activeSignal=s; const {error}=await admin.storage.from(t.bucket).upload(t.objectKey,b.slice(),{upsert:false,contentType:mime,cacheControl:"0"}); if (error) { if (error.status===409) return "exists"; throw Error(); } return "written"; },
           async readBack(t,s) { activeSignal=s; const {data,error}=await admin.storage.from(t.bucket).download(t.objectKey,{}, {signal:s,cache:"no-store"}).asStream(); if (error || !data) throw Error(); return data; },
-          async commit(t,a,s) { activeSignal=s; const {error}=await admin.rpc("findback_commit_chat_media_for_device",{p_actor:actor,p_session:sessionId,p_device:deviceId,p_enrollment:generation,p_attachment_id:t.id,p_generation:t.generation,p_object_key:t.objectKey,p_sha:a.sha256,p_mime:a.mime,p_bytes:a.bytes,p_width:a.width,p_height:a.height}).abortSignal(s); if (error) throw Error(); },
+          async commit(t,a,s) { activeSignal=s; const {error}=await admin.rpc("findback_commit_chat_media_for_device",{p_actor:actor,p_session:sessionId,p_device:deviceId,p_enrollment:generation,p_attachment_id:t.id,p_generation:t.generation,p_object_key:t.objectKey,p_sha:a.sha256,p_mime:a.mime,p_bytes:a.bytes,p_width:a.width,p_height:a.height,p_duration_ms:a.durationMs}).abortSignal(s); if (error) throw Error(); },
         };
-        const result=await uploadChatMedia(io,{actor,messageId:messageId!,attachmentId,bytes,declaredMime:mime!},{signal});
+        const result=await uploadChatMedia(io,{actor,messageId:messageId!,attachmentId,bytes,declaredMime:mime!,durationMs},{signal});
         if (result.status!=="attached") return respond({error:result.status==="invalid"?"Invalid request":"Unavailable"},result.status==="invalid"?400:503);
         const {status: _status,...body}=result; return respond(body,200);
       } finally { active=false; }

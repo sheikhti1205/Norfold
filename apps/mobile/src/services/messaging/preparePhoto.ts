@@ -3,7 +3,7 @@ import { normalizeImage, type ImageDeps } from "../image";
 import { MediaError, probeDimensions, sniffImage } from "../media/importImage";
 import { PROBE_BYTES, SOURCE_LIMIT_MESSAGE, SOURCE_MAX_BYTES } from "../media/mediaPolicy";
 import { throwIfAborted, withTimeout } from "../timeout";
-import { isMediaMime, MEDIA_MAX_BYTES, MEDIA_MAX_EDGE, sha256Hex, type MediaMime } from "./media";
+import { isImageMime, MEDIA_MAX_BYTES, MEDIA_MAX_EDGE, sha256Hex, type MediaMime } from "./media";
 
 export interface PreparedMessagingPhoto {
   bytes: ArrayBuffer;
@@ -55,7 +55,7 @@ export async function prepareMessagingPhoto(source: File,
     const normalized = await normalizeImage(new File([source], "photo", { type: mime }), deps,
       { signal, timeoutMs, animation: "still" });
     throwIfAborted(signal);
-    if (!isMediaMime(normalized.mimeType) || normalized.blob.type !== normalized.mimeType
+    if (!isImageMime(normalized.mimeType) || normalized.blob.type !== normalized.mimeType
       || normalized.blob.size <= 0 || normalized.blob.size > MEDIA_MAX_BYTES) throw failed();
     const bytes = await withTimeout(() => readBlob(normalized.blob), timeoutMs, "Photo read timed out", signal);
     throwIfAborted(signal);

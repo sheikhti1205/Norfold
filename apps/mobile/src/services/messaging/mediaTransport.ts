@@ -40,7 +40,7 @@ function exactObject(value: unknown, keys: readonly string[]): Record<string, un
     || Object.keys(value).length !== keys.length || keys.some((key) => !Object.hasOwn(value, key))) throw unavailable();
   return value as Record<string, unknown>;
 }
-const UPLOAD_FIELDS = ["attachmentId", "sha256", "mime", "bytes", "width", "height"];
+const UPLOAD_FIELDS = ["attachmentId", "sha256", "mime", "bytes", "width", "height", "durationMs"];
 const DELIVERY_FIELDS = ["version", ...UPLOAD_FIELDS, "messageId", "expiresAt"];
 
 /** Buffer at most the independently validated bound, including an EOF sentinel. */
@@ -129,10 +129,13 @@ export function createMediaTransport(inputScope: MessagingScope, owner: AbortSig
         const bytes = inputBytes.slice(0);
         await abortable(verifyMediaContainer(metadata, bytes), signal);
         const raw = await request({ method: "POST", headers: { "content-type": metadata.mime,
-          "x-attachment-id": metadata.id, "x-message-id": metadata.messageId }, body: bytes, signal }, "application/json", 4096, false);
+          "x-attachment-id": metadata.id, "x-message-id": metadata.messageId,
+          ...(metadata.durationMs !== null ? { "x-duration-ms": String(metadata.durationMs) } : {}) },
+          body: bytes, signal }, "application/json", 4096, false);
         const result = exactObject(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(raw)), UPLOAD_FIELDS);
         if (result.attachmentId !== metadata.id || result.sha256 !== metadata.sha256 || result.mime !== metadata.mime
-          || result.bytes !== metadata.byteSize || result.width !== metadata.width || result.height !== metadata.height) throw unavailable();
+          || result.bytes !== metadata.byteSize || result.width !== metadata.width || result.height !== metadata.height
+          || (result.durationMs ?? null) !== metadata.durationMs) throw unavailable();
       });
     },
     download(input: MediaMetadata): Promise<ArrayBuffer> {
@@ -157,12 +160,14 @@ export function createMediaTransport(inputScope: MessagingScope, owner: AbortSig
             || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(row.expiresAt)) throw unavailable();
           const expiresAt = Date.parse(row.expiresAt);
           const metadata = copyMediaMetadata({ id: row.attachmentId, messageId: row.messageId, direction: "IN",
-            sha256: row.sha256, mime: row.mime, byteSize: row.bytes, width: row.width, height: row.height, expiresAt });
+            sha256: row.sha256, mime: row.mime, byteSize: row.bytes, width: row.width, height: row.height,
+            durationMs: row.durationMs ?? null, expiresAt });
           if (expiresAt <= Date.now() || attachments.has(metadata.id) || messages.has(metadata.messageId)) throw unavailable();
           attachments.add(metadata.id); messages.add(metadata.messageId);
           // Direction is deliberately absent: session must resolve the durable parent.
           return { id: metadata.id, messageId: metadata.messageId, sha256: metadata.sha256, mime: metadata.mime,
-            byteSize: metadata.byteSize, width: metadata.width, height: metadata.height, expiresAt };
+            byteSize: metadata.byteSize, width: metadata.width, height: metadata.height,
+            durationMs: metadata.durationMs, expiresAt };
         });
       });
     },

@@ -18,6 +18,7 @@ function metadata(overrides: Partial<MediaMetadata> = {}): MediaMetadata {
     sha256: ABC,
     mime: "image/jpeg",
     byteSize: 3,
+    durationMs: null,
     width: 1200,
     height: 900,
     expiresAt: null,
@@ -44,6 +45,21 @@ describe("media metadata", () => {
     for (const mime of ["image/gif", "image/bmp", "image/heic", "image/svg+xml", "text/plain"]) {
       expect(() => copyMediaMetadata({ ...metadata(), mime })).toThrow("Unsupported media type");
     }
+  });
+
+  it("accepts a voice container only with a bounded duration and sentinel edges", () => {
+    const voice = (overrides: Partial<MediaMetadata> = {}): MediaMetadata => metadata({
+      mime: "audio/webm", width: 1, height: 1, durationMs: 1500, ...overrides });
+    expect(copyMediaMetadata(voice())).toMatchObject({ mime: "audio/webm", width: 1, height: 1, durationMs: 1500 });
+    expect(copyMediaMetadata(voice({ mime: "audio/mp4" })).mime).toBe("audio/mp4");
+    expect(() => copyMediaMetadata(voice({ durationMs: null }))).toThrow("Invalid voice duration");
+    expect(() => copyMediaMetadata(voice({ durationMs: 499 }))).toThrow("Invalid voice duration");
+    expect(() => copyMediaMetadata(voice({ durationMs: 300_001 }))).toThrow("Invalid voice duration");
+    expect(() => copyMediaMetadata(voice({ durationMs: 1500.5 }))).toThrow("Invalid voice duration");
+    expect(() => copyMediaMetadata(voice({ width: 2, height: 1 }))).toThrow("Invalid voice dimensions");
+    expect(() => copyMediaMetadata(metadata({ durationMs: 1500 }))).toThrow("Invalid media duration");
+    expect(() => copyMediaMetadata(voice({ mime: "audio/ogg" as MediaMetadata["mime"] })))
+      .toThrow("Unsupported media type");
   });
 
   it("rejects a digest that is not lowercase hex of the right length", () => {

@@ -20,6 +20,8 @@ import { BackupError, normaliseSnapshot, validateSnapshot } from "./backup";
 import {
   MESSAGES_V5_BODY_CHECK,
   MESSAGES_V9_TYPE_CHECK,
+  MESSAGES_V11_TYPE_CHECK,
+  MEDIA_V11_MIME_CHECK,
   MESSAGING_SQLITE_DURABILITY_CHECKS as D,
   MESSAGING_SQLITE_PRAGMAS,
   MESSAGING_SQLITE_SCHEMA,
@@ -113,6 +115,7 @@ interface MediaRow {
   byteSize: number;
   width: number;
   height: number;
+  durationMs: number | null;
   expiresAt: number | null;
   lastAccessAt: number;
   state: string;
@@ -431,6 +434,67 @@ export async function openSqliteMessagingHistory(
       }
     const restoredV9 = (await driver.all<{ foreign_keys: number }>(D.foreignKeys))[0]?.foreign_keys;
     if (restoredV9 !== 1) throw new Error("Messaging storage requires foreign_keys = ON");
+  }
+
+  // v11: voice notes. `VOICE` cannot be added to the messages CHECK and the
+  // attachment MIME allowlist cannot be widened in place either, so both run
+  // through the same proven rebuild. Messages go first because dropping it
+  // cascades into `media_attachments`; the dependent-preservation helper hands
+  // back the exact attachment rows, and the media rebuild then adds the
+  // duration column with a NULL for every existing photo.
+  const messagesTableV11 = (await driver.all<{ sql: string }>(S.messagesTableSql))[0];
+  if (messagesTableV11 && !messagesTableV11.sql.includes(MESSAGES_V11_TYPE_CHECK)) {
+    await driver.exec("begin immediate");
+    try {
+      const restoreDependents = await preserveMessageDependents(driver);
+      await driver.exec(S.createMessagesV11);
+      await driver.run(S.copyMessagesV11);
+      const missing = (await driver.all<{ n: number }>(S.missingMessagesV11))[0]?.n;
+      const extra = (await driver.all<{ n: number }>(S.extraMessagesV11))[0]?.n;
+      if (missing !== 0 || extra !== 0) {
+        throw new Error("Messaging v11 rebuild did not preserve every message");
+      }
+      await driver.exec(S.dropMessagesV11);
+      await driver.exec(S.renameMessagesV11);
+      await restoreDependents();
+      await driver.exec(S.recreateMessagesEventIndex);
+      await driver.exec(S.recreateMessagesConversationIndex);
+      if ((await driver.all(S.foreignKeyCheck)).length > 0) {
+        throw new Error("Messaging v11 rebuild broke referential integrity");
+      }
+      await driver.run(S.setSchemaVersion, [String(MESSAGING_SQLITE_SCHEMA_VERSION)]);
+      await driver.exec("commit");
+    } catch (error) {
+      try { await driver.exec("rollback"); } catch { /* commit may already have failed */ }
+      throw error;
+    }
+  }
+  const mediaTableV11 = (await driver.all<{ sql: string }>(
+    "select sql from sqlite_master where type = 'table' and name = 'media_attachments'"))[0];
+  if (mediaTableV11 && !mediaTableV11.sql.includes(MEDIA_V11_MIME_CHECK)) {
+    await driver.exec("begin immediate");
+    try {
+      await driver.exec(S.createMediaV11);
+      await driver.run(S.copyMediaV11);
+      const missing = (await driver.all<{ n: number }>(S.missingMediaV11))[0]?.n;
+      const extra = (await driver.all<{ n: number }>(S.extraMediaV11))[0]?.n;
+      if (missing !== 0 || extra !== 0) {
+        throw new Error("Messaging v11 rebuild did not preserve every attachment");
+      }
+      await driver.exec(S.dropMediaV11);
+      await driver.exec(S.renameMediaV11);
+      await driver.exec(S.recreateMediaIndex);
+      if ((await driver.all(S.foreignKeyCheck)).length > 0) {
+        throw new Error("Messaging v11 attachment rebuild broke referential integrity");
+      }
+      await driver.run(S.setSchemaVersion, [String(MESSAGING_SQLITE_SCHEMA_VERSION)]);
+      await driver.exec("commit");
+    } catch (error) {
+      try { await driver.exec("rollback"); } catch { /* commit may already have failed */ }
+      throw error;
+    }
+    const restoredV11 = (await driver.all<{ foreign_keys: number }>(D.foreignKeys))[0]?.foreign_keys;
+    if (restoredV11 !== 1) throw new Error("Messaging storage requires foreign_keys = ON");
   }
   } catch (error) {
     await driver.close();
@@ -1135,7 +1199,8 @@ export async function openSqliteMessagingHistory(
     const clears = await driver.all<{
       conversationId: string; throughSequence: number; clearedAt: number;
     }>(S.listSnapshotClears);
-    return {
+    const media = await driver.all<MediaMetadata>(S.listSnapshotMedia);
+    const exported: HistorySnapshot = {
       conversations: conversations.map((row) => ({
         id: row.id, lastSequence: row.lastSequence,
         createdAt: row.createdAt, updatedAt: row.updatedAt,
@@ -1157,6 +1222,15 @@ export async function openSqliteMessagingHistory(
       deletedForMe: deletedForMe.map((row) => ({ ...row })),
       clears: clears.map((row) => ({ ...row })),
     };
+    // Metadata for every settled attachment; the bytes travel beside the
+    // snapshot through the backup layer's media map. Absent key means none,
+    // which keeps a text-only export in the older portable shape.
+    if (media.length === 0) return exported;
+    return { ...exported, attachments: media.map((row) => ({
+      id: row.id, messageId: row.messageId, direction: row.direction, sha256: row.sha256,
+      mime: row.mime, byteSize: row.byteSize, width: row.width, height: row.height,
+      durationMs: row.durationMs, expiresAt: row.expiresAt,
+    })) };
   }
 
   /**
@@ -1170,7 +1244,8 @@ export async function openSqliteMessagingHistory(
    * The merge creates no outbox row, no mailbox receipt and no state event: a
    * restore is not a send, not an acknowledgement and not metadata application.
    */
-  async function importSnapshot(snapshot: HistorySnapshot): Promise<ImportReport> {
+  async function importSnapshot(snapshot: HistorySnapshot,
+    media?: ReadonlyMap<string, ArrayBuffer>): Promise<ImportReport> {
     await assertOpen();
     // This is a public entry point: the caller may not have gone through
     // decodeBackup, so the records are validated again against this database's
@@ -1181,7 +1256,7 @@ export async function openSqliteMessagingHistory(
     validateSnapshot(incoming, scope.accountId);
     return transaction(async () => {
       const report: ImportReport = {
-        conversations: 0, messages: 0, tombstones: 0, deletedForMe: 0, clears: 0,
+        conversations: 0, messages: 0, attachments: 0, tombstones: 0, deletedForMe: 0, clears: 0,
       };
 
       // Tombstones are merged before messages, so the contradiction check needs
@@ -1333,6 +1408,37 @@ export async function openSqliteMessagingHistory(
       await driver.run(S.suppressDeletedBodies);
       await driver.run(S.suppressUnsentBodies);
       await driver.run(S.suppressClearedBodies);
+
+      // Attachments come last: a restored row only exists behind a parent this
+      // account can still see, and bytes are written only after they verify
+      // against the descriptor the snapshot carried.
+      const store = options.mediaBytes;
+      for (const attachment of incoming.attachments ?? []) {
+        const visible = (await driver.all<{ id: string }>(S.getMediaParent, [attachment.messageId])).length > 0;
+        if (!visible) continue;
+        const bytes = media?.get(attachment.id);
+        if (bytes) {
+          try { await verifyMediaBytes(attachment, bytes); }
+          catch { throw new BackupError("backup: identity conflict"); }
+        }
+        const existing = await mediaReplay(attachment);
+        if (!existing) {
+          if (attachment.direction === "IN" && attachment.expiresAt === null) continue;
+          // Without a byte store there is nowhere to put the blob, so the row
+          // restores as evicted rather than claiming bytes it does not have.
+          const usable = bytes !== undefined && store !== undefined;
+          await insertMedia({ ...attachment, state: usable ? "READY" : "EVICTED",
+            attempts: 0, lastAccessAt: Date.now() });
+        }
+        if (bytes && store) {
+          const stored = await store.get(scope.accountId, attachment.id);
+          if (stored) {
+            try { await verifyMediaBytes(attachment, stored); }
+            catch { throw new BackupError("backup: identity conflict"); }
+          } else await store.put(scope.accountId, attachment.id, bytes);
+        }
+        report.attachments += 1;
+      }
       return report;
     });
   }
@@ -1355,7 +1461,9 @@ export async function openSqliteMessagingHistory(
     if (row.authorId !== scope.accountId && row.recipientId !== scope.accountId) {
       throw new Error("Media participant scope mismatch");
     }
-    if (row.messageType !== null && row.messageType !== "MEDIA") throw new Error("Media parent classification conflict");
+    if (row.messageType !== null && row.messageType !== "MEDIA" && row.messageType !== "VOICE") {
+      throw new Error("Media parent classification conflict");
+    }
     if (metadata.direction !== (row.authorId === scope.accountId ? "OUT" : "IN")) {
       throw new Error("Media direction scope mismatch");
     }
@@ -1373,7 +1481,7 @@ export async function openSqliteMessagingHistory(
   async function insertMedia(record: MediaAttachment): Promise<void> {
     const row = copyMediaAttachment(record);
     await driver.run(S.insertMediaAttachment, [row.id, row.messageId, row.direction, row.sha256,
-      row.mime, row.byteSize, row.width, row.height, row.expiresAt, row.lastAccessAt,
+      row.mime, row.byteSize, row.width, row.height, row.durationMs, row.expiresAt, row.lastAccessAt,
       row.state, row.attempts, row.token ?? null, row.leaseUntil ?? null]);
   }
 
@@ -1432,7 +1540,7 @@ export async function openSqliteMessagingHistory(
       const parent = await messageRow(outgoing.id);
       if (parent) {
         if (!sameIdentity(parent, outgoing) || parent.body !== outgoing.body) throw new Error("Immutable message identity conflict");
-        if (!parent.messageType) await driver.run(S.bindMessageType, ["MEDIA", outgoing.id]);
+        if (!parent.messageType) await driver.run(S.bindMessageType, [outgoing.messageType ?? "MEDIA", outgoing.id]);
       } else {
         await driver.run(S.insertMessage, [outgoing.id, outgoing.conversationId, outgoing.authorId,
           outgoing.recipientId, outgoing.body, now(), outgoing.messageType ?? null, null, null, null, null]);
@@ -1704,7 +1812,8 @@ export async function openSqliteMessagingHistory(
     // is exactly what the queue is allowed to clone.
     // `async` matters: a synchronous throw here would escape the promise
     // contract every other method keeps, so callers would need a try/catch.
-    importSnapshot: async (snapshot: HistorySnapshot) =>
-      serializedImport(normaliseSnapshot(snapshot)),
+    importSnapshot: async (snapshot: HistorySnapshot,
+      media?: ReadonlyMap<string, ArrayBuffer>) =>
+      serializedImport(normaliseSnapshot(snapshot), media),
   };
 }

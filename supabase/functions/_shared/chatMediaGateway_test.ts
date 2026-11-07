@@ -27,3 +27,34 @@ Deno.test("deadline aborts a pending write and prevents readback and commit",asy
 Deno.test("unsupported GIF BMP and SVG are rejected",async()=>{for(const s of ["GIF89a","BM","<svg>"]) {const f=fixture(); assert.equal((await run(f.ports,new TextEncoder().encode(s))).status,"invalid"); assert.equal(f.calls.length,0);}});
 Deno.test("JPEG and WebP header dimensions are parsed",async()=>{const jpeg=new Uint8Array([255,216,255,192,0,11,8,0,2,0,3,1,1,17,0,255,217]); const webp=new Uint8Array([82,73,70,70,22,0,0,0,87,69,66,80,86,80,56,88,10,0,0,0,0,0,0,0,2,0,0,1,0,0]); for(const [bytes,mime] of [[jpeg,"image/jpeg"],[webp,"image/webp"]] as const) {const f=fixture(); f.setBytes(bytes); const result=await run(f.ports,bytes,mime); assert.equal(result.status,"attached"); if(result.status==="attached") {assert.equal(result.width,3); assert.equal(result.height,2);} }});
 Deno.test("corrupt PNG header rejected",async()=>{const f=fixture(); const corrupt=png.slice(); corrupt[29]^=1; assert.equal((await run(f.ports,corrupt)).status,"invalid"); assert.equal(f.calls.length,0);});
+
+// Voice containers are identified from their bytes, never from the header, and
+// the measured duration is bounded exactly as image dimensions are.
+const webm = new Uint8Array([0x1a,0x45,0xdf,0xa3,0x42,0x82,0x84,0x77,0x65,0x62,0x6d]);
+const mp4 = new Uint8Array([0,0,0,24,0x66,0x74,0x79,0x70,0x69,0x73,0x6f,0x6d,0,0,2,0,0x69,0x73,0x6f,0x6d,0x69,0x73,0x6f,0x32]);
+Deno.test("voice WebM carries a bounded duration and sentinel dimensions", async () => {
+  const f = fixture(); f.setBytes(webm);
+  const r = await uploadChatMedia(f.ports, { actor: id, messageId: id, attachmentId: id, bytes: webm,
+    declaredMime: "audio/webm", durationMs: 1500 });
+  assert.equal(r.status, "attached");
+  if (r.status === "attached") {
+    assert.equal(r.mime, "audio/webm"); assert.equal(r.width, 1); assert.equal(r.height, 1); assert.equal(r.durationMs, 1500);
+  }
+  for (const [mime, duration] of [["audio/webm", null], ["audio/webm", 100],
+    ["audio/webm", 300001], ["audio/mp4", 1500]] as const) {
+    const bad = fixture();
+    const result = await uploadChatMedia(bad.ports, { actor: id, messageId: id, attachmentId: id,
+      bytes: webm, declaredMime: mime, durationMs: duration as number | null });
+    assert.equal(result.status, "invalid"); assert(!bad.calls.includes("write"));
+  }
+});
+Deno.test("voice MP4 is accepted and a still image cannot carry a duration", async () => {
+  const f = fixture(); f.setBytes(mp4);
+  const voice = await uploadChatMedia(f.ports, { actor: id, messageId: id, attachmentId: id,
+    bytes: mp4, declaredMime: "audio/mp4", durationMs: 900 });
+  assert.equal(voice.status, "attached");
+  const g = fixture();
+  const image = await uploadChatMedia(g.ports, { actor: id, messageId: id, attachmentId: id,
+    bytes: png, declaredMime: "image/png", durationMs: 900 });
+  assert.equal(image.status, "invalid"); assert(!g.calls.includes("write"));
+});

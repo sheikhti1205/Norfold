@@ -150,12 +150,31 @@ export async function exportMessagingSnapshot(accountId: string): Promise<Histor
 }
 
 /**
+ * Bytes that still live on this device for a snapshot's attachments. A missing
+ * or unreadable row is simply absent: a backup records what it can read and
+ * never substitutes a fabricated blob for an evicted one.
+ */
+export async function exportMessagingMedia(accountId: string,
+  snapshot: HistorySnapshot): Promise<Map<string, ArrayBuffer>> {
+  const owner = ownerFor(accountId);
+  const media = new Map<string, ArrayBuffer>();
+  for (const attachment of snapshot.attachments ?? []) {
+    try {
+      const bytes = await owner.handle.history.readMedia(attachment.id);
+      if (bytes && bytes.byteLength === attachment.byteSize) media.set(attachment.id, bytes);
+    } catch { /* evicted or corrupt locally: keep the descriptor only */ }
+  }
+  assertOwner(owner);
+  return media;
+}
+
+/**
  * Merge a backup snapshot into local history. The shared import applies
  * tombstones, unsends and clears and never creates send work, receipts or state
  * events. Conversation heads still have to be reconciled with the server.
  */
 export async function importMessagingSnapshot(accountId: string,
-  snapshot: HistorySnapshot): Promise<ImportReport> {
+  snapshot: HistorySnapshot, media?: ReadonlyMap<string, ArrayBuffer>): Promise<ImportReport> {
   const owner = ownerFor(accountId);
   const captured = normaliseSnapshot(snapshot);
   const local = new Set((await owner.handle.history.exportSnapshot()).messages.map(message => message.id));
@@ -163,7 +182,7 @@ export async function importMessagingSnapshot(accountId: string,
   const missing = captured.messages.filter(message => message.body !== null && !local.has(message.id)).length;
   const finish = beginRestoration(owner, "backup", missing);
   try {
-    const report = await owner.handle.history.importSnapshot(captured);
+    const report = await owner.handle.history.importSnapshot(captured, media);
     assertOwner(owner);
     await reload(owner);
     return report;
@@ -578,6 +597,22 @@ export async function sendMessagingMedia(accountId: string, conversationId: stri
   await reload(owner);
   // The upload/sync media lanes live on the full pass; a photo must not wait for
   // a later focus to start uploading.
+  void requestRefresh(owner, "full");
+  return id;
+}
+
+/**
+ * A voice note is its own classification, not a photo with a caption: the same
+ * verified attachment lane carries the bytes, and the message row records
+ * `VOICE` so a receiver renders a player instead of an image.
+ */
+export async function sendMessagingVoice(accountId: string, conversationId: string, peerId: string,
+  metadata: MediaMetadata, bytes: ArrayBuffer): Promise<string> {
+  const owner = ownerFor(accountId), id = uuid(metadata.messageId);
+  await owner.session.sendMedia({ id, conversationId: uuid(conversationId), authorId: uuid(accountId),
+    recipientId: uuid(peerId), body: "", messageType: "VOICE" }, metadata, bytes);
+  assertOwner(owner);
+  await reload(owner);
   void requestRefresh(owner, "full");
   return id;
 }

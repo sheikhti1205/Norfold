@@ -15,7 +15,7 @@ const exact = (v: unknown, keys: string[]): Record<string, unknown> => {
 };
 function payload(input: unknown): Payload {
   const v = input as Payload;
-  if (typeof v.body !== "string" || v.body.length > 100_000 || !["TEXT","MEDIA","LOCATION"].includes(v.messageType)) throw unavailable();
+  if (typeof v.body !== "string" || v.body.length > 100_000 || !["TEXT","MEDIA","LOCATION","VOICE"].includes(v.messageType)) throw unavailable();
   const report = v.contextReportId === null ? null : uuid(v.contextReportId);
   if (report && v.messageType !== "TEXT") throw unavailable();
   let location: StaticLocation | null = null;

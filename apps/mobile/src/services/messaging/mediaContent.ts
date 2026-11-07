@@ -1,7 +1,7 @@
 /** Shared enforcement at the history boundary, never a caller's verified flag. */
 import { probeDimensions, sniffImage } from "../media/importImage";
 import { transcodeImageForWeb } from "../media/webTranscode";
-import { verifyMediaBytes, type MediaMetadata } from "./media";
+import { isVoiceMime, verifyMediaBytes, type MediaMetadata } from "./media";
 import { sniffMediaMime } from "./validation";
 
 /** Platform decoder port; tests replace decoding, not metadata/hash checks. */
@@ -15,9 +15,21 @@ const decodeMedia: MediaDecoder = async (bytes, metadata) => {
     targetWidth: 1, targetHeight: 1, mimeType: "image/png", quality: null });
 };
 
-/** Transport verifies assertions; durable admission additionally requires decoding. */
+/**
+ * Transport verifies assertions; durable admission additionally requires
+ * decoding.
+ *
+ * A voice note is checked as a container, not decoded: the host has no audio
+ * decoder the app can rely on, and the stored length was measured while
+ * recording. The signature check still refuses a mislabelled file, and the
+ * server re-checks the container from the bytes it stores.
+ */
 export async function verifyMediaContainer(metadata: MediaMetadata, bytes: ArrayBuffer): Promise<void> {
   await verifyMediaBytes(metadata, bytes);
+  if (isVoiceMime(metadata.mime)) {
+    if (sniffMediaMime(bytes) !== metadata.mime) throw new Error("Media type mismatch");
+    return;
+  }
   if (sniffMediaMime(bytes) !== metadata.mime) throw new Error("Media type mismatch");
   const view = new Uint8Array(bytes);
   const kind = sniffImage(view);
@@ -32,5 +44,7 @@ export async function verifyMediaContent(
   metadata: MediaMetadata, bytes: ArrayBuffer, decode: MediaDecoder = decodeMedia,
 ): Promise<void> {
   await verifyMediaContainer(metadata, bytes);
+  // Audio is never run through the image decoder.
+  if (isVoiceMime(metadata.mime)) return;
   await decode(bytes, metadata);
 }

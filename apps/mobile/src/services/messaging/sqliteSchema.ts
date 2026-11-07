@@ -48,7 +48,7 @@
  */
 // v10 fences executables which cannot honor local conversation checkpoints.
 // Checkpoints use existing scoped messaging_meta rows; they are never portable.
-export const MESSAGING_SQLITE_SCHEMA_VERSION = 10;
+export const MESSAGING_SQLITE_SCHEMA_VERSION = 11;
 
 /**
  * The v5 `messages` body CHECK, recognised in `sqlite_master`.
@@ -69,6 +69,18 @@ export const MESSAGES_V5_BODY_CHECK = "length(body) <= 100000";
  * `LOCATION`.
  */
 export const MESSAGES_V9_TYPE_CHECK = "'TEXT','MEDIA','LOCATION'";
+
+/**
+ * The v11 classification CHECK. A voice note is a real message classification,
+ * not a MEDIA row with a caption, so it must be admitted by the table itself.
+ */
+export const MESSAGES_V11_TYPE_CHECK = "'TEXT','MEDIA','LOCATION','VOICE'";
+
+/**
+ * The v11 attachment MIME marker. Audio rides the same verified attachment row
+ * as a photo; only the container allowlist and the stored duration differ.
+ */
+export const MEDIA_V11_MIME_CHECK = "'audio/webm','audio/mp4'";
 
 export const MESSAGING_SQLITE_PRAGMAS = [
   "pragma journal_mode = wal",
@@ -119,7 +131,7 @@ export const MESSAGING_SQLITE_SCHEMA = [
     author_id text not null,
     recipient_id text not null,
     body text,
-    message_type text check (message_type in ('TEXT','MEDIA','LOCATION')),
+    message_type text check (message_type in ('TEXT','MEDIA','LOCATION','VOICE')),
     context_report_id text,
     location_lat real,
     location_lng real,
@@ -204,10 +216,11 @@ export const MESSAGING_SQLITE_SCHEMA = [
     message_id text not null references messages(id) on delete cascade check (${uuidCheck("message_id")}),
     direction text not null check (direction in ('OUT','IN')),
     sha256 text not null check (length(sha256) = 64 and sha256 not glob '*[^0-9a-f]*'),
-    mime text not null check (mime in ('image/jpeg','image/png','image/webp')),
+    mime text not null check (mime in ('image/jpeg','image/png','image/webp','audio/webm','audio/mp4')),
     byte_size integer not null check (typeof(byte_size) = 'integer' and byte_size between 1 and 20971520),
     width integer not null check (typeof(width) = 'integer' and width between 1 and 8192),
     height integer not null check (typeof(height) = 'integer' and height between 1 and 8192),
+    duration_ms integer check (duration_ms is null or (typeof(duration_ms) = 'integer' and duration_ms between 500 and 300000)),
     expires_at integer check (expires_at is null or (typeof(expires_at) = 'integer' and expires_at between 1 and 9007199254740991)),
     last_access_at integer not null check (typeof(last_access_at) = 'integer' and last_access_at between 0 and 9007199254740991),
     state text not null check (state in ('QUEUED','UPLOADING','FAILED','AWAITING_ACK','READY','EVICTED')),
@@ -217,7 +230,9 @@ export const MESSAGING_SQLITE_SCHEMA = [
     check ((state = 'UPLOADING' and token is not null and lease_until is not null)
       or (state <> 'UPLOADING' and token is null and lease_until is null)),
     check (direction = 'OUT' or expires_at is not null),
-    check (direction = 'OUT' or state in ('AWAITING_ACK','READY','EVICTED'))
+    check (direction = 'OUT' or state in ('AWAITING_ACK','READY','EVICTED')),
+    check ((mime like 'audio/%') = (duration_ms is not null)),
+    check (mime not like 'audio/%' or (width = 1 and height = 1))
   )`,
   // One attachment per message in this wave, and the lookup the adapters use.
   // A unique index provides both the uniqueness rule and the index.
@@ -237,7 +252,7 @@ const MESSAGE_COLUMNS = `m.id as id, m.conversation_id as conversationId,
 
 const MEDIA_COLUMNS = `a.id as id, a.message_id as messageId, a.direction as direction,
   a.sha256 as sha256, a.mime as mime, a.byte_size as byteSize, a.width as width,
-  a.height as height, a.expires_at as expiresAt, a.last_access_at as lastAccessAt,
+  a.height as height, a.duration_ms as durationMs, a.expires_at as expiresAt, a.last_access_at as lastAccessAt,
   a.state as state, a.attempts as attempts, a.token as token, a.lease_until as leaseUntil`;
 
 export const MESSAGING_SQLITE_STATEMENTS = {
@@ -502,6 +517,14 @@ export const MESSAGING_SQLITE_STATEMENTS = {
     created_at as createdAt, updated_at as updatedAt from conversations`,
   listSnapshotMessages: `select ${MESSAGE_COLUMNS}, m.created_at as createdAt from messages m
     where m.server_event_id is not null and m.server_sequence is not null`,
+  /** Settled attachments of accepted messages; a pending upload is not history. */
+  listSnapshotMedia: `select a.id as id, a.message_id as messageId, a.direction as direction,
+    a.sha256 as sha256, a.mime as mime, a.byte_size as byteSize, a.width as width,
+    a.height as height, a.duration_ms as durationMs, a.expires_at as expiresAt
+    from media_attachments a join messages m on m.id = a.message_id
+    where m.server_event_id is not null and m.server_sequence is not null
+      and a.state in ('READY','EVICTED','AWAITING_ACK')
+    order by a.id`,
   listSnapshotTombstones: `select message_id as messageId, conversation_id as conversationId,
     recipient_id as recipientId, unsent_at as unsentAt, unsent_by as unsentBy from tombstones`,
   listSnapshotDeletedForMe: `select message_id as messageId, conversation_id as conversationId,
@@ -557,9 +580,9 @@ export const MESSAGING_SQLITE_STATEMENTS = {
 
   // ---- v6: chat media attachment metadata ----
   insertMediaAttachment: `insert into media_attachments
-    (id, message_id, direction, sha256, mime, byte_size, width, height, expires_at,
+    (id, message_id, direction, sha256, mime, byte_size, width, height, duration_ms, expires_at,
       last_access_at, state, attempts, token, lease_until)
-    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   getMediaAttachment: `select ${MEDIA_COLUMNS} from media_attachments a where a.id = ?`,
   getMediaByMessage: `select ${MEDIA_COLUMNS} from media_attachments a where a.message_id = ?`,
   /** A row is only rendered or claimed behind a parent this account can see. */
@@ -632,6 +655,101 @@ export const MESSAGING_SQLITE_STATEMENTS = {
   listMediaIdsForMessage: `select id from media_attachments where message_id = ?`,
   deleteMediaAttachment: `delete from media_attachments where id = ?`,
   deleteAllMedia: `delete from media_attachments`,
+  // --- v11: voice notes -----------------------------------------------------
+  // A voice note is a `VOICE` message whose bytes ride the same verified
+  // attachment row as a photo. Two CHECKs must widen and one column is added,
+  // so both tables are rebuilt with the same proven copy-and-verify procedure
+  // the messages rebuild already uses.
+  createMessagesV11: `create table messages_v11 (
+    id text primary key,
+    conversation_id text not null references conversations(id) on delete cascade,
+    author_id text not null,
+    recipient_id text not null,
+    body text,
+    message_type text check (message_type in ('TEXT','MEDIA','LOCATION','VOICE')),
+    context_report_id text,
+    location_lat real,
+    location_lng real,
+    location_accuracy_m real,
+    server_event_id text,
+    server_sequence integer,
+    created_at integer not null,
+    unsent_at integer,
+    check (author_id <> recipient_id),
+    check (body is null or length(body) <= 100000),
+    check (context_report_id is null or message_type = 'TEXT'),
+    check ((location_lat is null and location_lng is null and location_accuracy_m is null)
+      or (message_type = 'LOCATION' and location_lat is not null and location_lng is not null and location_lat between -90 and 90
+        and location_lng between -180 and 180
+        and (location_accuracy_m is null or (location_accuracy_m > 0 and location_accuracy_m <= 100000)))),
+    check (message_type not in ('VOICE') or (body is null or body = '')),
+    check ((server_event_id is null) = (server_sequence is null)),
+    unique (conversation_id, server_sequence)
+  )`,
+  copyMessagesV11: `insert into messages_v11
+    (id, conversation_id, author_id, recipient_id, body, message_type, server_event_id,
+      server_sequence, created_at, unsent_at)
+    select id, conversation_id, author_id, recipient_id, body, message_type, server_event_id,
+      server_sequence, created_at, unsent_at from messages`,
+  missingMessagesV11: `select count(*) as n from (
+    select id, conversation_id, author_id, recipient_id, body, message_type, server_event_id,
+      server_sequence, created_at, unsent_at from messages
+    except
+    select id, conversation_id, author_id, recipient_id, body, message_type, server_event_id,
+      server_sequence, created_at, unsent_at from messages_v11)`,
+  extraMessagesV11: `select count(*) as n from (
+    select id, conversation_id, author_id, recipient_id, body, message_type, server_event_id,
+      server_sequence, created_at, unsent_at from messages_v11
+    except
+    select id, conversation_id, author_id, recipient_id, body, message_type, server_event_id,
+      server_sequence, created_at, unsent_at from messages)`,
+  dropMessagesV11: `drop table messages`,
+  renameMessagesV11: `alter table messages_v11 rename to messages`,
+  createMediaV11: `create table media_attachments_v11 (
+    id text primary key not null check (${uuidCheck("id")}),
+    message_id text not null references messages(id) on delete cascade check (${uuidCheck("message_id")}),
+    direction text not null check (direction in ('OUT','IN')),
+    sha256 text not null check (length(sha256) = 64 and sha256 not glob '*[^0-9a-f]*'),
+    mime text not null check (mime in ('image/jpeg','image/png','image/webp','audio/webm','audio/mp4')),
+    byte_size integer not null check (typeof(byte_size) = 'integer' and byte_size between 1 and 20971520),
+    width integer not null check (typeof(width) = 'integer' and width between 1 and 8192),
+    height integer not null check (typeof(height) = 'integer' and height between 1 and 8192),
+    duration_ms integer check (duration_ms is null or (typeof(duration_ms) = 'integer' and duration_ms between 500 and 300000)),
+    expires_at integer check (expires_at is null or (typeof(expires_at) = 'integer' and expires_at between 1 and 9007199254740991)),
+    last_access_at integer not null check (typeof(last_access_at) = 'integer' and last_access_at between 0 and 9007199254740991),
+    state text not null check (state in ('QUEUED','UPLOADING','FAILED','AWAITING_ACK','READY','EVICTED')),
+    attempts integer not null default 0 check (typeof(attempts) = 'integer' and attempts between 0 and 9007199254740991),
+    token text check (token is null or (${uuidCheck("token")})),
+    lease_until integer check (lease_until is null or (typeof(lease_until) = 'integer' and lease_until between 1 and 9007199254740991)),
+    check ((state = 'UPLOADING' and token is not null and lease_until is not null)
+      or (state <> 'UPLOADING' and token is null and lease_until is null)),
+    check (direction = 'OUT' or expires_at is not null),
+    check (direction = 'OUT' or state in ('AWAITING_ACK','READY','EVICTED')),
+    check ((mime like 'audio/%') = (duration_ms is not null)),
+    check (mime not like 'audio/%' or (width = 1 and height = 1))
+  )`,
+  copyMediaV11: `insert into media_attachments_v11
+    (id, message_id, direction, sha256, mime, byte_size, width, height, duration_ms, expires_at,
+      last_access_at, state, attempts, token, lease_until)
+    select id, message_id, direction, sha256, mime, byte_size, width, height, null, expires_at,
+      last_access_at, state, attempts, token, lease_until from media_attachments`,
+  missingMediaV11: `select count(*) as n from (
+    select id, message_id, direction, sha256, mime, byte_size, width, height, expires_at,
+      last_access_at, state, attempts, token, lease_until from media_attachments
+    except
+    select id, message_id, direction, sha256, mime, byte_size, width, height, expires_at,
+      last_access_at, state, attempts, token, lease_until from media_attachments_v11)`,
+  extraMediaV11: `select count(*) as n from (
+    select id, message_id, direction, sha256, mime, byte_size, width, height, expires_at,
+      last_access_at, state, attempts, token, lease_until from media_attachments_v11
+    except
+    select id, message_id, direction, sha256, mime, byte_size, width, height, expires_at,
+      last_access_at, state, attempts, token, lease_until from media_attachments)`,
+  dropMediaV11: `drop table media_attachments`,
+  renameMediaV11: `alter table media_attachments_v11 rename to media_attachments`,
+  recreateMediaIndex: `create unique index if not exists ux_media_attachments_message
+    on media_attachments(message_id)`,
+
 } as const;
 
 export type MessagingStatement = keyof typeof MESSAGING_SQLITE_STATEMENTS;

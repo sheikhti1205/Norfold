@@ -143,6 +143,7 @@ export async function mediaFixture(
     byteSize: bytes.byteLength,
     width: 32,
     height: 32,
+    durationMs: null,
     expiresAt: null,
     ...overrides,
   };

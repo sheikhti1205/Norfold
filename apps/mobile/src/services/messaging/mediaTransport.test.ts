@@ -9,7 +9,7 @@ const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")
 const scope = { accountId: id(1), deviceId: id(2) };
 const fixture = () => mediaFixture(id(3), id(4), { expiresAt: Date.now() + 60_000 });
 const reply = (m: MediaMetadata) => ({ attachmentId: m.id, sha256: m.sha256, mime: m.mime,
-  bytes: m.byteSize, width: m.width, height: m.height });
+  bytes: m.byteSize, width: m.width, height: m.height, durationMs: m.durationMs });
 const delivery = (m: MediaMetadata) => ({ version: 1, ...reply(m), messageId: m.messageId,
   expiresAt: new Date(m.expiresAt!).toISOString() });
 function setup(request: MediaTransportPorts["request"], rpc: MediaTransportPorts["rpc"] = async () => null) {
@@ -226,7 +226,8 @@ describe("media transport boundary", () => {
     });
     const rows = await transport.fetchDeliveries();
     expect(rows).toEqual([{ id: id(3), messageId: id(4), sha256: metadata.sha256, mime: "image/png",
-      byteSize: metadata.byteSize, width: metadata.width, height: metadata.height, expiresAt: metadata.expiresAt }]);
+      byteSize: metadata.byteSize, width: metadata.width, height: metadata.height,
+      durationMs: null, expiresAt: metadata.expiresAt }]);
     await transport.ack(id(3));
     expect(calls).toEqual([
       { name: "findback_fetch_chat_media_delivery", args: { p_account_id: id(1), p_device_id: id(2) }, signal: expect.any(AbortSignal) },

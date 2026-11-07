@@ -21,9 +21,19 @@ export const MEDIA_MAX_BYTES = 20 * 1024 * 1024;
  */
 export const MEDIA_BUDGET_BYTES = 100 * 1024 * 1024;
 
-/** The only containers the chat gateway accepts. */
+/** The only still-image containers the chat gateway accepts. */
 export const MEDIA_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
-export type MediaMime = (typeof MEDIA_MIME_TYPES)[number];
+export type ImageMime = (typeof MEDIA_MIME_TYPES)[number];
+
+/**
+ * The audio containers the chat gateway accepts. The codecs parameter is never
+ * stored: the container is the validated, signed identity and what playback
+ * needs, so `audio/webm;codecs=opus` is normalised before it reaches a record.
+ */
+export const VOICE_MIME_TYPES = ["audio/webm", "audio/mp4"] as const;
+export type VoiceMime = (typeof VOICE_MIME_TYPES)[number];
+
+export type MediaMime = ImageMime | VoiceMime;
 
 /**
  * How long freshly stored bytes are exempt from the orphan sweep.
@@ -65,6 +75,16 @@ export interface MediaMetadata {
   byteSize: number;
   width: number;
   height: number;
+  /**
+   * Voice-note length in milliseconds. `null` for a still image.
+   *
+   * A voice note keeps the attachment contract's dimension columns with the
+   * sentinel `1 x 1`, because every layer (local SQLite CHECK, server CHECK,
+   * peer manifest) requires positive dimensions and a second nullable triple
+   * would be a second shape to keep in step. `isVoiceMime` is the discriminator;
+   * no renderer reads width/height for audio.
+   */
+  durationMs: number | null;
   /** Server retention boundary in epoch milliseconds, when known. */
   expiresAt: number | null;
 }
@@ -90,9 +110,28 @@ export function isMediaSha256(value: unknown): value is string {
   return typeof value === "string" && SHA256.test(value);
 }
 
-export function isMediaMime(value: unknown): value is MediaMime {
+export function isImageMime(value: unknown): value is ImageMime {
   return typeof value === "string" && (MEDIA_MIME_TYPES as readonly string[]).includes(value);
 }
+
+export function isVoiceMime(value: unknown): value is VoiceMime {
+  return typeof value === "string" && (VOICE_MIME_TYPES as readonly string[]).includes(value);
+}
+
+export function isMediaMime(value: unknown): value is MediaMime {
+  return isImageMime(value) || isVoiceMime(value);
+}
+
+/** Normalise a recorded container type to its stored form. */
+export function storedMediaMime(recorded: string): string {
+  return recorded.split(";")[0]?.trim().toLowerCase() ?? "";
+}
+
+export const VOICE_MIN_DURATION_MS = 500;
+export const VOICE_MAX_DURATION_MS = 5 * 60_000;
+
+/** The sentinel dimensions a voice attachment carries. */
+export const VOICE_SENTINEL_EDGE = 1;
 
 function boundedInteger(value: unknown, maximum: number, what: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1 || value > maximum) {
@@ -113,8 +152,23 @@ export function copyMediaMetadata(value: unknown): MediaMetadata {
   if (!isMediaSha256(input.sha256)) throw new Error("Invalid media digest");
   if (!isMediaMime(input.mime)) throw new Error("Unsupported media type");
   const byteSize = boundedInteger(input.byteSize, MEDIA_MAX_BYTES, "byte size");
-  const width = boundedInteger(input.width, MEDIA_MAX_EDGE, "width");
-  const height = boundedInteger(input.height, MEDIA_MAX_EDGE, "height");
+  const voice = isVoiceMime(input.mime);
+  const width = voice ? VOICE_SENTINEL_EDGE : boundedInteger(input.width, MEDIA_MAX_EDGE, "width");
+  const height = voice ? VOICE_SENTINEL_EDGE : boundedInteger(input.height, MEDIA_MAX_EDGE, "height");
+  if (voice && (input.width !== VOICE_SENTINEL_EDGE || input.height !== VOICE_SENTINEL_EDGE)) {
+    throw new Error("Invalid voice dimensions");
+  }
+  let durationMs: number | null = null;
+  if (voice) {
+    const duration = input.durationMs;
+    if (typeof duration !== "number" || !Number.isSafeInteger(duration)
+      || duration < VOICE_MIN_DURATION_MS || duration > VOICE_MAX_DURATION_MS) {
+      throw new Error("Invalid voice duration");
+    }
+    durationMs = duration;
+  } else if (input.durationMs !== null && input.durationMs !== undefined) {
+    throw new Error("Invalid media duration");
+  }
   let expiresAt: number | null = null;
   if (input.expiresAt !== null && input.expiresAt !== undefined) {
     if (typeof input.expiresAt !== "number" || !Number.isSafeInteger(input.expiresAt) || input.expiresAt <= 0) {
@@ -131,6 +185,7 @@ export function copyMediaMetadata(value: unknown): MediaMetadata {
     byteSize,
     width,
     height,
+    durationMs,
     expiresAt,
   };
 }
@@ -139,7 +194,7 @@ export function copyMediaMetadata(value: unknown): MediaMetadata {
 export function sameMediaIdentity(a: MediaMetadata, b: MediaMetadata): boolean {
   return a.id === b.id && a.messageId === b.messageId && a.direction === b.direction
     && a.sha256 === b.sha256 && a.mime === b.mime && a.byteSize === b.byteSize
-    && a.width === b.width && a.height === b.height;
+    && a.width === b.width && a.height === b.height && a.durationMs === b.durationMs;
 }
 
 /**
