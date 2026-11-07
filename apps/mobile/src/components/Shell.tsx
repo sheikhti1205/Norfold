@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 import { Link, useLocation } from "react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { ClipboardList, Home, MessageCircle, Plus, Settings } from "lucide-react";
@@ -165,19 +166,36 @@ export function PrimaryNav({
   const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
+    const isEditable = () => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName;
+      if (tag !== "INPUT" && tag !== "TEXTAREA" && !el.isContentEditable) return false;
+      return !(el as HTMLInputElement).readOnly && !(el as HTMLInputElement).disabled;
+    };
     const update = () => {
       // The visual viewport shrinks when the on-screen keyboard opens. Keep
       // the bottom bar out of its way; do not infer keyboard state from scroll.
-      setKeyboardOpen(!!window.visualViewport &&
-        window.innerHeight - window.visualViewport.height > 120);
+      // Android's WebView resizes the layout viewport instead (adjustResize),
+      // so visualViewport never differs from innerHeight there and the bar sat
+      // on top of the focused field. A focused editable field is the reliable
+      // keyboard signal on that platform.
+      const viewportShrank = !!window.visualViewport &&
+        window.innerHeight - window.visualViewport.height > 120;
+      const androidKeyboard = Capacitor.getPlatform() === "android" && isEditable();
+      setKeyboardOpen(viewportShrank || androidKeyboard);
       setFullscreen(!!document.fullscreenElement);
     };
     update();
     window.visualViewport?.addEventListener("resize", update);
     document.addEventListener("fullscreenchange", update);
+    document.addEventListener("focusin", update);
+    document.addEventListener("focusout", update);
     return () => {
       window.visualViewport?.removeEventListener("resize", update);
       document.removeEventListener("fullscreenchange", update);
+      document.removeEventListener("focusin", update);
+      document.removeEventListener("focusout", update);
     };
   }, []);
 
