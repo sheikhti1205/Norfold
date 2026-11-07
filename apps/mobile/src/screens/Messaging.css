@@ -82,10 +82,9 @@
 .fb-chat-actions button:first-child { background:var(--fb-primary-container); color:var(--fb-on-primary-container); }
 .fb-chat-transcript { display:flex; flex-direction:column; gap:.55rem; padding-block:.5rem 1rem; }
 .fb-chat-line { display:flex; align-items:center; max-width:100%; }
-/* One chip per calendar day. It stays at the top of the transcript while that
-   day is on screen, so a long thread never needs a date on every bubble. */
-.fb-chat-day { position:sticky; top:0; z-index:2; display:flex; justify-content:center; padding:.2rem 0 .1rem;
-  pointer-events:none; }
+/* One chip per calendar day. It scrolls with the thread: a sticky chip sat on
+   top of the message under it, which read as a rendering fault. */
+.fb-chat-day { display:flex; justify-content:center; padding:.35rem 0 .1rem; }
 .fb-chat-day span { padding:.2rem .65rem; border-radius:.75rem; background:var(--fb-surface-container-high, var(--fb-surface));
   color:var(--fb-on-surface-variant); font-size:.75rem; font-weight:600; letter-spacing:.01em;
   box-shadow:0 1px 2px rgb(0 0 0 / .08); }

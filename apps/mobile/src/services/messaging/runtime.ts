@@ -101,6 +101,15 @@ let lifecycle: Promise<void> = Promise.resolve();
 const accountClosing = new Map<string, Promise<void>>();
 const listeners = new Set<() => void>();
 
+/**
+ * A media pass is allowed to fail without telling the reader which photo, but
+ * the reason belongs in the platform log: without it a persistent "some photos
+ * could not sync" is untraceable from the device.
+ */
+function reportMediaFailure(phase: "upload" | "download", error: unknown) {
+  console.warn(`chat media ${phase} failed:`, error instanceof Error ? error.message : String(error));
+}
+
 function publish(value: MessagingRuntimeSnapshot) {
   snapshot = value;
   for (const listener of listeners) listener();
@@ -379,12 +388,12 @@ function requestRefresh(owner: Owner, mode: RefreshMode): Promise<void> {
       // Uploading already-admitted photos is bounded (10 per pass) and is a no-op
       // when nothing is queued: a photo must never wait for the next full sweep.
       // The download/ACK sweep stays with the full pass.
-      try { await owner.session.flushMedia(); } catch { mediaFailed = true; }
+      try { await owner.session.flushMedia(); } catch (error) { mediaFailed = true; reportMediaFailure("upload", error); }
       assertOwner(owner);
       if (run === "full") {
         // An outgoing failure must never starve independently authorized incoming
         // deliveries or lost-ACK settlement. Each session pass is bounded.
-        try { await owner.session.syncMedia(); } catch { mediaFailed = true; }
+        try { await owner.session.syncMedia(); } catch (error) { mediaFailed = true; reportMediaFailure("download", error); }
       }
       await reload(owner);
       assertOwner(owner);

@@ -356,7 +356,14 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
       const receive = async (metadata: MediaMetadata) => {
         attempted.add(metadata.id);
         try { await receiveMedia(metadata, context); return true; }
-        catch { context.live(); failed = true; return false; }
+        catch (error) {
+          context.live(); failed = true;
+          // One attachment id and a reason: enough to name the defect from
+          // logcat, never message text or bytes.
+          console.warn("chat media delivery failed:",
+            metadata.id, metadata.mime, error instanceof Error ? error.message : String(error));
+          return false;
+        }
       };
       // An ACK may already be recorded remotely while local READY settlement was
       // lost. Such rows no longer appear in discovery: retry from trusted expiry
