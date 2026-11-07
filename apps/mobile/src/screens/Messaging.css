@@ -100,6 +100,7 @@
 .fb-msg-menu-backdrop { position:fixed; inset:0; z-index:200; background:transparent; }
 .fb-msg-menu {
   position:fixed; display:flex; flex-direction:column; min-width:12rem; max-width:16rem;
+  -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
   padding:.3rem; border-radius:.75rem; background:var(--fb-surface-container-high, var(--fb-surface));
   border:1px solid var(--fb-outline-variant); box-shadow:var(--shadow-md, 0 12px 28px rgb(0 0 0 / .24));
   transform-origin:top left;
@@ -138,7 +139,13 @@
 .fb-chat-sheet :is(button,a):focus-visible, .fb-chat-search-results button:focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }
 @media (prefers-reduced-motion:no-preference) { .fb-chat-refreshing { animation:fb-chat-spin 1s linear infinite; } }
 @keyframes fb-chat-spin { to { transform:rotate(360deg); } }
-.fb-chat-photo { width:min(15rem, 65vw); max-width:100%; max-height:20rem; overflow:hidden; border-radius:.6rem; background:var(--fb-surface); }
+.fb-chat-photo { position:relative; width:min(15rem, 65vw); max-width:100%; max-height:20rem; overflow:hidden; border-radius:.6rem; background:var(--fb-surface); }
+/* Bytes can exist before the bitmap paints; without a skeleton the bubble is a
+   blank rectangle and looks like a failed photo. The spinner is decorative —
+   the placeholder copy still carries the status for assistive technology. */
+.fb-chat-photo[data-loading]::after { content:""; position:absolute; inset:0; margin:auto; width:1.35rem; height:1.35rem;
+  border-radius:50%; border:2px solid var(--fb-outline-variant); border-top-color:var(--fb-primary); }
+@media (prefers-reduced-motion:no-preference) { .fb-chat-photo[data-loading]::after { animation:fb-chat-spin 1s linear infinite; } }
 .fb-chat-photo > button { display:block; width:100%; height:100%; min-width:44px; min-height:44px; }
 .fb-chat-photo img { display:block; width:100%; height:100%; object-fit:contain; }
 .fb-chat-photo > div { display:flex; height:100%; min-height:5rem; flex-direction:column; align-items:center; justify-content:center; gap:.4rem; padding:.5rem; font-size:.875rem; }
@@ -146,8 +153,31 @@
    `:not(:first-child)` rule never reached it and it measured 21px tall.
    Match the status box's button directly and keep the 44px house minimum. */
 .fb-chat-photo > div button, .fb-chat-photo-draft button, .fb-chat-message > button { min-height:44px; min-width:44px; padding:.3rem .5rem; text-decoration:underline; }
-.fb-chat-photo-draft { display:flex; align-items:center; flex-wrap:wrap; gap:.5rem; padding:.35rem .8rem; font-size:.875rem; }
-.fb-chat-photo-draft img { width:4rem; max-height:4rem; object-fit:contain; border-radius:.4rem; }
+/* Staged photos: a real review tray, not a single "Photo ready" line. The
+   strip scrolls horizontally at phone widths, every thumbnail opens the shared
+   viewer, and each slot carries its own remove control. */
+.fb-chat-photo-draft { display:flex; flex-direction:column; gap:.35rem; padding:.45rem .8rem .25rem;
+  font-size:.875rem; }
+.fb-chat-photo-strip { display:flex; gap:.5rem; margin:0; padding:0 0 .15rem; list-style:none;
+  overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:thin; }
+.fb-chat-photo-slot { position:relative; flex:none; }
+.fb-chat-photo-draft .fb-chat-photo-open { display:block; width:4.5rem; height:4.5rem; min-width:0; min-height:0; padding:0;
+  overflow:hidden; border:1px solid var(--fb-outline-variant); border-radius:.6rem;
+  background:var(--fb-surface-container); text-decoration:none; }
+.fb-chat-photo-open img { display:block; width:100%; height:100%; object-fit:cover; }
+.fb-chat-photo-pending { display:grid; place-items:center; gap:.15rem; color:var(--fb-on-surface-variant); }
+.fb-chat-photo-spinner { width:1.1rem; height:1.1rem; border-radius:50%;
+  border:2px solid var(--fb-outline-variant); border-top-color:var(--fb-primary); }
+@media (prefers-reduced-motion:no-preference) { .fb-chat-photo-spinner { animation:fb-chat-spin 1s linear infinite; } }
+.fb-chat-photo-draft .fb-chat-photo-remove { position:absolute; top:-.3rem; inset-inline-end:-.3rem; display:grid; place-items:center;
+  width:1.55rem; height:1.55rem; min-width:0; min-height:0; padding:0; border-radius:50%;
+  background:var(--fb-inverse-surface, #1f1f23); color:var(--fb-inverse-on-surface, #f4f4f6);
+  text-decoration:none; }
+/* The visual badge stays small; the hit area is the full house target so a
+   thumb can remove one photo without removing two. */
+.fb-chat-photo-remove::after { content:""; position:absolute; inset:-.6rem; border-radius:50%; }
+.fb-chat-photo-options { display:flex; align-items:center; flex-wrap:wrap; gap:.4rem .75rem; }
+.fb-chat-photo-options p { margin:0; flex:1 1 10rem; min-width:0; }
 /* Voice notes: one compact player inside the bubble and one draft strip above
    the composer. The track is decorative; the button, clock and state carry the
    meaning, and every control keeps the 44px house target. */
