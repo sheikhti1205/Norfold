@@ -434,6 +434,19 @@ export async function updatePassword(password: string): Promise<void> {
   if (error) throw mapAuthError(error);
 }
 
+/**
+ * Give the signed-in account a password.
+ *
+ * A Google sign-up creates an account with no password identity, so the same
+ * person can only ever get back in through Google. Setting one here lets that
+ * account sign in with email + password too, without changing its identity.
+ */
+export async function setAccountPassword(password: string): Promise<void> {
+  if (password.length < MIN_PASSWORD_LENGTH) throw new ApiError("Password must be at least 8 characters.", 400);
+  const { error } = await getSupabase().auth.updateUser({ password });
+  if (error) throw mapAuthError(error);
+}
+
 /** Server-reported result of self-serve account deletion (FBA-036). */
 export interface AccountDeletionResult {
   storageRemoved: number;
