@@ -87,7 +87,12 @@
 .fb-chat-message { align-self:flex-start; max-width:min(calc(100% - 44px), 34rem); padding:.6rem .8rem; border-radius:1rem 1rem 1rem .25rem; background:var(--fb-surface-container); overflow-wrap:anywhere; min-width:0; }
 .fb-chat-message-own { align-self:flex-end; border-radius:1rem 1rem .25rem 1rem; background:var(--fb-primary-container); color:var(--fb-on-primary-container); }
 .fb-chat-message p { white-space:pre-wrap; margin:0; line-height:1.45; font-size:.95rem; }
-.fb-chat-message-status { display:block; font-size:.75rem; text-align:end; margin-top:.25rem; }
+.fb-chat-message-status { display:block; font-size:.75rem; text-align:end; margin-top:.25rem;
+  color:var(--fb-on-surface-variant); }
+.fb-chat-message-own .fb-chat-message-status { color:color-mix(in srgb, currentColor 62%, transparent); }
+.fb-chat-ticks { display:inline-flex; align-items:center; vertical-align:-1px; color:inherit; }
+.fb-chat-ticks svg { fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+.fb-chat-ticks.is-read { color:var(--fb-receipt-read, #56c8f5); }
 .fb-chat-message-status button { text-decoration:underline; min-height:44px; min-width:44px; }
 .fb-chat-composer { display:flex; align-items:flex-end; gap:.4rem; flex:none; padding:8px 12px; background:var(--fb-surface); padding-bottom:max(8px, env(safe-area-inset-bottom)); }
 .fb-chat-composer textarea { flex:1; min-width:0; min-height:44px; max-height:9rem; resize:vertical; border:1px solid var(--fb-control-outline); border-radius:1.25rem; padding:.6rem .9rem; background:var(--fb-surface-container); color:var(--fb-on-surface); font-size:1rem; }
@@ -198,16 +203,24 @@ a.fb-chat-context:hover, a.fb-chat-context:focus-visible { text-decoration:under
 .fb-chat-rail-unread { position: absolute; inset-block-start: 7px; inset-inline-end: 10px; width: 9px; height: 9px;
   border-radius: 50%; background: var(--fb-primary); box-shadow: 0 0 0 2px var(--fb-surface); }
 
-/* Quiet per-message actions only where the pointer can hover; touch keeps the
-   always-visible 44px target. Focus still reveals it for keyboard users. */
+/* A pointer that can hover gets the actions on approach, positioned clear of
+   the bubble. A finger does not: there the whole message is the long-press
+   target and no permanent chrome sits in the transcript. */
+.fb-chat-message { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.fb-chat-message-options { border-radius: 50%; background: var(--fb-surface-container); }
 @media (hover: hover) and (pointer: fine) {
-  .fb-split-detail .fb-chat-message-options { opacity: 0; }
+  .fb-chat-message-options { opacity: 0; transform: translateY(2px); }
+  .fb-chat-line-own .fb-chat-message-options { margin-inline-end: .35rem; }
+  .fb-chat-line:not(.fb-chat-line-own) .fb-chat-message-options { margin-inline-start: .35rem; }
   .fb-chat-line:hover .fb-chat-message-options,
   .fb-chat-line:focus-within .fb-chat-message-options,
-  .fb-chat-message-options:focus-visible { opacity: 1; }
+  .fb-chat-message-options:focus-visible { opacity: 1; transform: none; }
   @media (prefers-reduced-motion: no-preference) {
-    .fb-split-detail .fb-chat-message-options { transition: opacity 120ms ease; }
+    .fb-chat-message-options { transition: opacity 120ms ease, transform 120ms ease; }
   }
+}
+@media (hover: none), (pointer: coarse) {
+  .fb-chat-message-options { display: none; }
 }
 
 /* Floating jump-to-latest: appears only when the reader is far from the newest

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { Archive, ArrowLeft, BellOff, ChevronDown, Ellipsis, Flag, Images, ListFilter, LogOut, MapPin, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCw, Search, Settings2, ShieldBan, Square, Trash2, UserRound } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
@@ -53,6 +53,23 @@ import { formatVoiceDuration, storedVoiceMime } from "../services/messaging/voic
 import { PhotoUnavailableError } from "../services/messaging/mediaTransport";
 import { chooseNativeImage, chooseNativeImages, importNativeImageUri, importedImageToFile } from "../services/media/nativeMedia";
 import "./Messaging.css";
+
+/**
+ * Read state as ticks, not words.
+ *
+ * One check means the server accepted the message; two means the peer's device
+ * has read it. The label carries the meaning for assistive tech, because the
+ * glyph alone is not content.
+ */
+function ReceiptTicks({ read }: { read: boolean }) {
+  return <span className={read ? "fb-chat-ticks is-read" : "fb-chat-ticks"} role="img"
+    aria-label={read ? "Read" : "Sent"} title={read ? "Read" : "Sent"}>
+    <svg viewBox="0 0 21 12" width="19" height="11" aria-hidden="true" focusable="false">
+      <path d="M1.4 6.6 4.5 9.7 11.4 2.3" />
+      {read && <path d="M8.4 9.7 15.3 2.3" />}
+    </svg>
+  </span>;
+}
 
 /** Live report subject for a report-linked message. Only the id travels with the
  * message; readability is resolved here, so a later-hidden report reads
@@ -529,6 +546,26 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const labels = useLabels(accountId, row ? [row.peerId] : []);
   const person = row ? labels.get(row.peerId) : undefined;
   const name = person?.displayName || person?.username;
+  // Long-press is the phone's way into the message actions; the visible
+  // ellipsis is a desktop affordance and is hidden from coarse pointers.
+  const press = useRef<{ timer: number; x: number; y: number } | null>(null);
+  const cancelPress = useCallback(() => {
+    if (!press.current) return;
+    window.clearTimeout(press.current.timer);
+    press.current = null;
+  }, []);
+  const startPress = useCallback((event: ReactPointerEvent, messageId: string) => {
+    if (event.pointerType === "mouse") return;
+    cancelPress();
+    const { clientX: x, clientY: y } = event;
+    const timer = window.setTimeout(() => {
+      press.current = null;
+      setSelectedMessageId(messageId);
+      setSheet("message");
+    }, 420);
+    press.current = { timer, x, y };
+  }, [cancelPress]);
+  useEffect(() => cancelPress, [cancelPress]);
   const [messages, setMessages] = useState<StoredHumanMessage[]>(cached?.messages ?? []);
   const [outbox, setOutbox] = useState<OutboxEntry[]>(cached?.outbox ?? []);
   const [media, setMedia] = useState<MediaAttachment[]>(cached?.media ?? []);
@@ -1125,7 +1162,19 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
           const own = message.authorId === accountId;
           const pending = outbox.find((entry) => entry.messageId === message.id);
           const attachment = media.find((entry) => entry.messageId === message.id);
-          return <li key={message.id} data-chat-message={message.id} tabIndex={-1} className={own ? "fb-chat-line fb-chat-line-own" : "fb-chat-line"}>
+          return <li key={message.id} data-chat-message={message.id} tabIndex={-1}
+            className={own ? "fb-chat-line fb-chat-line-own" : "fb-chat-line"}
+            onPointerDown={(event) => startPress(event, message.id)}
+            onPointerMove={(event) => {
+              const active = press.current;
+              if (active && (Math.abs(event.clientX - active.x) > 8 || Math.abs(event.clientY - active.y) > 8)) cancelPress();
+            }}
+            onPointerUp={cancelPress} onPointerCancel={cancelPress} onPointerLeave={cancelPress}
+            onContextMenu={(event) => {
+              // A long press that already opened the sheet must not also raise
+              // the browser menu; a right-click keeps its normal behaviour.
+              if (press.current || event.currentTarget.matches(":active")) event.preventDefault();
+            }}>
             <div data-receipt-message={message.messageType === "TEXT" && message.body && message.unsentAt === undefined ? message.id : undefined} className={own ? "fb-chat-message fb-chat-message-own" : "fb-chat-message"}>
             <span className="sr-only">{own ? "You: " : `${name || "Member"}: `}</span>
             {message.unsentAt !== undefined ? <p>Message unsent</p> : <>
@@ -1134,7 +1183,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             {message.contextReportId && <ChatReportContext reportId={message.contextReportId} safetyKey={view?.ownBlocked ? "blocked" : "clear"} />}
             {message.location && <ChatLocation location={message.location} />}
             {message.body ? <p dir="auto" className={isEmojiOnly(message.body) ? "fb-chat-emoji-only" : undefined}>{message.body}</p> : !attachment && message.messageType !== "LOCATION" && <p>{message.messageType === "MEDIA" ? "Photo loading…" : message.messageType === "VOICE" ? "Voice message loading…" : "Message unavailable"}</p>}
-            {own && <span className="fb-chat-message-status">{pending?.status === "NEEDS_REVIEW" ? "Needs review — " : message.messageType === "MEDIA" && !attachment ? "Photo pending" : message.messageType === "VOICE" && !attachment ? "Voice pending" : attachment && !["READY", "EVICTED"].includes(attachment.state) ? (attachment.state === "FAILED" ? (message.messageType === "VOICE" ? "Voice saved" : "Photo saved") : "Sending…") : message.server ? (message.readByPeer || readIds.has(message.id) ? "Read" : "Sent") : pending?.status === "FAILED" ? "Message saved" : "Sending…"}
+            {own && <span className="fb-chat-message-status">{pending?.status === "NEEDS_REVIEW" ? "Needs review" : message.messageType === "MEDIA" && !attachment ? "Photo pending" : message.messageType === "VOICE" && !attachment ? "Voice pending" : attachment && !["READY", "EVICTED"].includes(attachment.state) ? (attachment.state === "FAILED" ? (message.messageType === "VOICE" ? "Voice saved" : "Photo saved") : "Sending…") : message.server ? <ReceiptTicks read={!!(message.readByPeer || readIds.has(message.id))} /> : pending?.status === "FAILED" ? "Message saved" : "Sending…"}
               {(attachment?.state === "FAILED" || (!message.server && pending?.status === "FAILED")) && pending?.status !== "NEEDS_REVIEW" && <button type="button" onClick={() => {
               // A refused send keeps its original boundary; re-flushing it can only
               // fail again. The message-level retry rebinds that boundary because a
@@ -1232,6 +1281,12 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
           <button type="button" disabled={busy || !selectedNeedsReview} onClick={() => void reviewMessage("delete")}>Delete for me</button>
         </div>
       </div> : sheet === "message" ? <div className="fb-chat-sheet">
+        {selectedMessage?.body ? <button type="button" onClick={() => {
+          void navigator.clipboard?.writeText(selectedMessage.body).then(
+            () => { setSheet(null); announce("Message copied."); },
+            () => setError("Could not copy this message."),
+          );
+        }}>Copy text</button> : null}
         <button type="button" disabled={busy || !current || !selectedMessage} onClick={() => setSheet("delete")}>Delete for me</button>
         {selectedMessage?.authorId === accountId && selectedMessage.unsentAt === undefined &&
           <button type="button" disabled={busy || !current} onClick={() => setSheet("unsend")}>Unsend</button>}

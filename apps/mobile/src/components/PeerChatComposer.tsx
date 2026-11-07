@@ -50,6 +50,7 @@ export function PeerChatComposer({
   photoAllowed, onCamera, onPhotos, voiceAvailable = false, voiceActive = false, onVoice, context,
 }: PeerChatComposerProps) {
   const [expanded, setExpanded] = useState(true);
+  const [focused, setFocused] = useState(false);
   const field = inputRef;
   const composing = useRef(false);
   // Live conversion changes the value, so the caret it produced is restored
@@ -78,11 +79,14 @@ export function PeerChatComposer({
     if (!element) return;
     element.style.height = "auto";
     const style = getComputedStyle(element);
-    const cap = Math.min(160, (parseFloat(style.lineHeight) || 20) * 4 +
-      (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0));
+    const line = parseFloat(style.lineHeight) || 20;
+    const padding = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+    // Blurred, the field sits at its resting one-line height even when it holds
+    // a long draft; focused, it grows to four lines before it scrolls.
+    const cap = focused ? Math.min(160, line * 4 + padding) : line + padding;
     if (element.scrollHeight > 0) element.style.height = `${Math.min(cap, element.scrollHeight)}px`;
-    element.style.overflowY = element.scrollHeight > cap ? "auto" : "hidden";
-  }, [value, field]);
+    element.style.overflowY = focused && element.scrollHeight > cap ? "auto" : "hidden";
+  }, [value, field, focused]);
 
   const send = () => { if (available && !composing.current) onSend(); };
 
@@ -129,8 +133,11 @@ export function PeerChatComposer({
       <div className="fb-peer-field">
         <textarea ref={field} value={value} aria-label="Message" placeholder="Message" rows={1}
           disabled={locked}
-          onFocus={() => setExpanded(false)}
-          onPointerDown={() => setExpanded(false)}
+          // Merely reaching the field does not hide the attachments: only text
+          // in the field does that, and emptying it or leaving the field brings
+          // them back.
+          onFocus={() => setFocused(true)}
+          onBlur={() => { setFocused(false); setExpanded(true); }}
           onChange={(event) => {
             const next = event.target.value;
             setExpanded(next === "");

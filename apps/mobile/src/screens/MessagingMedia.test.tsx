@@ -236,15 +236,15 @@ it("renders a reopened cached thread and Read before any asynchronous refresh se
   m.threadRead.mockReturnValue(new Promise(() => {}));
   render(thread());
   expect(screen.getByText("Already read")).toBeTruthy();
-  expect(screen.getByText("Read")).toBeTruthy();
+  expect(screen.getByRole("img", { name: "Read" })).toBeTruthy();
   expect(screen.queryByText("Opening messages…")).toBeNull();
 });
 it("reopens durable Read offline without receipt lookups for confirmed messages", async () => {
   sentText(); m.messages = m.messages.map(message => ({ ...message as object, readByPeer: true }));
   const rendered = await open();
-  expect(screen.getByText("Read")).toBeTruthy();
+  expect(screen.getByRole("img", { name: "Read" })).toBeTruthy();
   m.chat.status = "offline"; m.chat.currentProjections = null as never; rendered.rerender(thread());
-  expect(screen.getByText("Read")).toBeTruthy();
+  expect(screen.getByRole("img", { name: "Read" })).toBeTruthy();
   m.chat.status = "ready"; m.chat.currentProjections = { chat: { ...m.view } }; m.chat.revision++;
   rendered.rerender(thread());
   await act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)); });
@@ -252,55 +252,55 @@ it("reopens durable Read offline without receipt lookups for confirmed messages"
 });
 it("keeps known Read through transcript refresh, projection copies and a failed receipt lookup", async () => {
   sentText(); m.receipt.mockResolvedValue({ context: "authority", readIds: ["sent"] });
-  const rendered = await open(); await screen.findByText("Read");
+  const rendered = await open(); await screen.findByRole("img", { name: "Read" });
   m.receipt.mockRejectedValue(new Error("temporary network failure"));
   m.chat.currentProjections = { chat: { ...m.view } }; m.chat.revision++;
   rendered.rerender(thread());
   await act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)); });
-  expect(screen.getByText("Read")).toBeTruthy(); expect(screen.queryByText("Sent")).toBeNull();
+  expect(screen.getByRole("img", { name: "Read" })).toBeTruthy(); expect(screen.queryByRole("img", { name: "Sent" })).toBeNull();
   m.messages = [...m.messages]; m.chat.revision++; rendered.rerender(thread());
   await act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)); });
   expect(m.receipt).toHaveBeenCalledTimes(1);
-  expect(screen.getByText("Read")).toBeTruthy();
+  expect(screen.getByRole("img", { name: "Read" })).toBeTruthy();
 });
 it("keeps Read across mute-only member revisions without rechecking it", async () => {
   sentText(); m.receipt.mockResolvedValue({ context: "authority", readIds: ["sent"] });
-  const rendered = await open(); await screen.findByText("Read");
+  const rendered = await open(); await screen.findByRole("img", { name: "Read" });
   m.chat.currentProjections = { chat: { ...m.view, ownMuted: true, revision: 2 } };
   rendered.rerender(thread());
   await act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)); });
   expect(m.receipt).toHaveBeenCalledTimes(1);
-  expect(screen.getByText("Read")).toBeTruthy();
+  expect(screen.getByRole("img", { name: "Read" })).toBeTruthy();
 });
 it.each([null, "new-consent"])("keeps historical Read when a new message gets receipt context %s", async context => {
   sentText(); m.receipt.mockResolvedValue({ context: "authority", readIds: ["sent"] });
-  const rendered = await open(); await screen.findByText("Read");
+  const rendered = await open(); await screen.findByRole("img", { name: "Read" });
   m.receipt.mockResolvedValue({ context, readIds: [] });
   m.messages = [...m.messages, { id: "new", conversationId: "chat", authorId: "account", recipientId: "peer", body: "New message", messageType: "TEXT", server: { sequence: 2 } }];
   m.chat.revision++; rendered.rerender(thread());
   await screen.findByText("New message");
   await waitFor(() => expect(m.receipt).toHaveBeenCalledTimes(2));
   expect(m.receipt.mock.calls[1]?.[2]).toEqual(["new"]);
-  expect(screen.getByText("Read")).toBeTruthy();
-  expect(screen.getByText("Sent")).toBeTruthy();
+  expect(screen.getByRole("img", { name: "Read" })).toBeTruthy();
+  expect(screen.getByRole("img", { name: "Sent" })).toBeTruthy();
 });
 it("retains historical Read across relationship changes without using it as receipt permission", async () => {
   sentText(); m.receipt.mockResolvedValue({ context: "authority", readIds: ["sent"] });
-  const rendered = await open(); await screen.findByText("Read");
+  const rendered = await open(); await screen.findByRole("img", { name: "Read" });
   m.receipt.mockImplementation(() => new Promise(() => {}));
   m.chat.currentProjections = { chat: { ...m.view, epoch: "relationship-b", revision: 2 } };
   rendered.rerender(thread());
-  expect(screen.getByText("Read")).toBeTruthy();
+  expect(screen.getByRole("img", { name: "Read" })).toBeTruthy();
   expect(m.observe).not.toHaveBeenCalled();
 });
 it("keeps historical Read while offline", async () => {
   sentText(); m.receipt.mockResolvedValue({ context: "authority", readIds: ["sent"] });
-  const rendered = await open(); await screen.findByText("Read");
+  const rendered = await open(); await screen.findByRole("img", { name: "Read" });
   m.chat.status = "offline"; rendered.rerender(thread());
-  expect(screen.getByText("Read")).toBeTruthy(); expect(screen.queryByText("Sent")).toBeNull();
+  expect(screen.getByRole("img", { name: "Read" })).toBeTruthy(); expect(screen.queryByRole("img", { name: "Sent" })).toBeNull();
   m.chat.status = "ready";
   m.receipt.mockResolvedValue({ context: "authority", readIds: [] });
-  rendered.rerender(thread()); await screen.findByText("Read");
+  rendered.rerender(thread()); await screen.findByRole("img", { name: "Read" });
 });
 
 it("attaches a report-origin subject to the first text only", async () => {
@@ -506,7 +506,7 @@ it("does not claim a photo was sent while its attachment is uploading", async ()
   m.messages = [{ id: "message", conversationId: "chat", authorId: "account", recipientId: "peer", body: "caption", messageType: "MEDIA", server: { eventId: "event", sequence: 1 } }];
   m.media = [{ id: "photo", messageId: "message", direction: "OUT", state: "UPLOADING", width: 2, height: 1, mime: "image/jpeg" }];
   await open();
-  expect(screen.queryByText("Sent")).toBeNull();
+  expect(screen.queryByRole("img", { name: "Sent" })).toBeNull();
   expect(screen.getByText(/sending/i)).toBeTruthy();
 });
 
@@ -563,7 +563,7 @@ it("does not show a deleted photo caption, image or send status", async () => {
   await open();
   expect(screen.getByText("Message unsent")).toBeTruthy();
   expect(screen.queryByText("old caption")).toBeNull();
-  expect(screen.queryByText("Sent")).toBeNull();
+  expect(screen.queryByRole("img", { name: "Sent" })).toBeNull();
   expect(m.read).not.toHaveBeenCalled();
 });
 it("shows unavailable without downloading after known expiry", async () => {
