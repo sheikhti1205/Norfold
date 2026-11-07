@@ -35,6 +35,9 @@ export interface HumanMessage {
   contextReportId?: string;
   /** Present exactly on a LOCATION message. */
   location?: StaticLocation;
+  /** When the author's device created the message, in epoch milliseconds.
+   * Optional because pre-existing history and older peers never sent it. */
+  createdAt?: number;
 }
 
 /** Monotonic historical knowledge, never live permission or receipt context. */

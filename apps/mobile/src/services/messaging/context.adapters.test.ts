@@ -46,7 +46,8 @@ describe.each(["sqlite", "web"] as const)("%s bounded message payload", (backend
 
   it.each(payloads)("keeps $messageType payload in claims and after restart", async (message) => {
     let h = await open(); await h.enqueueOutgoing(message, "connected:1");
-    const attempt = await h.claimNextOutgoing(); expect(attempt?.message).toEqual(message);
+    const attempt = await h.claimNextOutgoing();
+    expect(attempt?.message).toEqual({ ...message, createdAt: expect.any(Number) });
     await h.close(); h = await open(); expect(await h.getMessage(message.id)).toMatchObject(message);
   });
   it.each(payloads)("round-trips $messageType through a portable backup", async (message) => {

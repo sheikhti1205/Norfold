@@ -440,7 +440,7 @@ it.each([['CONNECTED','Archive','hide'],['REQUEST','Hide request','hide']])("use
 it("keeps failed destructive operations in a labelled confirmation with their error", async () => {
   m.messages=[received("TEXT")];m.remove.mockRejectedValue(new Error("refused"));await open();
   fireEvent.click(screen.getByRole("button",{name:"Options for received message"}));
-  fireEvent.click(screen.getByRole("button",{name:"Delete for me"}));
+  fireEvent.click(screen.getByRole("menuitem",{name:"Delete for me"}));
   const dialog=screen.getByRole("alertdialog",{name:"Delete for me?"});
   fireEvent.click(within(dialog).getByRole("button",{name:"Delete for me"}));
   await waitFor(()=>expect(within(dialog).getByRole("alert").textContent).toMatch(/Could not confirm/));

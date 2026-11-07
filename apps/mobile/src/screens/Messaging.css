@@ -90,9 +90,32 @@
 .fb-chat-message-status { display:block; font-size:.75rem; text-align:end; margin-top:.25rem;
   color:var(--fb-on-surface-variant); }
 .fb-chat-message-own .fb-chat-message-status { color:color-mix(in srgb, currentColor 62%, transparent); }
+.fb-chat-time { margin-inline-end:.35rem; font-variant-numeric:tabular-nums; }
 .fb-chat-ticks { display:inline-flex; align-items:center; vertical-align:-1px; color:inherit; }
 .fb-chat-ticks svg { fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
 .fb-chat-ticks.is-read { color:var(--fb-receipt-read, #56c8f5); }
+
+/* Floating message actions. A menu annotates the message you pressed; it is
+   never a second screen. One portal layer, above every task surface (70+). */
+.fb-msg-menu-backdrop { position:fixed; inset:0; z-index:200; background:transparent; }
+.fb-msg-menu {
+  position:fixed; display:flex; flex-direction:column; min-width:12rem; max-width:16rem;
+  padding:.3rem; border-radius:.75rem; background:var(--fb-surface-container-high, var(--fb-surface));
+  border:1px solid var(--fb-outline-variant); box-shadow:var(--shadow-md, 0 12px 28px rgb(0 0 0 / .24));
+  transform-origin:top left;
+}
+.fb-msg-menu > button {
+  display:flex; align-items:center; min-height:44px; padding:.5rem .7rem;
+  border:0; border-radius:.5rem; background:none; text-align:start;
+  font-size:.875rem; font-weight:400; color:var(--fb-on-surface); cursor:pointer;
+}
+.fb-msg-menu > button:hover { background:var(--fb-surface-container); }
+.fb-msg-menu > button:focus-visible { outline:2px solid var(--fb-focus); outline-offset:-2px; }
+.fb-msg-menu > button:disabled { opacity:.45; cursor:default; }
+@media (prefers-reduced-motion:no-preference) {
+  .fb-msg-menu { animation:fb-msg-menu-in 120ms ease-out; }
+  @keyframes fb-msg-menu-in { from { opacity:0; transform:scale(.96); } to { opacity:1; transform:none; } }
+}
 .fb-chat-message-status button { text-decoration:underline; min-height:44px; min-width:44px; }
 .fb-chat-composer { display:flex; align-items:flex-end; gap:.4rem; flex:none; padding:8px 12px; background:var(--fb-surface); padding-bottom:max(8px, env(safe-area-inset-bottom)); }
 .fb-chat-composer textarea { flex:1; min-width:0; min-height:44px; max-height:9rem; resize:vertical; border:1px solid var(--fb-control-outline); border-radius:1.25rem; padding:.6rem .9rem; background:var(--fb-surface-container); color:var(--fb-on-surface); font-size:1rem; }
