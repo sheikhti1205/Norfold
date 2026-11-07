@@ -39,6 +39,13 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
   const assertOpen = () => { if (controller.signal.aborted) throw new Error("Messaging session closed"); };
   const prepare = async () => { assertOpen(); await admission?.(controller.signal); assertOpen(); };
   const mediaUnavailable = () => new Error("Photo could not sync. Try again.");
+  /**
+   * One attachment that cannot be fetched used to be retried on every wake, so a
+   * single 404 turned into a permanent download + log loop. A failure now parks
+   * that attachment for five minutes; a person asking again skips the wait.
+   */
+  const mediaRetryAt = new Map<string, number>();
+  const MEDIA_RETRY_COOLDOWN_MS = 5 * 60_000;
   let mediaEpoch = 0, mediaMutationEpoch = 0, mediaPaused = false;
   let mediaController = new AbortController();
   let mediaTransport: ReturnType<typeof createMediaTransport> | undefined;
@@ -347,6 +354,13 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
       durationMs: row.durationMs, expiresAt: row.expiresAt } : null;
   }
 
+  /**
+   * Lifts the parked-attachment wait. Only a deliberate person action calls
+   * this: an automatic wake must not turn one broken attachment back into a
+   * download loop.
+   */
+  const clearMediaRetry = () => { mediaRetryAt.clear(); };
+
   const syncMedia = (): Promise<void> => {
     if (mediaSyncing) return mediaSyncing;
     const run = async () => {
@@ -354,10 +368,13 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
       const discoveryRevision = mediaDiscoveryRevision;
       let failed = false;
       const receive = async (metadata: MediaMetadata) => {
+        const retryAt = mediaRetryAt.get(metadata.id);
+        if (retryAt !== undefined && retryAt > Date.now()) return false;
         attempted.add(metadata.id);
-        try { await receiveMedia(metadata, context); return true; }
+        try { await receiveMedia(metadata, context); mediaRetryAt.delete(metadata.id); return true; }
         catch (error) {
           context.live(); failed = true;
+          mediaRetryAt.set(metadata.id, Date.now() + MEDIA_RETRY_COOLDOWN_MS);
           // One attachment id and a reason: enough to name the defect from
           // logcat, never message text or bytes.
           console.warn("chat media delivery failed:",
@@ -490,6 +507,8 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
       const row = (await history.listMedia(uuid(conversationId))).find((item) => item.id === id);
       if (!row || row.expiresAt === null) throw mediaUnavailable();
       if (row.expiresAt <= Date.now()) { context.live(); throw new PhotoUnavailableError(); }
+      // An explicit request is the one caller allowed to ignore the parked retry.
+      mediaRetryAt.delete(id);
       await receiveMedia(row, context);
     },
     /** Server delivery row for one attachment, used to authorize peer bytes. */
@@ -540,7 +559,7 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
       if (!await history.retryOutgoing(id, epoch)) throw new Error("Message is no longer retryable");
       assertOpen();
     },
-    sync, syncState, flush, refreshConversations, flushMedia, syncMedia,
+    sync, syncState, flush, refreshConversations, flushMedia, syncMedia, clearMediaRetry,
     reconcileConversation,
     needsMediaDiscovery: () => mediaDiscoveryRevision !== discoveredMediaRevision,
     close() { controller.abort(); mediaController.abort(); return Promise.resolve(history.close()); },

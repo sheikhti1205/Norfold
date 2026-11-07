@@ -2,6 +2,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, Images, Info, MapPin, Play } from "lucide-react";
 import { ChatIdentity } from "../../components/ChatIdentity";
 import { PeerChatComposer } from "../../components/PeerChatComposer";
+import { voiceBarHeights } from "../../screens/Messaging";
 import { ALL_VARIANTS, FixtureFrame, FixtureSection, type FixtureVariant } from "../FixtureSection";
 import "../../screens/Messaging.css";
 
@@ -66,7 +67,9 @@ function Thread({ variant }: { variant: FixtureVariant }) {
                 <Play size={18} aria-hidden="true" />
               </button>
               <span className="fb-chat-voice-track" aria-hidden="true">
-                <span className="fb-chat-voice-fill" style={{ width: "35%" }} />
+                {voiceBarHeights("fixture-voice-note").map((height, index) => <span key={index}
+                  className="fb-chat-voice-bar" data-played={index < 11 ? "true" : undefined}
+                  style={{ height: `${height}%` }} />)}
               </span>
               <span className="fb-chat-voice-time">0:07</span>
             </div>
