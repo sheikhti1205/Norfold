@@ -235,19 +235,35 @@ describe("media transport boundary", () => {
     ]);
   });
 
-  it.each(["version", "array", "duplicate", "duplicate-message", "expiry", "oversize", "envelope", "extra"])("rejects invalid delivery %s", async (kind) => {
+  it.each(["object", "oversize", "envelope"])("rejects a malformed delivery page: %s", async (kind) => {
     const { metadata } = await fixture(); const row = delivery(metadata); let data: unknown = [row];
-    if (kind === "version") data = [{ ...row, version: 2 }];
-    if (kind === "array") data = [[]];
-    if (kind === "duplicate") data = [row, row];
-    if (kind === "duplicate-message") data = [row, { ...row, attachmentId: id(8) }];
-    if (kind === "expiry") data = [{ ...row, expiresAt: "tomorrow" }];
+    if (kind === "object") data = { items: [row] };
     if (kind === "oversize") data = Array(101).fill(row);
-    if (kind === "envelope") data = { items: [row] };
-    if (kind === "extra") data = [{ ...row, storageKey: "private" }];
+    if (kind === "envelope") data = "rows";
     const { transport } = setup(async () => { throw Error("unexpected"); }, async () => data);
     await expect(transport.fetchDeliveries()).rejects.toThrow();
   });
+
+  it.each(["version", "duplicate", "duplicate-message", "expiry", "extra", "voice-without-duration"])(
+    "drops one unreadable delivery row instead of blacking out the page: %s", async (kind) => {
+      const { metadata } = await fixture(); const row = delivery(metadata);
+      // A voice row with no measured length cannot be admitted by the metadata
+      // contract, and the page must still deliver the photo beside it.
+      const poisoned = kind === "voice-without-duration"
+        ? [{ ...row, mime: "audio/webm", width: 1, height: 1, durationMs: null }, { ...delivery(metadata), attachmentId: id(9) }]
+        : null;
+      const data: unknown = poisoned ?? (kind === "version" ? [{ ...row, version: 2 }]
+        : kind === "duplicate" ? [row, row]
+        : kind === "duplicate-message" ? [row, { ...row, attachmentId: id(8) }]
+        : kind === "expiry" ? [{ ...row, expiresAt: "tomorrow" }]
+        : [{ ...row, storageKey: "private" }]);
+      const { transport } = setup(async () => { throw Error("unexpected"); }, async () => data);
+      const rows = await transport.fetchDeliveries();
+      if (kind === "duplicate") expect(rows).toHaveLength(1);
+      else if (kind === "duplicate-message") expect(rows).toHaveLength(1);
+      else if (poisoned) expect(rows.map((entry) => entry.id)).toEqual([id(9)]);
+      else expect(rows).toEqual([]);
+    });
 
   it("refuses ACK reply objects and does not issue work after owner closure", async () => {
     let calls = 0;
