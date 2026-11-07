@@ -9,7 +9,6 @@ import { onRealtime } from "../services/realtime";
 import { useAuth } from "../auth";
 import { UserAvatar } from "../components/UserAvatar";
 import { ChatIdentity } from "../components/ChatIdentity";
-import { UserIdentityTrigger } from "../components/UserIdentityTrigger";
 import { StatusChip } from "../components/StatusChip";
 import { formatEventDate, timeAgo } from "../utils/dates";
 import { convertEmoticons, isEmojiOnly } from "../utils/emoji";
@@ -376,15 +375,12 @@ export function ChatRail({ rows, labels, identities, selectedId, onExpand, headi
         const name = labels.get(row.peerId);
         const unread = row.unreadCount;
         const person = identities?.get(row.peerId);
-        // The avatar is the person; the tile around it opens the chat.
+        // The whole tile, avatar and name included, opens the chat. A profile is
+        // reached from the conversation header, not from the list.
         return <li key={row.conversationId} className="fb-chat-rail-item">
-          {person?.username
-            ? <UserIdentityTrigger className="fb-chat-rail-identity"
-                person={{ id: row.peerId, username: person.username, displayName: name, avatarUrl: person.avatarUrl }}
-                trigger={<UserAvatar username={name} avatarUrl={person.avatarUrl} size={40} />} />
-            : <span className="fb-chat-rail-identity">
-                <UserAvatar username={name} avatarUrl={person?.avatarUrl} size={40} />
-              </span>}
+          <span className="fb-chat-rail-identity" aria-hidden="true">
+            <UserAvatar username={name} avatarUrl={person?.avatarUrl} size={40} />
+          </span>
           {unread > 0 && <span className="fb-chat-rail-unread" aria-hidden="true" />}
           <Link to={`/chats/${row.conversationId}`} className="fb-chat-rail-row"
             aria-current={selectedId === row.conversationId ? "page" : undefined}
@@ -466,23 +462,16 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
             : view?.ownDeclined ? "Dismissed" : view?.mode === "CONNECTED" ? "Connected"
               : view?.request === "INCOMING" ? "Message request" : view?.request === "OUTGOING" ? "Request sent" : "Conversation";
           const person = identities.get(row.peerId);
-          // Split hit targets: the avatar and name are the person (a profile
-          // destination), and every other part of the row opens the conversation.
-          // They are siblings with one stretched link, never nested anchors.
+          // One hit target: the name and avatar open the conversation, exactly
+          // like the rest of the row. The profile lives in the conversation
+          // header, where tapping the person is unambiguous.
           return <li key={row.conversationId}>
             <div className="fb-chat-row">
               <div className="fb-chat-row-copy">
-                {person?.username
-                  ? <UserIdentityTrigger className="fb-chat-row-identity"
-                      person={{ id: row.peerId, username: person.username, displayName: name, avatarUrl: person.avatarUrl }}
-                      trigger={<>
-                        <UserAvatar username={name} avatarUrl={person.avatarUrl} size={44} />
-                        <strong>{name || person.username}</strong>
-                      </>} />
-                  : <span className="fb-chat-row-identity">
-                      <UserAvatar username={name} avatarUrl={person?.avatarUrl} size={44} />
-                      <strong>{name || "Member"}</strong>
-                    </span>}
+                <span className="fb-chat-row-identity" aria-hidden="true">
+                  <UserAvatar username={name} avatarUrl={person?.avatarUrl} size={44} />
+                  <strong>{name || person?.username || "Member"}</strong>
+                </span>
                 <span className="fb-chat-preview">{row.lastMessage?.unsentAt !== undefined ? "Message unsent"
                   : row.lastMessage?.body || (row.lastMessage?.messageType === "LOCATION" ? "Location shared"
                     : row.lastMessage?.messageType === "MEDIA" ? "Photo"
