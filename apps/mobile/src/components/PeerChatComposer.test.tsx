@@ -35,9 +35,15 @@ it("shows exactly camera and photos on the left while voice is unavailable", () 
   expect(screen.queryByRole("button", { name: /add to message|emoji|attach/i })).toBeNull();
 });
 
-it("collapses behind `>` on focus and expands again on request", async () => {
+// Owner rule 2026-11-08: reaching the field is not a reason to hide the
+// attachments. Only text in the field does that; `>` brings them back.
+it("keeps the attachments on focus, collapses them once text exists, and reopens on request", async () => {
   render(<Harness />);
-  fireEvent.focus(screen.getByRole("textbox", { name: "Message" }));
+  const field = screen.getByRole("textbox", { name: "Message" });
+  fireEvent.focus(field);
+  expect(screen.getByRole("button", { name: "Take photo" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Show attachments" })).toBeNull();
+  fireEvent.change(field, { target: { value: "and more" } });
   const reveal = await screen.findByRole("button", { name: "Show attachments" });
   await waitFor(() => expect(screen.queryByRole("button", { name: "Take photo" })).toBeNull());
   fireEvent.click(reveal);
