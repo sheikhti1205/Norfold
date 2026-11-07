@@ -152,23 +152,29 @@ export function createMediaTransport(inputScope: MessagingScope, owner: AbortSig
     fetchDeliveries(): Promise<MediaDelivery[]> {
       return attempt(async (signal) => {
         const value = await rpc("findback_fetch_chat_media_delivery", {}, signal);
+        // Shape of the page is contract; a single row is not. One unreadable
+        // attachment must not black out every other delivery for this device,
+        // which is exactly what a whole-page rejection does.
         if (!Array.isArray(value) || value.length > 100) throw unavailable();
-        const attachments = new Set<string>(), messages = new Set<string>();
-        return value.map((entry) => {
-          const row = exactObject(entry, DELIVERY_FIELDS);
-          if (row.version !== 1 || typeof row.expiresAt !== "string"
-            || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(row.expiresAt)) throw unavailable();
-          const expiresAt = Date.parse(row.expiresAt);
-          const metadata = copyMediaMetadata({ id: row.attachmentId, messageId: row.messageId, direction: "IN",
-            sha256: row.sha256, mime: row.mime, byteSize: row.bytes, width: row.width, height: row.height,
-            durationMs: row.durationMs ?? null, expiresAt });
-          if (expiresAt <= Date.now() || attachments.has(metadata.id) || messages.has(metadata.messageId)) throw unavailable();
-          attachments.add(metadata.id); messages.add(metadata.messageId);
-          // Direction is deliberately absent: session must resolve the durable parent.
-          return { id: metadata.id, messageId: metadata.messageId, sha256: metadata.sha256, mime: metadata.mime,
-            byteSize: metadata.byteSize, width: metadata.width, height: metadata.height,
-            durationMs: metadata.durationMs, expiresAt };
-        });
+        const attachments = new Set<string>(), messages = new Set<string>(), rows: MediaDelivery[] = [];
+        for (const entry of value) {
+          try {
+            const row = exactObject(entry, DELIVERY_FIELDS);
+            if (row.version !== 1 || typeof row.expiresAt !== "string"
+              || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(row.expiresAt)) continue;
+            const expiresAt = Date.parse(row.expiresAt);
+            const metadata = copyMediaMetadata({ id: row.attachmentId, messageId: row.messageId, direction: "IN",
+              sha256: row.sha256, mime: row.mime, byteSize: row.bytes, width: row.width, height: row.height,
+              durationMs: row.durationMs ?? null, expiresAt });
+            if (expiresAt <= Date.now() || attachments.has(metadata.id) || messages.has(metadata.messageId)) continue;
+            attachments.add(metadata.id); messages.add(metadata.messageId);
+            // Direction is deliberately absent: session must resolve the durable parent.
+            rows.push({ id: metadata.id, messageId: metadata.messageId, sha256: metadata.sha256, mime: metadata.mime,
+              byteSize: metadata.byteSize, width: metadata.width, height: metadata.height,
+              durationMs: metadata.durationMs, expiresAt });
+          } catch { continue; }
+        }
+        return rows;
       });
     },
     ack(attachmentId: string): Promise<void> {
