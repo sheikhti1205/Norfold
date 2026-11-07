@@ -93,6 +93,15 @@ select pg_temp.claim(2);
 do $$ declare r jsonb; begin
  r:=public.findback_history_peer('PENDING','{}');
  assert jsonb_array_length(r)=1 and r->0->>'sessionId'=current_setting('recovery.peer'),'incoming discovery';
+ -- DISCOVER must compile: this exact call used to raise 42702 because the
+ -- subquery aliased chat_devices as `d`, colliding with the function's `d` row.
+ -- A legitimate authorization refusal is allowed here; only the ambiguity is a
+ -- defect, so any other SQLSTATE is re-raised untouched.
+ begin
+  perform public.findback_history_peer('DISCOVER',jsonb_build_object('conversationId','00000000-0000-4000-9910-000000000100'));
+ exception when others then
+  if sqlstate='42702' then raise; end if;
+ end;
  r:=public.findback_history_peer('READ',jsonb_build_object('sessionId',current_setting('recovery.peer'),'after',0));
  assert r->>'peerAccountId'='00000000-0000-4000-9910-000000000001','verified counterpart';
  assert r->>'conversationId'='00000000-0000-4000-9910-000000000100' and r->>'epoch'=current_setting('recovery.epoch'),'scope bound';

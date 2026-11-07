@@ -1,0 +1,44 @@
+/* Conversation details: the third pane inside SplitView's detail column.
+   Width is a CSS variable so one transition animates both the collapse
+   (0px) and a pointer drag, and reduced motion simply removes the motion. */
+.fb-chat-workspace {
+  position:relative;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 0px;
+  height:100%; min-height:0; min-width:0;
+  transition:grid-template-columns .26s cubic-bezier(.2,.7,.2,1);
+}
+.fb-chat-workspace-details {
+  grid-template-columns:minmax(0,1fr) var(--fb-details-w, 320px);
+}
+.fb-chat-workspace-dragging { transition:none; user-select:none; }
+
+.fb-chat-details {
+  min-width:0; min-height:0; overflow-y:auto; overscroll-behavior:contain;
+  padding:.75rem 1rem; border-inline-start:1px solid var(--fb-outline-variant);
+  background:var(--fb-surface); color:var(--fb-on-surface);
+  opacity:0; transform:translateX(6px);
+  transition:opacity .16s ease, transform .22s cubic-bezier(.2,.7,.2,1);
+}
+.fb-chat-workspace-details .fb-chat-details { opacity:1; transform:none; }
+.fb-chat-workspace-dragging .fb-chat-details { transition:none; }
+
+.fb-chat-details-resize {
+  position:absolute; top:0; bottom:0; right:calc(var(--fb-details-w, 320px) - 4px);
+  width:9px; z-index:6; cursor:col-resize; touch-action:none;
+  background:transparent; border-inline-start:1px solid transparent;
+  transition:background .15s ease, border-color .15s ease;
+}
+.fb-chat-details-resize:hover,
+.fb-chat-details-resize:focus-visible,
+.fb-chat-workspace-dragging .fb-chat-details-resize {
+  background:color-mix(in srgb, var(--fb-primary, #3355ff) 16%, transparent);
+  border-inline-start-color:var(--fb-primary, #3355ff);
+}
+.fb-chat-workspace:not(.fb-chat-workspace-details) .fb-chat-details-resize { display:none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-chat-workspace,
+  .fb-chat-details,
+  .fb-chat-details-resize { transition:none; }
+}

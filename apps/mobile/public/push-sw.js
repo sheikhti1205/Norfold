@@ -9,8 +9,7 @@
  * The payload is content-free by design: ids only, no sender name and no
  * message text, so nothing private is rendered by the operating system.
  */
-/* eslint-env serviceworker */
-/* global self, clients */
+/* global self, URL */
 
 self.addEventListener("install", () => {
   self.skipWaiting();

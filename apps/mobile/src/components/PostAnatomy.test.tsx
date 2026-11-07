@@ -6,7 +6,6 @@ import { MemoryRouter, useLocation } from "react-router";
 import { PostList } from "./PostList";
 import { SavedReportsProvider } from "../hooks/useSavedReports";
 import { readSavedReports } from "../services/savedReports";
-import { UserIdentityTrigger } from "./UserIdentityTrigger";
 
 const { rpc, auth } = vi.hoisted(() => ({ rpc: vi.fn(), auth: { id: "reader" as string | null } }));
 vi.mock("../services/supabaseClient", () => ({ getSupabase: () => ({ rpc }) }));

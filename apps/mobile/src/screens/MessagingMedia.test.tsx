@@ -324,8 +324,8 @@ function geolocation() {
     reject: () => failure({ code: 1 } as GeolocationPositionError) };
 }
 async function locationPicker() {
-  fireEvent.click(screen.getByRole("button", { name: "Add to message" }));
-  fireEvent.click(await screen.findByRole("menuitem", { name: "Location" }));
+  fireEvent.click(screen.getByRole("button", { name: "Conversation options" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Share location" }));
   return await screen.findByRole("dialog", { name: "Share a location" });
 }
 it("reviews an approximate or exact pin and sends only on a separate activation, keeping the draft", async () => {
@@ -468,17 +468,17 @@ it("sends desktop Enter once but preserves Shift+Enter and IME composition", asy
 });
 it("offers an accessible photo picker in a connected conversation", async () => {
   await open();
-  fireEvent.click(screen.getByRole("button", { name: "Add to message" }));
-  expect(await screen.findByRole("menuitem", { name: "Photo" })).toBeTruthy();
+  expect((screen.getByRole("button", { name: "Choose photo" }) as HTMLButtonElement).disabled).toBe(false);
+  expect((screen.getByRole("button", { name: "Take photo" }) as HTMLButtonElement).disabled).toBe(false);
 });
-it("does not offer a photo picker in a request", async () => {
+it("does not offer an active photo picker in a request", async () => {
   m.view.mode = "REQUEST"; await open();
-  expect(screen.queryByRole("button", { name: "Add to message" })).toBeNull();
+  expect((screen.getByRole("button", { name: "Choose photo" }) as HTMLButtonElement).disabled).toBe(true);
 });
 it("prepares a selected web photo and allows removing the draft", async () => {
   m.prepare.mockResolvedValue({ bytes: new Uint8Array([1]).buffer, sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 1, height: 1 });
   await open();
-  fireEvent.change(screen.getByLabelText("Choose photo"), { target: { files: [new File(["x"], "p.jpg", { type: "image/jpeg" })] } });
+  fireEvent.change(screen.getByLabelText("Photo file input"), { target: { files: [new File(["x"], "p.jpg", { type: "image/jpeg" })] } });
   await waitFor(() => expect(screen.getByRole("button", { name: /remove photo/i })).toBeTruthy());
   expect(m.prepare).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole("button", { name: /remove photo/i }));
@@ -488,7 +488,7 @@ it("keeps the same photo and caption on retry after uncertain admission", async 
   m.prepare.mockResolvedValue({ bytes: new Uint8Array([1]).buffer, sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 1, height: 1 });
   m.send.mockRejectedValueOnce(new Error("uncertain")).mockResolvedValueOnce("saved");
   await open();
-  fireEvent.change(screen.getByLabelText("Choose photo"), { target: { files: [new File(["x"], "p.jpg", { type: "image/jpeg" })] } });
+  fireEvent.change(screen.getByLabelText("Photo file input"), { target: { files: [new File(["x"], "p.jpg", { type: "image/jpeg" })] } });
   await waitFor(() => expect(screen.getByText("Photo ready")).toBeTruthy());
   fireEvent.change(screen.getByLabelText("Message"), { target: { value: "caption" } });
   fireEvent.click(screen.getByRole("button", { name: "Send message" }));
@@ -541,7 +541,7 @@ it("shows a prepared draft preview and revokes it when removed", async () => {
   vi.stubGlobal("URL", { createObjectURL: create, revokeObjectURL: revoke });
   m.prepare.mockResolvedValue({ bytes: new Uint8Array([1]).buffer, sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
   await open();
-  fireEvent.change(screen.getByLabelText("Choose photo"), { target: { files: [new File(["x"], "p.jpg")] } });
+  fireEvent.change(screen.getByLabelText("Photo file input"), { target: { files: [new File(["x"], "p.jpg")] } });
   await waitFor(() => expect(screen.getByAltText("Selected photo")).toBeTruthy());
   fireEvent.click(screen.getByRole("button", { name: /remove photo/i }));
   await waitFor(() => expect(revoke).toHaveBeenCalledWith("blob:draft"));
@@ -550,11 +550,11 @@ it("does not allow replacing or silently discarding an uncertain admission", asy
   m.prepare.mockResolvedValue({ bytes: new Uint8Array([1]).buffer, sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
   m.send.mockRejectedValue(new Error("uncertain"));
   await open();
-  fireEvent.change(screen.getByLabelText("Choose photo"), { target: { files: [new File(["x"], "p.jpg")] } });
+  fireEvent.change(screen.getByLabelText("Photo file input"), { target: { files: [new File(["x"], "p.jpg")] } });
   await waitFor(() => expect(screen.getByText("Photo ready")).toBeTruthy());
   fireEvent.click(screen.getByRole("button", { name: "Send message" }));
   await waitFor(() => expect(m.send).toHaveBeenCalledTimes(1));
-  expect((screen.getByRole("button", { name: "Add to message" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "Choose photo" }) as HTMLButtonElement).disabled).toBe(true);
   expect((screen.getByRole("button", { name: /remove photo/i }) as HTMLButtonElement).disabled).toBe(true);
 });
 it("does not show a deleted photo caption, image or send status", async () => {
@@ -578,7 +578,7 @@ it("does not display a photo draft after the connection becomes a request", asyn
   const app = <MemoryRouter initialEntries={["/connections/chat"]}><Routes><Route path="/connections/:conversationId" element={<MessagingThread />} /></Routes></MemoryRouter>;
   const rendered = render(app);
   await waitFor(() => expect(screen.queryByText("Opening messages…")).toBeNull());
-  fireEvent.change(screen.getByLabelText("Choose photo"), { target: { files: [new File(["x"], "p.jpg")] } });
+  fireEvent.change(screen.getByLabelText("Photo file input"), { target: { files: [new File(["x"], "p.jpg")] } });
   await waitFor(() => expect(screen.getByAltText("Selected photo")).toBeTruthy());
   m.view.mode = "REQUEST"; rendered.rerender(<MemoryRouter initialEntries={["/connections/chat"]}><Routes><Route path="/connections/:conversationId" element={<MessagingThread />} /></Routes></MemoryRouter>);
   expect(screen.queryByAltText("Selected photo")).toBeNull();
@@ -586,7 +586,7 @@ it("does not display a photo draft after the connection becomes a request", asyn
 it("lets a request-mode user remove a retained photo draft before sending text", async () => {
   m.prepare.mockResolvedValue({ bytes: new ArrayBuffer(1), sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
   const rendered = await open();
-  fireEvent.change(screen.getByLabelText("Choose photo"), { target: { files: [new File(["x"], "p.jpg")] } });
+  fireEvent.change(screen.getByLabelText("Photo file input"), { target: { files: [new File(["x"], "p.jpg")] } });
   await screen.findByAltText("Selected photo");
   fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Hello again" } });
   m.view.mode = "REQUEST"; rendered.rerender(thread());
@@ -686,7 +686,7 @@ it("closes an open photo when an unsend arrives in the same thread", async () =>
 it("can retry preparation after relationship loss aborted a draft", async () => {
   let resolve!: (value: unknown) => void; m.prepare.mockReturnValue(new Promise((done) => { resolve = done; }));
   const rendered = await open();
-  fireEvent.change(screen.getByLabelText("Choose photo"), { target: { files: [new File(["x"], "p.jpg")] } });
+  fireEvent.change(screen.getByLabelText("Photo file input"), { target: { files: [new File(["x"], "p.jpg")] } });
   expect(screen.getByText("Preparing photo…")).toBeTruthy();
   m.view.mode = "REQUEST"; rendered.rerender(thread());
   await act(async () => { resolve({ bytes: new ArrayBuffer(1), mime: "image/jpeg", width: 2, height: 1 }); });
@@ -699,8 +699,7 @@ it("uses the canonical Android URI import before preparing a selected photo", as
   const imported = { uri: "synthetic-import" }, source = new File(["x"], "photo.jpg");
   m.choose.mockResolvedValue(["content://synthetic-photo"]); m.import.mockResolvedValue(imported); m.file.mockReturnValue(source);
   m.prepare.mockResolvedValue({ bytes: new ArrayBuffer(1), sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
-  await open(); fireEvent.click(screen.getByRole("button", { name: "Add to message" }));
-  fireEvent.click(await screen.findByRole("menuitem", { name: "Photo" }));
+  await open(); fireEvent.click(screen.getByRole("button", { name: "Choose photo" }));
   await screen.findByAltText("Selected photo");
   expect(m.choose).toHaveBeenCalledWith({ source: "photos", limit: 1 });
   expect(m.import).toHaveBeenCalledWith("content://synthetic-photo", { signal: expect.any(AbortSignal) });

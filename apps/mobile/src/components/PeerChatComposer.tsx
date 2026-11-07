@@ -12,6 +12,9 @@ export interface PeerChatComposerProps {
   inputRef: RefObject<HTMLTextAreaElement | null>;
   busy: boolean;
   locked: boolean;
+  /** Attachment controls stay disabled while an uncertain admission owns them,
+   * even when Send must stay available for an identical retry. */
+  attachmentsLocked?: boolean;
   canSend: boolean;
   photoAllowed: boolean;
   onCamera: () => void;
@@ -42,7 +45,7 @@ export interface PeerChatComposerProps {
  *     the keyboard is still open.
  */
 export function PeerChatComposer({
-  value, onChange, onSend, inputRef, busy, locked, canSend,
+  value, onChange, onSend, inputRef, busy, locked, canSend, attachmentsLocked = false,
   photoAllowed, onCamera, onPhotos, voiceAvailable = false, voiceActive = false, onVoice, context,
 }: PeerChatComposerProps) {
   const [expanded, setExpanded] = useState(true);
@@ -90,13 +93,13 @@ export function PeerChatComposer({
               animate={{ opacity: 1, x: 0, width: "auto" }}
               exit={reduce ? { opacity: 0 } : { opacity: 0, x: -8, width: 0 }}
               transition={{ duration: reduce ? 0 : motionDurations.fast, ease: motionEasings.out }}>
-              {button("Take photo", <Camera size={21} aria-hidden="true" />, onCamera, !photoAllowed || busy)}
-              {button("Choose photo", <ImagePlus size={21} aria-hidden="true" />, onPhotos, !photoAllowed || busy)}
+              {button("Take photo", <Camera size={21} aria-hidden="true" />, onCamera, !photoAllowed || busy || locked || attachmentsLocked)}
+              {button("Choose photo", <ImagePlus size={21} aria-hidden="true" />, onPhotos, !photoAllowed || busy || locked || attachmentsLocked)}
               {/* Voice exists only when a real recording/playback path exists.
                   The handoff forbids a microphone that cannot record. */}
               {voiceAvailable && onVoice
                 ? button(voiceActive ? "Stop recording" : "Voice message",
-                  voiceActive ? <Square size={19} aria-hidden="true" /> : <Mic size={21} aria-hidden="true" />, onVoice, busy)
+                  voiceActive ? <Square size={19} aria-hidden="true" /> : <Mic size={21} aria-hidden="true" />, onVoice, busy || locked || attachmentsLocked)
                 : null}
             </motion.div>
           ) : (
