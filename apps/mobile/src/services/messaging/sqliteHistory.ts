@@ -85,6 +85,7 @@ interface MessageRow {
   eventId: string | null;
   sequence: number | null;
   unsentAt: number | null;
+  createdAt: number;
 }
 
 interface OutboxRow {
@@ -173,6 +174,7 @@ function toStored(row: MessageRow): StoredHumanMessage {
     authorId: row.authorId,
     recipientId: row.recipientId,
     body: row.body ?? "",
+    createdAt: row.createdAt,
     ...(row.messageType ? { messageType: row.messageType } : {}),
     ...(row.contextReportId ? { contextReportId: row.contextReportId } : {}),
     ...(row.locationLat !== null && row.locationLng !== null
@@ -1361,7 +1363,7 @@ export async function openSqliteMessagingHistory(
             || (existing.body !== null && message.body !== null && (existing.body !== message.body
               || !sameIdentity(existing, { ...message, body: message.body,
                 messageType: message.messageType ?? undefined, contextReportId: message.contextReportId ?? undefined,
-                location: message.location ?? undefined })))
+                location: message.location ?? undefined, createdAt: message.createdAt ?? undefined })))
             || (existing.unsentAt !== null && message.unsentAt !== null
               && existing.unsentAt !== message.unsentAt)) {
             throw new BackupError("backup: identity conflict");

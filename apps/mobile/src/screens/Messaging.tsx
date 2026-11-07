@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { Archive, ArrowLeft, BellOff, ChevronDown, Ellipsis, Flag, Images, ListFilter, LogOut, MapPin, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCw, Search, Settings2, ShieldBan, Square, Trash2, UserRound } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
@@ -548,6 +549,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const name = person?.displayName || person?.username;
   // Long-press is the phone's way into the message actions; the visible
   // ellipsis is a desktop affordance and is hidden from coarse pointers.
+  // Actions float next to the message that owns them. A sheet is a different
+  // screen; a menu is an annotation of the thing you pressed.
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const press = useRef<{ timer: number; x: number; y: number } | null>(null);
   const cancelPress = useCallback(() => {
     if (!press.current) return;
@@ -560,12 +564,40 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     const { clientX: x, clientY: y } = event;
     const timer = window.setTimeout(() => {
       press.current = null;
-      setSelectedMessageId(messageId);
-      setSheet("message");
+      openMessageMenu(messageId);
     }, 420);
     press.current = { timer, x, y };
   }, [cancelPress]);
   useEffect(() => cancelPress, [cancelPress]);
+  const openMessageMenu = useCallback((messageId: string, anchor?: Element | null) => {
+    const element = anchor ?? document.querySelector(`[data-chat-message="${messageId}"]`);
+    const rect = element?.getBoundingClientRect();
+    const width = 208, gap = 8, viewportWidth = window.innerWidth, viewportHeight = window.innerHeight;
+    // Roughly four 48 px rows; the panel clamps itself again if it is shorter.
+    const height = Math.min(4 * 48 + 12, viewportHeight - 16);
+    let x = rect ? rect.right + gap : viewportWidth / 2 - width / 2;
+    let y = rect ? rect.top : viewportHeight / 2 - height / 2;
+    if (rect) {
+      if (x + width > viewportWidth - gap) x = Math.max(gap, rect.left - gap - width);
+      if (viewportWidth < 480) x = Math.max(gap, Math.min(viewportWidth - width - gap, rect.left + rect.width / 2 - width / 2));
+      y = Math.min(Math.max(gap, y), Math.max(gap, viewportHeight - height - gap));
+    }
+    setSelectedMessageId(messageId);
+    setMenu({ id: messageId, x, y });
+  }, []);
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setMenu(null); };
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    document.addEventListener("keydown", escape);
+    return () => {
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [menu]);
   const [messages, setMessages] = useState<StoredHumanMessage[]>(cached?.messages ?? []);
   const [outbox, setOutbox] = useState<OutboxEntry[]>(cached?.outbox ?? []);
   const [media, setMedia] = useState<MediaAttachment[]>(cached?.media ?? []);
@@ -642,7 +674,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const cameraInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<"actions" | "search" | "media" | "location" | "end" | "message" | "delete" | "unsend" | "clear" | "review" | null>(null);
+  const [sheet, setSheet] = useState<"actions" | "search" | "media" | "location" | "end" | "delete" | "unsend" | "clear" | "review" | null>(null);
   const [showJump, setShowJump] = useState(false);
   useLayoutEffect(() => { if (!locationAllowed) setSheet(previous => previous === "location" ? null : previous); }, [locationAllowed]);
   const [messageQuery, setMessageQuery] = useState("");
@@ -1183,7 +1215,11 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             {message.contextReportId && <ChatReportContext reportId={message.contextReportId} safetyKey={view?.ownBlocked ? "blocked" : "clear"} />}
             {message.location && <ChatLocation location={message.location} />}
             {message.body ? <p dir="auto" className={isEmojiOnly(message.body) ? "fb-chat-emoji-only" : undefined}>{message.body}</p> : !attachment && message.messageType !== "LOCATION" && <p>{message.messageType === "MEDIA" ? "Photo loading…" : message.messageType === "VOICE" ? "Voice message loading…" : "Message unavailable"}</p>}
-            {own && <span className="fb-chat-message-status">{pending?.status === "NEEDS_REVIEW" ? "Needs review" : message.messageType === "MEDIA" && !attachment ? "Photo pending" : message.messageType === "VOICE" && !attachment ? "Voice pending" : attachment && !["READY", "EVICTED"].includes(attachment.state) ? (attachment.state === "FAILED" ? (message.messageType === "VOICE" ? "Voice saved" : "Photo saved") : "Sending…") : message.server ? <ReceiptTicks read={!!(message.readByPeer || readIds.has(message.id))} /> : pending?.status === "FAILED" ? "Message saved" : "Sending…"}
+            <span className="fb-chat-message-status">
+              {message.createdAt ? <time className="fb-chat-time" dateTime={new Date(message.createdAt).toISOString()}>
+                {new Date(message.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+              </time> : null}
+              {own && <>{pending?.status === "NEEDS_REVIEW" ? "Needs review" : message.messageType === "MEDIA" && !attachment ? "Photo pending" : message.messageType === "VOICE" && !attachment ? "Voice pending" : attachment && !["READY", "EVICTED"].includes(attachment.state) ? (attachment.state === "FAILED" ? (message.messageType === "VOICE" ? "Voice saved" : "Photo saved") : "Sending…") : message.server ? <ReceiptTicks read={!!(message.readByPeer || readIds.has(message.id))} /> : pending?.status === "FAILED" ? "Message saved" : "Sending…"}
               {(attachment?.state === "FAILED" || (!message.server && pending?.status === "FAILED")) && pending?.status !== "NEEDS_REVIEW" && <button type="button" onClick={() => {
               // A refused send keeps its original boundary; re-flushing it can only
               // fail again. The message-level retry rebinds that boundary because a
@@ -1193,7 +1229,8 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
                 ? retryMessagingMessage(accountId, conversationId, message.id)
                 : refreshMessaging(accountId);
               void retry.catch(() => setError("Could not retry. Try syncing again."));
-            }}>Retry</button>}</span>}
+            }}>Retry</button>}</>}
+            </span>
             {own && pending?.status === "NEEDS_REVIEW" && <button type="button" disabled={busy} onClick={() => { setSelectedMessageId(message.id); setSheet("review"); }}>Review message</button>}
             {own && attachment && !message.server && <button type="button" aria-label={message.messageType === "VOICE" ? "Remove pending voice message" : "Remove pending photo"} onClick={() => {
               void removeMessagingMessage(accountId, conversationId, message.id, false).catch(() => {
@@ -1204,7 +1241,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             </>}
             </div>
             {message.server && <button type="button" className="fb-chat-icon fb-chat-message-options" aria-label={own ? "Options for your message" : "Options for received message"}
-              onClick={() => { setSelectedMessageId(message.id); setSheet("message"); }}><Ellipsis size={16} aria-hidden="true" /></button>}
+              onClick={(event) => openMessageMenu(message.id, event.currentTarget.parentElement)}><Ellipsis size={16} aria-hidden="true" /></button>}
           </li>;
         })}
       </ol>
@@ -1264,7 +1301,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       {error && <p className="fb-chat-error" role="alert">{error}</p>}
     </ConfirmDialog>
     <AdaptiveTaskSurface open={sheet !== null && sheet !== "location" && !confirming} onClose={() => setSheet(null)} busy={busy}
-      title={sheet === "search" ? "Search chat" : sheet === "media" ? "Conversation media" : sheet === "review" ? "Review message" : sheet === "message" ? "Message options" : "Conversation info"}>
+      title={sheet === "search" ? "Search chat" : sheet === "media" ? "Conversation media" : sheet === "review" ? "Review message" : "Conversation info"}>
       {sheet === "actions" ? conversationInfo : sheet === "search" ? <div className="fb-chat-search-task">
         <label className="fb-chat-search"><Search size={17} aria-hidden="true" /><input type="search" aria-label="Search saved messages" value={messageQuery} onChange={event => setMessageQuery(event.target.value)} /></label>
         <p role="status" className="fb-chat-secondary">{!searchTerm ? "Search the messages saved on this device." : `${searchMatches.length} ${searchMatches.length === 1 ? "message" : "messages"} found${searchMatches.length > 100 ? ". Showing the first 100." : ""}`}</p>
@@ -1280,22 +1317,29 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
           <button type="button" disabled={busy || !selectedNeedsReview || !selectedMessage?.body.trim() || !canCompose} onClick={() => void reviewMessage("send")}>Send text only</button>
           <button type="button" disabled={busy || !selectedNeedsReview} onClick={() => void reviewMessage("delete")}>Delete for me</button>
         </div>
-      </div> : sheet === "message" ? <div className="fb-chat-sheet">
-        {selectedMessage?.body ? <button type="button" onClick={() => {
-          void navigator.clipboard?.writeText(selectedMessage.body).then(
-            () => { setSheet(null); announce("Message copied."); },
-            () => setError("Could not copy this message."),
-          );
-        }}>Copy text</button> : null}
-        <button type="button" disabled={busy || !current || !selectedMessage} onClick={() => setSheet("delete")}>Delete for me</button>
-        {selectedMessage?.authorId === accountId && selectedMessage.unsentAt === undefined &&
-          <button type="button" disabled={busy || !current} onClick={() => setSheet("unsend")}>Unsend</button>}
-        {selectedMessage?.authorId !== accountId && selectedMessage?.unsentAt === undefined &&
-          <button type="button" disabled={busy || !current || !selectedMessage || !row}
-            onClick={() => { setSheet(null); setReportTarget("message"); }}>Report message</button>}
       </div> : null}
       {error && <p className="fb-chat-error" role="alert">{error}</p>}
     </AdaptiveTaskSurface>
+    {menu && selectedMessage && createPortal(
+      <div className="fb-msg-menu-backdrop" onPointerDown={() => setMenu(null)} role="presentation">
+        <div className="fb-msg-menu" role="menu" aria-label="Message options"
+          style={{ left: menu.x, top: menu.y }} onPointerDown={(event) => event.stopPropagation()}>
+          {selectedMessage.body ? <button type="button" role="menuitem" onClick={() => {
+            void navigator.clipboard?.writeText(selectedMessage.body).then(
+              () => { setMenu(null); announce("Message copied."); },
+              () => setError("Could not copy this message."),
+            );
+          }}>Copy text</button> : null}
+          {selectedMessage.authorId === accountId && selectedMessage.unsentAt === undefined &&
+            <button type="button" role="menuitem" disabled={busy || !current}
+              onClick={() => { setMenu(null); setSheet("unsend"); }}>Unsend</button>}
+          <button type="button" role="menuitem" disabled={busy || !current}
+            onClick={() => { setMenu(null); setSheet("delete"); }}>Delete for me</button>
+          {selectedMessage.authorId !== accountId && selectedMessage.unsentAt === undefined &&
+            <button type="button" role="menuitem" disabled={busy || !current || !row}
+              onClick={() => { setMenu(null); setReportTarget("message"); }}>Report message</button>}
+        </div>
+      </div>, document.body)}
     <ReportSheet open={reportTarget !== null} target={reportTarget === "account" && row ? { targetType: "USER", targetId: row.peerId }
       : reportTarget === "message" && selectedMessage && selectedMessage.unsentAt === undefined
         ? { targetType: "MESSAGE", targetId: selectedMessage.id, accountId, body: selectedMessage.body } : null}

@@ -38,7 +38,7 @@ describe("durable human messaging history (not AI chat)", () => {
     await first.enqueueOutgoing(text);
     first.close();
     const second = await open();
-    expect(await second.getMessage(MESSAGE)).toEqual({ ...text, messageType: "TEXT" });
+    expect(await second.getMessage(MESSAGE)).toEqual({ ...text, messageType: "TEXT", createdAt: expect.any(Number) });
     expect(await second.listOutbox()).toEqual([{ messageId: MESSAGE, status: "QUEUED", attempts: 0 }]);
   });
 
@@ -76,7 +76,7 @@ describe("durable human messaging history (not AI chat)", () => {
     const one = await open();
     const two = await open();
     await Promise.all(Array.from({ length: 5 }, (_, i) => (i % 2 ? one : two).enqueueOutgoing(text)));
-    expect(await one.listMessages(CONVERSATION)).toEqual([{ ...text, messageType: "TEXT" }]);
+    expect(await one.listMessages(CONVERSATION)).toEqual([{ ...text, messageType: "TEXT", createdAt: expect.any(Number) }]);
     expect(await two.listOutbox()).toHaveLength(1);
     await expect(two.enqueueOutgoing({ ...text, body: "different" })).rejects.toThrow(/conflict/i);
     await expect(two.enqueueOutgoing({ ...text, recipientId: DEVICE })).rejects.toThrow(/conflict/i);
@@ -105,10 +105,10 @@ describe("durable human messaging history (not AI chat)", () => {
     const saved = one.enqueueOutgoing(input);
     input.body = "changed after call";
     await saved;
-    expect(await one.getMessage(MESSAGE)).toEqual({ ...text, messageType: "TEXT" });
+    expect(await one.getMessage(MESSAGE)).toEqual({ ...text, messageType: "TEXT", createdAt: expect.any(Number) });
     const read = (await one.getMessage(MESSAGE))!;
     read.body = "changed read result";
-    expect(await one.getMessage(MESSAGE)).toEqual({ ...text, messageType: "TEXT" });
+    expect(await one.getMessage(MESSAGE)).toEqual({ ...text, messageType: "TEXT", createdAt: expect.any(Number) });
   });
 
   it("fails closed when signed out, device identity is missing, or durable storage is unavailable", async () => {
@@ -212,7 +212,7 @@ describe("durable human messaging history (not AI chat)", () => {
     vi.restoreAllMocks();
     one.close();
     const reopened = await open();
-    expect(await reopened.getMessage(MESSAGE)).toEqual({ ...text, messageType: "TEXT" });
+    expect(await reopened.getMessage(MESSAGE)).toEqual({ ...text, messageType: "TEXT", createdAt: expect.any(Number) });
     expect(await reopened.listOutbox()).toEqual([{ messageId: MESSAGE, status: "QUEUED", attempts: 0 }]);
     await reopened.persistInbound(envelope(text));
     expect(await reopened.listOutbox()).toEqual([]);

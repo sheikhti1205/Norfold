@@ -244,7 +244,7 @@ const MESSAGE_COLUMNS = `m.id as id, m.conversation_id as conversationId,
   m.author_id as authorId, m.recipient_id as recipientId, m.body as body, m.message_type as messageType,
   m.context_report_id as contextReportId, m.location_lat as locationLat, m.location_lng as locationLng,
   m.location_accuracy_m as locationAccuracy,
-  m.server_event_id as eventId, m.server_sequence as sequence, m.unsent_at as unsentAt,
+  m.server_event_id as eventId, m.server_sequence as sequence, m.unsent_at as unsentAt, m.created_at as createdAt,
   (coalesce((select cast(value as integer) from messaging_meta where key = 'read_facts:' || m.id), 0)
     | case when m.recipient_id = (select value from messaging_meta where key = 'account_id')
       and m.server_sequence <= coalesce((select read_through from conversation_state where conversation_id = m.conversation_id), 0)

@@ -81,12 +81,17 @@ export function copyReceivedMessage(value: HumanMessage, options: CopyMessageOpt
   const location = value.location === undefined ? undefined : copyStaticLocation(value.location);
   if (location !== undefined && messageType !== "LOCATION") throw new Error("Invalid messaging context");
   if (messageType === "LOCATION" && location === undefined) throw new Error("Invalid messaging context");
+  // Presentation metadata, not content identity: a stored row keeps the instant
+  // it was composed, while a message from the wire may not carry one at all.
+  const createdAt = value.createdAt === undefined || value.createdAt === null ? undefined : value.createdAt;
+  if (createdAt !== undefined && (!Number.isSafeInteger(createdAt) || createdAt < 0)) throw new Error("Invalid messaging time");
   const message = {
     id: uuid(value.id), conversationId: uuid(value.conversationId),
     authorId: uuid(value.authorId), recipientId: uuid(value.recipientId), body: value.body,
     ...(messageType ? { messageType } : {}),
     ...(contextReportId ? { contextReportId } : {}),
     ...(location ? { location } : {}),
+    ...(createdAt === undefined ? {} : { createdAt }),
   };
   if (message.authorId === message.recipientId) throw new Error("Invalid messaging participants");
   return message;
