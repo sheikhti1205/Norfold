@@ -1,0 +1,17 @@
+/*
+ * One avatar shape, defined outside Tailwind's layers.
+ *
+ * The messenger surfaces use a squircle. `corner-shape` is the real thing where
+ * the engine has it (Chromium 139+); elsewhere the 32% radius is the closest
+ * single-radius reading of the same silhouette. Unlayered on purpose: a layered
+ * utility loses to any plain `img { border-radius }` rule in the app.
+ */
+.fb-avatar-squircle {
+  border-radius: var(--fb-avatar-radius, 32%);
+}
+
+@supports (corner-shape: squircle) {
+  .fb-avatar-squircle {
+    corner-shape: squircle;
+  }
+}
