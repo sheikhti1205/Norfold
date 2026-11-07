@@ -48,3 +48,30 @@
     transition: none;
   }
 }
+
+/* Adding a sign-in password to an account created with Google. The fields sit
+   inside the settings row group, so the form keeps the row rhythm. */
+.fb-account-password {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.4rem 0.15rem 0.2rem;
+}
+.fb-account-password label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--fb-on-surface-variant);
+}
+.fb-account-password input {
+  min-height: 44px;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--fb-outline);
+  border-radius: 0.7rem;
+  background: var(--fb-surface);
+  color: var(--fb-on-surface);
+  font-size: 1rem;
+}
+.fb-account-password input:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 1px; }
+.fb-account-hint { margin: 0; font-size: 0.75rem; color: var(--fb-on-surface-variant); }

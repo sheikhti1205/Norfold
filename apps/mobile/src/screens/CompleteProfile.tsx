@@ -6,7 +6,7 @@ import { useAuth } from "../auth";
 import { Button } from "../components/Button";
 import { TextField } from "../components/Fields";
 import { AuthShell } from "../components/auth/AuthShell";
-import { checkUsername } from "../services/auth";
+import { checkUsername, setAccountPassword } from "../services/auth";
 // S2 (W0-B): READ-ONLY import of the now-landed real service as the seam
 // default. Tests inject fakes through `__setCompleteSocialProfile`.
 import {
@@ -104,6 +104,10 @@ export function CompleteProfile({
   const [phone, setPhone] = useState(seed.phone);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(seed.avatarUrl);
   const [usernameState, setUsernameState] = useState<UsernameState>("idle");
+  // A Google sign-up arrives with no password. One is required here so the
+  // account is never reachable only through Google.
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const checkSeq = useRef(0);
@@ -160,6 +164,14 @@ export function CompleteProfile({
       setError("Please choose another username");
       return;
     }
+    if (password.length < 8) {
+      setError("Choose a password of at least 8 characters.");
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setError("The two passwords do not match.");
+      return;
+    }
     const phoneNorm = normalizePhone(phone);
     if (!phoneNorm) {
       setError("Enter a valid Bangladesh mobile number (e.g., 01812345678).");
@@ -172,6 +184,10 @@ export function CompleteProfile({
     }
     setBusy(true);
     try {
+      // The password is attached to the signed-in Google account before the
+      // profile is written, so a profile save that fails later still leaves the
+      // account able to sign in with email as well.
+      await setAccountPassword(password);
       const user = await complete({
         username: chosen,
         displayName: name,
@@ -199,7 +215,7 @@ export function CompleteProfile({
   return (
     <AuthShell
       title="Complete your profile"
-      supporting="Review these suggestions from Google — change anything before continuing."
+      supporting="Review these suggestions from Google, then choose a password for this account."
     >
       <div className="flex items-center gap-4">
         {avatarUrl ? (
@@ -288,6 +304,25 @@ export function CompleteProfile({
           aria-readonly="true"
           autoComplete="email"
           hint="Your Google account email — it can't be changed here."
+        />
+
+        <TextField
+          label="Password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="new-password"
+          hint="At least 8 characters. You can sign in with this instead of Google."
+          required
+        />
+
+        <TextField
+          label="Confirm password"
+          type="password"
+          value={passwordConfirm}
+          onChange={(e) => setPasswordConfirm(e.target.value)}
+          autoComplete="new-password"
+          required
         />
 
         <TextField

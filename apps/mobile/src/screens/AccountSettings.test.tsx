@@ -4,11 +4,12 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PublicUser } from "@norfold/shared";
 
-const { mockLogout, mockFinishDeletion, mockUser, mockRequestDeletion, mockFetchEligibility } = vi.hoisted(() => ({
+const { mockLogout, mockFinishDeletion, mockUser, mockRequestDeletion, mockFetchEligibility, mockSetPassword } = vi.hoisted(() => ({
   mockLogout: vi.fn(),
   mockFinishDeletion: vi.fn(),
   mockRequestDeletion: vi.fn(),
   mockFetchEligibility: vi.fn(),
+  mockSetPassword: vi.fn(async (_password: string) => undefined),
   mockUser: {
     value: null as PublicUser | null,
   },
@@ -26,6 +27,7 @@ vi.mock("../auth", () => ({
 
 vi.mock("../services/auth", () => ({
   requestAccountDeletion: (...args: unknown[]) => mockRequestDeletion(...args),
+  setAccountPassword: (password: string) => mockSetPassword(password),
 }));
 
 vi.mock("../services/profile", () => ({
@@ -80,6 +82,31 @@ beforeEach(() => {
 });
 
 describe("AccountSettings", () => {
+  it("adds a sign-in password for an account created with Google", async () => {
+    renderAccount();
+    fireEvent.click(screen.getByRole("button", { name: /sign-in password/i }));
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "password123" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "password123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save password" }));
+    await waitFor(() => expect(mockSetPassword).toHaveBeenCalledWith("password123"));
+    await waitFor(() => expect(screen.queryByLabelText("New password")).toBeNull());
+    expect(screen.getByText(/you can sign in with your email and this password/i)).toBeTruthy();
+  });
+
+  it("refuses a mismatched or short sign-in password without writing it", async () => {
+    renderAccount();
+    fireEvent.click(screen.getByRole("button", { name: /sign-in password/i }));
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "short" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "short" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save password" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/at least 8/i);
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "password123" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "password124" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save password" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/do not match/i);
+    expect(mockSetPassword).not.toHaveBeenCalled();
+  });
+
   it("renders one account heading with a back target of /settings", () => {
     renderAccount();
     expect(screen.getByRole("heading", { level: 1, name: "Account" })).toBeTruthy();

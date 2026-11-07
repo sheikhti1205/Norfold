@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { servicesMock, pendingMock, authMock, supabaseMock } = vi.hoisted(() => ({
-  servicesMock: { checkUsername: vi.fn() },
+  servicesMock: { checkUsername: vi.fn(), setAccountPassword: vi.fn(async () => undefined) },
   pendingMock: { getPendingReportRoute: vi.fn((): string | null => null) },
   authMock: {
     setUser: vi.fn(),
@@ -52,6 +52,12 @@ const FAKE_USER: PublicUser = {
 };
 
 const mockCheckUsername = vi.mocked(checkUsername);
+
+/** The Google sign-up now requires a password; every submit path needs one. */
+function fillPassword(value = "password123") {
+  fireEvent.change(screen.getByLabelText("Password"), { target: { value } });
+  fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value } });
+}
 
 const SEED = {
   email: "google.user@example.com",
@@ -117,6 +123,7 @@ describe("CompleteProfile seeds (W0.5)", () => {
     __setCompleteSocialProfile(vi.fn(async () => FAKE_USER));
     renderProfile({ ...SEED, phone: "01812345678" });
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
+    fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByText("Protected conversation destination")).toBeTruthy();
   });
@@ -146,6 +153,7 @@ describe("CompleteProfile seeds (W0.5)", () => {
 
     await waitFor(() => expect(screen.queryByText(/checking/i)).toBeNull());
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
+    fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(complete).toHaveBeenCalledTimes(1));
     expect(complete).toHaveBeenCalledWith({
@@ -164,6 +172,7 @@ describe("CompleteProfile seeds (W0.5)", () => {
     expect(phone.value).toBe("01712345678");
     fireEvent.change(phone, { target: { value: "01912345678" } });
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
+    fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(complete).toHaveBeenCalledTimes(1));
     expect((complete.mock.calls[0] as unknown as [Record<string, unknown>])[0]).toMatchObject({
@@ -176,6 +185,7 @@ describe("CompleteProfile seeds (W0.5)", () => {
     __setCompleteSocialProfile(complete);
     renderProfile();
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
+    fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() =>
       expect(screen.getByText(/valid Bangladesh mobile number/i)).toBeTruthy(),
@@ -194,6 +204,7 @@ describe("CompleteProfile seeds (W0.5)", () => {
       target: { value: "01812345678" },
     });
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
+    fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(complete).toHaveBeenCalledTimes(1));
     expect((complete.mock.calls[0] as unknown as [Record<string, unknown>])[0]).toMatchObject({
@@ -217,6 +228,7 @@ describe("CompleteProfile seeds (W0.5)", () => {
     fireEvent.change(screen.getByLabelText("Mobile (Bangladesh)"), {
       target: { value: "01812345678" },
     });
+    fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() =>
       expect(screen.getByText(/still checking username availability/i)).toBeTruthy(),
@@ -224,6 +236,7 @@ describe("CompleteProfile seeds (W0.5)", () => {
     expect(complete).not.toHaveBeenCalled();
     release({ available: true, normalized: "checking_name" });
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
+    fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(complete).toHaveBeenCalledTimes(1));
   });
@@ -241,6 +254,7 @@ describe("CompleteProfile seeds (W0.5)", () => {
     fireEvent.change(screen.getByLabelText("Mobile (Bangladesh)"), {
       target: { value: "01812345678" },
     });
+    fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() =>
       expect(screen.getByText(/choose another username/i)).toBeTruthy(),
@@ -256,6 +270,7 @@ describe("CompleteProfile seeds (W0.5)", () => {
       target: { value: "01812345678" },
     });
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
+    fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(screen.getByText("Shared report destination")).toBeTruthy());
   });
@@ -268,6 +283,7 @@ describe("CompleteProfile seeds (W0.5)", () => {
       target: { value: "01812345678" },
     });
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
+    fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(screen.getByText("Home destination")).toBeTruthy());
   });
@@ -281,6 +297,7 @@ describe("CompleteProfile seeds (W0.5)", () => {
       target: { value: "01812345678" },
     });
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
+    fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/couldn't save|try again/i);
@@ -298,6 +315,7 @@ describe("CompleteProfile seeds (W0.5)", () => {
       target: { value: "01812345678" },
     });
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
+    fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     const alert = await screen.findByRole("alert");
     expect(alert).toBeTruthy();
@@ -319,6 +337,7 @@ describe("CompleteProfile seeds (W0.5)", () => {
       target: { value: "01812345678" },
     });
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
+    fillPassword();
     fireEvent.submit(form!);
     await waitFor(() => expect(complete).toHaveBeenCalledTimes(1));
   });
@@ -375,6 +394,7 @@ describe("CompleteProfileRoute (W0-QA defect 2)", () => {
       target: { value: "01812345678" },
     });
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
+    fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(authMock.setUser).toHaveBeenCalledWith(FAKE_USER));
     expect(authMock.clearNeedsProfile).toHaveBeenCalledTimes(1);

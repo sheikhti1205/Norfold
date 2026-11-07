@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { LogOut } from "lucide-react";
 import { useAuth } from "../auth";
-import { requestAccountDeletion } from "../services/auth";
+import { requestAccountDeletion, setAccountPassword } from "../services/auth";
 import { fetchPhoneChangeEligibility, formatPhoneChangeEligibleAt } from "../services/profile";
 import { Button } from "../components/Button";
 import { UserAvatar } from "../components/UserAvatar";
@@ -41,6 +41,14 @@ export function AccountSettings() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleted, setDeleted] = useState(false);
+  // A Google-created account has no password. This is the plain way to add one
+  // later without changing how the account signs in.
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSaved, setPasswordSaved] = useState(false);
   const [localCleanupDone, setLocalCleanupDone] = useState(false);
   const currentAccount = useRef(user?.id ?? null);
   currentAccount.current = user?.id ?? null;
@@ -187,6 +195,25 @@ export function AccountSettings() {
     setDeleteError(null);
   }
 
+  async function savePassword(event: FormEvent) {
+    event.preventDefault();
+    setPasswordError(null);
+    if (password.length < 8) { setPasswordError("Use at least 8 characters."); return; }
+    if (password !== passwordConfirm) { setPasswordError("The two passwords do not match."); return; }
+    setPasswordBusy(true);
+    try {
+      await setAccountPassword(password);
+      setPasswordSaved(true);
+      setPasswordOpen(false);
+      setPassword("");
+      setPasswordConfirm("");
+    } catch (error) {
+      setPasswordError(friendlyError(error).message || "Couldn’t set a password. Try again.");
+    } finally {
+      setPasswordBusy(false);
+    }
+  }
+
   return (
     <SettingsPage
       title="Account"
@@ -225,6 +252,55 @@ export function AccountSettings() {
           value={user.phone}
           route="/profile/edit"
         />
+      </SettingsGroup>
+
+      <SettingsGroup title="Sign-in">
+        <SettingsRow
+          title="Sign-in password"
+          description={passwordSaved
+            ? "Set. You can sign in with your email and this password."
+            // Nothing local proves whether this account already has a password
+            // (the Auth record does not report it), so the resting state must
+            // not claim "Add" — that was a lie for every Google account that
+            // already had one.
+            : "Choose a password so you can also sign in without Google."}
+          value={passwordOpen ? "Close" : passwordSaved ? "Set" : "Manage"}
+          onClick={() => {
+            setPasswordOpen(open => !open);
+            setPasswordError(null);
+          }}
+        />
+        {passwordOpen && (
+          <form className="fb-account-password" onSubmit={savePassword} noValidate>
+            <label htmlFor="fb-account-password">
+              New password
+              <input
+                id="fb-account-password"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                required
+                value={password}
+                onChange={event => setPassword(event.target.value)}
+              />
+            </label>
+            <label htmlFor="fb-account-password-confirm">
+              Confirm password
+              <input
+                id="fb-account-password-confirm"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                required
+                value={passwordConfirm}
+                onChange={event => setPasswordConfirm(event.target.value)}
+              />
+            </label>
+            <p className="fb-account-hint">At least 8 characters.</p>
+            {passwordError && <p className="fb-account-notice" role="alert">{passwordError}</p>}
+            <Button type="submit" loading={passwordBusy}>Save password</Button>
+          </form>
+        )}
       </SettingsGroup>
 
       <Button
