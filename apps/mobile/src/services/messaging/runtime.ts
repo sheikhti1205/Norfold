@@ -107,7 +107,7 @@ const listeners = new Set<() => void>();
  * could not sync" is untraceable from the device.
  */
 function reportMediaFailure(phase: "upload" | "download", error: unknown) {
-  console.warn(`chat media ${phase} failed:`, error instanceof Error ? error.message : String(error));
+  logError(`chat media ${phase} failed:`, error instanceof Error ? error.message : String(error));
 }
 
 function publish(value: MessagingRuntimeSnapshot) {
