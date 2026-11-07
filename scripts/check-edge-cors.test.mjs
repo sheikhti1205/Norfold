@@ -17,6 +17,8 @@ const CLIENT_HEADERS = [
   "content-type",
   "x-attachment-id",
   "x-message-id",
+  // Voice uploads only: without this the preflight fails and the note never leaves.
+  "x-duration-ms",
 ];
 
 // The production browser bundle initializes Sentry tracing with the Supabase

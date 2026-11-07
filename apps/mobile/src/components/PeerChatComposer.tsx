@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Camera, ChevronRight, ImagePlus, Mic, SendHorizontal, Square } from "lucide-react";
 import { motionDurations, motionEasings, shouldReduceMotion } from "./uiMotion";
 import { hasFinePointer } from "./inputCapabilities";
+import { convertEmoticonsLive } from "../utils/emoji";
 import "./peerComposer.css";
 
 export interface PeerChatComposerProps {
@@ -51,6 +52,17 @@ export function PeerChatComposer({
   const [expanded, setExpanded] = useState(true);
   const field = inputRef;
   const composing = useRef(false);
+  // Live conversion changes the value, so the caret it produced is restored
+  // after React commits instead of being left wherever the browser guessed.
+  const caret = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    const next = caret.current;
+    if (next === null) return;
+    caret.current = null;
+    const element = field.current;
+    if (element && document.activeElement === element) element.setSelectionRange(next, next);
+  }, [value, field]);
   const available = canSend && !locked && !busy;
   const reduce = shouldReduceMotion();
 
@@ -122,10 +134,28 @@ export function PeerChatComposer({
           onChange={(event) => {
             const next = event.target.value;
             setExpanded(next === "");
-            onChange(next);
+            const start = event.target.selectionStart ?? next.length;
+            // Never rewrite under a selection or an active IME: the browser
+            // owns that value until composition finishes.
+            if (composing.current || (event.nativeEvent as InputEvent).isComposing || start !== (event.target.selectionEnd ?? start)) {
+              onChange(next);
+              return;
+            }
+            const live = convertEmoticonsLive(next, start);
+            if (live.text === next) { onChange(next); return; }
+            caret.current = live.caret;
+            onChange(live.text);
           }}
           onCompositionStart={() => { composing.current = true; }}
-          onCompositionEnd={() => { composing.current = false; }}
+          onCompositionEnd={(event) => {
+            composing.current = false;
+            const next = event.currentTarget.value;
+            const at = event.currentTarget.selectionStart ?? next.length;
+            const live = convertEmoticonsLive(next, at);
+            if (live.text === next) return;
+            caret.current = live.caret;
+            onChange(live.text);
+          }}
           onKeyDown={(event) => {
             if (event.defaultPrevented || event.key !== "Enter" || event.shiftKey
               || event.ctrlKey || event.altKey || event.metaKey || composing.current

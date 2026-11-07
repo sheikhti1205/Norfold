@@ -15,7 +15,9 @@
 .fb-chat-count { margin-inline-start:.4rem; font-size:.75rem; }
 .fb-chat-active-filter { display:flex; align-items:center; margin-inline-start:auto; font-size:.8rem; color:var(--fb-on-surface-variant); }
 .fb-chat-people-heading { padding:.75rem 1rem 0; font-size:.9rem; font-weight:650; }
-.fb-chat-row-open[aria-current="page"] { background:var(--fb-surface-container); }
+/* Selection is drawn by the row (see :has above); a painted link would cover
+   the name, because a positioned background paints above static content. */
+.fb-chat-row-open[aria-current="page"] { background:transparent; }
 .fb-chat-heading .fb-identity-link { max-width:100%; min-width:0; justify-content:flex-start; }
 .fb-chat-heading .fb-identity-link > .fb-chat-identity { flex:1; min-width:0; }
 .fb-chat-search-task { display:flex; flex-direction:column; gap:.75rem; }
@@ -42,7 +44,15 @@
 .fb-chat-filters button[aria-pressed="true"] { border-color:var(--fb-primary); font-weight:650; }
 .fb-chat-list, .fb-chat-messages { min-height:0; flex:1; overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
 .fb-chat-list ul, .fb-chat-transcript { margin:0; padding:0; list-style:none; }
-.fb-chat-row { position:relative; display:flex; align-items:center; gap:.75rem; padding:.85rem 1rem; min-height:72px; }
+/* A row is a surface, not a table cell: it carries the shape, the hover and the
+   selection tint, so the stretched link can stay transparent and never paints
+   over the name. */
+.fb-chat-row { position:relative; display:flex; align-items:center; gap:.75rem; padding:.7rem .75rem;
+  margin:.125rem .375rem; min-height:68px; border-radius:.9rem;
+  transition:background-color .16s cubic-bezier(.2,0,0,1); }
+.fb-chat-row-avatar { pointer-events:none; }
+.fb-chat-row:has(.fb-chat-row-open[aria-current="page"]) { background:var(--fb-surface-container-high, var(--fb-surface-container)); }
+.fb-chat-row:has(.fb-chat-row-open:focus-visible) { outline:2px solid var(--fb-focus); outline-offset:-2px; }
 /* The row's conversation target is one stretched link underneath the identity
    link, so tapping the person opens the profile and tapping anything else opens
    the chat. No nested anchors and no second navigation target in the middle. */
@@ -51,9 +61,9 @@
 .fb-chat-row-identity { position:relative; display:flex; align-items:center; gap:.75rem; min-width:0; pointer-events:none; }
 .fb-chat-row-identity strong { font-size:.95rem; overflow-wrap:anywhere; }
 .fb-chat-row:hover { background:var(--fb-surface-container); }
-.fb-chat-row-copy { display:flex; flex:1; min-width:0; flex-direction:column; gap:.2rem; }
+.fb-chat-row-copy { display:flex; flex:1; min-width:0; flex-direction:column; gap:.15rem; }
 .fb-chat-row-copy strong { overflow-wrap:anywhere; font-size:.95rem; }
-.fb-chat-preview { padding-left:calc(44px + .75rem); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; font-size:.875rem; white-space:pre-wrap; }
+.fb-chat-preview { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; font-size:.875rem; white-space:pre-wrap; }
 .fb-chat-secondary, .fb-chat-sync { font-size:.8rem; color:var(--fb-on-surface-variant); }
 .fb-chat-sync { padding:.3rem 1rem; margin:0; }
 .fb-chat-sync:empty { display:none; }
@@ -157,6 +167,7 @@ a.fb-chat-context:hover, a.fb-chat-context:focus-visible { text-decoration:under
 .fb-chat-location-composer { padding:.9rem; display:flex; flex-direction:column; gap:.9rem; min-width:0; }
 .fb-chat-row-context { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.75rem; color:var(--fb-on-surface-variant); }
 .fb-chat-row-meta { display:flex; flex-direction:column; align-items:flex-end; flex:none; gap:.3rem; font-size:.75rem; color:var(--fb-on-surface-variant); }
+.fb-chat-row-meta time { font-variant-numeric:tabular-nums; }
 
 /* One optional backup prompt above the conversation list (packet 06). */.fb-chat-backup-prompt { display:flex; flex-direction:column; gap:.75rem; margin:0 .75rem .75rem; padding:.9rem 1rem; border:1px solid var(--fb-outline-variant); border-radius:.9rem; background:var(--fb-surface-container); }
 .fb-chat-backup-prompt h2 { margin:0; font-size:1rem; font-weight:650; }
@@ -209,5 +220,7 @@ a.fb-chat-context:hover, a.fb-chat-context:focus-visible { text-decoration:under
   border:1px solid var(--fb-outline-variant); box-shadow:var(--shadow-md); z-index:6;
 }
 .fb-chat-jump:focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }
-/* Emoji-only messages scale the glyphs, not the bubble or the surrounding row. */
+/* Emoji-only messages scale the glyphs, not the bubble or the surrounding row.
+   `.fb-chat-message p` is (0,1,1) and would otherwise discard both declarations. */
+.fb-chat-message p.fb-chat-emoji-only { font-size: 2em; line-height: 1.15; }
 .fb-chat-emoji-only { font-size: 2em; line-height: 1.15; }

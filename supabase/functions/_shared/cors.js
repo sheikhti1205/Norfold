@@ -19,6 +19,7 @@ const ALLOW_HEADERS = [
   "x-client-info",
   "x-message-id",
   "x-attachment-id",
+  "x-duration-ms",
   "x-supabase-client-platform",
   "x-supabase-client-platform-version",
   "x-supabase-client-runtime",

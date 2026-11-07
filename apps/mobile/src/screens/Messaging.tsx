@@ -379,7 +379,7 @@ export function ChatRail({ rows, labels, identities, selectedId, onExpand, headi
         // reached from the conversation header, not from the list.
         return <li key={row.conversationId} className="fb-chat-rail-item">
           <span className="fb-chat-rail-identity" aria-hidden="true">
-            <UserAvatar username={name} avatarUrl={person?.avatarUrl} size={40} />
+            <UserAvatar username={name} avatarUrl={person?.avatarUrl} size={40} shape="squircle" />
           </span>
           {unread > 0 && <span className="fb-chat-rail-unread" aria-hidden="true" />}
           <Link to={`/chats/${row.conversationId}`} className="fb-chat-rail-row"
@@ -467,9 +467,10 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
           // header, where tapping the person is unambiguous.
           return <li key={row.conversationId}>
             <div className="fb-chat-row">
+              <UserAvatar className="fb-chat-row-avatar" shape="squircle"
+                username={name} avatarUrl={person?.avatarUrl} size={44} />
               <div className="fb-chat-row-copy">
                 <span className="fb-chat-row-identity" aria-hidden="true">
-                  <UserAvatar username={name} avatarUrl={person?.avatarUrl} size={44} />
                   <strong>{name || person?.username || "Member"}</strong>
                 </span>
                 <span className="fb-chat-preview">{row.lastMessage?.unsentAt !== undefined ? "Message unsent"
@@ -477,7 +478,6 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
                     : row.lastMessage?.messageType === "MEDIA" ? "Photo"
                       : row.lastMessage?.messageType === "VOICE" ? "Voice message" : state)}</span>
                 {row.lastMessage?.contextReportId && row.lastMessage.unsentAt === undefined && <ChatReportContext reportId={row.lastMessage.contextReportId} safetyKey={view?.ownBlocked ? "blocked" : "clear"} preview />}
-                {row.lastMessage && <span className="fb-chat-secondary">{state}{!chat.currentProjections ? " · Saved chat" : ""}</span>}
               </div>
               <span className="fb-chat-row-meta">
                 {row.updatedAt > 0 && <time dateTime={new Date(row.updatedAt).toISOString()}
@@ -1067,7 +1067,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     {row && <button type="button" className="fb-chat-info-row" onClick={() => { setSheet(null); setReportTarget("account"); }}><Flag size={20} aria-hidden="true" /><span>Report account</span></button>}
   </div>;
   return <ChatDetailsLayout details={conversationInfo} onCompactOpen={() => setSheet("actions")}
-    identity={<><UserAvatar username={name || person?.username} avatarUrl={person?.avatarUrl} size={72} />
+    identity={<><UserAvatar username={name || person?.username} avatarUrl={person?.avatarUrl} size={72} shape="squircle" />
       <strong dir="auto">{name || "Conversation"}</strong><span className="fb-chat-secondary">{!current ? "Saved chat" : current.mode === "CONNECTED" ? "Connected" : "Message request"}</span></>}>
     {detailsToggle => <section className="fb-chat-page" aria-label="Conversation">
     <header className="fb-chat-header">

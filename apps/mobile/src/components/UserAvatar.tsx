@@ -1,4 +1,5 @@
 import { useState } from "react";
+import "./avatarShape.css";
 
 /**
  * Two-letter initials from a display name; never touches other fields.
@@ -20,6 +21,8 @@ export interface UserAvatarProps {
   /** Rendered square size in CSS pixels. */
   size?: number;
   className?: string;
+  /** Messenger surfaces use a squircle; everything else keeps the circle. */
+  shape?: "circle" | "squircle";
 }
 
 /** Neutral person glyph used when there is neither an image nor a username. */
@@ -48,7 +51,7 @@ function GenericAvatarGlyph({ size }: { size: number }) {
  * never shown. Decorative by default (`aria-hidden`) because the user's name is
  * rendered adjacent to every call site; pass a `className` to restyle.
  */
-export function UserAvatar({ avatarUrl, username, size = 40, className = "" }: UserAvatarProps) {
+export function UserAvatar({ avatarUrl, username, size = 40, className = "", shape = "circle" }: UserAvatarProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const name = (username ?? "").trim();
   const showImage = Boolean(avatarUrl) && !imageFailed;
@@ -57,7 +60,7 @@ export function UserAvatar({ avatarUrl, username, size = 40, className = "" }: U
     <span
       aria-hidden="true"
       data-testid="user-avatar"
-      className={`flex flex-none items-center justify-center overflow-hidden rounded-full bg-surface-container text-on-surface ${className}`}
+      className={`flex flex-none items-center justify-center overflow-hidden bg-surface-container text-on-surface ${shape === "squircle" ? "fb-avatar-squircle" : "rounded-full"} ${className}`}
       style={{ width: size, height: size }}
     >
       {showImage ? (

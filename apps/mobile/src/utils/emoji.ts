@@ -41,16 +41,7 @@ function convertSegment(segment: string): string {
   return segment.split(/(\s+)/).map((token) => {
     // A token carrying a path/URL/email/tag/code character is not prose.
     if (!token || /^\s+$/.test(token) || NOT_AFTER.test(token)) return token;
-    let converted = token;
-    for (const [emoticon, emoji] of EMOTICONS) {
-      const pattern = new RegExp(
-        // Longest-first ordering above keeps `:-)` from being read as `:-` + `)`.
-        `(?<!${NOT_AFTER.source})${escapeRegExp(emoticon)}(?!${WORD.source})`,
-        "g",
-      );
-      converted = converted.replace(pattern, emoji);
-    }
-    return converted;
+    return convertToken(token);
   }).join("");
 }
 
@@ -64,6 +55,66 @@ export function convertEmoticons(text: string): string {
     cursor = at + match[0].length;
   }
   return result + convertSegment(text.slice(cursor));
+}
+
+/**
+ * Live conversion for a composer.
+ *
+ * The send path converts once, but a messenger also converts as you type. The
+ * risky part is the caret: replacing `:)` with 🙂 moves every later offset, so
+ * the caller gets a mapped caret back. Three rules keep typing predictable:
+ *
+ *  - a token the caret sits inside is never rewritten (you are still typing it);
+ *  - the token ending at the caret is deferred when it ends in a letter or
+ *    digit, because `:p` may still become `:please` and `:D` may become `:Done`;
+ *  - protected spans (URLs, emails, code) are untouched, exactly as on send.
+ */
+export function convertEmoticonsLive(text: string, caret: number): { text: string; caret: number } {
+  const limit = Math.min(Math.max(caret, 0), text.length);
+  let out = "";
+  let cursor = 0;
+  let mapped = limit;
+
+  const convertProse = (segment: string, start: number) => {
+    // Keep the separators so the rebuilt text is byte-identical outside matches.
+    for (const part of segment.split(/(\s+)/)) {
+      if (!part) continue;
+      const partStart = start;
+      const partEnd = start + part.length;
+      const inside = limit > partStart && limit < partEnd;
+      const atEnd = limit === partEnd;
+      const whitespace = /^\s+$/.test(part);
+      const deferrable = atEnd && /[\w]$/.test(part);
+      const converted = whitespace || inside || deferrable || NOT_AFTER.test(part)
+        ? part : convertToken(part);
+      out += converted;
+      if (partEnd <= limit) mapped += converted.length - part.length;
+      start = partEnd;
+    }
+  };
+
+  for (const match of text.matchAll(PROTECTED)) {
+    const at = match.index ?? 0;
+    convertProse(text.slice(cursor, at), cursor);
+    out += match[0];
+    cursor = at + match[0].length;
+  }
+  convertProse(text.slice(cursor), cursor);
+  return { text: out, caret: mapped };
+}
+
+/** One token, already known to be prose. */
+function convertToken(token: string): string {
+  let converted = token;
+  for (const [emoticon, emoji] of EMOTICONS) {
+    // Longest-first ordering above keeps `:-)` from being read as `:-` + `)`.
+    const pattern = new RegExp(
+      `(?<!${NOT_AFTER.source})${escapeRegExp(emoticon)}(?!${WORD.source})`,
+      "g",
+    );
+    converted = converted.replace(pattern, emoji);
+  }
+  return converted;
 }
 
 const KEYCAP = /[0-9#*]\uFE0F?\u20E3/;

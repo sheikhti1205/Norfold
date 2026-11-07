@@ -147,4 +147,7 @@
       the @PermissionCallback would never run without this entry.
     -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Capacitor requests this alongside RECORD_AUDIO for WebView audio
+         capture and denies the entire grant when either is undeclared. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 </manifest>
