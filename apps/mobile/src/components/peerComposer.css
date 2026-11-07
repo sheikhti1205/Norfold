@@ -1,0 +1,40 @@
+/* Peer composer: independent floating controls, no enclosing capsule. */
+.fb-peer-composer {
+  display: flex; flex-direction: column; min-width: 0; width: 100%;
+  /* Width queries below measure this composer, not the window. */
+  container-type: inline-size; container-name: composer;
+}
+.fb-peer-composer-row {
+  display: flex; align-items: flex-end; gap: 4px;
+  min-width: 0; padding: 4px;
+}
+.fb-peer-attachments { display: flex; align-items: center; flex: none; }
+.fb-peer-controls { display: flex; align-items: center; gap: 2px; overflow: hidden; }
+.fb-peer-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 44px; min-height: 44px; flex: none;
+  border-radius: 999px; color: var(--fb-on-surface-variant);
+}
+.fb-peer-icon:hover { background: var(--fb-surface-container); }
+.fb-peer-icon:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; }
+.fb-peer-icon:disabled { opacity: .4; }
+.fb-peer-reveal { color: var(--fb-on-surface); }
+.fb-peer-field {
+  flex: 1; min-width: 0;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 20px;
+  background: var(--fb-surface-container-low);
+}
+.fb-peer-field:focus-within { border-color: var(--fb-focus); }
+.fb-peer-field textarea {
+  display: block; width: 100%; min-width: 0; min-height: 44px; max-height: 160px;
+  resize: none; padding: 10px 12px; font: inherit; line-height: 1.4;
+  color: inherit; background: transparent; border: 0;
+}
+.fb-peer-field textarea:focus-visible { outline: none; }
+.fb-peer-send { color: var(--fb-primary); }
+/* 320dp: three 44px controls + field + send still fit (44*3 + 44 + 8 gaps +
+   field minimum), and the collapsed `>` state frees the rest. */@container composer (max-width: 20rem) {
+  .fb-peer-controls { gap: 0; }
+  .fb-peer-icon { min-width: 40px; min-height: 44px; }
+}

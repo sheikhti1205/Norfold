@@ -201,7 +201,7 @@ describe("PostList home-feed density (reference-inspired Home redesign)", () => 
     expect(row.className).toMatch(/flex-nowrap/);
     expect(row.className).not.toMatch(/grid/);
     // Time belongs to the identity; category is a compact fact after media.
-    const identity = screen.getByRole("button", { name: "About alice" }).closest("header")!;
+    const identity = screen.getByRole("link", { name: "Open Alice's profile" }).closest("header")!;
     expect(identity.contains(screen.getByTestId("post-time"))).toBe(true);
     expect(screen.getByTestId("home-feed-media").compareDocumentPosition(screen.getByTestId("post-category")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const footer = screen.getByTestId("post-footer") as HTMLElement;

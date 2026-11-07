@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAuth } from "../auth";
-import { AtSign, BellRing, Heart, MessageCircle, PackageCheck } from "lucide-react";
+import { AtSign, BellRing, Heart, MessageCircle, MessagesSquare, PackageCheck } from "lucide-react";
 import { PreferenceSwitchRow, SettingsGroup } from "./settings";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -20,6 +20,13 @@ import {
   setDesktopNotificationsEnabled,
   type DesktopNotificationPermission,
 } from "../services/desktopNotifications";
+import {
+  disableWebPush,
+  enableWebPush,
+  webPushConfigured,
+  webPushEnabled,
+  webPushPermission,
+} from "../services/webPush";
 
 interface ToggleDef {
   key: keyof NotificationPreferences;
@@ -49,6 +56,13 @@ const GROUPS: Array<{ title: string; description: string; toggles: ToggleDef[] }
     description: "Reactions to your reports.",
     toggles: [
       { key: "likes", label: "Reactions", hint: "Someone reacts to your report.", icon: Heart },
+    ],
+  },
+  {
+    title: "Messages",
+    description: "New messages in your connected conversations.",
+    toggles: [
+      { key: "messages", label: "Messages", hint: "Someone sends you a message.", icon: MessagesSquare },
     ],
   },
   {
@@ -97,6 +111,13 @@ function AccountNotificationSettings() {
     () => desktopNotificationPermission(),
   );
   const [desktopOn, setDesktopOn] = useState(false);
+  /**
+   * Background browser push is a separate capability from an in-tab alert: it
+   * survives the tab being closed and needs a service worker. When this build
+   * carries no VAPID key the screen says so instead of offering a dead switch.
+   */
+  const webPushReady = webPushConfigured();
+  const [backgroundOn, setBackgroundOn] = useState(false);
 
   useEffect(() => {
     const owner = lifetime.current;
@@ -126,11 +147,13 @@ function AccountNotificationSettings() {
     if (!owner.active || !desktopSupported || !user) return;
     setDesktopOn(desktopNotificationsEnabled(user.id));
     setDesktopPermission(desktopNotificationPermission());
+    setBackgroundOn(webPushEnabled(user.id));
     // The browser can revoke the permission while the tab is in the background.
     const sync = () => {
       if (!owner.active) return;
       setDesktopPermission(desktopNotificationPermission());
       setDesktopOn(desktopNotificationsEnabled(user.id));
+      setBackgroundOn(webPushEnabled(user.id));
     };
     const onVisibility = () => { if (document.visibilityState === "visible") sync(); };
     window.addEventListener("focus", sync);
@@ -170,6 +193,30 @@ function AccountNotificationSettings() {
     setDesktopNotificationsEnabled(user.id, false);
     setDesktopOn(false);
     announce("Desktop notifications are off for this browser.");
+  }, [user]);
+
+  const applyBackgroundAlerts = useCallback(async (enabled: boolean, owner: SettingsLifetime) => {
+    if (!owner.active || !user) return;
+    setBusy(true);
+    try {
+      if (!enabled) {
+        await disableWebPush(user.id);
+        if (owner.active) {
+          setBackgroundOn(false);
+          announce("Background browser alerts are off.");
+        }
+        return;
+      }
+      const result = await enableWebPush(user.id);
+      if (!owner.active) return;
+      setBackgroundOn(result === "on");
+      if (result === "on") announce("Background browser alerts are on. You can close this tab.");
+      else if (result === "blocked") announce("This browser is blocking notifications.");
+      else if (result === "unconfigured") announce("Background alerts aren't configured for this site.");
+      else announce("Couldn't turn on background alerts. Please try again.");
+    } finally {
+      if (owner.active) setBusy(false);
+    }
   }, [user]);
 
   const enableDeviceNotifications = useCallback(async () => {
@@ -350,8 +397,20 @@ function AccountNotificationSettings() {
           )}
         </section>
       ) : null}
-      {desktopSupported ? (
-        <SettingsGroup title="This browser" description="Desktop alerts work while Norfold is open in a background tab.">
+      {webPushReady ? (
+        <SettingsGroup title="This browser"
+          description="Alerts from this browser keep arriving after you close the tab.">
+          <PreferenceSwitchRow title="Background alerts" icon={BellRing} iconTone="notifications"
+            description={webPushPermission() === "denied"
+              ? "Blocked by your browser. Allow notifications in this site's settings."
+              : pushOff ? "Paused. Turn on Push notifications below to receive browser alerts."
+              : "Show a system alert for a new message."}
+            checked={backgroundOn}
+            disabled={busy || pushOff || webPushPermission() === "denied"}
+            onChange={enabled => void applyBackgroundAlerts(enabled, lifetime.current)} />
+        </SettingsGroup>
+      ) : desktopSupported ? (
+        <SettingsGroup title="This browser" description="Desktop alerts work while Norfold is open in a background tab. Background alerts aren't configured for this site.">
           <PreferenceSwitchRow title="Desktop alerts" icon={BellRing} iconTone="notifications"
             description={desktopPermission === "denied"
               ? "Blocked by your browser. Allow notifications in this site's settings."

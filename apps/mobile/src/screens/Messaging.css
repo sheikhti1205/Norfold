@@ -1,4 +1,4 @@
-.fb-chat-page { display:flex; flex-direction:column; height:100%; min-height:0; background:var(--fb-surface); color:var(--fb-on-surface); }
+.fb-chat-page { position:relative; display:flex; flex-direction:column; height:100%; min-height:0; background:var(--fb-surface); color:var(--fb-on-surface); }
 .fb-chat-workspace { display:grid; grid-template-columns:minmax(0,1fr); height:100%; min-height:0; min-width:0; }
 .fb-chat-workspace-details { grid-template-columns:minmax(0,1fr) clamp(280px,20rem,320px); }
 .fb-chat-details { min-width:0; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:.75rem 1rem;
@@ -20,8 +20,9 @@
 .fb-chat-count { margin-inline-start:.4rem; font-size:.75rem; }
 .fb-chat-active-filter { display:flex; align-items:center; margin-inline-start:auto; font-size:.8rem; color:var(--fb-on-surface-variant); }
 .fb-chat-people-heading { padding:.75rem 1rem 0; font-size:.9rem; font-weight:650; }
-.fb-chat-row[aria-current="page"] { background:var(--fb-surface-container); }
-.fb-chat-heading .fb-quick-trigger { max-width:100%; min-width:0; justify-content:flex-start; }
+.fb-chat-row-open[aria-current="page"] { background:var(--fb-surface-container); }
+.fb-chat-heading .fb-identity-link { max-width:100%; min-width:0; justify-content:flex-start; }
+.fb-chat-heading .fb-identity-link > .fb-chat-identity { flex:1; min-width:0; }
 .fb-chat-search-task { display:flex; flex-direction:column; gap:.75rem; }
 .fb-chat-search-task .fb-chat-search { margin:0; }
 .fb-chat-search-results { list-style:none; margin:0; padding:0; }
@@ -46,11 +47,18 @@
 .fb-chat-filters button[aria-pressed="true"] { border-color:var(--fb-primary); font-weight:650; }
 .fb-chat-list, .fb-chat-messages { min-height:0; flex:1; overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
 .fb-chat-list ul, .fb-chat-transcript { margin:0; padding:0; list-style:none; }
-.fb-chat-row { display:flex; align-items:center; gap:.75rem; padding:.85rem 1rem; min-height:72px; }
+.fb-chat-row { position:relative; display:flex; align-items:center; gap:.75rem; padding:.85rem 1rem; min-height:72px; }
+/* The row's conversation target is one stretched link underneath the identity
+   link, so tapping the person opens the profile and tapping anything else opens
+   the chat. No nested anchors and no second navigation target in the middle. */
+.fb-chat-row-open { position:absolute; inset:0; border-radius:inherit; }
+.fb-chat-row-open:focus-visible { outline:2px solid var(--fb-focus); outline-offset:-2px; }
+.fb-chat-row-identity { position:relative; z-index:1; display:flex; align-items:center; gap:.75rem; min-width:0; }
+.fb-chat-row-identity strong { font-size:.95rem; overflow-wrap:anywhere; }
 .fb-chat-row:hover { background:var(--fb-surface-container); }
 .fb-chat-row-copy { display:flex; flex:1; min-width:0; flex-direction:column; gap:.2rem; }
 .fb-chat-row-copy strong { overflow-wrap:anywhere; font-size:.95rem; }
-.fb-chat-preview { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; font-size:.875rem; white-space:pre-wrap; }
+.fb-chat-preview { padding-left:calc(44px + .75rem); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; font-size:.875rem; white-space:pre-wrap; }
 .fb-chat-secondary, .fb-chat-sync { font-size:.8rem; color:var(--fb-on-surface-variant); }
 .fb-chat-sync { padding:.3rem 1rem; margin:0; }
 .fb-chat-sync:empty { display:none; }
@@ -149,8 +157,12 @@ a.fb-chat-context:hover, a.fb-chat-context:focus-visible { text-decoration:under
 .fb-chat-rail-header { justify-content: center; padding-inline: 0; }
 .fb-chat-rail-list { list-style: none; margin: 0; padding: .25rem 0 .5rem; display: flex; flex-direction: column;
   flex: 1; min-height: 0; gap: .2rem; overflow-y: auto; overscroll-behavior: contain; }
-.fb-chat-rail-row { position: relative; display: flex; align-items: center; justify-content: center;
-  min-width: 44px; min-height: 48px; border-radius: .75rem; }
+.fb-chat-rail-item { position: relative; display: flex; align-items: center; justify-content: center;
+  min-width: 44px; min-height: 48px; }
+.fb-chat-rail-identity { position: relative; z-index: 1; display: flex; align-items: center;
+  justify-content: center; min-width: 44px; min-height: 44px; }
+.fb-chat-rail-identity:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; border-radius: .75rem; }
+.fb-chat-rail-row { position: absolute; inset: 0; border-radius: .75rem; }
 .fb-chat-rail-row:hover, .fb-chat-rail-row:focus-visible { background: var(--fb-surface-container); }
 .fb-chat-rail-row[aria-current="page"] { background: var(--fb-surface-container); }
 .fb-chat-rail-unread { position: absolute; inset-block-start: 7px; inset-inline-end: 10px; width: 9px; height: 9px;
@@ -167,3 +179,16 @@ a.fb-chat-context:hover, a.fb-chat-context:focus-visible { text-decoration:under
     .fb-split-detail .fb-chat-message-options { transition: opacity 120ms ease; }
   }
 }
+
+/* Floating jump-to-latest: appears only when the reader is far from the newest
+   message, sits above the composer, and never moves the reader on its own. */
+.fb-chat-jump {
+  position:absolute; right:.9rem; bottom:5.75rem;
+  display:flex; align-items:center; justify-content:center;
+  min-width:44px; min-height:44px; border-radius:999px;
+  background:var(--fb-surface-container-high); color:var(--fb-on-surface);
+  border:1px solid var(--fb-outline-variant); box-shadow:var(--shadow-md); z-index:6;
+}
+.fb-chat-jump:focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }
+/* Emoji-only messages scale the glyphs, not the bubble or the surrounding row. */
+.fb-chat-emoji-only { font-size: 2em; line-height: 1.15; }

@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { useState } from "react";
 import { MemoryRouter } from "react-router";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import { SplitView } from "./SplitView";
-import { UserQuickCard } from "./UserQuickCard";
+import { UserIdentityTrigger } from "./UserIdentityTrigger";
 
 const originalWidth = window.innerWidth;
 afterEach(() => {
@@ -47,16 +47,10 @@ it("wide windows expose both panes and resizing away from the list relocates foc
   expect(document.activeElement).not.toBe(document.body);
 });
 
-it("identity opens by explicit activation, exposes only caller-supplied public fields, and restores its trigger", async () => {
-  render(<MemoryRouter><UserQuickCard username="river" displayName="River Lee" relationship="Connected" /></MemoryRouter>);
-  const trigger = screen.getByRole("button", { name: "About River Lee" });
+it("identity is a direct profile link, not a quick-card popover", () => {
+  render(<MemoryRouter><UserIdentityTrigger person={{ id: "u-river", username: "river", displayName: "River Lee" }} /></MemoryRouter>);
+  const link = screen.getByRole("link", { name: "Open River Lee's profile" });
+  expect(link.getAttribute("href")).toBe("/u/river");
   expect(screen.queryByRole("dialog")).toBeNull();
-  trigger.focus(); fireEvent.click(trigger);
-  const dialog = await screen.findByRole("dialog", { name: "About River Lee" });
-  await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
-  expect(screen.getByText("Connected")).toBeTruthy();
-  expect(screen.getByRole("link", { name: "View profile" }).getAttribute("href")).toBe("/u/river");
-  fireEvent.keyDown(dialog, { key: "Escape" });
-  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-  await waitFor(() => expect(document.activeElement).toBe(trigger));
+  expect(screen.getByText("River Lee")).toBeTruthy();
 });

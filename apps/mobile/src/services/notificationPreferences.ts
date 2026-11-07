@@ -7,6 +7,8 @@ export interface NotificationPreferences {
   comments: boolean;
   mentions: boolean;
   status: boolean;
+  /** Connected-conversation messages. Requests are never silenced by this. */
+  messages: boolean;
 }
 
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
@@ -15,6 +17,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   comments: true,
   mentions: true,
   status: true,
+  messages: true,
 };
 
 interface PreferenceRow {
@@ -23,6 +26,7 @@ interface PreferenceRow {
   comments: number | boolean;
   mentions: number | boolean;
   status: number | boolean;
+  messages?: number | boolean;
 }
 
 function preferenceErrorStatus(code: string | undefined): number {
@@ -39,6 +43,8 @@ export function mapPreferences(row: PreferenceRow | undefined): NotificationPref
     comments: Boolean(row.comments),
     mentions: Boolean(row.mentions),
     status: Boolean(row.status),
+    // Rows written before the forward migration have the column default (on).
+    messages: row.messages === undefined ? true : Boolean(row.messages),
   };
 }
 
@@ -57,6 +63,7 @@ export async function saveNotificationPreferences(prefs: NotificationPreferences
     p_comments: prefs.comments,
     p_mentions: prefs.mentions,
     p_status: prefs.status,
+    p_messages: prefs.messages,
   });
   if (error) throw new ApiError(error.message, preferenceErrorStatus(error.code));
 }

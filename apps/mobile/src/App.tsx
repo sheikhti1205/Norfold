@@ -81,8 +81,6 @@ import { MessagingPrivacy } from "./screens/MessagingPrivacy";
 import { MessagingLifecycle } from "./components/MessagingLifecycle";
 import { postBackgroundLocation, PostNavigationProvider } from "./components/PostNavigation";
 import { PostModal } from "./components/PostModal";
-import { UserIdentityProvider } from "./components/UserIdentityTrigger";
-import { PeerIdentityActions } from "./components/PeerIdentityActions";
 import { SignedOutEntry } from "./screens/RememberedAccounts";
 import { clearAuthReturnTo, getAuthReturnRoute, peekAuthReturnTo } from "./utils/authReturnTo";
 
@@ -166,7 +164,7 @@ function AppRouteTree() {
           <ErrorBoundary>
             <AccountDeletionFeedback />
             <ReportDeletionFeedbackProvider>
-             <UserIdentityProvider actions={PeerIdentityActions}><PostNavigationProvider value={user?.id ?? null}>
+             <PostNavigationProvider value={user?.id ?? null}>
             <Routes location={background ?? location}>
               <Route path="/shared/:id" element={<SharedReport />} />
               <Route path="/privacy" element={<main className="nf-public-document"><PrivacyPolicy publicView /></main>} />
@@ -292,7 +290,7 @@ function AppRouteTree() {
             {background && <Routes location={location}>
               <Route path="/posts/:id" element={<RequireAuth><PostModal /></RequireAuth>} />
             </Routes>}
-             </PostNavigationProvider></UserIdentityProvider>
+             </PostNavigationProvider>
             </ReportDeletionFeedbackProvider>
           </ErrorBoundary>
     </>

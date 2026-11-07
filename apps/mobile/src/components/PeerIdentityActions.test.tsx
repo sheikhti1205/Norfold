@@ -6,7 +6,7 @@ import type { ConversationProjection } from "../services/messaging/conversationI
 
 const state = vi.hoisted(() => ({
   account: "viewer", status: "ready", projections: {} as Record<string, ConversationProjection> | null,
-  create: vi.fn(), send: vi.fn(), refresh: vi.fn(),
+  create: vi.fn(), send: vi.fn(), refresh: vi.fn(), end: vi.fn(),
 }));
 vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: state.account } }) }));
 vi.mock("../services/messaging/useMessaging", () => ({ useMessaging: () => ({
@@ -16,9 +16,10 @@ vi.mock("../services/messaging/runtime", () => ({
   requestMessagingConversation: (...args: unknown[]) => state.create(...args),
   refreshMessaging: (...args: unknown[]) => state.refresh(...args),
   sendMessagingText: (...args: unknown[]) => state.send(...args),
+  changeMessagingRelationship: (...args: unknown[]) => state.end(...args),
 }));
 import { PeerIdentityActions } from "./PeerIdentityActions";
-import { UserIdentityProvider, UserIdentityTrigger } from "./UserIdentityTrigger";
+import { UserIdentityTrigger } from "./UserIdentityTrigger";
 import type { PublicIdentity } from "./UserIdentityTrigger";
 
 const person = { id: "peer", username: "river", displayName: "River Lee", avatarUrl: null };
@@ -36,6 +37,7 @@ function identityTree(identity: PublicIdentity) {
 beforeEach(() => {
   state.account = "viewer"; state.status = "ready"; state.projections = {};
   state.create.mockReset().mockResolvedValue("chat"); state.send.mockReset().mockResolvedValue("message");
+  state.end.mockReset().mockResolvedValue(undefined);
 });
 afterEach(cleanup);
 
@@ -62,25 +64,23 @@ it("keeps an incoming request as View request with safety available", () => {
   expect(screen.getByRole("button", { name: "More profile actions" })).toBeTruthy();
 });
 
-it("offers connection options alongside message on a connected card", () => {
+it("offers message plus an explicit, confirmed disconnect on a connected profile", () => {
   state.projections = { chat: connected };
   mount();
   expect(screen.getByRole("link", { name: "Message" }).getAttribute("href")).toBe("/chats/chat");
-  expect(screen.getByRole("link", { name: "Connection options" }).getAttribute("href")).toBe("/chats/chat");
+  fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+  const confirm = screen.getByRole("group", { name: "Disconnect" });
+  expect(confirm.textContent).toContain("Your messages stay in the conversation.");
   expect(screen.getByRole("button", { name: "More profile actions" })).toBeTruthy();
+  expect(state.end).not.toHaveBeenCalled();
 });
 
-it("supplies the same contact owner to a public quick card without leaking private identity", async () => {
-  render(<MemoryRouter><UserIdentityProvider actions={PeerIdentityActions}>
-    <UserIdentityTrigger person={{ ...person, email: "private@example.test" } as typeof person} />
-  </UserIdentityProvider></MemoryRouter>);
-  fireEvent.click(screen.getByRole("button", { name: "About River Lee" }));
-  const card = await screen.findByRole("dialog", { name: "About River Lee" });
-  expect(card.textContent).not.toContain("private@example.test");
-  expect(screen.getByRole("button", { name: "Connect" })).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Connect" }));
-  expect(await screen.findByRole("dialog", { name: "Connect with River Lee" })).toBeTruthy();
-  expect(state.create).not.toHaveBeenCalled();
+it("renders the identity as a direct profile link with no quick-card dialog", () => {
+  render(<MemoryRouter><UserIdentityTrigger person={{ ...person, email: "private@example.test" } as typeof person} /></MemoryRouter>);
+  const link = screen.getByRole("link", { name: "Open River Lee's profile" });
+  expect(link.getAttribute("href")).toBe("/u/river");
+  expect(link.textContent).not.toContain("private@example.test");
+  expect(screen.queryByRole("dialog")).toBeNull();
 });
 
 it("opens first contact without creating or sending until explicit Send request", async () => {

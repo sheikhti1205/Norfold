@@ -35,6 +35,9 @@ object PushChannels {
     /** Initial private-message request only; follow-ups never alert. */
     const val CHAT_REQUESTS = "findback.chat.requests.v1"
 
+    /** Normal connected-conversation messages. OS-owned sound/vibration. */
+    const val CHAT_MESSAGES = "findback.chat.messages.v1"
+
     /** Reserved — not created until a real background-matching source exists. */
     const val MATCHES_RESERVED = "findback.matches.v1"
 
@@ -62,6 +65,8 @@ object PushChannels {
         create(context, manager, COMMENTS, R.string.findback_channel_comments, R.string.findback_channel_comments_description, NotificationManager.IMPORTANCE_HIGH)
         create(context, manager, ACTIVITY, R.string.findback_channel_activity, R.string.findback_channel_activity_description, NotificationManager.IMPORTANCE_DEFAULT)
         create(context, manager, UPDATES, R.string.findback_channel_updates, R.string.findback_channel_updates_description, NotificationManager.IMPORTANCE_DEFAULT)
+        create(context, manager, CHAT_MESSAGES, R.string.findback_channel_chat_messages,
+            R.string.findback_channel_chat_messages_description, NotificationManager.IMPORTANCE_HIGH)
         if (manager.getNotificationChannel(CHAT_REQUESTS) == null) {
             manager.createNotificationChannel(NotificationChannel(CHAT_REQUESTS,
                 context.getString(R.string.findback_channel_chat_requests), NotificationManager.IMPORTANCE_LOW).apply {

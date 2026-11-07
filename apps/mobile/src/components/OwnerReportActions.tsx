@@ -1,7 +1,7 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import type { PostItem, PostStatus } from "@norfold/shared";
 import { OWNER_SELECTABLE_STATUSES, POST_STATUS_LABELS, RESOLVED_STATUSES } from "@norfold/shared";
-import { CircleCheck, Copy, MoreVertical, Pencil, Share2, Trash2, Undo2 } from "lucide-react";
+import { CircleCheck, Copy, Pencil, Share2, Trash2, Undo2 } from "lucide-react";
 import { ActionMenu, type MenuAction } from "./ActionMenu";
 
 /**
@@ -68,11 +68,19 @@ function statusLabel(status: PostStatus): string {
  * the trigger, and a destructive row separated from the rest. Swipe is never
  * the only route to an action, and the screen still owns every handler.
  */
-export function OwnerReportMenu({ post }: { post: PostItem }) {
+export function OwnerReportMenu({ post, open: controlledOpen, onOpenChange: controlledOnOpenChange }: {
+  post: PostItem;
+  /** Controlled by the long-press surface; omitting them keeps the menu usable
+   * on its own (fixtures and tests) with local state. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const onOpenChange = controlledOnOpenChange ?? setLocalOpen;
   const actions = useOwnerReportActions();
   if (!actions) return null;
 
-  const pending = actions.pendingDeleteId === post.id;
   const resolved = RESOLVED_STATUSES.includes(post.status);
   const matched = post.status === "MATCHED";
 
@@ -140,34 +148,21 @@ export function OwnerReportMenu({ post }: { post: PostItem }) {
     onAction: () => actions.onDelete(post),
   });
 
-  return (
-    <div className="flex shrink-0 items-center gap-1" onPointerDown={(event) => event.stopPropagation()}>
-      {pending && (
-        <span
-          role="status"
-          data-testid="owner-report-delete-pending"
-          className="mr-1 flex items-center gap-1 rounded-full bg-surface-container px-2 py-1 text-xs font-medium text-on-surface-variant"
-        >
-          Deleting…
-          {actions.onUndoDelete && (
-            <button
-              type="button"
-              onClick={() => actions.onUndoDelete?.()}
-              className="flex min-h-[36px] items-center gap-1 rounded-full bg-on-surface px-2 font-semibold text-surface"
-              data-testid="owner-report-undo-delete"
-            >
-              <Undo2 size={13} aria-hidden />
-              Undo
-            </button>
-          )}
-        </span>
-      )}
-      <ActionMenu
-        label={`Manage report: ${post.title}`}
-        items={items}
-        icon={<MoreVertical size={18} aria-hidden />}
-        triggerClassName="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container"
-      />
-    </div>
-  );
+  // Controlled by a long-press surface → the trigger is an invisible anchor
+  // filling the card. Rendered on its own → a normal, focusable overflow button.
+  return <ActionMenu anchor={controlledOpen !== undefined} label={`Report actions: ${post.title}`}
+    items={items} open={open} onOpenChange={onOpenChange} />;
+}
+
+/** Undo lives outside the popover so it stays visible after the menu closes. */
+export function OwnerReportPendingDelete({ post }: { post: PostItem }) {
+  const actions = useOwnerReportActions();
+  if (!actions || actions.pendingDeleteId !== post.id) return null;
+  return <span role="status" data-testid="owner-report-delete-pending" data-longpress-ignore
+    className="mt-1 inline-flex items-center gap-1 rounded-full bg-surface-container px-2 py-1 text-xs font-medium text-on-surface-variant">
+    Deleting…
+    {actions.onUndoDelete && <button type="button" onClick={() => actions.onUndoDelete?.()}
+      className="flex min-h-[36px] items-center gap-1 rounded-full bg-on-surface px-2 font-semibold text-surface"
+      data-testid="owner-report-undo-delete"><Undo2 size={13} aria-hidden />Undo</button>}
+  </span>;
 }

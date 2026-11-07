@@ -110,3 +110,9 @@
 }
 /* No spatial entrance travel: effective reduced motion has no hidden animation
    path. Feedback is local background/focus state, not springing whole panels. */
+
+/* Inline disconnect confirmation on the full-screen profile (no bottom sheet). */
+.fb-peer-actions-confirm { display: flex; flex-direction: column; gap: .5rem; margin-block: .5rem; }
+.fb-peer-actions-confirm p { margin: 0; font-size: .8125rem; color: var(--fb-on-surface-variant); }
+.fb-peer-actions-confirm > div { display: flex; flex-wrap: wrap; gap: .5rem; }
+.fb-surface-button.destructive { background: var(--fb-error); color: var(--fb-on-error); }

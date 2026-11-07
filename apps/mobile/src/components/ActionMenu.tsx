@@ -36,7 +36,7 @@ function actionRows(items: readonly MenuAction[]) {
 }
 
 /** Anchored actions on every input/width. Never turns a simple action into a sheet. */
-export function ActionMenu({ label, items, icon, disabled = false, open: controlledOpen, onOpenChange, triggerClassName = "fb-icon-control", feedback }: {
+export function ActionMenu({ label, items, icon, disabled = false, open: controlledOpen, onOpenChange, triggerClassName = "fb-icon-control", anchor = false, feedback }: {
   label: string;
   items: readonly (MenuAction | MenuGroup)[];
   icon?: ReactNode;
@@ -44,6 +44,9 @@ export function ActionMenu({ label, items, icon, disabled = false, open: control
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   triggerClassName?: string;
+  /** Render the trigger as an invisible anchor filling the long-press surface.
+   * The visible surface owns the accessible name and the gesture. */
+  anchor?: boolean;
   /** Keep operation feedback in the active layer, not in its inert background. */
   feedback?: ReactNode;
 }) {
@@ -65,10 +68,12 @@ export function ActionMenu({ label, items, icon, disabled = false, open: control
   // window. Touch uses a stacked second panel; roomy fine-pointer gets flyout.
   const flyout = finePointer && width >= COMPACT_MAX_PX;
   return <MenuTrigger isOpen={open} onOpenChange={setOpen}>
-    <Button ref={trigger} aria-label={label} isDisabled={disabled} className={triggerClassName}>
+    <Button ref={trigger} aria-label={label} isDisabled={disabled}
+      className={anchor ? `fb-longpress-anchor ${triggerClassName}` : triggerClassName}
+      excludeFromTabOrder={anchor} aria-hidden={anchor || undefined}>
       {icon ?? <MoreHorizontal size={20} aria-hidden="true" />}
     </Button>
-    <LayeredPopover placement="bottom end" offset={4}>
+    <LayeredPopover placement={anchor ? "bottom start" : "bottom end"} offset={4}>
       <div onKeyDownCapture={leaveOnTab}>
       {feedback}
       <Menu aria-label={label} className="fb-action-menu">

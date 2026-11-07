@@ -6,7 +6,7 @@ import { ActionMenu } from "../../components/ActionMenu";
 import { AdaptiveTaskSurface, ConfirmDialog } from "../../components/AdaptiveTaskSurface";
 import { ComposerShell } from "../../components/ComposerShell";
 import { SplitView } from "../../components/SplitView";
-import { UserQuickCard } from "../../components/UserQuickCard";
+import { UserIdentityTrigger } from "../../components/UserIdentityTrigger";
 import { TabTapProvider } from "../../components/TabTap";
 import { COMPACT_MAX_PX, useContentWidth, useViewportWidth } from "../../components/responsive";
 import { FixtureSection } from "../FixtureSection";
@@ -37,7 +37,7 @@ export function FoundationDemo({ state = "normal" }: { state?: "normal" | "loadi
         </div>} detail={<div className="flex h-full min-h-0 flex-col">
           <header className="flex shrink-0 items-center gap-1 border-b border-outline-variant px-2 py-1">
             <button aria-label="Back to chats" className="fb-icon-control" onClick={() => setSelected(false)}><ArrowLeft size={20} aria-hidden="true" /></button>
-            <div className="min-w-0 flex-1"><UserQuickCard username="river" displayName="River Lee" relationship="Connected" /></div>
+            <div className="min-w-0 flex-1"><UserIdentityTrigger person={{ id: "u-river", username: "river", displayName: "River Lee" }} /></div>
             <button aria-label="Filters" className="fb-icon-control" onClick={() => setTask(true)}><SlidersHorizontal size={20} aria-hidden="true" /></button>
             <ActionMenu label="Conversation actions" items={[
               { id: "save", label: "Save", onAction: () => setNotice("Saved") },

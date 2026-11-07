@@ -31,7 +31,7 @@ describe("mapPreferences", () => {
         mentions: 0,
         status: 1,
       }),
-    ).toEqual({ pushEnabled: true, likes: false, comments: true, mentions: false, status: true });
+    ).toEqual({ pushEnabled: true, likes: false, comments: true, mentions: false, status: true, messages: true });
   });
 });
 
@@ -47,6 +47,7 @@ describe("fetchNotificationPreferences", () => {
       comments: true,
       mentions: true,
       status: false,
+      messages: true,
     });
     expect(clientMock.rpc).toHaveBeenCalledWith("findback_get_notification_preferences_client", {});
   });
@@ -66,6 +67,7 @@ describe("saveNotificationPreferences", () => {
       comments: true,
       mentions: true,
       status: false,
+      messages: true,
     });
     expect(clientMock.rpc).toHaveBeenCalledWith("findback_set_notification_preferences_client", {
       p_push_enabled: true,
@@ -73,6 +75,7 @@ describe("saveNotificationPreferences", () => {
       p_comments: true,
       p_mentions: true,
       p_status: false,
+      p_messages: true,
     });
   });
 

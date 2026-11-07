@@ -41,6 +41,36 @@ class NotificationPresenter(private val context: Context) {
         NotificationManagerCompat.from(context).notify("chat:" + push.notificationId, 0, notification)
     }
 
+    /**
+     * Normal incoming message in a connected conversation. Content-free by
+     * design: the push carries ids only, so the body never names the sender or
+     * quotes the message. The tap capability routes to the conversation once
+     * the authenticated session is ready.
+     */
+    fun showChatMessage(push: ChatPushData, tap: String) {
+        if (!notificationsAllowed()) return
+        PushChannels.ensureCreated(context)
+        val intent = Intent(context, MainActivity::class.java).apply {
+            action = ChatPushState.ACTION_TAP
+            data = Uri.Builder().scheme("findback-chat").authority("tap").appendPath(tap).build()
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val pending = PendingIntent.getActivity(context, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val notification = NotificationCompat.Builder(context, PushChannels.CHAT_MESSAGES)
+            .setSmallIcon(R.drawable.ic_stat_findback)
+            .setContentTitle(context.getString(R.string.findback_chat_message_title))
+            .setContentText(context.getString(R.string.findback_chat_message_body))
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .build()
+        NotificationManagerCompat.from(context).notify("chat:" + push.notificationId, 0, notification)
+    }
+
     fun show(push: PushData) {
         if (!notificationsAllowed()) return
         PushChannels.ensureCreated(context)
