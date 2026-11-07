@@ -10,6 +10,14 @@ begin;
 alter table public.notification_preferences
   add column if not exists messages integer not null default 1 check (messages in (0, 1));
 
+-- Neither edit below is a CREATE OR REPLACE: a table-returning function cannot
+-- change its OUT columns in place (42P13), and the setter gains a parameter, so
+-- leaving the old five-argument definition would make every five-argument call
+-- ambiguous. Both are new in this wave, and the explicit grants further down
+-- restore the only role that may call them.
+drop function if exists public.findback_get_notification_preferences_client();
+drop function if exists public.findback_set_notification_preferences_client(boolean, boolean, boolean, boolean, boolean);
+
 create or replace function public.findback_get_notification_preferences_client()
 returns table (
   push_enabled integer,
