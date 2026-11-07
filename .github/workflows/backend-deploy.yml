@@ -103,8 +103,13 @@ jobs:
       - name: Push pending migrations
         if: inputs.push_migrations && !inputs.deploy_device_list && !inputs.deploy_chat_media_ack && !inputs.deploy_history_peers
         run: |
+          # CLI v2 defaults `db push` to the local stack even after `link`.
+          # Every other deploy path here already selects the remote explicitly;
+          # without --remote this step failed closed on 127.0.0.1:54322 while
+          # reporting a successful link.
           supabase link --project-ref "$PROJECT_REF"
-          supabase db push
+          supabase db push --remote --skip-vault --dry-run
+          supabase db push --remote --skip-vault --yes
       - uses: actions/setup-node@v5
         if: inputs.deploy_device_list || inputs.deploy_chat_media_ack || inputs.deploy_history_peers
         with:
