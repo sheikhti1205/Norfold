@@ -6,6 +6,7 @@ import { fetchNotifications, type NotificationItem } from "../services/notificat
 import { closeDesktopNotifications, desktopNotificationsEnabled, showDesktopNotification } from "../services/desktopNotifications";
 import { fetchNotificationPreferences, type NotificationPreferences } from "../services/notificationPreferences";
 import { notificationRoute, typeLabel } from "../screens/Notifications";
+import { releaseWebPush } from "../services/webPush";
 
 /** One sentence for the OS notification; the inbox row stays the full record. */
 function describe(item: NotificationItem): { title: string; body: string } {
@@ -63,6 +64,9 @@ export function DesktopNotifications() {
       cancelled = true;
       off();
       closeDesktopNotifications(accountId);
+      // A browser endpoint belongs to the account that registered it. Sign-out
+      // or an account switch releases it; the next opt-in re-registers.
+      void releaseWebPush();
     };
   }, [user, navigate]);
   return null;

@@ -3,12 +3,13 @@ import { Link, useNavigate } from "react-router";
 import type { PublicIdentity } from "./UserIdentityTrigger";
 import { useAuth } from "../auth";
 import { useMessaging } from "../services/messaging/useMessaging";
-import { requestMessagingConversation, refreshMessaging, sendMessagingText } from "../services/messaging/runtime";
+import { changeMessagingRelationship, requestMessagingConversation, refreshMessaging, sendMessagingText } from "../services/messaging/runtime";
 import { MAX_BODY_UNITS } from "../services/messaging/validation";
 import { useSafetyLifetime } from "../utils/useSafetyLifetime";
 import { AdaptiveTaskSurface } from "./AdaptiveTaskSurface";
 import { ComposerShell } from "./ComposerShell";
 import { SafetyActions } from "./SafetyActions";
+import { convertEmoticons } from "../utils/emoji";
 import { UserAvatar } from "./UserAvatar";
 
 /** Account/peer/report key invalidates drafts and async continuations synchronously. */
@@ -29,6 +30,7 @@ function PeerActionsSession({ accountId, person }: { accountId: string; person: 
   const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [checkConversation, setCheckConversation] = useState<string | null>(null);
+  const [confirmEnd, setConfirmEnd] = useState(false);
   // Relationship authority exists only after a completed refresh. Cached or
   // offline projections are not current authority, so they are never shown or
   // used to infer a relationship; an offline chat still opens the dialog and
@@ -71,7 +73,7 @@ function PeerActionsSession({ accountId, person }: { accountId: string; person: 
       }
       conversationId = await requestMessagingConversation(accountId, person.id);
       if (!alive.current) return;
-      await sendMessagingText(accountId, conversationId, person.id, body.trim(), reportId);
+      await sendMessagingText(accountId, conversationId, person.id, convertEmoticons(body.trim()), reportId);
       if (alive.current) navigate(`/chats/${encodeURIComponent(conversationId)}`);
     } catch {
       if (!alive.current) return;
@@ -87,7 +89,12 @@ function PeerActionsSession({ accountId, person }: { accountId: string; person: 
     }
   }
 
-  if (projection?.ownBlocked) return null;
+  // A blocked pair is an honest state, not an empty space: say what is true and
+  // leave unblock/report to the canonical safety owner.
+  if (projection?.ownBlocked) return <div className="fb-peer-actions">
+    <p className="fb-identity-relationship">You blocked this account. Message controls stay unavailable until you unblock it.</p>
+    <SafetyActions reportPerson person={{ userId: person.id, name }} />
+  </div>;
   // §9 quick card: the conversation is the canonical owner of relationship
   // options, so a connected card routes to it instead of duplicating accept /
   // decline / end policy here. Outgoing requests name the action they perform.
@@ -102,7 +109,22 @@ function PeerActionsSession({ accountId, person }: { accountId: string; person: 
         {projection.mode === "CONNECTED" ? reportId ? "Message about this report" : "Message"
           : projection.request === "OUTGOING" ? "Open request conversation" : "View request"}
       </Link>
-      {projection.mode === "CONNECTED" && <Link className="fb-surface-button" to={`/chats/${encodeURIComponent(projection.conversationId)}`}>Connection options</Link>}
+      {projection.mode === "CONNECTED" && (confirmEnd
+        ? <div className="fb-peer-actions-confirm" role="group" aria-label="Disconnect">
+            <p>Your messages stay in the conversation. Either of you can send a new request.</p>
+            <div>
+              <button type="button" className="fb-surface-button" disabled={busy} onClick={() => setConfirmEnd(false)}>Cancel</button>
+              <button type="button" className="fb-surface-button destructive" disabled={busy} onClick={() => {
+                if (busy || !ready) return;
+                setBusy(true); setError(null);
+                void changeMessagingRelationship(accountId, projection.conversationId, "end")
+                  .then(() => { if (alive.current) { setConfirmEnd(false); setError("Connection ended."); } })
+                  .catch(() => { if (alive.current) setError("Couldn’t end the connection. Try again."); })
+                  .finally(() => { if (alive.current) setBusy(false); });
+              }}>{busy ? "Ending…" : "Disconnect"}</button>
+            </div>
+          </div>
+        : <button type="button" className="fb-surface-button" disabled={busy} onClick={() => setConfirmEnd(true)}>Disconnect</button>)}
     </>}
     {!projection && <button type="button" className="fb-surface-button"
       onClick={() => setOpen(true)}>{reportId ? "Connect about this report" : "Connect"}</button>}

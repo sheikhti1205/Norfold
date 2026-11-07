@@ -18,6 +18,10 @@
     <string name="findback_channel_chat_requests_description">A quiet notification for a new message request.</string>
     <string name="findback_chat_request_title">Message request</string>
     <string name="findback_chat_request_body">Open Norfold to view your requests.</string>
+    <string name="findback_channel_chat_messages">Messages</string>
+    <string name="findback_channel_chat_messages_description">New messages in your connected conversations.</string>
+    <string name="findback_chat_message_title">New message</string>
+    <string name="findback_chat_message_body">Open Norfold to read it.</string>
     <string name="findback_reply_sent">Reply sent</string>
     <string name="findback_reply_failed">Reply failed — open Norfold to try again</string>
     <string name="findback_reply_too_fast">Too fast — reply again in %1$ds</string>

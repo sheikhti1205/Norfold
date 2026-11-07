@@ -16,16 +16,19 @@ const match: MyMatch = {
 function tree(accountId: string | null = "A") {
   return <MemoryRouter><MatchActivity accountId={accountId} /></MemoryRouter>;
 }
-function open() { fireEvent.click(screen.getByText("Match activity")); }
+function surface() { return screen.getByRole("group", { name: /Match activity/i }); }
+/** Touch users hold; keyboard users press Shift+F10. jsdom exercises the
+ * right-click path, which fires the same long-press surface. */
+function open() { fireEvent.contextMenu(surface()); }
 beforeEach(() => list.mockReset().mockResolvedValue([match]));
 afterEach(cleanup);
 
 describe("account match discovery", () => {
-  it("is a compact native disclosure linking to the canonical owner controls", async () => {
+  it("opens from a long-press, with no visible chevron, and links to the canonical owner controls", async () => {
     render(tree());
-    const summary = screen.getByText("Match activity").closest("summary")!;
-    expect(summary).not.toBeNull();
-    expect(summary.closest("details")?.open).toBe(false);
+    const area = surface();
+    expect(area.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(screen.queryByRole("dialog", { name: "Match activity" })).toBeNull();
     await screen.findByText("Action waiting");
     open();
     const link = await screen.findByRole("link", { name: /My wallet.*Proposal to review/i });

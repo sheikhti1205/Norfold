@@ -36,8 +36,18 @@ export function ChatPushLinkHandler() {
       }
     };
     const signal = () => { void drain(); };
+    // The background web-push worker posts here when its notification is tapped
+    // and this tab is already open. Ids only: the worker never carries content.
+    const onWorkerMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; conversationId?: string } | null;
+      if (!data || data.type !== "norfold:chat-notification") return;
+      if (typeof data.conversationId === "string" && data.conversationId) {
+        navigate(`/chats/${encodeURIComponent(data.conversationId)}`);
+      }
+    };
     window.addEventListener(CHAT_PUSH_BOUND_EVENT, signal);
     window.addEventListener("focus", signal);
+    if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", onWorkerMessage);
     // This component mounts for every route, so a native bridge that is absent
     // or throws synchronously must not take the shell down with it: the call is
     // guarded as well as the promise, because a missing export throws before
@@ -53,6 +63,7 @@ export function ChatPushLinkHandler() {
       remove?.();
       window.removeEventListener(CHAT_PUSH_BOUND_EVENT, signal);
       window.removeEventListener("focus", signal);
+      if ("serviceWorker" in navigator) navigator.serviceWorker.removeEventListener("message", onWorkerMessage);
     };
   }, [account, booting, navigate]);
   return null;

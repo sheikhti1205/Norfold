@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 import type { PostItem, PublicProfile as PublicProfileShape } from "@norfold/shared";
 import { fetchPublicProfile, appendReportPage, hasMoreReports } from "../services/profile";
 import { fetchFeed } from "../services/posts";
@@ -11,6 +11,8 @@ import { SettingsGroup, SettingsPage, SettingsRow, StatusPill } from "../compone
 import { useAuth } from "../auth";
 import { useSafetyLifetime } from "../utils/useSafetyLifetime";
 import { PeerIdentityActions } from "../components/PeerIdentityActions";
+import { ConversationInfo } from "../components/ConversationInfo";
+import { useMessaging } from "../services/messaging/useMessaging";
 
 /** "Joined January 2026" from an ISO timestamp; tolerant of bad input. */
 function formatJoined(createdAt: string): string {
@@ -34,8 +36,15 @@ export function PublicProfile() {
   return <PublicProfileSession key={JSON.stringify([user?.id ?? null, username])} username={username} />;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 function PublicProfileSession({ username }: { username: string }) {
   const { user } = useAuth();
+  const chat = useMessaging();
+  const [params] = useSearchParams();
+  const rawConversation = params.get("conversation");
+  const rawReport = params.get("report");
+  const contextReportId = rawReport && UUID.test(rawReport) ? rawReport : undefined;
   const alive = useSafetyLifetime();
   const pageInFlight = useRef(false);
   const [profile, setProfile] = useState<PublicProfileShape | null>(null);
@@ -112,6 +121,11 @@ function PublicProfileSession({ username }: { username: string }) {
     }
   }
 
+  const projection = rawConversation && user && chat.accountId === user.id && chat.status === "ready"
+    ? chat.currentProjections?.[rawConversation] : undefined;
+  const conversation = projection && profile && rawConversation && projection.peerId === profile.id
+    && projection.conversationId === rawConversation && !projection.ownBlocked ? rawConversation : undefined;
+
   return (
     <SettingsPage title="Profile" backTo="/" backLabel="Back">
       {loading && <p role="status">Loading profile…</p>}
@@ -155,9 +169,18 @@ function PublicProfileSession({ username }: { username: string }) {
             {profile.locationLabel && (
               <p className="break-words text-sm text-on-surface-variant">{profile.locationLabel}</p>
             )}
-             {user && <PeerIdentityActions person={profile} />}
+             {user && <PeerIdentityActions person={{ ...profile, contextReportId }} />}
             </div>
           </section>
+
+          {/* Conversation context is sensitive: it is shown only when this
+              account's live runtime proves the caller is a participant and the
+              profile is the other participant. A stale or forged id falls back
+              to the public profile with no private sections. */}
+          {conversation && user && (
+            <ConversationInfo accountId={user.id} conversationId={conversation}
+              peer={{ id: profile.id, username: profile.username, name: profile.displayName || profile.username }} />
+          )}
 
           <SettingsGroup title="Reports">
             {reports.length === 0 ? (

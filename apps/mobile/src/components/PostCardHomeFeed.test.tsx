@@ -669,7 +669,7 @@ describe("home-feed content-first interactions", () => {
     renderHomeFeed(imagePost());
     const time = screen.getByTestId("post-time");
     const category = screen.getByTestId("post-category");
-    const identity = screen.getByRole("button", { name: "About alice" }).closest("header")!;
+    const identity = screen.getByRole("link", { name: "Open Alice's profile" }).closest("header")!;
     expect(identity.contains(time)).toBe(true);
     expect(screen.getByTestId("home-feed-media").compareDocumentPosition(category) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // The separate category-only row is gone: the card footer now holds the
@@ -682,7 +682,7 @@ describe("home-feed content-first interactions", () => {
   it("keeps the content navigation independent from identity and actions", () => {
     renderHomeFeed(post());
     const link = screen.getByTestId("home-feed-detail-link");
-    expect(link.contains(screen.getByRole("button", { name: "About alice" }))).toBe(false);
+    expect(link.contains(screen.getByRole("link", { name: "Open Alice's profile" }))).toBe(false);
     expect(link.contains(screen.getByRole("group", { name: "Report actions" }))).toBe(false);
   });
 });

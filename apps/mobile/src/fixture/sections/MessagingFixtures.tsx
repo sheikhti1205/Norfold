@@ -70,9 +70,8 @@ function Thread({ variant }: { variant: FixtureVariant }) {
         locked={false}
         canSend={!!draft.trim()}
         photoAllowed
-        onPhoto={() => undefined}
-        locationAllowed
-        onLocation={() => undefined}
+        onCamera={() => undefined}
+        onPhotos={() => undefined}
       />
     </div>
   );

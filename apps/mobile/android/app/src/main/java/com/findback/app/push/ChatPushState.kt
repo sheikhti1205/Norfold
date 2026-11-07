@@ -80,10 +80,6 @@ object ChatPushState {
         if (!storageReady) return
         val state = load(context)
         if (state.optString("account") != push.recipientId) return
-        if (push.type == "CHAT_CONNECTED") {
-            if (foreground) forward()
-            return
-        }
         val seen = entries(state)
         val duplicate = (0 until seen.length()).any { seen.getJSONObject(it).getString("wake") == push.notificationId }
         if (duplicate) { if (foreground) forward(); return }
@@ -92,8 +88,17 @@ object ChatPushState {
         seen.put(JSONObject().put("wake", push.notificationId).put("account", push.recipientId)
             .put("conversation", push.conversationId).put("at", System.currentTimeMillis()).put("tap", tap))
         save(context, state)
-        if (foreground) forward()
-        else NotificationPresenter(context).showChatRequest(push, tap)
+        if (foreground) {
+            // The app is visible: update in-app state; never stack a duplicate
+            // OS notification on top of the conversation the user is reading.
+            forward()
+            return
+        }
+        if (push.type == "CHAT_CONNECTED") {
+            NotificationPresenter(context).showChatMessage(push, tap)
+        } else {
+            NotificationPresenter(context).showChatRequest(push, tap)
+        }
     }
 
     /** The exported launcher is not an authority. A tap must match a private,

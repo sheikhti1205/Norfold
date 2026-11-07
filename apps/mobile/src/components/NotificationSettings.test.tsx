@@ -39,7 +39,7 @@ const fetchMock = vi.mocked(fetchNotificationPreferences);
 const saveMock = vi.mocked(saveNotificationPreferences);
 
 function allOn() {
-  return { pushEnabled: true, likes: true, comments: true, mentions: true, status: true };
+  return { pushEnabled: true, likes: true, comments: true, mentions: true, status: true, messages: true };
 }
 
 beforeEach(() => {
@@ -246,7 +246,7 @@ describe("NotificationSettings", () => {
 
     const push = await screen.findByRole("switch", { name: "Push notifications" });
     expect(push.getAttribute("aria-checked")).toBe("true");
-    expect(screen.getAllByRole("switch")).toHaveLength(5);
+    expect(screen.getAllByRole("switch")).toHaveLength(6);
   });
 
   it("persists a toggle and disables categories when push is off", async () => {

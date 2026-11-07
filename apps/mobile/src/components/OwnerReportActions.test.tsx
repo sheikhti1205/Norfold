@@ -66,12 +66,12 @@ function renderMenu(value = handlers(), report = post) {
 }
 
 async function openMenu() {
-  const trigger = screen.getByRole("button", { name: /manage report/i });
+  const trigger = screen.getByRole("button", { name: /report actions/i });
   trigger.focus();
   // Keyboard-open focuses the first enabled item, which is what the canonical
   // menu owner guarantees; the click path is covered separately.
   fireEvent.keyDown(trigger, { key: "ArrowDown" });
-  const menu = await screen.findByRole("menu", { name: /manage report/i });
+  const menu = await screen.findByRole("menu", { name: /report actions/i });
   await waitFor(() => expect(menu.contains(document.activeElement)).toBe(true));
   return { trigger, menu };
 }
@@ -82,13 +82,13 @@ describe("the overflow menu", () => {
   it("opens from the trigger and shows the actions as menu items", async () => {
     renderMenu();
 
-    const trigger = screen.getByRole("button", { name: /manage report/i });
+    const trigger = screen.getByRole("button", { name: /report actions/i });
     expect(["menu", "true"]).toContain(trigger.getAttribute("aria-haspopup"));
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
 
     fireEvent.click(trigger);
 
-    const menu = await screen.findByRole("menu", { name: /manage report/i });
+    const menu = await screen.findByRole("menu", { name: /report actions/i });
     expect(menu.getAttribute("aria-label")).toBeTruthy();
     expect(within(menu).getAllByRole("menuitem").length).toBeGreaterThan(0);
     // The owner-writable statuses stay one tap away, and the current one says so.
@@ -185,7 +185,7 @@ describe("the overflow menu", () => {
 
   it("shows no controls at all outside a provider", () => {
     render(<OwnerReportMenu post={post} />);
-    expect(screen.queryByRole("button", { name: /manage report/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /report actions/i })).toBeNull();
   });
 
   it("routes a MATCHED owner to handover/correction instead of an unlinked recovery or bare status write", async () => {

@@ -4,6 +4,7 @@ import { RefreshCw } from "lucide-react";
 import { listMyMatches, type MyMatch } from "../services/matches";
 import { useSafetyLifetime } from "../utils/useSafetyLifetime";
 import { Button } from "./Button";
+import { LongPressArea, LongPressDialog } from "./LongPressArea";
 
 /** Discovery only: consent, correction and handover stay in ReportMatches.
  * Remount before paint at account boundaries, including an A→B→A trip. */
@@ -67,12 +68,15 @@ function ScopedMatchActivity({ accountId }: { accountId: string }) {
     (match.state === "PENDING" && !match.myConfirmed) || (match.state === "CONFIRMED" && !match.myHandover)
   ));
   const last = matches.at(-1);
-  return <details className="group mx-4 mb-3 min-w-0 border-b border-outline-variant">
-    <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2">
-      <span>Match activity</span>
-      {actionWaiting && <span className="ml-2 inline-block text-xs text-on-surface-variant">Action waiting</span>}
-    </summary>
-    <div className="flex min-w-0 flex-col gap-2 pb-3">
+  return <LongPressArea label="Match activity" popup="dialog" className="mx-4 mb-3 min-w-0 border-b border-outline-variant">
+    {({ open, setOpen }) => <>
+      <span className="flex min-h-11 items-center gap-2 py-3 text-sm font-medium">
+        Match activity
+        {actionWaiting && <span className="text-xs text-on-surface-variant">Action waiting</span>}
+      </span>
+      <LongPressDialog label="Match activity" open={open} setOpen={setOpen}>
+      <h2>Match activity</h2>
+      <div className="flex min-w-0 flex-col gap-2 pb-1">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm text-on-surface-variant">Review proposals and handovers across your reports.</p>
         <button type="button" aria-label="Refresh match activity" disabled={loading}
@@ -98,6 +102,8 @@ function ScopedMatchActivity({ accountId }: { accountId: string }) {
       </ul>
       {hasMore && last && <Button variant="text" disabled={loading}
         onClick={() => void load({ at: last.proposedAt, id: last.matchId })}>Load earlier activity</Button>}
-    </div>
-  </details>;
+      </div>
+      </LongPressDialog>
+    </>}
+  </LongPressArea>;
 }

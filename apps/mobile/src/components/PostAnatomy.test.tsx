@@ -6,7 +6,7 @@ import { MemoryRouter, useLocation } from "react-router";
 import { PostList } from "./PostList";
 import { SavedReportsProvider } from "../hooks/useSavedReports";
 import { readSavedReports } from "../services/savedReports";
-import { UserIdentityProvider, type PublicIdentity } from "./UserIdentityTrigger";
+import { UserIdentityTrigger } from "./UserIdentityTrigger";
 
 const { rpc, auth } = vi.hoisted(() => ({ rpc: vi.fn(), auth: { id: "reader" as string | null } }));
 vi.mock("../services/supabaseClient", () => ({ getSupabase: () => ({ rpc }) }));
@@ -36,15 +36,12 @@ function mount(density?: "home-feed" | "editorial" | "compact" | "masonry") {
 // to report detail (and to chat attachments), never to the list.
 it.each([undefined, "home-feed", "editorial", "compact", "masonry"] as const)("keeps identity, navigation and photo destination separate in %s", async (density) => {
   const { container } = mount(density);
-  const identity = screen.getByRole("button", { name: "About Sam Reed" });
+  const identity = screen.getByRole("link", { name: "Open Sam Reed's profile" });
   const title = screen.getByRole("heading", { name: "Brown wallet" });
   expect(identity.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(container.querySelector("a button, a a, button button")).toBeNull();
-  fireEvent.click(identity);
-  const card = await screen.findByRole("dialog", { name: "About Sam Reed" });
-  expect(within(card).getByRole("link", { name: "View profile" }).getAttribute("href")).toBe("/u/sam");
-  fireEvent.keyDown(card, { key: "Escape" });
-  await waitFor(() => expect(screen.queryByRole("dialog", { name: "About Sam Reed" })).toBeNull());
+  expect(identity.getAttribute("href")).toBe("/u/sam?report=p1");
+  expect(screen.queryByRole("dialog")).toBeNull();
   const photo = screen.getByRole("button", { name: "Photo for Brown wallet" });
   fireEvent.click(photo);
   await waitFor(() => expect(screen.getByTestId("route").textContent).toBe("/posts/p1"));
@@ -64,13 +61,11 @@ it("keeps Save in overflow while the primary actions remain Like, Comments and S
   expect(screen.getByRole("menuitem", { name: "Block account" })).toBeTruthy();
 });
 
-it("supplies the originating report to the canonical identity contact owner in the feed", async () => {
-  function Contact({ person }: { person: PublicIdentity }) { return <span>Message about {person.contextReportId ?? "no report"}</span>; }
-  render(<MemoryRouter><SavedReportsProvider><UserIdentityProvider actions={Contact}>
-    <PostList items={[post]} density="home-feed" loading={false} loadingMore={false} error={null} hasMore={false} onLoadMore={async () => {}} />
-  </UserIdentityProvider></SavedReportsProvider></MemoryRouter>);
-  fireEvent.click(screen.getByRole("button", { name: "About Sam Reed" }));
-  expect(await screen.findByText("Message about p1")).toBeTruthy();
+it("links the feed identity directly to the profile with the originating report", () => {
+  mount("home-feed");
+  const identity = screen.getByRole("link", { name: "Open Sam Reed's profile" });
+  expect(identity.getAttribute("href")).toBe("/u/sam?report=p1");
+  expect(screen.queryByRole("dialog")).toBeNull();
 });
 
 it("lets the owner save without offering self-report or self-block", async () => {
@@ -90,5 +85,5 @@ it("removes the account-owned overflow on sign-out without removing public ident
   view.rerender(<MemoryRouter><SavedReportsProvider><PostList items={[post]} density="compact" loading={false} loadingMore={false} error={null} hasMore={false} onLoadMore={async () => {}} /></SavedReportsProvider></MemoryRouter>);
   expect(screen.queryByRole("menu")).toBeNull();
   expect(screen.queryByRole("button", { name: "More report actions" })).toBeNull();
-  expect(screen.getByRole("button", { name: "About Sam Reed" })).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Open Sam Reed's profile" })).toBeTruthy();
 });

@@ -16,6 +16,10 @@
  * - `FIREBASE_SERVICE_ACCOUNT_JSON` — dedicated `findback-push` sender.
  * - `FCM_PROJECT_ID`, `PUBLIC_SHARE_ORIGIN`, `PUSH_DISPATCH_SECRET`.
  * - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — injected by the runtime.
+ * - `WEB_PUSH_PUBLIC_KEY` / `WEB_PUSH_PRIVATE_KEY` / `WEB_PUSH_SUBJECT` —
+ *   optional VAPID material for the browser lane. Absent means this deployment
+ *   sends no browser push; the chat lane then reports `webConfigured: false`
+ *   instead of failing.
  */
 // Edge deployment has no project-wide import map.
 // deno-lint-ignore no-import-prefix
@@ -28,6 +32,7 @@ import {
   sendFcm,
   type ChatClaim,
 } from "../_shared/chatWake.ts";
+import { drainWebWakes, readWebPushConfig, type WebPushAdmin, type WebPushConfig } from "../_shared/webPush.ts";
 
 /**
  * Service-role client factory. Lane helpers take `AdminClient` — the exact
@@ -341,12 +346,26 @@ export function configurationFailure(missing: string[]): Response {
  * pruning live in `_shared/chatWake.ts`, shared with the `chat-wake` function
  * so both paths cannot drift.
  */
-function dispatchChatWakes(admin: AdminClient, projectId: string, senderJson: string) {
-  return drainChatWakes(admin, projectId, senderJson, async (limit) => {
+async function dispatchChatWakes(
+  admin: AdminClient,
+  projectId: string,
+  senderJson: string,
+  webPush: WebPushConfig | null,
+) {
+  const fcm = await drainChatWakes(admin, projectId, senderJson, async (limit) => {
     const { data, error } = await admin.rpc("findback_claim_chat_external_wakes", { p_limit: limit });
     if (error || !Array.isArray(data)) throw new Error("Chat wake claim unavailable");
     return data as ChatClaim[];
   }, BATCH_LIMIT);
+  // Browser delivery is a second channel for the same wakes and never a
+  // precondition for the FCM result: a failure here is logged and contained.
+  try {
+    const web = await drainWebWakes(admin as unknown as WebPushAdmin, webPush, BATCH_LIMIT);
+    return { claimed: fcm.claimed, sent: fcm.sent + web.sent, failed: fcm.failed + web.failed };
+  } catch (cause) {
+    console.error("push-dispatch: browser chat lane failed independently.", cause instanceof Error ? cause.message : "unknown");
+    return fcm;
+  }
 }
 
 /**
@@ -552,6 +571,7 @@ export default {
     const projectId = Deno.env.get("FCM_PROJECT_ID");
     const origin = Deno.env.get("PUBLIC_SHARE_ORIGIN");
     const senderJson = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON");
+    const webPushConfig = readWebPushConfig((name) => Deno.env.get(name));
     const missing = missingDispatchConfig({
       SUPABASE_URL: supabaseUrl,
       SUPABASE_SERVICE_ROLE_KEY: serviceKey,
@@ -567,7 +587,7 @@ export default {
     // One seam runs both lanes: chat first and additive, then the report lane
     // that owns the status. See `_shared/dispatchLanes.ts`.
     const lanes = await runDispatchLanes({
-      dispatchChat: () => dispatchChatWakes(admin, projectId!, senderJson!),
+      dispatchChat: () => dispatchChatWakes(admin, projectId!, senderJson!, webPushConfig),
       dispatchReports: () =>
         dispatchReportLane(admin, { projectId: projectId!, origin: origin!, senderJson: senderJson! }),
       log: (message) => console.error(`push-dispatch: ${message}`),

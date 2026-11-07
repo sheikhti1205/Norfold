@@ -148,17 +148,13 @@ describe("PostDetail redesign (UXN-3)", () => {
   it("uses shared identity before content, inline description before media, and Save in overflow", async () => {
     renderDetail();
     const summary = await screen.findByRole("region", { name: "Report summary" });
-    const identity = within(summary).getByRole("button", { name: "About owner" });
+    const identity = within(summary).getByRole("link", { name: "Open Owner's profile" });
     const title = within(summary).getByRole("heading", { level: 1, name: "Lost wallet" });
     expect(identity.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const description = screen.getByTestId("post-description");
     const photo = screen.getByRole("button", { name: "Open photo 1 of 2 fullscreen" });
     expect(description.compareDocumentPosition(photo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    fireEvent.click(identity);
-    const card = await screen.findByRole("dialog", { name: "About owner" });
-    expect(within(card).getByRole("link", { name: "View profile" }).getAttribute("href")).toBe("/u/owner");
-    fireEvent.keyDown(card, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "About owner" })).toBeNull());
+    expect(identity.getAttribute("href")).toMatch(/^\/u\/owner\?report=/);
     expect(within(screen.getByRole("group", { name: "Report actions" })).queryByRole("button", { name: "Save report" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "More report actions" }));
     expect(await screen.findByRole("menuitem", { name: "Save report" })).toBeTruthy();

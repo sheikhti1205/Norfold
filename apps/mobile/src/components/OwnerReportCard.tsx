@@ -16,7 +16,8 @@ import { PostLink } from "./PostNavigation";
 import { PostTypeBadge } from "./PostTypeBadge";
 import { MediaViewer } from "./MediaViewer";
 import { peekMediaUrl, useMediaUrl } from "../services/media/privateMedia";
-import { OwnerReportMenu, useOwnerReportActions } from "./OwnerReportActions";
+import { OwnerReportMenu, OwnerReportPendingDelete, useOwnerReportActions } from "./OwnerReportActions";
+import { LongPressArea } from "./LongPressArea";
 import { OwnerStatusSwipe } from "./OwnerStatusSwipe";
 import { formatEventDate, timeAgo } from "../utils/dates";
 import { stripMarkdown } from "../utils/stripMarkdown";
@@ -222,20 +223,26 @@ export function OwnerReportCard({ post }: { post: PostItem }) {
 
   return (
     <article data-testid="owner-report-article">
-      <div className="flex items-start gap-1">
-        {actions && swipe ? (
-          <OwnerStatusSwipe
-            className="min-w-0 flex-1 shadow-sm"
-            actionLabel={swipe.label}
-            onAction={() => actions.onChangeStatus(post, swipe.status)}
-          >
-            {card}
-          </OwnerStatusSwipe>
-        ) : (
-          <div className="min-w-0 flex-1 rounded-[18px] shadow-sm">{card}</div>
-        )}
-        <OwnerReportMenu post={post} />
-      </div>
+      {/* No visible ellipsis: a long-press (or right-click / Shift+F10) opens the
+          contextual menu anchored to this card. A normal tap still navigates and
+          a tap on the photo still opens the canonical viewer. */}
+      <LongPressArea label={`Report actions: ${post.title}`} disabled={!actions} className="w-full">
+        {({ open, setOpen }) => <>
+          {actions && swipe ? (
+            <OwnerStatusSwipe
+              className="min-w-0 w-full shadow-sm"
+              actionLabel={swipe.label}
+              onAction={() => actions.onChangeStatus(post, swipe.status)}
+            >
+              {card}
+            </OwnerStatusSwipe>
+          ) : (
+            <div className="min-w-0 w-full rounded-[18px] shadow-sm">{card}</div>
+          )}
+          {actions && <OwnerReportMenu post={post} open={open} onOpenChange={setOpen} />}
+        </>}
+      </LongPressArea>
+      <OwnerReportPendingDelete post={post} />
       {lightboxIndex !== null && lightboxPhotos.length > 0 && (
         <MediaViewer
           index={Math.min(lightboxIndex, lastIndex)}

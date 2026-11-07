@@ -125,7 +125,7 @@ describe("W7B-HOME home-feed content (media-led block)", () => {
     // Media region spans the block width; the text block insets separately.
     expect(media.className).toMatch(/fb-home-feed-media/);
     expect(detail.compareDocumentPosition(media) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByRole("button", { name: "About alice" }).compareDocumentPosition(detail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open Alice's profile" }).compareDocumentPosition(detail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("keeps every feed contract testid/aria hook", () => {

@@ -17,7 +17,7 @@ export function SettingsProfileHeader({ user }: { user: PublicUser }) {
       aria-label={`View profile, ${displayName}, @${user.username}`}
       className="fb-settings-profile"
     >
-      <UserAvatar avatarUrl={user.avatarUrl} username={user.username} size={40} />
+      <UserAvatar avatarUrl={user.avatarUrl} username={user.username} size={64} />
       <span className="fb-settings-profile-copy">
         <span className="fb-settings-profile-name">{displayName}</span>
         <span className="fb-settings-profile-username">@{user.username}</span>

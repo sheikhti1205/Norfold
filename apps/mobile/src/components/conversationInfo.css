@@ -1,0 +1,68 @@
+/* Conversation-information sections on the canonical profile route. */
+.fb-conversation-info { display: flex; flex-direction: column; gap: 1.25rem; }
+.fb-conversation-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+  gap: 0.5rem;
+}
+.fb-conversation-shortcuts :is(a, button) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 64px;
+  padding: 0.5rem 0.25rem;
+  border-radius: 0.75rem;
+  background: var(--fb-surface-container-low);
+  color: var(--fb-on-surface);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.fb-conversation-shortcuts :is(a, button):focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; }
+.fb-conversation-photos > header { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.fb-conversation-photos h2, .fb-conversation-actions h2 {
+  margin: 0 0 0.5rem; font-size: 0.8125rem; font-weight: 600; color: var(--fb-on-surface-variant);
+}
+.fb-conversation-photos > header span { font-size: 0.75rem; color: var(--fb-on-surface-variant); }
+.fb-conversation-photos ul {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.35rem;
+  margin: 0; padding: 0; list-style: none;
+}
+.fb-conversation-photos li { min-width: 0; }
+.fb-conversation-photos button, .fb-conversation-photos img {
+  display: block; width: 100%; aspect-ratio: 1; border-radius: 0.5rem; object-fit: cover;
+  overflow: hidden; background: var(--fb-surface-container);
+}
+.fb-conversation-photo-fallback {
+  display: flex; align-items: center; justify-content: center; aspect-ratio: 1;
+  border-radius: 0.5rem; background: var(--fb-surface-container); color: var(--fb-on-surface-variant);
+  font-size: 0.75rem;
+}
+.fb-conversation-actions { display: flex; flex-direction: column; }
+.fb-conversation-actions > button {
+  display: flex; align-items: center; gap: 0.75rem;
+  min-height: 48px; padding: 0.25rem 0; text-align: start;
+  color: var(--fb-on-surface); font-size: 0.9375rem;
+}
+.fb-conversation-actions > button:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; border-radius: 0.5rem; }
+.fb-conversation-actions > button:disabled { opacity: 0.55; }
+.fb-conversation-block { display: flex; align-items: center; gap: 0.75rem; }
+.fb-conversation-confirm {
+  display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem;
+  border-radius: 0.75rem; background: var(--fb-surface-container-low);
+}
+.fb-conversation-confirm p { margin: 0; font-size: 0.875rem; color: var(--fb-on-surface-variant); }
+.fb-conversation-confirm > div { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.fb-conversation-confirm button { min-height: 44px; padding-inline: 0.9rem; border-radius: 999px; font-weight: 600; }
+.fb-conversation-confirm button.destructive { background: var(--fb-error); color: var(--fb-on-error); }
+
+/* A person's avatar/name is a link, never a button that opens a popover. */
+.fb-identity-link {
+  display: inline-flex; align-items: center; gap: 0.45rem; min-width: 0;
+  color: inherit; text-decoration: none;
+}
+.fb-identity-link:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; border-radius: 0.4rem; }

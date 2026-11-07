@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import type { PostItem, PostStatus, PostType } from "@norfold/shared";
 import { POST_STATUS_LABELS } from "@norfold/shared";
-import { BackButton } from "../components/BackButton";
+import { AppBar } from "../components/AppBar";
 import { PostList } from "../components/PostList";
 import { PullToRefresh, type PullToRefreshHandle } from "../components/PullToRefresh";
 import { useFeed } from "../hooks/useFeed";
@@ -558,15 +558,8 @@ export function MyPosts() {
 
   return (
     <div className="mx-auto flex h-full w-full max-w-[100rem] flex-col gap-4 py-5 lg:py-8">
-      <header className="flex items-center gap-2 px-4 lg:px-8">
-        <BackButton fallbackTo="/profile" label="Back to profile" />
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">My reports</h1>
-          <p className="text-sm text-on-surface-variant">
-            {total} report{total === 1 ? "" : "s"} · manage the status of items you have reported.
-          </p>
-        </div>
-      </header>
+      <AppBar backTo="/profile" backLabel="Back to profile" title="My reports"
+        subtitle={`${total} report${total === 1 ? "" : "s"} · manage the status of items you have reported.`} />
 
       {actionError && (
         <p role="alert" className="mx-4 lg:mx-8 rounded-m3-sm border border-error px-3 py-2 text-sm text-error">

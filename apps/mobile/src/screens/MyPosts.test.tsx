@@ -227,9 +227,18 @@ describe("MyPosts (My Reports alignment)", () => {
 });
 
 /** Open the overflow menu of the first report row. */
+/**
+ * Owner actions have no visible ellipsis: they open from the long-press
+ * surface. jsdom uses the right-click path, which is the same handler.
+ */
+/** Second card's long-press menu, for multi-row flows. */
+function openRowMenu(index: number) {
+  fireEvent.contextMenu(screen.getAllByRole("group", { name: /report actions/i })[index]!);
+  return screen.getByRole("menu");
+}
 function openFirstRowMenu() {
-  const trigger = screen.getAllByRole("button", { name: /manage report/i })[0]!;
-  fireEvent.click(trigger);
+  const surface = screen.getAllByRole("group", { name: /report actions/i })[0]!;
+  fireEvent.contextMenu(surface);
   return screen.getByRole("menu");
 }
 
@@ -251,7 +260,8 @@ describe("MyPosts management (owner row actions)", () => {
       cancelReason: null, proposedAt: "2026-10-29T00:00:00Z", returnId: null,
     }]);
     renderMyPosts();
-    fireEvent.click(await screen.findByText("Match activity"));
+    await screen.findByText("Match activity");
+    fireEvent.contextMenu(screen.getByRole("group", { name: /Match activity/i }));
     const link = await screen.findByRole("link", { name: /Report p2.*Proposal to review/i });
     expect(link.getAttribute("href")).toBe("/posts/p2#detail-matches");
     expect(listMatchesMock).toHaveBeenCalledWith("u1", {});
@@ -740,7 +750,7 @@ describe("MyPosts management (owner row actions)", () => {
     vi.useFakeTimers();
     fireEvent.click(within(openFirstRowMenu()).getByRole("menuitem", { name: /delete report/i }));
     confirmRowAction(/delete report/i);
-    fireEvent.click(screen.getAllByRole("button", { name: /manage report/i })[1]!);
+    fireEvent.contextMenu(screen.getAllByRole("group", { name: /report actions/i })[1]!);
     fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: /delete report/i }));
     // A delete is already scheduled: the second request is refused in words,
     // so no dialog opens and the first schedule is untouched.

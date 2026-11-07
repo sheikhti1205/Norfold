@@ -6,16 +6,18 @@ import { UserIdentityTrigger } from "./UserIdentityTrigger";
 /**
  * Compact thread heading; the complete name remains available to every user.
  *
- * Avatar and name are ONE identity trigger: a person is a destination, not a
- * selector, so there is no dropdown chevron, and tapping either opens the
- * canonical `UserQuickCard` through `UserIdentityTrigger`.
+ * Avatar and name are ONE direct link to the canonical full-screen profile.
+ * When the conversation id is known, the same link carries the conversation
+ * context the profile page revalidates before showing anything private. There
+ * is no quick-card popover and no dropdown chevron.
  *
  * Lives in its own module (not in the Messaging screen) so the visual fixture
  * route can render the production header without pulling in the messaging
  * runtime.
  */
-export function ChatIdentity({ peerId, name, username = name, avatarUrl, status, muted = false }: {
+export function ChatIdentity({ peerId, name, username = name, avatarUrl, status, muted = false, conversationId }: {
   peerId?: string; name?: string; username?: string; avatarUrl?: string | null; status: string; muted?: boolean;
+  conversationId?: string;
 }) {
   const heading = useRef<HTMLHeadingElement>(null);
   const label = name || username || "Conversation";
@@ -30,7 +32,7 @@ export function ChatIdentity({ peerId, name, username = name, avatarUrl, status,
     <>
       <div className="fb-chat-heading">
         <h1 ref={heading} tabIndex={-1}>{username && peerId
-          ? <UserIdentityTrigger person={{ id: peerId, username, displayName: name, avatarUrl }} trigger={identity} />
+          ? <UserIdentityTrigger person={{ id: peerId, username, displayName: name, avatarUrl, contextConversationId: conversationId }} trigger={identity} />
           : identity}
         </h1>
         <p className="fb-chat-secondary">

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { Archive, ArrowLeft, BellOff, Ellipsis, Flag, Images, ListFilter, LogOut, MapPin, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound } from "lucide-react";
+import { ArrowLeft, ChevronDown, Ellipsis, Info, ListFilter, MapPin, PanelLeftClose, PanelLeftOpen, RefreshCw, Search } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import type { PostItem } from "@norfold/shared";
 import { copyStaticLocation, isUuid } from "../services/messaging/validation";
@@ -9,22 +9,23 @@ import { onRealtime } from "../services/realtime";
 import { useAuth } from "../auth";
 import { UserAvatar } from "../components/UserAvatar";
 import { ChatIdentity } from "../components/ChatIdentity";
+import { UserIdentityTrigger } from "../components/UserIdentityTrigger";
 import { StatusChip } from "../components/StatusChip";
 import { formatEventDate, timeAgo } from "../utils/dates";
+import { convertEmoticons, isEmojiOnly } from "../utils/emoji";
 import { SplitView, type SplitPaneState } from "../components/SplitView";
 import { CHAT_PANE } from "../components/panePreference";
-import { ChatDetailsLayout } from "../components/ChatDetailsLayout";
 import { ActionMenu } from "../components/ActionMenu";
+import { AppBar } from "../components/AppBar";
 import { PeopleSearch } from "../components/PeopleSearch";
 import { PeerChatComposer } from "../components/PeerChatComposer";
 import { ChatLocationComposer } from "../components/ChatLocationComposer";
 import { AdaptiveTaskSurface, ConfirmDialog } from "../components/AdaptiveTaskSurface";
-import { BlockControl } from "../components/BlockControl";
 import { ReportSheet } from "../components/ReportSheet";
 import { MediaViewer, type MediaViewerItem } from "../components/MediaViewer";
 import { useMediaUrl } from "../services/media/privateMedia";
 import { announce } from "../components/LiveRegion";
-import { PreferenceSwitchRow } from "../components/settings/SettingsPrimitives";
+import { shouldReduceMotion } from "../components/uiMotion";
 import { fetchAccountIdentities, readCachedAccountIdentities } from "../services/accountLabels";
 import { fetchPost } from "../services/posts";
 import { useMessaging } from "../services/messaging/useMessaging";
@@ -33,13 +34,13 @@ import {
   changeMessagingRelationship, markMessagingConversationRead, readMessagingThreadState, getCachedMessagingThreadState,
   refreshMessaging, sendMessagingText, sendMessagingLocation, sendMessagingMedia, clearMessagingConversation, removeMessagingMessage,
   fetchMessagingReceiptView, observeMessagingReceipt, readMessagingMedia, downloadMessagingMedia, recoverMessagingText,
-  retryMessagingMessage, setMessagingMuted, watchMessagingThread,
+  retryMessagingMessage, watchMessagingThread,
 } from "../services/messaging/runtime";
 import type { MediaAttachment, OutboxEntry, StaticLocation, StoredHumanMessage } from "../services/messaging/history";
 import { prepareMessagingPhoto, type PreparedMessagingPhoto } from "../services/messaging/preparePhoto";
 import type { MediaMetadata } from "../services/messaging/media";
 import { PhotoUnavailableError } from "../services/messaging/mediaTransport";
-import { chooseNativeImages, importNativeImageUri, importedImageToFile } from "../services/media/nativeMedia";
+import { chooseNativeImage, chooseNativeImages, importNativeImageUri, importedImageToFile } from "../services/media/nativeMedia";
 import "./Messaging.css";
 
 /** Live report subject for a report-linked message. Only the id travels with the
@@ -247,14 +248,21 @@ export function ChatRail({ rows, labels, identities, selectedId, onExpand, headi
       {rows.map((row) => {
         const name = labels.get(row.peerId);
         const unread = row.unreadCount;
-        return <li key={row.conversationId}>
+        const person = identities?.get(row.peerId);
+        // The avatar is the person; the tile around it opens the chat.
+        return <li key={row.conversationId} className="fb-chat-rail-item">
+          {person?.username
+            ? <UserIdentityTrigger className="fb-chat-rail-identity"
+                person={{ id: row.peerId, username: person.username, displayName: name, avatarUrl: person.avatarUrl }}
+                trigger={<UserAvatar username={name} avatarUrl={person.avatarUrl} size={40} />} />
+            : <span className="fb-chat-rail-identity">
+                <UserAvatar username={name} avatarUrl={person?.avatarUrl} size={40} />
+              </span>}
+          {unread > 0 && <span className="fb-chat-rail-unread" aria-hidden="true" />}
           <Link to={`/chats/${row.conversationId}`} className="fb-chat-rail-row"
             aria-current={selectedId === row.conversationId ? "page" : undefined}
-            aria-label={`${name || "Conversation"}${unread > 0 ? `, ${unread} unread` : ""}`}
-            title={name || "Member"}>
-            <UserAvatar username={name} avatarUrl={identities?.get(row.peerId)?.avatarUrl} size={40} />
-            {unread > 0 && <span className="fb-chat-rail-unread" aria-hidden="true" />}
-          </Link>
+            aria-label={`Open conversation with ${name || "member"}${unread > 0 ? `, ${unread} unread` : ""}`}
+            title={name || "Member"} />
         </li>;
       })}
     </ul>
@@ -301,14 +309,13 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
   if (pane?.wide && pane.collapsed) return <ChatRail rows={rows} labels={labels} identities={identities} selectedId={selectedId}
     onExpand={pane.toggle} headingRef={heading} toggleRef={paneToggle} />;
   return <section className="fb-chat-page" aria-label="Chats">
-    <header className="fb-chat-header">
-      <h1 ref={heading} tabIndex={-1} className="fb-chat-list-title">Chats</h1>
+    <AppBar title="Chats" autoFocus actions={<>
       <RetrySync accountId={accountId} />
       {pane?.wide && <button ref={paneToggle} type="button" className="fb-chat-icon" aria-label="Collapse conversation list" onClick={pane.toggle}>
         <PanelLeftClose size={20} aria-hidden="true" />
       </button>}
       <ActionMenu label="Filter chats" icon={<ListFilter size={20} aria-hidden="true" />} items={["All", "Unread", "Archived"].map(value => ({ id: value, label: value, onAction: () => setFilter(value) }))} />
-    </header>
+    </>} />
     <label className="fb-chat-search"><Search size={17} aria-hidden="true" /><input type="search" aria-label="Search people or chats" placeholder="Search people or chats" value={query} onChange={event => setQuery(event.target.value)} /></label>
     <BackupPrompt sequences={chat.conversations.reduce((total, row) => total + row.lastSequence, 0)} />
     <div className="fb-chat-filters" role="group" aria-label="Show conversations">
@@ -331,21 +338,38 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
           const state = view?.ownBlocked ? "Blocked by you" : view?.ownHidden ? (view.mode === "CONNECTED" ? "Archived" : "Hidden request")
             : view?.ownDeclined ? "Dismissed" : view?.mode === "CONNECTED" ? "Connected"
               : view?.request === "INCOMING" ? "Message request" : view?.request === "OUTGOING" ? "Request sent" : "Conversation";
+          const person = identities.get(row.peerId);
+          // Split hit targets: the avatar and name are the person (a profile
+          // destination), and every other part of the row opens the conversation.
+          // They are siblings with one stretched link, never nested anchors.
           return <li key={row.conversationId}>
-             <Link to={`/chats/${row.conversationId}`} className="fb-chat-row" aria-current={selectedId === row.conversationId ? "page" : undefined}>
-              <UserAvatar username={name} avatarUrl={identities.get(row.peerId)?.avatarUrl} size={44} />
-              <span className="fb-chat-row-copy"><strong>{name || "Member"}</strong>
+            <div className="fb-chat-row">
+              <div className="fb-chat-row-copy">
+                {person?.username
+                  ? <UserIdentityTrigger className="fb-chat-row-identity"
+                      person={{ id: row.peerId, username: person.username, displayName: name, avatarUrl: person.avatarUrl }}
+                      trigger={<>
+                        <UserAvatar username={name} avatarUrl={person.avatarUrl} size={44} />
+                        <strong>{name || person.username}</strong>
+                      </>} />
+                  : <span className="fb-chat-row-identity">
+                      <UserAvatar username={name} avatarUrl={person?.avatarUrl} size={44} />
+                      <strong>{name || "Member"}</strong>
+                    </span>}
                 <span className="fb-chat-preview">{row.lastMessage?.unsentAt !== undefined ? "Message unsent"
                   : row.lastMessage?.body || (row.lastMessage?.messageType === "LOCATION" ? "Location shared" : row.lastMessage?.messageType === "MEDIA" ? "Photo" : state)}</span>
                 {row.lastMessage?.contextReportId && row.lastMessage.unsentAt === undefined && <ChatReportContext reportId={row.lastMessage.contextReportId} safetyKey={view?.ownBlocked ? "blocked" : "clear"} preview />}
                 {row.lastMessage && <span className="fb-chat-secondary">{state}{!chat.currentProjections ? " · Saved chat" : ""}</span>}
+              </div>
+              <span className="fb-chat-row-meta">
+                {row.updatedAt > 0 && <time dateTime={new Date(row.updatedAt).toISOString()}
+                  title="Chat updated on this device">{timeAgo(new Date(row.updatedAt).toISOString())}</time>}
+                {row.unreadCount > 0 && <span className="fb-chat-unread" aria-label={`${row.unreadCount} unread messages`}>{row.unreadCount}</span>}
               </span>
-               <span className="fb-chat-row-meta">
-                 {row.updatedAt > 0 && <time dateTime={new Date(row.updatedAt).toISOString()}
-                   title="Chat updated on this device">{timeAgo(new Date(row.updatedAt).toISOString())}</time>}
-                 {row.unreadCount > 0 && <span className="fb-chat-unread" aria-label={`${row.unreadCount} unread messages`}>{row.unreadCount}</span>}
-               </span>
-            </Link>
+              <Link to={`/chats/${row.conversationId}`} className="fb-chat-row-open"
+                aria-current={selectedId === row.conversationId ? "page" : undefined}
+                aria-label={`Open conversation with ${name || "member"}`} />
+            </div>
           </li>;
         })}
        </ul>
@@ -402,6 +426,19 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const validReport = isUuid(queryReport) ? queryReport : null;
   const [reportContext, setReportContext] = useState(validReport);
   useEffect(() => { setReportContext(validReport); }, [validReport]);
+  // The full-screen conversation-info route links back here with an explicit
+  // search/media request; consume it once so closing the sheet does not reopen.
+  useEffect(() => {
+    const params = new URLSearchParams(route.search);
+    const requested = params.get("search") === "1" ? "search"
+      : params.get("media") === "1" ? "media"
+      : params.get("location") === "1" ? "location" : null;
+    if (!requested) return;
+    setSheet(requested);
+    params.delete("search"); params.delete("media"); params.delete("location");
+    navigate({ pathname: route.pathname, search: params.toString() ? `?${params}` : "", hash: route.hash },
+      { replace: true, state: route.state });
+  }, [route, navigate]);
   function clearReportContext(expected: string | null) {
     const latest = routeRef.current, params = new URLSearchParams(latest.search);
     if (expected !== params.get("report")) return;
@@ -426,9 +463,11 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const photoController = useRef<AbortController | null>(null);
   const admission = useRef<{ metadata: MediaMetadata; caption: string } | null>(null);
   const photoInput = useRef<HTMLInputElement>(null);
+  const cameraInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<"actions" | "search" | "media" | "location" | "end" | "message" | "delete" | "unsend" | "clear" | "review" | null>(null);
+  const [sheet, setSheet] = useState<"search" | "media" | "location" | "end" | "message" | "delete" | "unsend" | "clear" | "review" | null>(null);
+  const [showJump, setShowJump] = useState(false);
   useLayoutEffect(() => { if (!locationAllowed) setSheet(previous => previous === "location" ? null : previous); }, [locationAllowed]);
   const [messageQuery, setMessageQuery] = useState("");
   const [jumpTo, setJumpTo] = useState<string | null>(null);
@@ -504,11 +543,20 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       if (!controller.signal.aborted) setPhoto({ source, error: true });
     } finally { if (!controller.signal.aborted) setPhotoPreparing(false); }
   }
-  async function choosePhoto() {
-    if (Capacitor.getPlatform() !== "android") { photoInput.current?.click(); return; }
+  async function choosePhoto(source: "photos" | "camera") {
+    if (Capacitor.getPlatform() !== "android") {
+      (source === "camera" ? cameraInput : photoInput).current?.click();
+      return;
+    }
     photoController.current?.abort();
     const controller = new AbortController(); photoController.current = controller;
     try {
+      if (source === "camera") {
+        // The canonical native capture path, never the gallery relabelled.
+        const imported = await chooseNativeImage({ source: "camera" });
+        if (!controller.signal.aborted && imported) await preparePhoto(importedImageToFile(imported));
+        return;
+      }
       const uris = await chooseNativeImages({ source: "photos", limit: 1 });
       if (controller.signal.aborted || !uris?.[0]) return;
       const imported = await importNativeImageUri(uris[0], { signal: controller.signal });
@@ -549,7 +597,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     const area = scroll.current;
     if (!area || !loaded || threadBlocked) return;
     const checkRead = () => {
-      nearBottom.current = area.scrollHeight - area.scrollTop - area.clientHeight < 32;
+      const distance = area.scrollHeight - area.scrollTop - area.clientHeight;
+      nearBottom.current = distance < 32;
+      setShowJump(distance > 400);
       if (document.visibilityState !== "visible" || !nearBottom.current || highest <= lastMarked.current) return;
       lastMarked.current = highest;
       void markMessagingConversationRead(accountId, conversationId, highest).catch(() => { lastMarked.current = 0; });
@@ -681,14 +731,6 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     };
   }, [accountId, conversationId, chat.accountId, chat.status, chat.currentProjections, current, receiptAuthority, loaded, messages, visible, sheet, reportTarget, viewer, threadBlocked]);
 
-  async function setMuted(muted: boolean) {
-    if (busy || chat.status !== "ready" || typeof current?.ownMuted !== "boolean") return;
-    setBusy(true); setError(null);
-    try {
-      await setMessagingMuted(accountId, conversationId, muted);
-    } catch { if (alive.current) setError("Your notifications change could not be saved. Sync and try again."); }
-    finally { if (alive.current) setBusy(false); }
-  }
   async function relationship(action: "accept" | "end" | "hide" | "unhide" | "decline") {
     if (busy) return;
     setBusy(true); setError(null);
@@ -713,7 +755,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   async function send() {
     if (!runtimeOpen || !row || (!photo && !draft.trim())) return;
     if (photo && (!photo.prepared || view?.mode !== "CONNECTED" || view.ownBlocked)) return;
-    const body = draft, sendingPhoto = photo, sendingRevision = draftRevision.current;
+    const body = convertEmoticons(draft), sendingPhoto = photo, sendingRevision = draftRevision.current;
     setError(null);
     try {
       if (sendingPhoto?.prepared) {
@@ -767,35 +809,14 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     .flatMap(message => { const attachment = media.find(item => item.messageId === message.id); return attachment ? [attachment] : []; }) : [];
   const confirming = sheet === "end" || sheet === "delete" || sheet === "unsend" || sheet === "clear";
   const confirmationTitle = sheet === "end" ? "End connection?" : sheet === "unsend" ? "Unsend message?" : sheet === "clear" ? "Clear chat for me?" : "Delete for me?";
-  const conversationInfo = <div className="fb-chat-sheet">
-    {person?.username && <Link className="fb-chat-info-row" to={`/u/${encodeURIComponent(person.username)}`}><UserRound size={20} aria-hidden="true" /><span>View profile</span></Link>}
-    <button type="button" className="fb-chat-info-row" onClick={() => setSheet("search")}><Search size={20} aria-hidden="true" /><span>Search chat</span></button>
-    <button type="button" className="fb-chat-info-row" onClick={() => setSheet("media")}><Images size={20} aria-hidden="true" /><span>Media</span></button>
-    <hr className="fb-chat-info-divider" />
-    {typeof view?.ownMuted === "boolean" ? <PreferenceSwitchRow className="fb-chat-mute" title="Mute notifications" icon={BellOff}
-      checked={view.ownMuted} disabled={busy || chat.status !== "ready" || typeof current?.ownMuted !== "boolean"}
-      onChange={muted => void setMuted(muted)} /> : <p className="fb-chat-secondary">Sync to change chat notifications.</p>}
-    <RetrySync accountId={accountId} labelled />
-    <Link className="fb-chat-info-row" to="/settings/privacy/messages"><Settings2 size={20} aria-hidden="true" /><span>Message settings</span></Link>
-    <hr className="fb-chat-info-divider" />
-    <button type="button" className="fb-chat-info-row" disabled={busy || !current} onClick={() => void relationship(view?.ownHidden ? "unhide" : "hide")}><Archive size={20} aria-hidden="true" /><span>{view?.ownHidden ? "Move to inbox" : view?.mode === "CONNECTED" ? "Archive" : "Hide request"}</span></button>
-    {view?.mode === "CONNECTED" && <button type="button" className="fb-chat-info-row" disabled={busy || !current} onClick={() => setSheet("end")}><LogOut size={20} aria-hidden="true" /><span>End connection</span></button>}
-    <button type="button" className="fb-chat-info-row" disabled={busy || !current || highest === 0 || outbox.length > 0} onClick={() => setSheet("clear")}><Trash2 size={20} aria-hidden="true" /><span>Clear chat for me</span></button>
-    {outbox.length > 0 && <p className="fb-chat-secondary">Wait for messages still sending before clearing this chat.</p>}
-    <hr className="fb-chat-info-divider" />
-    {row && <div className="fb-chat-info-block"><ShieldBan size={20} aria-hidden="true" /><BlockControl userId={row.peerId} name={name || "this account"} blocked={current?.ownBlocked}
-      onChanged={() => { void refreshMessaging(accountId).catch(() => undefined); }} /></div>}
-    {row && <button type="button" className="fb-chat-info-row" onClick={() => { setSheet(null); setReportTarget("account"); }}><Flag size={20} aria-hidden="true" /><span>Report account</span></button>}
-  </div>;
-  return <ChatDetailsLayout details={conversationInfo} onCompactOpen={() => setSheet("actions")}
-    identity={<><UserAvatar username={name || person?.username} avatarUrl={person?.avatarUrl} size={72} />
-      <strong dir="auto">{name || "Conversation"}</strong><span className="fb-chat-secondary">{!current ? "Saved chat" : current.mode === "CONNECTED" ? "Connected" : "Message request"}</span></>}>
-    {detailsToggle => <section className="fb-chat-page" aria-label="Conversation">
+  return <section className="fb-chat-page" aria-label="Conversation">
     <header className="fb-chat-header">
       <Link to="/chats" className="fb-chat-icon" aria-label="Back to chats"><ArrowLeft size={22} aria-hidden="true" /></Link>
       <ChatIdentity peerId={row?.peerId} name={name} username={person?.username} avatarUrl={person?.avatarUrl} muted={view?.ownMuted === true}
+        conversationId={conversationId}
         status={!current ? "Saved chat" : current.mode === "CONNECTED" ? "Connected" : "Message request"} />
-      {detailsToggle}
+      {person?.username && <Link to={`/u/${encodeURIComponent(person.username)}?conversation=${encodeURIComponent(conversationId)}`}
+        className="fb-chat-icon" aria-label="Conversation information"><Info size={20} aria-hidden="true" /></Link>}
     </header>
     {/* Owner feedback 2026-11-06: a failed refresh is a status, not a lock.
         The transcript keeps its saved messages and the composer keeps working;
@@ -836,7 +857,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             {message.messageType === "MEDIA" && attachment && photoAllowed && <ChatPhoto key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} onOpen={openPhoto} onReady={rememberPhoto} />}
             {message.contextReportId && <ChatReportContext reportId={message.contextReportId} safetyKey={view?.ownBlocked ? "blocked" : "clear"} />}
             {message.location && <ChatLocation location={message.location} />}
-            {message.body ? <p dir="auto">{message.body}</p> : !attachment && message.messageType !== "LOCATION" && <p>{message.messageType === "MEDIA" ? "Photo loading…" : "Message unavailable"}</p>}
+            {message.body ? <p dir="auto" className={isEmojiOnly(message.body) ? "fb-chat-emoji-only" : undefined}>{message.body}</p> : !attachment && message.messageType !== "LOCATION" && <p>{message.messageType === "MEDIA" ? "Photo loading…" : "Message unavailable"}</p>}
             {own && <span className="fb-chat-message-status">{pending?.status === "NEEDS_REVIEW" ? "Needs review — " : message.messageType === "MEDIA" && !attachment ? "Photo pending" : attachment && !["READY", "EVICTED"].includes(attachment.state) ? (attachment.state === "FAILED" ? "Photo saved" : "Sending…") : message.server ? (message.readByPeer || readIds.has(message.id) ? "Read" : "Sent") : pending?.status === "FAILED" ? "Message saved" : "Sending…"}
               {(attachment?.state === "FAILED" || (!message.server && pending?.status === "FAILED")) && pending?.status !== "NEEDS_REVIEW" && <button type="button" onClick={() => {
               // A refused send keeps its original boundary; re-flushing it can only
@@ -864,6 +885,11 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       </ol>
       {view?.ownBlocked && <p className="fb-chat-secondary">You’ve blocked this account. Manage blocked accounts in Privacy settings.</p>}
     </div>
+    {showJump && <button type="button" className="fb-chat-jump" aria-label="Jump to latest message" onClick={() => {
+      const area = scroll.current;
+      if (area) area.scrollTo({ top: area.scrollHeight, behavior: shouldReduceMotion() ? "auto" : "smooth" });
+      nearBottom.current = true; setShowJump(false);
+    }}><ChevronDown size={20} aria-hidden="true" /></button>}
     {error && !sheet && <p className="fb-chat-error" role="alert">{error}</p>}
     {photo && <div className="fb-chat-photo-draft" role="status">
       {photoAllowed && draftUrl && photo.prepared && <img src={draftUrl} alt="Selected photo" style={{ aspectRatio: `${photo.prepared.width} / ${photo.prepared.height}` }} />}
@@ -872,19 +898,25 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       <button type="button" aria-label="Remove photo" disabled={busy || !!admission.current} onClick={() => { photoController.current?.abort(); admission.current = null; setPhoto(null); setPhotoPreparing(false); }}>Remove</button>
     </div>}
     {canCompose && <>
-        {reportContext && <p className="fb-chat-context-banner" role="status">
+        {view?.mode === "CONNECTED" && <>
+          <input ref={photoInput} type="file" accept="image/*" aria-label="Choose photo" hidden onChange={(event) => {
+            const source = event.currentTarget.files?.[0]; event.currentTarget.value = "";
+            if (source && Capacitor.getPlatform() !== "android") void preparePhoto(source);
+          }} />
+          <input ref={cameraInput} type="file" accept="image/*" capture="environment" aria-label="Take photo" hidden onChange={(event) => {
+            const source = event.currentTarget.files?.[0]; event.currentTarget.value = "";
+            if (source && Capacitor.getPlatform() !== "android") void preparePhoto(source);
+          }} />
+        </>}
+      <PeerChatComposer value={draft} onChange={value => { draftRevision.current++; setDraft(value); }} onSend={() => void send()} inputRef={composer}
+        busy={false} locked={!runtimeOpen || !!admission.current}
+        canSend={runtimeOpen && (photo ? photoAllowed && !!photo.prepared : !!draft.trim())}
+        photoAllowed={view?.mode === "CONNECTED"}
+        onCamera={() => void choosePhoto("camera")} onPhotos={() => void choosePhoto("photos")}
+        context={reportContext && <p className="fb-chat-context-banner" role="status">
           Your next text message will show which report you’re asking about.
           <button type="button" onClick={() => clearReportContext(reportContext)}>Don’t attach</button>
-        </p>}
-        {view?.mode === "CONNECTED" && <input ref={photoInput} type="file" accept="image/*" aria-label="Choose photo" hidden onChange={(event) => {
-          const source = event.currentTarget.files?.[0]; event.currentTarget.value = "";
-          if (source && Capacitor.getPlatform() !== "android") void preparePhoto(source);
-        }} />}
-      <PeerChatComposer value={draft} onChange={value => { draftRevision.current++; setDraft(value); }} onSend={() => void send()} inputRef={composer}
-         busy={false} locked={!runtimeOpen || !!admission.current}
-         canSend={runtimeOpen && (photo ? photoAllowed && !!photo.prepared : !!draft.trim())}
-        photoAllowed={view?.mode === "CONNECTED"} onPhoto={() => void choosePhoto()}
-        locationAllowed={locationAllowed} onLocation={() => setSheet("location")} />
+        </p>} />
     </>}
     {sheet === "location" && locationAllowed && <ChatLocationComposer key={locationAuthority.current}
       onClose={() => setSheet(null)} onSend={shareLocation} />}
@@ -925,13 +957,12 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         {selectedMessage?.authorId !== accountId && selectedMessage?.unsentAt === undefined &&
           <button type="button" disabled={busy || !current || !selectedMessage || !row}
             onClick={() => { setSheet(null); setReportTarget("message"); }}>Report message</button>}
-      </div> : conversationInfo}
+      </div> : null}
       {error && <p className="fb-chat-error" role="alert">{error}</p>}
     </AdaptiveTaskSurface>
     <ReportSheet open={reportTarget !== null} target={reportTarget === "account" && row ? { targetType: "USER", targetId: row.peerId }
       : reportTarget === "message" && selectedMessage && selectedMessage.unsentAt === undefined
         ? { targetType: "MESSAGE", targetId: selectedMessage.id, accountId, body: selectedMessage.body } : null}
       onClose={() => setReportTarget(null)} />
-  </section>}
-  </ChatDetailsLayout>;
+  </section>;
 }

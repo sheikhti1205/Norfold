@@ -5,6 +5,7 @@ import { ACCENT_OPTIONS, type AccentId } from "../../appearance";
 import type { Theme } from "../../theme";
 import { density } from "../../design/density";
 import { BackButton } from "../BackButton";
+import { TopUtilities } from "../TopUtilities";
 import "./settings.css";
 
 // Legacy category/tone names are accepted at the boundary but render neutral.
@@ -34,9 +35,11 @@ export interface SettingsPageProps {
   className?: string;
   headingLevel?: 1 | 2;
   autoFocus?: boolean;
+  /** Global search/notification utilities share this one row (default true). */
+  utilities?: boolean;
 }
 /** Content only: Shell remains the sole viewport/safe-area/scroll owner. */
-export function SettingsPage({ title, description, children, backTo, backLabel = "Back to Settings", className = "", headingLevel = 1, autoFocus = true }: SettingsPageProps) {
+export function SettingsPage({ title, description, children, backTo, backLabel = "Back to Settings", className = "", headingLevel = 1, autoFocus = true, utilities = true }: SettingsPageProps) {
   const heading = useRef<HTMLHeadingElement>(null);
   const Heading = headingLevel === 1 ? "h1" : "h2";
   useEffect(() => {
@@ -53,6 +56,7 @@ export function SettingsPage({ title, description, children, backTo, backLabel =
     <div className="fb-settings-sticky">
       {backTo && <BackButton fallbackTo={backTo} label={backLabel} />}
       <Heading ref={heading} tabIndex={-1}>{title}</Heading>
+      {utilities && <TopUtilities />}
     </div>
     {description && <p className="fb-settings-page-description">{description}</p>}
     <div className="fb-settings-page-content">{children}</div>
