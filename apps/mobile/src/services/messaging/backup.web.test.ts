@@ -235,7 +235,7 @@ describe("portable IndexedDB history, not live delivery authority", () => {
       }
       return tx;
     });
-    expect(await history.importSnapshot(snapshot())).toEqual({ conversations: 1, messages: 1, tombstones: 0, deletedForMe: 0, clears: 0 });
+    expect(await history.importSnapshot(snapshot())).toEqual({ conversations: 1, messages: 1, attachments: 0, tombstones: 0, deletedForMe: 0, clears: 0 });
     expect(completed).toBe(true);
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = factory.open(`findback-human-history-v1:${A}:${scope.deviceId}`);

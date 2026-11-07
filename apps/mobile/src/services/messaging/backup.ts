@@ -24,9 +24,10 @@
  * local `now()`), so they merge as min/max rather than being compared as identity.
  */
 import type {
-  HistorySnapshot, ImportReport, MessagingHistory, MessagingScope, SnapshotMessage,
+  HistorySnapshot, ImportReport, MessagingHistory, MessagingScope, SnapshotAttachment, SnapshotMessage,
 } from "./history";
 import { isUuid, MAX_BODY_UNITS } from "./validation";
+import { copyMediaMetadata } from "./media";
 
 export type {
   HistorySnapshot, ImportReport, SnapshotConversation, SnapshotMessage,
@@ -34,12 +35,15 @@ export type {
 
 export const BACKUP_FORMAT = "findback.chat.backup";
 /**
+ * v5 adds verified attachment metadata; the bytes travel beside the snapshot.
  * v4 adds optional monotonic historical read facts, not live authorization.
  * v3 adds the bounded message payload: a live report reference and one static
  * coordinate set. Both are optional own keys on a v3 message record, so a v2
  * file still decodes and a v3 file never smuggles them into an older shape.
  */
-export const BACKUP_VERSION = 4;
+export const BACKUP_VERSION = 5;
+/** Original envelope version; still read with its exact nine-field records. */
+const LEGACY_VERSION = 1;
 
 export interface HistoryBackup {
   format: typeof BACKUP_FORMAT;
@@ -134,6 +138,9 @@ const DELETION_KEYS = ["messageId", "conversationId", "deletedAt"];
 const CLEAR_KEYS = ["conversationId", "throughSequence", "clearedAt"];
 
 const SNAPSHOT_KEYS = ["conversations", "messages", "tombstones", "deletedForMe", "clears"];
+const SNAPSHOT_V5_KEYS = [...SNAPSHOT_KEYS, "attachments"];
+const ATTACHMENT_KEYS = ["id", "messageId", "direction", "sha256", "mime", "byteSize",
+  "width", "height", "durationMs", "expiresAt"];
 
 /** Distinguishes "no own data value" from a field whose value is `undefined`. */
 const ABSENT = Symbol("absent");
@@ -251,12 +258,23 @@ function validBody(value: unknown): boolean {
 function readSnapshot(value: unknown, version?: number): HistorySnapshot {
   try {
     if (!object(value)) throw new BackupError("backup: invalid snapshot");
-    if (!exactKeys(value, SNAPSHOT_KEYS)) throw new BackupError("backup: invalid snapshot");
+    // `attachments` is an optional own key: a v4 file has none, and a forged
+    // extra key is still refused by the exact key-set check either way.
+    const hasAttachments = Object.getOwnPropertyDescriptor(value, "attachments") !== undefined;
+    // `attachments` is a v5 field: an older sealed envelope carrying it is a
+    // forgery, not forward compatibility.
+    if (hasAttachments && version !== undefined && version !== 5) {
+      throw new BackupError("backup: invalid snapshot");
+    }
+    if (!exactKeys(value, hasAttachments ? SNAPSHOT_V5_KEYS : SNAPSHOT_KEYS)) {
+      throw new BackupError("backup: invalid snapshot");
+    }
     const conversations = elements(ownField(value, "conversations"));
     const messages = elements(ownField(value, "messages"));
     const tombstones = elements(ownField(value, "tombstones"));
     const deletedForMe = elements(ownField(value, "deletedForMe"));
     const clears = elements(ownField(value, "clears"));
+    const attachments = hasAttachments ? elements(ownField(value, "attachments")) : [];
     // The casts are not assumptions: `checkSnapshot` validates this copy before
     // anything uses it, and a cast here cannot throw on hostile input.
     const record = (row: unknown, allowed: readonly string[]): Record<string, unknown> => {
@@ -279,11 +297,12 @@ function readSnapshot(value: unknown, version?: number): HistorySnapshot {
       messages: messages.map((row) => {
         // A v1 digest must describe the original nine fields exactly. Never add
         // defaults before verifying it, nor let v1 smuggle a later field.
-        const payload = version === 3 || version === 4 || (version === undefined && object(row)
-          && Object.getOwnPropertyDescriptor(row, "contextReportId") !== undefined);
+        const payload = version === 3 || version === 4 || version === 5
+          || (version === undefined && object(row)
+            && Object.getOwnPropertyDescriptor(row, "contextReportId") !== undefined);
         const classified = payload || version === 2 || (version === undefined && object(row)
           && Object.getOwnPropertyDescriptor(row, "messageType") !== undefined);
-        const facts = (version === undefined || version === 4) && object(row)
+        const facts = (version === undefined || version === 4 || version === 5) && object(row)
           ? READ_FACT_KEYS.filter(key => Object.getOwnPropertyDescriptor(row, key) !== undefined) : [];
         const r = record(row, [...(payload ? MESSAGE_V3_KEYS : classified ? MESSAGE_V2_KEYS : MESSAGE_KEYS), ...facts]);
         // v2 introduced classification, not static location. Suppression does
@@ -334,6 +353,18 @@ function readSnapshot(value: unknown, version?: number): HistorySnapshot {
           clearedAt: r.clearedAt as number,
         };
       }),
+      // Only a file that owns the field keeps it: the digest is over this copy,
+      // so an invented `attachments` key would fail a correctly sealed v4 file.
+      ...(hasAttachments ? { attachments: attachments.map((row) => {
+        const r = record(row, ATTACHMENT_KEYS);
+        return {
+          id: r.id as string, messageId: r.messageId as string,
+          direction: r.direction as "OUT" | "IN", sha256: r.sha256 as string,
+          mime: r.mime as SnapshotAttachment["mime"], byteSize: r.byteSize as number,
+          width: r.width as number, height: r.height as number,
+          durationMs: r.durationMs as number | null, expiresAt: r.expiresAt as number | null,
+        };
+      }) } : {}),
     };
   } catch (error) {
     // A caller-supplied object can be hostile: a revoked Proxy makes even
@@ -359,8 +390,9 @@ export function validateSnapshot(value: unknown, accountId: string): asserts val
 function checkSnapshot(value: unknown, accountId: string): asserts value is HistorySnapshot {
   if (!object(value)) throw new BackupError("backup: invalid snapshot");
   const { conversations, messages, tombstones, deletedForMe, clears } = value;
+  const attachments = value.attachments ?? [];
   if (!dense(conversations) || !dense(messages) || !dense(tombstones)
-    || !dense(deletedForMe) || !dense(clears)) {
+    || !dense(deletedForMe) || !dense(clears) || !dense(attachments)) {
     throw new BackupError("backup: invalid snapshot");
   }
   if (!conversations.every((row: unknown) => object(row) && isUuid(row.id)
@@ -375,7 +407,8 @@ function checkSnapshot(value: unknown, accountId: string): asserts value is Hist
     && (!(row.readLocally || row.receiptObserved) || row.recipientId === accountId)
     && validBody(row.body)
     && (row.messageType === undefined || row.messageType === null
-      || row.messageType === "TEXT" || row.messageType === "MEDIA" || row.messageType === "LOCATION")
+      || row.messageType === "TEXT" || row.messageType === "MEDIA" || row.messageType === "LOCATION"
+        || row.messageType === "VOICE")
     && (row.messageType !== "TEXT" || row.body !== "")
     && validPayload(row)
     && isUuid(row.serverEventId) && integer(row.serverSequence, 1)
@@ -400,6 +433,20 @@ function checkSnapshot(value: unknown, accountId: string): asserts value is Hist
     && integer(row.throughSequence, 1) && integer(row.clearedAt, 1))) {
     throw new BackupError("backup: invalid snapshot");
   }
+  // An attachment is portable only with the accepted message it belongs to,
+  // and only if it is itself a valid record under the shared media contract.
+  const messageIds = new Set((messages as { id: string }[]).map((row) => row.id));
+  const attachmentIds = new Set<string>();
+  if (!attachments.every((row: unknown) => {
+    if (!object(row) || !isUuid(row.id) || attachmentIds.has(row.id as string)
+      || !messageIds.has(row.messageId as string) || !(row.direction === "OUT" || row.direction === "IN")
+      || !(row.expiresAt === null || integer(row.expiresAt, 1))) return false;
+    attachmentIds.add(row.id as string);
+    try {
+      copyMediaMetadata(row);
+      return true;
+    } catch { return false; }
+  })) throw new BackupError("backup: invalid snapshot");
 }
 
 /**
@@ -420,6 +467,7 @@ export function normaliseSnapshot(value: unknown): HistorySnapshot {
   }
   return {
     ...snapshot,
+    attachments: snapshot.attachments ?? [],
     messages: snapshot.messages.map((message: SnapshotMessage) => ({
       ...message,
       messageType: message.messageType ?? null,
@@ -465,8 +513,10 @@ async function decodeEnvelope(value: object): Promise<HistoryBackup> {
   const deviceId = field("deviceId");
   const exportedAt = field("exportedAt");
   if (format !== BACKUP_FORMAT) throw new BackupError("backup: unsupported format");
-  if (typeof version !== "number" || !Number.isInteger(version) || version < 1
-    || version > BACKUP_VERSION) {
+  // Every version this module has ever written stays readable: a newer build
+  // must not turn an older sealed file into "unsupported version".
+  if (typeof version !== "number" || !Number.isInteger(version)
+    || version < LEGACY_VERSION || version > BACKUP_VERSION) {
     throw new BackupError("backup: unsupported version");
   }
   // Format and version are checked first so a foreign envelope is reported as

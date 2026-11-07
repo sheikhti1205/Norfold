@@ -162,7 +162,11 @@ export interface BackupDeps {
   isCurrent(lease: BackupLease): boolean;
   key(lease: BackupLease): Promise<BackupKeyMaterial>;
   snapshot(lease: BackupLease): Promise<HistorySnapshot>;
-  importSnapshot(lease: BackupLease, snapshot: HistorySnapshot): Promise<void>;
+  /** Bytes for the snapshot's attachments. Missing ids are evicted rows, not
+   * failures: a backup records what still exists and never invents the rest. */
+  media(lease: BackupLease, snapshot: HistorySnapshot): Promise<ReadonlyMap<string, ArrayBuffer>>;
+  importSnapshot(lease: BackupLease, snapshot: HistorySnapshot,
+    media?: ReadonlyMap<string, ArrayBuffer>): Promise<void>;
   storage?: Pick<Storage, "getItem" | "setItem"> | null;
   now?: () => number;
   random?: () => number;
@@ -464,7 +468,7 @@ export class DriveBackup {
         const restored = await downloadBackup({ store, key, scope: op.lease });
         this.assertCurrent(op);
         op.stage = "history-merge";
-        await this.deps.importSnapshot(op.lease, restored.snapshot);
+        await this.deps.importSnapshot(op.lease, restored.snapshot, restored.media);
         this.assertCurrent(op);
         const state = this.state(op.lease.accountId);
         if (!this.persist(op.lease.accountId, { dirtyRevision: state.dirtyRevision + 1,
@@ -483,7 +487,7 @@ export class DriveBackup {
           const restored = await downloadBackup({ store, key, scope: op.lease });
           this.assertCurrent(op);
           op.stage = "history-merge";
-          await this.deps.importSnapshot(op.lease, restored.snapshot);
+          await this.deps.importSnapshot(op.lease, restored.snapshot, restored.media);
           this.assertCurrent(op);
         }
       }
@@ -491,7 +495,9 @@ export class DriveBackup {
       op.stage = "history-read";
       const snapshot = await this.deps.snapshot(op.lease);
       this.assertCurrent(op);
-      await uploadBackup({ store, key, scope: op.lease, snapshot, now: this.now() });
+      const media = await this.deps.media(op.lease, snapshot);
+      this.assertCurrent(op);
+      await uploadBackup({ store, key, scope: op.lease, snapshot, media, now: this.now() });
       this.assertCurrent(op);
       const next = this.now() + healthyDelayMs(this.random);
       if (!this.persist(op.lease.accountId, { uploadedRevision: snapshotRevision,

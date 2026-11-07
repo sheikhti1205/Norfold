@@ -119,7 +119,8 @@ beforeEach(async () => {
         requestLog.push("delivery");
         return Response.json([...remote.values()].filter(({ metadata: m }) => !acked.has(m.id)).map(({ metadata: m }) => ({
           version: 1, attachmentId: m.id, messageId: m.messageId, sha256: m.sha256, mime: m.mime,
-          bytes: m.byteSize, width: m.width, height: m.height, expiresAt: new Date(m.expiresAt!).toISOString(),
+          bytes: m.byteSize, width: m.width, height: m.height, durationMs: m.durationMs,
+          expiresAt: new Date(m.expiresAt!).toISOString(),
         })));
       }
       if (request.url.endsWith("findback_ack_chat_media_delivery")) {
@@ -178,7 +179,7 @@ beforeEach(async () => {
     expect((await owner.history.getMessage(row.messageId))?.server).toBeDefined();
     remote.set(key, { metadata: { ...row, expiresAt: Date.now() + 60_000 }, bytes: await request.arrayBuffer() });
     return Response.json({ attachmentId: key, sha256: row.sha256, mime: row.mime,
-      bytes: row.byteSize, width: row.width, height: row.height });
+      bytes: row.byteSize, width: row.width, height: row.height, durationMs: row.durationMs });
   };
   const config = { url: boundary.url, key: "sb_publishable_synthetic_runtime" };
   boundary.sdk = createClient(config.url, config.key, { accessToken: async () => `synthetic-${account}`, global: { fetch: network } });

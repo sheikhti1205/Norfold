@@ -59,7 +59,7 @@ function pickMime(deps: VoiceRecordingDeps): string {
 
 export function createVoiceRecorder(deps: VoiceRecordingDeps) {
   let state: VoiceRecorderState = { status: "idle" };
-  let listener: Listener | null = null;
+  const listeners = new Set<Listener>();
   let recorder: VoiceRecorderHandle | null = null;
   let stream: MediaStream | null = null;
   let chunks: Blob[] = [];
@@ -69,7 +69,9 @@ export function createVoiceRecorder(deps: VoiceRecordingDeps) {
 
   const emit = (next: VoiceRecorderState) => {
     state = next;
-    listener?.(state);
+    for (const listener of [...listeners]) {
+      try { listener(state); } catch { /* a view must not break recording */ }
+    }
   };
 
   /** Read through a call so an await cannot leave a narrowed stale union. */
@@ -135,8 +137,8 @@ export function createVoiceRecorder(deps: VoiceRecordingDeps) {
       return state;
     },
     subscribe(next: Listener): () => void {
-      listener = next;
-      return () => { if (listener === next) listener = null; };
+      listeners.add(next);
+      return () => { listeners.delete(next); };
     },
     /** Permission is requested here and nowhere else. */
     async start(): Promise<void> {
@@ -209,6 +211,19 @@ export function createVoiceRecorder(deps: VoiceRecordingDeps) {
 }
 
 export type VoiceRecorderPort = ReturnType<typeof createVoiceRecorder>;
+
+/**
+ * Whether this runtime can record at all. The composer only offers the control
+ * when this is true, so the microphone is never decorative.
+ */
+export function voiceRecordingSupported(): boolean {
+  const scope = globalThis as unknown as {
+    MediaRecorder?: unknown;
+    navigator?: { mediaDevices?: { getUserMedia?: unknown } };
+  };
+  return typeof scope.MediaRecorder === "function"
+    && typeof scope.navigator?.mediaDevices?.getUserMedia === "function";
+}
 
 /** Browser adapter. Returns `null` where the runtime cannot record at all. */
 export function browserVoiceDeps(): VoiceRecordingDeps {

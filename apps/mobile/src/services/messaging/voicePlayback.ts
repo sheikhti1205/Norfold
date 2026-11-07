@@ -106,7 +106,7 @@ export function createVoicePlayback(ports: VoicePlaybackPorts) {
     },
     /** Load (not play) one note. A different note always stops the old one. */
     load(id: string, url: string, durationHintMs: number): boolean {
-      if (current?.id === id && audio) return true;
+      if (current?.id === id && current.url === url && audio) return true;
       reset();
       const element = ports.createAudio();
       if (!element) return false;

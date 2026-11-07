@@ -16,7 +16,7 @@ import {
   type BackupDriveStore,
   type BackupManifest,
 } from "./backupDrive";
-import { importBackupKey, sealBackupObject, sha256Hex } from "./backupCrypto";
+import { importBackupKey, openBackupObject, sealBackupObject, sha256Hex } from "./backupCrypto";
 
 const uuid = (n: number) => `00000000-0000-4000-9d02-${n.toString(16).padStart(12, "0")}`;
 const A = uuid(1);
@@ -139,7 +139,7 @@ describe("an encrypted Drive backup", () => {
       clears: [{ conversationId: CHAT, throughSequence: 2, clearedAt: 1_759_000_000_002 }],
     });
     const report = await upload(store, snapshot);
-    expect(report).toEqual({ uploaded: 1, reused: 0, removed: 0, conversations: 1, messages: 3 });
+    expect(report).toEqual({ uploaded: 1, reused: 0, removed: 0, conversations: 1, messages: 3, attachments: 0 });
     expect(store.names()).toHaveLength(2);
     expect(store.names()).toContain(MANIFEST);
     for (const name of chunkNames(store)) {
@@ -481,7 +481,7 @@ describe("an encrypted Drive backup", () => {
 describe("the manifest contract", () => {
   const base = (): BackupManifest => ({
     format: BACKUP_FORMAT, version: BACKUP_VERSION, accountId: A, deviceId: DEVICE,
-    generation: GEN, exportedAt: 1_760_000_000_000,
+    generation: GEN, exportedAt: 1_760_000_000_000, media: [],
     conversations: [{ conversationId: CHAT, headSequence: 2, parts: [{
       part: 1, chunk: chunkName(A, DEVICE, CHAT, "11".repeat(32)), sha256: "11".repeat(32),
       bytes: 128, messages: 2, firstSequence: 1, lastSequence: 2,
@@ -522,7 +522,7 @@ describe("the manifest contract", () => {
 
   it.each([
     ["unknown format", (m: BackupManifest) => ({ ...m, format: "other" })],
-    ["unsupported version", (m: BackupManifest) => ({ ...m, version: 3 })],
+    ["unsupported version", (m: BackupManifest) => ({ ...m, version: 4 })],
     ["extra key", (m: BackupManifest) => ({ ...m, extra: 1 })],
     ["bad account", (m: BackupManifest) => ({ ...m, accountId: "nope" })],
     ["no exportedAt", (m: BackupManifest) => ({ ...m, exportedAt: 0 })],
@@ -731,5 +731,74 @@ describe("two installations writing one account", () => {
     expect(store.names()).toEqual(expect.arrayContaining(legacy));
     expect(store.names()).toEqual(expect.arrayContaining([A_MANIFEST]));
     expect((await download(store)).snapshot.messages).toHaveLength(2);
+  });
+});
+
+describe("media in an encrypted Drive backup", () => {
+  const photo = new Uint8Array([0x61, 0x62, 0x63]);
+  const voice = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3, 4]);
+
+  async function fixture() {
+    const snapshot = snapshotOf([{ chat: CHAT, count: 2, base: 0x8000 }]);
+    snapshot.messages[0]!.messageType = "MEDIA"; snapshot.messages[0]!.body = "";
+    snapshot.messages[1]!.messageType = "VOICE"; snapshot.messages[1]!.body = "";
+    const attachments = [{
+      id: uuid(0x8100), messageId: snapshot.messages[0]!.id, direction: "OUT" as const,
+      sha256: await sha256Hex(photo), mime: "image/jpeg" as const, byteSize: photo.byteLength,
+      width: 2, height: 3, durationMs: null, expiresAt: null,
+    }, {
+      id: uuid(0x8101), messageId: snapshot.messages[1]!.id, direction: "OUT" as const,
+      sha256: await sha256Hex(voice), mime: "audio/webm" as const, byteSize: voice.byteLength,
+      width: 1, height: 1, durationMs: 1_500, expiresAt: null,
+    }];
+    return { snapshot: { ...snapshot, attachments }, attachments,
+      media: new Map([[attachments[0]!.id, photo.buffer], [attachments[1]!.id, voice.buffer]]) };
+  }
+
+  it("stores photo and voice bytes beside the transcript and restores them", async () => {
+    const store = memoryStore(), f = await fixture();
+    const report = await upload(store, f.snapshot, { media: f.media });
+    expect(report.attachments).toBe(2);
+    expect(store.names().filter((name) => name.includes(".media."))).toHaveLength(2);
+
+    const restored = await download(store);
+    expect(restored.snapshot.attachments).toEqual(f.attachments);
+    expect(new Uint8Array(restored.media.get(f.attachments[0]!.id)!)).toEqual(photo);
+    expect(new Uint8Array(restored.media.get(f.attachments[1]!.id)!)).toEqual(voice);
+  });
+
+  it("keeps uploaded parts when this device has since evicted the bytes", async () => {
+    const store = memoryStore(), f = await fixture();
+    await upload(store, f.snapshot, { media: f.media });
+    // Same history, no local blobs: the descriptors and the uploaded parts stay.
+    const second = await upload(store, structuredClone(f.snapshot));
+    expect(second.attachments).toBe(2);
+    expect(second.removed).toBe(0);
+    const restored = await download(store);
+    expect(new Uint8Array(restored.media.get(f.attachments[0]!.id)!)).toEqual(photo);
+    expect(new Uint8Array(restored.media.get(f.attachments[1]!.id)!)).toEqual(voice);
+  });
+
+  it("compacts media once its message is retired", async () => {
+    const store = memoryStore(), f = await fixture();
+    await upload(store, f.snapshot, { media: f.media });
+    const later = snapshotOf([{ chat: CHAT2, count: 1, base: 0x9000 }]);
+    later.clears = [{ conversationId: CHAT, throughSequence: 2, clearedAt: 10 }];
+    const third = await upload(store, later);
+    expect(third.attachments).toBe(0);
+    expect(store.names().some((name) => name.includes(".media."))).toBe(false);
+    expect((await download(store)).media.size).toBe(0);
+  });
+
+  it("refuses a descriptor whose parts do not add up to the blob", async () => {
+    const store = memoryStore(), f = await fixture();
+    await upload(store, f.snapshot, { media: f.media });
+    const file = (await store.list()).find((entry) => entry.name === MANIFEST)!;
+    const opened = await openBackupObject(await key(), file.name, await store.read(file.id));
+    const manifest = parseManifest(JSON.parse(new TextDecoder().decode(opened)));
+    expect(manifest.media).toHaveLength(2);
+    const broken = structuredClone(manifest);
+    broken.media![0]!.byteSize += 1;
+    expect(() => parseManifest(broken)).toThrow(BackupDriveError);
   });
 });

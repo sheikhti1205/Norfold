@@ -28,6 +28,7 @@ function record(overrides: Partial<MediaAttachment> = {}): MediaAttachment {
     byteSize: 64,
     width: 32,
     height: 32,
+    durationMs: null,
     expiresAt: null,
     state: "QUEUED",
     attempts: 0,
@@ -128,6 +129,21 @@ describe("image-only messages", () => {
     expect(() => copyMediaMessage({ ...message, body: "a\u0000b" })).toThrow(/Invalid messaging text/);
     expect(() => copyMediaMessage({ ...message, body: "x".repeat(100_001) })).toThrow(/Invalid messaging text/);
     expect(() => copyMediaMessage({ ...message, body: "hello" })).not.toThrow();
+  });
+});
+
+describe("voice messages", () => {
+  const voice = { id: MESSAGE, conversationId: MESSAGE, authorId: A, recipientId: B, body: "" };
+  it("classifies a note as VOICE, never as a captioned photo", () => {
+    expect(copyMediaMessage({ ...voice, messageType: "VOICE" }).messageType).toBe("VOICE");
+    expect(() => copyMediaMessage({ ...voice, messageType: "VOICE", body: "caption" })).toThrow(/Invalid messaging text/);
+    expect(() => copyMediaMessage({ ...voice, messageType: "LOCATION" })).toThrow(/Invalid messaging type/);
+  });
+  it("recognises both recorded containers from their bytes", () => {
+    const webm = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 9, 9]).buffer;
+    const mp4 = new Uint8Array([0, 0, 0, 16, 0x66, 0x74, 0x79, 0x70, 0, 0, 0, 0, 0, 0, 0, 0]).buffer;
+    expect(sniffMediaMime(webm)).toBe("audio/webm");
+    expect(sniffMediaMime(mp4)).toBe("audio/mp4");
   });
 });
 

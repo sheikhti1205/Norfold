@@ -20,7 +20,8 @@ describe("canonical Supabase media composition", () => {
     const scope = { accountId: id(1), deviceId: id(2) }, controller = new AbortController();
     const requests: Request[] = [];
     const publicMetadata = { attachmentId: id(3), sha256: metadata.sha256, mime: metadata.mime,
-      bytes: metadata.byteSize, width: metadata.width, height: metadata.height };
+      bytes: metadata.byteSize, width: metadata.width, height: metadata.height,
+      durationMs: metadata.durationMs };
     const network: typeof fetch = async (input, init) => {
       const req = new Request(input, init); requests.push(req);
       if (req.url.endsWith("/chat-wake")) return Response.json({ ok: true });

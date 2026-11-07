@@ -9,7 +9,7 @@ export interface MessagingScope {
   deviceId: string;
 }
 
-export type MessageType = "TEXT" | "MEDIA" | "LOCATION";
+export type MessageType = "TEXT" | "MEDIA" | "LOCATION" | "VOICE";
 
 /** One-time static share. Never background-tracked and never request-stage. */
 export interface StaticLocation {
@@ -188,9 +188,18 @@ export interface SnapshotMessage extends MessageReadFacts {
   createdAt: number | null;
 }
 
+/**
+ * One verified attachment in a backup. The metadata is portable; the bytes
+ * travel beside the snapshot (Drive media objects, or the caller's media map)
+ * so a text-only export can never pretend to hold media it does not have.
+ */
+export type SnapshotAttachment = MediaMetadata;
+
 export interface HistorySnapshot {
   conversations: SnapshotConversation[];
   messages: SnapshotMessage[];
+  /** Settled attachments of accepted, visible messages. */
+  attachments?: SnapshotAttachment[];
   tombstones: { messageId: string; conversationId: string; recipientId: string | null;
     unsentAt: number; unsentBy: string }[];
   deletedForMe: { messageId: string; conversationId: string | null; deletedAt: number }[];
@@ -200,6 +209,7 @@ export interface HistorySnapshot {
 export interface ImportReport {
   conversations: number;
   messages: number;
+  attachments: number;
   tombstones: number;
   deletedForMe: number;
   clears: number;
@@ -321,7 +331,9 @@ export interface MessagingHistory {
   exportSnapshot(): Promise<HistorySnapshot>;
   /** Merge a normalised snapshot in one transaction. Never creates send work,
    * mailbox receipts or state events, and never resurrects a suppressed body. */
-  importSnapshot(snapshot: HistorySnapshot): Promise<ImportReport>;
+  /** `media` carries verified bytes keyed by attachment id; an attachment with
+   * no bytes restores as EVICTED, never as a fabricated READY row. */
+  importSnapshot(snapshot: HistorySnapshot, media?: ReadonlyMap<string, ArrayBuffer>): Promise<ImportReport>;
   /** Session owner must close on sign-out/account switch; cancels active work. */
   close(): void | Promise<void>;
 }

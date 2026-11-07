@@ -12,7 +12,7 @@ import { DriveBackup, type BackupLease } from "./backupService";
 import { driveAuth } from "./driveAuth";
 import { reportLogToMonitoring } from "../monitoring/sentry";
 import {
-  exportMessagingSnapshot, getMessagingRuntimeSnapshot, importMessagingSnapshot,
+  exportMessagingMedia, exportMessagingSnapshot, getMessagingRuntimeSnapshot, importMessagingSnapshot,
   subscribeMessagingRuntime, webInstallationId, getMessagingRuntimeGeneration,
 } from "./runtime";
 
@@ -54,9 +54,14 @@ export function driveBackup(): DriveBackup {
       const snapshot = await exportMessagingSnapshot(lease.accountId);
       assertCurrent(lease); return snapshot;
     },
-    importSnapshot: async (lease, snapshot) => {
+    media: async (lease, snapshot) => {
       assertCurrent(lease);
-      await importMessagingSnapshot(lease.accountId, snapshot);
+      const media = await exportMessagingMedia(lease.accountId, snapshot);
+      assertCurrent(lease); return media;
+    },
+    importSnapshot: async (lease, snapshot, media) => {
+      assertCurrent(lease);
+      await importMessagingSnapshot(lease.accountId, snapshot, media);
       assertCurrent(lease);
     },
   });

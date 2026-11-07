@@ -1234,7 +1234,9 @@ describe("chat media schema and migration", () => {
       { ...before[0], message_type: null, ...payload }, { ...before[1], message_type: "MEDIA", ...payload },
     ]);
     expect(database.prepare("select * from outbox").all()).toEqual(outbox);
-    expect(database.prepare("select * from media_attachments").all()).toEqual(media);
+    // The v11 rebuild adds the voice duration column with a NULL for a photo.
+    expect(database.prepare("select * from media_attachments").all())
+      .toEqual(media.map((row) => ({ ...row, duration_ms: null })));
     expect((await history.getMessage(MESSAGE))?.messageType).toBeUndefined();
     expect((await history.getMessage(MESSAGE_2))?.messageType).toBe("MEDIA");
     expect(() => database.prepare("update messages set message_type='VIDEO'").run()).toThrow(/CHECK/);
@@ -1735,7 +1737,8 @@ describe("chat media records", () => {
     const trace: string[] = [];
     const port = new FakeMediaBytes(() => clock, trace);
     const history = await openWithMedia(port, (sql) => {
-      if (sql.includes("insert into media_attachments")) trace.push("row");
+      // Only the admission insert; the v11 rebuild's row restore is not one.
+      if (sql.startsWith("insert into media_attachments\n")) trace.push("row");
       if (sql === "commit") trace.push("commit");
     });
     trace.length = 0; // Ignore initialization commits, not admission ordering.
@@ -1762,7 +1765,7 @@ describe("chat media records", () => {
   it("rolls the byte write back when the attachment row is refused", async () => {
     const port = new FakeMediaBytes(() => clock);
     const history = await openWithMedia(port, (sql) => {
-      if (sql.includes("insert into media_attachments")) throw new Error("injected failure");
+      if (sql.startsWith("insert into media_attachments\n")) throw new Error("injected failure");
     });
     const { bytes, metadata } = await mediaFixture(ATTACHMENT, MESSAGE);
     await expect(history.enqueueOutgoingWithMedia({ ...outgoing, body: "" }, metadata, bytes))

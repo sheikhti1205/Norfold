@@ -16,7 +16,7 @@ const expiresAt = Date.now() + 60_000;
 
 function media(overrides: Partial<MediaMetadata> = {}): MediaMetadata {
   return { id: attachmentId, messageId, direction: "IN", sha256, mime: "image/png",
-    byteSize: 4, width: 1, height: 1, expiresAt, ...overrides };
+    byteSize: 4, width: 1, height: 1, durationMs: null, expiresAt, ...overrides };
 }
 function manifest(deviceId: string, withMedia: boolean): PeerManifest {
   return { version: 1, accountId, deviceId, generatedAt: Date.now(),

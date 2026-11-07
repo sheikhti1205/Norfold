@@ -115,6 +115,31 @@
 .fb-chat-photo > div button, .fb-chat-photo-draft button, .fb-chat-message > button { min-height:44px; min-width:44px; padding:.3rem .5rem; text-decoration:underline; }
 .fb-chat-photo-draft { display:flex; align-items:center; flex-wrap:wrap; gap:.5rem; padding:.35rem .8rem; font-size:.875rem; }
 .fb-chat-photo-draft img { width:4rem; max-height:4rem; object-fit:contain; border-radius:.4rem; }
+/* Voice notes: one compact player inside the bubble and one draft strip above
+   the composer. The track is decorative; the button, clock and state carry the
+   meaning, and every control keeps the 44px house target. */
+.fb-chat-voice { display:flex; align-items:center; gap:.5rem; width:min(15rem, 65vw); max-width:100%;
+  min-height:2.75rem; padding:.3rem .5rem; border-radius:.6rem; background:var(--fb-surface); }
+.fb-chat-voice-toggle { display:grid; place-items:center; flex:none; width:2.25rem; height:2.25rem;
+  min-width:44px; min-height:44px; border:0; border-radius:50%; background:var(--fb-primary); color:var(--fb-on-primary); }
+.fb-chat-voice-toggle:disabled { opacity:.55; }
+.fb-chat-voice-track { position:relative; flex:1 1 auto; min-width:3.5rem; height:.25rem;
+  border-radius:999px; background:var(--fb-outline-variant); overflow:hidden; }
+.fb-chat-voice-fill { position:absolute; inset:0 auto 0 0; border-radius:inherit; background:var(--fb-primary); }
+.fb-chat-voice-time { flex:none; font-size:.8125rem; font-variant-numeric:tabular-nums; color:var(--fb-on-surface-variant); }
+.fb-chat-voice-state { flex:1 1 100%; display:flex; flex-wrap:wrap; align-items:center; gap:.25rem .5rem;
+  font-size:.8125rem; color:var(--fb-on-surface-variant); }
+.fb-chat-voice-state button { min-height:44px; min-width:44px; padding:.2rem .35rem; text-decoration:underline; }
+.fb-chat-voice-draft { display:flex; align-items:center; flex-wrap:wrap; gap:.4rem .55rem;
+  padding:.35rem .8rem; font-size:.875rem; }
+.fb-chat-voice-draft button { min-height:44px; min-width:44px; padding:.2rem .45rem; }
+.fb-chat-voice-draft .fb-chat-voice-time { color:var(--fb-on-surface); }
+.fb-chat-voice-recording .fb-chat-voice-dot { width:.5rem; height:.5rem; border-radius:50%; background:var(--fb-error); }
+.fb-chat-voice-recording button:first-of-type { display:inline-flex; align-items:center; gap:.3rem; }
+@media (prefers-reduced-motion:no-preference) {
+  .fb-chat-voice-recording .fb-chat-voice-dot { animation:fb-chat-voice-pulse 1.4s ease-in-out infinite; }
+}
+@keyframes fb-chat-voice-pulse { 50% { opacity:.35; } }
 /* Report subject and one-time location stay compact cards inside the bubble:
    the report id is a live reference, so an unreadable report degrades to plain
    text rather than a broken card. */

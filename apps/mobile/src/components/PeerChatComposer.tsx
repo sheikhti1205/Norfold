@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Camera, ChevronRight, ImagePlus, Mic, SendHorizontal } from "lucide-react";
+import { Camera, ChevronRight, ImagePlus, Mic, SendHorizontal, Square } from "lucide-react";
 import { motionDurations, motionEasings, shouldReduceMotion } from "./uiMotion";
 import { hasFinePointer } from "./inputCapabilities";
 import "./peerComposer.css";
@@ -19,6 +19,8 @@ export interface PeerChatComposerProps {
   /** Voice is a real capability flag: when false the control explains the
    * limitation instead of pretending to record. */
   voiceAvailable?: boolean;
+  /** True while the microphone is actually open; the control then stops it. */
+  voiceActive?: boolean;
   onVoice?: () => void;
   context?: ReactNode;
 }
@@ -41,7 +43,7 @@ export interface PeerChatComposerProps {
  */
 export function PeerChatComposer({
   value, onChange, onSend, inputRef, busy, locked, canSend,
-  photoAllowed, onCamera, onPhotos, voiceAvailable = false, onVoice, context,
+  photoAllowed, onCamera, onPhotos, voiceAvailable = false, voiceActive = false, onVoice, context,
 }: PeerChatComposerProps) {
   const [expanded, setExpanded] = useState(true);
   const field = inputRef;
@@ -93,7 +95,8 @@ export function PeerChatComposer({
               {/* Voice exists only when a real recording/playback path exists.
                   The handoff forbids a microphone that cannot record. */}
               {voiceAvailable && onVoice
-                ? button("Voice message", <Mic size={21} aria-hidden="true" />, onVoice, busy)
+                ? button(voiceActive ? "Stop recording" : "Voice message",
+                  voiceActive ? <Square size={19} aria-hidden="true" /> : <Mic size={21} aria-hidden="true" />, onVoice, busy)
                 : null}
             </motion.div>
           ) : (

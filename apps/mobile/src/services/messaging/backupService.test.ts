@@ -161,6 +161,7 @@ function harness(options: {
     auth,
     key: async () => (options.key ? options.key() : material),
     snapshot: async () => options.snapshot ?? snapshotOf(3),
+    media: async () => new Map(),
     importSnapshot: async (_lease, snapshot) => { state.imported = snapshot; },
     captureLease: () => accountId ? Object.freeze({ accountId, deviceId: DEVICE,
       sessionGeneration, driveGeneration: auth.generation(), operationGeneration: 0 }) : null,

@@ -732,7 +732,7 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
   function snapshotTransaction<T>(mode: IDBTransactionMode,
     work: (view: PortableView, tx: IDBTransaction, guard: (callback: () => void) => () => void) => T): Promise<T> {
     return transaction(mode, (tx, result, guard) => {
-      const names = ["messages", "conversations", "unsends", "deletions", "clears"] as const;
+      const names = ["messages", "conversations", "unsends", "deletions", "clears", "mediaAttachments"] as const;
       const requests = names.map((name) => tx.objectStore(name).getAll());
       let remaining = requests.length;
       const complete = guard(() => {
@@ -746,7 +746,8 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
   function exportSnapshot(): Promise<HistorySnapshot> {
     return snapshotTransaction("readonly", view => exportPortable(view, scope.accountId));
   }
-  function importSnapshot(incoming: HistorySnapshot): Promise<ImportReport> {
+  function importSnapshot(incoming: HistorySnapshot,
+    ready: ReadonlySet<string> = new Set()): Promise<ImportReport> {
     // Captured/validated by the public wrapper before structuredClone can invoke getters.
     return snapshotTransaction("readwrite", (view, tx, guard) => {
       const merged = mergePortable(view, incoming, scope);
@@ -758,6 +759,17 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
         tx.objectStore("messages").put(message);
         if (message.snapshotSuppressed) removeMediaRows(tx, guard, message.id);
         if (message.server || message.snapshotSuppressed) tx.objectStore("outbox").delete(message.id);
+      }
+      // Attachment rows are written after their parents. A suppressed parent
+      // never gets its media back, and an imported descriptor without verified
+      // bytes restores as evicted rather than claiming a blob it lacks.
+      const parents = new Map(merged.messages.map((message) => [message.id, message]));
+      const imported = new Set((incoming.attachments ?? []).map((row) => row.id));
+      for (const record of merged.media ?? []) {
+        const parent = parents.get(record.messageId);
+        if (!parent || parent.snapshotSuppressed) continue;
+        tx.objectStore("mediaAttachments").put(imported.has(record.id) && !ready.has(record.id)
+          ? { ...record, state: "EVICTED" as const } : record);
       }
       // Imported accepted identities reserve the same immutable slots as echoes,
       // but never create mailbox receipts or state events/cursors.
@@ -779,7 +791,8 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
         request.onsuccess = complete; atSequence.onsuccess = complete;
       }
       return { conversations: incoming.conversations.length, messages: incoming.messages.length,
-        tombstones: incoming.tombstones.length, deletedForMe: incoming.deletedForMe.length, clears: incoming.clears.length };
+        attachments: incoming.attachments?.length ?? 0, tombstones: incoming.tombstones.length,
+        deletedForMe: incoming.deletedForMe.length, clears: incoming.clears.length };
     });
   }
 
@@ -832,7 +845,8 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
     const parent = view.parents.find((row) => row.id === metadata.messageId);
     if (!parent) throw new MediaParentUnavailableError(metadata.messageId);
     if (parent.authorId !== scope.accountId && parent.recipientId !== scope.accountId) throw new Error("Media participant scope mismatch");
-    if (parent.messageType !== undefined && parent.messageType !== null && parent.messageType !== "MEDIA") {
+    if (parent.messageType !== undefined && parent.messageType !== null
+      && parent.messageType !== "MEDIA" && parent.messageType !== "VOICE") {
       throw new Error("Media parent classification conflict");
     }
     if (metadata.direction !== (parent.authorId === scope.accountId ? "OUT" : "IN")) throw new Error("Media direction scope mismatch");
@@ -895,7 +909,9 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
             // needs. Classification alone would also hide a body/scope conflict.
             if (!sameMessage(parent, message)) throw new Error("Immutable message identity conflict");
             mediaParent(view, record);
-            if (!parent.messageType) tx.objectStore("messages").put({ ...parent, messageType: "MEDIA" });
+            if (!parent.messageType) {
+              tx.objectStore("messages").put({ ...parent, messageType: message.messageType ?? "MEDIA" });
+            }
           } else {
             tx.objectStore("messages").add(message);
             tx.objectStore("outbox").add({ messageId: message.id, status: "QUEUED", attempts: 0,
@@ -1164,9 +1180,26 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
     persistVerifiedMediaAndAck, markMediaReady: serializedMediaReady, listMedia: serial(listMedia), readMedia: serial(readMedia),
     evictMedia: serial(evictMedia), sweepOrphanMedia: serial(sweepOrphanMedia),
     removeMediaForMessage: serial(removeMediaForMessage), clearMedia: serial(clearMedia), purgeHistory: serial(purgeHistory, true),
-    exportSnapshot: serial(exportSnapshot), importSnapshot: async (input) => {
+    exportSnapshot: serial(exportSnapshot), importSnapshot: async (input, media) => {
       const captured = normaliseSnapshot(input);
       validateSnapshot(captured, scope.accountId);
-      return serial(importSnapshot)(captured);
+      // Bytes land in the separate media store before the metadata transaction:
+      // a failed merge can leave sweepable orphan bytes, never a READY row whose
+      // blob is missing or a blob that disagrees with its descriptor.
+      const ready = new Set<string>();
+      const store = options.mediaBytes;
+      if (store && media) for (const attachment of captured.attachments ?? []) {
+        const bytes = media.get(attachment.id);
+        if (!bytes) continue;
+        try { await verifyMediaBytes(attachment, bytes); }
+        catch { throw new BackupError("backup: identity conflict"); }
+        const existing = await store.get(scope.accountId, attachment.id);
+        if (existing) {
+          try { await verifyMediaBytes(attachment, existing); }
+          catch { throw new BackupError("backup: identity conflict"); }
+        } else await store.put(scope.accountId, attachment.id, bytes);
+        ready.add(attachment.id);
+      }
+      return serial(importSnapshot)(captured, ready);
     } };
 }

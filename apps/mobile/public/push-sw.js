@@ -47,9 +47,11 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const data = event.notification.data || {};
+  // The app is hash-routed, so a cold open must carry the route in the hash;
+  // a bare path would land on the default screen instead of the conversation.
   const target = data.conversationId
-    ? `/chats/${encodeURIComponent(data.conversationId)}`
-    : "/chats";
+    ? `/#/chats/${encodeURIComponent(data.conversationId)}`
+    : "/#/chats";
   event.waitUntil((async () => {
     const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     for (const client of open) {

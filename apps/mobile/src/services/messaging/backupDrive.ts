@@ -41,15 +41,17 @@
  * Every payload is sealed by `backupCrypto` before the store sees it, and the
  * key is admission-gated server-side, never stored beside the ciphertext.
  */
-import type { HistorySnapshot, SnapshotMessage } from "./history";
+import type { HistorySnapshot, SnapshotAttachment, SnapshotMessage } from "./history";
 import { normaliseSnapshot, validateSnapshot } from "./backup";
+import { copyMediaMetadata, verifyMediaBytes } from "./media";
 import { mergeReadFacts } from "./readFacts";
 import { openBackupObject, sealBackupObject, sha256Hex, type BackupKey } from "./backupCrypto";
 import { isUuid } from "./validation";
 
 export const BACKUP_FORMAT = "norfold.drive.backup";
-/** v2 namespaces each installation's manifest and chunks; v1 stays readable. */
-export const BACKUP_VERSION = 2;
+/** v3 adds media objects; v2 namespaces each installation's manifest and
+ * chunks; v1 stays readable. Older manifests never carry media. */
+export const BACKUP_VERSION = 3;
 const LEGACY_VERSION = 1;
 /** Chunk framing version, independent of the manifest format the writer uses. */
 const PAYLOAD_VERSION = 1;
@@ -57,6 +59,7 @@ const LEGACY_CHUNK = /^norfold\.([0-9a-f-]{36})\.chunk\.([0-9a-f-]{36})\.([0-9a-
 const LEGACY_MANIFEST = /^norfold\.([0-9a-f-]{36})\.manifest\.v1\.bin$/;
 const CHUNK = /^norfold\.([0-9a-f-]{36})\.chunk\.([0-9a-f-]{36})\.([0-9a-f-]{36})\.([0-9a-f]{64})\.v2\.bin$/;
 const MANIFEST = /^norfold\.([0-9a-f-]{36})\.manifest\.([0-9a-f-]{36})\.v2\.bin$/;
+const MEDIA = /^norfold\.([0-9a-f-]{36})\.media\.([0-9a-f-]{36})\.([0-9a-f-]{36})\.([0-9a-f]{64})\.(\d{1,6})\.v1\.bin$/;
 const HASH = /^[0-9a-f]{64}$/;
 
 export const MAX_CONVERSATIONS = 512;
@@ -65,6 +68,9 @@ export const MAX_MESSAGES_PER_PART = 500;
 export const MAX_PART_BYTES = 2 * 1024 * 1024;
 export const MAX_MANIFEST_BYTES = 2 * 1024 * 1024;
 export const MAX_SUPPRESSION_ROWS = 20_000;
+/** Descendants of one account's backed-up attachment set, and their slices. */
+export const MAX_MEDIA = 4_096;
+export const MAX_MEDIA_PARTS = 64;
 /** Bound on distinct installations whose manifests one restore will union. */
 export const MAX_BACKUP_DEVICES = 16;
 
@@ -90,6 +96,23 @@ export interface BackupPart {
   lastSequence: number;
 }
 
+export interface BackupMediaPart {
+  part: number;
+  chunk: string;
+  bytes: number;
+}
+
+/**
+ * One verified attachment whose bytes live in this installation's media
+ * objects. The descriptor repeats the metadata so a restore can rebuild the
+ * attachment without trusting the message payload.
+ */
+export interface BackupMedia extends SnapshotAttachment {
+  attachmentId: string;
+  conversationId: string;
+  parts: BackupMediaPart[];
+}
+
 export interface BackupConversation {
   conversationId: string;
   headSequence: number;
@@ -98,12 +121,14 @@ export interface BackupConversation {
 
 export interface BackupManifest {
   format: typeof BACKUP_FORMAT;
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   accountId: string;
   deviceId: string;
   generation: string;
   exportedAt: number;
   conversations: BackupConversation[];
+  /** v3 only; absent in v1/v2 objects written by older installations. */
+  media?: BackupMedia[];
   tombstones: HistorySnapshot["tombstones"];
   deletedForMe: HistorySnapshot["deletedForMe"];
   clears: HistorySnapshot["clears"];
@@ -168,6 +193,15 @@ export function chunkName(accountId: string, deviceId: string, conversationId: s
   return `norfold.${accountId}.chunk.${deviceId}.${conversationId}.${sha256}.v2.bin`;
 }
 
+export function mediaName(accountId: string, deviceId: string, attachmentId: string,
+  sha256: string, part: number): string {
+  if (!isUuid(accountId) || !isUuid(deviceId) || !isUuid(attachmentId) || !HASH.test(sha256)
+    || !Number.isSafeInteger(part) || part < 1 || part > MAX_MEDIA_PARTS) {
+    throw fail("backup: invalid manifest");
+  }
+  return `norfold.${accountId}.media.${deviceId}.${attachmentId}.${sha256}.${part}.v1.bin`;
+}
+
 export function manifestName(accountId: string, deviceId: string): string {
   if (!isUuid(accountId) || !isUuid(deviceId)) throw fail("backup: invalid manifest");
   return `norfold.${accountId}.manifest.${deviceId}.v2.bin`;
@@ -192,7 +226,9 @@ export function isBackupName(name: string, accountId: string): boolean {
   const manifest = MANIFEST.exec(name) ?? LEGACY_MANIFEST.exec(name);
   if (manifest) return manifest[1] === accountId;
   const chunk = CHUNK.exec(name) ?? LEGACY_CHUNK.exec(name);
-  return chunk !== null && chunk[1] === accountId;
+  if (chunk) return chunk[1] === accountId;
+  const media = MEDIA.exec(name);
+  return media !== null && media[1] === accountId;
 }
 
 function isDeviceManifestName(name: string, accountId: string, deviceId: string): boolean {
@@ -202,6 +238,11 @@ function isDeviceManifestName(name: string, accountId: string, deviceId: string)
 
 function isDeviceChunkName(name: string, accountId: string, deviceId: string): boolean {
   const match = CHUNK.exec(name);
+  return match !== null && match[1] === accountId && match[2] === deviceId;
+}
+
+function isDeviceMediaName(name: string, accountId: string, deviceId: string): boolean {
+  const match = MEDIA.exec(name);
   return match !== null && match[1] === accountId && match[2] === deviceId;
 }
 
@@ -275,14 +316,62 @@ function clears(input: unknown): HistorySnapshot["clears"] {
   });
 }
 
+const MANIFEST_KEYS = ["format", "version", "accountId", "deviceId", "generation", "exportedAt",
+  "conversations", "tombstones", "deletedForMe", "clears"];
+const MANIFEST_V3_KEYS = [...MANIFEST_KEYS, "media"];
+const MEDIA_KEYS = ["attachmentId", "conversationId", "id", "messageId", "direction", "sha256", "mime",
+  "byteSize", "width", "height", "durationMs", "expiresAt", "parts"];
+
+/**
+ * One attachment descriptor. `parts` may be empty: that is a row whose bytes
+ * were already evicted locally, and a restore must show the same bubble rather
+ * than invent bytes it never had.
+ */
+function mediaEntry(input: unknown, accountId: string, deviceId: string,
+  conversationIds: ReadonlySet<string>): BackupMedia {
+  const row = exact(input, MEDIA_KEYS);
+  if (!isUuid(row.attachmentId) || row.attachmentId !== row.id || !isUuid(row.conversationId)
+    || !conversationIds.has(row.conversationId as string)) throw fail("backup: invalid manifest");
+  let metadata: SnapshotAttachment;
+  try {
+    metadata = copyMediaMetadata(row as unknown as Parameters<typeof copyMediaMetadata>[0]);
+  } catch { throw fail("backup: invalid manifest"); }
+  const chunks = new Set<string>();
+  const parts = array(row.parts, MAX_MEDIA_PARTS).map((value, index): BackupMediaPart => {
+    const part = exact(value, ["part", "chunk", "bytes"]);
+    const chunk = typeof part.chunk === "string" ? part.chunk : "";
+    const named = MEDIA.exec(chunk);
+    if (part.part !== index + 1 || !named || chunks.has(chunk)
+      || named[1] !== accountId || named[2] !== deviceId || named[3] !== metadata.id) {
+      throw fail("backup: invalid manifest");
+    }
+    chunks.add(chunk);
+    const bytes = positive(part.bytes);
+    if (bytes > MAX_PART_BYTES) throw fail("backup: invalid manifest");
+    return { part: index + 1, chunk, bytes };
+  });
+  // A descriptor that claims bytes must describe exactly the attachment it
+  // names; a partial set would restore a truncated note or photo.
+  if (parts.length > 0
+    && parts.reduce((sum, value) => sum + value.bytes, 0) !== metadata.byteSize) {
+    throw fail("backup: invalid manifest");
+  }
+  return { ...metadata, attachmentId: metadata.id,
+    conversationId: row.conversationId as string, parts };
+}
+
 export function parseManifest(input: unknown): BackupManifest {
-  const row = exact(input, ["format", "version", "accountId", "deviceId", "generation", "exportedAt",
-    "conversations", "tombstones", "deletedForMe", "clears"]);
-  if (row.format !== BACKUP_FORMAT) throw fail("backup: invalid manifest");
-  if (row.version !== LEGACY_VERSION && row.version !== BACKUP_VERSION) {
+  const value = object(input);
+  if (value.format !== BACKUP_FORMAT) throw fail("backup: invalid manifest");
+  // v1 is the legacy single-manifest format, v2 the per-installation format and
+  // v3 adds media: all three must stay readable after an upgrade.
+  if (value.version !== LEGACY_VERSION && value.version !== 2 && value.version !== BACKUP_VERSION) {
     throw fail("backup: unsupported version");
   }
-  const version = row.version;
+  const version = value.version;
+  // `media` exists exactly where the format says it does: a v3 file without it
+  // and a v2 file carrying it are both forgeries, not forward compatibility.
+  const row = exact(value, version === BACKUP_VERSION ? MANIFEST_V3_KEYS : MANIFEST_KEYS);
   if (!isUuid(row.accountId) || !isUuid(row.deviceId) || !isUuid(row.generation)) {
     throw fail("backup: invalid manifest");
   }
@@ -293,11 +382,16 @@ export function parseManifest(input: unknown): BackupManifest {
     .map((entry) => conversation(entry, accountId, deviceId));
   const ids = new Set(conversations.map((entry) => entry.conversationId));
   if (ids.size !== conversations.length) throw fail("backup: invalid manifest");
+  const media = version === BACKUP_VERSION
+    ? array(row.media, MAX_MEDIA).map((entry) => mediaEntry(entry, accountId, deviceId as string, ids))
+    : [];
+  const attachmentIds = new Set(media.map((entry) => entry.attachmentId));
+  if (attachmentIds.size !== media.length) throw fail("backup: invalid manifest");
   return {
     format: BACKUP_FORMAT, version,
     accountId: row.accountId as string, deviceId: row.deviceId as string,
     generation: row.generation as string, exportedAt: positive(row.exportedAt),
-    conversations, tombstones: tombstones(row.tombstones),
+    conversations, media, tombstones: tombstones(row.tombstones),
     deletedForMe: deletedForMe(row.deletedForMe), clears: clears(row.clears),
   };
 }
@@ -366,6 +460,7 @@ export interface BackupUploadReport {
   removed: number;
   conversations: number;
   messages: number;
+  attachments: number;
 }
 
 export interface BackupUploadInput {
@@ -373,6 +468,9 @@ export interface BackupUploadInput {
   key: BackupKey;
   scope: BackupScope;
   snapshot: HistorySnapshot;
+  /** Verified bytes by attachment id. An id absent here is a row whose bytes
+   * are gone; it is still described, never fabricated. */
+  media?: ReadonlyMap<string, ArrayBuffer>;
   now: number;
   crypto?: Crypto;
   /** Legacy caller hint. Never bypasses validation of an existing backup. */
@@ -389,7 +487,8 @@ async function readManifestFile(store: BackupDriveStore, file: BackupDriveFile, 
   const manifest = parseManifest(value);
   if (manifest.accountId !== scope.accountId) throw fail("backup: account mismatch");
   if (manifest.generation !== key.generation) throw fail("backup: invalid manifest");
-  if (manifest.version === BACKUP_VERSION && !isDeviceManifestName(file.name, scope.accountId, manifest.deviceId)) {
+  if (manifest.version !== LEGACY_VERSION
+    && !isDeviceManifestName(file.name, scope.accountId, manifest.deviceId)) {
     throw fail("backup: invalid manifest");
   }
   return manifest;
@@ -531,10 +630,73 @@ export async function uploadBackup(input: BackupUploadInput): Promise<BackupUplo
     if (!covered.has(conversationId)) throw fail("backup: invalid manifest");
   }
 
+  // Attachments ride beside the transcript. Bytes are split into parts small
+  // enough for the store's simple upload path, each part content-addressed and
+  // sealed under its own name; the descriptor carries the full digest so a
+  // restore verifies the reassembled blob against the attachment contract.
+  const previousMedia = new Map((previousManifest?.media ?? []).map((entry) => [entry.attachmentId, entry]));
+  const previouslyReferencedMedia = new Set<string>();
+  for (const entry of previousManifest?.media ?? []) {
+    for (const previousPart of entry.parts) previouslyReferencedMedia.add(previousPart.chunk);
+  }
+  const conversationOfMessage = new Map(snapshot.messages.map((row) => [row.id, row.conversationId]));
+  const media: BackupMedia[] = [];
+  const writtenMedia = new Set<string>();
+  let attachments = 0;
+  for (const attachment of snapshot.attachments ?? []) {
+    const conversationId = conversationOfMessage.get(attachment.messageId);
+    if (!conversationId || !covered.has(conversationId)) continue;
+    const bytes = input.media?.get(attachment.id);
+    const parts: BackupMediaPart[] = [];
+    if (bytes) {
+      try { await verifyMediaBytes(attachment, bytes); } catch { throw fail("backup: chunk mismatch"); }
+      const source = new Uint8Array(bytes);
+      const count = Math.ceil(source.byteLength / MAX_PART_PLAINTEXT);
+      if (count < 1 || count > MAX_MEDIA_PARTS) throw fail("backup: invalid manifest");
+      for (let index = 0; index < count; index++) {
+        const slice = source.slice(index * MAX_PART_PLAINTEXT, (index + 1) * MAX_PART_PLAINTEXT);
+        const sha256 = await sha256Hex(slice, crypto);
+        const name = mediaName(scope.accountId, scope.deviceId, attachment.id, sha256, index + 1);
+        const file = existing.get(name);
+        // The same reuse rule as a transcript chunk: only content the previous
+        // manifest referenced, never an orphan from an interrupted pass.
+        if (!(file && previouslyReferencedMedia.has(name))) {
+          const sealed = await sealBackupObject(key, name, slice, crypto);
+          if (sealed.byteLength > MAX_PART_BYTES) throw fail("backup: invalid manifest");
+          existing.set(name, await store.write({ id: file?.id, name, bytes: sealed }));
+        }
+        writtenMedia.add(name);
+        // Plaintext length, not the sealed object size: the descriptor describes
+        // the blob a restore must reproduce, and the reader checks both.
+        parts.push({ part: index + 1, chunk: name, bytes: slice.byteLength });
+      }
+    } else {
+      // This device no longer holds the bytes. Keep the descriptor and, when the
+      // previous pass uploaded the identical blob, its parts too: dropping them
+      // would make the backup lose media merely because local cache was evicted.
+      const prior = previousMedia.get(attachment.id);
+      if (prior) {
+        if (prior.messageId !== attachment.messageId || prior.direction !== attachment.direction
+          || prior.sha256 !== attachment.sha256 || prior.mime !== attachment.mime
+          || prior.byteSize !== attachment.byteSize) throw fail("backup: invalid manifest");
+        // Only a complete set of still-present objects is a usable carry-over;
+        // a partial copy would describe a truncated blob.
+        if (prior.parts.every((previousPart) => existing.has(previousPart.chunk))) {
+          for (const previousPart of prior.parts) {
+            parts.push({ ...previousPart });
+            writtenMedia.add(previousPart.chunk);
+          }
+        }
+      }
+    }
+    media.push({ ...attachment, attachmentId: attachment.id, conversationId, parts });
+    attachments++;
+  }
+
   const manifest: BackupManifest = {
     format: BACKUP_FORMAT, version: BACKUP_VERSION, accountId: scope.accountId,
     deviceId: scope.deviceId, generation: key.generation, exportedAt: now,
-    conversations, tombstones: snapshot.tombstones, deletedForMe: snapshot.deletedForMe,
+    conversations, media, tombstones: snapshot.tombstones, deletedForMe: snapshot.deletedForMe,
     clears: snapshot.clears,
   };
   const plaintext = new TextEncoder().encode(JSON.stringify(manifest));
@@ -551,19 +713,25 @@ export async function uploadBackup(input: BackupUploadInput): Promise<BackupUplo
   // committed receipt and a later pass retries the bounded cleanup.
   let removed = 0;
   for (const file of files) {
-    if (written.has(file.name) || !isDeviceChunkName(file.name, scope.accountId, scope.deviceId)) continue;
+    const superseded = isDeviceChunkName(file.name, scope.accountId, scope.deviceId)
+      ? !written.has(file.name)
+      : isDeviceMediaName(file.name, scope.accountId, scope.deviceId) && !writtenMedia.has(file.name);
+    if (!superseded) continue;
     try {
       await store.remove(file.id);
       removed++;
     } catch { /* retained for the next pass */ }
   }
-  return { uploaded, reused, removed, conversations: conversations.length, messages };
+  return { uploaded, reused, removed, conversations: conversations.length, messages, attachments };
 }
 
 export interface BackupDownload {
   manifest: BackupManifest;
   /** Normalised, validated snapshot; the caller still reconciles with the server. */
   snapshot: HistorySnapshot;
+  /** Verified attachment bytes by id. A descriptor with no entry here is a row
+   * whose bytes were already gone when this backup was written. */
+  media: Map<string, ArrayBuffer>;
 }
 
 function chunkMessages(opened: Uint8Array, conversationId: string): SnapshotMessage[] {
@@ -598,6 +766,7 @@ function mergeSnapshots(parts: readonly { manifest: BackupManifest; snapshot: Hi
   const tombstones = new Map<string, HistorySnapshot["tombstones"][number]>();
   const deletedForMe = new Map<string, HistorySnapshot["deletedForMe"][number]>();
   const clears = new Map<string, HistorySnapshot["clears"][number]>();
+  const attachments = new Map<string, SnapshotAttachment>();
   for (const { snapshot } of ordered) {
     for (const row of snapshot.conversations) {
       const prior = conversations.get(row.id);
@@ -640,11 +809,22 @@ function mergeSnapshots(parts: readonly { manifest: BackupManifest; snapshot: Hi
         clearedAt: Math.max(prior.clearedAt, row.clearedAt),
       } : { ...row });
     }
+    for (const row of snapshot.attachments ?? []) {
+      const prior = attachments.get(row.id);
+      // Immutable media identity: two installations cannot describe one
+      // attachment differently without one of them being wrong.
+      if (prior && (prior.messageId !== row.messageId || prior.direction !== row.direction
+        || prior.sha256 !== row.sha256 || prior.mime !== row.mime || prior.byteSize !== row.byteSize)) {
+        throw fail("backup: invalid manifest");
+      }
+      if (!prior) attachments.set(row.id, { ...row });
+    }
   }
   return {
     conversations: [...conversations.values()].sort((a, b) => a.id.localeCompare(b.id)),
     messages: [...messages.values()].sort((a, b) => a.conversationId.localeCompare(b.conversationId)
       || a.serverSequence - b.serverSequence || a.id.localeCompare(b.id)),
+    attachments: [...attachments.values()].sort((a, b) => a.id.localeCompare(b.id)),
     tombstones: [...tombstones.values()],
     deletedForMe: [...deletedForMe.values()],
     clears: [...clears.values()],
@@ -671,22 +851,31 @@ export async function downloadBackup(input: { store: BackupDriveStore; key: Back
     if (!legacy) throw fail("backup: chunk missing");
     const manifest = await readManifestFile(store, legacy, key, scope, crypto);
     if (manifest.version !== LEGACY_VERSION) throw fail("backup: invalid manifest");
-    return { manifest, snapshot: await readSnapshot(store, key, scope, manifest, crypto, byName) };
+    return { manifest, snapshot: await readSnapshot(store, key, scope, manifest, crypto, byName),
+      media: new Map() };
   }
   if (deviceManifests.length > MAX_BACKUP_DEVICES) throw fail("backup: invalid manifest");
 
-  const read: { manifest: BackupManifest; snapshot: HistorySnapshot }[] = [];
+  const read: { manifest: BackupManifest; snapshot: HistorySnapshot; media: Map<string, ArrayBuffer> }[] = [];
   const devices = new Set<string>();
   for (const file of deviceManifests) {
     const manifest = await readManifestFile(store, file, key, scope, crypto);
-    if (manifest.version !== BACKUP_VERSION) throw fail("backup: invalid manifest");
+    if (manifest.version !== 2 && manifest.version !== BACKUP_VERSION) throw fail("backup: invalid manifest");
     if (devices.has(manifest.deviceId)) throw fail("backup: invalid manifest");
     devices.add(manifest.deviceId);
-    read.push({ manifest, snapshot: await readSnapshot(store, key, scope, manifest, crypto, byName) });
+    read.push({
+      manifest,
+      snapshot: await readSnapshot(store, key, scope, manifest, crypto, byName),
+      media: await readMediaObjects(store, key, manifest, crypto, byName),
+    });
   }
   read.sort((a, b) => a.manifest.exportedAt - b.manifest.exportedAt
     || a.manifest.deviceId.localeCompare(b.manifest.deviceId));
-  return { manifest: read.at(-1)!.manifest, snapshot: mergeSnapshots(read) };
+  // Later snapshots win only when they actually carry the bytes; an installation
+  // that evicted a blob must not erase another's copy of it.
+  const media = new Map<string, ArrayBuffer>();
+  for (const entry of read) for (const [id, bytes] of entry.media) media.set(id, bytes);
+  return { manifest: read.at(-1)!.manifest, snapshot: mergeSnapshots(read), media };
 }
 
 async function readSnapshot(store: BackupDriveStore, key: BackupKey, scope: BackupScope,
@@ -718,10 +907,51 @@ async function readSnapshot(store: BackupDriveStore, key: BackupKey, scope: Back
       createdAt: 0, updatedAt: 0,
     })),
     messages,
+    attachments: (manifest.media ?? []).map((entry) => ({
+      id: entry.id, messageId: entry.messageId, direction: entry.direction,
+      sha256: entry.sha256, mime: entry.mime, byteSize: entry.byteSize,
+      width: entry.width, height: entry.height, durationMs: entry.durationMs,
+      expiresAt: entry.expiresAt,
+    })),
     tombstones: manifest.tombstones,
     deletedForMe: manifest.deletedForMe,
     clears: manifest.clears,
   });
   validateSnapshot(snapshot, scope.accountId);
   return snapshot;
+}
+
+/**
+ * Read and verify every media blob this manifest describes. Each part is
+ * content-addressed and sealed on its own, so a missing or altered part is
+ * detected before the descriptors are handed to a restore.
+ */
+async function readMediaObjects(store: BackupDriveStore, key: BackupKey, manifest: BackupManifest,
+  crypto: Crypto, byName: Map<string, BackupDriveFile>): Promise<Map<string, ArrayBuffer>> {
+  const media = new Map<string, ArrayBuffer>();
+  for (const entry of manifest.media ?? []) {
+    if (entry.parts.length === 0) continue;
+    const slices: Uint8Array[] = [];
+    let total = 0;
+    for (const part of entry.parts) {
+      const file = byName.get(part.chunk);
+      if (!file) throw fail("backup: chunk missing");
+      const sealed = await store.read(file.id);
+      const opened = await openBackupObject(key, part.chunk, sealed, crypto);
+      const named = MEDIA.exec(part.chunk)!;
+      if (opened.byteLength !== part.bytes || await sha256Hex(opened, crypto) !== named[4]) {
+        throw fail("backup: chunk mismatch");
+      }
+      slices.push(opened);
+      total += opened.byteLength;
+    }
+    if (total !== entry.byteSize) throw fail("backup: chunk mismatch");
+    const joined = new Uint8Array(total);
+    let offset = 0;
+    for (const slice of slices) { joined.set(slice, offset); offset += slice.byteLength; }
+    const bytes = joined.buffer;
+    try { await verifyMediaBytes(entry, bytes); } catch { throw fail("backup: chunk mismatch"); }
+    media.set(entry.attachmentId, bytes);
+  }
+  return media;
 }

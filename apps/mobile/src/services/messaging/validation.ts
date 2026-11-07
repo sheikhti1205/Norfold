@@ -64,7 +64,8 @@ export function copyLocationMessage(value: HumanMessage): HumanMessage {
 /** Authorized mailbox/history data: missing legacy classification stays unknown. */
 export function copyReceivedMessage(value: HumanMessage, options: CopyMessageOptions = { allowEmptyBody: true }): HumanMessage {
   const messageType = value?.messageType;
-  if (messageType !== undefined && messageType !== "TEXT" && messageType !== "MEDIA" && messageType !== "LOCATION") {
+  if (messageType !== undefined && messageType !== "TEXT" && messageType !== "MEDIA"
+    && messageType !== "LOCATION" && messageType !== "VOICE") {
     throw new Error("Invalid messaging type");
   }
   if (!value || typeof value.body !== "string" || value.body.length > MAX_BODY_UNITS
@@ -109,9 +110,14 @@ export function copyStaticLocation(value: StaticLocation): StaticLocation {
  * caption either; it would render as a blank bubble, so it is refused.
  */
 export function copyMediaMessage(value: HumanMessage): HumanMessage {
-  if (value?.messageType !== undefined && value.messageType !== "MEDIA") throw new Error("Invalid messaging type");
-  const message = copyReceivedMessage({ ...value, messageType: "MEDIA" });
+  if (value?.messageType !== undefined && value.messageType !== "MEDIA" && value.messageType !== "VOICE") {
+    throw new Error("Invalid messaging type");
+  }
+  const message = copyReceivedMessage({ ...value, messageType: value.messageType ?? "MEDIA" });
   if (message.body !== "" && !message.body.trim()) throw new Error("Invalid messaging text");
+  // A voice note's payload is the attachment, never a caption: the same rule the
+  // local table and the server CHECK enforce.
+  if (message.messageType === "VOICE" && message.body !== "") throw new Error("Invalid messaging text");
   return message;
 }
 
@@ -213,5 +219,9 @@ export function sniffMediaMime(bytes: unknown): MediaMime | null {
   if (starts(0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png";
   if (starts(0, [0xff, 0xd8, 0xff])) return "image/jpeg";
   if (starts(0, [0x52, 0x49, 0x46, 0x46]) && starts(8, [0x57, 0x45, 0x42, 0x50])) return "image/webp";
+  // EBML header: every MediaRecorder WebM note starts with the same four bytes.
+  if (starts(0, [0x1a, 0x45, 0xdf, 0xa3])) return "audio/webm";
+  // ISO base media: the first box is `ftyp`, which MP4/AAC recording produces.
+  if (starts(4, [0x66, 0x74, 0x79, 0x70])) return "audio/mp4";
   return null;
 }

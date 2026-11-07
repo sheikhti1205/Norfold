@@ -2,9 +2,14 @@ export const MAX_BYTES = 20971520;
 const MARGIN_MS = 120_000;
 const ATTEMPT_MS = 90_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-type Mime = "image/jpeg" | "image/png" | "image/webp";
+type Mime = "image/jpeg" | "image/png" | "image/webp" | "audio/webm" | "audio/mp4";
+/** Voice notes are measured by recording; the server bounds the claim. */
+export const MIN_VOICE_MS = 500;
+export const MAX_VOICE_MS = 5 * 60_000;
+/** The attachment contract's sentinel edge for a container with no pixels. */
+const VOICE_EDGE = 1;
 export interface Target { id: string; generation: string; bucket: string; objectKey: string; expiresAt: string }
-export interface Assertions { sha256: string; mime: Mime; bytes: number; width: number; height: number }
+export interface Assertions { sha256: string; mime: Mime; bytes: number; width: number; height: number; durationMs: number | null }
 export interface GatewayPorts {
   reserve(actor: string, messageId: string, attachmentId: string, signal: AbortSignal): Promise<void>;
   uploadTarget(actor: string, attachmentId: string, signal: AbortSignal): Promise<unknown>;
@@ -45,6 +50,22 @@ function image(b: Uint8Array): { mime: Mime; width: number; height: number } {
   if (!Number.isInteger(width) || !Number.isInteger(height) || width<1 || height<1 || width>8192 || height>8192) throw Error();
   return {mime,width,height};
 }
+/**
+ * Container-only audio probe. The browser records WebM/Opus and Android's
+ * WebView records MP4/AAC; both are identified from the bytes rather than
+ * trusted from the request header. No decoder is involved: the stored length
+ * was measured by the recorder and bounded here, exactly as the image path
+ * bounds dimensions.
+ */
+function audio(b: Uint8Array): { mime: "audio/webm" | "audio/mp4" } {
+  if (b.length >= 8 && b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return { mime: "audio/webm" };
+  if (b.length >= 16 && b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) {
+    const size = (b[0]! * 16777216 + b[1]! * 65536 + b[2]! * 256 + b[3]!);
+    if (size < 16 || size > b.length) throw Error();
+    return { mime: "audio/mp4" };
+  }
+  throw Error();
+}
 async function hash(bytes: Uint8Array): Promise<string> { const digest = await crypto.subtle.digest("SHA-256", bytes.slice()); return Array.from(new Uint8Array(digest), x=>x.toString(16).padStart(2,"0")).join(""); }
 function targetOf(raw: unknown, id: string): Target {
   if (!raw || typeof raw !== "object") throw Error(); const t=raw as Record<string, unknown>;
@@ -56,13 +77,24 @@ async function abortable<T>(signal: AbortSignal, fn: () => Promise<T>): Promise<
   const aborted=new Promise<never>((_,reject)=>{ const f=()=>reject(Error()); signal.addEventListener("abort",f,{once:true}); off=()=>signal.removeEventListener("abort",f); });
   try { return await Promise.race([fn(),aborted]); } finally { off(); }
 }
-export async function uploadChatMedia(io: GatewayPorts, input: { actor: string; messageId: string; attachmentId: string; bytes: Uint8Array; declaredMime: string }, options: { signal?: AbortSignal; now?: () => number } = {}): Promise<{ status: "attached"; attachmentId: string } & Assertions | { status: "invalid" | "retry" }> {
+export async function uploadChatMedia(io: GatewayPorts, input: { actor: string; messageId: string; attachmentId: string; bytes: Uint8Array; declaredMime: string; durationMs?: number | null }, options: { signal?: AbortSignal; now?: () => number } = {}): Promise<{ status: "attached"; attachmentId: string } & Assertions | { status: "invalid" | "retry" }> {
   const now=options.now ?? Date.now; const controller=new AbortController(); const signal=AbortSignal.any([controller.signal,...(options.signal?[options.signal]:[])]); let deadline=now()+ATTEMPT_MS; let timer=setTimeout(()=>controller.abort(),ATTEMPT_MS);
   const check=()=>{ signal.throwIfAborted(); if (now()>=deadline) { controller.abort(); throw Error(); } };
   let assertions: Assertions;
   try {
     if (input.bytes.length<1 || input.bytes.length>MAX_BYTES) throw Error();
-    const info=image(input.bytes); if (input.declaredMime.toLowerCase().trim()!==info.mime) throw Error();
+    const declared=input.declaredMime.toLowerCase().trim();
+    let info: { mime: Mime; width: number; height: number; durationMs: number | null };
+    if (declared.startsWith("audio/")) {
+      const container=audio(input.bytes); if (declared!==container.mime) throw Error();
+      const duration=input.durationMs;
+      if (typeof duration!=="number" || !Number.isSafeInteger(duration) || duration<MIN_VOICE_MS || duration>MAX_VOICE_MS) throw Error();
+      info={...container, width:VOICE_EDGE, height:VOICE_EDGE, durationMs:duration};
+    } else {
+      if (input.durationMs !== undefined && input.durationMs !== null) throw Error();
+      const still=image(input.bytes); if (declared!==still.mime) throw Error();
+      info={...still, durationMs:null};
+    }
     assertions={...info, bytes:input.bytes.length, sha256:await abortable(signal,()=>hash(input.bytes))};
   } catch { clearTimeout(timer); controller.abort(); return {status:"invalid"}; }
   try {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { ArrowLeft, ChevronDown, Ellipsis, Info, ListFilter, MapPin, PanelLeftClose, PanelLeftOpen, RefreshCw, Search } from "lucide-react";
+import { ArrowLeft, ChevronDown, Ellipsis, Info, ListFilter, MapPin, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCw, Search, Square } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import type { PostItem } from "@norfold/shared";
 import { copyStaticLocation, isUuid } from "../services/messaging/validation";
@@ -32,13 +32,22 @@ import { useMessaging } from "../services/messaging/useMessaging";
 import { BackupPrompt } from "../components/BackupPrompt";
 import {
   changeMessagingRelationship, markMessagingConversationRead, readMessagingThreadState, getCachedMessagingThreadState,
-  refreshMessaging, sendMessagingText, sendMessagingLocation, sendMessagingMedia, clearMessagingConversation, removeMessagingMessage,
+  refreshMessaging, sendMessagingText, sendMessagingLocation, sendMessagingMedia, sendMessagingVoice, clearMessagingConversation, removeMessagingMessage,
   fetchMessagingReceiptView, observeMessagingReceipt, readMessagingMedia, downloadMessagingMedia, recoverMessagingText,
   retryMessagingMessage, watchMessagingThread,
 } from "../services/messaging/runtime";
 import type { MediaAttachment, OutboxEntry, StaticLocation, StoredHumanMessage } from "../services/messaging/history";
 import { prepareMessagingPhoto, type PreparedMessagingPhoto } from "../services/messaging/preparePhoto";
-import type { MediaMetadata } from "../services/messaging/media";
+import { sha256Hex, VOICE_SENTINEL_EDGE, type MediaMetadata, type MediaMime } from "../services/messaging/media";
+import {
+  browserVoiceDeps, createVoiceRecorder, voiceRecordingSupported,
+  type VoiceRecorderPort, type VoiceRecorderState, type VoiceRecording,
+} from "../services/messaging/voiceRecorder";
+import {
+  browserVoicePlaybackPorts, createVoicePlayback, voiceProgressPercent,
+  type VoicePlaybackPort, type VoicePlaybackSnapshot,
+} from "../services/messaging/voicePlayback";
+import { formatVoiceDuration, storedVoiceMime } from "../services/messaging/voice";
 import { PhotoUnavailableError } from "../services/messaging/mediaTransport";
 import { chooseNativeImage, chooseNativeImages, importNativeImageUri, importedImageToFile } from "../services/media/nativeMedia";
 import "./Messaging.css";
@@ -207,6 +216,121 @@ function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady }: {
   </div>;
 }
 
+/**
+ * One voice note in the transcript. Bytes come from the same verified store as
+ * a photo; playback is delegated to the single transcript player so starting a
+ * second note pauses the first. A length shown here is the stored duration, not
+ * a container guess (WebM often reports `Infinity`).
+ */
+function ChatVoice({ accountId, conversationId, attachment, playback, snapshot }: {
+  accountId: string; conversationId: string; attachment: MediaAttachment;
+  playback: VoicePlaybackPort; snapshot: VoicePlaybackSnapshot;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [state, setState] = useState<"loading" | "ready" | "missing" | "failed" | "unavailable">("loading");
+  const [version, setVersion] = useState(0);
+  const durationMs = attachment.durationMs ?? 0;
+  const canDownload = attachment.expiresAt !== null && attachment.expiresAt !== undefined
+    && attachment.expiresAt > Date.now()
+    && (attachment.direction === "IN" || ["READY", "EVICTED", "AWAITING_ACK"].includes(attachment.state));
+  useEffect(() => {
+    let cancelled = false, made: string | null = null;
+    setUrl(null);
+    if (attachment.state === "EVICTED") {
+      setState(attachment.expiresAt !== null && attachment.expiresAt <= Date.now() ? "unavailable" : "missing");
+      return;
+    }
+    setState("loading");
+    void readMessagingMedia(accountId, attachment.id).then((bytes) => {
+      if (cancelled) return;
+      if (!bytes) { setState("missing"); return; }
+      made = URL.createObjectURL(new Blob([bytes.slice(0)], { type: attachment.mime }));
+      setUrl(made);
+      // The player loads metadata on demand; the stored duration is what the
+      // bar and the clock show, so no decode is required to call it ready.
+      setState("ready");
+    }).catch(() => { if (!cancelled) setState("failed"); });
+    return () => { cancelled = true; if (made) URL.revokeObjectURL(made); setUrl(null); };
+  }, [accountId, attachment.id, attachment.mime, attachment.state, attachment.expiresAt, version]);
+  async function download() {
+    setState("loading");
+    try { await downloadMessagingMedia(accountId, conversationId, attachment.id); setVersion((value) => value + 1); }
+    catch (error) { setState(error instanceof PhotoUnavailableError ? "unavailable" : "failed"); }
+  }
+  const playing = snapshot.playingId === attachment.id;
+  const position = playing ? Math.min(snapshot.positionMs, durationMs) : 0;
+  async function toggle() {
+    if (!url) return;
+    if (playing) { playback.pause(); return; }
+    if (!playback.load(attachment.id, url, durationMs)) return;
+    await playback.play();
+  }
+  return <div className="fb-chat-voice" data-receipt-message={state === "ready" && attachment.state === "READY" ? attachment.messageId : undefined}>
+    <button type="button" className="fb-chat-voice-toggle" aria-label={playing ? "Pause voice message" : "Play voice message"}
+      disabled={!url || durationMs <= 0} onClick={() => void toggle()}>
+      {playing ? <Pause size={18} aria-hidden="true" /> : <Play size={18} aria-hidden="true" />}
+    </button>
+    <span className="fb-chat-voice-track" aria-hidden="true">
+      <span className="fb-chat-voice-fill" style={{ width: `${voiceProgressPercent(position, durationMs)}%` }} />
+    </span>
+    <span className="fb-chat-voice-time">{durationMs > 0 ? formatVoiceDuration(playing ? position : durationMs) : ""}</span>
+    {state !== "ready" && <span className="fb-chat-voice-state" role="status">
+      {state === "loading" ? "Voice loading…" : state === "failed" ? "Could not load voice." : state === "unavailable" ? "Voice unavailable" : "Voice not on this device"}
+      {canDownload && (state === "missing" || state === "failed") && <button type="button" onClick={() => void download()}>Download again</button>}
+    </span>}
+  </div>;
+}
+
+/**
+ * The composer's voice lifecycle: opening, live timer, review/preview and the
+ * one honest failure sentence. The timer subscribes here so a 200 ms tick only
+ * repaints this strip, never the transcript behind it.
+ */
+function VoiceDraft({ recorder, status, recording, notice, url, snapshot, sending, allowed,
+  onStop, onDiscard, onSend, onPreview }: {
+  recorder: VoiceRecorderPort; status: VoiceRecorderState["status"]; recording: VoiceRecording | null;
+  notice: string | null; url: string | null; snapshot: VoicePlaybackSnapshot; sending: boolean; allowed: boolean;
+  onStop: () => void; onDiscard: () => void; onSend: () => void; onPreview: () => void;
+}) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (status !== "recording") { setElapsed(0); return; }
+    return recorder.subscribe((next) => { if (next.status === "recording") setElapsed(next.elapsedMs); });
+  }, [recorder, status]);
+  if (status === "idle") return null;
+  if (status === "error") return <div className="fb-chat-voice-draft" role="status">
+    <span>{notice ?? "That recording didn’t save. Try again."}</span>
+    <button type="button" onClick={onDiscard}>Dismiss</button>
+  </div>;
+  if (status === "starting") return <div className="fb-chat-voice-draft" role="status">
+    <span>Opening microphone…</span>
+    <button type="button" onClick={onDiscard}>Cancel</button>
+  </div>;
+  if (status === "review" && recording) {
+    const playing = snapshot.playingId === "voice-draft";
+    const position = playing ? Math.min(snapshot.positionMs, recording.durationMs) : 0;
+    return <div className="fb-chat-voice-draft" role="status" aria-label="Voice message ready">
+      <button type="button" className="fb-chat-voice-toggle" aria-label={playing ? "Pause voice preview" : "Play voice preview"}
+        disabled={!url} onClick={onPreview}>
+        {playing ? <Pause size={17} aria-hidden="true" /> : <Play size={17} aria-hidden="true" />}
+      </button>
+      <span className="fb-chat-voice-track" aria-hidden="true">
+        <span className="fb-chat-voice-fill" style={{ width: `${voiceProgressPercent(position, recording.durationMs)}%` }} />
+      </span>
+      <span className="fb-chat-voice-time">{formatVoiceDuration(playing ? position : recording.durationMs)}</span>
+      <button type="button" onClick={onDiscard} disabled={sending}>Discard</button>
+      <button type="button" onClick={onSend} disabled={sending || !allowed}>{sending ? "Sending…" : "Send"}</button>
+    </div>;
+  }
+  return <div className="fb-chat-voice-draft fb-chat-voice-recording" role="status">
+    <span className="fb-chat-voice-dot" aria-hidden="true" />
+    <span>Recording</span>
+    <span className="fb-chat-voice-time">{formatVoiceDuration(elapsed)}</span>
+    <button type="button" onClick={onStop} aria-label="Stop recording"><Square size={15} aria-hidden="true" />Stop</button>
+    <button type="button" onClick={onDiscard}>Discard</button>
+  </div>;
+}
+
 export function Connections() {
   const { user } = useAuth();
   const { conversationId } = useParams();
@@ -357,7 +481,9 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
                       <strong>{name || "Member"}</strong>
                     </span>}
                 <span className="fb-chat-preview">{row.lastMessage?.unsentAt !== undefined ? "Message unsent"
-                  : row.lastMessage?.body || (row.lastMessage?.messageType === "LOCATION" ? "Location shared" : row.lastMessage?.messageType === "MEDIA" ? "Photo" : state)}</span>
+                  : row.lastMessage?.body || (row.lastMessage?.messageType === "LOCATION" ? "Location shared"
+                    : row.lastMessage?.messageType === "MEDIA" ? "Photo"
+                      : row.lastMessage?.messageType === "VOICE" ? "Voice message" : state)}</span>
                 {row.lastMessage?.contextReportId && row.lastMessage.unsentAt === undefined && <ChatReportContext reportId={row.lastMessage.contextReportId} safetyKey={view?.ownBlocked ? "blocked" : "clear"} preview />}
                 {row.lastMessage && <span className="fb-chat-secondary">{state}{!chat.currentProjections ? " · Saved chat" : ""}</span>}
               </div>
@@ -453,6 +579,21 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     current?.mode, current?.ownBlocked, current?.revision]);
   const [photo, setPhoto] = useState<{ source: File; prepared?: PreparedMessagingPhoto; error?: boolean } | null>(null);
   const [photoPreparing, setPhotoPreparing] = useState(false);
+  // Voice is a real capability: one recorder and one transcript player per
+  // conversation. Nothing opens the microphone until the user taps Voice.
+  const [voice] = useState(() => ({
+    recorder: createVoiceRecorder(browserVoiceDeps()),
+    player: createVoicePlayback(browserVoicePlaybackPorts()),
+  }));
+  const [voiceStatus, setVoiceStatus] = useState<VoiceRecorderState["status"]>("idle");
+  const [voiceRecording, setVoiceRecording] = useState<VoiceRecording | null>(null);
+  const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
+  const [playbackSnapshot, setPlaybackSnapshot] = useState<VoicePlaybackSnapshot>({
+    playingId: null, positionMs: 0, durationMs: 0 });
+  const [voiceUrl, setVoiceUrl] = useState<string | null>(null);
+  const [voiceSending, setVoiceSending] = useState(false);
+  const voiceSupported = voiceRecordingSupported();
+  const voiceAllowed = photoAllowed && voiceSupported;
   const [draftUrl, setDraftUrl] = useState<string | null>(null);
   const [viewer, setViewer] = useState<{ id: string; items: MediaViewerItem[] } | null>(null);
   const readyPhotos = useRef(new Map<string, { bytes: ArrayBuffer; mime: string }>());
@@ -461,7 +602,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   }, []);
   const viewerUrls = useRef(new Set<string>());
   const photoController = useRef<AbortController | null>(null);
-  const admission = useRef<{ metadata: MediaMetadata; caption: string } | null>(null);
+  const admission = useRef<{ metadata: MediaMetadata; caption: string; messageType?: "MEDIA" | "VOICE" } | null>(null);
   const photoInput = useRef<HTMLInputElement>(null);
   const cameraInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -502,6 +643,42 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       setPhoto((previous) => previous && !previous.prepared ? { ...previous, error: true } : previous);
     }
   }, [photoAllowed]);
+  // The recorder's 200 ms tick must not repaint the transcript: the parent
+  // keeps only lifecycle facts, and the timestamping strip subscribes itself.
+  useEffect(() => voice.recorder.subscribe((next) => {
+    setVoiceStatus(next.status);
+    if (next.status === "review") { setVoiceRecording(next.recording); setVoiceNotice(null); }
+    else if (next.status === "error") { setVoiceRecording(null); setVoiceNotice(next.message); }
+    else if (next.status === "idle") { setVoiceRecording(null); setVoiceNotice(null); }
+  }), [voice]);
+  useEffect(() => voice.player.subscribe(setPlaybackSnapshot), [voice]);
+  useEffect(() => {
+    if (voiceStatus !== "review" || !voiceRecording) { setVoiceUrl(null); return; }
+    const url = URL.createObjectURL(voiceRecording.blob);
+    setVoiceUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [voiceStatus, voiceRecording]);
+  // Leaving the app, closing the tab or unmounting never leaves a hot mic.
+  useEffect(() => {
+    const release = () => {
+      if (document.visibilityState !== "hidden") return;
+      // Leaving the tab closes the microphone AND tells the view, so a return
+      // does not show a recording that no longer exists.
+      voice.recorder.discard();
+    };
+    document.addEventListener("visibilitychange", release);
+    window.addEventListener("pagehide", release);
+    return () => {
+      document.removeEventListener("visibilitychange", release);
+      window.removeEventListener("pagehide", release);
+      voice.recorder.teardown();
+      voice.player.teardown();
+    };
+  }, [voice]);
+  useLayoutEffect(() => {
+    if (voiceAllowed) return;
+    voice.recorder.teardown(); voice.player.pause();
+  }, [voiceAllowed, voice]);
   const viewerItems = photoAllowed ? viewer?.items.filter((item) => messages.some((message) => message.id === item.id && message.unsentAt === undefined)
     && media.some((attachment) => attachment.messageId === item.id)) ?? [] : [];
   const activeViewer = viewer && viewerItems.some((item) => item.id === viewer.id) ? viewer : null;
@@ -747,6 +924,59 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     await sendMessagingLocation(accountId, conversationId, row.peerId, copyStaticLocation(location));
     if (alive.current) nearBottom.current = true;
   }
+  /** A discarded note is gone: a later note must not reuse its attachment id. */
+  function discardVoice() {
+    if (admission.current?.messageType === "VOICE") admission.current = null;
+    voice.recorder.discard();
+  }
+  function toggleVoiceCapture() {
+    if (!voiceAllowed || voiceSending) return;
+    if (voiceStatus === "recording") { voice.recorder.stop(); return; }
+    if (voiceStatus === "starting" || voiceStatus === "review") return;
+    if (admission.current?.messageType === "VOICE") admission.current = null;
+    void voice.recorder.start();
+  }
+  async function previewVoice() {
+    if (voiceStatus !== "review" || !voiceRecording || !voiceUrl) return;
+    if (playbackSnapshot.playingId === "voice-draft") { voice.player.pause(); return; }
+    if (!voice.player.load("voice-draft", voiceUrl, voiceRecording.durationMs)) return;
+    await voice.player.play();
+  }
+  /**
+   * The recording is consumed only after the durable outbox admits it: a failed
+   * send leaves the preview and its exact attachment identity in place, so the
+   * retry is the same note rather than a re-recorded one.
+   */
+  async function sendVoice() {
+    if (!row || !voiceAllowed || voiceStatus !== "review" || !voiceRecording || voiceSending) return;
+    const recording = voiceRecording;
+    setVoiceSending(true); setError(null);
+    try {
+      const mime = storedVoiceMime(recording.mime);
+      if (mime !== "audio/webm" && mime !== "audio/mp4") throw new Error("Unsupported voice container");
+      const bytes = await recording.blob.arrayBuffer();
+      const attempt = admission.current?.messageType === "VOICE" ? admission.current : {
+        messageType: "VOICE" as const,
+        caption: "",
+        metadata: {
+          id: crypto.randomUUID(), messageId: crypto.randomUUID(), direction: "OUT" as const,
+          sha256: await sha256Hex(bytes), mime: mime as MediaMime, byteSize: bytes.byteLength,
+          width: VOICE_SENTINEL_EDGE, height: VOICE_SENTINEL_EDGE, durationMs: recording.durationMs,
+          expiresAt: null,
+        },
+      };
+      admission.current = attempt;
+      await sendMessagingVoice(accountId, conversationId, row.peerId, attempt.metadata, bytes);
+      if (!alive.current) return;
+      nearBottom.current = true;
+      admission.current = null;
+      voice.player.pause();
+      voice.recorder.take();
+      announce("Voice message sent.");
+    } catch {
+      if (alive.current) setError("That voice message could not be saved. Try sending it again.");
+    } finally { if (alive.current) setVoiceSending(false); }
+  }
   /**
    * Normal conversation is not a form submission: the durable outbox admits the
    * message, the draft clears, and the next message can start immediately. Only
@@ -760,7 +990,8 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     try {
       if (sendingPhoto?.prepared) {
         const { bytes, ...info } = sendingPhoto.prepared;
-        const attempt = admission.current ?? { caption: body, metadata: { ...info, id: crypto.randomUUID(), messageId: crypto.randomUUID(), direction: "OUT", expiresAt: null } };
+        const attempt = admission.current ?? { caption: body, metadata: { ...info, durationMs: null,
+          id: crypto.randomUUID(), messageId: crypto.randomUUID(), direction: "OUT", expiresAt: null } };
         admission.current = attempt;
         await sendMessagingMedia(accountId, conversationId, row.peerId, attempt.caption, attempt.metadata, bytes);
       } else await sendMessagingText(accountId, conversationId, row.peerId, body, reportContext ?? undefined);
@@ -855,10 +1086,11 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             <span className="sr-only">{own ? "You: " : `${name || "Member"}: `}</span>
             {message.unsentAt !== undefined ? <p>Message unsent</p> : <>
             {message.messageType === "MEDIA" && attachment && photoAllowed && <ChatPhoto key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} onOpen={openPhoto} onReady={rememberPhoto} />}
+            {message.messageType === "VOICE" && attachment && photoAllowed && <ChatVoice key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} playback={voice.player} snapshot={playbackSnapshot} />}
             {message.contextReportId && <ChatReportContext reportId={message.contextReportId} safetyKey={view?.ownBlocked ? "blocked" : "clear"} />}
             {message.location && <ChatLocation location={message.location} />}
-            {message.body ? <p dir="auto" className={isEmojiOnly(message.body) ? "fb-chat-emoji-only" : undefined}>{message.body}</p> : !attachment && message.messageType !== "LOCATION" && <p>{message.messageType === "MEDIA" ? "Photo loading…" : "Message unavailable"}</p>}
-            {own && <span className="fb-chat-message-status">{pending?.status === "NEEDS_REVIEW" ? "Needs review — " : message.messageType === "MEDIA" && !attachment ? "Photo pending" : attachment && !["READY", "EVICTED"].includes(attachment.state) ? (attachment.state === "FAILED" ? "Photo saved" : "Sending…") : message.server ? (message.readByPeer || readIds.has(message.id) ? "Read" : "Sent") : pending?.status === "FAILED" ? "Message saved" : "Sending…"}
+            {message.body ? <p dir="auto" className={isEmojiOnly(message.body) ? "fb-chat-emoji-only" : undefined}>{message.body}</p> : !attachment && message.messageType !== "LOCATION" && <p>{message.messageType === "MEDIA" ? "Photo loading…" : message.messageType === "VOICE" ? "Voice message loading…" : "Message unavailable"}</p>}
+            {own && <span className="fb-chat-message-status">{pending?.status === "NEEDS_REVIEW" ? "Needs review — " : message.messageType === "MEDIA" && !attachment ? "Photo pending" : message.messageType === "VOICE" && !attachment ? "Voice pending" : attachment && !["READY", "EVICTED"].includes(attachment.state) ? (attachment.state === "FAILED" ? (message.messageType === "VOICE" ? "Voice saved" : "Photo saved") : "Sending…") : message.server ? (message.readByPeer || readIds.has(message.id) ? "Read" : "Sent") : pending?.status === "FAILED" ? "Message saved" : "Sending…"}
               {(attachment?.state === "FAILED" || (!message.server && pending?.status === "FAILED")) && pending?.status !== "NEEDS_REVIEW" && <button type="button" onClick={() => {
               // A refused send keeps its original boundary; re-flushing it can only
               // fail again. The message-level retry rebinds that boundary because a
@@ -870,7 +1102,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
               void retry.catch(() => setError("Could not retry. Try syncing again."));
             }}>Retry</button>}</span>}
             {own && pending?.status === "NEEDS_REVIEW" && <button type="button" disabled={busy} onClick={() => { setSelectedMessageId(message.id); setSheet("review"); }}>Review message</button>}
-            {own && attachment && !message.server && <button type="button" aria-label="Remove pending photo" onClick={() => {
+            {own && attachment && !message.server && <button type="button" aria-label={message.messageType === "VOICE" ? "Remove pending voice message" : "Remove pending photo"} onClick={() => {
               void removeMessagingMessage(accountId, conversationId, message.id, false).catch(() => {
                 setError("Could not confirm this change. Sync and check your chat.");
                 void refreshMessaging(accountId).catch(() => undefined);
@@ -897,6 +1129,10 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       {photoAllowed && photo.error && <button type="button" onClick={() => void preparePhoto(photo.source)}>Retry</button>}
       <button type="button" aria-label="Remove photo" disabled={busy || !!admission.current} onClick={() => { photoController.current?.abort(); admission.current = null; setPhoto(null); setPhotoPreparing(false); }}>Remove</button>
     </div>}
+    <VoiceDraft recorder={voice.recorder} status={voiceStatus} recording={voiceRecording} notice={voiceNotice}
+      url={voiceUrl} snapshot={playbackSnapshot} sending={voiceSending} allowed={voiceAllowed}
+      onStop={toggleVoiceCapture} onDiscard={discardVoice} onSend={() => void sendVoice()}
+      onPreview={() => void previewVoice()} />
     {canCompose && <>
         {view?.mode === "CONNECTED" && <>
           <input ref={photoInput} type="file" accept="image/*" aria-label="Choose photo" hidden onChange={(event) => {
@@ -913,6 +1149,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         canSend={runtimeOpen && (photo ? photoAllowed && !!photo.prepared : !!draft.trim())}
         photoAllowed={view?.mode === "CONNECTED"}
         onCamera={() => void choosePhoto("camera")} onPhotos={() => void choosePhoto("photos")}
+        voiceAvailable={voiceAllowed} voiceActive={voiceStatus === "recording"} onVoice={toggleVoiceCapture}
         context={reportContext && <p className="fb-chat-context-banner" role="status">
           Your next text message will show which report you’re asking about.
           <button type="button" onClick={() => clearReportContext(reportContext)}>Don’t attach</button>

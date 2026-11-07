@@ -1,7 +1,9 @@
 /** Portable metadata lives in the existing IDB records, never in delivery/cursor stores. */
 import { BackupError } from "./backup";
 import { conversationPeer, type LocalConversationState } from "./conversationIndex";
-import type { HistorySnapshot, MessagingScope, SnapshotConversation, StoredHumanMessage } from "./history";
+import type { HistorySnapshot, MediaAttachment, MessagingScope, SnapshotAttachment,
+  SnapshotConversation, StoredHumanMessage } from "./history";
+import { sameMediaIdentity } from "./media";
 import { compatibleMessageType, sameMessagePayload } from "./validation";
 import { mergeReadFacts } from "./readFacts";
 
@@ -31,6 +33,8 @@ export interface PortableView {
   unsends: PortableErasure[];
   deletions: PortableErasure[];
   clears: PortableClear[];
+  /** Settled attachment rows; the snapshot carries their metadata. */
+  media?: MediaAttachment[];
 }
 function conflict(): never { throw new BackupError("backup: identity conflict"); }
 
@@ -69,7 +73,18 @@ export function exportPortable(view: PortableView, accountId?: string): HistoryS
       ...mergeReadFacts(row, row.recipientId === accountId && server.sequence <= (readThrough.get(row.conversationId) ?? 0)
         ? { readLocally: true } : undefined), unsentAt, createdAt: row.snapshotCreatedAt ?? 0 };
   }).sort((a, b) => a.conversationId.localeCompare(b.conversationId) || a.serverSequence - b.serverSequence || a.id.localeCompare(b.id));
-  return {
+  // A suppressed message does not carry its media into a backup: the bubble is
+  // gone, and restoring the bytes would resurrect what the user erased.
+  const visible = new Set(messages.filter((row) => row.body !== null).map((row) => row.id));
+  const attachments: SnapshotAttachment[] = (view.media ?? [])
+    .filter((row) => visible.has(row.messageId)
+      && (row.state === "READY" || row.state === "EVICTED" || row.state === "AWAITING_ACK"))
+    .map((row) => ({
+      id: row.id, messageId: row.messageId, direction: row.direction, sha256: row.sha256,
+      mime: row.mime, byteSize: row.byteSize, width: row.width, height: row.height,
+      durationMs: row.durationMs, expiresAt: row.expiresAt,
+    })).sort((a, b) => a.id.localeCompare(b.id));
+  const exported: HistorySnapshot = {
     conversations: [...conversations.values()].sort((a, b) => a.id.localeCompare(b.id)), messages,
     tombstones: view.unsends.map((row) => ({ messageId: row.messageId, conversationId: row.conversationId!,
       recipientId: row.recipientId ?? null, unsentBy: row.authorId!, unsentAt: row.occurredAt }))
@@ -79,6 +94,10 @@ export function exportPortable(view: PortableView, accountId?: string): HistoryS
     clears: view.clears.map((row) => ({ conversationId: row.conversationId, throughSequence: row.throughSequence, clearedAt: row.occurredAt }))
       .sort((a, b) => a.conversationId.localeCompare(b.conversationId)),
   };
+  // Absent when there is no media, so a text-only export keeps the older
+  // portable shape; present when there is, because metadata without it would
+  // silently drop every attachment.
+  return attachments.length === 0 ? exported : { ...exported, attachments };
 }
 
 /** Pure merge; caller commits all resulting canonical records in one strict transaction. */
@@ -156,6 +175,20 @@ export function mergePortable(view: PortableView, incoming: HistorySnapshot, sco
       snapshotCreatedAt: knownTime === 0 ? time : time === 0 ? knownTime : Math.min(knownTime, time) });
     eventOwners.set(row.serverEventId, row.id); sequenceOwners.set(sequenceKey, row.id);
   }
+  // Attachments follow their parent: only a message that survives every
+  // suppression may bring a row back. The metadata is immutable; a disagreement
+  // between two snapshots is a contradiction, not a merge choice.
+  const media = new Map((view.media ?? []).map((row) => [row.id, row]));
+  for (const row of incoming.attachments ?? []) {
+    const parent = messages.get(row.messageId);
+    if (!parent || parent.snapshotSuppressed || parent.unsentAt !== undefined
+      || deletions.has(row.messageId) || unsends.has(row.messageId)) continue;
+    // Inbound rows have no valid form without a retention boundary.
+    if (row.direction === "IN" && row.expiresAt === null) continue;
+    const prior = media.get(row.id);
+    if (prior && !sameMediaIdentity(prior, row)) conflict();
+    if (!prior) media.set(row.id, { ...row, state: "EVICTED", attempts: 0, lastAccessAt: 0 });
+  }
   for (const row of messages.values()) {
     const tombstone = unsends.get(row.id), deletion = deletions.get(row.id);
     for (const state of [tombstone, deletion]) if (state && !erasureMatches(state, row, row.server?.sequence)) conflict();
@@ -171,5 +204,6 @@ export function mergePortable(view: PortableView, incoming: HistorySnapshot, sco
     }
   }
   return { messages: [...messages.values()], conversations: [...conversations.values()],
-    unsends: [...unsends.values()], deletions: [...deletions.values()], clears: [...clears.values()] };
+    unsends: [...unsends.values()], deletions: [...deletions.values()], clears: [...clears.values()],
+    media: [...media.values()] };
 }

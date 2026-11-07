@@ -146,7 +146,8 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
         assertOpen();
         await call("ACK", { mailboxId: receipt.mailboxId });
       });
-      if (envelope.event.message.messageType === "MEDIA" && envelope.event.message.authorId !== scope.accountId) mediaDiscoveryRevision++;
+      if ((envelope.event.message.messageType === "MEDIA" || envelope.event.message.messageType === "VOICE")
+        && envelope.event.message.authorId !== scope.accountId) mediaDiscoveryRevision++;
     }
     return envelopes.length;
   };
@@ -229,7 +230,7 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
         try {
           const kind = attempt.message.messageType;
           if (!kind) throw new Error("Message classification unavailable");
-          const hasMedia = kind === "MEDIA";
+          const hasMedia = kind === "MEDIA" || kind === "VOICE";
           // A captured report context or location keeps its own classification;
           // a retry must never recast it to plain text.
           const message = hasMedia ? copyMediaMessage(attempt.message)
@@ -238,7 +239,7 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
           if (hasMedia) {
             mediaContext().live();
             const attachments = await history.listMedia(message.conversationId);
-            if (!attachments.some((row) => row.messageId === message.id)) throw new Error("Photo unavailable");
+            if (!attachments.some((row) => row.messageId === message.id)) throw new Error("Attachment unavailable");
           }
           if (message.authorId !== scope.accountId) throw new Error("Invalid messaging author");
           const expectedHead = await reconcileConversation(message.conversationId);
@@ -342,7 +343,8 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
     const row = (await context.transport.fetchDeliveries()).find((item) => item.id === id);
     context.live();
     return row ? { id: row.id, messageId: row.messageId, direction: "IN", sha256: row.sha256,
-      mime: row.mime, byteSize: row.byteSize, width: row.width, height: row.height, expiresAt: row.expiresAt } : null;
+      mime: row.mime, byteSize: row.byteSize, width: row.width, height: row.height,
+      durationMs: row.durationMs, expiresAt: row.expiresAt } : null;
   }
 
   const syncMedia = (): Promise<void> => {
@@ -499,7 +501,8 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
       if (metadata.direction !== "IN" || !pending || pending.messageId !== metadata.messageId
         || pending.sha256 !== metadata.sha256 || pending.byteSize !== metadata.byteSize
         || pending.mime !== metadata.mime || pending.width !== metadata.width
-        || pending.height !== metadata.height || pending.expiresAt !== metadata.expiresAt) throw mediaUnavailable();
+        || pending.height !== metadata.height || pending.durationMs !== metadata.durationMs
+        || pending.expiresAt !== metadata.expiresAt) throw mediaUnavailable();
       await history.persistVerifiedMediaAndAck(metadata, bytes, (row) => {
         // Begin captured-account work synchronously under the adapter's lock.
         context.live(); return context.transport.ack(row.id);

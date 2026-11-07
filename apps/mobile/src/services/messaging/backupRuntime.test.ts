@@ -25,6 +25,7 @@ vi.mock("./runtime", () => ({
     f.exportEntered(); if (f.exportGate) await f.exportGate;
     return f.histories.get(accountId)!.exportSnapshot();
   },
+  exportMessagingMedia: async () => new Map(),
   importMessagingSnapshot: async (accountId: string, snapshot: HistorySnapshot) => f.histories.get(accountId)!.importSnapshot(snapshot),
 }));
 vi.mock("./backupKey", () => ({ readBackupKey: async () => ({ accountId: f.account,

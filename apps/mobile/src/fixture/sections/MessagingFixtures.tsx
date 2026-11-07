@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Images, Info, MapPin } from "lucide-react";
+import { ArrowLeft, Images, Info, MapPin, Play } from "lucide-react";
 import { ChatIdentity } from "../../components/ChatIdentity";
 import { PeerChatComposer } from "../../components/PeerChatComposer";
 import { ALL_VARIANTS, FixtureFrame, FixtureSection, type FixtureVariant } from "../FixtureSection";
@@ -31,6 +31,7 @@ function Bubble({ own, children, status }: { own?: boolean; children: ReactNode;
 
 function Thread({ variant }: { variant: FixtureVariant }) {
   const [draft, setDraft] = useState("");
+  const [voiceActive, setVoiceActive] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const long = variant === "long-content";
   const name = long ? "alexander_the_third_rivera_with_a_long_handle" : "alex_rivera";
@@ -59,6 +60,17 @@ function Thread({ variant }: { variant: FixtureVariant }) {
           <Bubble own status="Sent">
             <p><MapPin size={16} aria-hidden="true" /> Static location</p>
           </Bubble>
+          <Bubble>
+            <div className="fb-chat-voice">
+              <button type="button" className="fb-chat-voice-toggle" aria-label="Play voice message">
+                <Play size={18} aria-hidden="true" />
+              </button>
+              <span className="fb-chat-voice-track" aria-hidden="true">
+                <span className="fb-chat-voice-fill" style={{ width: "35%" }} />
+              </span>
+              <span className="fb-chat-voice-time">0:07</span>
+            </div>
+          </Bubble>
         </ol>
       </div>
       <PeerChatComposer
@@ -72,6 +84,9 @@ function Thread({ variant }: { variant: FixtureVariant }) {
         photoAllowed
         onCamera={() => undefined}
         onPhotos={() => undefined}
+        voiceAvailable
+        voiceActive={voiceActive}
+        onVoice={() => setVoiceActive((active) => !active)}
       />
     </div>
   );
