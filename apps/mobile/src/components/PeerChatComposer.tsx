@@ -1,7 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import { Camera, ChevronRight, ImagePlus, Mic, SendHorizontal, Square } from "lucide-react";
-import { motionDurations, motionEasings, shouldReduceMotion } from "./uiMotion";
 import { hasFinePointer } from "./inputCapabilities";
 import { convertEmoticonsLive } from "../utils/emoji";
 import "./peerComposer.css";
@@ -65,7 +63,6 @@ export function PeerChatComposer({
     if (element && document.activeElement === element) element.setSelectionRange(next, next);
   }, [value, field]);
   const available = canSend && !locked && !busy;
-  const reduce = shouldReduceMotion();
 
   // Restore on send or on clearing the entire draft — including while the IME
   // is still open. It collapses again only on a deliberate return to the field
@@ -102,33 +99,27 @@ export function PeerChatComposer({
     {context}
     <div className="fb-peer-composer-row">
       <div className="fb-peer-attachments">
-        <AnimatePresence initial={false} mode="popLayout">
-          {expanded ? (
-            <motion.div key="controls" className="fb-peer-controls"
-              initial={reduce ? false : { opacity: 0, x: -8, width: 0 }}
-              animate={{ opacity: 1, x: 0, width: "auto" }}
-              exit={reduce ? { opacity: 0 } : { opacity: 0, x: -8, width: 0 }}
-              transition={{ duration: reduce ? 0 : motionDurations.fast, ease: motionEasings.out }}>
-              {button("Take photo", <Camera size={21} aria-hidden="true" />, onCamera, !photoAllowed || busy || locked || attachmentsLocked)}
-              {button("Choose photo", <ImagePlus size={21} aria-hidden="true" />, onPhotos, !photoAllowed || busy || locked || attachmentsLocked)}
-              {/* Voice exists only when a real recording/playback path exists.
-                  The handoff forbids a microphone that cannot record. */}
-              {voiceAvailable && onVoice
-                ? button(voiceActive ? "Stop recording" : "Voice message",
-                  voiceActive ? <Square size={19} aria-hidden="true" /> : <Mic size={21} aria-hidden="true" />, onVoice, busy || locked || attachmentsLocked)
-                : null}
-            </motion.div>
-          ) : (
-            <motion.button key="reveal" type="button" className="fb-peer-icon fb-peer-reveal"
-              aria-label="Show attachments" aria-expanded={false}
-              initial={reduce ? false : { opacity: 0, scale: 0.85 }}
-              animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.85 }}
-              transition={{ duration: reduce ? 0 : motionDurations.instant }}
-              onClick={() => setExpanded(true)}>
-              <ChevronRight size={20} aria-hidden="true" />
-            </motion.button>
-          )}
-        </AnimatePresence>
+        {/* A plain swap. Two tiny affordances do not need an exit animation,
+            and a swap keeps both states in normal flow instead of relying on
+            Framer's popLayout to place a leaving group absolutely. */}
+        {expanded ? (
+          <div className="fb-peer-controls">
+            {button("Take photo", <Camera size={21} aria-hidden="true" />, onCamera, !photoAllowed || busy || locked || attachmentsLocked)}
+            {button("Choose photo", <ImagePlus size={21} aria-hidden="true" />, onPhotos, !photoAllowed || busy || locked || attachmentsLocked)}
+            {/* Voice exists only when a real recording/playback path exists.
+                The handoff forbids a microphone that cannot record. */}
+            {voiceAvailable && onVoice
+              ? button(voiceActive ? "Stop recording" : "Voice message",
+                voiceActive ? <Square size={19} aria-hidden="true" /> : <Mic size={21} aria-hidden="true" />, onVoice, busy || locked || attachmentsLocked)
+              : null}
+          </div>
+        ) : (
+          <button type="button" className="fb-peer-icon fb-peer-reveal"
+            aria-label="Show attachments" aria-expanded={false}
+            onClick={() => setExpanded(true)}>
+            <ChevronRight size={20} aria-hidden="true" />
+          </button>
+        )}
       </div>
       <div className="fb-peer-field">
         <textarea ref={field} value={value} aria-label="Message" placeholder="Message" rows={1}
