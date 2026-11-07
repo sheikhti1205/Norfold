@@ -31,7 +31,7 @@ beforeEach(() => {
 afterEach(cleanup);
 it("uses canonical thread links and retains the actual list/search owner across navigation", async () => {
   render(app());
-  const link=await screen.findByRole("link",{name:/River Jones/});expect(link.getAttribute("href")).toBe("/chats/chat");
+  const link=await screen.findByRole("link",{name:"Open conversation with River Jones"});expect(link.getAttribute("href")).toBe("/chats/chat");
   const search=screen.getByRole("searchbox",{name:"Search people or chats"});
   fireEvent.change(search,{target:{value:"river"}});fireEvent.click(link);
   await waitFor(()=>expect(screen.getByTestId("location").textContent).toBe("/chats/chat"));
@@ -40,11 +40,11 @@ it("uses canonical thread links and retains the actual list/search owner across 
   expect(screen.getAllByTestId("route-transition")).toHaveLength(1);
 });
 it("counts visible incoming requests and separates archived/unread filters", async () => {
-  render(app());await screen.findByRole("link",{name:/River Jones/});
+  render(app());await screen.findByRole("link",{name:"Open conversation with River Jones"});
   fireEvent.click(screen.getByRole("button",{name:"Requests, 1"}));
-  expect(screen.getByRole("link",{name:/Robin Lane/})).toBeTruthy();expect(screen.queryByRole("link",{name:/River Jones/})).toBeNull();
+  expect(screen.getByRole("link",{name:"Open conversation with Robin Lane"})).toBeTruthy();expect(screen.queryByRole("link",{name:"Open conversation with River Jones"})).toBeNull();
   fireEvent.click(screen.getByRole("button",{name:"Filter chats"}));fireEvent.click(await screen.findByRole("menuitem",{name:"Archived"}));
-  expect(screen.getByRole("link",{name:/Rowan Lee/})).toBeTruthy();expect(screen.queryByRole("link",{name:/Robin Lane/})).toBeNull();
+  expect(screen.getByRole("link",{name:"Open conversation with Rowan Lee"})).toBeTruthy();expect(screen.queryByRole("link",{name:"Open conversation with Robin Lane"})).toBeNull();
 });
 it.each(["/connections", "/connections/chat"])("replaces legacy %s with the canonical destination and preserves query/hash", async path => {
   function Probe(){const location=useLocation();return <p data-testid="redirect">{location.pathname+location.search+location.hash}</p>;}
@@ -60,6 +60,6 @@ it("shows readable report context and a truthful local update time on a request 
   row.lastMessage={id:"message",conversationId:"request",authorId:"requester",recipientId:"viewer",body:"Is it yours?",messageType:"TEXT",contextReportId:"report"};
   render(app());fireEvent.click(screen.getByRole("button",{name:"Requests, 1"}));
   expect(await screen.findByText(/Blue wallet/)).toBeTruthy();
-  const link=screen.getByRole("link",{name:/Robin Lane/});expect(link.querySelector("a")).toBeNull();
-  expect(link.querySelector("time")?.getAttribute("datetime")).toBe("2026-10-30T10:00:00.000Z");
+  const link=screen.getByRole("link",{name:"Open conversation with Robin Lane"});expect(link.querySelector("a")).toBeNull();
+  expect(link.closest("li")?.querySelector("time")?.getAttribute("datetime")).toBe("2026-10-30T10:00:00.000Z");
 });

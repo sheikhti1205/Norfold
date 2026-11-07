@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { ArrowLeft, ChevronDown, Ellipsis, Info, ListFilter, MapPin, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCw, Search, Square } from "lucide-react";
+import { Archive, ArrowLeft, BellOff, ChevronDown, Ellipsis, Flag, Images, ListFilter, LogOut, MapPin, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCw, Search, Settings2, ShieldBan, Square, Trash2, UserRound } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import type { PostItem } from "@norfold/shared";
 import { copyStaticLocation, isUuid } from "../services/messaging/validation";
@@ -15,6 +15,9 @@ import { formatEventDate, timeAgo } from "../utils/dates";
 import { convertEmoticons, isEmojiOnly } from "../utils/emoji";
 import { SplitView, type SplitPaneState } from "../components/SplitView";
 import { CHAT_PANE } from "../components/panePreference";
+import { ChatDetailsLayout } from "../components/ChatDetailsLayout";
+import { BlockControl } from "../components/BlockControl";
+import { PreferenceSwitchRow } from "../components/settings";
 import { ActionMenu } from "../components/ActionMenu";
 import { AppBar } from "../components/AppBar";
 import { PeopleSearch } from "../components/PeopleSearch";
@@ -34,7 +37,7 @@ import {
   changeMessagingRelationship, markMessagingConversationRead, readMessagingThreadState, getCachedMessagingThreadState,
   refreshMessaging, sendMessagingText, sendMessagingLocation, sendMessagingMedia, sendMessagingVoice, clearMessagingConversation, removeMessagingMessage,
   fetchMessagingReceiptView, observeMessagingReceipt, readMessagingMedia, downloadMessagingMedia, recoverMessagingText,
-  retryMessagingMessage, watchMessagingThread,
+  retryMessagingMessage, setMessagingMuted, watchMessagingThread,
 } from "../services/messaging/runtime";
 import type { MediaAttachment, OutboxEntry, StaticLocation, StoredHumanMessage } from "../services/messaging/history";
 import { prepareMessagingPhoto, type PreparedMessagingPhoto } from "../services/messaging/preparePhoto";
@@ -603,11 +606,14 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const viewerUrls = useRef(new Set<string>());
   const photoController = useRef<AbortController | null>(null);
   const admission = useRef<{ metadata: MediaMetadata; caption: string; messageType?: "MEDIA" | "VOICE" } | null>(null);
+  // A failed photo/voice admission keeps its ids for an identical retry, but the
+  // composer must let that retry be sent without letting the attachment change.
+  const [admissionFailed, setAdmissionFailed] = useState(false);
   const photoInput = useRef<HTMLInputElement>(null);
   const cameraInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<"search" | "media" | "location" | "end" | "message" | "delete" | "unsend" | "clear" | "review" | null>(null);
+  const [sheet, setSheet] = useState<"actions" | "search" | "media" | "location" | "end" | "message" | "delete" | "unsend" | "clear" | "review" | null>(null);
   const [showJump, setShowJump] = useState(false);
   useLayoutEffect(() => { if (!locationAllowed) setSheet(previous => previous === "location" ? null : previous); }, [locationAllowed]);
   const [messageQuery, setMessageQuery] = useState("");
@@ -908,6 +914,14 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     };
   }, [accountId, conversationId, chat.accountId, chat.status, chat.currentProjections, current, receiptAuthority, loaded, messages, visible, sheet, reportTarget, viewer, threadBlocked]);
 
+  async function setMuted(muted: boolean) {
+    if (busy || chat.status !== "ready" || typeof current?.ownMuted !== "boolean") return;
+    setBusy(true); setError(null);
+    try {
+      await setMessagingMuted(accountId, conversationId, muted);
+    } catch { if (alive.current) setError("Your notifications change could not be saved. Sync and try again."); }
+    finally { if (alive.current) setBusy(false); }
+  }
   async function relationship(action: "accept" | "end" | "hide" | "unhide" | "decline") {
     if (busy) return;
     setBusy(true); setError(null);
@@ -1003,8 +1017,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         if (sendingPhoto) setPhoto((current) => current === sendingPhoto ? null : current);
         if (!sendingPhoto && reportContext) clearReportContext(reportContext);
         admission.current = null;
+        setAdmissionFailed(false);
       }
-    } catch { if (alive.current) setError("Your message could not be saved. Your draft is still here."); }
+    } catch { if (alive.current) { if (sendingPhoto) setAdmissionFailed(true); setError("Your message could not be saved. Your draft is still here."); } }
   }
   const selectedMessage = messages.find((message) => message.id === selectedMessageId);
   const selectedNeedsReview = selectedMessage?.authorId === accountId && !selectedMessage.server
@@ -1040,14 +1055,38 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     .flatMap(message => { const attachment = media.find(item => item.messageId === message.id); return attachment ? [attachment] : []; }) : [];
   const confirming = sheet === "end" || sheet === "delete" || sheet === "unsend" || sheet === "clear";
   const confirmationTitle = sheet === "end" ? "End connection?" : sheet === "unsend" ? "Unsend message?" : sheet === "clear" ? "Clear chat for me?" : "Delete for me?";
-  return <section className="fb-chat-page" aria-label="Conversation">
+  // One action list, rendered in the wide third pane and in the compact sheet.
+  const conversationInfo = <div className="fb-chat-sheet">
+    {person?.username && <Link className="fb-chat-info-row" to={`/u/${encodeURIComponent(person.username)}`}><UserRound size={20} aria-hidden="true" /><span>View profile</span></Link>}
+    <button type="button" className="fb-chat-info-row" onClick={() => setSheet("search")}><Search size={20} aria-hidden="true" /><span>Search chat</span></button>
+    <button type="button" className="fb-chat-info-row" onClick={() => setSheet("media")}><Images size={20} aria-hidden="true" /><span>Media</span></button>
+    {locationAllowed && <button type="button" className="fb-chat-info-row" onClick={() => setSheet("location")}><MapPin size={20} aria-hidden="true" /><span>Share location</span></button>}
+    <hr className="fb-chat-info-divider" />
+    {typeof view?.ownMuted === "boolean" ? <PreferenceSwitchRow className="fb-chat-mute" title="Mute notifications" icon={BellOff}
+      checked={view.ownMuted} disabled={busy || chat.status !== "ready" || typeof current?.ownMuted !== "boolean"}
+      onChange={muted => void setMuted(muted)} /> : <p className="fb-chat-secondary">Sync to change chat notifications.</p>}
+    <RetrySync accountId={accountId} labelled />
+    <Link className="fb-chat-info-row" to="/settings/privacy/messages"><Settings2 size={20} aria-hidden="true" /><span>Message settings</span></Link>
+    <hr className="fb-chat-info-divider" />
+    <button type="button" className="fb-chat-info-row" disabled={busy || !current} onClick={() => void relationship(view?.ownHidden ? "unhide" : "hide")}><Archive size={20} aria-hidden="true" /><span>{view?.ownHidden ? "Move to inbox" : view?.mode === "CONNECTED" ? "Archive" : "Hide request"}</span></button>
+    {view?.mode === "CONNECTED" && <button type="button" className="fb-chat-info-row" disabled={busy || !current} onClick={() => setSheet("end")}><LogOut size={20} aria-hidden="true" /><span>End connection</span></button>}
+    <button type="button" className="fb-chat-info-row" disabled={busy || !current || highest === 0 || outbox.length > 0} onClick={() => setSheet("clear")}><Trash2 size={20} aria-hidden="true" /><span>Clear chat for me</span></button>
+    {outbox.length > 0 && <p className="fb-chat-secondary">Wait for messages still sending before clearing this chat.</p>}
+    <hr className="fb-chat-info-divider" />
+    {row && <div className="fb-chat-info-block"><ShieldBan size={20} aria-hidden="true" /><BlockControl userId={row.peerId} name={name || "this account"} blocked={current?.ownBlocked}
+      onChanged={() => { void refreshMessaging(accountId).catch(() => undefined); }} /></div>}
+    {row && <button type="button" className="fb-chat-info-row" onClick={() => { setSheet(null); setReportTarget("account"); }}><Flag size={20} aria-hidden="true" /><span>Report account</span></button>}
+  </div>;
+  return <ChatDetailsLayout details={conversationInfo} onCompactOpen={() => setSheet("actions")}
+    identity={<><UserAvatar username={name || person?.username} avatarUrl={person?.avatarUrl} size={72} />
+      <strong dir="auto">{name || "Conversation"}</strong><span className="fb-chat-secondary">{!current ? "Saved chat" : current.mode === "CONNECTED" ? "Connected" : "Message request"}</span></>}>
+    {detailsToggle => <section className="fb-chat-page" aria-label="Conversation">
     <header className="fb-chat-header">
       <Link to="/chats" className="fb-chat-icon" aria-label="Back to chats"><ArrowLeft size={22} aria-hidden="true" /></Link>
       <ChatIdentity peerId={row?.peerId} name={name} username={person?.username} avatarUrl={person?.avatarUrl} muted={view?.ownMuted === true}
         conversationId={conversationId}
         status={!current ? "Saved chat" : current.mode === "CONNECTED" ? "Connected" : "Message request"} />
-      {person?.username && <Link to={`/u/${encodeURIComponent(person.username)}?conversation=${encodeURIComponent(conversationId)}`}
-        className="fb-chat-icon" aria-label="Conversation information"><Info size={20} aria-hidden="true" /></Link>}
+      {detailsToggle}
     </header>
     {/* Owner feedback 2026-11-06: a failed refresh is a status, not a lock.
         The transcript keeps its saved messages and the composer keeps working;
@@ -1127,7 +1166,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       {photoAllowed && draftUrl && photo.prepared && <img src={draftUrl} alt="Selected photo" style={{ aspectRatio: `${photo.prepared.width} / ${photo.prepared.height}` }} />}
       {!photoAllowed ? "Photos are available when connected. Remove this photo to send text only." : photoPreparing ? "Preparing photo…" : photo.error ? "Could not prepare photo." : "Photo ready"}
       {photoAllowed && photo.error && <button type="button" onClick={() => void preparePhoto(photo.source)}>Retry</button>}
-      <button type="button" aria-label="Remove photo" disabled={busy || !!admission.current} onClick={() => { photoController.current?.abort(); admission.current = null; setPhoto(null); setPhotoPreparing(false); }}>Remove</button>
+      <button type="button" aria-label="Remove photo" disabled={busy || !!admission.current} onClick={() => { photoController.current?.abort(); admission.current = null; setAdmissionFailed(false); setPhoto(null); setPhotoPreparing(false); }}>Remove</button>
     </div>}
     <VoiceDraft recorder={voice.recorder} status={voiceStatus} recording={voiceRecording} notice={voiceNotice}
       url={voiceUrl} snapshot={playbackSnapshot} sending={voiceSending} allowed={voiceAllowed}
@@ -1135,17 +1174,17 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       onPreview={() => void previewVoice()} />
     {canCompose && <>
         {view?.mode === "CONNECTED" && <>
-          <input ref={photoInput} type="file" accept="image/*" aria-label="Choose photo" hidden onChange={(event) => {
+          <input ref={photoInput} type="file" accept="image/*" aria-label="Photo file input" hidden onChange={(event) => {
             const source = event.currentTarget.files?.[0]; event.currentTarget.value = "";
             if (source && Capacitor.getPlatform() !== "android") void preparePhoto(source);
           }} />
-          <input ref={cameraInput} type="file" accept="image/*" capture="environment" aria-label="Take photo" hidden onChange={(event) => {
+          <input ref={cameraInput} type="file" accept="image/*" capture="environment" aria-label="Camera file input" hidden onChange={(event) => {
             const source = event.currentTarget.files?.[0]; event.currentTarget.value = "";
             if (source && Capacitor.getPlatform() !== "android") void preparePhoto(source);
           }} />
         </>}
       <PeerChatComposer value={draft} onChange={value => { draftRevision.current++; setDraft(value); }} onSend={() => void send()} inputRef={composer}
-        busy={false} locked={!runtimeOpen || !!admission.current}
+        busy={false} locked={!runtimeOpen || (!!admission.current && !admissionFailed)} attachmentsLocked={!!admission.current || !!admissionFailed}
         canSend={runtimeOpen && (photo ? photoAllowed && !!photo.prepared : !!draft.trim())}
         photoAllowed={view?.mode === "CONNECTED"}
         onCamera={() => void choosePhoto("camera")} onPhotos={() => void choosePhoto("photos")}
@@ -1172,7 +1211,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     </ConfirmDialog>
     <AdaptiveTaskSurface open={sheet !== null && sheet !== "location" && !confirming} onClose={() => setSheet(null)} busy={busy}
       title={sheet === "search" ? "Search chat" : sheet === "media" ? "Conversation media" : sheet === "review" ? "Review message" : sheet === "message" ? "Message options" : "Conversation info"}>
-      {sheet === "search" ? <div className="fb-chat-search-task">
+      {sheet === "actions" ? conversationInfo : sheet === "search" ? <div className="fb-chat-search-task">
         <label className="fb-chat-search"><Search size={17} aria-hidden="true" /><input type="search" aria-label="Search saved messages" value={messageQuery} onChange={event => setMessageQuery(event.target.value)} /></label>
         <p role="status" className="fb-chat-secondary">{!searchTerm ? "Search the messages saved on this device." : `${searchMatches.length} ${searchMatches.length === 1 ? "message" : "messages"} found${searchMatches.length > 100 ? ". Showing the first 100." : ""}`}</p>
         <ul className="fb-chat-search-results">{searchMatches.slice(0, 100).map(message => <li key={message.id}>
@@ -1201,5 +1240,6 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       : reportTarget === "message" && selectedMessage && selectedMessage.unsentAt === undefined
         ? { targetType: "MESSAGE", targetId: selectedMessage.id, accountId, body: selectedMessage.body } : null}
       onClose={() => setReportTarget(null)} />
-  </section>;
+  </section>}
+  </ChatDetailsLayout>;
 }

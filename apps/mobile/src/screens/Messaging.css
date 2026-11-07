@@ -1,9 +1,4 @@
 .fb-chat-page { position:relative; display:flex; flex-direction:column; height:100%; min-height:0; background:var(--fb-surface); color:var(--fb-on-surface); }
-.fb-chat-workspace { display:grid; grid-template-columns:minmax(0,1fr); height:100%; min-height:0; min-width:0; }
-.fb-chat-workspace-details { grid-template-columns:minmax(0,1fr) clamp(280px,20rem,320px); }
-.fb-chat-details { min-width:0; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:.75rem 1rem;
-  border-inline-start:1px solid var(--fb-outline-variant); background:var(--fb-surface); color:var(--fb-on-surface); }
-.fb-chat-details[hidden] { display:none; }
 .fb-chat-details-heading h2 { margin:0; font-size:.8rem; font-weight:600; color:var(--fb-on-surface-variant); }
 .fb-chat-details-person { display:flex; flex-direction:column; align-items:center; gap:.45rem; padding:1.25rem 0; text-align:center; overflow-wrap:anywhere; }
 .fb-chat-details-person strong { font-size:1rem; }

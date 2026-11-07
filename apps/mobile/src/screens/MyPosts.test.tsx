@@ -231,11 +231,6 @@ describe("MyPosts (My Reports alignment)", () => {
  * Owner actions have no visible ellipsis: they open from the long-press
  * surface. jsdom uses the right-click path, which is the same handler.
  */
-/** Second card's long-press menu, for multi-row flows. */
-function openRowMenu(index: number) {
-  fireEvent.contextMenu(screen.getAllByRole("group", { name: /report actions/i })[index]!);
-  return screen.getByRole("menu");
-}
 function openFirstRowMenu() {
   const surface = screen.getAllByRole("group", { name: /report actions/i })[0]!;
   fireEvent.contextMenu(surface);
