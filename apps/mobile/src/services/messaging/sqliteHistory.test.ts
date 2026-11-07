@@ -210,6 +210,20 @@ describe("schema and durability", () => {
       .toBeUndefined();
   });
 
+  it("migrates the shipped v10 file instead of refusing it", async () => {
+    // 10 is the version the 2026-11-04 build wrote. Refusing it locked every
+    // existing install out of its own chat history after the voice upgrade.
+    database.exec("create table messaging_meta (key text primary key, value text not null)");
+    const bind = database.prepare("insert into messaging_meta (key, value) values (?, ?)");
+    bind.run("account_id", A);
+    bind.run("device_id", DEVICE);
+    bind.run("schema_version", "10");
+    const history = await open();
+    expect(database.prepare("select value from messaging_meta where key = 'schema_version'").get())
+      .toEqual({ value: String(MESSAGING_SQLITE_SCHEMA_VERSION) });
+    await history.close();
+  });
+
   it("migrates a v3 file additively and keeps a legacy tombstone usable", async () => {
     database.exec("create table messaging_meta (key text primary key, value text not null)");
     const bind = database.prepare("insert into messaging_meta (key, value) values (?, ?)");

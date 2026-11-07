@@ -153,7 +153,10 @@ async function preserveMessageDependents(driver: SqliteDriver): Promise<() => Pr
  * is a file written by a newer build, and it is refused before any mutation.
  */
 const SUPPORTED_PRIOR_VERSIONS: readonly string[] = [
-  "1", "2", "3", "4", "5", "6", "7", "8", "9", String(MESSAGING_SQLITE_SCHEMA_VERSION),
+  // "10" shipped in the 2026-11-04 build (conversation HEAD). The voice wave
+  // moved to 11 and must keep migrating those files forward; omitting 10 made
+  // every existing install refuse to open its own chat history.
+  "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", String(MESSAGING_SQLITE_SCHEMA_VERSION),
 ];
 
 function defaultToken(): string {

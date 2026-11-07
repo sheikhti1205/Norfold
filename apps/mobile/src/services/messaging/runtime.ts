@@ -14,6 +14,7 @@ import type { MessagingPreferences } from "./session";
 import { onRealtime } from "../realtime";
 import { getSupabaseBackendUrl } from "../supabaseClient";
 import { createPeerHistoryOwner } from "./peerHistoryOwner";
+import { logError } from "../../utils/log";
 
 export interface MessagingThreadSync {
   conversationId: string;
@@ -476,7 +477,10 @@ export function setMessagingAccount(accountId: string | null, sessionId?: string
       throw error;
     }
   };
-  lifecycle = lifecycle.then(start).catch(() => {
+  lifecycle = lifecycle.then(start).catch((error: unknown) => {
+    // The reader gets one actionable sentence; the cause goes to the log so a
+    // release build can be diagnosed (loggingBehaviour is production).
+    logError("[messaging] chat history open failed", error);
     if (ticket === generation && next !== null) publish({ ...snapshot, status: "error",
       error: "Chat history could not open. Try again." });
   });

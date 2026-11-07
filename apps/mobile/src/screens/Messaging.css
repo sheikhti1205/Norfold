@@ -48,7 +48,7 @@
    the chat. No nested anchors and no second navigation target in the middle. */
 .fb-chat-row-open { position:absolute; inset:0; border-radius:inherit; }
 .fb-chat-row-open:focus-visible { outline:2px solid var(--fb-focus); outline-offset:-2px; }
-.fb-chat-row-identity { position:relative; z-index:1; display:flex; align-items:center; gap:.75rem; min-width:0; }
+.fb-chat-row-identity { position:relative; display:flex; align-items:center; gap:.75rem; min-width:0; pointer-events:none; }
 .fb-chat-row-identity strong { font-size:.95rem; overflow-wrap:anywhere; }
 .fb-chat-row:hover { background:var(--fb-surface-container); }
 .fb-chat-row-copy { display:flex; flex:1; min-width:0; flex-direction:column; gap:.2rem; }
@@ -179,9 +179,8 @@ a.fb-chat-context:hover, a.fb-chat-context:focus-visible { text-decoration:under
   flex: 1; min-height: 0; gap: .2rem; overflow-y: auto; overscroll-behavior: contain; }
 .fb-chat-rail-item { position: relative; display: flex; align-items: center; justify-content: center;
   min-width: 44px; min-height: 48px; }
-.fb-chat-rail-identity { position: relative; z-index: 1; display: flex; align-items: center;
+.fb-chat-rail-identity { position: relative; display: flex; align-items: center; pointer-events: none;
   justify-content: center; min-width: 44px; min-height: 44px; }
-.fb-chat-rail-identity:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; border-radius: .75rem; }
 .fb-chat-rail-row { position: absolute; inset: 0; border-radius: .75rem; }
 .fb-chat-rail-row:hover, .fb-chat-rail-row:focus-visible { background: var(--fb-surface-container); }
 .fb-chat-rail-row[aria-current="page"] { background: var(--fb-surface-container); }
