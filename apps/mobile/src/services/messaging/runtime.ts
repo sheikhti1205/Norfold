@@ -556,6 +556,18 @@ export function refreshMessaging(accountId: string): Promise<void> {
   return requestRefresh(ownerFor(accountId), "full");
 }
 
+/**
+ * A person asking for one more attempt. Automatic syncs park an attachment that
+ * keeps failing so the app cannot loop on it; an explicit press lifts that park
+ * before the refresh, otherwise the button would silently do nothing for five
+ * minutes.
+ */
+export function retryMessagingMedia(accountId: string): Promise<void> {
+  const owner = ownerFor(accountId);
+  owner.session.clearMediaRetry();
+  return requestRefresh(owner, "full");
+}
+
 export async function readMessagingThread(accountId: string, conversationId: string): Promise<StoredHumanMessage[]> {
   const owner = ownerFor(accountId);
   const rows = await owner.handle.history.listMessages(uuid(conversationId));

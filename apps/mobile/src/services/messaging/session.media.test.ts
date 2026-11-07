@@ -34,12 +34,13 @@ describe.each(["sqlite", "web"] as const)("%s canonical media session", (backend
   let histories: MessagingHistory[], sessions: ReturnType<typeof createMessagingSession>[];
   let mailbox: MailboxEnvelope[], view: ConversationProjection;
   let sendError: boolean, uploadError: boolean, lostUpload: boolean, lostAck: boolean;
+  let downloadStatus: number | null;
   let downloads: string[], uploads: string[], acks: string[], sends: Record<string, unknown>[], fetches: number;
   let remote: Map<string, { metadata: MediaMetadata; bytes: ArrayBuffer }>, acknowledged: Set<string>;
 
   beforeEach(async () => {
     factory = new IDBFactory(); histories = []; sessions = []; mailbox = []; view = { ...projection };
-    sendError = uploadError = lostUpload = lostAck = false;
+    sendError = uploadError = lostUpload = lostAck = false; downloadStatus = null;
     downloads = []; uploads = []; acks = []; sends = []; fetches = 0;
     remote = new Map(); acknowledged = new Set();
     directory = mkdtempSync(join(tmpdir(), "session-media-")); // recomputable per-command databases only
@@ -117,6 +118,7 @@ describe.each(["sqlite", "web"] as const)("%s canonical media session", (backend
         const key = headers["x-attachment-id"]!;
         if (method === "GET") {
           downloads.push(key); const value = remote.get(key)!;
+          if (downloadStatus !== null) return new Response(null, { status: downloadStatus });
           return new Response(value.bytes.slice(0), { headers: { "content-type": value.metadata.mime } });
         }
         uploads.push(key);
@@ -403,6 +405,23 @@ describe.each(["sqlite", "web"] as const)("%s canonical media session", (backend
     await client.syncMedia();
     expect(acks).toEqual([]); expect(await bytes.keys(A)).toEqual([]);
     expect(await history.listMedia(CONV)).toEqual([]);
+  });
+
+  it("stops retrying a delivery that keeps failing until the person asks again", async () => {
+    const history = await open(), client = session(history), fixture = await incoming(history);
+    // A gateway that answers 404 for this attachment is not going to start
+    // working two seconds later; retrying on every wake is a download loop.
+    downloadStatus = 404;
+    await expect(client.syncMedia()).rejects.toThrow("Photo could not sync");
+    expect(downloads).toEqual([fixture.metadata.id]);
+    await expect(client.syncMedia()).resolves.toBeUndefined();
+    expect(downloads).toEqual([fixture.metadata.id]);
+    // Asking again is a person's decision, not a scheduled retry.
+    client.clearMediaRetry();
+    downloadStatus = null;
+    await client.syncMedia();
+    expect(downloads).toEqual([fixture.metadata.id, fixture.metadata.id]);
+    expect(acks).toEqual([fixture.metadata.id]);
   });
 
   it("continues the delivery page after corrupt bytes without ACKing the invalid object", async () => {

@@ -192,9 +192,9 @@
 .fb-chat-voice-toggle { display:grid; place-items:center; flex:none; width:2.25rem; height:2.25rem;
   min-width:44px; min-height:44px; border:0; border-radius:50%; background:var(--fb-primary); color:var(--fb-on-primary); }
 .fb-chat-voice-toggle:disabled { opacity:.55; }
-.fb-chat-voice-track { position:relative; flex:1 1 auto; min-width:3.5rem; height:.25rem;
-  border-radius:999px; background:var(--fb-outline-variant); overflow:hidden; }
-.fb-chat-voice-fill { position:absolute; inset:0 auto 0 0; border-radius:inherit; background:var(--fb-primary); }
+.fb-chat-voice-track { display:flex; align-items:center; gap:2px; flex:1 1 auto; min-width:3.5rem; height:1.6rem; }
+.fb-chat-voice-bar { flex:1 1 0; min-width:1px; border-radius:999px; background:var(--fb-outline-variant); }
+.fb-chat-voice-bar[data-played] { background:var(--fb-primary); }
 .fb-chat-voice-time { flex:none; font-size:.8125rem; font-variant-numeric:tabular-nums; color:var(--fb-on-surface-variant); }
 .fb-chat-voice-state { flex:1 1 100%; display:flex; flex-wrap:wrap; align-items:center; gap:.25rem .5rem;
   font-size:.8125rem; color:var(--fb-on-surface-variant); }

@@ -36,7 +36,7 @@ import { useMessaging } from "../services/messaging/useMessaging";
 import { BackupPrompt } from "../components/BackupPrompt";
 import {
   changeMessagingRelationship, markMessagingConversationRead, readMessagingThreadState, getCachedMessagingThreadState,
-  refreshMessaging, sendMessagingText, sendMessagingLocation, sendMessagingMedia, sendMessagingVoice, clearMessagingConversation, removeMessagingMessage,
+  refreshMessaging, retryMessagingMedia, sendMessagingText, sendMessagingLocation, sendMessagingMedia, sendMessagingVoice, clearMessagingConversation, removeMessagingMessage,
   fetchMessagingReceiptView, observeMessagingReceipt, readMessagingMedia, downloadMessagingMedia, recoverMessagingText,
   retryMessagingMessage, setMessagingMuted, watchMessagingThread,
 } from "../services/messaging/runtime";
@@ -265,6 +265,51 @@ function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady }: {
  * second note pauses the first. A length shown here is the stored duration, not
  * a container guess (WebM often reports `Infinity`).
  */
+/** Bars in a voice bubble. Enough to read as audio at 240 px, few enough that a
+ * playback tick stays a cheap repaint. */
+const VOICE_BARS = 30;
+const voiceBarCache = new Map<string, number[]>();
+
+/**
+ * A voice bubble shows a bar pattern, not a flat progress line.
+ *
+ * WhatsApp paints a measured envelope. This host has no cheap way to decode a
+ * five-minute note (a 5 min stereo decode is ~115 MB of floats) and the note is
+ * played through an <audio> element, not an analyser. The pattern is therefore
+ * fixed and derived from the attachment id: the same note keeps the same bars
+ * on every device, after every reinstall, and while it plays. It is decorative
+ * — the elapsed time, the play control and the accessible name carry meaning.
+ */
+export function voiceBarHeights(key: string): number[] {
+  const cached = voiceBarCache.get(key);
+  if (cached) return cached;
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < key.length; index++) {
+    hash ^= key.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  const heights: number[] = [];
+  for (let index = 0; index < VOICE_BARS; index++) {
+    hash ^= hash << 13; hash >>>= 0;
+    hash ^= hash >>> 17;
+    hash ^= hash << 5; hash >>>= 0;
+    // 28–100%: a uniform bar reads as a divider, not as speech.
+    heights.push(28 + (hash % 73));
+  }
+  if (voiceBarCache.size > 200) voiceBarCache.clear();
+  voiceBarCache.set(key, heights);
+  return heights;
+}
+
+function VoiceWave({ id, percent }: { id: string; percent: number }) {
+  const heights = voiceBarHeights(id);
+  const played = Math.round((Math.min(100, Math.max(0, percent)) / 100) * VOICE_BARS);
+  return <span className="fb-chat-voice-track" aria-hidden="true">
+    {heights.map((height, index) => <span key={index} className="fb-chat-voice-bar"
+      data-played={index < played ? "true" : undefined} style={{ height: `${height}%` }} />)}
+  </span>;
+}
+
 function ChatVoice({ accountId, conversationId, attachment, playback, snapshot }: {
   accountId: string; conversationId: string; attachment: MediaAttachment;
   playback: VoicePlaybackPort; snapshot: VoicePlaybackSnapshot;
@@ -313,9 +358,7 @@ function ChatVoice({ accountId, conversationId, attachment, playback, snapshot }
       disabled={!url || durationMs <= 0} onClick={() => void toggle()}>
       {playing ? <Pause size={18} aria-hidden="true" /> : <Play size={18} aria-hidden="true" />}
     </button>
-    <span className="fb-chat-voice-track" aria-hidden="true">
-      <span className="fb-chat-voice-fill" style={{ width: `${voiceProgressPercent(position, durationMs)}%` }} />
-    </span>
+    <VoiceWave id={attachment.id} percent={voiceProgressPercent(position, durationMs)} />
     <span className="fb-chat-voice-time">{durationMs > 0 ? formatVoiceDuration(playing ? position : durationMs) : ""}</span>
     {state !== "ready" && <span className="fb-chat-voice-state" role="status">
       {state === "loading" ? "Voice loading…" : state === "failed" ? "Could not load voice." : state === "unavailable" ? "Voice unavailable" : "Voice not on this device"}
@@ -357,9 +400,7 @@ function VoiceDraft({ recorder, status, recording, notice, url, snapshot, sendin
         disabled={!url} onClick={onPreview}>
         {playing ? <Pause size={17} aria-hidden="true" /> : <Play size={17} aria-hidden="true" />}
       </button>
-      <span className="fb-chat-voice-track" aria-hidden="true">
-        <span className="fb-chat-voice-fill" style={{ width: `${voiceProgressPercent(position, recording.durationMs)}%` }} />
-      </span>
+      <VoiceWave id="voice-draft" percent={voiceProgressPercent(position, recording.durationMs)} />
       <span className="fb-chat-voice-time">{formatVoiceDuration(playing ? position : recording.durationMs)}</span>
       <button type="button" onClick={onDiscard} disabled={sending}>Discard</button>
       <button type="button" onClick={onSend} disabled={sending || !allowed}>{sending ? "Sending…" : "Send"}</button>
@@ -1329,13 +1370,13 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   </div>;
   return <ChatDetailsLayout details={conversationInfo} onCompactOpen={() => setSheet("actions")}
     identity={<><UserAvatar username={name || person?.username} avatarUrl={person?.avatarUrl} size={72} shape="squircle" />
-      <strong dir="auto">{name || "Conversation"}</strong><span className="fb-chat-secondary">{!current ? "Saved chat" : current.mode === "CONNECTED" ? "Connected" : "Message request"}</span></>}>
+      <strong dir="auto">{name || "Conversation"}</strong><span className="fb-chat-secondary">{!view ? "Saved chat" : view.mode === "CONNECTED" ? "Connected" : "Message request"}</span></>}>
     {detailsToggle => <section className="fb-chat-page" aria-label="Conversation">
     <header className="fb-chat-header">
       <Link to="/chats" className="fb-chat-icon" aria-label="Back to chats"><ArrowLeft size={22} aria-hidden="true" /></Link>
       <ChatIdentity peerId={row?.peerId} name={name} username={person?.username} avatarUrl={person?.avatarUrl} muted={view?.ownMuted === true}
         conversationId={conversationId}
-        status={!current ? "Saved chat" : current.mode === "CONNECTED" ? "Connected" : "Message request"} />
+        status={!view ? "Saved chat" : view.mode === "CONNECTED" ? "Connected" : "Message request"} />
       {detailsToggle}
     </header>
     {/* Owner feedback 2026-11-06: a failed refresh is a status, not a lock.
@@ -1403,7 +1444,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             {!attachment && !message.body && missingAttachmentStale(message) && <button type="button" onClick={() => {
               // A message whose attachment never arrived is not stuck loading:
               // ask for one full pass before telling the reader it is gone.
-              void refreshMessaging(accountId).catch(() => setError("Could not check for this attachment. Try syncing again."));
+              void retryMessagingMedia(accountId).catch(() => setError("Could not check for this attachment. Try syncing again."));
             }}>Check again</button>}
             <span className="fb-chat-message-status">
               {message.createdAt ? <time className="fb-chat-time" dateTime={new Date(message.createdAt).toISOString()}>
@@ -1552,12 +1593,12 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             );
           }}>Copy text</button> : null}
           {selectedMessage.authorId === accountId && selectedMessage.unsentAt === undefined &&
-            <button type="button" role="menuitem" disabled={busy || !current}
+            <button type="button" role="menuitem" disabled={busy || !view}
               onClick={() => { setMenu(null); setSheet("unsend"); }}>Unsend</button>}
-          <button type="button" role="menuitem" disabled={busy || !current}
+          <button type="button" role="menuitem" disabled={busy || !view}
             onClick={() => { setMenu(null); setSheet("delete"); }}>Delete for me</button>
           {selectedMessage.authorId !== accountId && selectedMessage.unsentAt === undefined &&
-            <button type="button" role="menuitem" disabled={busy || !current || !row}
+            <button type="button" role="menuitem" disabled={busy || !view || !row}
               onClick={() => { setMenu(null); setReportTarget("message"); }}>Report message</button>}
         </div>
       </div>, document.body)}
