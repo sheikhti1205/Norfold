@@ -83,10 +83,19 @@ public final class FindbackMediaPlugin extends Plugin {
         try {
             call.getData().put("mediaRequestId", request.id);
             Intent intent;
-            if ("photos".equals(source) && Build.VERSION.SDK_INT >= 33) {
+            // The picker contract on some OEM ROMs reports a max of 0, and any
+            // EXTRA_PICK_IMAGES_MAX — including 1 — then makes PhotoPickerActivity
+            // finish itself in onCreate with "Invalid EXTRA_PICK_IMAGES_MAX value".
+            // The user sees the picker flash and nothing picked. Only advertise a
+            // cap the platform actually accepts, and fall back to the document
+            // picker when it advertises none.
+            int maxPick = MediaStore.getPickImagesMaxLimit();
+            if ("photos".equals(source) && Build.VERSION.SDK_INT >= 33 && maxPick >= 2) {
                 intent = new Intent(MediaStore.ACTION_PICK_IMAGES);
                 intent.setType("image/*");
-                intent.putExtra(MediaStore.EXTRA_PICK_IMAGES_MAX, Math.min(limit, MediaStore.getPickImagesMaxLimit()));
+                // Single selection is the picker's default; only ask for a cap
+                // when more than one is wanted.
+                if (limit > 1) intent.putExtra(MediaStore.EXTRA_PICK_IMAGES_MAX, Math.min(limit, maxPick));
             } else {
                 intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -122,11 +131,11 @@ public final class FindbackMediaPlugin extends Plugin {
             finish(request);
             call.reject("Couldn't read these photos. Choose them again.", "MEDIA_INVALID_URI"); return;
         }
-        if (Build.VERSION.SDK_INT < 33 || "files".equals(request.source)) {
-            for (Uri uri : uris) {
-                try { getContext().getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION); }
-                catch (RuntimeException ignored) { /* Some providers refuse persistence; the session grant still applies. */ }
-            }
+        // Attempt persistence for every picker result: the document fallback needs
+        // it, and a session-scoped picker grant simply refuses (caught below).
+        for (Uri uri : uris) {
+            try { getContext().getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION); }
+            catch (RuntimeException ignored) { /* Some providers refuse persistence; the session grant still applies. */ }
         }
         finish(request);
         JSONArray array = new JSONArray();
