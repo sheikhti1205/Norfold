@@ -702,9 +702,26 @@ it("uses the canonical Android URI import before preparing a selected photo", as
   await open(); fireEvent.click(screen.getByRole("button", { name: "Choose photo" }));
   await screen.findByAltText("Selected photo");
   expect(m.choose).toHaveBeenCalledWith({ source: "photos", limit: 1 });
-  expect(m.import).toHaveBeenCalledWith("content://synthetic-photo", { signal: expect.any(AbortSignal) });
+  // No abort signal: a projection refresh on resume used to cancel the very
+  // grant the picker had just returned, so the photo vanished silently.
+  expect(m.import).toHaveBeenCalledWith("content://synthetic-photo");
   expect(m.file).toHaveBeenCalledWith(imported);
   expect(m.prepare).toHaveBeenCalledWith(source, { signal: expect.any(AbortSignal) });
+});
+it("survives a projection refresh while the native picker is open", async () => {
+  vi.spyOn(Capacitor, "getPlatform").mockReturnValue("android");
+  const imported = { uri: "synthetic-import" }, source = new File(["x"], "photo.jpg");
+  let grant!: (uris: string[]) => void;
+  m.choose.mockReturnValue(new Promise((done) => { grant = done; }));
+  m.import.mockResolvedValue(imported); m.file.mockReturnValue(source);
+  m.prepare.mockResolvedValue({ bytes: new ArrayBuffer(1), sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
+  await open(); fireEvent.click(screen.getByRole("button", { name: "Choose photo" }));
+  // The app backgrounds while the picker is up, and the projection refresh
+  // that runs on resume drops the cached view. The selection must survive it.
+  await act(async () => { m.view = { ...m.view, mode: "REQUEST" }; });
+  await act(async () => { m.view = { ...m.view, mode: "CONNECTED" }; });
+  await act(async () => { grant(["content://synthetic-photo"]); });
+  expect(await screen.findByAltText("Selected photo")).toBeTruthy();
 });
 it("ignores a late local read after leaving the thread without allocating a URL", async () => {
   let resolve!: (bytes: ArrayBuffer) => void; m.read.mockReturnValue(new Promise((done) => { resolve = done; }));

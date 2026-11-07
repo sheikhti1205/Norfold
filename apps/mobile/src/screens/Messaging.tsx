@@ -594,6 +594,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   }, []);
   const viewerUrls = useRef(new Set<string>());
   const photoController = useRef<AbortController | null>(null);
+  // True between opening the native picker and its result: render state must
+  // not cancel a selection the platform is still holding.
+  const picking = useRef(false);
   const admission = useRef<{ metadata: MediaMetadata; caption: string; messageType?: "MEDIA" | "VOICE" } | null>(null);
   // A failed photo/voice admission keeps its ids for an identical retry, but the
   // composer must let that retry be sent without letting the attachment change.
@@ -633,10 +636,15 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     return () => URL.revokeObjectURL(url);
   }, [photo?.prepared, photoAllowed]);
   useLayoutEffect(() => {
-    if (!photoAllowed) {
-      photoController.current?.abort(); setPhotoPreparing(false);
-      setPhoto((previous) => previous && !previous.prepared ? { ...previous, error: true } : previous);
-    }
+    if (photoAllowed) return;
+    // A native picker that is still open must survive the projection refresh
+    // that runs when the app returns to the foreground: aborting here made a
+    // perfectly good selection arrive at an already-cancelled controller, so
+    // the photo vanished with no strip and no error. The result is re-checked
+    // against authority when it returns.
+    if (!picking.current) photoController.current?.abort();
+    setPhotoPreparing(false);
+    setPhoto((previous) => previous && !previous.prepared ? { ...previous, error: true } : previous);
   }, [photoAllowed]);
   // The recorder's 200 ms tick must not repaint the transcript: the parent
   // keeps only lifecycle facts, and the timestamping strip subscribes itself.
@@ -672,7 +680,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   }, [voice]);
   useLayoutEffect(() => {
     if (voiceAllowed) return;
-    voice.recorder.teardown(); voice.player.pause();
+    // discard() emits idle; teardown() is silent, which left a "Recording"
+    // strip on screen for a recorder that no longer existed.
+    voice.recorder.discard(); voice.player.pause();
   }, [voiceAllowed, voice]);
   const viewerItems = photoAllowed ? viewer?.items.filter((item) => messages.some((message) => message.id === item.id && message.unsentAt === undefined)
     && media.some((attachment) => attachment.messageId === item.id)) ?? [] : [];
@@ -686,7 +696,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   }, [viewer, activeViewer, viewerItems]);
   function openPhoto(id: string, bytes: ArrayBuffer, mime: string) {
     if (!photoAllowed) return;
-    const items = messages.filter((message) => message.unsentAt === undefined).flatMap((message) => {
+    const items = messages.filter((message) => message.unsentAt === undefined && message.messageType === "MEDIA").flatMap((message) => {
       const attachment = media.find((item) => item.messageId === message.id);
       const content = attachment ? readyPhotos.current.get(attachment.id) : undefined;
       const available = content ?? (message.id === id ? { bytes, mime } : undefined);
@@ -720,20 +730,23 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       (source === "camera" ? cameraInput : photoInput).current?.click();
       return;
     }
-    photoController.current?.abort();
-    const controller = new AbortController(); photoController.current = controller;
+    picking.current = true;
     try {
       if (source === "camera") {
         // The canonical native capture path, never the gallery relabelled.
         const imported = await chooseNativeImage({ source: "camera" });
-        if (!controller.signal.aborted && imported) await preparePhoto(importedImageToFile(imported));
+        if (imported) await preparePhoto(importedImageToFile(imported));
         return;
       }
+      // null is a real cancel; an empty array is a picker that returned no
+      // grant, which must be visible rather than silently doing nothing.
       const uris = await chooseNativeImages({ source: "photos", limit: 1 });
-      if (controller.signal.aborted || !uris?.[0]) return;
-      const imported = await importNativeImageUri(uris[0], { signal: controller.signal });
-      if (!controller.signal.aborted) await preparePhoto(importedImageToFile(imported));
-    } catch { if (!controller.signal.aborted) setError("Could not open that photo. Please try again."); }
+      if (!uris) return;
+      if (!uris[0]) { setError("That photo could not be read. Try a different one."); return; }
+      const imported = await importNativeImageUri(uris[0]);
+      if (imported) await preparePhoto(importedImageToFile(imported));
+    } catch { setError("Could not open that photo. Please try again."); }
+    finally { picking.current = false; }
   }
   useEffect(() => {
     const update = () => setVisible(document.visibilityState === "visible");
@@ -973,11 +986,14 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       if (!alive.current) return;
       nearBottom.current = true;
       admission.current = null;
+      setAdmissionFailed(false);
       voice.player.pause();
       voice.recorder.take();
       announce("Voice message sent.");
     } catch {
-      if (alive.current) setError("That voice message could not be saved. Try sending it again.");
+      // The ids stay for an identical retry, but the composer must not stay
+      // locked: that is the same rule the photo path already follows.
+      if (alive.current) { setAdmissionFailed(true); setError("That voice message could not be saved. Try sending it again."); }
     } finally { if (alive.current) setVoiceSending(false); }
   }
   /**
