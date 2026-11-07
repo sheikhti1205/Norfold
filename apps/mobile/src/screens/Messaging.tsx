@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { Archive, ArrowLeft, BellOff, ChevronDown, Ellipsis, Flag, Images, ListFilter, LogOut, MapPin, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCw, Search, Settings2, ShieldBan, Square, Trash2, UserRound } from "lucide-react";
+import { Archive, ArrowLeft, BellOff, ChevronDown, Ellipsis, Flag, ImageOff, Images, ListFilter, LogOut, MapPin, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCw, Search, Settings2, ShieldBan, Square, Trash2, UserRound, X } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import type { PostItem } from "@norfold/shared";
 import { copyStaticLocation, isUuid } from "../services/messaging/validation";
@@ -12,6 +12,7 @@ import { UserAvatar } from "../components/UserAvatar";
 import { ChatIdentity } from "../components/ChatIdentity";
 import { StatusChip } from "../components/StatusChip";
 import { formatEventDate, timeAgo } from "../utils/dates";
+import { haptic } from "../utils/haptics";
 import { convertEmoticons, isEmojiOnly } from "../utils/emoji";
 import { SplitView, type SplitPaneState } from "../components/SplitView";
 import { CHAT_PANE } from "../components/panePreference";
@@ -180,6 +181,27 @@ export { ChatIdentity } from "../components/ChatIdentity";
 // A media task is another view of ChatPhoto, not another ready-byte cache.
 function ignorePhotoReadiness() {}
 
+/**
+ * An attachment is a separate record from the message, so a message can render
+ * before its media has synced. Keep a short loading window for that race, then
+ * say plainly that it did not arrive — an endless "loading…" on a two-hour-old
+ * voice note reads as a broken app.
+ */
+const ATTACHMENT_ARRIVAL_GRACE_MS = 2 * 60_000;
+
+function missingAttachmentStale(message: StoredHumanMessage): boolean {
+  if (message.messageType !== "MEDIA" && message.messageType !== "VOICE") return false;
+  // With no creation time there is no honest way to call it late; keep waiting.
+  return message.createdAt !== undefined && Date.now() - message.createdAt > ATTACHMENT_ARRIVAL_GRACE_MS;
+}
+
+function missingAttachmentCopy(message: StoredHumanMessage): string {
+  if (message.messageType !== "MEDIA" && message.messageType !== "VOICE") return "Message unavailable";
+  const stale = missingAttachmentStale(message), voice = message.messageType === "VOICE";
+  if (voice) return stale ? "Voice message unavailable" : "Voice message loading…";
+  return stale ? "Photo unavailable" : "Photo loading…";
+}
+
 function RetrySync({ accountId, labelled = false }: { accountId: string; labelled?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -226,7 +248,8 @@ function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady }: {
     try { await downloadMessagingMedia(accountId, conversationId, attachment.id); setVersion((v) => v + 1); }
     catch (error) { setState(error instanceof PhotoUnavailableError ? "unavailable" : "failed"); }
   }
-  return <div className="fb-chat-photo" style={{ aspectRatio: `${attachment.width} / ${attachment.height}` }}>
+  return <div className="fb-chat-photo" data-loading={content && !loaded ? "true" : undefined}
+    style={{ aspectRatio: `${attachment.width} / ${attachment.height}` }}>
     {content ? <button type="button" aria-label="View photo" onClick={() => onOpen(attachment.messageId, content.bytes, attachment.mime)}>
       <img src={content.url} alt="" onLoad={() => setLoaded(true)} onError={() => { onReady(attachment.id, null); setContent(null); setState("failed"); }}
         data-receipt-message={loaded && attachment.state === "READY" ? attachment.messageId : undefined} />
@@ -514,6 +537,20 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
   </section>;
 }
 
+/** The most photos one send may stage. Matches the native picker cap so a
+ *  selection more than one screen of thumbnails can still be reviewed here. */
+const MAX_STAGED_PHOTOS = 10;
+
+interface StagedChatPhoto {
+  key: string;
+  source?: File;
+  prepared?: PreparedMessagingPhoto;
+  /** Object URL of the prepared bytes; only present once preparation succeeded. */
+  url?: string;
+  error?: boolean;
+  preparing: boolean;
+}
+
 export function MessagingThread() {
   const { user } = useAuth();
   const { conversationId = "" } = useParams();
@@ -564,29 +601,46 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     const { clientX: x, clientY: y } = event;
     const timer = window.setTimeout(() => {
       press.current = null;
+      haptic("commit");
       openMessageMenu(messageId);
     }, 420);
     press.current = { timer, x, y };
   }, [cancelPress]);
   useEffect(() => cancelPress, [cancelPress]);
+  const menuPanel = useRef<HTMLDivElement | null>(null);
   const openMessageMenu = useCallback((messageId: string, anchor?: Element | null) => {
     const element = anchor ?? document.querySelector(`[data-chat-message="${messageId}"]`);
-    const rect = element?.getBoundingClientRect();
+    // Anchor to the bubble, not the row: a row spans the whole transcript, so
+    // its rect would place the menu at the pane edge instead of the message.
+    const bubble = element?.matches(".fb-chat-message") ? element : element?.querySelector(".fb-chat-message");
+    const rect = (bubble ?? element)?.getBoundingClientRect();
     const width = 208, gap = 8, viewportWidth = window.innerWidth, viewportHeight = window.innerHeight;
     // Roughly four 48 px rows; the panel clamps itself again if it is shorter.
     const height = Math.min(4 * 48 + 12, viewportHeight - 16);
+    const narrow = viewportWidth < 480;
     let x = rect ? rect.right + gap : viewportWidth / 2 - width / 2;
     let y = rect ? rect.top : viewportHeight / 2 - height / 2;
     if (rect) {
-      if (x + width > viewportWidth - gap) x = Math.max(gap, rect.left - gap - width);
-      if (viewportWidth < 480) x = Math.max(gap, Math.min(viewportWidth - width - gap, rect.left + rect.width / 2 - width / 2));
+      // Wide: beside the bubble, flipping to its other side when it would leave
+      // the window. Narrow: centred over the bubble, above it when there is room
+      // so the menu never covers the message it acts on.
+      if (narrow) x = Math.max(gap, Math.min(viewportWidth - width - gap, rect.left + rect.width / 2 - width / 2));
+      else if (x + width > viewportWidth - gap) x = Math.max(gap, rect.left - gap - width);
+      if (narrow && rect.top - height - gap >= gap) y = rect.top - height - gap;
+      else if (narrow) y = rect.bottom + gap;
       y = Math.min(Math.max(gap, y), Math.max(gap, viewportHeight - height - gap));
     }
+    // A long press must not leave a text selection behind: the menu is a set of
+    // actions, not selectable copy, and the handles would float over it.
+    window.getSelection()?.removeAllRanges();
     setSelectedMessageId(messageId);
     setMenu({ id: messageId, x, y });
   }, []);
   useEffect(() => {
     if (!menu) return;
+    // The menu takes focus so a keyboard user lands on its first action; every
+    // dismissal returns focus to the message that owns it.
+    menuPanel.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
     const close = () => setMenu(null);
     const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setMenu(null); };
     window.addEventListener("resize", close);
@@ -638,8 +692,16 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const locationAuthority = useRef("");
   locationAuthority.current = JSON.stringify([chat.accountId, chat.status, row?.peerId,
     current?.mode, current?.ownBlocked, current?.revision]);
-  const [photo, setPhoto] = useState<{ source: File; prepared?: PreparedMessagingPhoto; error?: boolean } | null>(null);
-  const [photoPreparing, setPhotoPreparing] = useState(false);
+  // Late preparation results are checked against the authority that existed
+  // when they started, not against whatever the view says now.
+  const photoAuthority = useRef(photoAllowed);
+  photoAuthority.current = photoAllowed;
+  // Photos are staged, not selected one at a time: the owner asked for a real
+  // bulk pick with a review surface, so each pick appends an item and every
+  // item is reviewed, removed and sent on its own terms.
+  const [photos, setPhotos] = useState<StagedChatPhoto[]>([]);
+  const [photoSending, setPhotoSending] = useState(false);
+  const [draftViewer, setDraftViewer] = useState<{ key: string } | null>(null);
   // Voice is a real capability: one recorder and one transcript player per
   // conversation. Nothing opens the microphone until the user taps Voice.
   const [voice] = useState(() => ({
@@ -655,14 +717,16 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const [voiceSending, setVoiceSending] = useState(false);
   const voiceSupported = voiceRecordingSupported();
   const voiceAllowed = photoAllowed && voiceSupported;
-  const [draftUrl, setDraftUrl] = useState<string | null>(null);
   const [viewer, setViewer] = useState<{ id: string; items: MediaViewerItem[] } | null>(null);
   const readyPhotos = useRef(new Map<string, { bytes: ArrayBuffer; mime: string }>());
   const rememberPhoto = useCallback((id: string, content: { bytes: ArrayBuffer; mime: string } | null) => {
     if (content) readyPhotos.current.set(id, content); else readyPhotos.current.delete(id);
   }, []);
   const viewerUrls = useRef(new Set<string>());
-  const photoController = useRef<AbortController | null>(null);
+  const stagedUrls = useRef(new Set<string>());
+  // Per-photo admission: ids belong to the durable draft owner and must survive
+  // an uncertain admission, so a retry of one photo is the same photo.
+  const photoAdmissions = useRef(new Map<string, { metadata: MediaMetadata; caption: string }>());
   // True between opening the native picker and its result: render state must
   // not cancel a selection the platform is still holding.
   const picking = useRef(false);
@@ -696,24 +760,29 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
-    return () => { alive.current = false; photoController.current?.abort(); for (const url of viewerUrls.current) URL.revokeObjectURL(url); viewerUrls.current.clear(); };
+    return () => {
+      alive.current = false;
+      for (const url of viewerUrls.current) URL.revokeObjectURL(url);
+      viewerUrls.current.clear();
+      for (const url of stagedUrls.current) URL.revokeObjectURL(url);
+      stagedUrls.current.clear();
+    };
   }, []);
-  useEffect(() => {
-    if (!photoAllowed || !photo?.prepared) { setDraftUrl(null); return; }
-    const url = URL.createObjectURL(new Blob([photo.prepared.bytes.slice(0)], { type: photo.prepared.mime }));
-    setDraftUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [photo?.prepared, photoAllowed]);
   useLayoutEffect(() => {
     if (photoAllowed) return;
     // A native picker that is still open must survive the projection refresh
-    // that runs when the app returns to the foreground: aborting here made a
-    // perfectly good selection arrive at an already-cancelled controller, so
-    // the photo vanished with no strip and no error. The result is re-checked
-    // against authority when it returns.
-    if (!picking.current) photoController.current?.abort();
-    setPhotoPreparing(false);
-    setPhoto((previous) => previous && !previous.prepared ? { ...previous, error: true } : previous);
+    // that runs when the app returns to the foreground: cancelling here made a
+    // perfectly good selection vanish with no strip and no error. A staged
+    // photo that never finished preparing is disclosed instead of sent.
+    setPhotos((list) => {
+      let changed = false;
+      const next = list.map((item) => {
+        if (item.prepared || item.error || !item.preparing) return item;
+        changed = true;
+        return { ...item, preparing: false, error: true };
+      });
+      return changed ? next : list;
+    });
   }, [photoAllowed]);
   // The recorder's 200 ms tick must not repaint the transcript: the parent
   // keeps only lifecycle facts, and the timestamping strip subscribes itself.
@@ -756,6 +825,15 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const viewerItems = photoAllowed ? viewer?.items.filter((item) => messages.some((message) => message.id === item.id && message.unsentAt === undefined)
     && media.some((attachment) => attachment.messageId === item.id)) ?? [] : [];
   const activeViewer = viewer && viewerItems.some((item) => item.id === viewer.id) ? viewer : null;
+  // The staged tray reuses the same inspection surface as the feed: swipe,
+  // thumbnails, zoom and counter, over the photos about to be sent.
+  const draftViewerItems: MediaViewerItem[] = photos.flatMap((item) => item.url
+    ? [{ id: item.key, src: item.url, width: item.prepared?.width ?? null, height: item.prepared?.height ?? null, alt: "Photo to send" }]
+    : []);
+  const draftViewerIndex = draftViewer ? draftViewerItems.findIndex((item) => item.id === draftViewer.key) : -1;
+  useLayoutEffect(() => {
+    if (draftViewer && draftViewerIndex < 0) setDraftViewer(null);
+  }, [draftViewer, draftViewerIndex]);
   useLayoutEffect(() => {
     if (viewer) {
       const retained = new Set(activeViewer ? viewerItems.map((item) => item.src) : []);
@@ -765,6 +843,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   }, [viewer, activeViewer, viewerItems]);
   function openPhoto(id: string, bytes: ArrayBuffer, mime: string) {
     if (!photoAllowed) return;
+    setDraftViewer(null);
     const items = messages.filter((message) => message.unsentAt === undefined && message.messageType === "MEDIA").flatMap((message) => {
       const attachment = media.find((item) => item.messageId === message.id);
       const content = attachment ? readyPhotos.current.get(attachment.id) : undefined;
@@ -781,18 +860,54 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     for (const url of viewerUrls.current) URL.revokeObjectURL(url);
     viewerUrls.current.clear();
   }
-  async function preparePhoto(source: File) {
-    photoController.current?.abort();
-    admission.current = null;
-    const controller = new AbortController();
-    photoController.current = controller;
-    setPhoto({ source }); setPhotoPreparing(true);
+  /** Reserve a review slot before importing, so a bulk pick keeps its order
+   *  even when one photo imports faster than the next. */
+  function reserveStaged(count: number): StagedChatPhoto[] {
+    const slots = Array.from({ length: count }, () => ({
+      key: `staged-${crypto.randomUUID()}`, preparing: true,
+    }));
+    setPhotos((list) => [...list, ...slots]);
+    return slots;
+  }
+  function releaseStagedUrl(item: StagedChatPhoto) {
+    if (!item.url) return;
+    URL.revokeObjectURL(item.url);
+    stagedUrls.current.delete(item.url);
+  }
+  function removeStaged(key: string) {
+    if (photoSending) return;
+    setPhotos((list) => {
+      const item = list.find((entry) => entry.key === key);
+      if (item) releaseStagedUrl(item);
+      photoAdmissions.current.delete(key);
+      return list.filter((entry) => entry.key !== key);
+    });
+    setAdmissionFailed(false);
+    setError(null);
+  }
+  async function prepareStaged(slot: StagedChatPhoto, source: File) {
     try {
-      const prepared = await prepareMessagingPhoto(source, { signal: controller.signal });
-      if (!controller.signal.aborted) setPhoto({ source, prepared });
+      const prepared = await prepareMessagingPhoto(source);
+      if (!alive.current) return;
+      // Preparation that completes after the connection no longer allows
+      // photos must not resurrect a draft it already disclosed as failed.
+      if (!photoAuthority.current) {
+        setPhotos((list) => list.map((item) => item.key === slot.key ? { ...item, source, preparing: false, error: true } : item));
+        return;
+      }
+      const url = URL.createObjectURL(new Blob([prepared.bytes.slice(0)], { type: prepared.mime }));
+      stagedUrls.current.add(url);
+      setPhotos((list) => list.map((item) => item.key === slot.key ? { ...item, source, prepared, url, preparing: false, error: false } : item));
     } catch {
-      if (!controller.signal.aborted) setPhoto({ source, error: true });
-    } finally { if (!controller.signal.aborted) setPhotoPreparing(false); }
+      // One unreadable photo fails alone and keeps its place in the tray.
+      if (alive.current) setPhotos((list) => list.map((item) => item.key === slot.key ? { ...item, source, preparing: false, error: true } : item));
+    }
+  }
+  async function retryStaged(item: StagedChatPhoto) {
+    if (!item.source) { removeStaged(item.key); return; }
+    photoAdmissions.current.delete(item.key);
+    setPhotos((list) => list.map((entry) => entry.key === item.key ? { ...entry, preparing: true, error: false } : entry));
+    await prepareStaged(item, item.source);
   }
   async function choosePhoto(source: "photos" | "camera") {
     if (Capacitor.getPlatform() !== "android") {
@@ -804,18 +919,48 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       if (source === "camera") {
         // The canonical native capture path, never the gallery relabelled.
         const imported = await chooseNativeImage({ source: "camera" });
-        if (imported) await preparePhoto(importedImageToFile(imported));
+        if (!imported) return;
+        const [slot] = reserveStaged(1);
+        if (!slot) return;
+        await prepareStaged(slot, importedImageToFile(imported));
         return;
       }
       // null is a real cancel; an empty array is a picker that returned no
       // grant, which must be visible rather than silently doing nothing.
-      const uris = await chooseNativeImages({ source: "photos", limit: 1 });
+      const uris = await chooseNativeImages({ source: "photos", limit: MAX_STAGED_PHOTOS });
       if (!uris) return;
-      if (!uris[0]) { setError("That photo could not be read. Try a different one."); return; }
-      const imported = await importNativeImageUri(uris[0]);
-      if (imported) await preparePhoto(importedImageToFile(imported));
+      if (uris.length === 0) { setError("That photo could not be read. Try a different one."); return; }
+      const room = Math.max(0, MAX_STAGED_PHOTOS - photos.length);
+      const accepted = uris.slice(0, room);
+      if (accepted.length === 0) { setError(`You can send up to ${MAX_STAGED_PHOTOS} photos at once.`); return; }
+      const slots = reserveStaged(accepted.length);
+      // Import one at a time: the canonical intake already bounds and strips
+      // each derivative, and a serial pass keeps the tray in picker order.
+      for (const [index, uri] of accepted.entries()) {
+        const slot = slots[index];
+        if (!slot) continue;
+        try {
+          const imported = await importNativeImageUri(uri);
+          if (alive.current) await prepareStaged(slot, importedImageToFile(imported));
+        } catch {
+          if (alive.current) setPhotos((list) => list.map((item) => item.key === slot.key ? { ...item, preparing: false, error: true } : item));
+        }
+      }
+      if (accepted.length < uris.length) setError(`Only ${MAX_STAGED_PHOTOS} photos can be reviewed at once. The first ${accepted.length} were added.`);
     } catch { setError("Could not open that photo. Please try again."); }
     finally { picking.current = false; }
+  }
+  /** Web/browser pick: the same staged tray, prepared through the codec. */
+  async function stageLocalFiles(files: File[]) {
+    const room = Math.max(0, MAX_STAGED_PHOTOS - photos.length);
+    const accepted = files.slice(0, room);
+    if (accepted.length === 0) { setError(`You can send up to ${MAX_STAGED_PHOTOS} photos at once.`); return; }
+    const slots = reserveStaged(accepted.length);
+    for (const [index, file] of accepted.entries()) {
+      const slot = slots[index];
+      if (slot) await prepareStaged(slot, file);
+    }
+    if (accepted.length < files.length) setError(`Only ${MAX_STAGED_PHOTOS} photos can be reviewed at once. The first ${accepted.length} were added.`);
   }
   useEffect(() => {
     const update = () => setVisible(document.visibilityState === "visible");
@@ -1071,29 +1216,60 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
    * authority/destructive actions take `busy`.
    */
   async function send() {
-    if (!runtimeOpen || !row || (!photo && !draft.trim())) return;
-    if (photo && (!photo.prepared || view?.mode !== "CONNECTED" || view.ownBlocked)) return;
-    const body = convertEmoticons(draft), sendingPhoto = photo, sendingRevision = draftRevision.current;
+    if (!runtimeOpen || !row || photoSending) return;
+    const ready = photos.filter((item): item is StagedChatPhoto & { prepared: PreparedMessagingPhoto } => !!item.prepared);
+    if (photos.length > 0 && ready.length !== photos.length) return;
+    if (photos.length > 0 && (view?.mode !== "CONNECTED" || view.ownBlocked)) return;
+    if (photos.length === 0 && !draft.trim()) return;
+    const body = convertEmoticons(draft), sendingRevision = draftRevision.current;
     setError(null);
     try {
-      if (sendingPhoto?.prepared) {
-        const { bytes, ...info } = sendingPhoto.prepared;
-        const attempt = admission.current ?? { caption: body, metadata: { ...info, durationMs: null,
-          id: crypto.randomUUID(), messageId: crypto.randomUUID(), direction: "OUT", expiresAt: null } };
-        admission.current = attempt;
-        await sendMessagingMedia(accountId, conversationId, row.peerId, attempt.caption, attempt.metadata, bytes);
-      } else await sendMessagingText(accountId, conversationId, row.peerId, body, reportContext ?? undefined);
-      if (alive.current) {
-        nearBottom.current = true;
-        // Only clear what this admission owned: typing that arrived while it was
-        // in flight is newer intent and must survive.
-        if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
-        if (sendingPhoto) setPhoto((current) => current === sendingPhoto ? null : current);
-        if (!sendingPhoto && reportContext) clearReportContext(reportContext);
-        admission.current = null;
-        setAdmissionFailed(false);
+      if (ready.length === 0) {
+        await sendMessagingText(accountId, conversationId, row.peerId, body, reportContext ?? undefined);
+        if (alive.current) {
+          nearBottom.current = true;
+          // Only clear what this draft owned: typing that arrived while it was
+          // in flight is newer intent and must survive.
+          if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+          if (reportContext) clearReportContext(reportContext);
+          setAdmissionFailed(false);
+        }
+      } else {
+        setPhotoSending(true);
+        // Each photo is its own message, so a failed one leaves the rest of the
+        // stack intact. The caption rides the first photo only.
+        let consumed = false;
+        for (const [index, item] of ready.entries()) {
+          const admissionKey = item.key;
+          const { bytes, ...info } = item.prepared;
+          const attempt = photoAdmissions.current.get(admissionKey) ?? { caption: index === 0 ? body : "",
+            metadata: { ...info, durationMs: null,
+              id: crypto.randomUUID(), messageId: crypto.randomUUID(), direction: "OUT" as const, expiresAt: null } };
+          photoAdmissions.current.set(admissionKey, attempt);
+          await sendMessagingMedia(accountId, conversationId, row.peerId, attempt.caption, attempt.metadata, bytes);
+          photoAdmissions.current.delete(admissionKey);
+          // The caption belonged to the first message that actually left, so
+          // clear the draft as soon as it is carried, not at the end of a bulk
+          // send that may still fail on a later photo.
+          if (!consumed && alive.current) {
+            consumed = true;
+            nearBottom.current = true;
+            if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+          }
+          if (alive.current) setPhotos((list) => {
+            const removed = list.find((entry) => entry.key === admissionKey);
+            if (removed) releaseStagedUrl(removed);
+            return list.filter((entry) => entry.key !== admissionKey);
+          });
+        }
+        if (alive.current) { nearBottom.current = true; setAdmissionFailed(false); }
       }
-    } catch { if (alive.current) { if (sendingPhoto) setAdmissionFailed(true); setError("Your message could not be saved. Your draft is still here."); } }
+    } catch {
+      if (alive.current) {
+        if (photos.length > 0) { setAdmissionFailed(true); setError("Those photos could not all be saved. The unsent ones are still here."); }
+        else setError("Your message could not be saved. Your draft is still here.");
+      }
+    } finally { if (alive.current) setPhotoSending(false); }
   }
   const selectedMessage = messages.find((message) => message.id === selectedMessageId);
   const selectedNeedsReview = selectedMessage?.authorId === accountId && !selectedMessage.server
@@ -1214,7 +1390,14 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             {message.messageType === "VOICE" && attachment && photoAllowed && <ChatVoice key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} playback={voice.player} snapshot={playbackSnapshot} />}
             {message.contextReportId && <ChatReportContext reportId={message.contextReportId} safetyKey={view?.ownBlocked ? "blocked" : "clear"} />}
             {message.location && <ChatLocation location={message.location} />}
-            {message.body ? <p dir="auto" className={isEmojiOnly(message.body) ? "fb-chat-emoji-only" : undefined}>{message.body}</p> : !attachment && message.messageType !== "LOCATION" && <p>{message.messageType === "MEDIA" ? "Photo loading…" : message.messageType === "VOICE" ? "Voice message loading…" : "Message unavailable"}</p>}
+            {message.body ? <p dir="auto" className={isEmojiOnly(message.body) ? "fb-chat-emoji-only" : undefined}>{message.body}</p>
+              : message.messageType === "LOCATION" ? (!message.location && <p>Location unavailable</p>)
+              : !attachment && <p>{missingAttachmentCopy(message)}</p>}
+            {!attachment && !message.body && missingAttachmentStale(message) && <button type="button" onClick={() => {
+              // A message whose attachment never arrived is not stuck loading:
+              // ask for one full pass before telling the reader it is gone.
+              void refreshMessaging(accountId).catch(() => setError("Could not check for this attachment. Try syncing again."));
+            }}>Check again</button>}
             <span className="fb-chat-message-status">
               {message.createdAt ? <time className="fb-chat-time" dateTime={new Date(message.createdAt).toISOString()}>
                 {new Date(message.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
@@ -1253,11 +1436,38 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       nearBottom.current = true; setShowJump(false);
     }}><ChevronDown size={20} aria-hidden="true" /></button>}
     {error && !sheet && <p className="fb-chat-error" role="alert">{error}</p>}
-    {photo && <div className="fb-chat-photo-draft" role="status">
-      {photoAllowed && draftUrl && photo.prepared && <img src={draftUrl} alt="Selected photo" style={{ aspectRatio: `${photo.prepared.width} / ${photo.prepared.height}` }} />}
-      {!photoAllowed ? "Photos are available when connected. Remove this photo to send text only." : photoPreparing ? "Preparing photo…" : photo.error ? "Could not prepare photo." : "Photo ready"}
-      {photoAllowed && photo.error && <button type="button" onClick={() => void preparePhoto(photo.source)}>Retry</button>}
-      <button type="button" aria-label="Remove photo" disabled={busy || !!admission.current} onClick={() => { photoController.current?.abort(); admission.current = null; setAdmissionFailed(false); setPhoto(null); setPhotoPreparing(false); }}>Remove</button>
+    {photos.length > 0 && <div className="fb-chat-photo-draft" role="group"
+      aria-label={`${photos.length} photo${photos.length === 1 ? "" : "s"} to send`}>
+      <ul className="fb-chat-photo-strip">
+        {photos.map((item, index) => <li key={item.key} className="fb-chat-photo-slot">
+          {item.url && item.prepared
+            ? (photoAllowed
+                ? <button type="button" className="fb-chat-photo-open" aria-label={`Review photo ${index + 1} of ${photos.length}`}
+                    onClick={() => { setViewer(null); setDraftViewer({ key: item.key }); }}>
+                    <img src={item.url} alt="" />
+                  </button>
+                : <span className="fb-chat-photo-open"><img src={item.url} alt="" /></span>)
+            : <span className="fb-chat-photo-open fb-chat-photo-pending" role="status">
+                {item.error ? <ImageOff size={20} aria-hidden="true" /> : <span className="fb-chat-photo-spinner" aria-hidden="true" />}
+                <span className="sr-only">{item.error ? "Could not prepare photo" : "Preparing photo"}</span>
+              </span>}
+          <button type="button" className="fb-chat-photo-remove" aria-label={`Remove photo ${index + 1}`}
+            disabled={photoSending || admissionFailed} onClick={() => removeStaged(item.key)}><X size={14} aria-hidden="true" /></button>
+        </li>)}
+      </ul>
+      <div className="fb-chat-photo-options">
+        <p role="status" className="fb-chat-secondary">
+          {!photoAllowed ? "Photos are available when connected."
+            : photoSending ? "Sending photos…"
+            : photos.some(item => item.preparing) ? "Preparing photos…"
+            : photos.some(item => item.error) ? "Some photos could not be prepared. Retry or remove them."
+            : `${photos.length} photo${photos.length === 1 ? "" : "s"} ready. Tap one to review.`}
+        </p>
+        {photoAllowed && photos.some(item => item.error) && <button type="button" disabled={photoSending}
+          onClick={() => { for (const item of photos) if (item.error) void retryStaged(item); }}>Retry</button>}
+        <button type="button" disabled={photoSending}
+          onClick={() => { for (const item of photos) removeStaged(item.key); }}>Remove all</button>
+      </div>
     </div>}
     <VoiceDraft recorder={voice.recorder} status={voiceStatus} recording={voiceRecording} notice={voiceNotice}
       url={voiceUrl} snapshot={playbackSnapshot} sending={voiceSending} allowed={voiceAllowed}
@@ -1265,18 +1475,18 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       onPreview={() => void previewVoice()} />
     {canCompose && <>
         {view?.mode === "CONNECTED" && <>
-          <input ref={photoInput} type="file" accept="image/*" aria-label="Photo file input" hidden onChange={(event) => {
-            const source = event.currentTarget.files?.[0]; event.currentTarget.value = "";
-            if (source && Capacitor.getPlatform() !== "android") void preparePhoto(source);
+          <input ref={photoInput} type="file" accept="image/*" multiple aria-label="Photo file input" hidden onChange={(event) => {
+            const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = "";
+            if (files.length > 0 && Capacitor.getPlatform() !== "android") void stageLocalFiles(files);
           }} />
           <input ref={cameraInput} type="file" accept="image/*" capture="environment" aria-label="Camera file input" hidden onChange={(event) => {
             const source = event.currentTarget.files?.[0]; event.currentTarget.value = "";
-            if (source && Capacitor.getPlatform() !== "android") void preparePhoto(source);
+            if (source && Capacitor.getPlatform() !== "android") void stageLocalFiles([source]);
           }} />
         </>}
       <PeerChatComposer value={draft} onChange={value => { draftRevision.current++; setDraft(value); }} onSend={() => void send()} inputRef={composer}
-        busy={false} locked={!runtimeOpen || (!!admission.current && !admissionFailed)} attachmentsLocked={!!admission.current || !!admissionFailed}
-        canSend={runtimeOpen && (photo ? photoAllowed && !!photo.prepared : !!draft.trim())}
+        busy={false} locked={!runtimeOpen || photoSending || voiceSending} attachmentsLocked={photoSending || admissionFailed}
+        canSend={runtimeOpen && (photos.length > 0 ? photoAllowed && photos.every(item => !!item.prepared) : !!draft.trim())}
         photoAllowed={view?.mode === "CONNECTED"}
         onCamera={() => void choosePhoto("camera")} onPhotos={() => void choosePhoto("photos")}
         voiceAvailable={voiceAllowed} voiceActive={voiceStatus === "recording"} onVoice={toggleVoiceCapture}
@@ -1289,6 +1499,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       onClose={() => setSheet(null)} onSend={shareLocation} />}
     <MediaViewer items={viewerItems} index={activeViewer ? viewerItems.findIndex((item) => item.id === activeViewer.id) : null}
       onIndexChange={(index) => { if (viewer && viewerItems[index]) setViewer({ ...viewer, id: viewerItems[index].id }); }} onClose={closePhoto} />
+    <MediaViewer items={draftViewerItems} index={draftViewerIndex < 0 ? null : draftViewerIndex}
+      onIndexChange={(index) => { const item = draftViewerItems[index]; if (item) setDraftViewer({ key: item.id }); }}
+      onClose={() => setDraftViewer(null)} />
     <ConfirmDialog open={confirming} onClose={() => setSheet(null)} title={confirmationTitle} busy={busy}
       confirmLabel={sheet === "end" ? "End connection" : sheet === "unsend" ? "Unsend" : sheet === "clear" ? "Clear for me" : "Delete for me"}
       cancelLabel={sheet === "end" ? "Keep connection" : "Cancel"}
@@ -1322,7 +1535,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     </AdaptiveTaskSurface>
     {menu && selectedMessage && createPortal(
       <div className="fb-msg-menu-backdrop" onPointerDown={() => setMenu(null)} role="presentation">
-        <div className="fb-msg-menu" role="menu" aria-label="Message options"
+        <div className="fb-msg-menu" role="menu" aria-label="Message options" ref={menuPanel}
           style={{ left: menu.x, top: menu.y }} onPointerDown={(event) => event.stopPropagation()}>
           {selectedMessage.body ? <button type="button" role="menuitem" onClick={() => {
             void navigator.clipboard?.writeText(selectedMessage.body).then(
