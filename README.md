@@ -50,7 +50,7 @@ Capture dimensions and checksums: [screenshot manifest](docs/screenshots/manifes
 - Profiles with verification badges, successful returns and a reputation level
 - Ratings that come from a real recovery, not from random profile visits
 - Block, report and feedback tools
-- Private messages with requests, connected-only still images and one-time location sharing, report-linked contact, conversation search, mute and personal Archive
+- Private messages with requests, connected-only still images, replies with quote jump-back, grouped photos, up to three shared pinned messages, one-time location sharing, report-linked contact, conversation search, mute and personal Archive
 - Adaptive layouts: bottom navigation on phones, compact rails and split views on larger windows
 - A shared photo viewer with zoom, keyboard navigation and desktop thumbnails
 - Sign in with email or Google; phone verification is not enabled

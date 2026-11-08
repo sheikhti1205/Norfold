@@ -67,6 +67,8 @@ describe("isEmojiOnly", () => {
     expect(isEmojiOnly("🇬🇧")).toBe(true);
     expect(isEmojiOnly("1️⃣")).toBe(true);
     expect(isEmojiOnly("😀 😀")).toBe(true);
+    expect(isEmojiOnly("🏴󠁧󠁢󠁥󠁮󠁧󠁿")).toBe(true);
+    expect(isEmojiOnly("🏳️‍🌈")).toBe(true);
   });
 
   it("rejects text, digits and mixed content", () => {
@@ -74,5 +76,13 @@ describe("isEmojiOnly", () => {
     expect(isEmojiOnly("hello 🙂")).toBe(false);
     expect(isEmojiOnly("7:30")).toBe(false);
     expect(isEmojiOnly("   ")).toBe(false);
+    // A digit or text-presentation symbol next to an emoji is a sentence, not
+    // a bare emoji: "2👍" must keep its bubble.
+    expect(isEmojiOnly("2👍")).toBe(false);
+    expect(isEmojiOnly("👍2")).toBe(false);
+    expect(isEmojiOnly("1🇧🇩")).toBe(false);
+    expect(isEmojiOnly("©")).toBe(false);
+    expect(isEmojiOnly("™")).toBe(false);
+    expect(isEmojiOnly("©️")).toBe(true);
   });
 });

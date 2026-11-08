@@ -876,7 +876,7 @@ it("closes an open photo when an unsend arrives in the same thread", async () =>
   m.messages = [received("MEDIA")]; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   m.media = [{ id: "photo", messageId: "message", direction: "IN", state: "READY", width: 2, height: 1, mime: "image/jpeg" }];
   const rendered = await open(); fireEvent.click(await screen.findByRole("button", { name: "View photo" }));
-   expect(screen.getByRole("dialog", { name: "Photo viewer" })).toBeTruthy();
+   expect(await screen.findByRole("dialog", { name: "Photo viewer" })).toBeTruthy();
   m.messages = [{ ...received("MEDIA"), body: "", unsentAt: 1 }]; m.chat.revision++;
   rendered.rerender(thread());
    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Photo viewer" })).toBeNull());
@@ -974,6 +974,26 @@ it("makes permanent-unavailable downloads opaque while a transient failure stays
   await waitFor(() => expect(screen.queryByRole("button", { name: "Download again" })).toBeNull());
   expect(screen.getByText("Photo unavailable")).toBeTruthy();
   expect(screen.queryByText(/synthetic network/)).toBeNull();
+});
+
+it("opens a single photo at its real place by reading photos the thread had not loaded", async () => {
+  let sequence = 0; vi.mocked(URL.createObjectURL).mockImplementation(() => `blob:single-${++sequence}`);
+  m.messages = [
+    { ...received("MEDIA"), id: "first" },
+    { ...received("MEDIA"), id: "second" },
+  ];
+  m.media = ["first", "second"].map((messageId) => ({ id: `photo-${messageId}`, messageId, direction: "IN", state: "READY", width: 2, height: 1, mime: "image/jpeg" }));
+  // The first photo has not been read yet (it sits outside the lazy margin),
+  // so the screen only holds the second one when the viewer opens.
+  let firstRead = false;
+  m.read.mockImplementation(async (_account, id) => {
+    if (id === "photo-first" && !firstRead) { firstRead = true; return null; }
+    return new ArrayBuffer(1);
+  });
+  await open();
+  fireEvent.click(await screen.findByRole("button", { name: "View photo" }));
+  const viewer = await screen.findByRole("dialog", { name: "Photo viewer" });
+  await waitFor(() => expect(within(viewer).getByText("Photo 2 of 2")).toBeTruthy());
 });
 
 it("opens the available conversation sequence and removes access immediately on relationship loss", async () => {
