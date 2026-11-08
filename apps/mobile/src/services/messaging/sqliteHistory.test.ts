@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HumanMessage, MailboxEnvelope } from "./history";
+import { UNSENT_HOLD_MS } from "./history";
 import { openSqliteMessagingHistory, type SqliteDriver, type SqliteHistoryOptions } from "./sqliteHistory";
 import { MESSAGING_SQLITE_SCHEMA, MESSAGING_SQLITE_SCHEMA_VERSION, MESSAGING_SQLITE_STATEMENTS as S } from "./sqliteSchema";
 import { MEDIA_SWEEP_GRACE_MS } from "./media";
@@ -1067,6 +1068,95 @@ const STATE_4 = "00000000-0000-4000-8000-0000000000f4";
 function state(change: StateChangeEnvelope["change"]): StateChangeEnvelope {
   return { accountId: A, deviceId: DEVICE, change };
 }
+
+describe("hidden unsent holds", () => {
+  it("retains the body for 24 hours while the transcript shows only unsent", async () => {
+    const history = await open();
+    await history.persistInbound(inbound());
+    await history.recordUnsend({ messageId: MESSAGE, conversationId: CONVERSATION, recipientId: A,
+      unsentAt: clock, unsentBy: B });
+    expect(await history.getUnsentHold(MESSAGE)).toMatchObject({
+      messageId: MESSAGE, conversationId: CONVERSATION, authorId: B, recipientId: A,
+      body: "Reply text", heldAt: clock, expiresAt: clock + UNSENT_HOLD_MS,
+    });
+    expect(await history.listMessages(CONVERSATION)).toEqual([
+      expect.objectContaining({ id: MESSAGE, body: "", unsentAt: clock }),
+    ]);
+    expect(await history.listUnsentHolds(CONVERSATION)).toHaveLength(1);
+    await history.close();
+  });
+
+  it("keeps the held body when a TEXT echo races the tombstone", async () => {
+    const history = await open();
+    await history.recordUnsend({ messageId: MESSAGE, conversationId: CONVERSATION, recipientId: A,
+      unsentAt: clock, unsentBy: B });
+    await history.persistInbound(inbound());
+    expect(await history.getMessage(MESSAGE)).toMatchObject({ body: "", unsentAt: clock });
+    expect(await history.getUnsentHold(MESSAGE)).toMatchObject({ body: "Reply text", heldAt: clock });
+    await history.close();
+  });
+
+  it("creates a hold from the applied UNSEND state event", async () => {
+    const history = await open();
+    await history.persistInbound(inbound());
+    await history.applyStateChange({ accountId: A, deviceId: DEVICE, change: {
+      kind: "UNSEND", eventId: "00000000-0000-4000-8000-0000000000f2", sequence: 1,
+      conversationId: CONVERSATION, occurredAt: clock + 5, messageId: MESSAGE,
+      authorId: B, recipientId: A, messageSequence: 1,
+    } });
+    expect(await history.getMessage(MESSAGE)).toMatchObject({ body: "", unsentAt: clock + 5 });
+    expect(await history.getUnsentHold(MESSAGE)).toMatchObject({
+      body: "Reply text", heldAt: clock + 5, expiresAt: clock + 5 + UNSENT_HOLD_MS,
+    });
+    await history.close();
+  });
+
+  it("stops serving and physically removes an expired hold", async () => {
+    const history = await open();
+    await history.persistInbound(inbound());
+    await history.recordUnsend({ messageId: MESSAGE, conversationId: CONVERSATION, recipientId: A,
+      unsentAt: clock, unsentBy: B });
+    clock += UNSENT_HOLD_MS + 1;
+    expect(await history.getUnsentHold(MESSAGE)).toBeNull();
+    expect(await history.listUnsentHolds(CONVERSATION)).toEqual([]);
+    expect(await history.purgeUnsentHolds()).toBe(1);
+    expect(database.prepare("select count(*) as n from unsent_holds").get()).toEqual({ n: 0 });
+    await history.close();
+  });
+
+  it("removes the hold on delete-for-me and on a covered clear", async () => {
+    const history = await open();
+    await history.persistInbound(inbound());
+    await history.recordUnsend({ messageId: MESSAGE, conversationId: CONVERSATION, recipientId: A,
+      unsentAt: clock, unsentBy: B });
+    await history.deleteForMe(MESSAGE);
+    expect(await history.getUnsentHold(MESSAGE)).toBeNull();
+
+    await history.persistInbound(inbound({ id: MESSAGE_2 }, EVENT_2, MAILBOX_2, 2));
+    await history.recordUnsend({ messageId: MESSAGE_2, conversationId: CONVERSATION, recipientId: A,
+      unsentAt: clock, unsentBy: B });
+    await history.clearThrough(CONVERSATION, 2);
+    expect(await history.getUnsentHold(MESSAGE_2)).toBeNull();
+    await history.close();
+  });
+
+  it("never exports or imports a held body", async () => {
+    const history = await open();
+    await history.persistInbound(inbound());
+    await history.recordUnsend({ messageId: MESSAGE, conversationId: CONVERSATION, recipientId: A,
+      unsentAt: clock, unsentBy: B });
+    const snapshot = await history.exportSnapshot();
+    expect(JSON.stringify(snapshot)).not.toContain("Reply text");
+    expect(JSON.stringify(snapshot)).not.toContain("expiresAt");
+    await history.close();
+
+    const other = await openOn(new DatabaseSync(join(dir, "restored.db")));
+    await other.importSnapshot(snapshot);
+    expect(await other.getUnsentHold(MESSAGE)).toBeNull();
+    expect(await other.getMessage(MESSAGE)).toMatchObject({ body: "" });
+    await other.close();
+  });
+});
 
 describe("server-authoritative erasure state", () => {
   it("applies an unsend that follows the authoritative echo", async () => {

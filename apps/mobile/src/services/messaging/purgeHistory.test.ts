@@ -104,6 +104,11 @@ describe.each(["sqlite", "web"] as const)("%s complete history purge", (backend)
       eventId: id(503), conversationId: CONV, peerId: B, throughSequence: 2, occurredAt: Date.now() } });
     await history.applyStateChange({ ...scope, change: { kind: "CLEAR_FOR_ME", sequence: 4,
       eventId: id(504), conversationId: CONV, peerId: B, throughSequence: 2, occurredAt: Date.now() } }, "conversation");
+    // Keep one live hold after the clear boundary so the fixture exercises the
+    // v13 hidden store on both engines; a clear must remove only what it covers.
+    await history.applyStateChange({ ...scope, change: { kind: "UNSEND", sequence: 5,
+      eventId: id(505), conversationId: CONV, messageId: message(3).id, authorId: A, recipientId: B,
+      messageSequence: 3, occurredAt: Date.now() } });
     await history.commitConversationCheckpoint({ accountId: A, conversationId: CONV, streamId: "purge-checkpoint-stream",
       epoch: "purge-relationship", revision: 1, position: 6, messageHead: 3, stateHead: 6, serverTime: Date.now() }, null);
     await history.saveConversationProgress({ target: { accountId: A, conversationId: CONV, streamId: "purge-checkpoint-stream",

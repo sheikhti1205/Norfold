@@ -51,7 +51,9 @@
 // v12 adds `reply_to_id`: the id of the message this one answers. Nullable and
 // additive, so an existing file gains the column and every stored message keeps
 // its exact current shape.
-export const MESSAGING_SQLITE_SCHEMA_VERSION = 12;
+// v13 adds the local hidden `unsent_holds` copy. It is a separate table so no
+// existing read can render it, and it is excluded from snapshots by construction.
+export const MESSAGING_SQLITE_SCHEMA_VERSION = 13;
 
 /**
  * The v5 `messages` body CHECK, recognised in `sqlite_master`.
@@ -185,6 +187,26 @@ export const MESSAGING_SQLITE_SCHEMA = [
     unsent_at integer not null,
     unsent_by text not null
   )`,
+  // v13: the local-only retained copy of an unsent message. Deliberately a
+  // separate table so no transcript/media/preview query can reach it and the
+  // portable snapshot never selects it. It is purged after UNSENT_HOLD_MS.
+  `create table if not exists unsent_holds (
+    message_id text primary key references messages(id) on delete cascade,
+    conversation_id text not null,
+    author_id text not null,
+    recipient_id text not null,
+    body text not null,
+    context_report_id text,
+    reply_to_id text,
+    location_lat real,
+    location_lng real,
+    location_accuracy_m real,
+    held_at integer not null,
+    expires_at integer not null,
+    check (length(body) <= 100000),
+    check (expires_at > held_at)
+  )`,
+  `create index if not exists ix_unsent_holds_expiry on unsent_holds(expires_at)`,
   // Deliberately no foreign key: a same-user deletion event may arrive before the
   // message content it hides (R3 §9 restore ordering).
   `create table if not exists deleted_for_me (
@@ -267,7 +289,7 @@ export const MESSAGING_SQLITE_STATEMENTS = {
     "delete from media_attachments", "delete from outbox", "delete from mailbox_seen",
     "delete from tombstones", "delete from deleted_for_me", "delete from conversation_cleared",
     "delete from conversation_state", "delete from messaging_state_events", "delete from messages",
-    "delete from conversations",
+    "delete from unsent_holds", "delete from conversations",
     "delete from messaging_meta where key not in ('account_id', 'device_id', 'schema_version', 'history_purged', 'media_purged')",
   ],
   historyRowCount: `select (select count(*) from media_attachments) + (select count(*) from outbox)
@@ -275,6 +297,7 @@ export const MESSAGING_SQLITE_STATEMENTS = {
     + (select count(*) from deleted_for_me) + (select count(*) from conversation_cleared)
     + (select count(*) from conversation_state) + (select count(*) from messaging_state_events)
     + (select count(*) from messages) + (select count(*) from conversations)
+    + (select count(*) from unsent_holds)
     + (select count(*) from messaging_meta where key not in
       ('account_id', 'device_id', 'schema_version', 'history_purged', 'media_purged')) as n`,
   getStateCursor: `select event_id as eventId, sequence from messaging_state_events order by sequence desc limit 1`,
@@ -421,6 +444,27 @@ export const MESSAGING_SQLITE_STATEMENTS = {
     values (?, ?, ?)`,
   clearConversation: `update conversation_cleared
     set through_sequence = max(through_sequence, ?), cleared_at = ? where conversation_id = ?`,
+
+  // ---- v13: local hidden unsent copy ----
+  insertUnsentHold: `insert into unsent_holds
+    (message_id, conversation_id, author_id, recipient_id, body, context_report_id,
+      reply_to_id, location_lat, location_lng, location_accuracy_m, held_at, expires_at)
+    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    on conflict(message_id) do nothing`,
+  getUnsentHold: `select message_id as messageId, conversation_id as conversationId,
+    author_id as authorId, recipient_id as recipientId, body, context_report_id as contextReportId,
+    reply_to_id as replyToId, location_lat as locationLat, location_lng as locationLng,
+    location_accuracy_m as locationAccuracy, held_at as heldAt, expires_at as expiresAt
+    from unsent_holds where message_id = ? and expires_at > ?`,
+  listUnsentHolds: `select message_id as messageId, conversation_id as conversationId,
+    author_id as authorId, recipient_id as recipientId, body, context_report_id as contextReportId,
+    reply_to_id as replyToId, location_lat as locationLat, location_lng as locationLng,
+    location_accuracy_m as locationAccuracy, held_at as heldAt, expires_at as expiresAt
+    from unsent_holds where conversation_id = ? and expires_at > ? order by held_at, message_id`,
+  deleteUnsentHold: `delete from unsent_holds where message_id = ?`,
+  deleteUnsentHoldsThrough: `delete from unsent_holds where message_id in
+    (select id from messages where conversation_id = ? and server_sequence <= ?)`,
+  purgeExpiredUnsentHolds: `delete from unsent_holds where expires_at <= ?`,
 
   // ---- v4 -> v5: messages.body admits '' (image-only caption) ----
   /** Fingerprint of the live table; the CHECK cannot be altered in place. */

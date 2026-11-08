@@ -1,8 +1,9 @@
 import type {
   HumanMessage, MailboxEnvelope, MessagingHistory, MessagingScope,
   OutboxEntry, OutgoingAttempt, PersistenceReceipt, StoredHumanMessage, MediaAttachment, MediaBytesPort, HistorySnapshot, ImportReport,
+  UnsentHold,
 } from "./history";
-import { MediaParentUnavailableError } from "./history";
+import { MediaParentUnavailableError, UNSENT_HOLD_MS } from "./history";
 import { cachedMediaAllowed, copyOutgoingMessage, copyMediaMessage, copyReceivedMessage, compatibleMessageType, copyMediaAttachment, sameMessage, eraseMessageContent, positiveSequence, uuid } from "./validation";
 import { isMediaSha256, sameMediaIdentity, verifyMediaBytes, type MediaMetadata, type MediaUploadAttempt } from "./media";
 import { verifyMediaContent, type MediaDecoder } from "./mediaContent";
@@ -19,8 +20,9 @@ import { erasureMatches, exportPortable, mergePortable, type PortableConversatio
   type PortableMessage, type PortableView } from "./indexedDbBackup";
 
 // v8 isolates range suppression from the account-wide state replay cursor.
-export const MESSAGING_IDB_VERSION = 8;
-const STORES = ["messages", "outbox", "events", "mailbox", "conversations", "stateEvents", "rangeStateEvents", "deletions", "clears", "unsends", "mediaAttachments", "mediaLifecycle", "conversationCheckpoints", "conversationProgress", "conversationUnavailable"];
+// v9 adds the local hidden unsent hold. It is never part of a portable snapshot.
+export const MESSAGING_IDB_VERSION = 9;
+const STORES = ["messages", "outbox", "events", "mailbox", "conversations", "stateEvents", "rangeStateEvents", "deletions", "clears", "unsends", "mediaAttachments", "mediaLifecycle", "conversationCheckpoints", "conversationProgress", "conversationUnavailable", "unsentHolds"];
 const LEASE_MS = 60_000;
 
 interface EventIdentity {
@@ -73,6 +75,13 @@ function connect(factory: IDBFactory, name: string): Promise<IDBDatabase> {
         media.createIndex("messageId", "messageId", { unique: true });
       }
       if (!db.objectStoreNames.contains("mediaLifecycle")) db.createObjectStore("mediaLifecycle");
+      // v9 additive: one hidden copy per unsent message. The expiry index is the
+      // only sweep path; the conversation index feeds the id list.
+      if (!db.objectStoreNames.contains("unsentHolds")) {
+        const holds = db.createObjectStore("unsentHolds", { keyPath: "messageId" });
+        holds.createIndex("conversation", "conversationId");
+        holds.createIndex("expiry", "expiresAt");
+      }
       // Upgrade is one atomic versionchange transaction. Only an existing
       // attachment establishes MEDIA; absent metadata never proves TEXT.
       const tx = request.transaction!;
@@ -275,6 +284,79 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
       request.onsuccess = guard(() => visibleMessages(tx, guard,
         request.result ? [request.result as StoredHumanMessage] : [], (messages) => result(messages[0] ?? null)));
     });
+  }
+
+  async function getUnsentHold(messageId: string): Promise<UnsentHold | null> {
+    assertOpen(); uuid(messageId);
+    return transaction("readonly", (tx, result, guard) => {
+      const request = tx.objectStore("unsentHolds").get(messageId);
+      request.onsuccess = guard(() => {
+        const hold = request.result as UnsentHold | undefined;
+        result(hold && hold.expiresAt > Date.now() ? hold : null);
+      });
+    });
+  }
+
+  async function listUnsentHolds(conversationId: string): Promise<UnsentHold[]> {
+    assertOpen(); uuid(conversationId);
+    return transaction("readonly", (tx, result, guard) => {
+      const request = tx.objectStore("unsentHolds").index("conversation").getAll(conversationId);
+      request.onsuccess = guard(() => {
+        const at = Date.now();
+        result((request.result as UnsentHold[]).filter((hold) => hold.expiresAt > at)
+          .sort((a, b) => a.heldAt - b.heldAt || a.messageId.localeCompare(b.messageId)));
+      });
+    });
+  }
+
+  async function deleteUnsentHold(messageId: string): Promise<void> {
+    assertOpen(); uuid(messageId);
+    return transaction("readwrite", (tx, result) => {
+      tx.objectStore("unsentHolds").delete(messageId); result(undefined);
+    });
+  }
+
+  async function purgeUnsentHolds(at = Date.now(), allowPurged = false): Promise<number> {
+    assertOpen();
+    // A cleanup check that finds nothing must not open a write transaction:
+    // opening history is a common path and strict durability is not free.
+    const expired = await transaction<boolean>("readonly", (tx, result) => {
+      const request = tx.objectStore("unsentHolds").index("expiry").openCursor();
+      request.onsuccess = () => {
+        const cursor = request.result;
+        result(!!cursor && (cursor.value as UnsentHold).expiresAt <= at);
+      };
+    }, undefined, allowPurged);
+    if (!expired) return 0;
+    return transaction("readwrite", (tx, result) => {
+      const index = tx.objectStore("unsentHolds").index("expiry");
+      const request = index.openCursor();
+      let removed = 0;
+      request.onsuccess = () => {
+        const cursor = request.result;
+        // The expiry index is ordered, so the first live row ends the sweep.
+        if (!cursor || (cursor.value as UnsentHold).expiresAt > at) { result(removed); return; }
+        cursor.delete(); removed += 1; cursor.continue();
+      };
+    }, undefined, allowPurged);
+  }
+
+  /** Keep the erased body out of the message row but inside the reportable hold. */
+  function holdUnsentContent(tx: IDBTransaction, existing: StoredHumanMessage | undefined,
+    authorId: string, recipientId: string, heldAt: number): void {
+    // An empty caption is still a real message payload; only an already erased
+    // row has nothing left to retain.
+    if (!existing || existing.unsentAt !== undefined) return;
+    const hold: UnsentHold = {
+      messageId: existing.id, conversationId: existing.conversationId,
+      authorId: existing.authorId || authorId, recipientId: existing.recipientId || recipientId,
+      body: existing.body,
+      ...(existing.contextReportId ? { contextReportId: existing.contextReportId } : {}),
+      ...(existing.replyToId ? { replyToId: existing.replyToId } : {}),
+      ...(existing.location ? { location: existing.location } : {}),
+      heldAt, expiresAt: heldAt + UNSENT_HOLD_MS,
+    };
+    tx.objectStore("unsentHolds").put(hold);
   }
 
   async function listMessages(conversationId: string): Promise<StoredHumanMessage[]> {
@@ -528,6 +610,17 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
             if (existing?.server && (existing.server.eventId !== eventId || existing.server.sequence !== sequence)) {
               throw new Error("Immutable message event conflict");
             }
+            if (tombstone) {
+              if (existing) holdUnsentContent(tx, existing, message.authorId, message.recipientId, tombstone.occurredAt);
+              else if (message.body !== "") tx.objectStore("unsentHolds").put({
+                messageId: message.id, conversationId: message.conversationId,
+                authorId: message.authorId, recipientId: message.recipientId, body: message.body,
+                ...(message.contextReportId ? { contextReportId: message.contextReportId } : {}),
+                ...(message.replyToId ? { replyToId: message.replyToId } : {}),
+                ...(message.location ? { location: message.location } : {}),
+                heldAt: tombstone.occurredAt, expiresAt: tombstone.occurredAt + UNSENT_HOLD_MS,
+              } satisfies UnsentHold);
+            }
             if (!existingEvent) events.add({ eventId, conversationId: message.conversationId, sequence, messageId: message.id } satisfies EventIdentity);
             const stored: PortableMessage = { ...existing, ...message, server: { eventId, sequence },
               createdAt: existing?.createdAt ?? message.createdAt ?? Date.now(),
@@ -661,6 +754,7 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
             const message = entry.value as StoredHumanMessage;
             if (message.server && message.server.sequence <= change.throughSequence) {
               entry.update(eraseMessageContent(message));
+              tx.objectStore("unsentHolds").delete(message.id);
               removeMediaRows(tx, guard, message.id);
             }
             entry.continue();
@@ -711,6 +805,9 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
             // Inserting a body-less row would append a floating bubble at the
             // bottom, out of the position this client does not know; the
             // authoritative TEXT echo later supplies the real position.
+            if (change.kind === "UNSEND") {
+              holdUnsentContent(tx, existing, change.authorId, change.recipientId, change.occurredAt);
+            }
             if (existing) messages.put({ ...eraseMessageContent(existing), id: change.messageId, conversationId: change.conversationId,
                 authorId: change.authorId, recipientId: change.recipientId, body: "",
                 ...(existing.messageType ? { messageType: existing.messageType } : {}),
@@ -1173,12 +1270,19 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
     if (!closed && !mediaPurged) await serializedMediaReady(record.id);
   }
 
+  // An expired hold must not survive a restart, even offline. Cleanup runs even
+  // on a fenced/purged history: it removes, never restores, content.
+  try { await purgeUnsentHolds(Date.now(), true); }
+  catch (error) { await close(); throw error; }
+
   if (options.mediaBytes && !options.cleanupOnly) {
     try { await serial(async () => { if (!await historyIsPurged()) await sweepOrphanMedia(100); }, true)(); }
     catch (error) { await close(); throw error; }
   }
 
   return { enqueueOutgoing: serial(enqueueOutgoing), getMessage: serial(getMessage), listMessages: serial(listMessages),
+    getUnsentHold: serial(getUnsentHold), listUnsentHolds: serial(listUnsentHolds),
+    deleteUnsentHold: serial(deleteUnsentHold), purgeUnsentHolds: serial(purgeUnsentHolds),
     listConversations: serial(listConversations), cacheConversation: serial(cacheConversation),
     markConversationRead: serial(markConversationRead), saveMessageReadFact: serial(saveMessageReadFact), getStateCursor: serial(getStateCursor),
     getConversationCheckpoint: serial(getConversationCheckpoint), commitConversationCheckpoint: serial(commitConversationCheckpoint),

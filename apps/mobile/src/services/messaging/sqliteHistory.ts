@@ -13,8 +13,9 @@
 import type {
   HistorySnapshot, HumanMessage, ImportReport, MailboxEnvelope, MediaAttachment, MediaBytesPort,
   MessagingHistory, MessagingScope, OutboxEntry, OutgoingAttempt, PersistenceReceipt, StoredHumanMessage,
+  UnsentHold,
 } from "./history";
-import { MediaParentUnavailableError } from "./history";
+import { MediaParentUnavailableError, UNSENT_HOLD_MS } from "./history";
 import { assertReadFact, readFactsFromMask, readFactsMask } from "./readFacts";
 import { BackupError, normaliseSnapshot, validateSnapshot } from "./backup";
 import {
@@ -107,6 +108,21 @@ interface TombstoneRow {
   unsentBy: string;
 }
 
+interface HoldRow {
+  messageId: string;
+  conversationId: string;
+  authorId: string;
+  recipientId: string;
+  body: string;
+  contextReportId: string | null;
+  replyToId: string | null;
+  locationLat: number | null;
+  locationLng: number | null;
+  locationAccuracy: number | null;
+  heldAt: number;
+  expiresAt: number;
+}
+
 /** `media_attachments` as the adapter reads it; validation re-checks every field. */
 interface MediaRow {
   id: string;
@@ -134,9 +150,9 @@ const LEASE_MS = 60_000;
  * after the parent swap. A failed copy/swap/check rolls back everything. */
 async function preserveMessageDependents(driver: SqliteDriver): Promise<() => Promise<void>> {
   const tables = await driver.all<{ name: string }>(
-    "select name from sqlite_master where type = 'table' and name in ('outbox','media_attachments')");
+    "select name from sqlite_master where type = 'table' and name in ('outbox','media_attachments','unsent_holds')");
   for (const { name } of tables) {
-    if (name !== "outbox" && name !== "media_attachments") throw new Error("Unexpected messaging dependency");
+    if (name !== "outbox" && name !== "media_attachments" && name !== "unsent_holds") throw new Error("Unexpected messaging dependency");
     await driver.exec(`create temporary table messaging_rebuild_${name} as select * from ${name}`);
   }
   return async () => {
@@ -158,8 +174,9 @@ const SUPPORTED_PRIOR_VERSIONS: readonly string[] = [
   // "10" shipped in the 2026-11-04 build (conversation HEAD). The voice wave
   // moved to 11 and must keep migrating those files forward; omitting 10 made
   // every existing install refuse to open its own chat history. "11" is the
-  // voice build, which gains the reply column on upgrade.
-  "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", String(MESSAGING_SQLITE_SCHEMA_VERSION),
+  // voice build, which gains the reply column on upgrade. "12" is the reply
+  // build; it opens here and gains the local unsent-hold table.
+  "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", String(MESSAGING_SQLITE_SCHEMA_VERSION),
 ];
 
 function defaultToken(): string {
@@ -591,6 +608,27 @@ export async function openSqliteMessagingHistory(
     return (await driver.all<TombstoneRow>(S.getTombstone, [id]))[0];
   }
 
+  /** Keep the erased body out of the message row but inside the reportable hold. */
+  async function holdUnsentContent(existing: MessageRow | undefined, heldAt: number): Promise<void> {
+    if (!existing || existing.body === null) return;
+    await driver.run(S.insertUnsentHold, [existing.id, existing.conversationId, existing.authorId,
+      existing.recipientId, existing.body, existing.contextReportId, existing.replyToId,
+      existing.locationLat, existing.locationLng, existing.locationAccuracy, heldAt, heldAt + UNSENT_HOLD_MS]);
+  }
+
+  function toUnsentHold(row: HoldRow): UnsentHold {
+    return {
+      messageId: row.messageId, conversationId: row.conversationId, authorId: row.authorId,
+      recipientId: row.recipientId, body: row.body,
+      ...(row.contextReportId !== null ? { contextReportId: row.contextReportId } : {}),
+      ...(row.replyToId !== null ? { replyToId: row.replyToId } : {}),
+      ...(row.locationLat !== null && row.locationLng !== null
+        ? { location: { lat: row.locationLat, lng: row.locationLng, accuracy: row.locationAccuracy } }
+        : {}),
+      heldAt: row.heldAt, expiresAt: row.expiresAt,
+    };
+  }
+
   async function touch(conversationId: string, sequence: number) {
     await driver.run(S.insertConversation, [conversationId, now(), now()]);
     await driver.run(S.touchConversation, [sequence, now(), conversationId]);
@@ -940,6 +978,12 @@ export async function openSqliteMessagingHistory(
         if (existing.body !== null && existing.body !== message.body) {
           throw new Error("Immutable message conflict");
         }
+        // A tombstone that predates this echo (legacy file or a racing state
+        // event) still gets its one reportable copy before the body is erased.
+        if (tombstone && existing.body !== null) {
+          await holdUnsentContent(existing, tombstone.unsentAt);
+          await driver.run(S.clearMessageBody, [tombstone.unsentAt, message.id]);
+        }
         if (existing.eventId === null) {
           // The participant-authorized echo confirms the pending message.
           await driver.run(S.setMessageServer, [eventId, sequence, message.id]);
@@ -951,6 +995,12 @@ export async function openSqliteMessagingHistory(
             message.id, message.conversationId, message.authorId, message.recipientId,
             now(), tombstone.unsentAt, message.messageType ?? null,
           ]);
+          if (message.body !== "") {
+            await driver.run(S.insertUnsentHold, [message.id, message.conversationId, message.authorId,
+              message.recipientId, message.body, message.contextReportId ?? null, message.replyToId ?? null,
+              message.location?.lat ?? null, message.location?.lng ?? null, message.location?.accuracy ?? null,
+              tombstone.unsentAt, tombstone.unsentAt + UNSENT_HOLD_MS]);
+          }
         } else if (suppressed) {
           await driver.run(S.insertTombstonedMessage, [
             message.id, message.conversationId, message.authorId, message.recipientId, now(), null, message.messageType ?? null,
@@ -1034,10 +1084,12 @@ export async function openSqliteMessagingHistory(
         await driver.run(S.insertTombstone, [messageId, conversationId, recipientId, unsentAt, unsentBy]);
       }
       if (existing && existing.body !== null) {
+        await holdUnsentContent(existing, unsentAt);
         await driver.run(S.clearMessageBody, [unsentAt, messageId]);
       }
       // An unsent message must never be leased for delivery.
       await driver.run(S.deleteOutbox, [messageId]);
+      await driver.run(S.purgeExpiredUnsentHolds, [now()]);
     });
   }
 
@@ -1062,6 +1114,7 @@ export async function openSqliteMessagingHistory(
         // Delete-for-me is local erasure: the plaintext must not stay readable in
         // the file. A message the server has never accepted is also cancelled so
         // it cannot be delivered after the user deleted it.
+        await driver.run(S.deleteUnsentHold, [id]);
         await driver.run(S.erasePersonalMessage, [id]);
         if (existing.eventId === null && existing.authorId === scope.accountId) {
           await driver.run(S.deleteOutbox, [id]);
@@ -1082,13 +1135,37 @@ export async function openSqliteMessagingHistory(
       // server-metadata path in `applyStateChange`. Leaving the bodies in the
       // file would make "clear chat" a UI-only claim. Pending sends have no
       // server sequence, so they are never covered by the boundary.
+      await driver.run(S.deleteUnsentHoldsThrough, [id, through]);
       await driver.run(S.erasePersonalConversation, [id, through]);
     });
   }
 
   async function getStateCursor(): Promise<StateCursor | null> {
-    await assertOpen();
     return (await driver.all<StateCursor>(S.getStateCursor))[0] ?? null;
+  }
+
+  async function getUnsentHold(messageId: string): Promise<UnsentHold | null> {
+    await assertOpen();
+    const id = uuid(messageId);
+    const row = (await driver.all<HoldRow>(S.getUnsentHold, [id, now()]))[0];
+    return row ? toUnsentHold(row) : null;
+  }
+
+  async function listUnsentHolds(conversationId: string): Promise<UnsentHold[]> {
+    await assertOpen();
+    const id = uuid(conversationId);
+    return (await driver.all<HoldRow>(S.listUnsentHolds, [id, now()])).map(toUnsentHold);
+  }
+
+  async function deleteUnsentHold(messageId: string): Promise<void> {
+    await assertOpen();
+    return transaction(async () => { await driver.run(S.deleteUnsentHold, [uuid(messageId)]); });
+  }
+
+  async function purgeUnsentHolds(at = now()): Promise<number> {
+    await assertOpen();
+    positiveTimestamp(at);
+    return transaction(async () => await driver.run(S.purgeExpiredUnsentHolds, [at]));
   }
 
   async function getConversationCheckpoint(conversationId: string): Promise<ConversationHead | null> {
@@ -1166,6 +1243,7 @@ export async function openSqliteMessagingHistory(
       if (change.kind === "CLEAR_FOR_ME") {
         await driver.run(S.insertClearConversation, [change.conversationId, change.throughSequence, change.occurredAt]);
         await driver.run(S.clearConversation, [change.throughSequence, change.occurredAt, change.conversationId]);
+        await driver.run(S.deleteUnsentHoldsThrough, [change.conversationId, change.throughSequence]);
         await driver.run(S.erasePersonalConversation, [change.conversationId, change.throughSequence]);
       } else {
         const existing = await messageRow(change.messageId);
@@ -1190,7 +1268,10 @@ export async function openSqliteMessagingHistory(
           // body-less row here would append a floating bubble at the bottom,
           // out of the position this client does not know; the authoritative
           // TEXT echo later supplies the real position.
-          if (existing) await driver.run(S.clearMessageBody, [change.occurredAt, change.messageId]);
+          if (existing) {
+            await holdUnsentContent(existing, change.occurredAt);
+            await driver.run(S.clearMessageBody, [change.occurredAt, change.messageId]);
+          }
         } else {
           await driver.run(S.deleteForMe, [change.messageId, change.conversationId, change.occurredAt]);
           if (!existing) await driver.run(S.insertTombstonedMessage, [change.messageId, change.conversationId,
@@ -1202,6 +1283,7 @@ export async function openSqliteMessagingHistory(
         // synthetic id here would make the real echo look like a conflict.
         await driver.run(S.deleteOutbox, [change.messageId]);
       }
+      await driver.run(S.purgeExpiredUnsentHolds, [now()]);
       if (mode === "account") await driver.run(S.insertStateEvent, [change.eventId, change.sequence, json]);
       else {
         await driver.run(S.setMeta, [rangeKey, json]);
@@ -1814,6 +1896,10 @@ export async function openSqliteMessagingHistory(
     return closing;
   }
 
+  // A hold that expired while the app was closed must be gone before any read.
+  try { await driver.run(S.purgeExpiredUnsentHolds, [now()]); }
+  catch (error) { await driver.close(); throw error; }
+
   if (options.mediaBytes && !options.cleanupOnly) {
     try { await serial(async () => { if (!await historyIsPurged()) await sweepOrphanMedia(100); }, true)(); }
     catch (error) { await close(); throw error; }
@@ -1833,6 +1919,8 @@ export async function openSqliteMessagingHistory(
     listConversations: serial(listConversations), cacheConversation: serial(cacheConversation),
     markConversationRead: serial(markConversationRead), saveMessageReadFact: serial(saveMessageReadFact),
     getStateCursor: serial(getStateCursor), applyStateChange: serial(applyStateChange),
+    getUnsentHold: serial(getUnsentHold), listUnsentHolds: serial(listUnsentHolds),
+    deleteUnsentHold: serial(deleteUnsentHold), purgeUnsentHolds: serial(purgeUnsentHolds),
     getConversationProgress: serial(getConversationProgress), saveConversationProgress: serial(saveConversationProgress),
     getConversationCheckpoint: serial(getConversationCheckpoint), commitConversationCheckpoint: serial(commitConversationCheckpoint),
     recordConversationUnavailable: serial(recordConversationUnavailable), listConversationUnavailable: serial(listConversationUnavailable),
