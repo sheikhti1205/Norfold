@@ -11,6 +11,7 @@ import { formatVoiceDuration } from "./voice";
 export interface VoiceAudioHandle {
   src: string;
   currentTime: number;
+  playbackRate: number;
   readonly duration: number;
   paused: boolean;
   play(): Promise<void>;
@@ -152,6 +153,9 @@ export function createVoicePlayback(ports: VoicePlaybackPorts) {
     seekTo(milliseconds: number): void {
       seekTo(milliseconds);
     },
+    setRate(rate: number): void {
+      if (audio && [1, 1.5, 2].includes(rate)) audio.playbackRate = rate;
+    },
     /** Skip back/forward from the current position, clamped to the note. */
     nudge(direction: "back" | "forward"): void {
       if (!current) return;
@@ -179,6 +183,8 @@ export function browserVoicePlaybackPorts(): VoicePlaybackPorts {
         set src(value: string) { element.src = value; },
         get currentTime() { return element.currentTime; },
         set currentTime(value: number) { element.currentTime = value; },
+        get playbackRate() { return element.playbackRate; },
+        set playbackRate(value: number) { element.playbackRate = value; },
         get duration() { return element.duration; },
         get paused() { return element.paused; },
         play: () => element.play(),

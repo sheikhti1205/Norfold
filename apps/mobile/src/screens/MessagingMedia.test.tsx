@@ -8,6 +8,9 @@ import { MessagingRestoration } from "../components/MessagingRestoration";
 import { Capacitor } from "@capacitor/core";
 import { PhotoUnavailableError } from "../services/messaging/mediaTransport";
 import type { MessagingThreadSync } from "../services/messaging/runtime";
+import { Blob as NodeBlob } from "node:buffer";
+import { webcrypto } from "node:crypto";
+import { sha256Hex } from "../services/messaging/media";
 
 const m = vi.hoisted(() => {
   const view = { mode: "CONNECTED", request: "OUTGOING", ownBlocked: false, ownMuted: false, epoch: "relationship-a", revision: 1 };
@@ -15,12 +18,12 @@ const m = vi.hoisted(() => {
     threadSync: { conversationId: "chat", mode: "ready", missing: 0 } as MessagingThreadSync | null,
     conversations: [{ conversationId: "chat", peerId: "peer", cachedProjection: view }], currentProjections: { chat: view } },
     messages: [] as unknown[], media: [] as unknown[], outbox: [] as unknown[], cached: null as null | { messages: unknown[]; media: unknown[]; outbox: unknown[] }, threadRead: vi.fn(),
-    location: vi.fn(), mute: vi.fn(), prepare: vi.fn(), relationship: vi.fn(), text: vi.fn(), send: vi.fn(), read: vi.fn(), download: vi.fn(), remove: vi.fn(), recover: vi.fn(), retry: vi.fn(), receipt: vi.fn(), observe: vi.fn(), refresh: vi.fn(), choose: vi.fn(), import: vi.fn(), file: vi.fn() };
+    voice: vi.fn(), location: vi.fn(), mute: vi.fn(), prepare: vi.fn(), relationship: vi.fn(), text: vi.fn(), send: vi.fn(), read: vi.fn(), download: vi.fn(), remove: vi.fn(), recover: vi.fn(), retry: vi.fn(), receipt: vi.fn(), observe: vi.fn(), refresh: vi.fn(), choose: vi.fn(), import: vi.fn(), file: vi.fn() };
 });
 vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "account" } }) }));
 vi.mock("../services/accountLabels", () => ({ fetchAccountIdentities: async () => new Map(), readCachedAccountIdentities: () => new Map() }));
 vi.mock("../services/messaging/useMessaging", () => ({ useMessaging: () => m.chat }));
-vi.mock("../services/messaging/runtime", () => ({ getCachedMessagingThreadState: () => m.cached, watchMessagingThread: m.watch, sendMessagingLocation: m.location, setMessagingMuted: m.mute, readMessagingThreadState: () => m.threadRead(), fetchMessagingReceiptView: m.receipt, observeMessagingReceipt: m.observe, markMessagingConversationRead: async () => {}, refreshMessaging: m.refresh, sendMessagingText: m.text, sendMessagingMedia: m.send, readMessagingMedia: m.read, downloadMessagingMedia: m.download, changeMessagingRelationship: m.relationship, clearMessagingConversation: async () => {}, removeMessagingMessage: m.remove, recoverMessagingText: m.recover, retryMessagingMessage: m.retry }));
+vi.mock("../services/messaging/runtime", () => ({ getCachedMessagingThreadState: () => m.cached, watchMessagingThread: m.watch, sendMessagingVoice: m.voice, sendMessagingLocation: m.location, setMessagingMuted: m.mute, readMessagingThreadState: () => m.threadRead(), fetchMessagingReceiptView: m.receipt, observeMessagingReceipt: m.observe, markMessagingConversationRead: async () => {}, refreshMessaging: m.refresh, sendMessagingText: m.text, sendMessagingMedia: m.send, readMessagingMedia: m.read, downloadMessagingMedia: m.download, changeMessagingRelationship: m.relationship, clearMessagingConversation: async () => {}, removeMessagingMessage: m.remove, recoverMessagingText: m.recover, retryMessagingMessage: m.retry }));
 vi.mock("../services/messaging/preparePhoto", () => ({ prepareMessagingPhoto: m.prepare }));
 vi.mock("../services/media/nativeMedia", () => ({ chooseNativeImages: m.choose, importNativeImageUri: m.import, importedImageToFile: m.file }));
 beforeEach(() => { vi.stubGlobal("URL", Object.assign(class extends URL {}, { createObjectURL: vi.fn(() => "blob:test"), revokeObjectURL: vi.fn() })); m.view.mode = "CONNECTED"; m.view.ownBlocked = false; m.chat.revision = 1; m.messages = []; m.media = []; m.outbox = []; m.prepare.mockReset(); m.send.mockReset(); m.read.mockReset().mockResolvedValue(null); m.download.mockReset().mockResolvedValue(undefined); m.remove.mockReset().mockResolvedValue(undefined); m.recover.mockReset().mockResolvedValue(undefined); m.receipt.mockReset().mockResolvedValue({ context: "authority", readIds: [] }); m.observe.mockReset().mockResolvedValue(true); m.refresh.mockReset().mockResolvedValue(undefined);
@@ -38,6 +41,59 @@ beforeEach(() => { vi.stubGlobal("URL", Object.assign(class extends URL {}, { cr
   m.threadRead.mockReset().mockImplementation(async () => ({ messages: m.messages, outbox: m.outbox, media: m.media }));
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+it("replaces the composer with recording/review, resumes, and sends only the finalized note", async () => {
+  let now = Date.now();
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  // Node's Blob returns a Node-realm buffer; the browser boundary correctly
+  // requires this realm's ArrayBuffer. Keep the fake browser-shaped too.
+  class BrowserBlob extends NodeBlob {
+    override async arrayBuffer(): Promise<ArrayBuffer> {
+      const source = await super.arrayBuffer();
+      const result = new ArrayBuffer(source.byteLength);
+      new Uint8Array(result).set(new Uint8Array(source));
+      return result;
+    }
+  }
+  vi.stubGlobal("Blob", BrowserBlob);
+  vi.stubGlobal("crypto", webcrypto);
+  await expect(sha256Hex(await new Blob(["audio"]).arrayBuffer())).resolves.toHaveLength(64);
+  const track = { enabled: true, readyState: "live", stop: vi.fn() };
+  vi.stubGlobal("navigator", { userAgent: navigator.userAgent, mediaDevices: {
+    getUserMedia: async () => ({ getTracks: () => [track] }),
+  } });
+  class Recorder {
+    static isTypeSupported() { return true; }
+    mimeType = "audio/webm";
+    state = "inactive";
+    ondataavailable: ((event: { data: Blob }) => void) | null = null;
+    onstop: (() => void) | null = null;
+    start() { this.state = "recording"; }
+    pause() { this.state = "paused"; }
+    resume() { this.state = "recording"; }
+    requestData() { this.ondataavailable?.({ data: new Blob(["audio"]) }); }
+    stop() { this.state = "inactive"; this.ondataavailable?.({ data: new Blob(["trailer"]) }); this.onstop?.(); }
+  }
+  vi.stubGlobal("MediaRecorder", Recorder);
+  m.voice.mockReset().mockResolvedValue("voice-saved");
+  await open();
+  fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Keep my text draft" } });
+  // Attachments are collapsed while typing: reveal them through the real composer.
+  fireEvent.click(screen.getByRole("button", { name: "Show attachments" }));
+  fireEvent.click(screen.getByRole("button", { name: "Voice message" }));
+  await screen.findByRole("button", { name: "Pause recording" });
+  expect(screen.queryByRole("textbox", { name: "Message" })).toBeNull();
+  now += 3_000;
+  fireEvent.click(screen.getByRole("button", { name: "Pause recording" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Resume recording" }));
+  now += 2_000;
+  fireEvent.click(screen.getByRole("button", { name: "Pause recording" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Send voice message" }));
+  await waitFor(() => expect(m.voice).toHaveBeenCalledOnce());
+  expect(m.voice.mock.calls[0]?.[3]).toMatchObject({ durationMs: 5_000, byteSize: 17 });
+  expect(screen.getByRole("textbox", { name: "Message" })).toHaveProperty("value", "Keep my text draft");
+  expect(track.stop).toHaveBeenCalled();
+});
 
 it("collapses desktop conversation details without replacing the transcript or draft", async () => {
   localStorage.clear();

@@ -7,18 +7,23 @@
  *
  * The port never leaves a microphone open. Every terminal path — stop, cancel,
  * maximum duration, error, page hide, account switch, unmount — releases the
- * capture tracks, and a stopped recorder cannot be resumed.
+ * capture tracks. Paused review mutes the tracks; Resume continues the same
+ * container. Send finalizes it before durable admission (never joins files).
  */
 import {
-  VOICE_MAX_MS, VOICE_MIN_MS, VOICE_MIME_TYPES, VOICE_PERMISSION_DENIED,
+  VOICE_MAX_MS, VOICE_MIC_UNAVAILABLE, VOICE_MIN_MS, VOICE_MIME_TYPES, VOICE_PERMISSION_DENIED,
   VOICE_RECORD_FAILED, VOICE_UNAVAILABLE, normalizeVoiceDuration, storedVoiceMime,
 } from "./voice";
+import { createInputMeter, type VoiceMeter } from "./voiceMeter";
 
 export interface VoiceRecorderHandle {
   mimeType: string;
-  state: "inactive" | "recording";
+  state: "inactive" | "recording" | "paused";
   start(): void;
   stop(): void;
+  pause?(): void;
+  resume?(): void;
+  requestData?(): void;
   ondataavailable: ((event: { data: Blob }) => void) | null;
   onstop: (() => void) | null;
   onerror: (() => void) | null;
@@ -29,6 +34,8 @@ export interface VoiceRecordingDeps {
   createRecorder(stream: MediaStream, mime: string): VoiceRecorderHandle | null;
   requestStream(): Promise<MediaStream>;
   isTypeSupported?(mime: string): boolean;
+  /** Optional live level source; a note still records when absent. */
+  createMeter?(stream: MediaStream): VoiceMeter | null;
   now(): number;
   setTimeout(handler: () => void, ms: number): number;
   clearTimeout(id: number): void;
@@ -38,12 +45,17 @@ export interface VoiceRecording {
   blob: Blob;
   mime: string;
   durationMs: number;
+  /** Live levels in the order they were measured; may be empty. */
+  peaks: number[];
+  /** Epoch ms of the first peak; bars are placed against the note's timeline. */
+  peakIntervalMs: number;
 }
 
 export type VoiceRecorderState =
   | { status: "idle" }
   | { status: "starting" }
-  | { status: "recording"; elapsedMs: number }
+  | { status: "pausing" }
+  | { status: "recording"; elapsedMs: number; peaks: number[] }
   | { status: "review"; recording: VoiceRecording }
   | { status: "error"; message: string };
 
@@ -64,8 +76,14 @@ export function createVoiceRecorder(deps: VoiceRecordingDeps) {
   let stream: MediaStream | null = null;
   let chunks: Blob[] = [];
   let startedAt = 0;
+  let recordedMs = 0;
+  let settleFinalization: ((note: VoiceRecording | null) => void) | null = null;
   let ticker: number | null = null;
   let watchdog: number | null = null;
+  let meter: VoiceMeter | null = null;
+  let livePeaks: number[] = [];
+  /** One reading per tick; the screen draws the trailing window. */
+  const PEAK_INTERVAL_MS = 120;
 
   const emit = (next: VoiceRecorderState) => {
     state = next;
@@ -78,6 +96,8 @@ export function createVoiceRecorder(deps: VoiceRecordingDeps) {
   const snapshot = (): VoiceRecorderState => state;
 
   const releaseTracks = () => {
+    meter?.close();
+    meter = null;
     for (const track of stream?.getTracks() ?? []) {
       try { track.stop(); } catch { /* already ended */ }
     }
@@ -99,12 +119,14 @@ export function createVoiceRecorder(deps: VoiceRecordingDeps) {
       recorder.ondataavailable = null;
       recorder.onstop = null;
       recorder.onerror = null;
-      if (recorder.state === "recording") {
+      if (recorder.state !== "inactive") {
         try { recorder.stop(); } catch { /* already stopped */ }
       }
     }
     recorder = null;
     releaseTracks();
+    settleFinalization?.(null);
+    settleFinalization = null;
   };
 
   const fail = (message: string) => {
@@ -113,28 +135,40 @@ export function createVoiceRecorder(deps: VoiceRecordingDeps) {
   };
 
   const finish = () => {
-    const durationMs = deps.now() - startedAt;
+    const durationMs = state.status === "recording" ? recordedMs + deps.now() - startedAt : recordedMs;
     const parts = chunks;
     const mime = storedVoiceMime(recorder?.mimeType ?? parts[0]?.type ?? "");
+    const resolve = settleFinalization;
+    settleFinalization = null;
     teardown();
     const blob = new Blob(parts, { type: mime });
+    const peaks = livePeaks;
+    livePeaks = [];
     // An accidental tap is not a message: nothing is sent and nothing is kept.
     if (durationMs < VOICE_MIN_MS || blob.size === 0) {
       emit({ status: "idle" });
+      resolve?.(null);
       return;
     }
-    emit({ status: "review", recording: { blob, mime, durationMs: normalizeVoiceDuration(durationMs) } });
+    const recording = { blob, mime, durationMs: normalizeVoiceDuration(durationMs), peaks, peakIntervalMs: PEAK_INTERVAL_MS };
+    emit({ status: "review", recording });
+    resolve?.(recording);
   };
 
   const tick = () => {
     if (state.status !== "recording") return;
-    emit({ status: "recording", elapsedMs: deps.now() - startedAt });
-    ticker = deps.setTimeout(tick, 200);
+    // A missing meter still advances the clock; it just contributes silence.
+    if (meter) livePeaks.push(meter.read());
+    emit({ status: "recording", elapsedMs: recordedMs + deps.now() - startedAt, peaks: [...livePeaks] });
+    ticker = deps.setTimeout(tick, PEAK_INTERVAL_MS);
   };
 
   return {
     get state(): VoiceRecorderState {
       return state;
+    },
+    get canResume(): boolean {
+      return state.status === "review" && recorder?.state === "paused" && !!recorder.resume;
     },
     subscribe(next: Listener): () => void {
       listeners.add(next);
@@ -142,8 +176,7 @@ export function createVoiceRecorder(deps: VoiceRecordingDeps) {
     },
     /** Permission is requested here and nowhere else. */
     async start(): Promise<void> {
-      if (state.status === "starting" || state.status === "recording") return;
-      if (state.status === "review") return;
+      if (state.status !== "idle" && state.status !== "error") return;
       emit({ status: "starting" });
       let opened: MediaStream;
       try {
@@ -157,6 +190,18 @@ export function createVoiceRecorder(deps: VoiceRecordingDeps) {
         for (const track of opened.getTracks()) { try { track.stop(); } catch { /* ended */ } }
         return;
       }
+      // A granted stream is not automatically a usable one: the device can hand
+      // back a track that another app already took or that the audio route
+      // dropped. Starting a recorder on that track fails asynchronously and
+      // reads like a save error, so refuse it here with the honest sentence.
+      // Only an explicitly ended track counts: a runtime that omits readyState
+      // cannot be judged, and guessing there would refuse a working mic.
+      const capture = opened.getAudioTracks?.() ?? opened.getTracks();
+      if (capture.length > 0 && capture.every((track) => track.readyState === "ended")) {
+        for (const track of opened.getTracks()) { try { track.stop(); } catch { /* ended */ } }
+        fail(VOICE_MIC_UNAVAILABLE);
+        return;
+      }
       const mime = pickMime(deps);
       const handle = deps.createRecorder(opened, mime);
       if (!handle) {
@@ -167,7 +212,17 @@ export function createVoiceRecorder(deps: VoiceRecordingDeps) {
       stream = opened;
       recorder = handle;
       chunks = [];
-      handle.ondataavailable = (event) => { if (event.data.size > 0) chunks.push(event.data); };
+      livePeaks = [];
+      recordedMs = 0;
+      meter = deps.createMeter?.(opened) ?? null;
+      handle.ondataavailable = (event) => {
+        if (event.data.size > 0) chunks.push(event.data);
+        if (state.status === "pausing") emit({ status: "review", recording: {
+          blob: new Blob(chunks, { type: storedVoiceMime(handle.mimeType) }),
+          mime: storedVoiceMime(handle.mimeType), durationMs: normalizeVoiceDuration(recordedMs),
+          peaks: [...livePeaks], peakIntervalMs: PEAK_INTERVAL_MS,
+        } });
+      };
       handle.onstop = finish;
       handle.onerror = () => fail(VOICE_RECORD_FAILED);
       try {
@@ -177,8 +232,8 @@ export function createVoiceRecorder(deps: VoiceRecordingDeps) {
         return;
       }
       startedAt = deps.now();
-      emit({ status: "recording", elapsedMs: 0 });
-      ticker = deps.setTimeout(tick, 200);
+      emit({ status: "recording", elapsedMs: 0, peaks: [] });
+      ticker = deps.setTimeout(tick, PEAK_INTERVAL_MS);
       // A note stops itself at the ceiling rather than growing unbounded.
       watchdog = deps.setTimeout(() => {
         if (state.status === "recording" && recorder?.state === "recording") recorder.stop();
@@ -190,6 +245,44 @@ export function createVoiceRecorder(deps: VoiceRecordingDeps) {
       stopTimers();
       try { recorder?.stop(); } catch { fail(VOICE_RECORD_FAILED); }
     },
+    /** Review without ending the container; a paused microphone is muted. */
+    pause(): void {
+      if (state.status !== "recording" || !recorder) return;
+      stopTimers();
+      if (!recorder.pause || !recorder.resume || !recorder.requestData) {
+        try { recorder.stop(); } catch { fail(VOICE_RECORD_FAILED); }
+        return;
+      }
+      recordedMs += deps.now() - startedAt;
+      try {
+        recorder.pause();
+        for (const track of stream?.getTracks() ?? []) track.enabled = false;
+        emit({ status: "pausing" });
+        recorder.requestData();
+      } catch { fail(VOICE_RECORD_FAILED); }
+    },
+    resume(): void {
+      if (state.status !== "review" || recorder?.state !== "paused" || !recorder.resume) return;
+      try {
+        for (const track of stream?.getTracks() ?? []) track.enabled = true;
+        recorder.resume();
+        startedAt = deps.now();
+        emit({ status: "recording", elapsedMs: recordedMs, peaks: [...livePeaks] });
+        ticker = deps.setTimeout(tick, PEAK_INTERVAL_MS);
+        watchdog = deps.setTimeout(() => {
+          if (state.status === "recording") recorder?.stop();
+        }, Math.max(0, VOICE_MAX_MS - recordedMs));
+      } catch { fail(VOICE_RECORD_FAILED); }
+    },
+    /** Flush the final trailer before send; keep review intact for retry. */
+    finalize(): Promise<VoiceRecording | null> {
+      if (state.status !== "review") return Promise.resolve(null);
+      if (!recorder) return Promise.resolve(state.recording);
+      return new Promise(resolve => {
+        settleFinalization = resolve;
+        try { recorder?.stop(); } catch { fail(VOICE_RECORD_FAILED); }
+      });
+    },
     /** Throws the note away: nothing is uploaded and the microphone closes. */
     discard(): void {
       teardown();
@@ -199,6 +292,7 @@ export function createVoiceRecorder(deps: VoiceRecordingDeps) {
     take(): VoiceRecording | null {
       if (state.status !== "review") return null;
       const recording = state.recording;
+      teardown();
       emit({ status: "idle" });
       return recording;
     },
@@ -253,6 +347,7 @@ export function browserVoiceDeps(): VoiceRecordingDeps {
       return getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
     },
     isTypeSupported: (mime) => Recorder?.isTypeSupported?.(mime) ?? true,
+    createMeter: (stream) => createInputMeter(stream),
     now: () => Date.now(),
     setTimeout: (handler, ms) => scope.setTimeout(handler, ms),
     clearTimeout: (id) => scope.clearTimeout(id),

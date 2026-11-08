@@ -101,6 +101,18 @@ describe("MediaViewer boundary", () => {
     expect((await screen.findByRole("dialog")).className).not.toContain("fb-viewer-chrome-hidden");
   });
 
+
+  // Owner rule 2026-11-08: the space around a photo dismisses it.
+  it("closes on a tap in the blank space around the photo, not on the photo itself", async () => {
+    const onClose = vi.fn();
+    render(<MediaViewer items={items} index={0} onClose={onClose} />);
+    const photo = await screen.findByRole("img", { name: "Blue wallet front" });
+    fireEvent.click(photo);
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("media-viewer"));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps failed filmstrip thumbnails noninteractive inside their navigation button", async () => {
     render(<Gallery />);
     fireEvent.click(screen.getByRole("button", { name: "Inspect wallet" }));

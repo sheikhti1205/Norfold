@@ -1,0 +1,58 @@
+/* Reference geometry, not reference branding. One centered speech envelope,
+   one flat delivered bubble, and a two-row recorder replacing the composer. */
+.fb-chat-voice { display:grid; grid-template-columns:54px 44px minmax(0,1fr); align-items:center;
+  column-gap:.25rem; width:18.5rem; max-width:100%; min-height:3.25rem; }
+.fb-chat-voice-identity { position:relative; display:grid; place-items:center; width:54px; height:44px; }
+.fb-chat-voice-avatar { display:flex; }
+.fb-chat-voice-mic { position:absolute; inset-inline-end:5px; bottom:0; color:var(--fb-primary);
+  background:var(--fb-primary-container); border-radius:1rem; }
+.fb-chat-voice-toggle, .fb-chat-voice-rate, .fb-voice-panel-preview {
+  display:grid; place-items:center; padding:0; border:0; min-height:44px; background:transparent;
+  color:inherit; border-radius:50%; }
+.fb-chat-voice-toggle { width:44px; }
+.fb-chat-voice-toggle svg, .fb-voice-panel-preview svg { fill:currentColor; stroke-width:1; }
+.fb-chat-voice-toggle:disabled, .fb-chat-voice-panel button:disabled { opacity:.45; }
+.fb-chat-voice-rate { position:relative; isolation:isolate; width:54px; font-size:.8125rem; font-weight:650; }
+/* The speed affordance is a short pill, but its real touch target stays 44px. */
+.fb-chat-voice-rate::before { content:""; position:absolute; z-index:-1; inset:8px 0;
+  background:color-mix(in srgb,currentColor 10%,transparent); border-radius:1.5rem; }
+.fb-chat-voice-timeline { min-width:0; display:grid; gap:.125rem; padding-top:.2rem; }
+.fb-chat-voice-track { position:relative; display:flex; align-items:center; gap:2px;
+  width:100%; min-width:0; height:1.75rem; }
+.fb-chat-voice-bar { flex:1 1 0; min-width:0; border-radius:999px;
+  background:color-mix(in srgb,currentColor 40%,transparent); }
+.fb-chat-voice-bar[data-played] { background:var(--fb-primary); }
+.fb-chat-voice-cursor { position:absolute; width:9px; height:9px; border-radius:50%; background:var(--fb-primary); }
+.fb-chat-voice-time { font-size:.75rem; line-height:1.2; font-variant-numeric:tabular-nums; color:inherit; opacity:.7; }
+.fb-chat-message-voice { position:relative; padding:.35rem .5rem; }
+.fb-chat-message-voice .fb-chat-message-status { position:absolute; inset-inline-end:.5rem; bottom:.35rem; margin:0;
+  max-width:calc(100% - 5rem); }
+/* A pending/retry status needs real room; never overlay its controls on audio. */
+.fb-chat-message-voice:has(.fb-chat-message-status button) .fb-chat-message-status { position:static; max-width:none; }
+.fb-chat-voice-state { display:flex; flex-wrap:wrap; align-items:center; gap:.25rem .5rem;
+  font-size:.8125rem; color:var(--fb-on-surface-variant); }
+.fb-chat-voice-state button { min-height:44px; min-width:44px; padding:.2rem .35rem; text-decoration:underline; }
+.fb-chat-voice-panel { flex:none; min-width:0; padding:.7rem .6rem max(.6rem,env(safe-area-inset-bottom));
+  border-radius:1.5rem 1.5rem 0 0; background:var(--fb-surface-container); color:var(--fb-on-surface); }
+.fb-voice-panel-wave { display:flex; align-items:center; gap:.6rem; min-height:3rem; padding:0 .45rem; }
+.fb-voice-panel-wave .fb-chat-voice-track { flex:1; height:2rem; }
+.fb-voice-panel-wave .fb-chat-voice-time { flex:none; font-size:1.125rem; opacity:1; }
+.fb-voice-panel-preview { width:44px; flex:none; }
+.fb-chat-voice-dot { flex:none; margin-inline:.65rem; width:.45rem; height:.45rem; border-radius:50%; background:var(--fb-error); }
+.fb-voice-panel-actions { display:grid; grid-template-columns:48px minmax(0,1fr) 48px; align-items:center; gap:.65rem; margin-top:.65rem; }
+.fb-voice-panel-actions button { display:flex; align-items:center; justify-content:center; gap:.5rem; padding:.5rem;
+  min-width:44px; min-height:48px; border:0; border-radius:50%; }
+.fb-voice-panel-discard { background:color-mix(in srgb,var(--fb-error) 12%,transparent); color:var(--fb-error); }
+.fb-voice-panel-actions .fb-voice-panel-resume { background:var(--fb-primary-container); color:var(--fb-on-primary-container);
+  border-radius:1rem; min-width:0; font-size:1rem; }
+.fb-voice-panel-resume span { overflow-wrap:anywhere; }
+.fb-voice-panel-send { background:var(--fb-primary); color:var(--fb-on-primary); }
+.fb-chat-voice-panel button:focus-visible, .fb-chat-voice button:focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }
+.fb-chat-voice-draft { flex:none; display:flex; align-items:center; gap:.5rem; padding:.5rem .8rem; font-size:.875rem; }
+.fb-chat-voice-draft button { min-width:44px; min-height:44px; }
+@media (prefers-reduced-motion:no-preference) {
+  .fb-chat-voice-dot { animation:fb-voice-pulse 1.4s ease-in-out infinite; }
+  .fb-voice-sending { animation:fb-voice-spin 1s linear infinite; }
+}
+@keyframes fb-voice-pulse { 50% { opacity:.35; } }
+@keyframes fb-voice-spin { to { transform:rotate(360deg); } }

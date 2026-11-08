@@ -1,10 +1,17 @@
 import { useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Images, Info, MapPin, Play } from "lucide-react";
+import { ArrowLeft, Images, Info, MapPin } from "lucide-react";
 import { ChatIdentity } from "../../components/ChatIdentity";
 import { PeerChatComposer } from "../../components/PeerChatComposer";
-import { voiceBarHeights } from "../../screens/Messaging";
 import { ALL_VARIANTS, FixtureFrame, FixtureSection, type FixtureVariant } from "../FixtureSection";
 import "../../screens/Messaging.css";
+import { VoiceMessagePlayer, VoiceRecordingPanel } from "../../components/VoiceNote";
+import { UserAvatar } from "../../components/UserAvatar";
+
+/** Synthetic fixture data only; production always measures the audio. */
+const FIXTURE_PEAKS = [0.18, 0.42, 0.71, 0.88, 0.63, 0.35, 0.22, 0.51, 0.94, 0.72,
+  0.44, 0.28, 0.19, 0.38, 0.66, 0.85, 0.57, 0.31, 0.24, 0.47, 0.79, 0.91, 0.62,
+  0.36, 0.21, 0.33, 0.58, 0.74, 0.49, 0.26, 0.17, 0.29, 0.53, 0.68, 0.41, 0.23,
+  0.16, 0.34, 0.61, 0.45];
 
 /**
  * Chat surface preflight (owner handoff 2026-11-03).
@@ -61,22 +68,18 @@ function Thread({ variant }: { variant: FixtureVariant }) {
           <Bubble own status="Sent">
             <p><MapPin size={16} aria-hidden="true" /> Static location</p>
           </Bubble>
-          <Bubble>
-            <div className="fb-chat-voice">
-              <button type="button" className="fb-chat-voice-toggle" aria-label="Play voice message">
-                <Play size={18} aria-hidden="true" />
-              </button>
-              <span className="fb-chat-voice-track" aria-hidden="true">
-                {voiceBarHeights("fixture-voice-note").map((height, index) => <span key={index}
-                  className="fb-chat-voice-bar" data-played={index < 11 ? "true" : undefined}
-                  style={{ height: `${height}%` }} />)}
-              </span>
-              <span className="fb-chat-voice-time">0:07</span>
+          <li className="fb-chat-line fb-chat-line-own">
+            <div className="fb-chat-message fb-chat-message-own fb-chat-message-voice">
+              <VoiceMessagePlayer peaks={FIXTURE_PEAKS} playing={false} ready durationMs={8_000} positionMs={0}
+                avatar={<UserAvatar username="Alex" size={40} />} rate={1} onRate={() => undefined} onToggle={() => undefined} />
+              <span className="fb-chat-message-status">12:44 AM ✓</span>
             </div>
-          </Bubble>
+          </li>
         </ol>
       </div>
-      <PeerChatComposer
+      {voiceActive ? <VoiceRecordingPanel phase="review" peaks={FIXTURE_PEAKS} elapsedMs={8_000} percent={0}
+        playing={false} previewReady canResume onPause={() => undefined} onPreview={() => undefined}
+        onResume={() => undefined} onDiscard={() => setVoiceActive(false)} onSend={() => setVoiceActive(false)} /> : <PeerChatComposer
         value={draft}
         onChange={setDraft}
         onSend={() => setDraft("")}
@@ -90,7 +93,7 @@ function Thread({ variant }: { variant: FixtureVariant }) {
         voiceAvailable
         voiceActive={voiceActive}
         onVoice={() => setVoiceActive((active) => !active)}
-      />
+      />}
     </div>
   );
 }

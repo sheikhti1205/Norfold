@@ -36,7 +36,14 @@
 }
 .fb-menu-item > span { min-width: 0; flex: 1; overflow-wrap: anywhere; }
 .fb-menu-item > svg { flex: none; }
-.fb-menu-item[data-focused] { outline: 2px solid var(--fb-focus); outline-offset: -2px; background: var(--fb-surface-container); }
+/* A pointer highlights a row with tone; only keyboard focus draws the ring.
+   Painting the ring on every pointer open made the menu look like the first
+   row was already selected. */
+.fb-menu-item[data-hovered] { background: var(--fb-surface-container); }
+.fb-menu-item[data-focus-visible] {
+  outline: 2px solid var(--fb-focus); outline-offset: -2px;
+  background: var(--fb-surface-container);
+}
 .fb-menu-item[data-disabled] { opacity: .45; cursor: default; }
 .fb-menu-danger { color: var(--fb-error); }
 .fb-menu-separator { height: 1px; margin: 4px 8px; background: var(--fb-outline-variant); }

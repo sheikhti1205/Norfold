@@ -36,7 +36,7 @@ function actionRows(items: readonly MenuAction[]) {
 }
 
 /** Anchored actions on every input/width. Never turns a simple action into a sheet. */
-export function ActionMenu({ label, items, icon, disabled = false, open: controlledOpen, onOpenChange, triggerClassName = "fb-icon-control", anchor = false, feedback }: {
+export function ActionMenu({ label, items, icon, disabled = false, open: controlledOpen, onOpenChange, triggerClassName = "fb-icon-control", anchor = false, feedback, placement }: {
   label: string;
   items: readonly (MenuAction | MenuGroup)[];
   icon?: ReactNode;
@@ -49,6 +49,8 @@ export function ActionMenu({ label, items, icon, disabled = false, open: control
   anchor?: boolean;
   /** Keep operation feedback in the active layer, not in its inert background. */
   feedback?: ReactNode;
+  /** Edge the menu grows from. A right-aligned bubble owns its bottom-end. */
+  placement?: "bottom start" | "bottom end";
 }) {
   const [localOpen, setLocalOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -73,7 +75,7 @@ export function ActionMenu({ label, items, icon, disabled = false, open: control
       excludeFromTabOrder={anchor} aria-hidden={anchor || undefined}>
       {icon ?? <MoreHorizontal size={20} aria-hidden="true" />}
     </Button>
-    <LayeredPopover placement={anchor ? "bottom start" : "bottom end"} offset={4}>
+    <LayeredPopover placement={placement ?? (anchor ? "bottom start" : "bottom end")} offset={4}>
       <div onKeyDownCapture={leaveOnTab}>
       {feedback}
       <Menu aria-label={label} className="fb-action-menu">

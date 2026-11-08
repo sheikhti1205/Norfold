@@ -61,4 +61,8 @@ export function normalizeVoiceDuration(milliseconds: number): number {
 export const VOICE_PERMISSION_DENIED =
   "Microphone access is off for Norfold. Allow it in your browser or system settings to send voice messages.";
 export const VOICE_UNAVAILABLE = "Voice messages aren’t available on this device.";
+/** The device handed back a capture track that is already dead: another app
+ * took the microphone, or the audio route disappeared mid-session. */
+export const VOICE_MIC_UNAVAILABLE =
+  "The microphone isn’t available right now. Close any app using it and try again.";
 export const VOICE_RECORD_FAILED = "That recording didn’t save. Try again.";
