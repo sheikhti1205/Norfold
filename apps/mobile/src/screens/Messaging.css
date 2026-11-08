@@ -54,7 +54,11 @@
 .fb-chat-filters { display:flex; flex-wrap:wrap; gap:.25rem; padding:.25rem .75rem; }
 .fb-chat-filters button { min-height:44px; padding:.4rem .65rem; font-size:.875rem; border-bottom:2px solid transparent; }
 .fb-chat-filters button[aria-pressed="true"] { border-color:var(--fb-primary); font-weight:650; }
-.fb-chat-list, .fb-chat-messages { min-height:0; flex:1; overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
+/* The thread scrolls down, never sideways: a conversation that can be dragged
+   left and right reads as a broken page. Intentionally horizontal strips
+   (pins, staged photos) own their own overflow-x. */
+.fb-chat-list, .fb-chat-messages { min-height:0; flex:1; overflow-x:hidden; overflow-y:auto;
+  overscroll-behavior:contain; scrollbar-gutter:stable; }
 .fb-chat-list ul, .fb-chat-transcript { margin:0; padding:0; list-style:none; }
 /* A row is a surface, not a table cell: it carries the shape, the hover and the
    selection tint, so the stretched link can stay transparent and never paints
