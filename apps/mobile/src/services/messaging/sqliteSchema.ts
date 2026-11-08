@@ -320,6 +320,7 @@ export const MESSAGING_SQLITE_STATEMENTS = {
   listMessages: `select ${MESSAGE_COLUMNS} from messages m
     where m.conversation_id = ?
       and not exists (select 1 from deleted_for_me d where d.message_id = m.id)
+      and not (m.unsent_at is not null and m.server_sequence is null)
       and (m.server_sequence is null or m.server_sequence > coalesce(
         (select c.through_sequence from conversation_cleared c
           where c.conversation_id = m.conversation_id), 0))
