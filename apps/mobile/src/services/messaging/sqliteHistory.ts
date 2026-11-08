@@ -29,7 +29,7 @@ import {
   MESSAGING_SQLITE_STATEMENTS as S,
 } from "./sqliteSchema";
 import {
-  conversationPeer, copyConversationProjection, nonnegativeSequence, summarizeConversations,
+  conversationPeer, copyConversationProjection, isProjectionFormatUpgrade, nonnegativeSequence, summarizeConversations,
   type ConversationProjection, type ConversationSummary, type LocalConversationState,
 } from "./conversationIndex";
 import { copyStateEnvelope, statePeer, type StateChangeEnvelope, type StateCursor } from "./stateChanges";
@@ -768,11 +768,13 @@ export async function openSqliteMessagingHistory(
       const row = await ensureConversationState(projection.conversationId, projection.peerId);
       const prior = localState(row).projection;
       if (prior && prior.revision > projection.revision) return;
-      if (prior?.revision === projection.revision && JSON.stringify(prior) !== JSON.stringify(projection)) {
-        // A projection cached by a pre-R4 build has no `epoch`, so its JSON can
-        // never equal a server projection. Accept the upgrade once; every later
-        // same-revision change is still a real conflict.
-        if (prior.epoch !== undefined) throw new Error("Conversation revision conflict");
+      if (prior?.revision === projection.revision && JSON.stringify(prior) !== JSON.stringify(projection)
+        && !isProjectionFormatUpgrade(prior, projection)) {
+        // A projection cached by a build that predates a shared field (the
+        // relationship epoch, then pins) can never equal a server projection.
+        // Accept that one-way format upgrade; any changed or removed field the
+        // cache already holds remains a real conflict.
+        throw new Error("Conversation revision conflict");
       }
       await driver.run(S.cacheConversation, [JSON.stringify(projection), now(), projection.conversationId]);
     });

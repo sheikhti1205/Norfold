@@ -18,6 +18,9 @@ export interface ConversationProjection {
   ownBlocked: boolean;
   /** Viewer-private preference. Absent only in pre-mute cached projections. */
   ownMuted?: boolean;
+  /** Shared pinned message ids, oldest first, at most three. Absent only in
+   * projections cached before pins existed. */
+  pinnedMessageIds?: string[];
   /** Monotonic revision of this viewer's authorized projection, not pair activity. */
   revision: number;
 }
@@ -77,9 +80,31 @@ export function copyConversationProjection(input: ConversationProjection): Conve
   }
   const epoch = typeof rawEpoch === "string" ? rawEpoch : null;
   if (input.ownMuted !== undefined && typeof input.ownMuted !== "boolean") throw new Error("Invalid conversation mute preference");
+  // The pin list is shared conversation state. A malformed or over-long list
+  // is refused rather than trimmed: silently dropping an entry would make the
+  // strip disagree with the server about what is pinned.
+  let pinnedMessageIds: string[] | undefined;
+  if (input.pinnedMessageIds !== undefined) {
+    const raw = input.pinnedMessageIds;
+    if (!Array.isArray(raw) || raw.length > 3) throw new Error("Invalid conversation pins");
+    pinnedMessageIds = raw.map((id) => uuid(id as string));
+    if (new Set(pinnedMessageIds).size !== pinnedMessageIds.length) throw new Error("Invalid conversation pins");
+  }
   return { conversationId, peerId, mode: input.mode, request: input.request, requestEpoch,
     ownHidden: input.ownHidden, ownDeclined: input.ownDeclined, ownBlocked: input.ownBlocked, revision,
-    ...(epoch ? { epoch } : {}), ...(input.ownMuted !== undefined ? { ownMuted: input.ownMuted } : {}) };
+    ...(epoch ? { epoch } : {}), ...(input.ownMuted !== undefined ? { ownMuted: input.ownMuted } : {}),
+    ...(pinnedMessageIds !== undefined ? { pinnedMessageIds } : {}) };
+}
+
+/** A newer build can add shared projection fields at the same revision (the
+ * relationship epoch, then pins). Accept that one-way format upgrade only when
+ * every field the cache already holds is unchanged and still present; a
+ * differing shared field, or a removed field, is a real revision conflict. */
+export function isProjectionFormatUpgrade(prior: ConversationProjection, next: ConversationProjection): boolean {
+  const before = prior as unknown as Record<string, unknown>;
+  const after = next as unknown as Record<string, unknown>;
+  return Object.keys(before).every((key) =>
+    key in after && JSON.stringify(before[key]) === JSON.stringify(after[key]));
 }
 
 /** Both durable adapters use the same local-only inbox semantics. Pending

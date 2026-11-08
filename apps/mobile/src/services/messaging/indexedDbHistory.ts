@@ -8,7 +8,7 @@ import { isMediaSha256, sameMediaIdentity, verifyMediaBytes, type MediaMetadata,
 import { verifyMediaContent, type MediaDecoder } from "./mediaContent";
 import { withHistoryLock } from "./historyLock";
 import {
-  conversationPeer, copyConversationProjection, nonnegativeSequence, summarizeConversations,
+  conversationPeer, copyConversationProjection, isProjectionFormatUpgrade, nonnegativeSequence, summarizeConversations,
   type ConversationProjection, type ConversationSummary, type LocalConversationState,
 } from "./conversationIndex";
 import { copyStateEnvelope, statePeer, type MessageStateChange, type StateChangeEnvelope, type StateCursor } from "./stateChanges";
@@ -327,11 +327,13 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
       updateConversation(tx, guard, projection.conversationId, projection.peerId, (state) => {
         if (state.projection && state.projection.revision > projection.revision) return state;
         if (state.projection?.revision === projection.revision
-          && JSON.stringify(state.projection) !== JSON.stringify(projection)) {
-          // A pre-R4 cache has no `epoch`, so it can never equal a server
-          // projection. Accept that one upgrade; later same-revision changes
-          // remain real conflicts.
-          if (state.projection.epoch !== undefined) throw new Error("Conversation revision conflict");
+          && JSON.stringify(state.projection) !== JSON.stringify(projection)
+          && !isProjectionFormatUpgrade(state.projection, projection)) {
+          // A cache written before a shared field existed (the relationship
+          // epoch, then pins) can never equal a server projection. Accept that
+          // one-way format upgrade; a changed or removed cached field remains
+          // a real conflict.
+          throw new Error("Conversation revision conflict");
         }
         return { ...state, projection, observedAt: Date.now() };
       });
