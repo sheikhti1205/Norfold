@@ -836,6 +836,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     if (content) readyPhotos.current.set(id, content); else readyPhotos.current.delete(id);
   }, []);
   const viewerUrls = useRef(new Set<string>());
+  // The viewer's newest open wins: a slower earlier read must not replace the
+  // photo the reader just tapped, and an unmounted thread must not allocate.
+  const viewerGeneration = useRef(0);
   const stagedUrls = useRef(new Set<string>());
   // Per-photo admission: ids belong to the durable draft owner and must survive
   // an uncertain admission, so a retry of one photo is the same photo.
@@ -881,6 +884,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     alive.current = true;
     return () => {
       alive.current = false;
+      viewerGeneration.current++;
       for (const url of viewerUrls.current) URL.revokeObjectURL(url);
       viewerUrls.current.clear();
       for (const url of stagedUrls.current) URL.revokeObjectURL(url);
@@ -969,24 +973,22 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   }
   async function openPhoto(id: string, bytes: ArrayBuffer, mime: string, group?: string[]) {
     if (!photoAllowed) return;
+    const generation = ++viewerGeneration.current;
     setDraftViewer(null);
-    // A group cell opens its own send, not "whichever cells happened to be
-    // mounted": the 4+ grid draws four cells, so the rest are read here and
-    // the viewer counter matches the bubble. A single photo keeps paging
-    // through the conversation photos this device already has.
+    // A single cell pages through every live photo in the conversation; a
+    // group cell pages through its own send. Photos outside the lazy-read
+    // margin are read here, on the explicit open, so the counter names the
+    // real sequence instead of only the cells that happened to be on screen.
     const scope = group ?? messages.filter((message) => message.unsentAt === undefined && message.messageType === "MEDIA")
       .map((message) => message.id);
-    const items: MediaViewerItem[] = [];
-    for (const messageId of scope) {
+    const resolved = await Promise.all(scope.map(async (messageId) => {
       const message = messages.find((entry) => entry.id === messageId);
-      if (!message || message.unsentAt !== undefined) continue;
+      if (!message || message.unsentAt !== undefined) return null;
       const attachment = media.find((entry) => entry.messageId === messageId);
-      if (!attachment) continue;
+      if (!attachment) return null;
       let available = readyPhotos.current.get(attachment.id);
       if (!available && messageId === id) available = { bytes, mime };
-      // Only a group reads its hidden members on demand; a single photo keeps
-      // the cheap behaviour of paging through bytes this screen already holds.
-      if (!available && group && attachment.state !== "EVICTED") {
+      if (!available && attachment.state !== "EVICTED") {
         const stored = await readMessagingMedia(accountId, attachment.id).catch(() => null);
         if (stored) {
           const copy = stored.slice(0);
@@ -994,11 +996,17 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
           readyPhotos.current.set(attachment.id, available);
         }
       }
-      if (!available) continue;
-      const src = URL.createObjectURL(new Blob([available.bytes.slice(0)], { type: available.mime }));
+      return available ? { messageId, available, attachment } : null;
+    }));
+    // A newer tap or an unmounted thread invalidates this run before it can
+    // allocate URLs or replace the viewer the reader is now looking at.
+    if (generation !== viewerGeneration.current || !alive.current) return;
+    const items: MediaViewerItem[] = resolved.flatMap((entry) => {
+      if (!entry) return [];
+      const src = URL.createObjectURL(new Blob([entry.available.bytes.slice(0)], { type: entry.available.mime }));
       viewerUrls.current.add(src);
-      items.push({ id: messageId, src, width: attachment.width, height: attachment.height, alt: "Conversation photo" });
-    }
+      return [{ id: entry.messageId, src, width: entry.attachment.width, height: entry.attachment.height, alt: "Conversation photo" }];
+    });
     setViewer({ id, items });
   }
   function closePhoto() {
@@ -1695,8 +1703,10 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             {batch && photoAllowed && <ChatPhotoGroup accountId={accountId} conversationId={conversationId} items={batch} media={media} onOpen={openPhoto} onReady={rememberPhoto} />}
             {batch && !photoAllowed && <p>Photos are available when connected.</p>}
             {!batch && message.messageType === "MEDIA" && attachment && photoAllowed && <ChatPhoto key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} onOpen={openPhoto} onReady={rememberPhoto} />}
+            {!batch && message.messageType === "MEDIA" && attachment && !photoAllowed && <p>Photos are available when connected.</p>}
             {message.messageType === "VOICE" && attachment && photoAllowed && <ChatVoice key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} playback={voice.player} snapshot={playbackSnapshot}
               authorName={own ? user?.displayName || user?.username : name} avatarUrl={own ? user?.avatarUrl : person?.avatarUrl} />}
+            {message.messageType === "VOICE" && attachment && !photoAllowed && <p>Voice messages are available when connected.</p>}
             {message.contextReportId && <ChatReportContext reportId={message.contextReportId} safetyKey={view?.ownBlocked ? "blocked" : "clear"} />}
             {message.location && <ChatLocation location={message.location} />}
             {message.body ? <p dir="auto" className={emojiOnly ? "fb-chat-emoji-only" : undefined}>{message.body}</p>

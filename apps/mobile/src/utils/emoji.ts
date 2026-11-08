@@ -117,21 +117,21 @@ function convertToken(token: string): string {
   return converted;
 }
 
-const KEYCAP = /[0-9#*]\uFE0F?\u20E3/;
-const PICTOGRAPHIC = /\p{Extended_Pictographic}/u;
-const REGIONAL_PAIR = /\p{Regional_Indicator}\p{Regional_Indicator}/u;
+// A unit is a complete emoji: a keycap, a flag, or one base glyph. A base
+// renders as emoji by default (`\p{Emoji_Presentation}`) or asks for that
+// presentation with VS16; ZWJ joins, skin tones and tag sequences (England's
+// flag) stay attached to their base.
+const EMOJI_BASE = String.raw`(?:\p{Emoji_Presentation}|\p{Extended_Pictographic}\uFE0F)`;
+const EMOJI_UNIT = String.raw`(?:[0-9#*]\uFE0F?\u20E3|\p{Regional_Indicator}{2}|${EMOJI_BASE}\uFE0F?\p{Emoji_Modifier}?[\u{E0020}-\u{E007F}]*(?:\u200D${EMOJI_BASE}\uFE0F?\p{Emoji_Modifier}?[\u{E0020}-\u{E007F}]*)*)`;
+const EMOJI_ONLY = new RegExp(String.raw`^(?:\s*${EMOJI_UNIT})+\s*$`, "u");
 
 /**
- * True only when the entire message is emoji grapheme sequences and
- * whitespace. A message with any ordinary letter/digit/punctuation is not
- * emoji-only (so "123" never renders at double size).
+ * True only when the entire message is complete emoji sequences and
+ * whitespace. A message with any ordinary letter, bare digit, punctuation or
+ * text-presentation symbol ("123", "2👍", "©") is not emoji-only, so it keeps
+ * its bubble instead of rendering at double size.
  */
 export function isEmojiOnly(text: string): boolean {
   const trimmed = text.trim();
-  if (!trimmed) return false;
-  if (!PICTOGRAPHIC.test(trimmed) && !REGIONAL_PAIR.test(trimmed) && !KEYCAP.test(trimmed)) return false;
-  // Every grapheme must be part of an emoji sequence or whitespace. Building
-  // the character class from the standard properties covers ZWJ, skin tones,
-  // variation selectors, flags and keycaps without a third-party table.
-  return /^(?:\p{Extended_Pictographic}|\p{Emoji_Modifier}|\p{Regional_Indicator}|\uFE0F|\u200D|\u20E3|[0-9#*]|\p{Emoji_Component}|\s)+$/u.test(trimmed);
+  return trimmed.length > 0 && EMOJI_ONLY.test(trimmed);
 }

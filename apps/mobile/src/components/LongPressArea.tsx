@@ -79,7 +79,9 @@ export function LongPressArea({ label, disabled = false, className = "", popup =
     if (disabled || event.nativeEvent.isComposing) return;
     if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey)) return;
     event.preventDefault();
-    suppress.current = true;
+    // The keyboard shortcut has no synthetic click to swallow, but it is an
+    // open like any other: without onOpen the menu has the previous target.
+    onOpen?.();
     setOpenState(true);
   }
 

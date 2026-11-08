@@ -44,7 +44,7 @@ function snapshotOf(rows: Row[], extra: Partial<HistorySnapshot> = {}): HistoryS
       messages.push({
         id: uuid(row.base + seq), conversationId: row.chat,
         authorId: PEER, recipientId: A, body: row.body?.(seq) ?? `text ${seq}`,
-        messageType: "TEXT", contextReportId: null, location: null,
+        messageType: "TEXT", contextReportId: null, location: null, replyToId: null,
         serverEventId: uuid(row.base + seq + 0x4000), serverSequence: seq,
         unsentAt: null, createdAt: 0,
       });
