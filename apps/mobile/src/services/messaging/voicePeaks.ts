@@ -71,6 +71,7 @@ export function normalizePeaks(values: readonly number[]): number[] {
 }
 
 type AudioContextCtor = new (options?: { sampleRate?: number }) => AudioContext;
+type OfflineContextCtor = new (channels: number, length: number, sampleRate: number) => BaseAudioContext;
 
 function audioContextCtor(): AudioContextCtor | null {
   const scope = globalThis as {
@@ -80,19 +81,37 @@ function audioContextCtor(): AudioContextCtor | null {
   return scope.AudioContext ?? scope.webkitAudioContext ?? null;
 }
 
-let decoder: AudioContext | null = null;
+function offlineContextCtor(): OfflineContextCtor | null {
+  const scope = globalThis as {
+    OfflineAudioContext?: OfflineContextCtor;
+    webkitOfflineAudioContext?: OfflineContextCtor;
+  };
+  return scope.OfflineAudioContext ?? scope.webkitOfflineAudioContext ?? null;
+}
 
-/** A low-rate context keeps the decoded buffer small; the default is the fallback. */
-function decodeContext(): AudioContext | null {
+/**
+ * Decoding renders nothing, so it must not borrow the audio device. A live
+ * `AudioContext` keeps its output thread pulling silence forever: on Android
+ * that surfaced as a permanent 8 kHz `fake_audio_worker` read loop and 20-26 %
+ * of a core with no note playing. An offline context decodes without an output
+ * stream, and is dropped with its peaks.
+ *
+ * A low rate keeps the decoded buffer small; 44.1 kHz is the constructor
+ * fallback, and the live context is only for runtimes without offline decode
+ * (closed after each use in `decodeVoicePeaks`).
+ */
+function decodeContext(): BaseAudioContext | null {
+  const Offline = offlineContextCtor();
+  if (Offline) {
+    try { return new Offline(1, 1, 8_000); } catch {
+      try { return new Offline(1, 1, 44_100); } catch { /* fall through */ }
+    }
+  }
   const Ctor = audioContextCtor();
   if (!Ctor) return null;
-  if (decoder) return decoder;
-  try {
-    decoder = new Ctor({ sampleRate: 8_000 });
-  } catch {
-    try { decoder = new Ctor(); } catch { return null; }
+  try { return new Ctor({ sampleRate: 8_000 }); } catch {
+    try { return new Ctor(); } catch { return null; }
   }
-  return decoder;
 }
 
 /**
@@ -114,6 +133,11 @@ export async function decodeVoicePeaks(bytes: ArrayBuffer, bars = VOICE_BARS): P
     return peaks;
   } catch {
     return null;
+  } finally {
+    // Offline decode owns no device. The live fallback would otherwise keep an
+    // output thread pulling silence for the life of the page.
+    const live = context as AudioContext;
+    if (typeof live.close === "function") void live.close().catch(() => undefined);
   }
 }
 
