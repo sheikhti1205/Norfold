@@ -1232,6 +1232,17 @@ describe("chat replies", () => {
     await reopened.close();
   });
 
+  it("exports an accepted reply reference for portable history", async () => {
+    const history = await open();
+    await history.persistInbound(inbound());
+    await history.persistInbound(inbound({ id: MESSAGE_2, body: "That one", replyToId: MESSAGE }, EVENT_2, MAILBOX_2, 2));
+    // A Drive/backup created on Android used to drop the reference here while
+    // the web adapter kept it.
+    const exported = await history.exportSnapshot();
+    expect(exported.messages.find((row) => row.id === MESSAGE_2)?.replyToId).toBe(MESSAGE);
+    await history.close();
+  });
+
   it("refuses a message that answers itself", async () => {
     const history = await open();
     await expect(history.enqueueOutgoing({ ...outgoing, replyToId: MESSAGE })).rejects.toThrow(/reply/i);
