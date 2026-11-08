@@ -705,6 +705,10 @@ it("renders four or more photos as one 2x2 bubble and counts the overflow", asyn
   expect(cells).toHaveLength(4);
   expect(screen.getByText("+1")).toBeTruthy();
   expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(1);
+  // The last cell hides one photo; the viewer still names the whole send.
+  fireEvent.click(cells[3]!);
+  const viewer = await screen.findByRole("dialog", { name: "Photo viewer" });
+  await waitFor(() => expect(within(viewer).getByText("Photo 4 of 5")).toBeTruthy());
 });
 it("jumps a quote that names a hidden photo to the visible group and rings it", async () => {
   const run = photoRun(3);
