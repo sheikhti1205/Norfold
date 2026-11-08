@@ -1239,6 +1239,10 @@ export async function openSqliteMessagingHistory(
         id: row.id, conversationId: row.conversationId, authorId: row.authorId,
         recipientId: row.recipientId, body: row.body, messageType: row.messageType,
         contextReportId: row.contextReportId,
+        // An unsent message keeps its tombstone but not what it answered;
+        // personal erasure already nulls the column. This matches the web
+        // adapter's suppressed export instead of leaking the reference.
+        replyToId: row.unsentAt !== null ? null : row.replyToId,
         location: row.locationLat !== null && row.locationLng !== null
           ? { lat: row.locationLat, lng: row.locationLng, accuracy: row.locationAccuracy } : null,
         // The query filters on both, so these are never null here.

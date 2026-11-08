@@ -16,7 +16,7 @@ const scope = { accountId: A, deviceId: id(11) };
 const empty = (): HistorySnapshot => ({ conversations: [], messages: [], tombstones: [], deletedForMe: [], clears: [] });
 const saved = (n = 1) => ({ id: id(100 + n), conversationId: CHAT, authorId: B, recipientId: A,
   body: `text ${n}` as string | null, messageType: "TEXT" as "TEXT" | "MEDIA" | null,
-  contextReportId: null, location: null,
+  contextReportId: null, replyToId: null, location: null,
   serverEventId: id(200 + n), serverSequence: n, unsentAt: null as number | null, createdAt: 0 });
 function snapshot(n = 1): HistorySnapshot {
   return { ...empty(), conversations: [{ id: CHAT, lastSequence: n, createdAt: 0, updatedAt: 25 }], messages: [saved(n)] };
