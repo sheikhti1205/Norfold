@@ -14,6 +14,7 @@ import {
   type BackupManifest, isBackupName,
 } from "./backupDrive";
 import { importBackupKey, BackupCryptoError } from "./backupCrypto";
+import { BackupError } from "./backup";
 import { ApiError } from "../session";
 import { DriveAuthError } from "./driveAuth";
 import type { BackupKeyMaterial } from "./backupKey";
@@ -154,6 +155,12 @@ export interface BackupDiagnostic {
   stage: "authorization" | "policy" | "account-key" | "encryption" | "drive-list" | "drive-read"
     | "drive-write" | "drive-delete" | "history-read" | "history-merge";
   cause: "unauthorized" | "throttled" | "unavailable" | "invalid" | "server" | "integrity" | "storage" | "auth" | "other";
+  /**
+   * A fixed internal code such as `backup: identity conflict`. Never a
+   * provider message, an account/file id, a key or a token, so it is safe to
+   * show inside the closed diagnostics disclosure.
+   */
+  detail?: string;
 }
 
 export interface BackupDeps {
@@ -510,9 +517,12 @@ export class DriveBackup {
       this.diagnostics.set(op.lease.accountId, { stage: op.stage,
         ...(error instanceof DriveStoreError && error.httpStatus !== undefined ? { httpStatus: error.httpStatus } : {}),
         ...(error instanceof DriveStoreError && error.providerReason !== undefined ? { providerReason: error.providerReason } : {}),
+        ...(error instanceof BackupError || error instanceof BackupCryptoError
+          || error instanceof BackupDriveError ? { detail: error.code } : {}),
         cause: error instanceof DriveStoreError ? error.kind
           : error instanceof ApiError ? "server"
-          : error instanceof BackupCryptoError || error instanceof BackupDriveError ? "integrity"
+          : error instanceof BackupError || error instanceof BackupCryptoError
+            || error instanceof BackupDriveError ? "integrity"
           : error instanceof BackupPolicyUnavailable ? "storage"
           : error instanceof DriveAuthError ? "auth" : "other" });
       return this.recordFailure(op.lease.accountId, error);
@@ -551,6 +561,10 @@ export class DriveBackup {
       // An unreadable local history is not a broken backup: name it separately
       // so the surface can say the existing backup was left untouched.
       lastError = error.code === "backup: empty snapshot" || error.code === "backup: incomplete snapshot" ? "snapshot" : "integrity";
+    } else if (error instanceof BackupError) {
+      // A snapshot that contradicts local history (for example two different
+      // records for one id) is an integrity failure, not a transient one.
+      lastError = "integrity";
     } else if (error instanceof BackupPolicyUnavailable) {
       lastError = "storage";
     } else if (error instanceof DriveAuthError) {

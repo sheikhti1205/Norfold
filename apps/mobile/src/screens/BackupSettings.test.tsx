@@ -73,6 +73,15 @@ describe("the backup settings surface", () => {
     expect(disclosure.textContent).toContain("drive-list / invalid");
   });
 
+  it("shows a fixed internal failure code inside the diagnostics disclosure", () => {
+    mocks.backup.status.mockReturnValue({ kind: "attention", lastError: "integrity", enabled: true,
+      diagnostic: { stage: "history-merge", cause: "integrity", detail: "backup: identity conflict" } });
+    renderScreen();
+    const disclosure = screen.getByText("Backup diagnostics").closest("details")!;
+    expect(disclosure.textContent).toContain("history-merge / integrity");
+    expect(disclosure.textContent).toContain("Internal code: backup: identity conflict");
+  });
+
   it("keeps disconnect available as a compact named icon action", () => {
     mocks.backup.status.mockReturnValue(WAITING);
     renderScreen();

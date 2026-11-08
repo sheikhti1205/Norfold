@@ -317,6 +317,7 @@ export function BackupSettings() {
           <summary>Backup diagnostics</summary>
           <div>
             <p>Last attempted step: {status.diagnostic.stage} / {status.diagnostic.cause}</p>
+            {status.diagnostic.detail ? <p>Internal code: {status.diagnostic.detail}</p> : null}
             {status.diagnostic.httpStatus !== undefined ? <p>HTTP {status.diagnostic.httpStatus}</p> : null}
             {status.diagnostic.providerReason ? <p>Google Drive: {status.diagnostic.providerReason}</p> : null}
           </div>
