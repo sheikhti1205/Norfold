@@ -30,6 +30,8 @@ import {
 } from "lucide-react";
 import type { PublicUser } from "@norfold/shared";
 import { useAuth } from "../auth";
+import { readRememberedAccounts, rememberAccount, removeRememberedAccount } from "../services/rememberedAccounts";
+import { announce } from "../components/LiveRegion";
 import {
   ACCENT_OPTIONS,
   TEXT_SCALE_OPTIONS,
@@ -190,6 +192,13 @@ function SettingsNavigation({ detailSelected }: { detailSelected: boolean }) {
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const [retention, setRetention] = useState<{ id: string; keep: boolean } | null>(null);
   const keepAccount = retention?.id === user?.id && retention?.keep === true;
+  const userId = user?.id;
+  useEffect(() => {
+    if (!userId) return;
+    // The switch reflects the durable choice: an account restored from the
+    // sign-in list is already remembered, and a toggle writes immediately.
+    setRetention({ id: userId, keep: readRememberedAccounts().some((account) => account.id === userId) });
+  }, [userId]);
   // The staff console entry is offered only to an account the SERVER says is
   // an ADMIN. An unreadable role leaves it hidden: the server refuses
   // everything an ordinary account asks for, so the client never offers what
@@ -406,7 +415,18 @@ function SettingsNavigation({ detailSelected }: { detailSelected: boolean }) {
               description="Save your name and email for next time, not your password."
               icon={UserRound}
               checked={keepAccount}
-              onChange={keep => setRetention({ id: user.id, keep })}
+              onChange={keep => {
+                if (!user) return;
+                const saved = keep ? rememberAccount(user) : removeRememberedAccount(user.id);
+                setRetention({ id: user.id, keep: saved && keep });
+                if (!saved) setSignOutError("Couldn't update saved accounts on this device. Try again.");
+                else {
+                  setSignOutError(null);
+                  announce(keep
+                    ? "This account will be remembered after you sign out."
+                    : "This account won't be remembered after you sign out.");
+                }
+              }}
               disabled={signingOut}
             />
             <SettingsRow

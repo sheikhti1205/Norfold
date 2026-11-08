@@ -74,6 +74,7 @@ import {
   notificationSummary,
 } from "./Settings";
 import { cloudConnectionsSummary } from "../services/aiCredentials";
+import { readRememberedAccounts, rememberAccount } from "../services/rememberedAccounts";
 import { Settings } from "./Settings";
 import { SettingsPage } from "../components/settings";
 import { RouteTransition } from "../components/RouteTransition";
@@ -83,6 +84,7 @@ afterEach(cleanup);
 beforeEach(() => {
   viewer.id = "u1";
   vi.clearAllMocks();
+  window.localStorage.clear();
   mockFetchPrefs.mockResolvedValue({ pushEnabled: true, likes: true, comments: true, mentions: true, status: true });
   mockPermission.mockResolvedValue("granted");
   mockLogout.mockResolvedValue(undefined);
@@ -113,6 +115,19 @@ it.each([false, true])("offers explicit logout identity retention without saving
   if (keepAccount) fireEvent.click(control);
   fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
   await waitFor(() => expect(mockLogout).toHaveBeenCalledWith({ keepAccount }));
+});
+
+it("reflects and persists the account-retention choice immediately", async () => {
+  rememberAccount({ id: viewer.id, username: "tester", displayName: "Test Person", email: "tester@example.com" } as Parameters<typeof rememberAccount>[0]);
+  renderSettings();
+  const control = screen.getByRole("switch", { name: "Keep this account on this device" });
+  await waitFor(() => expect(control.getAttribute("aria-checked")).toBe("true"));
+  fireEvent.click(control);
+  expect(control.getAttribute("aria-checked")).toBe("false");
+  expect(readRememberedAccounts().some((account) => account.id === viewer.id)).toBe(false);
+  fireEvent.click(control);
+  expect(control.getAttribute("aria-checked")).toBe("true");
+  expect(readRememberedAccounts().some((account) => account.id === viewer.id)).toBe(true);
 });
 
 describe("summary helpers", () => {
