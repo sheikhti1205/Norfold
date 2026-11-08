@@ -103,10 +103,11 @@ function createHandle(
     close: () => {
       // Never close bytes before history's admitted cleanup has drained, even
       // on failed native teardown. Preserve that original close failure and do
-      // not release native ownership when either resource's close is uncertain.
+      // not release native ownership when the SQLite close is uncertain. The
+      // media store is a separate resource: its close result must not decide
+      // whether the native account lease is released.
       closing ??= closeHistory(history).then(async () => {
-        await bytes?.close();
-        release();
+        try { await bytes?.close(); } finally { release(); }
       }, async (error: unknown) => {
         await bytes?.close().catch(() => undefined);
         throw error;

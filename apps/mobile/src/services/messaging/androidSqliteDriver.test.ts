@@ -12,7 +12,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { fakePlugin, registerPluginMock, platform } = vi.hoisted(() => ({
   fakePlugin: {
-    open: vi.fn<(options: { accountId: string }) => Promise<unknown>>(),
+    open: vi.fn<(options: { accountId: string; documentId: string }) => Promise<unknown>>(),
     exec: vi.fn<(options: { handle: string; sql: string }) => Promise<unknown>>(),
     all: vi.fn<(options: { handle: string; sql: string; params: unknown[] }) => Promise<unknown>>(),
     run: vi.fn<(options: { handle: string; sql: string; params: unknown[] }) => Promise<unknown>>(),
@@ -100,8 +100,36 @@ describe("open", () => {
 
   it("opens the native handle for the account and reports no path", async () => {
     const driver = await openAndroidMessagingSqliteDriver({ accountId: A });
-    expect(fakePlugin.open).toHaveBeenCalledWith({ accountId: A });
+    expect(fakePlugin.open).toHaveBeenCalledWith({ accountId: A, documentId: expect.any(String) });
+    const sent = fakePlugin.open.mock.calls[0]?.[0]?.documentId;
+    expect(typeof sent).toBe("string");
+    expect(sent).toMatch(/^[A-Za-z0-9_-]{16,128}$/);
     expect(Object.keys(driver).sort()).toEqual(["all", "close", "exec", "run"]);
+  });
+
+  it("keeps one document identity for the module and mints a new one after a JS reload", async () => {
+    await openAndroidMessagingSqliteDriver({ accountId: A });
+    const first = fakePlugin.open.mock.calls[0]?.[0]?.documentId;
+    await openAndroidMessagingSqliteDriver({ accountId: A });
+    const second = fakePlugin.open.mock.calls[1]?.[0]?.documentId;
+    expect(second).toBe(first);
+
+    vi.resetModules();
+    const reloaded = await import("./androidSqliteDriver");
+    await reloaded.openAndroidMessagingSqliteDriver({ accountId: A });
+    const third = fakePlugin.open.mock.calls[2]?.[0]?.documentId;
+    expect(third).not.toBe(first);
+    expect(third).toMatch(/^[A-Za-z0-9_-]{16,128}$/);
+  });
+
+  it("preserves an already-open or stale-close native lease conflict", async () => {
+    for (const [nativeCode, kind] of [
+      ["MESSAGING_STORAGE_ALREADY_OPEN", "already-open"],
+      ["MESSAGING_STORAGE_STALE_CLOSE", "stale-close"],
+    ] as const) {
+      fakePlugin.open.mockRejectedValue(Object.assign(new Error("native lease conflict"), { code: nativeCode }));
+      await expect(openAndroidMessagingSqliteDriver({ accountId: A })).rejects.toMatchObject({ kind });
+    }
   });
 
   it("rejects a handle that is not a non-empty opaque string", async () => {

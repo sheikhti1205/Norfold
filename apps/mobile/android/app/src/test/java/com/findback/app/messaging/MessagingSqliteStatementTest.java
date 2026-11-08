@@ -5,6 +5,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 
+import android.database.sqlite.SQLiteDatabase;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import com.getcapacitor.JSArray;
@@ -40,13 +41,129 @@ public class MessagingSqliteStatementTest {
             assertEquals(owner, owners.get(account));
         } finally { owners.remove(account, owner); }
     }
+    private static final String TEST_DOCUMENT = "test-document-a0001";
     private static final class RecordedCall extends PluginCall {
         String rejectedCode;
+        String rejectedMessage;
+        JSObject resolved;
         final CountDownLatch rejected = new CountDownLatch(1);
-        RecordedCall(String account) {
-            super(null, "FindbackMessagingSqlite", "test", "open", new JSObject().put("accountId", account));
+        final CountDownLatch settled = new CountDownLatch(1);
+        RecordedCall(String account) { this(account, TEST_DOCUMENT); }
+        RecordedCall(String account, String documentId) {
+            super(null, "FindbackMessagingSqlite", "test", "open",
+                    new JSObject().put("accountId", account).put("documentId", documentId));
         }
-        @Override public void reject(String message, String code) { rejectedCode = code; rejected.countDown(); }
+        @Override public void reject(String message, String code) {
+            rejectedCode = code;
+            rejectedMessage = message;
+            rejected.countDown();
+            settled.countDown();
+        }
+        @Override public void resolve(JSObject data) {
+            resolved = data;
+            settled.countDown();
+        }
+    }
+
+    private static final class FakeConnection implements FindbackMessagingSqlitePlugin.DatabaseConnection {
+        final java.util.concurrent.atomic.AtomicInteger closes = new java.util.concurrent.atomic.AtomicInteger();
+        final boolean failClose;
+        FakeConnection() { this(false); }
+        FakeConnection(boolean failClose) { this.failClose = failClose; }
+        @Override public SQLiteDatabase database() { return null; }
+        @Override public void verify() { }
+        @Override public void close() {
+            closes.incrementAndGet();
+            if (failClose) throw new IllegalStateException("connection cannot close");
+        }
+    }
+
+    @Test public void staleDocumentReclaimsTheUnreachableLeaseBeforeOpeningAgain() throws Exception {
+        String account = "00000000-0000-4000-8000-0000000000d1";
+        FakeConnection firstConnection = new FakeConnection();
+        FakeConnection secondConnection = new FakeConnection();
+        FindbackMessagingSqlitePlugin plugin = new FindbackMessagingSqlitePlugin() {
+            int opened, handles;
+            @Override DatabaseConnection openDatabase(String ignored) {
+                opened++;
+                return opened == 1 ? firstConnection : secondConnection;
+            }
+            @Override String newHandle() { return "test-handle-" + (++handles); }
+        };
+        try {
+            RecordedCall first = new RecordedCall(account, "document-one-a0001");
+            plugin.open(first);
+            org.junit.Assert.assertTrue(first.settled.await(2, TimeUnit.SECONDS));
+            assertEquals(first.rejectedMessage, null, first.rejectedCode);
+            assertNotNull(first.resolved);
+            assertEquals(0, firstConnection.closes.get());
+
+            // A WebView document reload lost the only handle token. The next
+            // document must close that lease before it opens its own database.
+            RecordedCall second = new RecordedCall(account, "document-two-b0002");
+            plugin.open(second);
+            org.junit.Assert.assertTrue(second.settled.await(2, TimeUnit.SECONDS));
+            assertNotNull(second.resolved);
+            assertEquals(1, firstConnection.closes.get());
+            assertEquals(0, secondConnection.closes.get());
+        } finally {
+            plugin.handleOnDestroy();
+        }
+    }
+
+    @Test public void sameDocumentDoubleOpenIsStillRejected() throws Exception {
+        String account = "00000000-0000-4000-8000-0000000000d2";
+        FindbackMessagingSqlitePlugin plugin = new FindbackMessagingSqlitePlugin() {
+            int handles;
+            @Override DatabaseConnection openDatabase(String ignored) { return new FakeConnection(); }
+            @Override String newHandle() { return "test-handle-" + (++handles); }
+        };
+        try {
+            RecordedCall first = new RecordedCall(account, "document-one-a0001");
+            plugin.open(first);
+            org.junit.Assert.assertTrue(first.settled.await(2, TimeUnit.SECONDS));
+            assertEquals(first.rejectedMessage, null, first.rejectedCode);
+            assertNotNull(first.resolved);
+
+            RecordedCall duplicate = new RecordedCall(account, "document-one-a0001");
+            plugin.open(duplicate);
+            assertEquals("MESSAGING_STORAGE_ALREADY_OPEN", duplicate.rejectedCode);
+        } finally {
+            plugin.handleOnDestroy();
+        }
+    }
+
+    @Test public void uncertainTeardownRejectsTheNewDocumentInsteadOfReopening() throws Exception {
+        String account = "00000000-0000-4000-8000-0000000000d3";
+        FindbackMessagingSqlitePlugin first = new FindbackMessagingSqlitePlugin() {
+            @Override DatabaseConnection openDatabase(String ignored) { return new FakeConnection(true); }
+            @Override String newHandle() { return "test-handle-first"; }
+        };
+        FindbackMessagingSqlitePlugin replacement = new FindbackMessagingSqlitePlugin() {
+            int handles;
+            @Override DatabaseConnection openDatabase(String ignored) { return new FakeConnection(); }
+            @Override String newHandle() { return "test-handle-new-" + (++handles); }
+        };
+        try {
+            RecordedCall opened = new RecordedCall(account, "document-one-a0001");
+            first.open(opened);
+            org.junit.Assert.assertTrue(opened.settled.await(2, TimeUnit.SECONDS));
+            assertEquals(opened.rejectedMessage, null, opened.rejectedCode);
+            assertNotNull(opened.resolved);
+            first.handleOnDestroy();
+
+            RecordedCall next = new RecordedCall(account, "document-two-b0002");
+            replacement.open(next);
+            org.junit.Assert.assertTrue(next.settled.await(2, TimeUnit.SECONDS));
+            assertEquals("MESSAGING_STORAGE_STALE_CLOSE", next.rejectedCode);
+            assertEquals(null, next.resolved);
+        } finally {
+            replacement.handleOnDestroy();
+            // The lease is deliberately retained: clear it only for test isolation.
+            Field owners = FindbackMessagingSqlitePlugin.class.getDeclaredField("accountOwners");
+            owners.setAccessible(true);
+            ((Map<?, ?>) owners.get(null)).remove(account);
+        }
     }
 
     @Test public void unexpectedFailureBeforeConnectionDoesNotStrandAccountAcrossRecreation() throws Exception {

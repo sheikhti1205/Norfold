@@ -271,8 +271,8 @@ describe("Android selection", () => {
 
     expect(await first.history.listMessages(CONVERSATION)).toEqual([{ ...outgoing, messageType: "TEXT", createdAt: expect.any(Number) }]);
     expect(await second.history.listMessages(CONVERSATION)).toEqual([]);
-    expect(fakePlugin.open).toHaveBeenNthCalledWith(1, { accountId: A });
-    expect(fakePlugin.open).toHaveBeenNthCalledWith(2, { accountId: otherAccount });
+    expect(fakePlugin.open).toHaveBeenNthCalledWith(1, { accountId: A, documentId: expect.any(String) });
+    expect(fakePlugin.open).toHaveBeenNthCalledWith(2, { accountId: otherAccount, documentId: expect.any(String) });
     await first.close();
     await second.close();
   });
