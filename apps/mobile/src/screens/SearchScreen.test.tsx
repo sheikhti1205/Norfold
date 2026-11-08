@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
+import type { ReactNode } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { fetchFeedMock, tabTapState, nlExtractLiveMock, nlHelperStateMock } = vi.hoisted(() => ({
@@ -10,6 +11,14 @@ const { fetchFeedMock, tabTapState, nlExtractLiveMock, nlHelperStateMock } = vi.
   nlHelperStateMock: vi.fn(),
 }));
 
+// This suite asserts the settled result state, not the status row's motion
+// choreography. Under a fully loaded suite the shared exit-before-enter
+// handoff can leave the old count mounted; render the current child directly
+// so the assertion observes the state the reader is meant to end up in.
+vi.mock("framer-motion", async (importOriginal) => ({
+  ...await importOriginal<typeof import("framer-motion")>(),
+  AnimatePresence: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
 vi.mock("../services/posts", () => ({ fetchFeed: fetchFeedMock }));
 vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "u1", username: "tester" } }) }));
 vi.mock("../components/TabTap", () => ({ useTabTap: () => tabTapState }));

@@ -6,16 +6,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const { unreadMock } = vi.hoisted(() => ({ unreadMock: vi.fn() }));
 
 vi.mock("../services/notifications", () => ({ fetchUnreadCount: unreadMock }));
-vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "badge-reader" } }) }));
+vi.mock("../auth", () => {
+  const reader = { id: "badge-reader" };
+  return { useAuth: () => ({ user: reader }) };
+});
 
 import { Shell } from "./Shell";
+import { AppBar } from "./AppBar";
 
 function renderShell() {
   return render(
     <MemoryRouter initialEntries={["/my"]}>
       <Routes>
         <Route element={<Shell />}>
-          <Route path="/my" element={<p>My Reports screen</p>} />
+          {/* Routes own the one top bar; the shell no longer renders one. */}
+          <Route path="/my" element={<><AppBar title="My Reports" /><p>My Reports screen</p></>} />
         </Route>
       </Routes>
     </MemoryRouter>,

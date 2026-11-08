@@ -183,13 +183,12 @@ describe("PostDetail overflow", () => {
   it("keeps a readable author width while metadata can wrap at large text", async () => {
     renderDetail();
     await waitFor(() => expect(screen.getByText(/plain comment/)).toBeTruthy());
-    const identity = screen.getByRole("button", { name: `About ${LONG}` });
+    const identity = screen.getByRole("link", { name: `Open ${LONG}'s profile` });
     expect(identity.textContent).toContain(`@${LONG}`);
     const header = identity.closest("header")!;
     expect(header.querySelector("time")?.getAttribute("dateTime")).toBe(longComment.createdAt);
     expect(header.querySelector("time")?.getAttribute("title")).toBeTruthy();
-    fireEvent.click(identity);
-    expect(await screen.findByRole("dialog", { name: `About ${LONG}` })).toBeTruthy();
+    expect(identity.getAttribute("href")).toBe(`/u/${LONG}`);
   });
 });
 

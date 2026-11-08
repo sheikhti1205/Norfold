@@ -443,11 +443,13 @@ describe("home-feed detail link + Like action siblings (never nested)", () => {
       </MemoryRouter>,
     );
     const card = screen.getByTestId("post-card");
-    // Main navigation and the comments shortcut are separate links.
-    const links = card.querySelectorAll("a[href]");
-    expect(links).toHaveLength(2);
-    expect(links[0]!.getAttribute("href")).toBe("/posts/p1");
-    expect(links[1]!.getAttribute("href")).toBe("/posts/p1#detail-comments");
+    // No ancestor link wraps the card: identity, content and the comments
+    // shortcut are separate destinations.
+    expect(card.closest("a")).toBeNull();
+    const links = [...card.querySelectorAll("a[href]")].map((link) => link.getAttribute("href"));
+    // The identity link carries the report context so the profile can
+    // revalidate where the person was opened from.
+    expect(links).toEqual(["/u/alice?report=p1", "/posts/p1", "/posts/p1#detail-comments"]);
   });
 });
 
@@ -669,7 +671,7 @@ describe("home-feed content-first interactions", () => {
     renderHomeFeed(imagePost());
     const time = screen.getByTestId("post-time");
     const category = screen.getByTestId("post-category");
-    const identity = screen.getByRole("link", { name: "Open Alice's profile" }).closest("header")!;
+    const identity = screen.getByRole("link", { name: "Open alice's profile" }).closest("header")!;
     expect(identity.contains(time)).toBe(true);
     expect(screen.getByTestId("home-feed-media").compareDocumentPosition(category) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // The separate category-only row is gone: the card footer now holds the
@@ -682,7 +684,7 @@ describe("home-feed content-first interactions", () => {
   it("keeps the content navigation independent from identity and actions", () => {
     renderHomeFeed(post());
     const link = screen.getByTestId("home-feed-detail-link");
-    expect(link.contains(screen.getByRole("link", { name: "Open Alice's profile" }))).toBe(false);
+    expect(link.contains(screen.getByRole("link", { name: "Open alice's profile" }))).toBe(false);
     expect(link.contains(screen.getByRole("group", { name: "Report actions" }))).toBe(false);
   });
 });

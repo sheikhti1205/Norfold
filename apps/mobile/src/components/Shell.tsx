@@ -182,7 +182,9 @@ export function PrimaryNav({
       // keyboard signal on that platform.
       const viewportShrank = !!window.visualViewport &&
         window.innerHeight - window.visualViewport.height > 120;
-      const androidKeyboard = Capacitor.getPlatform() === "android" && isEditable();
+      // Same tolerant read as applicationAi: a host without the platform id
+      // is simply not Android, never a crash in the shell's keyboard probe.
+      const androidKeyboard = Capacitor.getPlatform?.() === "android" && isEditable();
       setKeyboardOpen(viewportShrank || androidKeyboard);
       setFullscreen(!!document.fullscreenElement);
     };

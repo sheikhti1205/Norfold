@@ -3,6 +3,12 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// SettingsPage renders the shared TopUtilities, whose unread-badge owner is
+// auth-scoped. This suite exercises the audit log, not sign-in state.
+vi.mock("../auth", () => ({
+  useAuth: () => ({ user: { id: "test-reader" }, booting: false, bootError: null }),
+}));
+
 const { mockReadAuditLog } = vi.hoisted(() => ({
   mockReadAuditLog: vi.fn(),
 }));

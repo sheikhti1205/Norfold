@@ -3,6 +3,13 @@ import { act } from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+// SettingsPage renders the shared TopUtilities, whose unread-badge owner is
+// auth-scoped. This suite exercises local tools, not sign-in state.
+vi.mock("../auth", () => ({
+  useAuth: () => ({ user: { id: "test-reader" }, booting: false, bootError: null }),
+}));
+
 import { ApplicationAiService } from "../services/ai/applicationAi";
 import { NEEDLE_DESCRIPTOR } from "../services/ai/modelDescriptors";
 import { LocalIntelligence } from "./LocalIntelligence";

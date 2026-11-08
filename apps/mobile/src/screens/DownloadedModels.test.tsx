@@ -3,6 +3,13 @@ import { act } from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+// SettingsPage renders the shared TopUtilities, whose unread-badge owner is
+// auth-scoped. This suite exercises model management, not sign-in state.
+vi.mock("../auth", () => ({
+  useAuth: () => ({ user: { id: "test-reader" }, booting: false, bootError: null }),
+}));
+
 import { ApplicationAiService } from "../services/ai/applicationAi";
 import { NEEDLE_DESCRIPTOR as descriptor } from "../services/ai/modelDescriptors";
 import { buildJournal } from "../services/ai/download/journal";

@@ -2,7 +2,14 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { MemoryRouter } from "react-router";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// SettingsPage renders the shared TopUtilities, whose unread-badge owner is
+// auth-scoped. This suite exercises appearance options, not sign-in state.
+vi.mock("../auth", () => ({
+  useAuth: () => ({ user: { id: "test-reader" }, booting: false, bootError: null }),
+}));
+
 import { AppearanceSettings } from "./AppearanceSettings";
 import { ThemeProvider } from "../theme";
 import { APPEARANCE_STORAGE_KEY } from "../appearance";

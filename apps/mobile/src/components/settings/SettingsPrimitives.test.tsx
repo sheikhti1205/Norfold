@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+// SettingsPage renders the shared TopUtilities, whose unread-badge owner is
+// auth-scoped. This suite exercises primitive semantics, not sign-in state.
+vi.mock("../../auth", () => ({
+  useAuth: () => ({ user: null, booting: false, bootError: null }),
+}));
+
 import { MemoryRouter } from "react-router";
 import { Palette } from "lucide-react";
 import { useState } from "react";

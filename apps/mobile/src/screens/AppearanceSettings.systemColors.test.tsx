@@ -2,6 +2,13 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// SettingsPage renders the shared TopUtilities, whose unread-badge owner is
+// auth-scoped. This suite exercises system-color integration, not sign-in.
+vi.mock("../auth", () => ({
+  useAuth: () => ({ user: { id: "test-reader" }, booting: false, bootError: null }),
+}));
+
 import { AppearanceSettings } from "./AppearanceSettings";
 import { ThemeProvider } from "../theme";
 import { APPEARANCE_STORAGE_KEY, DEFAULT_APPEARANCE, accentTokensFor } from "../appearance";
