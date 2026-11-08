@@ -108,6 +108,10 @@
   max-width:calc(100% - 2.75rem); }
 .fb-chat-line-own .fb-chat-message-surface { flex-direction:row-reverse; }
 .fb-chat-message-surface:focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; border-radius:1rem; }
+/* A quote jump focuses the original row so assistive tech follows it. The
+   transient bubble ring is the visible cue, so the browser's row-wide focus
+   rectangle must not paint over the thread. */
+.fb-chat-line:focus { outline:none; }
 .fb-chat-message { align-self:flex-start; max-width:min(100%, 34rem); padding:.6rem .8rem; border-radius:1rem 1rem 1rem .25rem; background:var(--fb-surface-container); overflow-wrap:anywhere; min-width:0; }
 .fb-chat-message-own { align-self:flex-end; border-radius:1rem 1rem .25rem 1rem; background:var(--fb-primary-container); color:var(--fb-on-primary-container); }
 .fb-chat-message p { white-space:pre-wrap; margin:0; line-height:1.45; font-size:.95rem; }
