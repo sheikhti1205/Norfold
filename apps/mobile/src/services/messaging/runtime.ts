@@ -806,6 +806,24 @@ export async function setMessagingMuted(accountId: string, conversationId: strin
   }
 }
 
+/** Pin or unpin one message in a connected conversation. The server owns the
+ * shared three-item limit; a refresh carries the result to every device. */
+export async function pinMessagingMessage(accountId: string, conversationId: string,
+  messageId: string, pinned: boolean): Promise<void> {
+  const owner = ownerFor(accountId), id = uuid(conversationId), target = uuid(messageId);
+  if (typeof pinned !== "boolean") throw new Error("Invalid pin state");
+  if (snapshot.status !== "ready" || !Array.isArray(snapshot.currentProjections?.[id]?.pinnedMessageIds)) {
+    throw new Error("Sync this chat before pinning messages");
+  }
+  invalidateAuthority(owner);
+  try {
+    await owner.session.setPinned(id, target, pinned);
+    assertOwner(owner);
+  } finally {
+    if (current === owner && owner.generation === generation) await requestRefresh(owner, "full");
+  }
+}
+
 export async function changeMessagingRelationship(accountId: string, conversationId: string,
   action: "accept" | "end" | "block" | "hide" | "unhide" | "decline"): Promise<void> {
   const owner = ownerFor(accountId);

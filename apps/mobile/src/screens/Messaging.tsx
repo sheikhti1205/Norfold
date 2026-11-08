@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { motion, type PanInfo } from "framer-motion";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { Archive, ArrowLeft, BellOff, ChevronDown, Ellipsis, Flag, ImageOff, Images, ListFilter, LogOut, MapPin, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound, X } from "lucide-react";
+import { Archive, ArrowLeft, BellOff, ChevronDown, Ellipsis, Flag, ImageOff, Images, ListFilter, LogOut, MapPin, PanelLeftClose, PanelLeftOpen, Pin, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound, X } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import type { PostItem } from "@norfold/shared";
 import { copyStaticLocation, isUuid } from "../services/messaging/validation";
@@ -41,7 +41,7 @@ import {
   changeMessagingRelationship, markMessagingConversationRead, readMessagingThreadState, getCachedMessagingThreadState,
   refreshMessaging, retryMessagingMedia, sendMessagingText, sendMessagingLocation, sendMessagingMedia, sendMessagingVoice, clearMessagingConversation, removeMessagingMessage,
   fetchMessagingReceiptView, observeMessagingReceipt, readMessagingMedia, downloadMessagingMedia, recoverMessagingText,
-  retryMessagingMessage, setMessagingMuted, watchMessagingThread,
+  retryMessagingMessage, setMessagingMuted, pinMessagingMessage, watchMessagingThread,
 } from "../services/messaging/runtime";
 import type { MediaAttachment, OutboxEntry, StaticLocation, StoredHumanMessage } from "../services/messaging/history";
 import { prepareMessagingPhoto, type PreparedMessagingPhoto } from "../services/messaging/preparePhoto";
@@ -1068,6 +1068,15 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   }, [messages]);
   // Presentation-only grouping: the wire still carries one message per photo.
   const groups = useMemo(() => photoBatches(messages), [messages]);
+  // Pins are shared conversation state. A pin that names a photo hidden inside
+  // a grid still jumps to the one visible bubble, and a pin whose message this
+  // device can no longer see (deleted for me, or not yet synced) is not drawn
+  // as a dead chip.
+  const pinnedIds = view?.pinnedMessageIds ?? [];
+  const pinnedRows = pinnedIds.flatMap((id) => {
+    const message = messages.find(entry => entry.id === (groups.leaderOf.get(id) ?? id));
+    return message && message.unsentAt === undefined ? [{ id, message }] : [];
+  });
   useEffect(() => {
     if (sheet || !jumpTo) return;
     // A grouped photo is drawn by its leader, so a quote that names a follower
@@ -1237,6 +1246,19 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     } catch { if (alive.current) setError("Your notifications change could not be saved. Sync and try again."); }
     finally { if (alive.current) setBusy(false); }
   }
+  /** Pins are conversation-wide; the server owns the three-item limit. */
+  async function setPinned(message: StoredHumanMessage, pinned: boolean) {
+    if (busy || current?.mode !== "CONNECTED") return;
+    setBusy(true); setError(null);
+    try {
+      await pinMessagingMessage(accountId, conversationId, message.id, pinned);
+      if (alive.current) announce(pinned ? "Message pinned." : "Message unpinned.");
+    } catch {
+      if (alive.current) setError(pinned
+        ? "This message could not be pinned. Sync and try again."
+        : "This message could not be unpinned. Sync and try again.");
+    } finally { if (alive.current) setBusy(false); }
+  }
   async function relationship(action: "accept" | "end" | "hide" | "unhide" | "decline") {
     if (busy) return;
     setBusy(true); setError(null);
@@ -1402,6 +1424,14 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         );
       } });
     }
+    // Connected conversations share one pin list (max three). An unsent message
+    // is never pinnable; the server also drops its pin when it is unsent.
+    if (message.unsentAt === undefined && message.server && view?.mode === "CONNECTED") {
+      const pinned = (view.pinnedMessageIds ?? []).includes(message.id);
+      items.push({ id: "pin", label: pinned ? "Unpin" : "Pin",
+        disabled: busy || (!pinned && (view.pinnedMessageIds?.length ?? 0) >= 3),
+        onAction: () => { void setPinned(message, !pinned); } });
+    }
     if (own && message.unsentAt === undefined) {
       items.push({ id: "unsend", label: "Unsend", destructive: true, disabled: busy || !view,
         onAction: () => setSheet("unsend") });
@@ -1482,6 +1512,21 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         status={!view ? "Saved chat" : view.mode === "CONNECTED" ? "Connected" : "Message request"} />
       {detailsToggle}
     </header>
+    {/* Pinned messages: one compact row directly under the header. Tapping a
+        chip uses the same jump as a reply quote — scroll, focus and ring. */}
+    {pinnedRows.length > 0 && <div className="fb-chat-pins" role="region" aria-label="Pinned messages">
+      {pinnedRows.map(({ id, message }) => {
+        const author = message.authorId === accountId ? "You" : name || "Member";
+        const preview = replyPreview(message);
+        return <button key={id} type="button" className="fb-chat-pin"
+          onClick={() => { nearBottom.current = false; setJumpTo(id); }}
+          aria-label={`Pinned message from ${author}: ${preview}. Show message`}>
+          <Pin size={14} aria-hidden="true" />
+          <span className="fb-chat-pin-author">{author}</span>
+          <span className="fb-chat-pin-preview" dir="auto">{preview}</span>
+        </button>;
+      })}
+    </div>}
     {/* Owner feedback 2026-11-06: a failed refresh is a status, not a lock.
         The transcript keeps its saved messages and the composer keeps working;
         the runtime retries on its own and this stays a single quiet line. */}

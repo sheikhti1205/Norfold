@@ -12,7 +12,7 @@ import { logError } from "../../utils/log";
 
 type MediaTransportFactory = (scope: MessagingScope, signal: AbortSignal) => ReturnType<typeof createMediaTransport>;
 
-type ChatAction = "REGISTER" | "CREATE" | "ACCEPT" | "END" | "BLOCK" | "SEND" | "SYNC" | "ACK" | "RECEIPT_VIEW" | "RECEIPT_OBSERVE" | "RECEIPTS" | "VIEWS" | "PRIVATE" | "PREFERENCES" | "CONTACT_MODE" | "MUTE"
+type ChatAction = "REGISTER" | "CREATE" | "ACCEPT" | "END" | "BLOCK" | "SEND" | "SYNC" | "ACK" | "RECEIPT_VIEW" | "RECEIPT_OBSERVE" | "RECEIPTS" | "VIEWS" | "PRIVATE" | "PREFERENCES" | "CONTACT_MODE" | "MUTE" | "PIN"
   | "STATE_SYNC" | "STATE_ACK" | "UNSEND" | "DELETE_FOR_ME" | "CLEAR_FOR_ME" | "HEAD" | "CONVERSATION_SYNC";
 export interface MessagingPreferences { openMessages: boolean; readReceipts: boolean }
 export type MessagingRpc = (input: MessagingScope & {
@@ -445,6 +445,16 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
       if (typeof muted !== "boolean") throw new Error("Invalid mute preference");
       const result = await call("MUTE", { conversationId: uuid(conversationId), muted });
       if (result !== muted) throw new Error("Invalid mute response");
+    },
+    /** Pin state is conversation-wide; the returned list is the authority. */
+    async setPinned(conversationId: string, messageId: string, pinned: boolean) {
+      if (typeof pinned !== "boolean") throw new Error("Invalid pin state");
+      const conversation = uuid(conversationId), id = uuid(messageId);
+      const value = await call("PIN", { conversationId: conversation, messageId: id, pinned });
+      if (!Array.isArray(value) || value.length > 3) throw new Error("Invalid pin response");
+      const pins = value.map((entry) => uuid(entry as string));
+      if (new Set(pins).size !== pins.length) throw new Error("Invalid pin response");
+      if (pinned !== pins.includes(id)) throw new Error("Invalid pin response");
     },
     async removeMessage(conversationId: string, messageId: string, unsend: boolean) {
       const conversation = uuid(conversationId), id = uuid(messageId);

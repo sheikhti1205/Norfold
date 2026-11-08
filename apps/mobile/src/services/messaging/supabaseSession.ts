@@ -66,6 +66,9 @@ export function createSupabaseMessagingSession(identity: MessagingScope, history
     const request = action === "MUTE"
       ? sdk.rpc("findback_chat_set_muted", { p_account_id: accountId, p_device_id: deviceId,
           p_conversation_id: args.conversationId, p_muted: args.muted })
+      : action === "PIN"
+      ? sdk.rpc("findback_chat_set_pin", { p_account_id: accountId, p_device_id: deviceId,
+          p_conversation_id: args.conversationId, p_message_id: args.messageId, p_pinned: args.pinned })
       : action === "RECEIPT_VIEW"
       ? sdk.rpc("findback_chat_receipt_view", { p_account_id: accountId, p_device_id: deviceId,
           p_conversation_id: args.conversationId, p_message_ids: args.messageIds })
