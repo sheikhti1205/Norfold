@@ -762,6 +762,7 @@ const CLIENT_REACHABLE_DEFINERS = Object.freeze([
   "findback_chat_receipt_observe",
   "findback_chat_receipt_view",
   "findback_chat_set_muted",
+  "findback_chat_set_pin",
   "findback_confirm_match",
   "findback_create_post_client",
   "findback_create_post_client_multi",
