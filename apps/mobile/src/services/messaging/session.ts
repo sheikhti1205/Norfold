@@ -370,9 +370,13 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
       const context = mediaContext(), attempted = new Set<string>();
       const discoveryRevision = mediaDiscoveryRevision;
       let failed = false;
+      // A cooldown-parked attachment is not a completed discovery: keep the
+      // revision open so the next pass re-enters the full media sweep instead
+      // of silently waiting for an unrelated event.
+      let parked = false;
       const receive = async (metadata: MediaMetadata) => {
         const retryAt = mediaRetryAt.get(metadata.id);
-        if (retryAt !== undefined && retryAt > Date.now()) return false;
+        if (retryAt !== undefined && retryAt > Date.now()) { parked = true; return false; }
         attempted.add(metadata.id);
         try { await receiveMedia(metadata, context); mediaRetryAt.delete(metadata.id); return true; }
         catch (error) {
@@ -415,7 +419,9 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
         if (deliveries.length < 100 || progress === 0) break;
       }
       if (failed) throw mediaUnavailable();
-      discoveredMediaRevision = discoveryRevision;
+      // Only a sweep with nothing parked has actually discovered every offered
+      // delivery; otherwise the fast path must be able to escalate again.
+      if (!parked) discoveredMediaRevision = discoveryRevision;
     };
     mediaSyncing = run().finally(() => { mediaSyncing = null; });
     return mediaSyncing;
