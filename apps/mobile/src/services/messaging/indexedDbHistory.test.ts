@@ -1106,4 +1106,15 @@ describe("relationship-boundary retry (web)", () => {
     await expect(store.cacheConversation({ ...legacy, epoch: EPOCH_B }))
       .rejects.toThrow("Conversation revision conflict");
   });
+
+  it("accepts one pre-pins projection at the same revision, then still refuses a real pin conflict", async () => {
+    const store = await open();
+    const base = { conversationId: CONVERSATION, peerId: B, mode: "CONNECTED" as const, request: "NONE" as const,
+      requestEpoch: null, ownBlocked: false, ownDeclined: false, ownHidden: false, revision: 2, epoch: EPOCH_A };
+    await store.cacheConversation(base);
+    await store.cacheConversation({ ...base, pinnedMessageIds: [] });
+    expect((await store.listConversations())[0]?.cachedProjection?.pinnedMessageIds).toEqual([]);
+    await expect(store.cacheConversation({ ...base, pinnedMessageIds: [MESSAGE] }))
+      .rejects.toThrow("Conversation revision conflict");
+  });
 });

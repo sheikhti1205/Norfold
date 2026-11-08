@@ -2194,4 +2194,18 @@ describe("relationship-boundary retry", () => {
       .rejects.toThrow("Conversation revision conflict");
     await history.close();
   });
+
+  it("accepts one pre-pins projection at the same revision, then still refuses a real pin conflict", async () => {
+    const history = await open();
+    const base = { conversationId: CONVERSATION, peerId: B, mode: "CONNECTED" as const, request: "NONE" as const,
+      requestEpoch: null, ownBlocked: false, ownDeclined: false, ownHidden: false, revision: 2, epoch: EPOCH_A };
+    await history.cacheConversation(base);
+    // Pins were added to the shared projection without a revision bump, so a
+    // cache written by the previous build differs at the same revision.
+    await history.cacheConversation({ ...base, pinnedMessageIds: [] });
+    expect((await history.listConversations())[0]?.cachedProjection?.pinnedMessageIds).toEqual([]);
+    await expect(history.cacheConversation({ ...base, pinnedMessageIds: [MESSAGE] }))
+      .rejects.toThrow("Conversation revision conflict");
+    await history.close();
+  });
 });
