@@ -256,6 +256,10 @@ export function photoBatches(messages: StoredHumanMessage[]): PhotoBatches {
       const next = messages[index + items.length]!;
       const previous = items[items.length - 1]!;
       if (next.messageType !== "MEDIA" || next.unsentAt !== undefined || next.authorId !== first.authorId) break;
+      // Only a bare photo joins the run. A caption, a quote, a report card or a
+      // location belongs to its own bubble; merging it would hide what the
+      // writer actually sent from the transcript, search and pins.
+      if (next.body || next.replyToId || next.contextReportId || next.location) break;
       const from = previous.createdAt ?? 0, to = next.createdAt ?? 0;
       if (!(from > 0 && to >= from && to - from <= PHOTO_BATCH_GAP_MS)) break;
       items.push(next);
@@ -293,10 +297,27 @@ function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady, gro
   const [state, setState] = useState<"loading" | "missing" | "failed" | "unavailable">("loading");
   const [version, setVersion] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const host = useRef<HTMLDivElement | null>(null);
+  // Reading and verifying the stored bytes is the expensive part, not painting
+  // the bitmap. A long thread must not read every photo on open, so the read
+  // starts when the cell approaches the viewport. Without an observer (jsdom),
+  // read immediately.
+  const [near, setNear] = useState(() => typeof IntersectionObserver === "undefined");
+  useEffect(() => {
+    if (near) return;
+    const element = host.current;
+    if (!element) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) { setNear(true); observer.disconnect(); }
+    }, { rootMargin: "600px 0px" });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [near]);
   const canDownload = attachment.expiresAt !== null && attachment.expiresAt !== undefined
     && attachment.expiresAt > Date.now()
     && (attachment.direction === "IN" || ["READY", "EVICTED", "AWAITING_ACK"].includes(attachment.state));
   useEffect(() => {
+    if (!near) return;
     let cancelled = false, url: string | null = null;
     setContent(null); setLoaded(false);
     onReady(attachment.id, null);
@@ -311,13 +332,13 @@ function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady, gro
       onReady(attachment.id, { bytes: copy, mime: attachment.mime });
     }).catch(() => { if (!cancelled) setState("failed"); });
     return () => { cancelled = true; onReady(attachment.id, null); if (url) URL.revokeObjectURL(url); };
-  }, [accountId, attachment.id, attachment.mime, attachment.state, attachment.expiresAt, version, onReady]);
+  }, [near, accountId, attachment.id, attachment.mime, attachment.state, attachment.expiresAt, version, onReady]);
   async function download() {
     setState("loading");
     try { await downloadMessagingMedia(accountId, conversationId, attachment.id); setVersion((v) => v + 1); }
     catch (error) { setState(error instanceof PhotoUnavailableError ? "unavailable" : "failed"); }
   }
-  return <div className={`fb-chat-photo${grouped ? " fb-chat-photo-grouped" : ""}`} data-loading={content && !loaded ? "true" : undefined}
+  return <div ref={host} className={`fb-chat-photo${grouped ? " fb-chat-photo-grouped" : ""}`} data-loading={content && !loaded ? "true" : undefined}
     style={grouped ? undefined : { aspectRatio: `${attachment.width} / ${attachment.height}` }}>
     {content ? <button type="button" aria-label={label} onClick={() => onOpen(attachment.messageId, content.bytes, attachment.mime)}>
       <img src={content.url} alt="" loading="lazy" decoding="async" onLoad={() => setLoaded(true)} onError={() => { onReady(attachment.id, null); setContent(null); setState("failed"); }}
@@ -1102,7 +1123,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     const frame = requestAnimationFrame(() => {
       const target = Array.from(scroll.current?.querySelectorAll<HTMLElement>("[data-chat-message]") ?? [])
         .find(element => element.dataset.chatMessage === targetId);
-      target?.scrollIntoView?.({ block: "center", behavior: shouldReduceMotion() ? "auto" : "smooth" });
+      target?.scrollIntoView?.({ block: "center", inline: "nearest", behavior: shouldReduceMotion() ? "auto" : "smooth" });
       target?.focus({ preventScroll: true });
       // A ring, not a second screen: the original is already here, it only has
       // to be findable after a long scroll.
@@ -1204,15 +1225,22 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         (element) => [element.dataset.receiptMessage, element] as const));
       let boundary: StoredHumanMessage | undefined;
       for (const message of candidates) {
+        const ownUnread = message.authorId === accountId
+          && !message.readByPeer && !confirmedReads.current.has(message.id);
+        const unobservedInbound = message.authorId !== accountId
+          && !message.receiptObserved && !confirmedObservations.current.has(message.id)
+          && (!boundary || message.server!.sequence > boundary.server!.sequence);
+        // Only a message that can change the answer earns a layout read. The
+        // old order measured every bubble on every scroll frame, which is the
+        // gesture the owner described as laggy.
+        if (!ownUnread && !unobservedInbound) continue;
         const bubble = bubbles.get(message.id);
         if (!bubble) continue;
         const bounds = bubble.getBoundingClientRect();
         if (bounds.bottom <= Math.max(container.top, 0) || bounds.top >= Math.min(container.bottom, window.innerHeight)
           || bounds.right <= Math.max(container.left, 0) || bounds.left >= Math.min(container.right, window.innerWidth)) continue;
-        if (message.authorId === accountId) {
-          if (!message.readByPeer && !confirmedReads.current.has(message.id)) visibleOwn.push(message.id);
-        } else if (!message.receiptObserved && !confirmedObservations.current.has(message.id)
-          && (!boundary || message.server!.sequence > boundary.server!.sequence)) boundary = message;
+        if (ownUnread) visibleOwn.push(message.id);
+        else boundary = message;
       }
       if (!visibleOwn.length && !boundary) return;
       const key = JSON.stringify(visibleOwn);
@@ -1633,8 +1661,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             <span className="sr-only">{own ? "You: " : `${name || "Member"}: `}</span>
             {message.unsentAt === undefined && message.replyToId && <button type="button" className="fb-chat-quote"
               onClick={() => { nearBottom.current = false; setJumpTo(message.replyToId!); }}
-              aria-label={`Quoted message from ${quoted ? (quoted.authorId === accountId ? "you" : name || "this member") : "an unavailable message"}. Show original`}>
-              {quotedAttachment && <ChatQuotePhoto accountId={accountId} attachment={quotedAttachment} />}
+              aria-label={`Quoted message from ${quoted ? (quoted.authorId === accountId ? "you" : name || "this member") : "an unavailable message"}: ${quoted ? replyPreview(quoted) : "unavailable"}. Show original`}>
+              {photoAllowed && quotedAttachment && quotedAttachment.state !== "EVICTED"
+                && <ChatQuotePhoto accountId={accountId} attachment={quotedAttachment} />}
               <span className="fb-chat-quote-copy">
                 <span className="fb-chat-quote-author">{quoted ? (quoted.authorId === accountId ? "You" : name || "Member") : "Quoted message"}</span>
                 <span className="fb-chat-quote-preview" dir="auto">{quoted ? replyPreview(quoted) : "Message unavailable"}</span>
@@ -1642,12 +1671,13 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             </button>}
             {message.unsentAt !== undefined ? <p>Message unsent</p> : <>
             {batch && photoAllowed && <ChatPhotoGroup accountId={accountId} conversationId={conversationId} items={batch} media={media} onOpen={openPhoto} onReady={rememberPhoto} />}
+            {batch && !photoAllowed && <p>Photos are available when connected.</p>}
             {!batch && message.messageType === "MEDIA" && attachment && photoAllowed && <ChatPhoto key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} onOpen={openPhoto} onReady={rememberPhoto} />}
             {message.messageType === "VOICE" && attachment && photoAllowed && <ChatVoice key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} playback={voice.player} snapshot={playbackSnapshot}
               authorName={own ? user?.displayName || user?.username : name} avatarUrl={own ? user?.avatarUrl : person?.avatarUrl} />}
             {message.contextReportId && <ChatReportContext reportId={message.contextReportId} safetyKey={view?.ownBlocked ? "blocked" : "clear"} />}
             {message.location && <ChatLocation location={message.location} />}
-            {message.body ? <p dir="auto" className={isEmojiOnly(message.body) ? "fb-chat-emoji-only" : undefined}>{message.body}</p>
+            {message.body ? <p dir="auto" className={emojiOnly ? "fb-chat-emoji-only" : undefined}>{message.body}</p>
               : message.messageType === "LOCATION" ? (!message.location && <p>Location unavailable</p>)
               : !batch && !attachment && <p>{missingAttachmentCopy(message)}</p>}
             {!batch && !attachment && !message.body && missingAttachmentStale(message) && <button type="button" onClick={() => {

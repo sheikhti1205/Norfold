@@ -665,6 +665,36 @@ it("renders a photo run as one bubble with the first caption and the last receip
   const viewer = await screen.findByRole("dialog", { name: "Photo viewer" });
   await waitFor(() => expect(within(viewer).getByText("Photo 3 of 3")).toBeTruthy());
 });
+it("starts a new bubble when the next photo carries its own caption", async () => {
+  const run = photoRun(1);
+  m.messages = [...run.messages,
+    { id: "second", conversationId: "chat", authorId: "account", recipientId: "peer", body: "And this",
+      messageType: "MEDIA", createdAt: 1_500, server: { eventId: "event-second", sequence: 2 } }];
+  m.media = [...run.media, { id: "media-2", messageId: "second", direction: "OUT", state: "READY", width: 2, height: 1, mime: "image/jpeg" }];
+  m.read.mockResolvedValue(new Uint8Array([1]).buffer);
+  await open();
+  // The second send is one second after the first, so it would have joined the
+  // run; its caption must still be visible, so it keeps its own bubble.
+  expect(screen.queryByRole("group", { name: "2 photos" })).toBeNull();
+  expect(screen.getAllByText("Two shots")).toHaveLength(1);
+  expect(screen.getByText("And this")).toBeTruthy();
+  expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(2);
+});
+it("does not preview a quoted photo while the conversation hides photos", async () => {
+  m.view.mode = "REQUEST";
+  m.messages = [
+    { id: "quoted", conversationId: "chat", authorId: "account", recipientId: "peer", body: "", messageType: "MEDIA",
+      createdAt: 1_000, server: { eventId: "event-q", sequence: 1 } },
+    { id: "reply", conversationId: "chat", authorId: "peer", recipientId: "account", body: "Which one?", messageType: "TEXT",
+      createdAt: 2_000, replyToId: "quoted", server: { eventId: "event-r", sequence: 2 } },
+  ];
+  m.media = [{ id: "media-q", messageId: "quoted", direction: "IN", state: "READY", width: 2, height: 1, mime: "image/jpeg" }];
+  m.read.mockResolvedValue(new Uint8Array([1]).buffer);
+  await open();
+  const quote = screen.getByRole("button", { name: /Quoted message/ });
+  expect(quote.querySelector("img.fb-chat-quote-thumb")).toBeNull();
+  expect(within(quote).getByText("Photo")).toBeTruthy();
+});
 it("renders four or more photos as one 2x2 bubble and counts the overflow", async () => {
   const run = photoRun(5);
   m.messages = run.messages; m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
