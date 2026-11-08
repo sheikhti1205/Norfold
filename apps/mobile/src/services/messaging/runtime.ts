@@ -360,6 +360,11 @@ function requestRefresh(owner: Owner, mode: RefreshMode): Promise<void> {
         // projections would leave the composer unable to judge eligibility.
         owner.started = true;
         owner.peers?.start();
+      } else {
+        // A content-free wake is the only notification a pin, mute or request
+        // change produces. Refetching views here keeps the open conversation's
+        // strip and state live instead of waiting for focus or a remount.
+        projections = await owner.session.refreshConversations();
       }
       // Open/reconnect compare the active thread before pending SEND admission.
       // A thread failure stays gated while unrelated mailbox recovery can proceed.
@@ -397,7 +402,7 @@ function requestRefresh(owner: Owner, mode: RefreshMode): Promise<void> {
       }
       await reload(owner);
       assertOwner(owner);
-      const projectionsNow = run === "full" && projections && authorityVersion === owner.authorityVersion
+      const projectionsNow = projections && authorityVersion === owner.authorityVersion
         ? Object.fromEntries(projections.map((projection) => [projection.conversationId, projection]))
         // An end/block/preference change or newer wake during a slow photo must
         // not restore earlier receipt authority; the coalesced full pass refetches.
@@ -641,10 +646,11 @@ export async function readMessagingThreadState(accountId: string, conversationId
  * canonical media pipeline. Caller retains both stable IDs across uncertain
  * admission errors, instead of generating a new message on retry. */
 export async function sendMessagingMedia(accountId: string, conversationId: string, peerId: string, body: string,
-  metadata: MediaMetadata, bytes: ArrayBuffer, replyToId?: string): Promise<string> {
+  metadata: MediaMetadata, bytes: ArrayBuffer, replyToId?: string, createdAt?: number): Promise<string> {
   const owner = ownerFor(accountId), id = uuid(metadata.messageId);
   await owner.session.sendMedia({ id, conversationId: uuid(conversationId), authorId: uuid(accountId),
-    recipientId: uuid(peerId), body, ...(replyToId ? { replyToId: uuid(replyToId) } : {}) }, metadata, bytes);
+    recipientId: uuid(peerId), body, createdAt: createdAt ?? Date.now(),
+    ...(replyToId ? { replyToId: uuid(replyToId) } : {}) }, metadata, bytes);
   assertOwner(owner);
   await reload(owner);
   // The upload/sync media lanes live on the full pass; a photo must not wait for
@@ -662,7 +668,7 @@ export async function sendMessagingVoice(accountId: string, conversationId: stri
   metadata: MediaMetadata, bytes: ArrayBuffer, replyToId?: string): Promise<string> {
   const owner = ownerFor(accountId), id = uuid(metadata.messageId);
   await owner.session.sendMedia({ id, conversationId: uuid(conversationId), authorId: uuid(accountId),
-    recipientId: uuid(peerId), body: "", messageType: "VOICE",
+    recipientId: uuid(peerId), body: "", messageType: "VOICE", createdAt: Date.now(),
     ...(replyToId ? { replyToId: uuid(replyToId) } : {}) }, metadata, bytes);
   assertOwner(owner);
   await reload(owner);
@@ -691,7 +697,7 @@ export async function sendMessagingText(accountId: string, conversationId: strin
   contextReportId?: string, replyToId?: string): Promise<string> {
   const owner = ownerFor(accountId);
   const id = uuid(crypto.randomUUID());
-  await owner.session.send({ id, conversationId: uuid(conversationId), authorId: uuid(accountId), recipientId: uuid(peerId), body,
+  await owner.session.send({ id, conversationId: uuid(conversationId), authorId: uuid(accountId), recipientId: uuid(peerId), body, createdAt: Date.now(),
     ...(contextReportId ? { messageType: "TEXT" as const, contextReportId: uuid(contextReportId) } : {}),
     ...(replyToId ? { replyToId: uuid(replyToId) } : {}) });
   assertOwner(owner);
@@ -708,7 +714,7 @@ export async function sendMessagingLocation(accountId: string, conversationId: s
   const owner = ownerFor(accountId);
   const id = uuid(crypto.randomUUID());
   await owner.session.send({ id, conversationId: uuid(conversationId), authorId: uuid(accountId), recipientId: uuid(peerId),
-    body: "", messageType: "LOCATION", location });
+    body: "", messageType: "LOCATION", location, createdAt: Date.now() });
   assertOwner(owner);
   await reload(owner);
   // Static location settles on the canonical echo, not on a media/projection sweep.
