@@ -33,6 +33,10 @@ export interface HumanMessage {
    * later-inaccessible report can render "Report unavailable" instead of a
    * stale private snapshot. TEXT only. */
   contextReportId?: string;
+  /** The message this one answers, in the same conversation. Only the id is
+   * stored: the quoted body is read live, so a later unsend reads as gone
+   * instead of replaying a snapshot the author erased. */
+  replyToId?: string;
   /** Present exactly on a LOCATION message. */
   location?: StaticLocation;
   /** When the author's device created the message, in epoch milliseconds.
@@ -181,6 +185,8 @@ export interface SnapshotMessage extends MessageReadFacts {
   messageType?: MessageType | null;
   /** v3 portable payload: a live report reference on a TEXT message. */
   contextReportId?: string | null;
+  /** The message this one answers, when the sender replied. */
+  replyToId?: string | null;
   /** v3 portable payload: one static coordinate set on a LOCATION message. */
   location?: StaticLocation | null;
   /** Only accepted messages are portable; a pending send is not history. */

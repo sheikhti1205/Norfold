@@ -79,6 +79,7 @@ interface MessageRow {
   body: string | null;
   messageType: HumanMessage["messageType"] | null;
   contextReportId: string | null;
+  replyToId: string | null;
   locationLat: number | null;
   locationLng: number | null;
   locationAccuracy: number | null;
@@ -156,8 +157,9 @@ async function preserveMessageDependents(driver: SqliteDriver): Promise<() => Pr
 const SUPPORTED_PRIOR_VERSIONS: readonly string[] = [
   // "10" shipped in the 2026-11-04 build (conversation HEAD). The voice wave
   // moved to 11 and must keep migrating those files forward; omitting 10 made
-  // every existing install refuse to open its own chat history.
-  "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", String(MESSAGING_SQLITE_SCHEMA_VERSION),
+  // every existing install refuse to open its own chat history. "11" is the
+  // voice build, which gains the reply column on upgrade.
+  "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", String(MESSAGING_SQLITE_SCHEMA_VERSION),
 ];
 
 function defaultToken(): string {
@@ -177,6 +179,7 @@ function toStored(row: MessageRow): StoredHumanMessage {
     createdAt: row.createdAt,
     ...(row.messageType ? { messageType: row.messageType } : {}),
     ...(row.contextReportId ? { contextReportId: row.contextReportId } : {}),
+    ...(row.replyToId ? { replyToId: row.replyToId } : {}),
     ...(row.locationLat !== null && row.locationLng !== null
       ? { location: { lat: row.locationLat, lng: row.locationLng, accuracy: row.locationAccuracy } }
       : {}),
@@ -198,6 +201,7 @@ function sameIdentity(row: MessageRow, message: HumanMessage): boolean {
     && row.recipientId === message.recipientId
     && compatibleMessageType(row.messageType, message.messageType)
     && (row.body === null || ((row.contextReportId ?? null) === (message.contextReportId ?? null)
+      && (row.replyToId ?? null) === (message.replyToId ?? null)
       && JSON.stringify(rowLocation) === JSON.stringify(messageLocation)));
 }
 
@@ -501,6 +505,21 @@ export async function openSqliteMessagingHistory(
     const restoredV11 = (await driver.all<{ foreign_keys: number }>(D.foreignKeys))[0]?.foreign_keys;
     if (restoredV11 !== 1) throw new Error("Messaging storage requires foreign_keys = ON");
   }
+
+  // v12: a message may name the message it answers. Purely additive, so the
+  // column is added in place; the pragma is the only existence check SQLite has.
+  const replyColumns = await driver.all<{ name: string }>(S.messageColumns);
+  if (replyColumns.length > 0 && !replyColumns.some((column) => column.name === "reply_to_id")) {
+    await driver.exec("begin immediate");
+    try {
+      await driver.exec(S.addMessageReply);
+      await driver.run(S.setSchemaVersion, [String(MESSAGING_SQLITE_SCHEMA_VERSION)]);
+      await driver.exec("commit");
+    } catch (error) {
+      try { await driver.exec("rollback"); } catch { /* commit may already have failed */ }
+      throw error;
+    }
+  }
   } catch (error) {
     await driver.close();
     throw error;
@@ -704,7 +723,8 @@ export async function openSqliteMessagingHistory(
       }
       await driver.run(S.insertMessage, [
         outgoing.id, outgoing.conversationId, outgoing.authorId, outgoing.recipientId, outgoing.body, now(), outgoing.messageType ?? null,
-        outgoing.contextReportId ?? null, outgoing.location?.lat ?? null, outgoing.location?.lng ?? null,
+        outgoing.contextReportId ?? null, outgoing.replyToId ?? null,
+        outgoing.location?.lat ?? null, outgoing.location?.lng ?? null,
         outgoing.location?.accuracy ?? null,
       ]);
       await driver.run(S.enqueueOutbox, [outgoing.id, expectedEpoch ?? null]);
@@ -936,7 +956,8 @@ export async function openSqliteMessagingHistory(
         } else {
           await driver.run(S.insertMessage, [
             message.id, message.conversationId, message.authorId, message.recipientId, message.body, now(), message.messageType ?? null,
-            message.contextReportId ?? null, message.location?.lat ?? null, message.location?.lng ?? null,
+            message.contextReportId ?? null, message.replyToId ?? null,
+            message.location?.lat ?? null, message.location?.lng ?? null,
             message.location?.accuracy ?? null,
           ]);
         }
@@ -1363,6 +1384,7 @@ export async function openSqliteMessagingHistory(
             || (existing.body !== null && message.body !== null && (existing.body !== message.body
               || !sameIdentity(existing, { ...message, body: message.body,
                 messageType: message.messageType ?? undefined, contextReportId: message.contextReportId ?? undefined,
+                replyToId: message.replyToId ?? undefined,
                 location: message.location ?? undefined, createdAt: message.createdAt ?? undefined })))
             || (existing.unsentAt !== null && message.unsentAt !== null
               && existing.unsentAt !== message.unsentAt)) {
@@ -1398,7 +1420,8 @@ export async function openSqliteMessagingHistory(
           await driver.run(S.insertSnapshotMessage, [
             message.id, message.conversationId, message.authorId, message.recipientId,
             message.body, createdAt, message.serverEventId, message.serverSequence, unsentAt, message.messageType ?? null,
-            message.contextReportId ?? null, message.location?.lat ?? null, message.location?.lng ?? null,
+            message.contextReportId ?? null, message.replyToId ?? null,
+            message.location?.lat ?? null, message.location?.lng ?? null,
             message.location?.accuracy ?? null,
           ]);
         }
@@ -1548,7 +1571,7 @@ export async function openSqliteMessagingHistory(
         if (!parent.messageType) await driver.run(S.bindMessageType, [outgoing.messageType ?? "MEDIA", outgoing.id]);
       } else {
         await driver.run(S.insertMessage, [outgoing.id, outgoing.conversationId, outgoing.authorId,
-          outgoing.recipientId, outgoing.body, now(), outgoing.messageType ?? null, null, null, null, null]);
+          outgoing.recipientId, outgoing.body, now(), outgoing.messageType ?? null, null, null, null, null, null]);
         await driver.run(S.enqueueOutbox, [outgoing.id, expectedEpoch ?? null]);
         await driver.run(S.touchConversationState, [now(), outgoing.conversationId]);
       }

@@ -614,10 +614,10 @@ export async function readMessagingThreadState(accountId: string, conversationId
  * canonical media pipeline. Caller retains both stable IDs across uncertain
  * admission errors, instead of generating a new message on retry. */
 export async function sendMessagingMedia(accountId: string, conversationId: string, peerId: string, body: string,
-  metadata: MediaMetadata, bytes: ArrayBuffer): Promise<string> {
+  metadata: MediaMetadata, bytes: ArrayBuffer, replyToId?: string): Promise<string> {
   const owner = ownerFor(accountId), id = uuid(metadata.messageId);
   await owner.session.sendMedia({ id, conversationId: uuid(conversationId), authorId: uuid(accountId),
-    recipientId: uuid(peerId), body }, metadata, bytes);
+    recipientId: uuid(peerId), body, ...(replyToId ? { replyToId: uuid(replyToId) } : {}) }, metadata, bytes);
   assertOwner(owner);
   await reload(owner);
   // The upload/sync media lanes live on the full pass; a photo must not wait for
@@ -632,10 +632,11 @@ export async function sendMessagingMedia(accountId: string, conversationId: stri
  * `VOICE` so a receiver renders a player instead of an image.
  */
 export async function sendMessagingVoice(accountId: string, conversationId: string, peerId: string,
-  metadata: MediaMetadata, bytes: ArrayBuffer): Promise<string> {
+  metadata: MediaMetadata, bytes: ArrayBuffer, replyToId?: string): Promise<string> {
   const owner = ownerFor(accountId), id = uuid(metadata.messageId);
   await owner.session.sendMedia({ id, conversationId: uuid(conversationId), authorId: uuid(accountId),
-    recipientId: uuid(peerId), body: "", messageType: "VOICE" }, metadata, bytes);
+    recipientId: uuid(peerId), body: "", messageType: "VOICE",
+    ...(replyToId ? { replyToId: uuid(replyToId) } : {}) }, metadata, bytes);
   assertOwner(owner);
   await reload(owner);
   void requestRefresh(owner, "full");
@@ -660,11 +661,12 @@ export async function downloadMessagingMedia(accountId: string, conversationId: 
  * it never changes a plain text send into a different capability.
  */
 export async function sendMessagingText(accountId: string, conversationId: string, peerId: string, body: string,
-  contextReportId?: string): Promise<string> {
+  contextReportId?: string, replyToId?: string): Promise<string> {
   const owner = ownerFor(accountId);
   const id = uuid(crypto.randomUUID());
   await owner.session.send({ id, conversationId: uuid(conversationId), authorId: uuid(accountId), recipientId: uuid(peerId), body,
-    ...(contextReportId ? { messageType: "TEXT" as const, contextReportId: uuid(contextReportId) } : {}) });
+    ...(contextReportId ? { messageType: "TEXT" as const, contextReportId: uuid(contextReportId) } : {}),
+    ...(replyToId ? { replyToId: uuid(replyToId) } : {}) });
   assertOwner(owner);
   await reload(owner); // Queued send appears without waiting for connectivity.
   // Settle this send and the peer's echo; projections/media stay on full passes.

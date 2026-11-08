@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { motion, type PanInfo } from "framer-motion";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { Archive, ArrowLeft, BellOff, ChevronDown, Ellipsis, Flag, ImageOff, Images, ListFilter, LogOut, MapPin, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound, X } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
@@ -202,6 +203,26 @@ function missingAttachmentCopy(message: StoredHumanMessage): string {
   const stale = missingAttachmentStale(message), voice = message.messageType === "VOICE";
   if (voice) return stale ? "Voice message unavailable" : "Voice message loading…";
   return stale ? "Photo unavailable" : "Photo loading…";
+}
+
+/**
+ * A reply gesture mirrors the direction the bubble already points: your own
+ * bubble travels right-to-left, a received one left-to-right. The threshold is
+ * the same 72 px the notification rows use, so a swipe means one thing here.
+ */
+export const REPLY_SWIPE_PX = 72;
+
+export function replySwipeFor(offsetX: number, own: boolean): boolean {
+  return own ? offsetX <= -REPLY_SWIPE_PX : offsetX >= REPLY_SWIPE_PX;
+}
+
+/** What a quoted message is called when the quoted row itself has no text. */
+export function replyPreview(message: StoredHumanMessage): string {
+  if (message.unsentAt !== undefined) return "Message unsent";
+  if (message.messageType === "MEDIA") return "Photo";
+  if (message.messageType === "VOICE") return "Voice message";
+  if (message.messageType === "LOCATION") return "Location";
+  return message.body;
 }
 
 function RetrySync({ accountId, labelled = false }: { accountId: string; labelled?: boolean }) {
@@ -720,6 +741,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const [messageQuery, setMessageQuery] = useState("");
   const [jumpTo, setJumpTo] = useState<string | null>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  // The message a new send answers. It stays until that send is admitted, so a
+  // failed send keeps the context instead of silently dropping the quote.
+  const [replyTo, setReplyTo] = useState<{ id: string; label: string; preview: string } | null>(null);
   const [reportTarget, setReportTarget] = useState<"account" | "message" | null>(null);
   const [visible, setVisible] = useState(() => document.visibilityState === "visible");
   // Live contexts authorize NEW observations only. Historical Read facts are
@@ -817,6 +841,13 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       if (!activeViewer) setViewer(null);
     }
   }, [viewer, activeViewer, viewerItems]);
+  function startReply(message: StoredHumanMessage) {
+    if (message.unsentAt !== undefined) return;
+    setReplyTo({ id: message.id, label: message.authorId === accountId ? "You" : name || "Member",
+      preview: replyPreview(message) });
+    haptic("commit");
+    composer.current?.focus();
+  }
   function openPhoto(id: string, bytes: ArrayBuffer, mime: string) {
     if (!photoAllowed) return;
     setDraftViewer(null);
@@ -1178,11 +1209,12 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         },
       };
       admission.current = attempt;
-      await sendMessagingVoice(accountId, conversationId, row.peerId, attempt.metadata, bytes);
+      await sendMessagingVoice(accountId, conversationId, row.peerId, attempt.metadata, bytes, replyTo?.id);
       if (!alive.current) return;
       nearBottom.current = true;
       admission.current = null;
       setAdmissionFailed(false);
+      setReplyTo(null);
       voice.player.pause();
       voice.recorder.take();
       announce("Voice message sent.");
@@ -1204,16 +1236,20 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     if (photos.length > 0 && (view?.mode !== "CONNECTED" || view.ownBlocked)) return;
     if (photos.length === 0 && !draft.trim()) return;
     const body = convertEmoticons(draft), sendingRevision = draftRevision.current;
+    // Captured once: the reply belongs to this send, and a later gesture while
+    // the message is in flight is newer intent for the next message.
+    const replyTargetId = replyTo?.id;
     setError(null);
     try {
       if (ready.length === 0) {
-        await sendMessagingText(accountId, conversationId, row.peerId, body, reportContext ?? undefined);
+        await sendMessagingText(accountId, conversationId, row.peerId, body, reportContext ?? undefined, replyTargetId);
         if (alive.current) {
           nearBottom.current = true;
           // Only clear what this draft owned: typing that arrived while it was
           // in flight is newer intent and must survive.
           if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
           if (reportContext) clearReportContext(reportContext);
+          setReplyTo(null);
           setAdmissionFailed(false);
         }
       } else {
@@ -1228,7 +1264,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             metadata: { ...info, durationMs: null,
               id: crypto.randomUUID(), messageId: crypto.randomUUID(), direction: "OUT" as const, expiresAt: null } };
           photoAdmissions.current.set(admissionKey, attempt);
-          await sendMessagingMedia(accountId, conversationId, row.peerId, attempt.caption, attempt.metadata, bytes);
+          await sendMessagingMedia(accountId, conversationId, row.peerId, attempt.caption, attempt.metadata, bytes, replyTargetId);
           photoAdmissions.current.delete(admissionKey);
           // The caption belonged to the first message that actually left, so
           // clear the draft as soon as it is carried, not at the end of a bulk
@@ -1237,6 +1273,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             consumed = true;
             nearBottom.current = true;
             if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+            setReplyTo(null);
           }
           if (alive.current) setPhotos((list) => {
             const removed = list.find((entry) => entry.key === admissionKey);
@@ -1260,6 +1297,11 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
    */
   function messageActions(message: StoredHumanMessage, own: boolean): MenuAction[] {
     const items: MenuAction[] = [];
+    // The pointer gesture is a swipe; the menu is the keyboard and desktop path
+    // to the same reply, so the capability is never gesture-only.
+    if (message.unsentAt === undefined) {
+      items.push({ id: "reply", label: "Reply", onAction: () => startReply(message) });
+    }
     if (message.unsentAt === undefined && message.body) {
       items.push({ id: "copy", label: "Copy text", onAction: () => {
         void navigator.clipboard?.writeText(message.body).then(
@@ -1385,9 +1427,19 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
           const day = message.createdAt ? formatChatDay(message.createdAt) : "";
           const before = index > 0 ? messages[index - 1] : undefined;
           const opensDay = !!day && day !== (before?.createdAt ? formatChatDay(before.createdAt) : "");
+          const quoted = message.replyToId ? messages.find((entry) => entry.id === message.replyToId) : undefined;
           return <Fragment key={message.id}>
             {opensDay && <li className="fb-chat-day" role="presentation"><span>{day}</span></li>}
-          <li data-chat-message={message.id} tabIndex={-1}
+          {/* The swipe and the menu reach the same reply. Your own bubble
+              answers with a right-to-left pull, a received one left-to-right —
+              the direction each bubble already points. */}
+          <motion.li data-chat-message={message.id} tabIndex={-1}
+            drag={canCompose && message.unsentAt === undefined ? "x" : false}
+            dragDirectionLock dragConstraints={{ left: 0, right: 0 }} dragElastic={0.18}
+            onDragEnd={(_event, info: PanInfo) => {
+              if (message.unsentAt !== undefined || !canCompose) return;
+              if (replySwipeFor(info.offset.x, own)) startReply(message);
+            }}
             className={own ? "fb-chat-line fb-chat-line-own" : "fb-chat-line"}>
             {/* The same contextual layer the feed and the report card use: a
                 400 ms hold (or right-click / Shift+F10) opens the app's own
@@ -1398,6 +1450,12 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             <div data-receipt-message={message.messageType === "TEXT" && message.body && message.unsentAt === undefined ? message.id : undefined}
               className={`fb-chat-message${own ? " fb-chat-message-own" : ""}${message.messageType === "VOICE" && attachment && message.unsentAt === undefined ? " fb-chat-message-voice" : ""}`}>
             <span className="sr-only">{own ? "You: " : `${name || "Member"}: `}</span>
+            {message.unsentAt === undefined && message.replyToId && <button type="button" className="fb-chat-quote"
+              onClick={() => { nearBottom.current = false; setJumpTo(message.replyToId!); }}
+              aria-label={`Quoted message from ${quoted ? (quoted.authorId === accountId ? "you" : name || "this member") : "an unavailable message"}. Show original`}>
+              <span className="fb-chat-quote-author">{quoted ? (quoted.authorId === accountId ? "You" : name || "Member") : "Quoted message"}</span>
+              <span className="fb-chat-quote-preview" dir="auto">{quoted ? replyPreview(quoted) : "Message unavailable"}</span>
+            </button>}
             {message.unsentAt !== undefined ? <p>Message unsent</p> : <>
             {message.messageType === "MEDIA" && attachment && photoAllowed && <ChatPhoto key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} onOpen={openPhoto} onReady={rememberPhoto} />}
             {message.messageType === "VOICE" && attachment && photoAllowed && <ChatVoice key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} playback={voice.player} snapshot={playbackSnapshot}
@@ -1462,7 +1520,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             </>}
             </>}
             </LongPressArea>
-          </li>
+          </motion.li>
           </Fragment>;
         })}
       </ol>
@@ -1528,10 +1586,21 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         photoAllowed={view?.mode === "CONNECTED"}
         onCamera={() => void choosePhoto("camera")} onPhotos={() => void choosePhoto("photos")}
         voiceAvailable={voiceAllowed} onVoice={toggleVoiceCapture}
-        context={reportContext && <p className="fb-chat-context-banner" role="status">
-          Your next text message will show which report you’re asking about.
-          <button type="button" onClick={() => clearReportContext(reportContext)}>Don’t attach</button>
-        </p>} />
+        context={<>
+          {replyTo && <div className="fb-chat-reply-chip" role="status" data-chat-reply-to={replyTo.id}>
+            <span className="fb-chat-reply-copy">
+              <span className="fb-chat-reply-author">{replyTo.label}</span>
+              <span className="fb-chat-reply-preview" dir="auto">{replyTo.preview}</span>
+            </span>
+            <button type="button" aria-label="Cancel reply" onClick={() => setReplyTo(null)}>
+              <X size={16} aria-hidden="true" />
+            </button>
+          </div>}
+          {reportContext && <p className="fb-chat-context-banner" role="status">
+            Your next text message will show which report you’re asking about.
+            <button type="button" onClick={() => clearReportContext(reportContext)}>Don’t attach</button>
+          </p>}
+        </>} />
     </>}
     {sheet === "location" && locationAllowed && <ChatLocationComposer key={locationAuthority.current}
       onClose={() => setSheet(null)} onSend={shareLocation} />}

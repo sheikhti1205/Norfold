@@ -45,6 +45,28 @@ describe("server-authorized peer history bodies", () => {
   await importPeerHistory(scope,pages[0]!,{...port,authority:async()=>[]});
   expect(snapshots).toHaveLength(1);
  });
+ it("carries a reply reference beside the payload, outside its identity", async () => {
+  const parent=message(0), answer={...message(1),replyToId:parent.id};
+  const pages:ArrayBuffer[]=[];
+  await exportPeerHistory(scope,{signal:new AbortController().signal,messages:async()=>[parent,answer],
+   authority:async c=>c.map((row,n)=>({...row,conversationId,authorId:peerId,recipientId:accountId,
+     sequence:n===0?1:2,messageType:"TEXT" as const,sentAt:1000+n})),send:async b=>{pages.push(b);}});
+  const decoded=JSON.parse(new TextDecoder().decode(pages[0]!));
+  expect(decoded.messages[1].replyToId).toBe(parent.id);
+  // The payload identity is unchanged by the reply reference: the wire carries
+  // it beside the digest, not inside it.
+  const base={body:answer.body,messageType:"TEXT" as const,contextReportId:null,location:null};
+  expect(await historyPayloadIdentity(base)).toBe(await historyPayloadIdentity(base));
+  const snapshots:Array<{messages:Array<{id:string;replyToId?:string}>}>=[];
+  const port={signal:new AbortController().signal,authority:authority(),
+   importSnapshot:async(s:unknown)=>{snapshots.push(s as never);}};
+  await importPeerHistory(scope,pages[0]!,port);
+  expect(snapshots[0]!.messages[1]!.replyToId).toBe(parent.id);
+  // A malformed reference is refused instead of being dropped silently.
+  const bad=JSON.parse(new TextDecoder().decode(pages[0]!));bad.messages[1].replyToId="not-a-uuid";
+  await expect(importPeerHistory(scope,new TextEncoder().encode(JSON.stringify(bad)).buffer,{...port,importSnapshot:async()=>{}}))
+   .rejects.toThrow();
+ });
  it("cancellation fences a late authority response before durable import", async () => {
   const controller=new AbortController();let imported=false;
   const pages:ArrayBuffer[]=[];

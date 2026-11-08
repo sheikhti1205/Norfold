@@ -78,6 +78,9 @@ export function copyReceivedMessage(value: HumanMessage, options: CopyMessageOpt
   if (value.body.includes("\u0000")) throw new Error("Invalid messaging text");
   const contextReportId = value.contextReportId === undefined ? undefined : uuid(value.contextReportId);
   if (contextReportId !== undefined && messageType !== "TEXT") throw new Error("Invalid messaging context");
+  // A reply may accompany any classification; it may never name itself.
+  const replyToId = value.replyToId === undefined || value.replyToId === null ? undefined : uuid(value.replyToId);
+  if (replyToId !== undefined && replyToId === value.id) throw new Error("Invalid reply target");
   const location = value.location === undefined ? undefined : copyStaticLocation(value.location);
   if (location !== undefined && messageType !== "LOCATION") throw new Error("Invalid messaging context");
   if (messageType === "LOCATION" && location === undefined) throw new Error("Invalid messaging context");
@@ -90,6 +93,7 @@ export function copyReceivedMessage(value: HumanMessage, options: CopyMessageOpt
     authorId: uuid(value.authorId), recipientId: uuid(value.recipientId), body: value.body,
     ...(messageType ? { messageType } : {}),
     ...(contextReportId ? { contextReportId } : {}),
+    ...(replyToId ? { replyToId } : {}),
     ...(location ? { location } : {}),
     ...(createdAt === undefined ? {} : { createdAt }),
   };
@@ -132,9 +136,10 @@ export function sameMessage(a: HumanMessage, b: HumanMessage): boolean {
     && sameMessagePayload(a, b);
 }
 
-export function sameMessagePayload(a: { contextReportId?: string | null; location?: StaticLocation | null },
-  b: { contextReportId?: string | null; location?: StaticLocation | null }): boolean {
+export function sameMessagePayload(a: { contextReportId?: string | null; replyToId?: string | null; location?: StaticLocation | null },
+  b: { contextReportId?: string | null; replyToId?: string | null; location?: StaticLocation | null }): boolean {
   return (a.contextReportId ?? null) === (b.contextReportId ?? null)
+    && (a.replyToId ?? null) === (b.replyToId ?? null)
     && (a.location?.lat ?? null) === (b.location?.lat ?? null)
     && (a.location?.lng ?? null) === (b.location?.lng ?? null)
     && (a.location?.accuracy ?? null) === (b.location?.accuracy ?? null);
@@ -143,7 +148,7 @@ export function sameMessagePayload(a: { contextReportId?: string | null; locatio
 /** Payload is content, not identity metadata: erase it with the body. */
 export function eraseMessageContent<T extends HumanMessage>(message: T): T {
   const copy = { ...message, body: "" };
-  delete copy.contextReportId; delete copy.location;
+  delete copy.contextReportId; delete copy.replyToId; delete copy.location;
   return copy;
 }
 

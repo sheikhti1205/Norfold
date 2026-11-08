@@ -114,6 +114,34 @@ describe("human messaging session delivery",()=>{
   await expect(f.session.request(B)).rejects.toThrow(/closed/i);
   expect(f.acked()).toBe(false);
  });
+ it("carries the reply reference on SEND and keeps it through the echo",async()=>{
+  const factory=new IDBFactory();
+  const history=await openWebMessagingHistory(scope,{indexedDB:factory}); handles.push(history);
+  const REPLY="00000000-0000-4000-8000-00000000000a";
+  const calls:Array<Record<string,unknown>>=[];
+  const envelopes=new Map<string,MailboxEnvelope>();
+  const rpc:MessagingRpc=async(input)=>{
+   if(input.action==="HEAD") return emptyConversationHead(A,input.args.conversationId as string);
+   if(input.action==="CONVERSATION_SYNC") return emptyConversationRange(input.args.head);
+   if(input.action==="SEND"){
+    calls.push(input.args);
+    const args=input.args as {messageId:string;body:string;replyToId?:string};
+    envelopes.set(args.messageId,{...scope,mailboxId:MAIL,event:{kind:"TEXT",eventId:args.messageId,sequence:1,
+     message:{id:args.messageId,conversationId:CONV,authorId:A,recipientId:B,body:args.body,
+      ...(args.replyToId?{replyToId:args.replyToId}:{})}}});
+    return args.messageId;
+   }
+   if(input.action==="SYNC") return [...envelopes.values()];
+   if(input.action==="STATE_SYNC") return [];
+   if(input.action==="ACK") return null;
+   return null;
+  };
+  const session=createMessagingSession(scope,history,rpc);
+  await session.send({...message,replyToId:REPLY});
+  await session.flush();
+  expect(calls).toEqual([expect.objectContaining({messageId:ID,replyToId:REPLY})]);
+  expect((await history.getMessage(ID))?.replyToId).toBe(REPLY);
+ });
  it("does not starve the queue behind a refused boundary and recovers it only on explicit retry",async()=>{
   const EPOCH_A="a".repeat(64), EPOCH_B="b".repeat(64);
   const SECOND="00000000-0000-4000-8000-000000000009";

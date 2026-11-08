@@ -525,7 +525,7 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
             const stored: PortableMessage = { ...existing, ...message, server: { eventId, sequence },
               createdAt: existing?.createdAt ?? message.createdAt ?? Date.now(),
               ...((message.messageType ?? existing?.messageType) ? { messageType: message.messageType ?? existing?.messageType } : {}),
-              ...((tombstone || suppressed) ? { body: "", contextReportId: undefined, location: undefined } : {}),
+              ...((tombstone || suppressed) ? { body: "", contextReportId: undefined, replyToId: undefined, location: undefined } : {}),
               ...(tombstone ? { unsentAt: tombstone.occurredAt } : {}) };
             if (tombstone || suppressed) removeMediaRows(tx, guard, message.id);
             if (!existing) messages.add(stored);
