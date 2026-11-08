@@ -56,7 +56,12 @@ export function checkBrandConsistency({read=path=>readFileSync(resolve(root,path
  assert.ok(android.includes('android:roundIcon="@mipmap/ic_launcher_round"'));
  assert.match(android,/com.google.firebase.messaging.default_notification_icon[\s\S]*?@drawable\/ic_stat_findback/);
  const presenter=text('apps/mobile/android/app/src/main/java/com/findback/app/push/NotificationPresenter.kt');
- assert.equal((presenter.match(/setSmallIcon\(R.drawable.ic_stat_findback\)/g)??[]).length,3);
+ // Every notification path must carry the canonical status icon. The count of
+ // channels is allowed to grow; a divergent icon is not.
+ const icons=presenter.match(/setSmallIcon\([^)]*\)/g)??[];
+ assert.ok(icons.length>=3,'notification presenter lost its channels');
+ assert.deepEqual(icons.filter(icon=>icon!=='setSmallIcon(R.drawable.ic_stat_findback)'),[],
+  'every notification must use the canonical status icon');
  for(const screen of ['HomeTopBar','Splash','About'])assert.ok(text(`apps/mobile/src/screens/${screen}.tsx`).includes('<BrandMark'));
  const auth=text('apps/mobile/src/components/auth/AuthShell.tsx');
  assert.ok(auth.includes('<BrandMark'),'shared auth must use canonical brand');
