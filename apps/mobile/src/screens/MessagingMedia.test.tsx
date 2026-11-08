@@ -652,6 +652,17 @@ it("renders a photo run as one bubble with the first caption and the last receip
   const viewer = await screen.findByRole("dialog", { name: "Photo viewer" });
   await waitFor(() => expect(within(viewer).getByText("Photo 3 of 3")).toBeTruthy());
 });
+it("renders four or more photos as one 2x2 bubble and counts the overflow", async () => {
+  const run = photoRun(5);
+  m.messages = run.messages; m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
+  await open();
+  expect(screen.getByRole("group", { name: "5 photos" })).toBeTruthy();
+  expect(document.querySelector(".fb-chat-photo-grid-4")).toBeTruthy();
+  const cells = await screen.findAllByRole("button", { name: /^View photo \d of 5$/ });
+  expect(cells).toHaveLength(4);
+  expect(screen.getByText("+1")).toBeTruthy();
+  expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(1);
+});
 it("jumps a quote that names a hidden photo to the visible group and rings it", async () => {
   const run = photoRun(3);
   m.messages = [...run.messages, { id: "reply", conversationId: "chat", authorId: "peer", recipientId: "account",
@@ -659,7 +670,9 @@ it("jumps a quote that names a hidden photo to the visible group and rings it", 
     server: { eventId: "reply", sequence: 9 } }];
   m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  fireEvent.click(screen.getByRole("button", { name: /Quoted message from you/ }));
+  const quote = screen.getByRole("button", { name: /Quoted message from you/ });
+  await waitFor(() => expect(quote.querySelector("img.fb-chat-quote-thumb")).toBeTruthy());
+  fireEvent.click(quote);
   const leader = document.querySelector<HTMLElement>('[data-chat-message="photo-1"]');
   await waitFor(() => expect(leader?.querySelector(".fb-chat-message")?.className).toMatch(/fb-chat-flash-[ab]/));
   expect(document.activeElement).toBe(leader);

@@ -26,11 +26,13 @@ export interface LongPressState {
  * After the hold fires, the synthetic click that would otherwise navigate or
  * open the image viewer is suppressed exactly once.
  */
-export function LongPressArea({ label, disabled = false, className = "", popup = "menu", children }: {
+export function LongPressArea({ label, disabled = false, className = "", popup = "menu", onOpen, children }: {
   label: string;
   disabled?: boolean;
   className?: string;
   popup?: "menu" | "dialog";
+  /** Runs once when the hold, right-click or ContextMenu shortcut opens the surface. */
+  onOpen?: () => void;
   children: (state: LongPressState) => ReactNode;
 }) {
   const surface = useRef<HTMLDivElement>(null);
@@ -50,6 +52,7 @@ export function LongPressArea({ label, disabled = false, className = "", popup =
   function fire() {
     clearTimer();
     suppress.current = true;
+    onOpen?.();
     setOpenState(true);
   }
   function setOpen(value: boolean) {

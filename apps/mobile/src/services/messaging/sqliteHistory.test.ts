@@ -1080,6 +1080,30 @@ describe("server-authoritative erasure state", () => {
     await history.close();
   });
 
+  it("keeps an unsend that precedes its TEXT echo in the message's server position", async () => {
+    const history = await open();
+    const missing = "00000000-0000-4000-8000-0000000000e1";
+    await history.persistInbound(inbound({ id: MESSAGE, body: "first" }, EVENT, MAILBOX, 1));
+    await history.persistInbound(inbound({ id: MESSAGE_2, body: "third" }, EVENT_2, MAILBOX_2, 3));
+    await history.applyStateChange(state({
+      kind: "UNSEND", eventId: STATE, sequence: 10, conversationId: CONVERSATION, occurredAt: clock + 1,
+      messageId: missing, authorId: B, recipientId: A, messageSequence: 2,
+    }));
+    // This client never stored the original, so there is no bubble to place yet.
+    expect((await history.listMessages(CONVERSATION)).map((message) => message.id))
+      .toEqual([MESSAGE, MESSAGE_2]);
+    expect(await history.getMessage(missing)).toBeNull();
+    expect(database.prepare("select message_id as messageId from tombstones where message_id = ?").get(missing))
+      .toEqual({ messageId: missing });
+    // The late authoritative echo keeps the tombstone where the server put it.
+    await history.persistInbound(inbound({ id: missing, body: "second" },
+      "00000000-0000-4000-8000-0000000000e2", "00000000-0000-4000-8000-0000000000e3", 2));
+    expect((await history.listMessages(CONVERSATION)).map((message) => message.id))
+      .toEqual([MESSAGE, missing, MESSAGE_2]);
+    expect(await history.getMessage(missing)).toMatchObject({ body: "", unsentAt: clock + 1 });
+    await history.close();
+  });
+
   it("applies delete-for-me after the echo and erases the local body", async () => {
     const history = await open();
     await history.persistInbound(inbound());

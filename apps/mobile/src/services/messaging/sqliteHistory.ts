@@ -1186,9 +1186,11 @@ export async function openSqliteMessagingHistory(
           } else if (tombstone.recipientId === null) {
             await driver.run(S.bindTombstoneRecipient, [change.recipientId, change.messageId]);
           }
-          if (!existing) await driver.run(S.insertTombstonedMessage, [change.messageId, change.conversationId,
-            change.authorId, change.recipientId, now(), change.occurredAt, null]);
-          else await driver.run(S.clearMessageBody, [change.occurredAt, change.messageId]);
+          // A message this client never stored keeps only its tombstone. A
+          // body-less row here would append a floating bubble at the bottom,
+          // out of the position this client does not know; the authoritative
+          // TEXT echo later supplies the real position.
+          if (existing) await driver.run(S.clearMessageBody, [change.occurredAt, change.messageId]);
         } else {
           await driver.run(S.deleteForMe, [change.messageId, change.conversationId, change.occurredAt]);
           if (!existing) await driver.run(S.insertTombstonedMessage, [change.messageId, change.conversationId,

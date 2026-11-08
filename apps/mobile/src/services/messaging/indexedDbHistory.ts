@@ -702,11 +702,15 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
             }
             if (change.kind === "DELETE_FOR_ME") tx.objectStore("deletions").put(change);
             else tx.objectStore("unsends").put(change);
-            messages.put({ ...(existing ? eraseMessageContent(existing) : {}), id: change.messageId, conversationId: change.conversationId,
+            // A message this client never stored keeps only its erasure record.
+            // Inserting a body-less row would append a floating bubble at the
+            // bottom, out of the position this client does not know; the
+            // authoritative TEXT echo later supplies the real position.
+            if (existing) messages.put({ ...eraseMessageContent(existing), id: change.messageId, conversationId: change.conversationId,
                 authorId: change.authorId, recipientId: change.recipientId, body: "",
-                ...(existing?.messageType ? { messageType: existing.messageType } : {}),
-                ...(existing?.server ? { server: existing.server } : {}),
-                ...(existing?.unsentAt !== undefined ? { unsentAt: existing.unsentAt }
+                ...(existing.messageType ? { messageType: existing.messageType } : {}),
+                ...(existing.server ? { server: existing.server } : {}),
+                ...(existing.unsentAt !== undefined ? { unsentAt: existing.unsentAt }
                   : change.kind === "UNSEND" ? { unsentAt: change.occurredAt } : {}) } satisfies StoredHumanMessage);
             tx.objectStore("outbox").delete(change.messageId);
             removeMediaRows(tx, guard, change.messageId);
