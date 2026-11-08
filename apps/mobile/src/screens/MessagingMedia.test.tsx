@@ -287,6 +287,19 @@ it("preserves a newer draft even when its text equals the in-flight admission", 
 function sentText() {
   m.messages = [{ id: "sent", conversationId: "chat", authorId: "account", recipientId: "peer", body: "Already read", messageType: "TEXT", server: { sequence: 1 } }];
 }
+it("renders an emoji-only message without bubble chrome", async () => {
+  m.messages = [{ id: "emoji", conversationId: "chat", authorId: "account", recipientId: "peer", body: "😞", messageType: "TEXT", server: { sequence: 1 } }];
+  await open();
+  const bubble = document.querySelector('[data-chat-message="emoji"] .fb-chat-message');
+  expect(bubble?.className).toContain("fb-chat-message-emoji");
+  expect(screen.getByText("😞").className).toContain("fb-chat-emoji-only");
+});
+it("does not strip the bubble from ordinary text", async () => {
+  sentText();
+  await open();
+  const bubble = document.querySelector('[data-chat-message="sent"] .fb-chat-message');
+  expect(bubble?.className).not.toContain("fb-chat-message-emoji");
+});
 it("renders a reopened cached thread and Read before any asynchronous refresh settles", () => {
   sentText(); m.messages = m.messages.map(message => ({ ...message as object, readByPeer: true }));
   m.cached = { messages: m.messages, outbox: [], media: [] };
