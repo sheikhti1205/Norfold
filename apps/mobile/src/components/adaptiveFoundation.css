@@ -81,7 +81,11 @@
 .fb-peer-actions .fb-identity-relationship { margin: 0; }
 .fb-split-view { min-height: 0; min-width: 0; height: 100%; }
 .fb-split-wide { display: grid; grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr); }
-.fb-split-list, .fb-split-detail { height: 100%; min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; }
+/* A pane scrolls vertically; it is never a second horizontal viewport. With
+   `overflow: auto` any child a few pixels too wide let the user pan the whole
+   chat sideways — header, composer and all. Horizontal strips inside a pane
+   keep their own overflow-x: auto. */
+.fb-split-list, .fb-split-detail { height: 100%; min-height: 0; min-width: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
 .fb-split-wide .fb-split-list { border-inline-end: 1px solid var(--fb-outline-variant); }
 /* A screen-opt-in resizable split draws its boundary on the divider instead. */
 .fb-split-resizable.fb-split-wide .fb-split-list { border-inline-end: 0; }
