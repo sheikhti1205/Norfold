@@ -21,7 +21,10 @@ import { erasureMatches, exportPortable, mergePortable, type PortableConversatio
 
 // v8 isolates range suppression from the account-wide state replay cursor.
 // v9 adds the local hidden unsent hold. It is never part of a portable snapshot.
-export const MESSAGING_IDB_VERSION = 9;
+// v10 returns restored rows to the transcript: a row that kept its instant only
+// in the merge mirror (`snapshotCreatedAt`) gains the canonical `createdAt` the
+// UI and photo-run grouping read.
+export const MESSAGING_IDB_VERSION = 10;
 const STORES = ["messages", "outbox", "events", "mailbox", "conversations", "stateEvents", "rangeStateEvents", "deletions", "clears", "unsends", "mediaAttachments", "mediaLifecycle", "conversationCheckpoints", "conversationProgress", "conversationUnavailable", "unsentHolds"];
 const LEASE_MS = 60_000;
 
@@ -83,19 +86,27 @@ function connect(factory: IDBFactory, name: string): Promise<IDBDatabase> {
         holds.createIndex("expiry", "expiresAt");
       }
       // Upgrade is one atomic versionchange transaction. Only an existing
-      // attachment establishes MEDIA; absent metadata never proves TEXT.
+      // attachment establishes MEDIA; absent metadata never proves TEXT. The
+      // same pass restores a time that older restore code kept only in the
+      // merge mirror, so old photo runs become groups instead of timeless rows.
       const tx = request.transaction!;
       const cursor = tx.objectStore("messages").openCursor();
+      const update = (entry: IDBCursorWithValue, message: PortableMessage, media: boolean) => {
+        const backfill = message.snapshotCreatedAt !== undefined
+          && (message.createdAt === undefined || message.createdAt === 0)
+          ? message.snapshotCreatedAt : undefined;
+        const patch = { ...message, ...(media ? { messageType: "MEDIA" as const } : {}),
+          ...(backfill === undefined ? {} : { createdAt: backfill }) };
+        if (media || backfill !== undefined) entry.update(patch);
+        entry.continue();
+      };
       cursor.onsuccess = () => {
         const entry = cursor.result;
         if (!entry) return;
-        const message = entry.value as StoredHumanMessage;
-        if (message.messageType !== undefined) { entry.continue(); return; }
+        const message = entry.value as PortableMessage;
+        if (message.messageType !== undefined) { update(entry, message, false); return; }
         const media = tx.objectStore("mediaAttachments").index("messageId").get(message.id);
-        media.onsuccess = () => {
-          if (media.result) entry.update({ ...message, messageType: "MEDIA" });
-          entry.continue();
-        };
+        media.onsuccess = () => update(entry, message, !!media.result);
       };
     };
     request.onsuccess = () => {
@@ -1022,7 +1033,7 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
               tx.objectStore("messages").put({ ...parent, messageType: message.messageType ?? "MEDIA" });
             }
           } else {
-            tx.objectStore("messages").add(message);
+            tx.objectStore("messages").add({ ...message, createdAt: message.createdAt ?? Date.now() });
             tx.objectStore("outbox").add({ messageId: message.id, status: "QUEUED", attempts: 0,
               ...(expectedEpoch ? { expectedEpoch } : {}) } satisfies OutboxEntry);
             updateConversation(tx, guard, message.conversationId, conversationPeer(scope, message),
