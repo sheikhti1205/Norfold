@@ -1,0 +1,26 @@
+{
+  "version": "1.1.0",
+  "organization": "Capgo",
+  "date": "October 2026",
+  "abstract": "Fix notch, Dynamic Island, home indicator, cutout, and system bar overlap in Capacitor apps: viewport-fit=cover, env(safe-area-inset-*), Capacitor 8 SystemBars and injected CSS variables, Android 15/16 edge-to-edge enforcement, status bar plugin changes, and runtime inset changes on resizable windows.",
+  "triggers": [
+    "safe area",
+    "notch",
+    "dynamic island",
+    "home indicator",
+    "edge to edge",
+    "SystemBars",
+    "safe-area-inset",
+    "viewport-fit cover",
+    "setOverlaysWebView not working",
+    "adjustMarginsForEdgeToEdge",
+    "status bar overlap"
+  ],
+  "references": [
+    "https://capacitorjs.com/docs/apis/system-bars",
+    "https://capacitorjs.com/docs/apis/status-bar",
+    "https://capacitorjs.com/docs/updating/8-0",
+    "https://developer.android.com/develop/ui/views/layout/edge-to-edge",
+    "https://webkit.org/blog/7929/designing-websites-for-iphone-x/"
+  ]
+}
