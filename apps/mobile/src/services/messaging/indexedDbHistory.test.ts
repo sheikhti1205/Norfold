@@ -489,6 +489,28 @@ describe("server-authoritative erasure state (web parity with SQLite)", () => {
     expect(await one.getMessage(MESSAGE)).toMatchObject({ body: "", unsentAt: 11 });
   });
 
+  it("keeps an unsend that precedes its TEXT echo in the message's server position", async () => {
+    const one = await open();
+    const missing = "00000000-0000-4000-8000-0000000000c1";
+    const third = { ...text, id: "00000000-0000-4000-8000-0000000000c2", authorId: B, recipientId: A, body: "third" };
+    await one.persistInbound(envelope());
+    await one.persistInbound({ ...scope, mailboxId: "00000000-0000-4000-8000-0000000000c3",
+      event: { kind: "TEXT", eventId: "00000000-0000-4000-8000-0000000000c4", sequence: 3, message: third } });
+    await one.applyStateChange(state({
+      kind: "UNSEND", eventId: "00000000-0000-4000-8000-0000000000c5", sequence: 10, conversationId: CONVERSATION,
+      occurredAt: 11, messageId: missing, authorId: B, recipientId: A, messageSequence: 2,
+    }));
+    // This client never stored the original, so there is no bubble to place yet.
+    expect((await one.listMessages(CONVERSATION)).map((message) => message.id)).toEqual([MESSAGE, third.id]);
+    expect(await rawMessage(missing)).toBeUndefined();
+    // The late authoritative echo takes over the position.
+    await one.persistInbound({ ...scope, mailboxId: "00000000-0000-4000-8000-0000000000c6",
+      event: { kind: "TEXT", eventId: "00000000-0000-4000-8000-0000000000c7", sequence: 2,
+        message: { ...text, id: missing, authorId: B, recipientId: A, body: "second" } } });
+    expect((await one.listMessages(CONVERSATION)).map((message) => message.id)).toEqual([MESSAGE, missing, third.id]);
+    expect(await one.getMessage(missing)).toMatchObject({ body: "", unsentAt: 11 });
+  });
+
   it("applies delete-for-me as local erasure of the stored body", async () => {
     const one = await open();
     await one.persistInbound(envelope());

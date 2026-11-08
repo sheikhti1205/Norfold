@@ -320,12 +320,29 @@ function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady, gro
   return <div className={`fb-chat-photo${grouped ? " fb-chat-photo-grouped" : ""}`} data-loading={content && !loaded ? "true" : undefined}
     style={grouped ? undefined : { aspectRatio: `${attachment.width} / ${attachment.height}` }}>
     {content ? <button type="button" aria-label={label} onClick={() => onOpen(attachment.messageId, content.bytes, attachment.mime)}>
-      <img src={content.url} alt="" onLoad={() => setLoaded(true)} onError={() => { onReady(attachment.id, null); setContent(null); setState("failed"); }}
+      <img src={content.url} alt="" loading="lazy" decoding="async" onLoad={() => setLoaded(true)} onError={() => { onReady(attachment.id, null); setContent(null); setState("failed"); }}
         data-receipt-message={loaded && attachment.state === "READY" ? attachment.messageId : undefined} />
     </button> : <div role="status">{state === "loading" ? "Photo loading…" : state === "failed" ? "Could not load photo." : "Photo unavailable"}
       {canDownload && (state === "missing" || state === "failed") && <button type="button" onClick={() => void download()}>Download again</button>}
     </div>}
   </div>;
+}
+
+/** A quoted photo keeps a real preview: the same stored bytes as a small thumb. */
+function ChatQuotePhoto({ accountId, attachment }: { accountId: string; attachment: MediaAttachment }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    let created: string | null = null;
+    void readMessagingMedia(accountId, attachment.id).then((bytes) => {
+      if (cancelled || !bytes) return;
+      created = URL.createObjectURL(new Blob([bytes.slice(0)], { type: attachment.mime }));
+      setUrl(created);
+    }).catch(() => undefined);
+    return () => { cancelled = true; if (created) URL.revokeObjectURL(created); };
+  }, [accountId, attachment.id, attachment.mime]);
+  return url ? <img className="fb-chat-quote-thumb" src={url} alt="" loading="lazy" decoding="async" />
+    : <span className="fb-chat-quote-thumb" aria-hidden="true" />;
 }
 
 /**
@@ -1584,6 +1601,8 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
           const before = index > 0 ? messages[index - 1] : undefined;
           const opensDay = !!day && day !== (before?.createdAt ? formatChatDay(before.createdAt) : "");
           const quoted = message.replyToId ? messages.find((entry) => entry.id === message.replyToId) : undefined;
+          const quotedAttachment = quoted?.messageType === "MEDIA" && quoted.unsentAt === undefined
+            ? media.find((entry) => entry.messageId === quoted.id) : undefined;
           const flashClass = flash?.id === message.id ? ` fb-chat-flash-${flash.nonce % 2 ? "a" : "b"}` : "";
           return <Fragment key={message.id}>
             {opensDay && <li className="fb-chat-day" role="presentation"><span>{day}</span></li>}
@@ -1602,7 +1621,8 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
                 400 ms hold (or right-click / Shift+F10) opens the app's own
                 menu anchored to this bubble, never a bottom sheet. */}
             <LongPressArea label={own ? "Options for your message" : "Options for received message"}
-              disabled={!message.server} className="fb-chat-message-surface">
+              disabled={!message.server} className="fb-chat-message-surface"
+              onOpen={() => { setSelectedMessageId(message.id); haptic("commit"); }}>
             {({ open, setOpen }) => <>
             <div data-receipt-message={message.messageType === "TEXT" && message.body && message.unsentAt === undefined ? message.id : undefined}
               className={`fb-chat-message${own ? " fb-chat-message-own" : ""}${message.messageType === "VOICE" && attachment && message.unsentAt === undefined ? " fb-chat-message-voice" : ""}${flashClass}`}>
@@ -1610,8 +1630,11 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             {message.unsentAt === undefined && message.replyToId && <button type="button" className="fb-chat-quote"
               onClick={() => { nearBottom.current = false; setJumpTo(message.replyToId!); }}
               aria-label={`Quoted message from ${quoted ? (quoted.authorId === accountId ? "you" : name || "this member") : "an unavailable message"}. Show original`}>
-              <span className="fb-chat-quote-author">{quoted ? (quoted.authorId === accountId ? "You" : name || "Member") : "Quoted message"}</span>
-              <span className="fb-chat-quote-preview" dir="auto">{quoted ? replyPreview(quoted) : "Message unavailable"}</span>
+              {quotedAttachment && <ChatQuotePhoto accountId={accountId} attachment={quotedAttachment} />}
+              <span className="fb-chat-quote-copy">
+                <span className="fb-chat-quote-author">{quoted ? (quoted.authorId === accountId ? "You" : name || "Member") : "Quoted message"}</span>
+                <span className="fb-chat-quote-preview" dir="auto">{quoted ? replyPreview(quoted) : "Message unavailable"}</span>
+              </span>
             </button>}
             {message.unsentAt !== undefined ? <p>Message unsent</p> : <>
             {batch && photoAllowed && <ChatPhotoGroup accountId={accountId} conversationId={conversationId} items={batch} media={media} onOpen={openPhoto} onReady={rememberPhoto} />}
