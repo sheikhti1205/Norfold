@@ -90,6 +90,10 @@ test("final APK gate examines packaged JavaScript, not the build directory", () 
   const apk = join(dir, "test.apk");
   try {
     mkdirSync(assets, { recursive: true });
+    // checkApk reads the packaged bridge config before it inspects JavaScript;
+    // a real APK always carries it, so the fixture must too.
+    writeFileSync(join(dir, "assets", "capacitor.config.json"),
+      JSON.stringify({ loggingBehavior: "none" }));
     const js = join(assets, "index-test.js");
     writeFileSync(js, `const dsn="o123.ingest.sentry.io";`);
     const pack = () => spawnSync("zip", ["-q", "-r", "-FS", apk, "assets"], { cwd: dir });
