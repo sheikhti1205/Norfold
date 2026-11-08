@@ -190,7 +190,8 @@ function SettingsNavigation({ detailSelected }: { detailSelected: boolean }) {
   const [notifValue, setNotifValue] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
-  const [retention, setRetention] = useState<{ id: string; keep: boolean } | null>(null);
+  const [retention, setRetention] = useState<{ id: string; keep: boolean } | null>(() =>
+    user ? { id: user.id, keep: readRememberedAccounts().some((account) => account.id === user.id) } : null);
   const keepAccount = retention?.id === user?.id && retention?.keep === true;
   const userId = user?.id;
   useEffect(() => {
@@ -412,7 +413,9 @@ function SettingsNavigation({ detailSelected }: { detailSelected: boolean }) {
           <SettingsGroup>
             <PreferenceSwitchRow
               title="Keep this account on this device"
-              description="Save your name and email for next time, not your password."
+              description={keepAccount
+                ? "Saved on this device. It appears on the sign-in screen."
+                : "Save your name and email for next time, not your password."}
               icon={UserRound}
               checked={keepAccount}
               onChange={keep => {
