@@ -58,6 +58,34 @@ export interface StoredHumanMessage extends HumanMessage, MessageReadFacts {
 }
 
 /**
+ * How long a device keeps the body of an unsent message before deleting it.
+ * The window exists only for accountability: a recipient can still report what
+ * was said, and the report carries the same bounded evidence as any other.
+ */
+export const UNSENT_HOLD_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Local-only retained copy of an unsent message, held for `UNSENT_HOLD_MS`.
+ *
+ * It is never part of a transcript, preview, search, gallery, notification,
+ * snapshot or sync payload. Only `getUnsentHold` may read it, and only the
+ * report path calls that. The server remains destructive: this is a device
+ * memory, not a second delivered-body archive.
+ */
+export interface UnsentHold {
+  messageId: string;
+  conversationId: string;
+  authorId: string;
+  recipientId: string;
+  body: string;
+  contextReportId?: string;
+  replyToId?: string;
+  location?: StaticLocation;
+  heldAt: number;
+  expiresAt: number;
+}
+
+/**
  * One chat attachment. Metadata only: the bytes live in the dedicated
  * `mediaBytes` store on every platform, because the SQLite bridge cannot carry
  * binary. A record never proves its own bytes exist; only the byte store does.
@@ -240,6 +268,15 @@ export interface MessagingHistory {
   markConversationRead(conversationId: string, throughSequence: number): Promise<void>;
   /** Body-free erasure metadata survives temporary message-mailbox expiry. */
   getStateCursor(): Promise<StateCursor | null>;
+  /** Local hidden copy of an unsent message while its 24-hour window lasts.
+   * Never rendered, searched, previewed, backed up or synced. */
+  getUnsentHold(messageId: string): Promise<UnsentHold | null>;
+  /** Ids only, for enabling the report action without loading held bodies. */
+  listUnsentHolds(conversationId: string): Promise<UnsentHold[]>;
+  /** Removes one held copy after it was reported. */
+  deleteUnsentHold(messageId: string): Promise<void>;
+  /** Deletes every hold whose window has closed; returns the count removed. */
+  purgeUnsentHolds(now?: number): Promise<number>;
   /** Conversation ranges apply suppression but never certify account-wide replay. */
   applyStateChange(envelope: StateChangeEnvelope, scope?: "account" | "conversation"): Promise<StateCursor>;
   /** Local-device proof of a fully applied authorized conversation prefix.

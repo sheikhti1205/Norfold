@@ -1,7 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { beginAppActivity } from "../appActivity";
 import type {
-  HistorySnapshot, ImportReport, MediaAttachment, OutboxEntry, StaticLocation, StoredHumanMessage,
+  HistorySnapshot, ImportReport, MediaAttachment, OutboxEntry, StaticLocation, StoredHumanMessage, UnsentHold,
 } from "./history";
 import { normaliseSnapshot } from "./backup";
 import type { MediaMetadata } from "./media";
@@ -573,6 +573,33 @@ export async function readMessagingThread(accountId: string, conversationId: str
   const rows = await owner.handle.history.listMessages(uuid(conversationId));
   assertOwner(owner);
   return rows;
+}
+
+/**
+ * Message ids whose unsent copy is still inside its hidden hold window. The
+ * transcript uses this only to offer "Report message"; bodies never enter the
+ * thread state.
+ */
+export async function readMessagingUnsentHoldIds(accountId: string, conversationId: string): Promise<string[]> {
+  const owner = ownerFor(accountId);
+  const holds = await owner.handle.history.listUnsentHolds(uuid(conversationId));
+  assertOwner(owner);
+  return holds.map((hold) => hold.messageId);
+}
+
+/** The held body, read only at the moment a report is opened. */
+export async function readMessagingUnsentHold(accountId: string, messageId: string): Promise<UnsentHold | null> {
+  const owner = ownerFor(accountId);
+  const hold = await owner.handle.history.getUnsentHold(uuid(messageId));
+  assertOwner(owner);
+  return hold;
+}
+
+/** A reported hold has served its purpose; remove it from this device. */
+export async function purgeMessagingUnsentHold(accountId: string, messageId: string): Promise<void> {
+  const owner = ownerFor(accountId);
+  await owner.handle.history.deleteUnsentHold(uuid(messageId));
+  assertOwner(owner);
 }
 
 export function getCachedMessagingThreadState(accountId: string, conversationId: string): MessagingThreadState | null {

@@ -18,13 +18,19 @@ const m = vi.hoisted(() => {
     threadSync: { conversationId: "chat", mode: "ready", missing: 0 } as MessagingThreadSync | null,
     conversations: [{ conversationId: "chat", peerId: "peer", cachedProjection: view }], currentProjections: { chat: view } },
     messages: [] as unknown[], media: [] as unknown[], outbox: [] as unknown[], cached: null as null | { messages: unknown[]; media: unknown[]; outbox: unknown[] }, threadRead: vi.fn(),
-    voice: vi.fn(), location: vi.fn(), mute: vi.fn(), pin: vi.fn(), prepare: vi.fn(), relationship: vi.fn(), text: vi.fn(), send: vi.fn(), read: vi.fn(), download: vi.fn(), remove: vi.fn(), recover: vi.fn(), retry: vi.fn(), receipt: vi.fn(), observe: vi.fn(), refresh: vi.fn(), choose: vi.fn(), import: vi.fn(), file: vi.fn() };
+    voice: vi.fn(), location: vi.fn(), mute: vi.fn(), pin: vi.fn(), prepare: vi.fn(), relationship: vi.fn(), text: vi.fn(), send: vi.fn(), read: vi.fn(), download: vi.fn(), remove: vi.fn(), recover: vi.fn(), retry: vi.fn(), receipt: vi.fn(), observe: vi.fn(), refresh: vi.fn(), choose: vi.fn(), import: vi.fn(), file: vi.fn(),
+    holdIds: vi.fn(async () => [] as string[]), hold: vi.fn(async (): Promise<Record<string, unknown> | null> => null), purgeHold: vi.fn(async () => undefined),
+    report: vi.fn(async (_input: unknown, _signal?: AbortSignal) => ({ reportId: "receipt" })) };
 });
 vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "account" } }) }));
 vi.mock("../services/accountLabels", () => ({ fetchAccountIdentities: async () => new Map(), readCachedAccountIdentities: () => new Map() }));
 vi.mock("../services/messaging/useMessaging", () => ({ useMessaging: () => m.chat }));
-vi.mock("../services/messaging/runtime", () => ({ getCachedMessagingThreadState: () => m.cached, watchMessagingThread: m.watch, sendMessagingVoice: m.voice, sendMessagingLocation: m.location, setMessagingMuted: m.mute, pinMessagingMessage: m.pin, readMessagingThreadState: () => m.threadRead(), fetchMessagingReceiptView: m.receipt, observeMessagingReceipt: m.observe, markMessagingConversationRead: async () => {}, refreshMessaging: m.refresh, sendMessagingText: m.text, sendMessagingMedia: m.send, readMessagingMedia: m.read, downloadMessagingMedia: m.download, changeMessagingRelationship: m.relationship, clearMessagingConversation: async () => {}, removeMessagingMessage: m.remove, recoverMessagingText: m.recover, retryMessagingMessage: m.retry }));
+vi.mock("../services/messaging/runtime", () => ({ getCachedMessagingThreadState: () => m.cached, watchMessagingThread: m.watch, sendMessagingVoice: m.voice, sendMessagingLocation: m.location, setMessagingMuted: m.mute, pinMessagingMessage: m.pin, readMessagingThreadState: () => m.threadRead(), fetchMessagingReceiptView: m.receipt, observeMessagingReceipt: m.observe, markMessagingConversationRead: async () => {}, refreshMessaging: m.refresh, sendMessagingText: m.text, sendMessagingMedia: m.send, readMessagingMedia: m.read, downloadMessagingMedia: m.download, changeMessagingRelationship: m.relationship, clearMessagingConversation: async () => {}, removeMessagingMessage: m.remove, recoverMessagingText: m.recover, retryMessagingMessage: m.retry, readMessagingUnsentHoldIds: m.holdIds, readMessagingUnsentHold: m.hold, purgeMessagingUnsentHold: m.purgeHold }));
 vi.mock("../services/messaging/preparePhoto", () => ({ prepareMessagingPhoto: m.prepare }));
+vi.mock("../services/moderation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../services/moderation")>()),
+  submitReport: (input: unknown, signal?: AbortSignal) => m.report(input, signal),
+}));
 vi.mock("../services/media/nativeMedia", () => ({ chooseNativeImages: m.choose, importNativeImageUri: m.import, importedImageToFile: m.file }));
 beforeEach(() => { vi.stubGlobal("URL", Object.assign(class extends URL {}, { createObjectURL: vi.fn(() => "blob:test"), revokeObjectURL: vi.fn() })); m.view.mode = "CONNECTED"; m.view.ownBlocked = false; m.chat.revision = 1; m.messages = []; m.media = []; m.outbox = []; m.prepare.mockReset(); m.send.mockReset(); m.read.mockReset().mockResolvedValue(null); m.download.mockReset().mockResolvedValue(undefined); m.remove.mockReset().mockResolvedValue(undefined); m.recover.mockReset().mockResolvedValue(undefined); m.receipt.mockReset().mockResolvedValue({ context: "authority", readIds: [] }); m.observe.mockReset().mockResolvedValue(true); m.refresh.mockReset().mockResolvedValue(undefined);
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ x: 0, y: 0, top: 0, left: 0, bottom: 200, right: 200, width: 200, height: 200, toJSON: () => ({}) });
@@ -39,6 +45,10 @@ beforeEach(() => { vi.stubGlobal("URL", Object.assign(class extends URL {}, { cr
   m.chat.threadSync = { conversationId: "chat", mode: "ready", missing: 0 };
   m.watch.mockReset().mockReturnValue(() => {});
   m.cached = null;
+  m.holdIds.mockReset().mockImplementation(async () => []);
+  m.hold.mockReset().mockImplementation(async () => null);
+  m.purgeHold.mockReset().mockImplementation(async () => undefined);
+  m.report.mockReset().mockImplementation(async () => ({ reportId: "receipt" }));
   m.threadRead.mockReset().mockImplementation(async () => ({ messages: m.messages, outbox: m.outbox, media: m.media }));
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -559,6 +569,29 @@ it("reports the participant directly instead of reusing a previously selected me
   const dialog=screen.getByRole("dialog",{name:"Report a problem"});
   expect(within(dialog).getByText("Tell us what is wrong with this person.")).toBeTruthy();
   expect(within(dialog).queryByText("Caption")).toBeNull();
+});
+it("reports the held copy of an unsent message, then stops offering it", async () => {
+  const held = "00000000-0000-4000-8000-0000000000aa";
+  m.messages = [{ ...received("TEXT"), id: held, body: "", unsentAt: 5 }];
+  m.holdIds.mockImplementation(async () => [held]);
+  m.hold.mockImplementation(async () => ({ messageId: held, conversationId: "chat", authorId: "peer",
+    recipientId: "account", body: "the removed words", heldAt: 5, expiresAt: Date.now() + 60_000 }));
+  await open();
+  fireEvent.click(screen.getByRole("button", { name: "Options for received message" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Report message" }));
+  const dialog = await screen.findByRole("dialog", { name: "Report a problem" });
+  fireEvent.click(within(dialog).getByRole("radio", { name: /harassment/i }));
+  fireEvent.click(within(dialog).getByRole("button", { name: /send report/i }));
+  await waitFor(() => expect(m.report).toHaveBeenCalledWith(expect.objectContaining({
+    targetType: "MESSAGE", targetId: held, accountId: "account", body: "the removed words",
+  }), expect.anything()));
+  await waitFor(() => expect(m.purgeHold).toHaveBeenCalledWith("account", held));
+});
+it("does not offer a report for an unsent message whose hidden copy has expired", async () => {
+  m.messages = [{ ...received("TEXT"), id: "00000000-0000-4000-8000-0000000000ab", body: "", unsentAt: 5 }];
+  await open();
+  fireEvent.click(screen.getByRole("button", { name: "Options for received message" }));
+  expect(screen.queryByRole("menuitem", { name: "Report message" })).toBeNull();
 });
 it("sends desktop Enter once but preserves Shift+Enter and IME composition", async () => {
   vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("pointer: fine"), addEventListener() {}, removeEventListener() {} }));

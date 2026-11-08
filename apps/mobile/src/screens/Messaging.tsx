@@ -42,6 +42,7 @@ import {
   refreshMessaging, retryMessagingMedia, sendMessagingText, sendMessagingLocation, sendMessagingMedia, sendMessagingVoice, clearMessagingConversation, removeMessagingMessage,
   fetchMessagingReceiptView, observeMessagingReceipt, readMessagingMedia, downloadMessagingMedia, recoverMessagingText,
   retryMessagingMessage, setMessagingMuted, pinMessagingMessage, watchMessagingThread,
+  readMessagingUnsentHold, readMessagingUnsentHoldIds, purgeMessagingUnsentHold,
 } from "../services/messaging/runtime";
 import type { MediaAttachment, OutboxEntry, StaticLocation, StoredHumanMessage } from "../services/messaging/history";
 import { prepareMessagingPhoto, type PreparedMessagingPhoto } from "../services/messaging/preparePhoto";
@@ -867,6 +868,10 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   // failed send keeps the context instead of silently dropping the quote.
   const [replyTo, setReplyTo] = useState<{ id: string; label: string; preview: string } | null>(null);
   const [reportTarget, setReportTarget] = useState<"account" | "message" | null>(null);
+  // The hidden copy of an unsent message. Ids enable the report action; the body
+  // is fetched only when the report sheet is actually opened.
+  const [heldMessageIds, setHeldMessageIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [reportHold, setReportHold] = useState<{ messageId: string; body: string } | null>(null);
   const [visible, setVisible] = useState(() => document.visibilityState === "visible");
   // Live contexts authorize NEW observations only. Historical Read facts are
   // durable and never disappear just because consent/context/connection changes.
@@ -1129,6 +1134,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       setMessages(state.messages); setOutbox(state.outbox); setMedia(state.media); setLoaded(true);
       setRenderedRevision(chat.revision); setThreadReadFailed(false);
     }).catch(() => { if (!cancelled) setThreadReadFailed(true); });
+    void readMessagingUnsentHoldIds(accountId, conversationId).then((ids) => {
+      if (!cancelled) setHeldMessageIds(new Set(ids));
+    }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [accountId, conversationId, chat.accountId, chat.status, chat.localReady, chat.revision, threadReadRetry]);
   useLayoutEffect(() => {
@@ -1480,6 +1488,23 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     } finally { if (alive.current) setPhotoSending(false); }
   }
   /**
+   * Open the report sheet for one message. An unsent message has no body in the
+   * transcript, so its hidden retained copy is read here — the single place the
+   * body is allowed to leave the hold.
+   */
+  async function openMessageReport(message: StoredHumanMessage): Promise<void> {
+    if (message.unsentAt === undefined) { setReportHold(null); setReportTarget("message"); return; }
+    try {
+      const hold = await readMessagingUnsentHold(accountId, message.id);
+      if (!alive.current) return;
+      if (!hold) { setError("That message can no longer be reported."); return; }
+      setReportHold({ messageId: message.id, body: hold.body });
+      setReportTarget("message");
+    } catch {
+      if (alive.current) setError("That message could not be opened for reporting.");
+    }
+  }
+  /**
    * The actions that annotate one message. This is the same `ActionMenu` the
    * feed and the report card use, so keyboard, collision placement, dismissal
    * and styling are the app's existing ones rather than a second implementation.
@@ -1513,9 +1538,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     }
     items.push({ id: "delete", label: "Delete for me", destructive: true, disabled: busy || !view,
       onAction: () => setSheet("delete") });
-    if (!own && message.unsentAt === undefined) {
+    if (!own && (message.unsentAt === undefined || heldMessageIds.has(message.id))) {
       items.push({ id: "report", label: "Report message", destructive: true, disabled: busy || !view || !row,
-        onAction: () => setReportTarget("message") });
+        onAction: () => { void openMessageReport(message); } });
     }
     return items;
   }
@@ -1877,7 +1902,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         : !selectedMessage?.server || (sheet === "unsend" && (selectedMessage.authorId !== accountId || selectedMessage.unsentAt !== undefined)))}
       onConfirm={() => { if (sheet === "end") void relationship("end"); else if (sheet === "delete" || sheet === "unsend" || sheet === "clear") void erase(sheet); }}>
       <p>{sheet === "end" ? "Your messages stay here. Either of you can send a new request."
-        : sheet === "unsend" ? "Replace this message with ‘Message unsent’ for everyone. Messages already reported can still be reviewed."
+        : sheet === "unsend" ? "Replace this message with ‘Message unsent’ for everyone. Each device that received it keeps a hidden copy for up to 24 hours so it can still be reported, then deletes it."
           : sheet === "clear" ? "This clears your copy on your devices, not theirs." : "Remove this message from your devices, not the other person’s chat."}</p>
       {error && <p className="fb-chat-error" role="alert">{error}</p>}
     </ConfirmDialog>
@@ -1902,9 +1927,22 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       {error && <p className="fb-chat-error" role="alert">{error}</p>}
     </AdaptiveTaskSurface>
     <ReportSheet open={reportTarget !== null} target={reportTarget === "account" && row ? { targetType: "USER", targetId: row.peerId }
-      : reportTarget === "message" && selectedMessage && selectedMessage.unsentAt === undefined
-        ? { targetType: "MESSAGE", targetId: selectedMessage.id, accountId, body: selectedMessage.body } : null}
-      onClose={() => setReportTarget(null)} />
+      : reportTarget === "message" && selectedMessage
+        ? selectedMessage.unsentAt === undefined
+          ? { targetType: "MESSAGE", targetId: selectedMessage.id, accountId, body: selectedMessage.body }
+          : reportHold && reportHold.messageId === selectedMessage.id
+            ? { targetType: "MESSAGE", targetId: selectedMessage.id, accountId, body: reportHold.body }
+            : null
+        : null}
+      onReported={() => {
+        if (selectedMessage?.unsentAt === undefined || reportHold?.messageId !== selectedMessage.id) return;
+        const messageId = reportHold.messageId;
+        setHeldMessageIds((previous) => {
+          const next = new Set(previous); next.delete(messageId); return next;
+        });
+        void purgeMessagingUnsentHold(accountId, messageId).catch(() => undefined);
+      }}
+      onClose={() => { setReportTarget(null); setReportHold(null); }} />
   </section>}
   </ChatDetailsLayout>;
 }
