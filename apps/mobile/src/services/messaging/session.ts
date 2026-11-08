@@ -257,6 +257,7 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
           assertOpen();
           if (!live || live.server || live.unsentAt !== undefined || live.messageType !== message.messageType
             || live.contextReportId !== message.contextReportId
+            || live.replyToId !== message.replyToId
             || JSON.stringify(live.location ?? null) !== JSON.stringify(message.location ?? null)) {
             throw new Error("Message is no longer pending");
           }
@@ -267,6 +268,7 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
             expectedHead,
             ...(kind !== "TEXT" ? { messageType: kind } : {}),
             ...(message.contextReportId ? { contextReportId: message.contextReportId } : {}),
+            ...(message.replyToId ? { replyToId: message.replyToId } : {}),
             ...(message.location ? { location: message.location } : {}),
             // Absent for a pre-v8 queued row: the server refuses it rather than
             // letting this client re-bind an old send to a newer boundary.

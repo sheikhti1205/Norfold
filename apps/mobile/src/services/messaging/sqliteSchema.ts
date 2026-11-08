@@ -48,7 +48,10 @@
  */
 // v10 fences executables which cannot honor local conversation checkpoints.
 // Checkpoints use existing scoped messaging_meta rows; they are never portable.
-export const MESSAGING_SQLITE_SCHEMA_VERSION = 11;
+// v12 adds `reply_to_id`: the id of the message this one answers. Nullable and
+// additive, so an existing file gains the column and every stored message keeps
+// its exact current shape.
+export const MESSAGING_SQLITE_SCHEMA_VERSION = 12;
 
 /**
  * The v5 `messages` body CHECK, recognised in `sqlite_master`.
@@ -133,6 +136,7 @@ export const MESSAGING_SQLITE_SCHEMA = [
     body text,
     message_type text check (message_type in ('TEXT','MEDIA','LOCATION','VOICE')),
     context_report_id text,
+    reply_to_id text,
     location_lat real,
     location_lng real,
     location_accuracy_m real,
@@ -242,7 +246,8 @@ export const MESSAGING_SQLITE_SCHEMA = [
 
 const MESSAGE_COLUMNS = `m.id as id, m.conversation_id as conversationId,
   m.author_id as authorId, m.recipient_id as recipientId, m.body as body, m.message_type as messageType,
-  m.context_report_id as contextReportId, m.location_lat as locationLat, m.location_lng as locationLng,
+  m.context_report_id as contextReportId, m.reply_to_id as replyToId,
+  m.location_lat as locationLat, m.location_lng as locationLng,
   m.location_accuracy_m as locationAccuracy,
   m.server_event_id as eventId, m.server_sequence as sequence, m.unsent_at as unsentAt, m.created_at as createdAt,
   (coalesce((select cast(value as integer) from messaging_meta where key = 'read_facts:' || m.id), 0)
@@ -275,9 +280,9 @@ export const MESSAGING_SQLITE_STATEMENTS = {
   getStateCursor: `select event_id as eventId, sequence from messaging_state_events order by sequence desc limit 1`,
   getStateEvent: `select sequence, change_json as changeJson from messaging_state_events where event_id = ?`,
   insertStateEvent: `insert into messaging_state_events(event_id,sequence,change_json) values(?,?,?)`,
-  erasePersonalMessage: `update messages set body=null, context_report_id=null,
+  erasePersonalMessage: `update messages set body=null, context_report_id=null, reply_to_id=null,
     location_lat=null, location_lng=null, location_accuracy_m=null where id=?`,
-  erasePersonalConversation: `update messages set body=null, context_report_id=null,
+  erasePersonalConversation: `update messages set body=null, context_report_id=null, reply_to_id=null,
     location_lat=null, location_lng=null, location_accuracy_m=null where conversation_id=? and server_sequence<=?`,
   getMetaRows: `select key, value from messaging_meta
     where key in ('account_id', 'device_id', 'schema_version')`,
@@ -328,19 +333,21 @@ export const MESSAGING_SQLITE_STATEMENTS = {
     where m.server_event_id = ?`,
   insertMessage: `insert into messages
     (id, conversation_id, author_id, recipient_id, body, created_at, message_type,
-      context_report_id, location_lat, location_lng, location_accuracy_m)
-    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      context_report_id, reply_to_id, location_lat, location_lng, location_accuracy_m)
+    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   insertTombstonedMessage: `insert into messages
     (id, conversation_id, author_id, recipient_id, body, created_at, unsent_at, message_type)
     values (?, ?, ?, ?, null, ?, ?, ?)`,
   messageColumns: `pragma table_info(messages)`,
   addMessageType: `alter table messages add column message_type text check (message_type in ('TEXT','MEDIA'))`,
+  // v12: SQLite has no `add column if not exists`, so `messageColumns` decides.
+  addMessageReply: `alter table messages add column reply_to_id text`,
   backfillMediaType: `update messages set message_type='MEDIA' where message_type is null
     and exists (select 1 from media_attachments a where a.message_id=messages.id)`,
   bindMessageType: `update messages set message_type=? where id=? and message_type is null`,
   setMessageServer: `update messages set server_event_id = ?, server_sequence = ?
     where id = ? and server_event_id is null`,
-  clearMessageBody: `update messages set body = null, context_report_id=null,
+  clearMessageBody: `update messages set body = null, context_report_id=null, reply_to_id=null,
     location_lat=null, location_lng=null, location_accuracy_m=null, unsent_at = coalesce(unsent_at, ?)
     where id = ?`,
   getMailboxEvent: `select event_id as eventId, message_id as messageId, sequence
@@ -548,8 +555,8 @@ export const MESSAGING_SQLITE_STATEMENTS = {
   insertSnapshotMessage: `insert into messages
     (id, conversation_id, author_id, recipient_id, body, created_at,
       server_event_id, server_sequence, unsent_at, message_type,
-      context_report_id, location_lat, location_lng, location_accuracy_m)
-    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      context_report_id, reply_to_id, location_lat, location_lng, location_accuracy_m)
+    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   updateSnapshotMessage: `update messages set body = ?, unsent_at = ?, created_at = ?
     where id = ?`,
   /** Union by message id, with a commutative tie-break on both metadata columns. */
@@ -561,17 +568,17 @@ export const MESSAGING_SQLITE_STATEMENTS = {
     where conversation_id = ?`,
   // Anti-resurrection backstop, run inside the import transaction: no path may
   // leave a body visible behind a tombstone, a personal deletion or a clear.
-  suppressTombstonedBodies: `update messages set body = null, context_report_id=null,
+  suppressTombstonedBodies: `update messages set body = null, context_report_id=null, reply_to_id=null,
     location_lat=null, location_lng=null, location_accuracy_m=null
     where id in (select message_id from tombstones)`,
-  suppressDeletedBodies: `update messages set body = null, context_report_id=null,
+  suppressDeletedBodies: `update messages set body = null, context_report_id=null, reply_to_id=null,
     location_lat=null, location_lng=null, location_accuracy_m=null
     where id in (select message_id from deleted_for_me)`,
   /** An unsent message is never readable, whether or not its tombstone travelled. */
-  suppressUnsentBodies: `update messages set body = null, context_report_id=null,
+  suppressUnsentBodies: `update messages set body = null, context_report_id=null, reply_to_id=null,
     location_lat=null, location_lng=null, location_accuracy_m=null
     where body is null or unsent_at is not null`,
-  suppressClearedBodies: `update messages set body = null, context_report_id=null,
+  suppressClearedBodies: `update messages set body = null, context_report_id=null, reply_to_id=null,
     location_lat=null, location_lng=null, location_accuracy_m=null
     where server_sequence is not null
       and exists (select 1 from conversation_cleared c

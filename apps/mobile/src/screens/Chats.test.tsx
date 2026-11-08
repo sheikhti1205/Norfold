@@ -13,7 +13,7 @@ vi.mock("../services/accountLabels", () => ({ readCachedAccountIdentities: () =>
 ]) }));
 vi.mock("../services/people", async original => ({ ...await original<typeof import("../services/people")>(), searchPeople: async () => ({ items: [], nextCursor: null }) }));
 vi.mock("../services/posts", () => ({ fetchPost: async () => ({ id:"report", title:"Blue wallet", type:"FOUND" }) }));
-import { Connections, LegacyChatsRedirect } from "./Messaging";
+import { Connections, LegacyChatsRedirect, replyPreview, replySwipeFor } from "./Messaging";
 import { RouteTransition } from "../components/RouteTransition";
 function Location() { return <p data-testid="location">{useLocation().pathname}</p>; }
 function app() { return <MemoryRouter initialEntries={["/chats"]}><Routes><Route element={<RouteTransition />}>
@@ -45,6 +45,20 @@ it("counts visible incoming requests and separates archived/unread filters", asy
   expect(screen.getByRole("link",{name:"Open conversation with Robin Lane"})).toBeTruthy();expect(screen.queryByRole("link",{name:"Open conversation with River Jones"})).toBeNull();
   fireEvent.click(screen.getByRole("button",{name:"Filter chats"}));fireEvent.click(await screen.findByRole("menuitem",{name:"Archived"}));
   expect(screen.getByRole("link",{name:"Open conversation with Rowan Lee"})).toBeTruthy();expect(screen.queryByRole("link",{name:"Open conversation with Robin Lane"})).toBeNull();
+});
+it("mirrors the bubble direction for the reply swipe and names a quoted attachment", () => {
+  // Your own bubble answers right-to-left; a received one left-to-right.
+  expect(replySwipeFor(-71, true)).toBe(false);
+  expect(replySwipeFor(-72, true)).toBe(true);
+  expect(replySwipeFor(72, true)).toBe(false);
+  expect(replySwipeFor(72, false)).toBe(true);
+  expect(replySwipeFor(-72, false)).toBe(false);
+  const base = { id: "message", conversationId: "chat", authorId: "peer", recipientId: "viewer", body: "" };
+  expect(replyPreview({ ...base, messageType: "VOICE" })).toBe("Voice message");
+  expect(replyPreview({ ...base, messageType: "MEDIA" })).toBe("Photo");
+  expect(replyPreview({ ...base, messageType: "LOCATION" })).toBe("Location");
+  expect(replyPreview({ ...base, body: "Kept text" })).toBe("Kept text");
+  expect(replyPreview({ ...base, body: "Gone", unsentAt: 1 })).toBe("Message unsent");
 });
 it.each(["/connections", "/connections/chat"])("replaces legacy %s with the canonical destination and preserves query/hash", async path => {
   function Probe(){const location=useLocation();return <p data-testid="redirect">{location.pathname+location.search+location.hash}</p>;}

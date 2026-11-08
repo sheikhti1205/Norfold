@@ -35,13 +35,14 @@ export type {
 
 export const BACKUP_FORMAT = "findback.chat.backup";
 /**
+ * v6 adds the reply reference: the id of the message a record answers.
  * v5 adds verified attachment metadata; the bytes travel beside the snapshot.
  * v4 adds optional monotonic historical read facts, not live authorization.
  * v3 adds the bounded message payload: a live report reference and one static
  * coordinate set. Both are optional own keys on a v3 message record, so a v2
  * file still decodes and a v3 file never smuggles them into an older shape.
  */
-export const BACKUP_VERSION = 5;
+export const BACKUP_VERSION = 6;
 /** Original envelope version; still read with its exact nine-field records. */
 const LEGACY_VERSION = 1;
 
@@ -263,7 +264,7 @@ function readSnapshot(value: unknown, version?: number): HistorySnapshot {
     const hasAttachments = Object.getOwnPropertyDescriptor(value, "attachments") !== undefined;
     // `attachments` is a v5 field: an older sealed envelope carrying it is a
     // forgery, not forward compatibility.
-    if (hasAttachments && version !== undefined && version !== 5) {
+    if (hasAttachments && version !== undefined && version !== 5 && version !== 6) {
       throw new BackupError("backup: invalid snapshot");
     }
     if (!exactKeys(value, hasAttachments ? SNAPSHOT_V5_KEYS : SNAPSHOT_KEYS)) {
@@ -297,14 +298,20 @@ function readSnapshot(value: unknown, version?: number): HistorySnapshot {
       messages: messages.map((row) => {
         // A v1 digest must describe the original nine fields exactly. Never add
         // defaults before verifying it, nor let v1 smuggle a later field.
-        const payload = version === 3 || version === 4 || version === 5
+        const payload = version === 3 || version === 4 || version === 5 || version === 6
           || (version === undefined && object(row)
             && Object.getOwnPropertyDescriptor(row, "contextReportId") !== undefined);
         const classified = payload || version === 2 || (version === undefined && object(row)
           && Object.getOwnPropertyDescriptor(row, "messageType") !== undefined);
-        const facts = (version === undefined || version === 4 || version === 5) && object(row)
+        const facts = (version === undefined || version === 4 || version === 5 || version === 6) && object(row)
           ? READ_FACT_KEYS.filter(key => Object.getOwnPropertyDescriptor(row, key) !== undefined) : [];
-        const r = record(row, [...(payload ? MESSAGE_V3_KEYS : classified ? MESSAGE_V2_KEYS : MESSAGE_KEYS), ...facts]);
+        // v6 owns the reply reference. It stays an optional own key so a v5 file
+        // keeps decoding, and a v5 file carrying it is still a forgery refused by
+        // the exact key-set check.
+        const reply = version !== undefined && version < 6 ? false : object(row)
+          && Object.getOwnPropertyDescriptor(row, "replyToId") !== undefined;
+        const r = record(row, [...(payload ? MESSAGE_V3_KEYS : classified ? MESSAGE_V2_KEYS : MESSAGE_KEYS),
+          ...facts, ...(reply ? ["replyToId"] : [])]);
         // v2 introduced classification, not static location. Suppression does
         // not make a later classification valid in an older sealed envelope.
         if (version === 2 && r.messageType === "LOCATION") throw new BackupError("backup: invalid snapshot");
@@ -321,6 +328,7 @@ function readSnapshot(value: unknown, version?: number): HistorySnapshot {
             location: r.location === null ? null
               : record(r.location, ["lat", "lng", "accuracy"]) as unknown as SnapshotMessage["location"],
           } : {}),
+          ...(reply ? { replyToId: r.replyToId as string | null } : {}),
           serverEventId: r.serverEventId as string,
           serverSequence: r.serverSequence as number,
           unsentAt: r.unsentAt as number | null,
@@ -411,6 +419,8 @@ function checkSnapshot(value: unknown, accountId: string): asserts value is Hist
         || row.messageType === "VOICE")
     && (row.messageType !== "TEXT" || row.body !== "")
     && validPayload(row)
+    && (row.replyToId === undefined || row.replyToId === null
+      || (isUuid(row.replyToId) && row.replyToId !== row.id))
     && isUuid(row.serverEventId) && integer(row.serverSequence, 1)
     && (row.unsentAt === null || integer(row.unsentAt, 1))
     && (row.createdAt === null || integer(row.createdAt)))) {
@@ -472,6 +482,7 @@ export function normaliseSnapshot(value: unknown): HistorySnapshot {
       ...message,
       messageType: message.messageType ?? null,
       contextReportId: message.contextReportId ?? null,
+      replyToId: message.replyToId ?? null,
       location: message.location ?? null,
       createdAt: message.createdAt ?? 0,
     })),

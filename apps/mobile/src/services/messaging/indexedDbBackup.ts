@@ -68,6 +68,7 @@ export function exportPortable(view: PortableView, accountId?: string): HistoryS
     return { id: row.id, conversationId: row.conversationId, authorId: row.authorId, recipientId: row.recipientId,
       body: suppressed ? null : row.body,
       contextReportId: suppressed ? null : row.contextReportId ?? null,
+      replyToId: suppressed ? null : row.replyToId ?? null,
       location: suppressed ? null : row.location ? { ...row.location } : null,
       messageType: row.messageType ?? null, serverEventId: server.eventId, serverSequence: server.sequence,
       ...mergeReadFacts(row, row.recipientId === accountId && server.sequence <= (readThrough.get(row.conversationId) ?? 0)
@@ -169,6 +170,7 @@ export function mergePortable(view: PortableView, incoming: HistorySnapshot, sco
     messages.set(row.id, { ...prior, ...mergeReadFacts(prior, row), id: row.id, conversationId: row.conversationId, authorId: row.authorId, recipientId: row.recipientId,
       body: row.body ?? "", server: { eventId: row.serverEventId, sequence: row.serverSequence },
       ...(row.contextReportId ? { contextReportId: row.contextReportId } : {}),
+      ...(row.replyToId ? { replyToId: row.replyToId } : {}),
       ...(row.location ? { location: { ...row.location } } : {}),
       ...((row.messageType ?? prior?.messageType) ? { messageType: row.messageType ?? prior?.messageType } : {}),
       ...(unsentAt !== undefined ? { unsentAt } : {}), ...(row.body === null ? { snapshotSuppressed: true as const } : {}),
@@ -200,7 +202,7 @@ export function mergePortable(view: PortableView, incoming: HistorySnapshot, sco
     if (row.snapshotSuppressed || row.unsentAt !== undefined || deletion
       || (row.server && row.server.sequence <= (clears.get(row.conversationId)?.throughSequence ?? 0))) {
       row.body = ""; row.snapshotSuppressed = true;
-      delete row.contextReportId; delete row.location;
+      delete row.contextReportId; delete row.replyToId; delete row.location;
     }
   }
   return { messages: [...messages.values()], conversations: [...conversations.values()],

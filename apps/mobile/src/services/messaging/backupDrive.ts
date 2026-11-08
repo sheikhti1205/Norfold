@@ -405,6 +405,7 @@ function portable(message: SnapshotMessage): Record<string, unknown> {
     messageType: message.messageType ?? null,
     ...mergeReadFacts(message),
     contextReportId: message.contextReportId ?? null,
+    replyToId: message.replyToId ?? null,
     location: message.location ?? null,
     serverEventId: message.serverEventId, serverSequence: message.serverSequence,
     unsentAt: message.unsentAt, createdAt: message.createdAt,
@@ -787,6 +788,7 @@ function mergeSnapshots(parts: readonly { manifest: BackupManifest; snapshot: Hi
         ...mergeReadFacts(prior, row),
         body: suppressed ? null : row.body,
         contextReportId: suppressed ? null : row.contextReportId,
+        replyToId: suppressed ? null : row.replyToId,
         location: suppressed ? null : row.location,
         unsentAt: prior.unsentAt ?? row.unsentAt,
       });

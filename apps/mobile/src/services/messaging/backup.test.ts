@@ -48,7 +48,7 @@ describe("portable history backup envelope", () => {
     const history = { exportSnapshot: async () => ({ ...legacy,
       messages: [{ ...legacy.messages[0]!, messageType: "MEDIA" as const }] }) } as MessagingHistory;
     const current = await createBackup(history, { accountId: ACCOUNT, deviceId: DEVICE }, 99);
-    expect(current.version).toBe(5);
+    expect(current.version).toBe(6);
     expect((await decodeBackup(encodeBackup(current))).snapshot.messages[0]?.messageType).toBe("MEDIA");
     const forged = { ...current, snapshot: { ...current.snapshot,
       messages: [{ ...current.snapshot.messages[0]!, messageType: "TEXT" as const }] } };
@@ -76,6 +76,26 @@ describe("portable history backup envelope", () => {
       .rejects.toMatchObject({ code: "backup: invalid snapshot" });
     const wrongLocation = { ...snapshot, messages: [{ ...snapshot.messages[1]!, messageType: "TEXT" as const, body: "x" }] };
     await expect(decodeBackup(await sealed(wrongLocation as HistorySnapshot, { version: 3 })))
+      .rejects.toMatchObject({ code: "backup: invalid snapshot" });
+  });
+
+  it("carries the v6 reply reference and still reads a v5 file without it", async () => {
+    const replyToId = "00000000-0000-4000-8000-00000000000e";
+    const snapshot: HistorySnapshot = { ...emptySnapshot(), messages: [{ id: MESSAGE, conversationId: CONVERSATION,
+      authorId: PEER, recipientId: ACCOUNT, body: "That one", messageType: "TEXT", contextReportId: null,
+      replyToId, location: null, serverEventId: EVENT, serverSequence: 1, unsentAt: null, createdAt: 0 }] };
+    const decoded = await decodeBackup(await sealed(snapshot as HistorySnapshot, { version: 6 }));
+    expect(decoded.snapshot.messages[0]?.replyToId).toBe(replyToId);
+    // A v5 file predates the key and must keep decoding to "no reply".
+    const { replyToId: _unused, ...legacy } = snapshot.messages[0]!;
+    const v5 = await decodeBackup(await sealed({ ...snapshot, messages: [legacy] } as HistorySnapshot, { version: 5 }));
+    expect(v5.snapshot.messages[0]?.replyToId).toBeUndefined();
+    // A v5 file that smuggles the newer key is a forgery, not a legacy file.
+    await expect(decodeBackup(await sealed(snapshot as HistorySnapshot, { version: 5 })))
+      .rejects.toMatchObject({ code: "backup: invalid snapshot" });
+    // The reply may never name its own message.
+    await expect(decodeBackup(await sealed({ ...snapshot,
+      messages: [{ ...snapshot.messages[0]!, replyToId: MESSAGE }] } as HistorySnapshot, { version: 6 })))
       .rejects.toMatchObject({ code: "backup: invalid snapshot" });
   });
 
@@ -131,7 +151,7 @@ describe("portable history backup envelope", () => {
       [null, "backup: not an object"],
       [{}, "backup: unsupported format"],
       [{ format: "other" }, "backup: unsupported format"],
-      [{ format: "findback.chat.backup", version: 6 }, "backup: unsupported version"],
+      [{ format: "findback.chat.backup", version: 7 }, "backup: unsupported version"],
       [{ format: "findback.chat.backup", version: 0 }, "backup: unsupported version"],
     ] as const) {
       await expect(decodeBackup(raw)).rejects.toMatchObject({ code });

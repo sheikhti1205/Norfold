@@ -4,13 +4,24 @@ import { uuid } from "./validation";
 export interface PeerHistoryScope { accountId: string; peerAccountId: string; conversationId: string; epoch: string }
 export interface HistoryCandidate { messageId: string; payloadIdentity: string }
 interface Payload { body: string; messageType: MessageType; contextReportId: string | null; location: StaticLocation | null }
-interface WireMessage extends Payload { messageId: string }
+/** The reply reference rides beside the payload: it is deliberately absent from
+ * `findback_chat_payload_identity`, so adding it here can never change an
+ * already-accepted message's identity. */
+interface WireMessage extends Payload { messageId: string; replyToId?: string | null }
 type Authority = (candidates: HistoryCandidate[]) => Promise<unknown>;
 const MAX_BYTES = 1_048_576;
 const unavailable = () => new Error("History could not sync");
 const exact = (v: unknown, keys: string[]): Record<string, unknown> => {
   if (!v || typeof v !== "object" || Array.isArray(v) || Object.keys(v).length !== keys.length
     || keys.some(k => !Object.hasOwn(v,k))) throw unavailable();
+  return v as Record<string, unknown>;
+};
+/** Same shape rule with an optional key: every present key must be allowed and
+ * every required key must be present. */
+const exactKeys = (v: unknown, allowed: string[]): Record<string, unknown> => {
+  if (!v || typeof v !== "object" || Array.isArray(v)) throw unavailable();
+  const keys=Object.keys(v);
+  if (keys.some(k => !allowed.includes(k)) || !allowed.slice(0,5).every(k => Object.hasOwn(v,k))) throw unavailable();
   return v as Record<string, unknown>;
 };
 function payload(input: unknown): Payload {
@@ -65,6 +76,7 @@ async function validate(scope: PeerHistoryScope, messages: WireMessage[], author
     seen.add(id);
     const {messageId:_id,...p}=offered.message;
     return {id,conversationId:scope.conversationId,authorId,recipientId,...p,
+      ...(offered.message.replyToId ? {replyToId:offered.message.replyToId} : {}),
       serverEventId:id,serverSequence:r.sequence,unsentAt:null,createdAt:r.sentAt};
   });
 }
@@ -93,7 +105,7 @@ export async function exportPeerHistory(scope: PeerHistoryScope, ports: { signal
     if (!row.server || row.server.eventId!==row.id || row.unsentAt!==undefined || row.conversationId!==scope.conversationId
       || !row.messageType || ![row.authorId,row.recipientId].includes(scope.accountId)) continue;
     const p=payload({body:row.body,messageType:row.messageType,contextReportId:row.contextReportId??null,location:row.location??null});
-    const entry={messageId:uuid(row.id),...p};
+    const entry={messageId:uuid(row.id),...p,...(row.replyToId ? {replyToId:row.replyToId} : {})};
     if (batch.length===64 || encodePage(scope,[...batch,entry]).byteLength>MAX_BYTES) await send();
     batch.push(entry);
     if (encodePage(scope,batch).byteLength>MAX_BYTES) throw unavailable();
@@ -112,10 +124,15 @@ export async function importPeerHistory(scope: PeerHistoryScope, bytes: ArrayBuf
     || v.messages.length>64) throw unavailable();
   const seen=new Set<string>();
   const messages=v.messages.map(m=>{
-    const e=exact(m,["messageId","body","messageType","contextReportId","location"]);
-    const messageId=uuid(e.messageId as string);
+    // `replyToId` is newer than the rest of the page: a device on the previous
+    // build omits it, and requiring the key would refuse an otherwise valid page.
+    const raw=exactKeys(m,["messageId","body","messageType","contextReportId","location","replyToId"]);
+    const reply=raw.replyToId===undefined||raw.replyToId===null?null:uuid(raw.replyToId as string);
+    const messageId=uuid(raw.messageId as string);
     if(seen.has(messageId))throw unavailable();seen.add(messageId);
-    return {messageId,...payload(e)};
+    const parsed=payload(raw);
+    if(reply!==null && reply===messageId) throw unavailable();
+    return {messageId,...parsed,...(reply===null?{}:{replyToId:reply})};
   });
   const accepted=await validate(scope,messages,ports.authority,ports.signal);
   if (!accepted.length) return 0;

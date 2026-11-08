@@ -1193,6 +1193,50 @@ function seedV5() {
   database.prepare("insert into outbox (message_id, status) values (?, 'QUEUED')").run(MESSAGE);
 }
 
+describe("chat replies", () => {
+  it("stores the message a row answers and reopens it", async () => {
+    const history = await open();
+    await history.enqueueOutgoing(outgoing);
+    const answer = { ...outgoing, id: MESSAGE_2, body: "That one", replyToId: MESSAGE };
+    await history.enqueueOutgoing(answer);
+    expect(await history.getMessage(MESSAGE_2)).toMatchObject({ body: "That one", replyToId: MESSAGE });
+    expect((await history.getMessage(MESSAGE))?.replyToId).toBeUndefined();
+    await history.close();
+    database = new DatabaseSync(path);
+    const reopened = await open();
+    expect((await reopened.getMessage(MESSAGE_2))?.replyToId).toBe(MESSAGE);
+    await reopened.close();
+  });
+
+  it("refuses a message that answers itself", async () => {
+    const history = await open();
+    await expect(history.enqueueOutgoing({ ...outgoing, replyToId: MESSAGE })).rejects.toThrow(/reply/i);
+    expect(await history.listOutbox()).toEqual([]);
+    await history.close();
+  });
+
+  it("adds the reply column to a v11 file without touching stored rows", async () => {
+    const first = await open();
+    await first.enqueueOutgoing(outgoing);
+    await first.close();
+    database = new DatabaseSync(path);
+    // A v11 file predates the column; dropping it recreates exactly what the
+    // voice build wrote, so opening this is a real forward migration.
+    database.exec("alter table messages drop column reply_to_id");
+    database.exec("update messaging_meta set value='11' where key='schema_version'");
+    expect(database.prepare("pragma table_info(messages)").all().map((column) => column.name))
+      .not.toContain("reply_to_id");
+    const migrated = await open();
+    expect(database.prepare("select value from messaging_meta where key='schema_version'").get())
+      .toEqual({ value: String(MESSAGING_SQLITE_SCHEMA_VERSION) });
+    expect(database.prepare("pragma table_info(messages)").all().map((column) => column.name))
+      .toContain("reply_to_id");
+    expect(await migrated.getMessage(MESSAGE)).toMatchObject({ body: "Hello there" });
+    expect((await migrated.getMessage(MESSAGE))?.replyToId).toBeUndefined();
+    await migrated.close();
+  });
+});
+
 describe("chat media schema and migration", () => {
   function seedV6() {
     seedV5();
@@ -1242,8 +1286,9 @@ describe("chat media schema and migration", () => {
     const outbox = database.prepare("select * from outbox").all();
     const media = database.prepare("select * from media_attachments").all();
     const history = await open();
-    // The v9 rebuild adds the bounded payload columns as NULL for existing rows.
-    const payload = { context_report_id: null, location_lat: null, location_lng: null, location_accuracy_m: null };
+    // The v9 rebuild adds the bounded payload columns as NULL for existing rows,
+    // and the v12 upgrade adds the reply column the same way.
+    const payload = { context_report_id: null, reply_to_id: null, location_lat: null, location_lng: null, location_accuracy_m: null };
     expect(database.prepare("select * from messages order by id").all()).toEqual([
       { ...before[0], message_type: null, ...payload }, { ...before[1], message_type: "MEDIA", ...payload },
     ]);
