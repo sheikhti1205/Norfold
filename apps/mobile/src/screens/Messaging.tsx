@@ -370,13 +370,14 @@ function ChatQuotePhoto({ accountId, attachment }: { accountId: string; attachme
  * Photos from one send share a bubble. Two sit side by side, three put the
  * first beside a stacked pair, and four or more use a 2x2 with the remainder
  * counted on the last cell. Each cell is the canonical ChatPhoto, so loading,
- * retry, download and the shared viewer keep one implementation; a hidden
- * follower still opens the viewer at its own photo.
+ * retry, download and the shared viewer keep one implementation; the tapped
+ * cell names its whole run, so the viewer counter matches the grid even when
+ * the last cell hides most of the photos.
  */
 function ChatPhotoGroup({ accountId, conversationId, items, media, onOpen, onReady }: {
   accountId: string; conversationId: string; items: StoredHumanMessage[];
   media: MediaAttachment[];
-  onOpen: (id: string, bytes: ArrayBuffer, mime: string) => void;
+  onOpen: (id: string, bytes: ArrayBuffer, mime: string, group: string[]) => void;
   onReady: (id: string, content: { bytes: ArrayBuffer; mime: string } | null) => void;
 }) {
   const visible = items.slice(0, 4);
@@ -388,7 +389,8 @@ function ChatPhotoGroup({ accountId, conversationId, items, media, onOpen, onRea
       return <div key={message.id} className="fb-chat-photo-cell">
         {attachment
           ? <ChatPhoto accountId={accountId} conversationId={conversationId} attachment={attachment}
-              onOpen={onOpen} onReady={onReady} grouped label={`View photo ${index + 1} of ${items.length}`} />
+              onOpen={(id, bytes, mime) => onOpen(id, bytes, mime, items.map((entry) => entry.id))}
+              onReady={onReady} grouped label={`View photo ${index + 1} of ${items.length}`} />
           : <span className="fb-chat-photo-missing" role="status">{missingAttachmentCopy(message)}</span>}
         {hidden > 0 && index === visible.length - 1 && <span className="fb-chat-photo-more" aria-hidden="true">{`+${hidden}`}</span>}
       </div>;
@@ -965,18 +967,38 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     haptic("commit");
     composer.current?.focus();
   }
-  function openPhoto(id: string, bytes: ArrayBuffer, mime: string) {
+  async function openPhoto(id: string, bytes: ArrayBuffer, mime: string, group?: string[]) {
     if (!photoAllowed) return;
     setDraftViewer(null);
-    const items = messages.filter((message) => message.unsentAt === undefined && message.messageType === "MEDIA").flatMap((message) => {
-      const attachment = media.find((item) => item.messageId === message.id);
-      const content = attachment ? readyPhotos.current.get(attachment.id) : undefined;
-      const available = content ?? (message.id === id ? { bytes, mime } : undefined);
-      if (!attachment || !available) return [];
+    // A group cell opens its own send, not "whichever cells happened to be
+    // mounted": the 4+ grid draws four cells, so the rest are read here and
+    // the viewer counter matches the bubble. A single photo keeps paging
+    // through the conversation photos this device already has.
+    const scope = group ?? messages.filter((message) => message.unsentAt === undefined && message.messageType === "MEDIA")
+      .map((message) => message.id);
+    const items: MediaViewerItem[] = [];
+    for (const messageId of scope) {
+      const message = messages.find((entry) => entry.id === messageId);
+      if (!message || message.unsentAt !== undefined) continue;
+      const attachment = media.find((entry) => entry.messageId === messageId);
+      if (!attachment) continue;
+      let available = readyPhotos.current.get(attachment.id);
+      if (!available && messageId === id) available = { bytes, mime };
+      // Only a group reads its hidden members on demand; a single photo keeps
+      // the cheap behaviour of paging through bytes this screen already holds.
+      if (!available && group && attachment.state !== "EVICTED") {
+        const stored = await readMessagingMedia(accountId, attachment.id).catch(() => null);
+        if (stored) {
+          const copy = stored.slice(0);
+          available = { bytes: copy, mime: attachment.mime };
+          readyPhotos.current.set(attachment.id, available);
+        }
+      }
+      if (!available) continue;
       const src = URL.createObjectURL(new Blob([available.bytes.slice(0)], { type: available.mime }));
       viewerUrls.current.add(src);
-      return [{ id: message.id, src, width: attachment.width, height: attachment.height, alt: "Conversation photo" }];
-    });
+      items.push({ id: messageId, src, width: attachment.width, height: attachment.height, alt: "Conversation photo" });
+    }
     setViewer({ id, items });
   }
   function closePhoto() {
