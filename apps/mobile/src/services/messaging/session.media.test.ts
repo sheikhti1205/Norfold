@@ -424,6 +424,27 @@ describe.each(["sqlite", "web"] as const)("%s canonical media session", (backend
     expect(acks).toEqual([fixture.metadata.id]);
   });
 
+  it("keeps media discovery pending while an offered attachment is parked", async () => {
+    const history = await open(), client = session(history);
+    const value = { ...message(1), authorId: B, recipientId: A, messageType: "MEDIA" as const };
+    const fixture = await mediaFixture(id(201), value.id, { direction: "IN", expiresAt: Date.now() + 60_000 });
+    remote.set(fixture.metadata.id, fixture);
+    mailbox = [envelope(value, 1)];
+    await client.sync();
+    expect(client.needsMediaDiscovery()).toBe(true);
+    downloadStatus = 404;
+    await expect(client.syncMedia()).rejects.toThrow();
+    // The retry is parked by cooldown: this sweep did not discover the offered
+    // attachment, so the fast path must still be able to escalate later.
+    await expect(client.syncMedia()).resolves.toBeUndefined();
+    expect(client.needsMediaDiscovery()).toBe(true);
+    client.clearMediaRetry();
+    downloadStatus = null;
+    await client.syncMedia();
+    expect(client.needsMediaDiscovery()).toBe(false);
+    expect(acks).toEqual([fixture.metadata.id]);
+  });
+
   it("continues the delivery page after corrupt bytes without ACKing the invalid object", async () => {
     const history = await open(), client = session(history);
     const invalid = await incoming(history, 1); await incoming(history, 2);
