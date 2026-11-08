@@ -18,6 +18,17 @@ track real evolution and do not imply a stable release. The per-commit mapping i
   participants' devices. A compact strip below the chat header jumps to a
   pinned message, Pin/Unpin lives in the existing long-press menu, and an
   unsent message is removed from the pins by the server.
+- An unsent message keeps one hidden local copy for 24 hours so it can still
+  be reported to staff; it is never rendered, synced or included in backups,
+  keeps the body or caption rather than photo/voice bytes, and is deleted when
+  the window ends. A reported copy is purged once the server confirms.
+- Reporting a person sends the five most recent messages by default, whether
+  text, photo, voice or location, and the reporter can select fewer or up to
+  twenty. Staff see only the selected excerpts, labelled as not the whole chat;
+  the copy is built server-side from the message rows.
+- The sender's composition time travels with a send, so both participants
+  group the same photo batch and show its clock identically instead of
+  measuring upload latency.
 - Google sign-in no longer dead-ends when Credential Manager has no usable
   credential: the same Supabase Google provider completes in the system
   browser and returns through the verified `/auth/callback` App Link.
