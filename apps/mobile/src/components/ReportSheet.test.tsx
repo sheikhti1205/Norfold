@@ -34,6 +34,15 @@ function renderSheet(targetType: "POST" | "COMMENT" | "USER" = "POST") {
   );
 }
 
+function personMessages(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `message-${index}`,
+    messageType: index === 1 ? ("MEDIA" as const) : ("TEXT" as const),
+    body: index === 1 ? "" : `message ${index}`,
+    createdAt: 1_760_000_000_000 + index,
+  }));
+}
+
 describe("the one report sheet", () => {
   it.each(["target", "reopen", "account"])("ignores an old submission after a %s change", async (change) => {
     let resolve!: (value: { reportId: string }) => void;
@@ -97,6 +106,72 @@ describe("the one report sheet", () => {
       reason: "HARASSMENT",
       detail: "They kept messaging me.",
     }, expect.any(AbortSignal));
+  });
+
+  it("sends the five most recent messages by default, whatever their kind", async () => {
+    const messages = personMessages(7);
+    render(
+      <ReportSheet
+        open
+        onClose={() => {}}
+        target={{ targetType: "USER", targetId: "target-1", conversationId: "chat-1", evidence: messages }}
+      />,
+    );
+    expect(screen.getByRole("status").textContent).toContain("5 of 20 selected");
+    fireEvent.click(screen.getByRole("radio", { name: /harassment/i }));
+    fireEvent.click(screen.getByRole("button", { name: /send report/i }));
+
+    await waitFor(() => expect(mockSubmitReport).toHaveBeenCalledTimes(1));
+    expect(mockSubmitReport).toHaveBeenCalledWith({
+      targetType: "USER",
+      targetId: "target-1",
+      conversationId: "chat-1",
+      reason: "HARASSMENT",
+      detail: null,
+      evidence: messages.slice(0, 5).map(({ id, body }) => ({ id, body })),
+    }, expect.any(AbortSignal));
+  });
+
+  it("lets the reporter remove every message and report the profile alone", async () => {
+    render(
+      <ReportSheet
+        open
+        onClose={() => {}}
+        target={{ targetType: "USER", targetId: "target-1", evidence: personMessages(2) }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^clear$/i }));
+    fireEvent.click(screen.getByRole("radio", { name: /harassment/i }));
+    fireEvent.click(screen.getByRole("button", { name: /send report/i }));
+
+    await waitFor(() => expect(mockSubmitReport).toHaveBeenCalledTimes(1));
+    expect(mockSubmitReport).toHaveBeenCalledWith(expect.objectContaining({
+      targetType: "USER", evidence: [],
+    }), expect.any(AbortSignal));
+  });
+
+  it("selects at most twenty and says so", () => {
+    render(
+      <ReportSheet
+        open
+        onClose={() => {}}
+        target={{ targetType: "USER", targetId: "target-1", evidence: personMessages(25) }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /select all/i }));
+    expect(screen.getByRole("status").textContent).toContain("20 of 20 selected");
+    expect(document.body.textContent).toContain("up to 20 messages");
+  });
+
+  it("says plainly when there is no message to send", () => {
+    render(
+      <ReportSheet
+        open
+        onClose={() => {}}
+        target={{ targetType: "USER", targetId: "target-1", evidence: [] }}
+      />,
+    );
+    expect(document.body.textContent).toContain("You can still report this person");
   });
 
   it("shows an honest receipt only after the server confirmed the report", async () => {

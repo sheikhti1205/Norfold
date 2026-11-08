@@ -7,13 +7,16 @@ import { TextAreaField } from "./Fields";
 import { PreferenceRadioRow } from "./settings";
 import { announce } from "./LiveRegion";
 import { friendlyError } from "../utils/friendlyErrors";
+import { PersonReportEvidence, PERSON_EVIDENCE_MAX, type PersonEvidenceMessage } from "./PersonReportEvidence";
 import {
   REPORT_REASONS,
   submitReport,
   type ReportReason,
   type ReportTargetType,
+  type SubmitReportInput,
 } from "../services/moderation";
 import {
+  PERSON_EVIDENCE_COPY,
   REPORT_REASON_HINTS,
   REPORT_REASON_LABELS,
   REPORT_TARGET_SUBJECTS,
@@ -21,9 +24,16 @@ import {
 } from "../utils/safetyCopy";
 import { isMissingServerFunction } from "../utils/safetyService";
 
-/** What is being reported. One shape for all three kinds. */
+/**
+ * What is being reported. One shape for all four kinds.
+ *
+ * A USER report may carry the messages the reporter chose. Without `evidence`
+ * it stays the profile-only report it always was; with it (even an empty list)
+ * it becomes one person report validated against the conversation.
+ */
 export type ReportTarget = { targetId: string } & (
-  | { targetType: Exclude<ReportTargetType, "MESSAGE"> }
+  | { targetType: Exclude<ReportTargetType, "MESSAGE" | "USER"> }
+  | { targetType: "USER"; conversationId?: string | null; evidence?: PersonEvidenceMessage[] }
   | { targetType: "MESSAGE"; accountId: string; body: string }
 );
 
@@ -69,7 +79,10 @@ export function ReportSheet({ open, onClose, target, onReported }: ReportSheetPr
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [evidenceSelection, setEvidenceSelection] = useState<ReadonlySet<string>>(() => new Set());
   const groupName = useId();
+
+  const evidence = target?.targetType === "USER" ? target.evidence : undefined;
 
   // Invalidate requests at the committed account/target/open boundary, before
   // paint. Keep the canonical sheet mounted so its exit motion is preserved.
@@ -83,9 +96,12 @@ export function ReportSheet({ open, onClose, target, onReported }: ReportSheetPr
       setError(null);
       setSent(false);
       setSending(false);
+      // The owner's default: the five most recent messages, whatever their
+      // kind. The reporter may change the selection before sending.
+      setEvidenceSelection(new Set((evidence ?? []).slice(0, 5).map((message) => message.id)));
     }
     return () => { controller.abort(); generation.current += 1; };
-  }, [open, target?.targetType, target?.targetId, user?.id]);
+  }, [open, target?.targetType, target?.targetId, user?.id, evidence]);
 
   if (!target) return null;
 
@@ -103,11 +119,32 @@ export function ReportSheet({ open, onClose, target, onReported }: ReportSheetPr
     setSending(true);
     setError(null);
     try {
-      const { reportId } = await submitReport({
-        ...target,
+      const selection = evidence === undefined ? undefined : evidence.filter((message) => evidenceSelection.has(message.id));
+      if (selection !== undefined && selection.length > PERSON_EVIDENCE_MAX) {
+        setError(PERSON_EVIDENCE_COPY.cap);
+        announce(PERSON_EVIDENCE_COPY.cap);
+        setSending(false);
+        return;
+      }
+      const common = {
+        targetId: target.targetId,
         reason,
         detail: detail.trim() === "" ? null : detail.trim(),
-      }, requestScope.current?.signal);
+      };
+      const input: SubmitReportInput =
+        target.targetType === "MESSAGE"
+          ? { ...common, targetType: "MESSAGE", accountId: target.accountId, body: target.body }
+          : target.targetType === "USER" && selection !== undefined
+            ? {
+                ...common,
+                targetType: "USER",
+                conversationId: target.conversationId ?? null,
+                evidence: selection.map((message) => ({ id: message.id, body: message.body })),
+              }
+            : target.targetType === "USER"
+              ? { ...common, targetType: "USER" }
+              : { ...common, targetType: target.targetType };
+      const { reportId } = await submitReport(input, requestScope.current?.signal);
       if (!isCurrent()) return;
       setSent(true);
       announce("Report sent.");
@@ -171,6 +208,15 @@ export function ReportSheet({ open, onClose, target, onReported }: ReportSheetPr
             maxLength={DETAIL_MAX}
             onChange={(event) => setDetail(event.target.value)}
           />
+
+          {evidence !== undefined ? (
+            <PersonReportEvidence
+              messages={evidence}
+              selected={evidenceSelection}
+              onChange={setEvidenceSelection}
+              disabled={sending}
+            />
+          ) : null}
 
           {error ? (
             <p role="alert" data-testid="report-error" className="text-sm text-error">

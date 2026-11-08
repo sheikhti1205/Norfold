@@ -24,9 +24,11 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { rpcMock } = vi.hoisted(() => ({ rpcMock: vi.fn() }));
+const { rpcMock, sessionMock } = vi.hoisted(() => ({ rpcMock: vi.fn(), sessionMock: vi.fn() }));
 
-vi.mock("./supabaseClient", () => ({ getSupabase: () => ({ rpc: rpcMock }) }));
+vi.mock("./supabaseClient", () => ({
+  getSupabase: () => ({ rpc: rpcMock, auth: { getSession: sessionMock } }),
+}));
 
 import {
   ACTION_CAPABILITIES,
@@ -40,6 +42,7 @@ import {
   SANCTION_KINDS,
   applyModeration,
   fetchModerationQueue,
+  fetchModerationQueueCount,
   fetchModerationTarget,
   fetchMyPostModeration,
   listMyModerationOutcomes,
@@ -65,6 +68,10 @@ const CHAT_REPORT_MIGRATION = resolve(
 const VISIBILITY_MIGRATION = resolve(
   REPO_ROOT,
   "supabase/migrations/20261017070000_visibility_kernel_and_blocks.sql",
+);
+const PERSON_REPORT_MIGRATION = resolve(
+  REPO_ROOT,
+  "supabase/migrations/20261109010000_norfold_person_reports.sql",
 );
 const SERVICE_SOURCE = resolve(REPO_ROOT, "apps/mobile/src/services/moderation.ts");
 
@@ -92,6 +99,8 @@ function caseMap(sql: string, marker: string): Record<string, string> {
 beforeEach(() => {
   rpcMock.mockReset();
   rpcMock.mockResolvedValue({ data: null, error: null });
+  sessionMock.mockReset();
+  sessionMock.mockResolvedValue({ data: { session: { user: { id: "u1" } } }, error: null });
 });
 
 describe("the client vocabulary is the server vocabulary", () => {
@@ -151,17 +160,19 @@ describe("the client vocabulary is the server vocabulary", () => {
     }
   });
 
-  it("calls only RPCs the migration defines, and never reads a table", () => {
-    const sql = migration();
+  it("calls only RPCs the migrations define, and never reads a table", () => {
+    const sql = `${migration()}\n${readFileSync(PERSON_REPORT_MIGRATION, "utf8")}`;
     for (const rpc of [
       "findback_submit_report",
       "findback_my_reports",
       "findback_moderation_queue",
+      "findback_moderation_queue_count",
       "findback_moderation_target",
       "findback_apply_moderation",
       "findback_my_moderation_outcomes",
       "findback_my_post_moderation",
       "findback_submit_appeal",
+      "findback_submit_person_report",
     ]) {
       expect(sql).toContain(`function public.${rpc}(`);
     }
@@ -229,6 +240,87 @@ describe("filing a report", () => {
       submitReport({ targetType: "POST", targetId: "p1", reason: "OTHER", detail: "x".repeat(2001) }),
     ).rejects.toMatchObject({ status: 400, code: "DETAIL_TOO_LONG" });
     expect(rpcMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("reporting a person with message evidence", () => {
+  it("sends the selected ids and their exact bodies in one person report", async () => {
+    rpcMock.mockResolvedValue({ data: "person-report-1", error: null });
+
+    const result = await submitReport({
+      targetType: "USER",
+      targetId: " peer-1 ",
+      conversationId: " chat-1 ",
+      reason: "HARASSMENT",
+      detail: "  repeated messages  ",
+      evidence: [
+        { id: "m2", body: "second" },
+        { id: "m1", body: "" },
+      ],
+    });
+
+    expect(result).toEqual({ reportId: "person-report-1" });
+    expect(sessionMock).toHaveBeenCalledTimes(1);
+    expect(rpcMock).toHaveBeenCalledWith("findback_submit_person_report", {
+      p_account_id: "u1",
+      p_peer_id: "peer-1",
+      p_conversation_id: "chat-1",
+      p_reason: "HARASSMENT",
+      p_detail: "repeated messages",
+      p_message_ids: ["m2", "m1"],
+      p_bodies: ["second", ""],
+    });
+  });
+
+  it("allows a profile-only person report with no messages", async () => {
+    rpcMock.mockResolvedValue({ data: "person-report-2", error: null });
+
+    await submitReport({
+      targetType: "USER",
+      targetId: "peer-1",
+      reason: "OTHER",
+      evidence: [],
+    });
+
+    expect(rpcMock).toHaveBeenCalledWith("findback_submit_person_report", {
+      p_account_id: "u1",
+      p_peer_id: "peer-1",
+      p_conversation_id: null,
+      p_reason: "OTHER",
+      p_detail: null,
+      p_message_ids: [],
+      p_bodies: [],
+    });
+  });
+
+  it("refuses more than 20, a duplicate id, or an empty id without calling the server", async () => {
+    await expect(submitReport({
+      targetType: "USER", targetId: "peer-1", reason: "OTHER",
+      evidence: Array.from({ length: 21 }, (_, index) => ({ id: `m${index}`, body: "x" })),
+    })).rejects.toMatchObject({ status: 400, code: "EVIDENCE_TOO_LARGE" });
+    await expect(submitReport({
+      targetType: "USER", targetId: "peer-1", reason: "OTHER",
+      evidence: [{ id: "m1", body: "x" }, { id: "m1", body: "x" }],
+    })).rejects.toMatchObject({ status: 400, code: "EVIDENCE_MALFORMED" });
+    await expect(submitReport({
+      targetType: "USER", targetId: "peer-1", reason: "OTHER",
+      evidence: [{ id: "   ", body: "x" }],
+    })).rejects.toMatchObject({ status: 400, code: "EVIDENCE_MALFORMED" });
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the generic profile report when no evidence list is supplied", async () => {
+    rpcMock.mockResolvedValue({ data: "report-3", error: null });
+
+    await submitReport({ targetType: "USER", targetId: "peer-1", reason: "OTHER" });
+
+    expect(rpcMock).toHaveBeenCalledWith("findback_submit_report", {
+      p_target_type: "USER",
+      p_target_id: "peer-1",
+      p_reason: "OTHER",
+      p_detail: null,
+    });
+    expect(sessionMock).not.toHaveBeenCalled();
   });
 });
 
@@ -365,6 +457,27 @@ describe("the moderator queue", () => {
   });
 });
 
+describe("the staff queue count", () => {
+  it("asks the grouped-count reader and returns a whole number", async () => {
+    rpcMock.mockResolvedValue({ data: "3", error: null });
+
+    await expect(fetchModerationQueueCount()).resolves.toBe(3);
+    expect(rpcMock).toHaveBeenCalledWith("findback_moderation_queue_count", {});
+  });
+
+  it("refuses a count the client cannot trust", async () => {
+    rpcMock.mockResolvedValue({ data: -1, error: null });
+    await expect(fetchModerationQueueCount()).rejects.toMatchObject({ code: "UNEXPECTED_SHAPE" });
+    rpcMock.mockResolvedValue({ data: "many", error: null });
+    await expect(fetchModerationQueueCount()).rejects.toMatchObject({ code: "UNEXPECTED_SHAPE" });
+  });
+
+  it("keeps the server's permission refusal", async () => {
+    rpcMock.mockResolvedValue({ data: null, error: { code: "42501", message: "You may not read the moderation queue" } });
+    await expect(fetchModerationQueueCount()).rejects.toMatchObject({ status: 403 });
+  });
+});
+
 describe("the case detail", () => {
   it("returns the live target, its reports and its decisions", async () => {
     rpcMock.mockResolvedValue({
@@ -435,6 +548,7 @@ describe("the case detail", () => {
           createdAt: "2026-10-22T10:00:00.000Z",
           reviewedAt: "2026-10-22T11:00:00.000Z",
           evidence: { target_type: "POST", title: "Hide me" },
+          media: [],
         },
       ],
       decisions: [{ action: "HIDE", reason: "HARASSMENT", createdAt: "2026-10-22T11:00:00.000Z" }],
@@ -457,6 +571,33 @@ describe("the case detail", () => {
     const target = await fetchModerationTarget("POST", "p9");
 
     expect(target).toMatchObject({ targetExists: false, target: null, reports: [], decisions: [] });
+  });
+
+  it("carries captured media metadata and drops a row it cannot label", async () => {
+    rpcMock.mockResolvedValue({
+      data: {
+        target_type: "USER", target_id: "u1", target_exists: true, target: null,
+        reports: [{
+          id: "r1", reason: "HARASSMENT", status: "OPEN", created_at: "2026-10-22T10:00:00.000Z",
+          evidence: { target_type: "USER", messages: [] },
+          media: [
+            { evidence_id: "e1", message_id: "m1", mime: "audio/webm", bytes: 1000,
+              width: 1, height: 1, duration_ms: 4200, state: "ATTACHED", expires_at: "2027-01-01T00:00:00.000Z" },
+            { evidence_id: "e2", mime: "image/jpeg" },
+          ],
+        }],
+        outcomes: [],
+      },
+      error: null,
+    });
+
+    const target = await fetchModerationTarget("USER", "u1");
+
+    expect(target.reports[0]?.media).toEqual([{
+      evidenceId: "e1", messageId: "m1", mime: "audio/webm", bytes: 1000,
+      width: 1, height: 1, durationMs: 4200, state: "ATTACHED",
+      expiresAt: "2027-01-01T00:00:00.000Z",
+    }]);
   });
 
   it("refuses an unknown target type without calling the server", async () => {
