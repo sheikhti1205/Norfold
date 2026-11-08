@@ -148,7 +148,7 @@ describe("PostDetail redesign (UXN-3)", () => {
   it("uses shared identity before content, inline description before media, and Save in overflow", async () => {
     renderDetail();
     const summary = await screen.findByRole("region", { name: "Report summary" });
-    const identity = within(summary).getByRole("link", { name: "Open Owner's profile" });
+    const identity = within(summary).getByRole("link", { name: "Open owner's profile" });
     const title = within(summary).getByRole("heading", { level: 1, name: "Lost wallet" });
     expect(identity.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const description = screen.getByTestId("post-description");

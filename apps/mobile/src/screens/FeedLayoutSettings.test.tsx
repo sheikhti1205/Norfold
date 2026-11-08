@@ -10,7 +10,14 @@
  * the reader guessing which layout they are looking at.
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// SettingsPage renders the shared TopUtilities, whose unread-badge owner is
+// auth-scoped. This suite exercises feed-layout preference, not sign-in.
+vi.mock("../auth", () => ({
+  useAuth: () => ({ user: { id: "test-reader" }, booting: false, bootError: null }),
+}));
+
 import { MemoryRouter } from "react-router";
 import { feedLayoutSummary, FeedLayoutSettings } from "./FeedLayoutSettings";
 import { FEED_LAYOUT_STORAGE_KEY } from "../services/feedLayoutPreference";

@@ -39,7 +39,7 @@ vi.mock("../appearance", async (importOriginal) => {
     }),
   };
 });
-vi.mock("@capacitor/core", () => ({ Capacitor: { isNativePlatform: () => false }, registerPlugin: () => ({}) }));
+vi.mock("@capacitor/core", () => ({ Capacitor: { isNativePlatform: () => false, getPlatform: () => "web" }, registerPlugin: () => ({}) }));
 vi.mock("@capacitor/app", () => ({
   App: { getLaunchUrl: async () => undefined, addListener: () => Promise.resolve({ remove: () => {} }) },
 }));

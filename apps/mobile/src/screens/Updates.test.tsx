@@ -3,6 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { Updates } from "./Updates";
+
+// SettingsPage renders the shared TopUtilities, whose unread-badge owner is
+// auth-scoped. This suite exercises update state, not sign-in state.
+vi.mock("../auth", () => ({
+  useAuth: () => ({ user: { id: "test-reader" }, booting: false, bootError: null }),
+}));
+
 import type { UpdateSnapshot } from "../services/updates/controller";
 import type { AndroidRelease } from "../services/updates/types";
 
@@ -17,7 +24,10 @@ const runtime = vi.hoisted(() => ({
 }));
 
 vi.mock("@capacitor/core", () => ({
-  Capacitor: { isNativePlatform: () => runtime.native },
+  Capacitor: {
+    isNativePlatform: () => runtime.native,
+    getPlatform: () => (runtime.native ? "android" : "web"),
+  },
 }));
 
 vi.mock("../services/updates/runtime", () => ({

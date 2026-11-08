@@ -3,6 +3,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// SettingsPage renders the shared TopUtilities, whose unread-badge owner is
+// auth-scoped. This suite exercises diagnostics, not sign-in state.
+vi.mock("../auth", () => ({
+  useAuth: () => ({ user: { id: "test-reader" }, booting: false, bootError: null }),
+}));
+
 const bridge = vi.hoisted(() => ({ getBuildInfo: vi.fn() }));
 vi.mock("../services/buildInfo", () => ({ readBuildInfo: bridge.getBuildInfo }));
 

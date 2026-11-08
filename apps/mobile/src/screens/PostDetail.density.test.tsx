@@ -251,19 +251,20 @@ describe("PostDetail density (owner wave)", () => {
     expect(row?.className ?? "").not.toContain("p-3");
   });
 
-  it("opens comment identity in a quick card and keeps overflow in its local header", async () => {
+  it("makes comment identity one direct profile link and keeps overflow in its local header", async () => {
     renderDetail();
     const row = (await screen.findByText("first comment")).closest("li")!;
-    const identity = within(row).getByRole("button", { name: "About neighbour" });
+    const identity = within(row).getByRole("link", { name: "Open neighbour's profile" });
     const header = identity.closest("header")!;
     expect(header).not.toBeNull();
     expect(within(header).getByRole("button", { name: "Actions for comment by neighbour" })).toBeTruthy();
     const time = header.querySelector("time")!;
     expect(time.getAttribute("dateTime")).toBe(comment.createdAt);
     expect(time.getAttribute("title")).toBeTruthy();
-    fireEvent.click(identity);
-    const card = await screen.findByRole("dialog", { name: "About neighbour" });
-    expect(within(card).getByRole("link", { name: "View profile" }).getAttribute("href")).toBe("/u/neighbour");
+    // A person is a destination, not a popover: the identity link carries the
+    // canonical profile route and no intermediate card opens.
+    expect(identity.getAttribute("href")).toBe("/u/neighbour");
+    expect(screen.queryByRole("dialog", { name: "About neighbour" })).toBeNull();
   });
 
   it("keeps Like immediately beside Reply instead of pushing it to the far edge", async () => {

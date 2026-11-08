@@ -1,7 +1,14 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+// SettingsPage renders the shared TopUtilities, whose unread-badge owner is
+// auth-scoped. This suite exercises help content, not sign-in state.
+vi.mock("../auth", () => ({
+  useAuth: () => ({ user: { id: "test-reader" }, booting: false, bootError: null }),
+}));
+
 import { HelpGuide } from "./HelpGuide";
 
 function LocationProbe() {
@@ -76,7 +83,10 @@ describe("HelpGuide", () => {
     fireEvent.change(screen.getByRole("searchbox", { name: /search help topics/i }), {
       target: { value: "notif" },
     });
-    expect(screen.getByRole("link", { name: /notifications/i })).toBeTruthy();
-    expect(screen.queryByRole("link", { name: /replay introduction/i })).toBeNull();
+    // Scope to the local results list: the shared chrome also carries a
+    // "Notifications" utility link.
+    const results = screen.getByRole("list", { name: /settings search results/i });
+    expect(within(results).getByRole("link", { name: "Notifications" })).toBeTruthy();
+    expect(within(results).queryByRole("link", { name: /replay introduction/i })).toBeNull();
   });
 });
