@@ -19,6 +19,9 @@
  *   - `close()` invalidates the handle synchronously, so a queued or
  *     old-account continuation cannot reach native storage or ACK after
  *     sign-out, and native close is dispatched once,
+ *   - `open()` carries an opaque per-JavaScript-document identity. A WebView
+ *     document reload destroys the handle token holder, so the native plugin
+ *     reclaims that unreachable lease before opening the next database,
  *   - there is no IndexedDB, memory or other fallback on this path.
  *
  * Privacy: SQL text and bound parameters are never logged. Parameters carry
@@ -40,6 +43,8 @@ export type MessagingSqliteFailure =
   | "invalid-command"
   | "invalid-result"
   | "open-failed"
+  | "already-open"
+  | "stale-close"
   | "command-failed"
   | "handle-closed";
 
@@ -51,6 +56,8 @@ const FAILURE_MESSAGE: Record<MessagingSqliteFailure, string> = {
   "invalid-command": "Messaging storage rejected an invalid request.",
   "invalid-result": "Messaging storage returned an unusable response.",
   "open-failed": "Messaging storage could not be opened.",
+  "already-open": "Messaging storage is already open for this account.",
+  "stale-close": "Messaging storage could not be released safely.",
   "command-failed": "Messaging storage could not complete the request.",
   "handle-closed": "Messaging storage closed.",
 };
@@ -62,9 +69,22 @@ const FAILURE_CODE: Record<MessagingSqliteFailure, string> = {
   "invalid-command": "MESSAGING_SQLITE_INVALID_COMMAND",
   "invalid-result": "MESSAGING_SQLITE_INVALID_RESULT",
   "open-failed": "MESSAGING_SQLITE_OPEN_FAILED",
+  "already-open": "MESSAGING_STORAGE_ALREADY_OPEN",
+  "stale-close": "MESSAGING_STORAGE_STALE_CLOSE",
   "command-failed": "MESSAGING_SQLITE_COMMAND_FAILED",
   "handle-closed": "MESSAGING_SQLITE_CLOSED",
 };
+
+/**
+ * Native open failures keep their own identity so the transport never flattens
+ * a lease conflict into a generic open failure. Unknown codes stay `open-failed`.
+ */
+function openFailure(error: unknown): MessagingSqliteError {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  if (code === FAILURE_CODE["already-open"]) return new MessagingSqliteError("already-open");
+  if (code === FAILURE_CODE["stale-close"]) return new MessagingSqliteError("stale-close");
+  return error instanceof MessagingSqliteError ? error : new MessagingSqliteError("open-failed");
+}
 
 export class MessagingSqliteError extends Error {
   readonly kind: MessagingSqliteFailure;
@@ -79,13 +99,30 @@ export class MessagingSqliteError extends Error {
 }
 
 interface NativeMessagingSqlite {
-  open(options: { accountId: string }): Promise<unknown>;
+  open(options: { accountId: string; documentId: string }): Promise<unknown>;
   exec(options: { handle: string; sql: string }): Promise<unknown>;
   all(options: { handle: string; sql: string; params: SqliteValue[] }): Promise<unknown>;
   run(options: { handle: string; sql: string; params: SqliteValue[] }): Promise<unknown>;
   close(options: { handle: string }): Promise<unknown>;
   installationId(): Promise<unknown>;
 }
+
+/**
+ * Identity for this JavaScript document, generated once when this module is
+ * evaluated. The native plugin owns an opaque handle token, so a WebView
+ * document reload destroys the only way to close the previous database lease.
+ * A fresh identity lets the plugin reclaim that unreachable lease before it
+ * opens the next one; ordinary route changes keep the same identity and keep
+ * the original single-owner rejection.
+ */
+const DOCUMENT_ID = (() => {
+  const cryptoApi = globalThis.crypto;
+  if (typeof cryptoApi?.randomUUID === "function") return cryptoApi.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (typeof cryptoApi?.getRandomValues === "function") cryptoApi.getRandomValues(bytes);
+  else for (let index = 0; index < bytes.length; index++) bytes[index] = Math.floor(Math.random() * 256);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+})();
 
 let bridge: NativeMessagingSqlite | null = null;
 
@@ -189,9 +226,9 @@ export async function openAndroidMessagingSqliteDriver(
 
   let opened: unknown;
   try {
-    opened = await nativeBridge().open({ accountId });
+    opened = await nativeBridge().open({ accountId, documentId: DOCUMENT_ID });
   } catch (error) {
-    throw error instanceof MessagingSqliteError ? error : new MessagingSqliteError("open-failed");
+    throw openFailure(error);
   }
   const handle = assertHandle(opened);
 

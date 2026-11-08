@@ -25,9 +25,11 @@ import java.security.SecureRandom;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 /**
@@ -74,15 +76,25 @@ public class FindbackMessagingSqlitePlugin extends Plugin {
     static final String MESSAGE_OPEN_FAILED = "Messaging storage could not be opened.";
     static final String MESSAGE_FAILED = "Messaging storage could not complete the request.";
     static final String MESSAGE_ALREADY_OPEN = "Messaging storage is already open for this account.";
+    static final String MESSAGE_STALE_CLOSE = "Messaging storage could not be released safely.";
 
     static final String CODE_CLOSED = "MESSAGING_STORAGE_CLOSED";
     static final String CODE_INVALID_REQUEST = "MESSAGING_STORAGE_INVALID_REQUEST";
     static final String CODE_OPEN_FAILED = "MESSAGING_STORAGE_OPEN_FAILED";
     static final String CODE_FAILED = "MESSAGING_STORAGE_FAILED";
     static final String CODE_ALREADY_OPEN = "MESSAGING_STORAGE_ALREADY_OPEN";
+    static final String CODE_STALE_CLOSE = "MESSAGING_STORAGE_STALE_CLOSE";
 
     private static final Pattern UUID_PATTERN = Pattern.compile(
             "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$");
+
+    /**
+     * Opaque per-JavaScript-document identity generated at module evaluation.
+     * A document reload destroys the holder of every native handle token, so a
+     * different identity is the only reliable signal that the previous lease
+     * can no longer be closed by its owner and must be reclaimed.
+     */
+    private static final Pattern DOCUMENT_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{16,128}$");
 
     /**
      * The adapter needs these durability settings and read-only schema probes.
@@ -108,11 +120,13 @@ public class FindbackMessagingSqlitePlugin extends Plugin {
     private static final int MAX_PARAMETERS = 64;
     private static final int HANDLE_BYTES = 32;
     private static final long MAX_SAFE_INTEGER = 9_007_199_254_740_991L;
+    /** Bounded wait for a previous plugin instance's final close task. */
+    private static final long RECLAIM_TIMEOUT_SECONDS = 5L;
 
     private final Map<String, Handle> handles = new ConcurrentHashMap<>();
     // Process-wide: a replacement plugin must not reopen a file still owned by
     // its predecessor's pending teardown. A failed close retains its lease.
-    private static final Map<String, Object> accountOwners = new ConcurrentHashMap<>();
+    private static final Map<String, Owner> accountOwners = new ConcurrentHashMap<>();
     /** Cold-launch only. Refuse to erase a database leased by ANY plugin instance. */
     public static void resetForDataEpoch(Context context) throws Exception {
         synchronized (accountOwners) {
@@ -135,15 +149,36 @@ public class FindbackMessagingSqlitePlugin extends Plugin {
 
     /** One open database. The account scope is the handle-to-file binding. */
     private static final class Handle {
+        final String token;
         final DatabaseConnection connection;
         final String accountId;
-        final Object owner;
+        final Owner owner;
         volatile boolean invalid;
 
-        Handle(DatabaseConnection connection, String accountId, Object owner) {
+        Handle(String token, DatabaseConnection connection, String accountId, Owner owner) {
+            this.token = token;
             this.connection = connection;
             this.accountId = accountId;
             this.owner = owner;
+        }
+    }
+
+    /**
+     * A live account lease. It is created by an {@code open} call and normally
+     * released by the matching {@code close}. When the owning JavaScript
+     * document disappears, its handle token disappears with it; a later open
+     * from a different document identity reclaims the lease instead.
+     */
+    private static final class Owner {
+        final String accountId;
+        final String documentId;
+        final FindbackMessagingSqlitePlugin plugin;
+        volatile Handle handle;
+
+        Owner(String accountId, String documentId, FindbackMessagingSqlitePlugin plugin) {
+            this.accountId = accountId;
+            this.documentId = documentId;
+            this.plugin = plugin;
         }
     }
 
@@ -249,24 +284,51 @@ public class FindbackMessagingSqlitePlugin extends Plugin {
             call.reject(MESSAGE_INVALID_REQUEST, CODE_INVALID_REQUEST);
             return;
         }
+        String documentId = call.getString("documentId");
+        if (documentId == null || !DOCUMENT_PATTERN.matcher(documentId).matches()) {
+            // Every real caller is the JS driver, which always supplies this.
+            // Refuse rather than silently falling back to the old unreclaimable
+            // lease semantics.
+            call.reject(MESSAGE_INVALID_REQUEST, CODE_INVALID_REQUEST);
+            return;
+        }
         if (destroyed) {
             call.reject(MESSAGE_CLOSED, CODE_CLOSED);
             return;
         }
-        Object owner = new Object();
+        Owner owner = new Owner(accountId, documentId, this);
+        Owner stale = null;
         synchronized (accountOwners) {
-            if (accountOwners.putIfAbsent(accountId, owner) != null) {
+            Owner existing = accountOwners.get(accountId);
+            if (existing == null) {
+                accountOwners.put(accountId, owner);
+            } else if (!isStaleDocument(existing, documentId)) {
                 call.reject(MESSAGE_ALREADY_OPEN, CODE_ALREADY_OPEN);
                 return;
+            } else {
+                // Do not install the replacement until the previous document's
+                // database is closed on its owning lane. Same-account opens stay
+                // serialized through accountOwners.
+                stale = existing;
             }
         }
+        final Owner previous = stale;
         boolean queued = runOnLane(call, () -> {
+            if (previous != null) {
+                reclaim(previous);
+                synchronized (accountOwners) {
+                    if (accountOwners.get(accountId) != null) {
+                        throw new StorageException(MESSAGE_ALREADY_OPEN, CODE_ALREADY_OPEN);
+                    }
+                    accountOwners.put(accountId, owner);
+                }
+            }
             Handle handle = null;
             String token = null;
             try {
                 if (destroyed) throw new StorageException(MESSAGE_CLOSED, CODE_CLOSED);
                 token = newHandle();
-                handle = new Handle(openDatabase(accountId), accountId, owner);
+                handle = new Handle(token, openDatabase(accountId), accountId, owner);
                 handle.invalid = true;
                 // Track before verification. Failed cleanup remains reclaimable
                 // by destroy, not just an orphaned process-wide reservation.
@@ -275,6 +337,7 @@ public class FindbackMessagingSqlitePlugin extends Plugin {
                 if (destroyed) throw new StorageException(MESSAGE_CLOSED, CODE_CLOSED);
                 JSObject result = new JSObject();
                 result.put("handle", token);
+                owner.handle = handle;
                 handle.invalid = false;
                 return result;
             } catch (Exception failure) {
@@ -299,7 +362,87 @@ public class FindbackMessagingSqlitePlugin extends Plugin {
         if (!queued) accountOwners.remove(accountId, owner);
     }
 
-    private String newHandle() {
+    /** A different document identity means the previous JS heap is gone. */
+    private static boolean isStaleDocument(Owner existing, String documentId) {
+        return existing.documentId != null && !existing.documentId.equals(documentId);
+    }
+
+    /**
+     * Releases a lease whose owning document can no longer send {@code close}.
+     * The previous handle is closed before the new database is opened; if its
+     * teardown is uncertain the open fails closed instead of risking two
+     * writers on one file.
+     */
+    private void reclaim(Owner stale) throws StorageException {
+        if (stale.plugin != this && !stale.plugin.destroyed) {
+            // A replacement plugin instance may hold a lease from an earlier
+            // one. Close on the owning lane so this never races its commands.
+            CountDownLatch done = new CountDownLatch(1);
+            StorageException[] failure = new StorageException[1];
+            try {
+                stale.plugin.lane.execute(() -> {
+                    try {
+                        stale.plugin.closeOwned(stale);
+                    } catch (StorageException error) {
+                        failure[0] = error;
+                    } finally {
+                        done.countDown();
+                    }
+                });
+            } catch (RejectedExecutionException alreadyGone) {
+                throw new StorageException(MESSAGE_STALE_CLOSE, CODE_STALE_CLOSE);
+            }
+            try {
+                if (!done.await(RECLAIM_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                    throw new StorageException(MESSAGE_STALE_CLOSE, CODE_STALE_CLOSE);
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new StorageException(MESSAGE_STALE_CLOSE, CODE_STALE_CLOSE);
+            }
+            if (failure[0] != null) throw failure[0];
+            return;
+        }
+        if (stale.plugin != this) {
+            // The previous plugin is already being destroyed. Its queued final
+            // cleanup may still release the lease successfully; wait for that
+            // bounded final task rather than racing it.
+            try { stale.plugin.lane.awaitTermination(RECLAIM_TIMEOUT_SECONDS, TimeUnit.SECONDS); }
+            catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new StorageException(MESSAGE_STALE_CLOSE, CODE_STALE_CLOSE);
+            }
+            synchronized (accountOwners) {
+                if (accountOwners.get(stale.accountId) != stale) return;
+            }
+        }
+        closeOwned(stale);
+    }
+
+    /** Must run on the owner's lane. */
+    private void closeOwned(Owner stale) throws StorageException {
+        Handle handle = stale.handle;
+        if (handle != null) {
+            synchronized (handle) { handle.invalid = true; }
+            try {
+                handle.connection.close();
+            } catch (RuntimeException uncertain) {
+                // Retry once: a transient failure on the first teardown must
+                // not permanently poison the account for a new document.
+                try { handle.connection.close(); }
+                catch (RuntimeException stillUncertain) {
+                    throw new StorageException(MESSAGE_STALE_CLOSE, CODE_STALE_CLOSE);
+                }
+            }
+            handles.remove(handle.token, handle);
+        }
+        synchronized (accountOwners) {
+            if (accountOwners.get(stale.accountId) == stale) accountOwners.remove(stale.accountId, stale);
+        }
+    }
+
+    /** Package-private seam: the JVM transport tests do not run Android's Base64. */
+    String newHandle() {
         byte[] bytes = new byte[HANDLE_BYTES];
         random.nextBytes(bytes);
         return Base64.encodeToString(bytes, Base64.NO_WRAP | Base64.URL_SAFE | Base64.NO_PADDING);
@@ -461,7 +604,11 @@ public class FindbackMessagingSqlitePlugin extends Plugin {
             handle.invalid = true;
         }
         runOnLane(call, () -> {
-            handle.connection.close();
+            // One transient teardown failure must not poison the lease for the
+            // rest of the process; the document-identity reclaim is the second
+            // safety net. If both attempts fail, ownership is retained.
+            try { handle.connection.close(); }
+            catch (RuntimeException first) { handle.connection.close(); }
             handles.remove(token, handle);
             accountOwners.remove(handle.accountId, handle.owner);
             return null;
