@@ -5,6 +5,7 @@ import { createVoicePlayback, voiceProgressPercent, type VoiceAudioHandle, type 
 class FakeAudio implements VoiceAudioHandle {
   src = "";
   currentTime = 0;
+  playbackRate = 1;
   duration = Number.POSITIVE_INFINITY;
   paused = true;
   playing = false;
@@ -48,6 +49,14 @@ function harness() {
 }
 
 describe("voice playback", () => {
+  it("changes the actual audio speed without replacing the note", async () => {
+    const h = harness();
+    h.playback.load("a", "blob:a", 8_000);
+    await h.playback.play();
+    h.playback.setRate(1.5);
+    expect(h.audio().playbackRate).toBe(1.5);
+    expect(h.playback.snapshot.playingId).toBe("a");
+  });
   it("plays one note at a time and pauses the previous one", async () => {
     const h = harness();
     expect(h.playback.load("a", "blob:a", 3_000)).toBe(true);

@@ -125,7 +125,18 @@ function OpenMediaViewer({ items, index, onIndexChange, onClose }: MediaViewerPr
     // FocusScope unmounts, so containment would pull focus back into the dying
     // portal. React Aria alone restores after removal (also for nested scopes).
     // React Aria's enclosing modal must not mark this external portal inert.
-    portal={{ container: { ...{ "data-testid": "media-viewer", "data-react-aria-top-layer": "" }, onFocus: () => {}, onKeyDownCapture: () => setChromeHidden(false), onPointerMove: (event) => { if (event.pointerType === "mouse") setChromeHidden(false); } } }}
+    portal={{ container: { ...{ "data-testid": "media-viewer", "data-react-aria-top-layer": "" }, onFocus: () => {},
+      onKeyDownCapture: () => setChromeHidden(false),
+      // Owner rule 2026-11-08: the space around a photo is a dismissal surface,
+      // not a dead zone. Anything that is not the photo or a control closes the
+      // viewer, including the letterbox bars of a tall or wide image.
+      onClick: (event) => {
+        const target = event.target as Element | null;
+        if (!target?.closest) { onClose(); return; }
+        if (target.closest("img, button, a, input, [role='button'], [role='slider'], [data-viewer-keep]")) return;
+        onClose();
+      },
+      onPointerMove: (event) => { if (event.pointerType === "mouse") setChromeHidden(false); } } }}
     carousel={{ finite: true, imageFit: "contain", padding: 0, spacing: 16, preload: 1 }}
     controller={{ closeOnEscape: false, closeOnPullDown: false, closeOnPullUp: false, closeOnBackdropClick: false }}
     animation={{ fade: reduced ? 0 : 180, swipe: reduced ? 0 : 250, zoom: reduced ? 0 : 180 }}

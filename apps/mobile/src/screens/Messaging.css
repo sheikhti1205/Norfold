@@ -89,8 +89,26 @@
   color:var(--fb-on-surface-variant); font-size:.75rem; font-weight:600; letter-spacing:.01em;
   box-shadow:0 1px 2px rgb(0 0 0 / .08); }
 .fb-chat-line-own { flex-direction:row-reverse; }
-.fb-chat-message-options { color:var(--fb-on-surface-variant); }
-.fb-chat-message { align-self:flex-start; max-width:min(calc(100% - 44px), 34rem); padding:.6rem .8rem; border-radius:1rem 1rem 1rem .25rem; background:var(--fb-surface-container); overflow-wrap:anywhere; min-width:0; }
+/* Nothing sits beside a bubble on touch; a pointer gets the control on hover
+   and a keyboard user reaches it through the long-press surface. */
+.fb-chat-message-options { color:var(--fb-on-surface-variant); opacity:0; pointer-events:none;
+  width:0; min-width:0; padding:0; overflow:hidden; transition:opacity .12s linear; }
+@media (hover:hover) and (pointer:fine) {
+  .fb-chat-line:hover .fb-chat-message-options,
+  .fb-chat-message-surface:focus-within .fb-chat-message-options {
+    opacity:1; pointer-events:auto; width:auto; min-width:44px; overflow:visible;
+  }
+}
+@media (prefers-reduced-motion:reduce) { .fb-chat-message-options { transition:none; } }
+/* The long-press surface is the flex item now, so the bubble keeps its own
+   alignment and the options control sits beside it exactly as before. */
+.fb-chat-message-surface { display:flex; align-items:flex-end; gap:.15rem; min-width:0;
+  /* The line owns the width; the surface only reserves room for the options
+     control, so a one-word bubble keeps its natural width. */
+  max-width:calc(100% - 2.75rem); }
+.fb-chat-line-own .fb-chat-message-surface { flex-direction:row-reverse; }
+.fb-chat-message-surface:focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; border-radius:1rem; }
+.fb-chat-message { align-self:flex-start; max-width:min(100%, 34rem); padding:.6rem .8rem; border-radius:1rem 1rem 1rem .25rem; background:var(--fb-surface-container); overflow-wrap:anywhere; min-width:0; }
 .fb-chat-message-own { align-self:flex-end; border-radius:1rem 1rem .25rem 1rem; background:var(--fb-primary-container); color:var(--fb-on-primary-container); }
 .fb-chat-message p { white-space:pre-wrap; margin:0; line-height:1.45; font-size:.95rem; }
 .fb-chat-message-status { display:block; font-size:.75rem; text-align:end; margin-top:.25rem;
@@ -103,26 +121,6 @@
 
 /* Floating message actions. A menu annotates the message you pressed; it is
    never a second screen. One portal layer, above every task surface (70+). */
-.fb-msg-menu-backdrop { position:fixed; inset:0; z-index:200; background:transparent; }
-.fb-msg-menu {
-  position:fixed; display:flex; flex-direction:column; min-width:12rem; max-width:16rem;
-  -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
-  padding:.3rem; border-radius:.75rem; background:var(--fb-surface-container-high, var(--fb-surface));
-  border:1px solid var(--fb-outline-variant); box-shadow:var(--shadow-md, 0 12px 28px rgb(0 0 0 / .24));
-  transform-origin:top left;
-}
-.fb-msg-menu > button {
-  display:flex; align-items:center; min-height:44px; padding:.5rem .7rem;
-  border:0; border-radius:.5rem; background:none; text-align:start;
-  font-size:.875rem; font-weight:400; color:var(--fb-on-surface); cursor:pointer;
-}
-.fb-msg-menu > button:hover { background:var(--fb-surface-container); }
-.fb-msg-menu > button:focus-visible { outline:2px solid var(--fb-focus); outline-offset:-2px; }
-.fb-msg-menu > button:disabled { opacity:.45; cursor:default; }
-@media (prefers-reduced-motion:no-preference) {
-  .fb-msg-menu { animation:fb-msg-menu-in 120ms ease-out; }
-  @keyframes fb-msg-menu-in { from { opacity:0; transform:scale(.96); } to { opacity:1; transform:none; } }
-}
 .fb-chat-message-status button { text-decoration:underline; min-height:44px; min-width:44px; }
 .fb-chat-composer { display:flex; align-items:flex-end; gap:.4rem; flex:none; padding:8px 12px; background:var(--fb-surface); padding-bottom:max(8px, env(safe-area-inset-bottom)); }
 .fb-chat-composer textarea { flex:1; min-width:0; min-height:44px; max-height:9rem; resize:vertical; border:1px solid var(--fb-control-outline); border-radius:1.25rem; padding:.6rem .9rem; background:var(--fb-surface-container); color:var(--fb-on-surface); font-size:1rem; }
@@ -184,31 +182,7 @@
 .fb-chat-photo-remove::after { content:""; position:absolute; inset:-.6rem; border-radius:50%; }
 .fb-chat-photo-options { display:flex; align-items:center; flex-wrap:wrap; gap:.4rem .75rem; }
 .fb-chat-photo-options p { margin:0; flex:1 1 10rem; min-width:0; }
-/* Voice notes: one compact player inside the bubble and one draft strip above
-   the composer. The track is decorative; the button, clock and state carry the
-   meaning, and every control keeps the 44px house target. */
-.fb-chat-voice { display:flex; align-items:center; gap:.5rem; width:min(15rem, 65vw); max-width:100%;
-  min-height:2.75rem; padding:.3rem .5rem; border-radius:.6rem; background:var(--fb-surface); }
-.fb-chat-voice-toggle { display:grid; place-items:center; flex:none; width:2.25rem; height:2.25rem;
-  min-width:44px; min-height:44px; border:0; border-radius:50%; background:var(--fb-primary); color:var(--fb-on-primary); }
-.fb-chat-voice-toggle:disabled { opacity:.55; }
-.fb-chat-voice-track { display:flex; align-items:center; gap:2px; flex:1 1 auto; min-width:3.5rem; height:1.6rem; }
-.fb-chat-voice-bar { flex:1 1 0; min-width:1px; border-radius:999px; background:var(--fb-outline-variant); }
-.fb-chat-voice-bar[data-played] { background:var(--fb-primary); }
-.fb-chat-voice-time { flex:none; font-size:.8125rem; font-variant-numeric:tabular-nums; color:var(--fb-on-surface-variant); }
-.fb-chat-voice-state { flex:1 1 100%; display:flex; flex-wrap:wrap; align-items:center; gap:.25rem .5rem;
-  font-size:.8125rem; color:var(--fb-on-surface-variant); }
-.fb-chat-voice-state button { min-height:44px; min-width:44px; padding:.2rem .35rem; text-decoration:underline; }
-.fb-chat-voice-draft { display:flex; align-items:center; flex-wrap:wrap; gap:.4rem .55rem;
-  padding:.35rem .8rem; font-size:.875rem; }
-.fb-chat-voice-draft button { min-height:44px; min-width:44px; padding:.2rem .45rem; }
-.fb-chat-voice-draft .fb-chat-voice-time { color:var(--fb-on-surface); }
-.fb-chat-voice-recording .fb-chat-voice-dot { width:.5rem; height:.5rem; border-radius:50%; background:var(--fb-error); }
-.fb-chat-voice-recording button:first-of-type { display:inline-flex; align-items:center; gap:.3rem; }
-@media (prefers-reduced-motion:no-preference) {
-  .fb-chat-voice-recording .fb-chat-voice-dot { animation:fb-chat-voice-pulse 1.4s ease-in-out infinite; }
-}
-@keyframes fb-chat-voice-pulse { 50% { opacity:.35; } }
+/* Shared voice-note geometry lives in components/voiceNote.css. */
 /* Report subject and one-time location stay compact cards inside the bubble:
    the report id is a live reference, so an unreadable report degrades to plain
    text rather than a broken card. */

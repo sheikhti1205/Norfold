@@ -1,7 +1,6 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
-import { createPortal } from "react-dom";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { Archive, ArrowLeft, BellOff, ChevronDown, Ellipsis, Flag, ImageOff, Images, ListFilter, LogOut, MapPin, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCw, Search, Settings2, ShieldBan, Square, Trash2, UserRound, X } from "lucide-react";
+import { Archive, ArrowLeft, BellOff, ChevronDown, Ellipsis, Flag, ImageOff, Images, ListFilter, LogOut, MapPin, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound, X } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import type { PostItem } from "@norfold/shared";
 import { copyStaticLocation, isUuid } from "../services/messaging/validation";
@@ -19,7 +18,8 @@ import { CHAT_PANE } from "../components/panePreference";
 import { ChatDetailsLayout } from "../components/ChatDetailsLayout";
 import { BlockControl } from "../components/BlockControl";
 import { PreferenceSwitchRow } from "../components/settings";
-import { ActionMenu } from "../components/ActionMenu";
+import { ActionMenu, type MenuAction } from "../components/ActionMenu";
+import { LongPressArea } from "../components/LongPressArea";
 import { AppBar } from "../components/AppBar";
 import { PeopleSearch } from "../components/PeopleSearch";
 import { PeerChatComposer } from "../components/PeerChatComposer";
@@ -27,6 +27,8 @@ import { ChatLocationComposer } from "../components/ChatLocationComposer";
 import { AdaptiveTaskSurface, ConfirmDialog } from "../components/AdaptiveTaskSurface";
 import { ReportSheet } from "../components/ReportSheet";
 import { MediaViewer, type MediaViewerItem } from "../components/MediaViewer";
+import { normalizePeaks, resamplePeaks, VOICE_BARS, cachedVoicePeaks, rememberVoicePeaks, queueVoicePeaks } from "../services/messaging/voicePeaks";
+import { VoiceMessagePlayer, VoiceRecordingPanel } from "../components/VoiceNote";
 import { useMediaUrl } from "../services/media/privateMedia";
 import { announce } from "../components/LiveRegion";
 import { shouldReduceMotion } from "../components/uiMotion";
@@ -51,7 +53,7 @@ import {
   browserVoicePlaybackPorts, createVoicePlayback, voiceProgressPercent,
   type VoicePlaybackPort, type VoicePlaybackSnapshot,
 } from "../services/messaging/voicePlayback";
-import { formatVoiceDuration, storedVoiceMime } from "../services/messaging/voice";
+import { storedVoiceMime } from "../services/messaging/voice";
 import { PhotoUnavailableError } from "../services/messaging/mediaTransport";
 import { chooseNativeImage, chooseNativeImages, importNativeImageUri, importedImageToFile } from "../services/media/nativeMedia";
 import "./Messaging.css";
@@ -265,58 +267,35 @@ function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady }: {
  * second note pauses the first. A length shown here is the stored duration, not
  * a container guess (WebM often reports `Infinity`).
  */
-/** Bars in a voice bubble. Enough to read as audio at 240 px, few enough that a
- * playback tick stays a cheap repaint. */
-const VOICE_BARS = 30;
-const voiceBarCache = new Map<string, number[]>();
-
 /**
- * A voice bubble shows a bar pattern, not a flat progress line.
- *
- * WhatsApp paints a measured envelope. This host has no cheap way to decode a
- * five-minute note (a 5 min stereo decode is ~115 MB of floats) and the note is
- * played through an <audio> element, not an analyser. The pattern is therefore
- * fixed and derived from the attachment id: the same note keeps the same bars
- * on every device, after every reinstall, and while it plays. It is decorative
- * — the elapsed time, the play control and the accessible name carry meaning.
+ * One voice note in the transcript. Bytes come from the same verified store as
+ * a photo; playback is delegated to the single transcript player so starting a
+ * second note pauses the first. The bars are measured from that audio, never
+ * invented: see `voicePeaks.ts` for how a container becomes an envelope.
  */
-export function voiceBarHeights(key: string): number[] {
-  const cached = voiceBarCache.get(key);
-  if (cached) return cached;
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < key.length; index++) {
-    hash ^= key.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  const heights: number[] = [];
-  for (let index = 0; index < VOICE_BARS; index++) {
-    hash ^= hash << 13; hash >>>= 0;
-    hash ^= hash >>> 17;
-    hash ^= hash << 5; hash >>>= 0;
-    // 28–100%: a uniform bar reads as a divider, not as speech.
-    heights.push(28 + (hash % 73));
-  }
-  if (voiceBarCache.size > 200) voiceBarCache.clear();
-  voiceBarCache.set(key, heights);
-  return heights;
+/**
+ * The last `VOICE_BARS` measurements of a note in progress.
+ *
+ * A recording fills from the left and then scrolls, the way a live level meter
+ * reads. Padding the *end* with silence is what produces that: padding the
+ * start would make the first seconds appear at the right edge.
+ */
+function livePeaks(values: readonly number[]): number[] {
+  const normalized = normalizePeaks(values);
+  const window = normalized.slice(-VOICE_BARS);
+  return window.length < VOICE_BARS ? [...window, ...new Array(VOICE_BARS - window.length).fill(0)] : window;
 }
 
-function VoiceWave({ id, percent }: { id: string; percent: number }) {
-  const heights = voiceBarHeights(id);
-  const played = Math.round((Math.min(100, Math.max(0, percent)) / 100) * VOICE_BARS);
-  return <span className="fb-chat-voice-track" aria-hidden="true">
-    {heights.map((height, index) => <span key={index} className="fb-chat-voice-bar"
-      data-played={index < played ? "true" : undefined} style={{ height: `${height}%` }} />)}
-  </span>;
-}
-
-function ChatVoice({ accountId, conversationId, attachment, playback, snapshot }: {
+function ChatVoice({ accountId, conversationId, attachment, playback, snapshot, authorName, avatarUrl }: {
   accountId: string; conversationId: string; attachment: MediaAttachment;
   playback: VoicePlaybackPort; snapshot: VoicePlaybackSnapshot;
+  authorName?: string | null; avatarUrl?: string | null;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "missing" | "failed" | "unavailable">("loading");
   const [version, setVersion] = useState(0);
+  const [rate, setRate] = useState(1);
+  const [peaks, setPeaks] = useState<number[]>(() => cachedVoicePeaks(attachment.id)?.bars ?? []);
   const durationMs = attachment.durationMs ?? 0;
   const canDownload = attachment.expiresAt !== null && attachment.expiresAt !== undefined
     && attachment.expiresAt > Date.now()
@@ -335,8 +314,16 @@ function ChatVoice({ accountId, conversationId, attachment, playback, snapshot }
       made = URL.createObjectURL(new Blob([bytes.slice(0)], { type: attachment.mime }));
       setUrl(made);
       // The player loads metadata on demand; the stored duration is what the
-      // bar and the clock show, so no decode is required to call it ready.
+      // clock shows, so no decode is required to call it ready. The envelope is
+      // measured separately, once per note, through the shared decode queue.
       setState("ready");
+      const known = cachedVoicePeaks(attachment.id);
+      if (known) setPeaks(known.bars);
+      else void queueVoicePeaks(bytes).then((measured) => {
+        if (cancelled || !measured) return;
+        rememberVoicePeaks(attachment.id, { bars: measured, measured: true });
+        setPeaks(measured);
+      });
     }).catch(() => { if (!cancelled) setState("failed"); });
     return () => { cancelled = true; if (made) URL.revokeObjectURL(made); setUrl(null); };
   }, [accountId, attachment.id, attachment.mime, attachment.state, attachment.expiresAt, version]);
@@ -351,15 +338,16 @@ function ChatVoice({ accountId, conversationId, attachment, playback, snapshot }
     if (!url) return;
     if (playing) { playback.pause(); return; }
     if (!playback.load(attachment.id, url, durationMs)) return;
+    playback.setRate(rate);
     await playback.play();
   }
-  return <div className="fb-chat-voice" data-receipt-message={state === "ready" && attachment.state === "READY" ? attachment.messageId : undefined}>
-    <button type="button" className="fb-chat-voice-toggle" aria-label={playing ? "Pause voice message" : "Play voice message"}
-      disabled={!url || durationMs <= 0} onClick={() => void toggle()}>
-      {playing ? <Pause size={18} aria-hidden="true" /> : <Play size={18} aria-hidden="true" />}
-    </button>
-    <VoiceWave id={attachment.id} percent={voiceProgressPercent(position, durationMs)} />
-    <span className="fb-chat-voice-time">{durationMs > 0 ? formatVoiceDuration(playing ? position : durationMs) : ""}</span>
+  return <div data-receipt-message={state === "ready" && attachment.state === "READY" ? attachment.messageId : undefined}>
+    <VoiceMessagePlayer peaks={peaks} playing={playing} ready={!!url} durationMs={durationMs} positionMs={position}
+      avatar={<UserAvatar username={authorName} avatarUrl={avatarUrl} size={40} />}
+      onToggle={() => void toggle()} rate={rate} onRate={() => {
+        const next = rate === 1 ? 1.5 : rate === 1.5 ? 2 : 1;
+        setRate(next); playback.setRate(next);
+      }} />
     {state !== "ready" && <span className="fb-chat-voice-state" role="status">
       {state === "loading" ? "Voice loading…" : state === "failed" ? "Could not load voice." : state === "unavailable" ? "Voice unavailable" : "Voice not on this device"}
       {canDownload && (state === "missing" || state === "failed") && <button type="button" onClick={() => void download()}>Download again</button>}
@@ -373,16 +361,38 @@ function ChatVoice({ accountId, conversationId, attachment, playback, snapshot }
  * repaints this strip, never the transcript behind it.
  */
 function VoiceDraft({ recorder, status, recording, notice, url, snapshot, sending, allowed,
-  onStop, onDiscard, onSend, onPreview }: {
+  onStop, onResume, onDiscard, onSend, onPreview }: {
   recorder: VoiceRecorderPort; status: VoiceRecorderState["status"]; recording: VoiceRecording | null;
   notice: string | null; url: string | null; snapshot: VoicePlaybackSnapshot; sending: boolean; allowed: boolean;
-  onStop: () => void; onDiscard: () => void; onSend: () => void; onPreview: () => void;
+  onStop: () => void; onResume: () => void; onDiscard: () => void; onSend: () => void; onPreview: () => void;
 }) {
   const [elapsed, setElapsed] = useState(0);
+  const [live, setLive] = useState<number[]>([]);
+  const [decoded, setDecoded] = useState<number[]>([]);
   useEffect(() => {
-    if (status !== "recording") { setElapsed(0); return; }
-    return recorder.subscribe((next) => { if (next.status === "recording") setElapsed(next.elapsedMs); });
+    if (status !== "recording") { setElapsed(0); setLive([]); return; }
+    if (recorder.state.status === "recording") {
+      setElapsed(recorder.state.elapsedMs); setLive(recorder.state.peaks);
+    }
+    return recorder.subscribe((next) => {
+      if (next.status === "recording") { setElapsed(next.elapsedMs); setLive(next.peaks); }
+    });
   }, [recorder, status]);
+  // A note recorded where the live meter is unavailable still gets a real
+  // envelope: the finished container is decoded instead.
+  useEffect(() => {
+    setDecoded([]);
+    if (status !== "review" || !recording || recording.peaks.length > 0) return;
+    let cancelled = false;
+    void recording.blob.arrayBuffer()
+      .then((bytes) => queueVoicePeaks(bytes))
+      .then((measured) => { if (!cancelled && measured) setDecoded(measured); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [status, recording]);
+  const reviewPeaks = recording
+    ? (recording.peaks.length > 0 ? resamplePeaks(recording.peaks) : decoded)
+    : [];
   if (status === "idle") return null;
   if (status === "error") return <div className="fb-chat-voice-draft" role="status">
     <span>{notice ?? "That recording didn’t save. Try again."}</span>
@@ -395,24 +405,14 @@ function VoiceDraft({ recorder, status, recording, notice, url, snapshot, sendin
   if (status === "review" && recording) {
     const playing = snapshot.playingId === "voice-draft";
     const position = playing ? Math.min(snapshot.positionMs, recording.durationMs) : 0;
-    return <div className="fb-chat-voice-draft" role="status" aria-label="Voice message ready">
-      <button type="button" className="fb-chat-voice-toggle" aria-label={playing ? "Pause voice preview" : "Play voice preview"}
-        disabled={!url} onClick={onPreview}>
-        {playing ? <Pause size={17} aria-hidden="true" /> : <Play size={17} aria-hidden="true" />}
-      </button>
-      <VoiceWave id="voice-draft" percent={voiceProgressPercent(position, recording.durationMs)} />
-      <span className="fb-chat-voice-time">{formatVoiceDuration(playing ? position : recording.durationMs)}</span>
-      <button type="button" onClick={onDiscard} disabled={sending}>Discard</button>
-      <button type="button" onClick={onSend} disabled={sending || !allowed}>{sending ? "Sending…" : "Send"}</button>
-    </div>;
+    return <VoiceRecordingPanel phase="review" peaks={reviewPeaks} playing={playing}
+      elapsedMs={playing ? position : recording.durationMs} percent={voiceProgressPercent(position, recording.durationMs)}
+      previewReady={!!url} canResume={recorder.canResume} sending={sending} allowed={allowed}
+      onPreview={onPreview} onPause={onStop} onResume={onResume} onDiscard={onDiscard} onSend={onSend} />;
   }
-  return <div className="fb-chat-voice-draft fb-chat-voice-recording" role="status">
-    <span className="fb-chat-voice-dot" aria-hidden="true" />
-    <span>Recording</span>
-    <span className="fb-chat-voice-time">{formatVoiceDuration(elapsed)}</span>
-    <button type="button" onClick={onStop} aria-label="Stop recording"><Square size={15} aria-hidden="true" />Stop</button>
-    <button type="button" onClick={onDiscard}>Discard</button>
-  </div>;
+  return <VoiceRecordingPanel phase={status === "pausing" ? "pausing" : "recording"}
+    peaks={livePeaks(live)} elapsedMs={elapsed} percent={0} playing={false}
+    onPreview={onPreview} onPause={onStop} onResume={onResume} onDiscard={onDiscard} onSend={onSend} />;
 }
 
 export function Connections() {
@@ -599,6 +599,7 @@ export function MessagingThread() {
 }
 
 function ThreadSession({ accountId, conversationId }: { accountId: string; conversationId: string }) {
+  const { user } = useAuth();
   const chat = useMessaging();
   const [cached] = useState(() => getCachedMessagingThreadState(accountId, conversationId));
   const [renderedRevision, setRenderedRevision] = useState(-1);
@@ -627,72 +628,6 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const name = person?.displayName || person?.username;
   // Long-press is the phone's way into the message actions; the visible
   // ellipsis is a desktop affordance and is hidden from coarse pointers.
-  // Actions float next to the message that owns them. A sheet is a different
-  // screen; a menu is an annotation of the thing you pressed.
-  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
-  const press = useRef<{ timer: number; x: number; y: number } | null>(null);
-  const cancelPress = useCallback(() => {
-    if (!press.current) return;
-    window.clearTimeout(press.current.timer);
-    press.current = null;
-  }, []);
-  const startPress = useCallback((event: ReactPointerEvent, messageId: string) => {
-    if (event.pointerType === "mouse") return;
-    cancelPress();
-    const { clientX: x, clientY: y } = event;
-    const timer = window.setTimeout(() => {
-      press.current = null;
-      haptic("commit");
-      openMessageMenu(messageId);
-    }, 420);
-    press.current = { timer, x, y };
-  }, [cancelPress]);
-  useEffect(() => cancelPress, [cancelPress]);
-  const menuPanel = useRef<HTMLDivElement | null>(null);
-  const openMessageMenu = useCallback((messageId: string, anchor?: Element | null) => {
-    const element = anchor ?? document.querySelector(`[data-chat-message="${messageId}"]`);
-    // Anchor to the bubble, not the row: a row spans the whole transcript, so
-    // its rect would place the menu at the pane edge instead of the message.
-    const bubble = element?.matches(".fb-chat-message") ? element : element?.querySelector(".fb-chat-message");
-    const rect = (bubble ?? element)?.getBoundingClientRect();
-    const width = 208, gap = 8, viewportWidth = window.innerWidth, viewportHeight = window.innerHeight;
-    // Roughly four 48 px rows; the panel clamps itself again if it is shorter.
-    const height = Math.min(4 * 48 + 12, viewportHeight - 16);
-    const narrow = viewportWidth < 480;
-    let x = rect ? rect.right + gap : viewportWidth / 2 - width / 2;
-    let y = rect ? rect.top : viewportHeight / 2 - height / 2;
-    if (rect) {
-      // Wide: beside the bubble, flipping to its other side when it would leave
-      // the window. Narrow: centred over the bubble, above it when there is room
-      // so the menu never covers the message it acts on.
-      if (narrow) x = Math.max(gap, Math.min(viewportWidth - width - gap, rect.left + rect.width / 2 - width / 2));
-      else if (x + width > viewportWidth - gap) x = Math.max(gap, rect.left - gap - width);
-      if (narrow && rect.top - height - gap >= gap) y = rect.top - height - gap;
-      else if (narrow) y = rect.bottom + gap;
-      y = Math.min(Math.max(gap, y), Math.max(gap, viewportHeight - height - gap));
-    }
-    // A long press must not leave a text selection behind: the menu is a set of
-    // actions, not selectable copy, and the handles would float over it.
-    window.getSelection()?.removeAllRanges();
-    setSelectedMessageId(messageId);
-    setMenu({ id: messageId, x, y });
-  }, []);
-  useEffect(() => {
-    if (!menu) return;
-    // The menu takes focus so a keyboard user lands on its first action; every
-    // dismissal returns focus to the message that owns it.
-    menuPanel.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
-    const close = () => setMenu(null);
-    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setMenu(null); };
-    window.addEventListener("resize", close);
-    window.addEventListener("scroll", close, true);
-    document.addEventListener("keydown", escape);
-    return () => {
-      window.removeEventListener("resize", close);
-      window.removeEventListener("scroll", close, true);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [menu]);
   const [messages, setMessages] = useState<StoredHumanMessage[]>(cached?.messages ?? []);
   const [outbox, setOutbox] = useState<OutboxEntry[]>(cached?.outbox ?? []);
   const [media, setMedia] = useState<MediaAttachment[]>(cached?.media ?? []);
@@ -1202,10 +1137,15 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   }
   function toggleVoiceCapture() {
     if (!voiceAllowed || voiceSending) return;
-    if (voiceStatus === "recording") { voice.recorder.stop(); return; }
-    if (voiceStatus === "starting" || voiceStatus === "review") return;
+    if (voiceStatus === "recording") { voice.recorder.pause(); return; }
+    if (voiceStatus === "starting" || voiceStatus === "pausing" || voiceStatus === "review") return;
     if (admission.current?.messageType === "VOICE") admission.current = null;
     void voice.recorder.start();
+  }
+  function resumeVoice() {
+    if (!voiceAllowed || voiceSending || admissionFailed) return;
+    voice.player.pause();
+    voice.recorder.resume();
   }
   async function previewVoice() {
     if (voiceStatus !== "review" || !voiceRecording || !voiceUrl) return;
@@ -1220,9 +1160,10 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
    */
   async function sendVoice() {
     if (!row || !voiceAllowed || voiceStatus !== "review" || !voiceRecording || voiceSending) return;
-    const recording = voiceRecording;
     setVoiceSending(true); setError(null);
     try {
+      const recording = await voice.recorder.finalize();
+      if (!recording || !alive.current) return;
       const mime = storedVoiceMime(recording.mime);
       if (mime !== "audio/webm" && mime !== "audio/mp4") throw new Error("Unsupported voice container");
       const bytes = await recording.blob.arrayBuffer();
@@ -1312,6 +1253,34 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       }
     } finally { if (alive.current) setPhotoSending(false); }
   }
+  /**
+   * The actions that annotate one message. This is the same `ActionMenu` the
+   * feed and the report card use, so keyboard, collision placement, dismissal
+   * and styling are the app's existing ones rather than a second implementation.
+   */
+  function messageActions(message: StoredHumanMessage, own: boolean): MenuAction[] {
+    const items: MenuAction[] = [];
+    if (message.unsentAt === undefined && message.body) {
+      items.push({ id: "copy", label: "Copy text", onAction: () => {
+        void navigator.clipboard?.writeText(message.body).then(
+          () => announce("Message copied."),
+          () => setError("Could not copy this message."),
+        );
+      } });
+    }
+    if (own && message.unsentAt === undefined) {
+      items.push({ id: "unsend", label: "Unsend", destructive: true, disabled: busy || !view,
+        onAction: () => setSheet("unsend") });
+    }
+    items.push({ id: "delete", label: "Delete for me", destructive: true, disabled: busy || !view,
+      onAction: () => setSheet("delete") });
+    if (!own && message.unsentAt === undefined) {
+      items.push({ id: "report", label: "Report message", destructive: true, disabled: busy || !view || !row,
+        onAction: () => setReportTarget("message") });
+    }
+    return items;
+  }
+
   const selectedMessage = messages.find((message) => message.id === selectedMessageId);
   const selectedNeedsReview = selectedMessage?.authorId === accountId && !selectedMessage.server
     && selectedMessage.unsentAt === undefined
@@ -1419,23 +1388,20 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
           return <Fragment key={message.id}>
             {opensDay && <li className="fb-chat-day" role="presentation"><span>{day}</span></li>}
           <li data-chat-message={message.id} tabIndex={-1}
-            className={own ? "fb-chat-line fb-chat-line-own" : "fb-chat-line"}
-            onPointerDown={(event) => startPress(event, message.id)}
-            onPointerMove={(event) => {
-              const active = press.current;
-              if (active && (Math.abs(event.clientX - active.x) > 8 || Math.abs(event.clientY - active.y) > 8)) cancelPress();
-            }}
-            onPointerUp={cancelPress} onPointerCancel={cancelPress} onPointerLeave={cancelPress}
-            onContextMenu={(event) => {
-              // A long press that already opened the sheet must not also raise
-              // the browser menu; a right-click keeps its normal behaviour.
-              if (press.current || event.currentTarget.matches(":active")) event.preventDefault();
-            }}>
-            <div data-receipt-message={message.messageType === "TEXT" && message.body && message.unsentAt === undefined ? message.id : undefined} className={own ? "fb-chat-message fb-chat-message-own" : "fb-chat-message"}>
+            className={own ? "fb-chat-line fb-chat-line-own" : "fb-chat-line"}>
+            {/* The same contextual layer the feed and the report card use: a
+                400 ms hold (or right-click / Shift+F10) opens the app's own
+                menu anchored to this bubble, never a bottom sheet. */}
+            <LongPressArea label={own ? "Options for your message" : "Options for received message"}
+              disabled={!message.server} className="fb-chat-message-surface">
+            {({ open, setOpen }) => <>
+            <div data-receipt-message={message.messageType === "TEXT" && message.body && message.unsentAt === undefined ? message.id : undefined}
+              className={`fb-chat-message${own ? " fb-chat-message-own" : ""}${message.messageType === "VOICE" && attachment && message.unsentAt === undefined ? " fb-chat-message-voice" : ""}`}>
             <span className="sr-only">{own ? "You: " : `${name || "Member"}: `}</span>
             {message.unsentAt !== undefined ? <p>Message unsent</p> : <>
             {message.messageType === "MEDIA" && attachment && photoAllowed && <ChatPhoto key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} onOpen={openPhoto} onReady={rememberPhoto} />}
-            {message.messageType === "VOICE" && attachment && photoAllowed && <ChatVoice key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} playback={voice.player} snapshot={playbackSnapshot} />}
+            {message.messageType === "VOICE" && attachment && photoAllowed && <ChatVoice key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} playback={voice.player} snapshot={playbackSnapshot}
+              authorName={own ? user?.displayName || user?.username : name} avatarUrl={own ? user?.avatarUrl : person?.avatarUrl} />}
             {message.contextReportId && <ChatReportContext reportId={message.contextReportId} safetyKey={view?.ownBlocked ? "blocked" : "clear"} />}
             {message.location && <ChatLocation location={message.location} />}
             {message.body ? <p dir="auto" className={isEmojiOnly(message.body) ? "fb-chat-emoji-only" : undefined}>{message.body}</p>
@@ -1471,8 +1437,31 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             }}>Remove</button>}
             </>}
             </div>
-            {message.server && <button type="button" className="fb-chat-icon fb-chat-message-options" aria-label={own ? "Options for your message" : "Options for received message"}
-              onClick={(event) => openMessageMenu(message.id, event.currentTarget.parentElement)}><Ellipsis size={16} aria-hidden="true" /></button>}
+            {message.server && <>
+              {/* The popover is anchored to the bubble itself: the trigger is an
+                  invisible anchor over the long-press surface, so the menu opens
+                  where the message is rather than beside a 44 px control. The
+                  visible affordance below is the named control for pointers. */}
+              <ActionMenu anchor label="Message actions"
+                placement={own ? "bottom end" : "bottom start"}
+                open={open}
+                onOpenChange={(next) => {
+                  setOpen(next);
+                  // Opening the actions is a deliberate press on a message: the
+                  // same confirmation the media and reaction gestures give, and
+                  // the target for whatever the chosen action destroys.
+                  if (next) { setSelectedMessageId(message.id); haptic("commit"); }
+                }}
+                items={messageActions(message, own)} />
+              <button type="button" className="fb-chat-icon fb-chat-message-options"
+                aria-label={own ? "Options for your message" : "Options for received message"}
+                aria-haspopup="menu" aria-expanded={open}
+                onClick={() => { setOpen(true); setSelectedMessageId(message.id); haptic("commit"); }}>
+                <Ellipsis size={16} aria-hidden="true" />
+              </button>
+            </>}
+            </>}
+            </LongPressArea>
           </li>
           </Fragment>;
         })}
@@ -1520,9 +1509,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     </div>}
     <VoiceDraft recorder={voice.recorder} status={voiceStatus} recording={voiceRecording} notice={voiceNotice}
       url={voiceUrl} snapshot={playbackSnapshot} sending={voiceSending} allowed={voiceAllowed}
-      onStop={toggleVoiceCapture} onDiscard={discardVoice} onSend={() => void sendVoice()}
+      onStop={toggleVoiceCapture} onResume={resumeVoice} onDiscard={discardVoice} onSend={() => void sendVoice()}
       onPreview={() => void previewVoice()} />
-    {canCompose && <>
+    {canCompose && (voiceStatus === "idle" || voiceStatus === "error") && <>
         {view?.mode === "CONNECTED" && <>
           <input ref={photoInput} type="file" accept="image/*" multiple aria-label="Photo file input" hidden onChange={(event) => {
             const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = "";
@@ -1538,7 +1527,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         canSend={runtimeOpen && (photos.length > 0 ? photoAllowed && photos.every(item => !!item.prepared) : !!draft.trim())}
         photoAllowed={view?.mode === "CONNECTED"}
         onCamera={() => void choosePhoto("camera")} onPhotos={() => void choosePhoto("photos")}
-        voiceAvailable={voiceAllowed} voiceActive={voiceStatus === "recording"} onVoice={toggleVoiceCapture}
+        voiceAvailable={voiceAllowed} onVoice={toggleVoiceCapture}
         context={reportContext && <p className="fb-chat-context-banner" role="status">
           Your next text message will show which report you’re asking about.
           <button type="button" onClick={() => clearReportContext(reportContext)}>Don’t attach</button>
@@ -1582,26 +1571,6 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       </div> : null}
       {error && <p className="fb-chat-error" role="alert">{error}</p>}
     </AdaptiveTaskSurface>
-    {menu && selectedMessage && createPortal(
-      <div className="fb-msg-menu-backdrop" onPointerDown={() => setMenu(null)} role="presentation">
-        <div className="fb-msg-menu" role="menu" aria-label="Message options" ref={menuPanel}
-          style={{ left: menu.x, top: menu.y }} onPointerDown={(event) => event.stopPropagation()}>
-          {selectedMessage.body ? <button type="button" role="menuitem" onClick={() => {
-            void navigator.clipboard?.writeText(selectedMessage.body).then(
-              () => { setMenu(null); announce("Message copied."); },
-              () => setError("Could not copy this message."),
-            );
-          }}>Copy text</button> : null}
-          {selectedMessage.authorId === accountId && selectedMessage.unsentAt === undefined &&
-            <button type="button" role="menuitem" disabled={busy || !view}
-              onClick={() => { setMenu(null); setSheet("unsend"); }}>Unsend</button>}
-          <button type="button" role="menuitem" disabled={busy || !view}
-            onClick={() => { setMenu(null); setSheet("delete"); }}>Delete for me</button>
-          {selectedMessage.authorId !== accountId && selectedMessage.unsentAt === undefined &&
-            <button type="button" role="menuitem" disabled={busy || !view || !row}
-              onClick={() => { setMenu(null); setReportTarget("message"); }}>Report message</button>}
-        </div>
-      </div>, document.body)}
     <ReportSheet open={reportTarget !== null} target={reportTarget === "account" && row ? { targetType: "USER", targetId: row.peerId }
       : reportTarget === "message" && selectedMessage && selectedMessage.unsentAt === undefined
         ? { targetType: "MESSAGE", targetId: selectedMessage.id, accountId, body: selectedMessage.body } : null}
