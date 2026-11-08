@@ -19,12 +19,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * button) can catch that, so this file exists.
  */
 
-const { fakeBridge, registerPluginMock } = vi.hoisted(() => ({
+const { fakeBridge, registerPluginMock, browserFallback } = vi.hoisted(() => ({
   fakeBridge: {
     isAvailable: vi.fn<() => Promise<unknown>>(),
     signIn: vi.fn<(options: Record<string, unknown>) => Promise<unknown>>(),
   },
   registerPluginMock: vi.fn(),
+  browserFallback: vi.fn<() => Promise<void>>(),
 }));
 
 vi.mock("@capacitor/core", () => ({
@@ -54,6 +55,7 @@ beforeEach(() => {
   registerPluginMock.mockReset().mockImplementation(() => fakeBridge);
   fakeBridge.isAvailable.mockReset().mockResolvedValue({ available: true });
   fakeBridge.signIn.mockReset();
+  browserFallback.mockReset().mockResolvedValue(undefined);
   __setGoogleSignInSeams({
     strategy: () => "android-native",
     // The REAL facade — this is the whole point of the file.
@@ -61,6 +63,7 @@ beforeEach(() => {
     signInWithGoogleIdToken: async () => {
       throw new Error("the Supabase exchange must not run when Google failed");
     },
+    startBrowserFallback: browserFallback,
   });
 });
 
@@ -81,29 +84,27 @@ function button(): HTMLButtonElement {
 }
 
 describe("Google sign-in failure copy, real bridge → real button", () => {
-  it("tells the user to add a Google account when the device has none", async () => {
+  it("continues in the system browser when the device exposes no Credential Manager account", async () => {
     fakeBridge.signIn.mockRejectedValue(packedRejection("unavailable"));
     press();
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/no Google account found/i);
-    expect(alert.textContent).toMatch(/Add a Google account and try again/i);
-    // The unactionable generic copy is what shipped; it must not be the answer.
-    expect(alert.textContent).not.toMatch(/failed\. Please try again/i);
-    expect(alert.textContent).not.toContain(PLATFORM_DETAIL);
+    await waitFor(() => expect(browserFallback).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(PLATFORM_DETAIL)).toBeNull();
   });
 
   it("stays silent when the user dismisses the Google sheet", async () => {
     fakeBridge.signIn.mockRejectedValue(packedRejection("cancelled"));
     press();
     await waitFor(() => expect(button().disabled).toBe(false));
+    expect(browserFallback).not.toHaveBeenCalled();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("points at another method when Google sign-in is not configured", async () => {
+  it("falls back to the system browser when Credential Manager is not configured", async () => {
     fakeBridge.signIn.mockRejectedValue(packedRejection("misconfigured"));
     press();
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/another sign-in method/i);
+    await waitFor(() => expect(browserFallback).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("reports a connection problem for a network failure", async () => {
@@ -111,13 +112,14 @@ describe("Google sign-in failure copy, real bridge → real button", () => {
     press();
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/check your connection/i);
+    expect(browserFallback).not.toHaveBeenCalled();
   });
 
   it("reads a top-level code too (the fixed native packing)", async () => {
     fakeBridge.signIn.mockRejectedValue({ message: PLATFORM_DETAIL, code: "unavailable" });
     press();
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/no Google account found/i);
+    await waitFor(() => expect(browserFallback).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("falls back to the generic copy for an unknown kind", async () => {
@@ -125,5 +127,6 @@ describe("Google sign-in failure copy, real bridge → real button", () => {
     press();
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/failed\. Please try again/i);
+    expect(browserFallback).not.toHaveBeenCalled();
   });
 });

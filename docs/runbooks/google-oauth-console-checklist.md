@@ -118,11 +118,19 @@ adb -s <device> logcat | grep -i "GoogleAuth\|CredentialManager"
 |---|---|---|
 | `isAvailable → available:false, reason:misconfigured` | `misconfigured` | Empty `GOOGLE_WEB_CLIENT_ID` in the packaged build — rebuild with the env var set (§1). |
 | `GetCredentialProviderConfigurationException` | `misconfigured` | Console-side: Android OAuth client missing, SHA-1 mismatch, or ID services disabled — fix in §1. |
-| `NoCredentialException` (filter by authorized accounts) | `unavailable` | No authorized Google account on the device — device state, not a bug. |
-| `GetCredentialUnsupportedException` | `unavailable` | Play Services too old / Credential Manager unsupported — device state. |
-| user dismisses the sheet | `cancelled` | Silent by design, no error shown. |
-| `IOException` cause chain | `network` | Connectivity. |
+| `NoCredentialException` (filter by authorized accounts) | `unavailable` | No account is authorized for this build's signer. The app continues through the system browser (see below); a dead end here is usually a debug-signed APK, which the OAuth client never registered. |
+| `GetCredentialUnsupportedException` | `unavailable` | Play Services too old / Credential Manager unsupported — the app continues through the system browser. |
+| user dismisses the sheet | `cancelled` | Silent by design, no error shown; the browser fallback is not started. |
+| `IOException` cause chain | `network` | Connectivity; no browser fallback. |
 | Supabase `signInWithIdToken` error after a token was issued | provider error | Supabase rejection — fix in §2. |
+
+Since 0.15.0-beta.1, an `unavailable` or `misconfigured` native outcome no longer
+dead-ends sign-in: the button opens the Supabase Google authorize URL in the system
+browser (Custom Tab) and returns through the verified
+`https://findbackapp.social/auth/callback` App Link, where the existing PKCE
+resolver completes the session. Credential Manager is still tried first; a user
+dismissal or a network failure never opens the browser. A visible failure after
+returning is a redirect/provider problem in §2, not a reason to swap the signer.
 
 The ID token and raw nonce are **never** logged by the app; error strings are
 stable human copy, never raw platform text.

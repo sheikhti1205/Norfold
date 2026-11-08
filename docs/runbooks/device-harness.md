@@ -63,6 +63,12 @@ Web client PRESENT/MISSING, Maps PRESENT/ABSENT (MapLibre expected PRESENT,
 Google markers must read ABSENT), Sentry PRESENT/MISSING. Names/presence/
 shapes only — never values. Requires `aapt`, `apksigner`, `unzip`, `git`.
 
+`node scripts/verify-apk-signer.mjs <apk>` checks the signer against the canonical
+findback-release certificate directly, and `npm run apk -- --variant
+signeddev|release` runs the same gate after packaging. A debug-signed APK is not
+device-acceptance evidence: Credential Manager cannot issue a Google ID token for
+an unregistered package/SHA-1 pair, and App Links verification fails.
+
 ## 4. Full proof (fresh install)
 
 ```sh

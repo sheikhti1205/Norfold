@@ -52,6 +52,7 @@ import { fileURLToPath } from "node:url";
 import { checkEffectiveSentryDsn } from "./check-sentry-config.mjs";
 import { effectiveSupabaseConfig } from "./check-mobile-build-config.mjs";
 import { effectiveGoogleConfig } from "./check-google-config.mjs";
+import { findVariantApk, verifyApkSigner } from "./verify-apk-signer.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, "..");
@@ -579,6 +580,20 @@ function main() {
   }
 
   npm(["run", VARIANTS[variant], "-w", "apps/mobile"]);
+
+  // Google OAuth registration and the deployed App-Links association both name
+  // ONE certificate. A debug-signed APK installs but cannot receive a Google
+  // ID token (Credential Manager sees no authorized account) or the OAuth App
+  // Link — symptoms that masquerade as product bugs. Device-bound variants now
+  // fail closed here instead of on the phone.
+  if (variant === "debug") {
+    console.log("build-apk: note — debug is not the registered device signer; use --variant signeddev for device acceptance");
+  } else {
+    const apk = findVariantApk(variant);
+    const signer = verifyApkSigner(apk ?? "");
+    if (!signer.ok) fail(`build-apk: refusing ${variant} output — ${signer.reason}`);
+    console.log(`build-apk: signer verified (${signer.reason})`);
+  }
 }
 
 if (isMainModule()) main();
