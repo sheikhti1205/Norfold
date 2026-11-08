@@ -13,7 +13,8 @@ vi.mock("../services/accountLabels", () => ({ readCachedAccountIdentities: () =>
 ]) }));
 vi.mock("../services/people", async original => ({ ...await original<typeof import("../services/people")>(), searchPeople: async () => ({ items: [], nextCursor: null }) }));
 vi.mock("../services/posts", () => ({ fetchPost: async () => ({ id:"report", title:"Blue wallet", type:"FOUND" }) }));
-import { Connections, LegacyChatsRedirect, replyPreview, replySwipeFor } from "./Messaging";
+import { Connections, LegacyChatsRedirect, photoBatches, replyPreview, replySwipeFor } from "./Messaging";
+import type { StoredHumanMessage } from "../services/messaging/history";
 import { RouteTransition } from "../components/RouteTransition";
 function Location() { return <p data-testid="location">{useLocation().pathname}</p>; }
 function app() { return <MemoryRouter initialEntries={["/chats"]}><Routes><Route element={<RouteTransition />}>
@@ -59,6 +60,33 @@ it("mirrors the bubble direction for the reply swipe and names a quoted attachme
   expect(replyPreview({ ...base, messageType: "LOCATION" })).toBe("Location");
   expect(replyPreview({ ...base, body: "Kept text" })).toBe("Kept text");
   expect(replyPreview({ ...base, body: "Gone", unsentAt: 1 })).toBe("Message unsent");
+});
+it("groups only consecutive photos from one author inside the batch window", () => {
+  const photo = (id: string, authorId: string, createdAt: number, extra: Partial<StoredHumanMessage> = {}): StoredHumanMessage => ({
+    id, conversationId: "chat", authorId, recipientId: "other", body: "", messageType: "MEDIA", createdAt, ...extra });
+  const text = (id: string, authorId: string, createdAt: number): StoredHumanMessage => ({
+    id, conversationId: "chat", authorId, recipientId: "other", body: "hi", messageType: "TEXT", createdAt });
+  const runs = photoBatches([
+    photo("a1", "peer", 1_000), photo("a2", "peer", 2_500), photo("a3", "peer", 4_000),
+    text("t1", "peer", 5_000),
+    photo("b1", "peer", 6_000), photo("b2", "peer", 7_000),
+    photo("c1", "viewer", 8_000), photo("c2", "viewer", 8_500),
+    photo("d1", "peer", 9_000), photo("d2", "peer", 13_500),
+    text("t2", "peer", 13_600),
+    photo("e1", "peer", 14_000), photo("e2", "peer", 0),
+    text("t3", "peer", 14_100),
+    photo("f1", "peer", 15_000), photo("f2", "peer", 16_000, { unsentAt: 1 }), photo("f3", "peer", 17_000),
+  ]);
+  expect([...runs.batches.keys()]).toEqual(["a1", "b1", "c1"]);
+  expect([...runs.followers].sort()).toEqual(["a2", "a3", "b2", "c2"]);
+  expect(runs.leaderOf.get("a2")).toBe("a1");
+  expect(runs.leaderOf.get("a3")).toBe("a1");
+  // A text between photos, another author, a slow gap, an unknown timestamp and
+  // an unsent photo all end the run instead of merging unrelated sends.
+  expect(runs.followers.has("d2")).toBe(false);
+  expect(runs.followers.has("e2")).toBe(false);
+  expect(runs.followers.has("f2")).toBe(false);
+  expect(runs.followers.has("f3")).toBe(false);
 });
 it.each(["/connections", "/connections/chat"])("replaces legacy %s with the canonical destination and preserves query/hash", async path => {
   function Probe(){const location=useLocation();return <p data-testid="redirect">{location.pathname+location.search+location.hash}</p>;}

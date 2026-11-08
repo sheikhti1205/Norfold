@@ -176,6 +176,48 @@
    `:not(:first-child)` rule never reached it and it measured 21px tall.
    Match the status box's button directly and keep the 44px house minimum. */
 .fb-chat-photo > div button, .fb-chat-photo-draft button, .fb-chat-message > button { min-height:44px; min-width:44px; padding:.3rem .5rem; text-decoration:underline; }
+
+/* Photos from one send read as one bubble: a 2-up row, a tall-left 3-up, or a
+   2x2 with the remainder counted on the last cell. Every cell is the same
+   ChatPhoto control, so loading, retry, download and the shared viewer never
+   diverge from a single photo. */
+.fb-chat-photo-grid { display:grid; width:min(15rem, 72vw); max-width:100%; gap:2px; overflow:hidden;
+  border-radius:.6rem; background:var(--fb-surface); }
+.fb-chat-photo-grid-2 { grid-template-columns:repeat(2, minmax(0,1fr)); aspect-ratio:2 / 1; }
+.fb-chat-photo-grid-3 { grid-template-columns:repeat(2, minmax(0,1fr)); grid-template-rows:repeat(2, minmax(0,1fr)); aspect-ratio:1 / 1; }
+.fb-chat-photo-grid-3 .fb-chat-photo-cell:first-child { grid-row:span 2; }
+.fb-chat-photo-grid-4 { grid-template-columns:repeat(2, minmax(0,1fr)); grid-template-rows:repeat(2, minmax(0,1fr)); aspect-ratio:1 / 1; }
+.fb-chat-photo-cell { position:relative; min-width:0; min-height:0; overflow:hidden; }
+/* The cell owns the box; the shared control fills it instead of setting its
+   own aspect ratio and width. */
+.fb-chat-photo-grouped { position:absolute; inset:0; width:100%; height:100%; max-height:none; border-radius:0; }
+.fb-chat-photo-grouped > button, .fb-chat-photo-grouped > div { width:100%; height:100%; min-height:0; }
+.fb-chat-photo-grouped > div { padding:.25rem; font-size:.7rem; line-height:1.2; }
+.fb-chat-photo-grouped img { object-fit:cover; }
+.fb-chat-photo-missing { display:grid; place-items:center; width:100%; height:100%; padding:.3rem;
+  text-align:center; font-size:.7rem; line-height:1.25; color:var(--fb-on-surface-variant);
+  background:var(--fb-surface-container); }
+.fb-chat-photo-more { position:absolute; inset:0; display:grid; place-items:center; pointer-events:none;
+  background:rgb(0 0 0 / .52); color:#fff; font-size:1.2rem; font-weight:650; }
+
+/* Tapping a quote scrolls the original into view and rings it once. The two
+   names are identical animations, alternated by the tap counter, so tapping
+   the same quote twice restarts the ring instead of resetting a live class.
+   One transient ring is the only paint animation in Chat; reduced motion keeps
+   the ring and drops the travel. */
+@keyframes fb-chat-flash-a {
+  0% { box-shadow:0 0 0 2px var(--fb-primary), 0 0 0 5px color-mix(in srgb, var(--fb-primary) 26%, transparent); }
+  100% { box-shadow:0 0 0 2px transparent, 0 0 0 5px transparent; }
+}
+@keyframes fb-chat-flash-b {
+  0% { box-shadow:0 0 0 2px var(--fb-primary), 0 0 0 5px color-mix(in srgb, var(--fb-primary) 26%, transparent); }
+  100% { box-shadow:0 0 0 2px transparent, 0 0 0 5px transparent; }
+}
+.fb-chat-flash-a { animation:fb-chat-flash-a 1.6s ease-out both; }
+.fb-chat-flash-b { animation:fb-chat-flash-b 1.6s ease-out both; }
+@media (prefers-reduced-motion:reduce) {
+  .fb-chat-flash-a, .fb-chat-flash-b { animation:none; box-shadow:0 0 0 2px var(--fb-primary); }
+}
 /* Staged photos: a real review tray, not a single "Photo ready" line. The
    strip scrolls horizontally at phone widths, every thumbnail opens the shared
    viewer, and each slot carries its own remove control. */
