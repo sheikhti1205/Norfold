@@ -5,6 +5,29 @@ described in [docs/history/VERSION_HISTORY.md](docs/history/VERSION_HISTORY.md).
 track real evolution and do not imply a stable release. The per-commit mapping is in
 [docs/history/VERSION_HISTORY.csv](docs/history/VERSION_HISTORY.csv).
 
+## 0.15.0-beta.1 — chat finishing
+
+- Replies jump: tapping a reply's quoted reference scrolls to the original and
+  rings it visibly, including a quote that names a photo hidden inside an
+  album. Reduced motion keeps a static ring instead of animating.
+- Photos from one send render as one bubble using the standard 2 / 3 / 4+
+  grids. Cells share the canonical photo control and viewer, opening at the
+  tapped photo; the first photo owns the caption and the last owns the time
+  and receipts.
+- Pinned messages: up to three per connected conversation, shared across both
+  participants' devices. A compact strip below the chat header jumps to a
+  pinned message, Pin/Unpin lives in the existing long-press menu, and an
+  unsent message is removed from the pins by the server.
+- Google sign-in no longer dead-ends when Credential Manager has no usable
+  credential: the same Supabase Google provider completes in the system
+  browser and returns through the verified `/auth/callback` App Link.
+- Device-bound builds (`signeddev` / `release`) now fail closed when the APK is
+  not signed by the canonical findback-release certificate, so a debug-signed
+  APK can no longer masquerade as an acceptance build.
+- Beta/source checkpoint, not a GitHub Release, public APK distribution, domain
+  migration or device acceptance. Phone/browser acceptance with real accounts
+  is recorded separately.
+
 ## 0.14.0-beta.1 — Norfold rebrand
 
 - The consumer product is now **Norfold**; the bird/leaf logo and the current

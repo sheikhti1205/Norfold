@@ -15,6 +15,7 @@ import {
 } from "../../services/auth/googleFailureClasses";
 import {
   googleAuthStrategy,
+  signInWithGoogleBrowserFallback,
   signInWithGoogleIdToken,
   signInWithGoogleWebOAuth,
   type GoogleAuthStrategy,
@@ -57,6 +58,9 @@ export interface GoogleSignInSeams {
   startGoogleSignIn: (opts: { mode: GoogleAuthMode }) => Promise<GoogleIdTokenResult>;
   signInWithGoogleIdToken: (idToken: string, nonce: string) => Promise<GoogleSignInOutcome>;
   startWebOAuth: (opts?: { returnTo?: string | null }) => Promise<void>;
+  /** Android only: complete the same provider in the system browser when
+   * Credential Manager has no usable credential. */
+  startBrowserFallback: () => Promise<void>;
 }
 
 const WIRED_SEAMS: GoogleSignInSeams = {
@@ -64,6 +68,7 @@ const WIRED_SEAMS: GoogleSignInSeams = {
   startGoogleSignIn,
   signInWithGoogleIdToken,
   startWebOAuth: signInWithGoogleWebOAuth,
+  startBrowserFallback: signInWithGoogleBrowserFallback,
 };
 
 let activeSeams: GoogleSignInSeams = WIRED_SEAMS;
@@ -166,6 +171,24 @@ export function GoogleSignInButton({
       }
       outcome = await activeSeams.signInWithGoogleIdToken(token.idToken, token.nonce);
     } catch (err) {
+      const cls = failureKindOf(err);
+      // Credential Manager has no usable credential on this device: no
+      // authorized account, an older Play Services, or a package/signing
+      // certificate that the Android OAuth client does not cover. The same
+      // Supabase Google provider works in the system browser, so continue
+      // there instead of dead-ending a fully configured Google account.
+      if (cls === "no_account" || cls === "device_unsupported" || cls === "setup_unavailable") {
+        try {
+          await activeSeams.startBrowserFallback();
+          // Keep pending=true: the Custom Tab is now the active flow and the
+          // App-Link callback will finish it.
+          return;
+        } catch (fallbackErr) {
+          setError(humanMessageFor(fallbackErr));
+          setPending(false);
+          return;
+        }
+      }
       setError(humanMessageFor(err));
       setPending(false);
       return;

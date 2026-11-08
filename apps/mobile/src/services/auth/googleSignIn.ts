@@ -18,11 +18,12 @@
  */
 import type { PublicUser } from "@norfold/shared";
 import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 import { getSupabase } from "../supabaseClient";
 import { ApiError, cacheSessionToken, getTokenRevision } from "../session";
 import { fetchMe } from "../auth";
 import { isGoogleAuthAvailable } from "../../native/googleAuth";
-import { AUTH_CALLBACK_PATH, isAllowedAuthOrigin } from "../../utils/authRedirect";
+import { AUTH_CALLBACK_PATH, PROD_AUTH_ORIGIN, authCallbackUrl, isAllowedAuthOrigin } from "../../utils/authRedirect";
 import { isSafeInternalRoute, rememberAuthReturnTo } from "../../utils/authReturnTo";
 // W-E: single owner of the failure-class taxonomy + consumer copy. S2 maps
 // every exchange rejection onto a stable class (never raw provider text) and
@@ -319,6 +320,40 @@ export async function signInWithGoogleWebOAuth(opts: { returnTo?: string | null 
     },
   });
   if (error) throw mapGoogleSignInError(error);
+}
+
+/**
+ * Android browser fallback for Google sign-in.
+ *
+ * Credential Manager can answer `NoCredentialException` even when the device
+ * has Google accounts: the Android OAuth client must cover this exact package
+ * and signing certificate, and a device whose accounts are served outside Play
+ * Services exposes none to Credential Manager. Dead-ending there makes a
+ * configured Google provider unusable, so the same Supabase Google provider is
+ * completed in the system browser instead: the hosted authorize URL opens in a
+ * Custom Tab and the App Link `/auth/callback` returns to `AuthLinkBootstrap`,
+ * which exchanges the PKCE code exactly once through the same seam. Still no
+ * client secret in the app and no second session store.
+ */
+export async function signInWithGoogleBrowserFallback(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) {
+    await signInWithGoogleWebOAuth();
+    return;
+  }
+  const { data, error } = await getSupabase().auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      // The App Link host, not the WebView origin (`https://localhost`):
+      // verified App Links hand the code back to this app.
+      redirectTo: authCallbackUrl(PROD_AUTH_ORIGIN),
+      skipBrowserRedirect: true,
+      queryParams: { prompt: "select_account" },
+    },
+  });
+  if (error) throw mapGoogleSignInError(error);
+  const url = typeof data?.url === "string" ? data.url : "";
+  if (!url.startsWith("https://")) throw mapGoogleSignInError({ message: "provider url missing" });
+  await Browser.open({ url });
 }
 
 /**

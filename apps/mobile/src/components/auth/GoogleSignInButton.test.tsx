@@ -36,6 +36,7 @@ function configureAvailable(seams?: {
     phone?: string | null;
   }>;
   signIn?: (idToken: string, nonce: string) => Promise<GoogleSignInOutcome>;
+  fallback?: () => Promise<void>;
 }) {
   __setGoogleSignInSeams({
     strategy: () => "android-native",
@@ -48,6 +49,11 @@ function configureAvailable(seams?: {
       seams?.signIn ??
       (async () => {
         throw new Error("signInWithGoogleIdToken must not be called");
+      }),
+    startBrowserFallback:
+      seams?.fallback ??
+      (async () => {
+        throw Object.assign(new Error("no browser fallback in this test"), { kind: "try_again" });
       }),
   });
 }
@@ -160,7 +166,16 @@ describe("GoogleSignInButton (S3)", () => {
       throw err;
     });
     const onDone = vi.fn();
-    configureAvailable({ start });
+    configureAvailable({
+      start,
+      // When the browser fallback cannot start either, the same class must
+      // still render the same actionable copy.
+      fallback: async () => {
+        const err = new Error(`fallback-${kind}`) as Error & { kind: string };
+        err.kind = kind;
+        throw err;
+      },
+    });
     render(<GoogleSignInButton mode="signin" onDone={onDone} />);
     fireEvent.click(screen.getByRole("button", { name: "Continue with Google" }));
     const alert = await screen.findByRole("alert");
@@ -179,7 +194,14 @@ describe("GoogleSignInButton (S3)", () => {
       throw err;
     });
     const onDone = vi.fn();
-    configureAvailable({ start });
+    configureAvailable({
+      start,
+      fallback: async () => {
+        const err = new Error("fallback misconfigured") as Error & { kind: string };
+        err.kind = "misconfigured";
+        throw err;
+      },
+    });
     render(<GoogleSignInButton mode="signin" onDone={onDone} />);
     fireEvent.click(screen.getByRole("button", { name: "Continue with Google" }));
     const alert = await screen.findByRole("alert");
@@ -210,8 +232,6 @@ describe("GoogleSignInButton (S3)", () => {
       { kind: "provider_rejected", pattern: /rejected.*try again/i },
       { kind: "network", pattern: /connection/i },
       { kind: "rate_limited", pattern: /wait a moment/i },
-      { kind: "setup_unavailable", pattern: /isn't set up yet/i },
-      { kind: "no_account", pattern: /isn't available/i },
     ] as const;
     for (const { kind, pattern } of cases) {
       cleanup();
@@ -233,6 +253,41 @@ describe("GoogleSignInButton (S3)", () => {
       expect(alert.textContent).not.toMatch(/device/i);
       expect(onDone).not.toHaveBeenCalled();
     }
+  });
+
+  it("continues in the system browser when Credential Manager has no usable account", async () => {
+    const fallback = vi.fn(async () => {});
+    const onDone = vi.fn();
+    configureAvailable({
+      start: async () => {
+        const err = new Error("native-no-credential") as Error & { kind: string };
+        err.kind = "unavailable";
+        throw err;
+      },
+      fallback,
+    });
+    render(<GoogleSignInButton mode="signin" onDone={onDone} />);
+    fireEvent.click(screen.getByRole("button", { name: "Continue with Google" }));
+    await waitFor(() => expect(fallback).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it("does not open the system browser when the user dismissed the native sheet", async () => {
+    const fallback = vi.fn(async () => {});
+    configureAvailable({
+      start: async () => {
+        const err = new Error("dismissed") as Error & { kind: string };
+        err.kind = "cancelled";
+        throw err;
+      },
+      fallback,
+    });
+    render(<GoogleSignInButton mode="signin" onDone={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Continue with Google" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Continue with Google" })).toBeTruthy());
+    expect(fallback).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("stays silent when the seam reports the S2 cancelled_silent class", async () => {

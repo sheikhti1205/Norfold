@@ -20,10 +20,15 @@ const hoisted = vi.hoisted(() => ({
   signInWithIdToken: vi.fn(),
   getUser: vi.fn(),
   single: vi.fn(),
+  browserOpen: vi.fn(),
 }));
 
 vi.mock("@capacitor/core", () => ({
   Capacitor: { isNativePlatform: () => hoisted.isNativePlatform() },
+}));
+
+vi.mock("@capacitor/browser", () => ({
+  Browser: { open: (...args: unknown[]) => hoisted.browserOpen(...args) },
 }));
 
 vi.mock("../../native/googleAuth", () => ({
@@ -55,6 +60,7 @@ import {
   googleAuthStrategy,
   googleOAuthRedirectTo,
   resolveCurrentGoogleSessionOutcome,
+  signInWithGoogleBrowserFallback,
   signInWithGoogleWebOAuth,
 } from "./googleSignIn";
 import { AUTH_CALLBACK_PATH, RECOVERY_PATH } from "../../utils/authRedirect";
@@ -336,6 +342,35 @@ describe("W-E web parity hardening — one-time exchange, shape, routing", () =>
     const source = fs.readFileSync(path.join(__dirname, "..", "supabaseClient.ts"), "utf8");
     expect(source).toMatch(/flowType:\s*"pkce"/);
     expect(source).toMatch(/detectSessionInUrl:\s*false/);
+  });
+});
+
+describe("signInWithGoogleBrowserFallback — native system-browser lane", () => {
+  it("opens the hosted authorize URL with the App-Link callback", async () => {
+    hoisted.isNativePlatform.mockReturnValue(true);
+    hoisted.signInWithOAuth.mockResolvedValue({
+      data: { url: "https://nfjhpigbsyyoaaktfaev.supabase.co/auth/v1/authorize?provider=google" },
+      error: null,
+    });
+    await signInWithGoogleBrowserFallback();
+    expect(hoisted.signInWithOAuth).toHaveBeenCalledWith({
+      provider: "google",
+      options: {
+        redirectTo: "https://findbackapp.social/auth/callback",
+        skipBrowserRedirect: true,
+        queryParams: { prompt: "select_account" },
+      },
+    });
+    expect(hoisted.browserOpen).toHaveBeenCalledWith({
+      url: "https://nfjhpigbsyyoaaktfaev.supabase.co/auth/v1/authorize?provider=google",
+    });
+  });
+
+  it("fails closed when the provider returns no URL and never opens the browser", async () => {
+    hoisted.isNativePlatform.mockReturnValue(true);
+    hoisted.signInWithOAuth.mockResolvedValue({ data: { url: null }, error: null });
+    await expect(signInWithGoogleBrowserFallback()).rejects.toBeInstanceOf(ApiError);
+    expect(hoisted.browserOpen).not.toHaveBeenCalled();
   });
 });
 
