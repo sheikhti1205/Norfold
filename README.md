@@ -58,7 +58,7 @@ Capture dimensions and checksums: [screenshot manifest](docs/screenshots/manifes
 - Optional AI Chat using your own API key from the provider you choose
 
 This is an internal beta under validation, not a public-ready release. The current
-source version is `0.14.0-beta.1`. Product Fit Reset migrations have exact hosted
+source version is `0.15.0-beta.1`. Product Fit Reset migrations have exact hosted
 readback; final CI and web deployment receipts are tracked separately. A source
 version is not an installable release or a real-device acceptance claim.
 
