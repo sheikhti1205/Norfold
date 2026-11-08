@@ -6,6 +6,7 @@ import { downloadBackup } from "./backupDrive";
 import { importBackupKey } from "./backupCrypto";
 import { DriveStoreError } from "./driveStore";
 import { DriveAuthError, type DriveAccess } from "./driveAuth";
+import { BackupError } from "./backup";
 import type { BackupKeyMaterial } from "./backupKey";
 import { ApiError } from "../session";
 import {
@@ -244,6 +245,23 @@ describe("operation ownership", () => {
     expect(local.messages).toHaveLength(25);
     expect(run.auth.renew).toHaveBeenCalledTimes(1);
     expect(run.auth.authorize).not.toHaveBeenCalled();
+  });
+
+  it("names a snapshot identity conflict as an integrity failure with its internal code", async () => {
+    const run = harness({ snapshot: snapshotOf(25) });
+    await run.backup.connect();
+    const access = run.auth.current();
+    run.deps.snapshot = async () => snapshotOf(3);
+    run.deps.importSnapshot = async () => { throw new BackupError("backup: identity conflict"); };
+    run.auth.drop();
+    run.auth.renew.mockImplementation(async () => { run.auth.current = () => access; return access; });
+    const reopened = new DriveBackup(run.deps);
+    run.advance(BACKUP_MAX_DELAY_MS);
+    await expect(reopened.tick()).resolves.toEqual({ kind: "failed", reason: "integrity" });
+    // A conflict is diagnosable without exposing a provider message: the
+    // disclosure gets the fixed internal code and the stage it failed at.
+    expect(reopened.status()).toMatchObject({ kind: "attention", lastError: "integrity",
+      diagnostic: { stage: "history-merge", cause: "integrity", detail: "backup: identity conflict" } });
   });
 
   it("preserves the committed backup and asks for repair when the key generation changes", async () => {
