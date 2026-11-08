@@ -631,6 +631,20 @@ function seedV3(version = 3, attachment?: Record<string, unknown>): Promise<void
 describe("chat media records (web parity with SQLite)", () => {
   beforeEach(() => { vi.spyOn(Date, "now").mockReturnValue(CLOCK); });
 
+  it("never promotes or trails an unpositioned legacy unsent row", async () => {
+    const fixture = await mediaFixture(ATTACHMENT, MESSAGE_2);
+    const attachment = { ...fixture.metadata, state: "EVICTED", attempts: 0, lastAccessAt: CLOCK };
+    await seedV3(4, attachment);
+    const store = await open();
+    // The row carries the erasure, not a placeable message: the newer sequenced
+    // message keeps the preview and the transcript tail.
+    expect((await store.listConversations())[0]?.lastMessage?.id).toBe(MESSAGE);
+    expect((await store.listMessages(CONVERSATION)).map((message) => message.id)).not.toContain(MESSAGE_2);
+    // The erasure record is still reachable by id, so a late echo can bind it.
+    expect((await store.getMessage(MESSAGE_2))?.unsentAt).toBe(CLOCK);
+    store.close();
+  });
+
   it("upgrades real v4 classification, preserving legacy unknowns, suppression and the queued outbox", async () => {
     const fixture = await mediaFixture(ATTACHMENT, MESSAGE_2);
     const attachment = { ...fixture.metadata, state: "EVICTED", attempts: 0, lastAccessAt: CLOCK };

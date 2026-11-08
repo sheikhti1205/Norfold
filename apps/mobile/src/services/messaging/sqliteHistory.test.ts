@@ -1289,6 +1289,15 @@ describe("chat media schema and migration", () => {
       .not.toContain("message_type");
   }
 
+  it("never promotes or trails an unpositioned legacy unsent row", async () => {
+    seedV6();
+    const history = await open();
+    const [summary] = await history.listConversations();
+    expect(summary?.lastMessage?.id).toBe(MESSAGE);
+    expect((await history.listMessages(CONVERSATION)).map((message) => message.id)).not.toContain(MESSAGE_2);
+    await history.close();
+  });
+
   it.each([S.copyMessagesV9, S.dropMessages, S.renameMessagesV9])("keeps the v8 stamp and exact rows after failed v9 rebuild: %s", async (failAt) => {
     seedV6();
     database.exec(S.addMessageType); database.exec(S.backfillMediaType);

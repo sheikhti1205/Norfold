@@ -282,7 +282,12 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
     return transaction("readonly", (tx, result, guard) => {
       const request = tx.objectStore("messages").index("conversation").getAll(conversationId);
       request.onsuccess = guard(() => {
-        const messages = request.result as StoredHumanMessage[];
+        // A pending send has no server order yet; it belongs at the end. An
+        // unsequenced unsent tombstone has no place at all (the unsend erased a
+        // message this client never positioned), so it must not float to the
+        // bottom as a fresh bubble. Its erasure record remains authoritative.
+        const messages = (request.result as StoredHumanMessage[])
+          .filter((message) => message.server !== undefined || message.unsentAt === undefined);
         // Pending messages have no server order. UUID tie-breaker, never timestamp inference.
         messages.sort((a, b) => (a.server?.sequence ?? Infinity) - (b.server?.sequence ?? Infinity) || a.id.localeCompare(b.id));
         visibleMessages(tx, guard, messages, result);

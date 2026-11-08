@@ -143,7 +143,15 @@ export function summarizeConversations(
       rows.set(row.conversationId, row);
     }
     if (row.peerId !== peerId) throw new Error("Immutable conversation peer conflict");
-    row.lastMessage = structuredClone(message);
+    // A locally pending message legitimately has no position and is the newest
+    // thing this device did, so it may be the preview. An unpositioned unsent
+    // tombstone is different: the unsend erased a message this client cannot
+    // place, and `?? Infinity` would otherwise pin the list preview to
+    // "Message unsent" above every real message that follows it. It stays in
+    // the transcript's erasure records but never becomes the summary.
+    if (message.server !== undefined || message.unsentAt === undefined) {
+      row.lastMessage = structuredClone(message);
+    }
     row.lastSequence = Math.max(row.lastSequence, message.server?.sequence ?? 0);
     if (pending.has(message.id)) row.pendingCount++;
     if (message.authorId !== scope.accountId && !message.readLocally && message.unsentAt === undefined
