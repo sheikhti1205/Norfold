@@ -11,7 +11,11 @@ tested and — where relevant — accepted on a real device.
 - Comments, replies, mentions, reactions, saves, sharing.
 - Recovery confirmation and ratings that come from an actual recovery.
 - Private person-to-person chat with message requests, after-connection still
-  images, durable local history and a temporary server mailbox.
+  images, replies, grouped photos, up to three shared pinned messages, durable
+  local history and a temporary server mailbox.
+- Optional encrypted Google Drive chat backup with a separate consent; the key
+  is held for the account and re-issued to signed-in devices, so it is not
+  zero-knowledge.
 - Role-gated moderation, reporting, appeals and staff feedback inside the same app.
 - Local-first AI: on-device suggestions and local model support; optional cloud
   AI Chat with the user's own API key.
@@ -20,7 +24,7 @@ tested and — where relevant — accepted on a real device.
 ## Before a public beta
 
 - Real two-account, multi-device acceptance of chat delivery, offline/outbox,
-  restore and media.
+  live Google Drive backup and restore, and media.
 - Signed-in ordinary-user and staff acceptance of moderation, appeals and feedback.
 - TalkBack and large-text passes across the main flows.
 - Phone photo capture and import acceptance on physical devices.
@@ -39,7 +43,6 @@ tested and — where relevant — accepted on a real device.
 - End-to-end encrypted messaging.
 - Group chat, calls or stories.
 - A separate admin web application.
-- Consumer cloud backup of chat history.
 - Monetization features.
 
 Items here are directional. Nothing on this page is a commitment or a claim that a
