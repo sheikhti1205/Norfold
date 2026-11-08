@@ -13,17 +13,17 @@ import { webcrypto } from "node:crypto";
 import { sha256Hex } from "../services/messaging/media";
 
 const m = vi.hoisted(() => {
-  const view = { mode: "CONNECTED", request: "OUTGOING", ownBlocked: false, ownMuted: false, epoch: "relationship-a", revision: 1 };
+  const view = { mode: "CONNECTED", request: "OUTGOING", ownBlocked: false, ownMuted: false, epoch: "relationship-a", revision: 1, pinnedMessageIds: [] as string[] };
   return { view, watch: vi.fn(), chat: { accountId: "account", status: "ready", revision: 1,
     threadSync: { conversationId: "chat", mode: "ready", missing: 0 } as MessagingThreadSync | null,
     conversations: [{ conversationId: "chat", peerId: "peer", cachedProjection: view }], currentProjections: { chat: view } },
     messages: [] as unknown[], media: [] as unknown[], outbox: [] as unknown[], cached: null as null | { messages: unknown[]; media: unknown[]; outbox: unknown[] }, threadRead: vi.fn(),
-    voice: vi.fn(), location: vi.fn(), mute: vi.fn(), prepare: vi.fn(), relationship: vi.fn(), text: vi.fn(), send: vi.fn(), read: vi.fn(), download: vi.fn(), remove: vi.fn(), recover: vi.fn(), retry: vi.fn(), receipt: vi.fn(), observe: vi.fn(), refresh: vi.fn(), choose: vi.fn(), import: vi.fn(), file: vi.fn() };
+    voice: vi.fn(), location: vi.fn(), mute: vi.fn(), pin: vi.fn(), prepare: vi.fn(), relationship: vi.fn(), text: vi.fn(), send: vi.fn(), read: vi.fn(), download: vi.fn(), remove: vi.fn(), recover: vi.fn(), retry: vi.fn(), receipt: vi.fn(), observe: vi.fn(), refresh: vi.fn(), choose: vi.fn(), import: vi.fn(), file: vi.fn() };
 });
 vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "account" } }) }));
 vi.mock("../services/accountLabels", () => ({ fetchAccountIdentities: async () => new Map(), readCachedAccountIdentities: () => new Map() }));
 vi.mock("../services/messaging/useMessaging", () => ({ useMessaging: () => m.chat }));
-vi.mock("../services/messaging/runtime", () => ({ getCachedMessagingThreadState: () => m.cached, watchMessagingThread: m.watch, sendMessagingVoice: m.voice, sendMessagingLocation: m.location, setMessagingMuted: m.mute, readMessagingThreadState: () => m.threadRead(), fetchMessagingReceiptView: m.receipt, observeMessagingReceipt: m.observe, markMessagingConversationRead: async () => {}, refreshMessaging: m.refresh, sendMessagingText: m.text, sendMessagingMedia: m.send, readMessagingMedia: m.read, downloadMessagingMedia: m.download, changeMessagingRelationship: m.relationship, clearMessagingConversation: async () => {}, removeMessagingMessage: m.remove, recoverMessagingText: m.recover, retryMessagingMessage: m.retry }));
+vi.mock("../services/messaging/runtime", () => ({ getCachedMessagingThreadState: () => m.cached, watchMessagingThread: m.watch, sendMessagingVoice: m.voice, sendMessagingLocation: m.location, setMessagingMuted: m.mute, pinMessagingMessage: m.pin, readMessagingThreadState: () => m.threadRead(), fetchMessagingReceiptView: m.receipt, observeMessagingReceipt: m.observe, markMessagingConversationRead: async () => {}, refreshMessaging: m.refresh, sendMessagingText: m.text, sendMessagingMedia: m.send, readMessagingMedia: m.read, downloadMessagingMedia: m.download, changeMessagingRelationship: m.relationship, clearMessagingConversation: async () => {}, removeMessagingMessage: m.remove, recoverMessagingText: m.recover, retryMessagingMessage: m.retry }));
 vi.mock("../services/messaging/preparePhoto", () => ({ prepareMessagingPhoto: m.prepare }));
 vi.mock("../services/media/nativeMedia", () => ({ chooseNativeImages: m.choose, importNativeImageUri: m.import, importedImageToFile: m.file }));
 beforeEach(() => { vi.stubGlobal("URL", Object.assign(class extends URL {}, { createObjectURL: vi.fn(() => "blob:test"), revokeObjectURL: vi.fn() })); m.view.mode = "CONNECTED"; m.view.ownBlocked = false; m.chat.revision = 1; m.messages = []; m.media = []; m.outbox = []; m.prepare.mockReset(); m.send.mockReset(); m.read.mockReset().mockResolvedValue(null); m.download.mockReset().mockResolvedValue(undefined); m.remove.mockReset().mockResolvedValue(undefined); m.recover.mockReset().mockResolvedValue(undefined); m.receipt.mockReset().mockResolvedValue({ context: "authority", readIds: [] }); m.observe.mockReset().mockResolvedValue(true); m.refresh.mockReset().mockResolvedValue(undefined);
@@ -34,6 +34,7 @@ beforeEach(() => { vi.stubGlobal("URL", Object.assign(class extends URL {}, { cr
   m.location.mockReset().mockResolvedValue("shared"); m.chat.accountId = "account";
   m.relationship.mockReset().mockResolvedValue(undefined);
   m.mute.mockReset().mockResolvedValue(undefined); m.view.ownMuted = false; m.chat.status = "ready";
+  m.pin.mockReset().mockResolvedValue(undefined); m.view.pinnedMessageIds = [];
   m.view.epoch = "relationship-a"; m.view.revision = 1; m.chat.currentProjections = { chat: m.view };
   m.chat.threadSync = { conversationId: "chat", mode: "ready", missing: 0 };
   m.watch.mockReset().mockReturnValue(() => {});
@@ -501,6 +502,40 @@ it("keeps failed destructive operations in a labelled confirmation with their er
   fireEvent.click(within(dialog).getByRole("button",{name:"Delete for me"}));
   await waitFor(()=>expect(within(dialog).getByRole("alert").textContent).toMatch(/Could not confirm/));
   expect(screen.getByText("Caption")).toBeTruthy();
+});
+it("shows shared pins under the header and rings the message it jumps to", async () => {
+  m.messages = [
+    { ...received("TEXT"), id: "pinned", body: "Bring the charger" },
+    { ...received("TEXT"), id: "later", body: "See you", server: { eventId: "event-2", sequence: 2 } },
+  ];
+  m.view.pinnedMessageIds = ["pinned"];
+  await open();
+  const strip = screen.getByRole("region", { name: "Pinned messages" });
+  fireEvent.click(within(strip).getByRole("button", { name: /Pinned message from/ }));
+  const row = document.querySelector<HTMLElement>('[data-chat-message="pinned"]');
+  await waitFor(() => expect(row?.querySelector(".fb-chat-message")?.className).toMatch(/fb-chat-flash-[ab]/));
+  expect(document.activeElement).toBe(row);
+});
+it("pins and unpins from the existing message menu and stops at three", async () => {
+  m.messages = [
+    { ...received("TEXT"), id: "one" }, { ...received("TEXT"), id: "two" },
+    { ...received("TEXT"), id: "three" }, { ...received("TEXT"), id: "four", server: { eventId: "event-4", sequence: 4 } },
+  ];
+  m.view.pinnedMessageIds = ["one", "two", "three"];
+  await open();
+  fireEvent.click(screen.getAllByRole("button", { name: "Options for received message" })[0]!);
+  fireEvent.click(screen.getByRole("menuitem", { name: "Unpin" }));
+  await waitFor(() => expect(m.pin).toHaveBeenCalledWith("account", "chat", "one", false));
+  fireEvent.keyDown(document, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  fireEvent.click(screen.getAllByRole("button", { name: "Options for received message" })[3]!);
+  expect(screen.getByRole("menuitem", { name: "Pin" }).getAttribute("aria-disabled")).toBe("true");
+});
+it("drops a pin whose message is unsent or no longer on this device", async () => {
+  m.messages = [{ ...received("TEXT"), id: "gone", unsentAt: 1 }];
+  m.view.pinnedMessageIds = ["gone", "missing"];
+  await open();
+  expect(screen.queryByRole("region", { name: "Pinned messages" })).toBeNull();
 });
 it("reports the participant directly instead of reusing a previously selected message", async () => {
   m.messages=[received("TEXT")];await open();
