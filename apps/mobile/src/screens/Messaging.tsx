@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { motion, type PanInfo } from "framer-motion";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { Archive, ArrowLeft, BellOff, ChevronDown, Ellipsis, Flag, ImageOff, Images, ListFilter, LogOut, MapPin, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound, X } from "lucide-react";
@@ -225,6 +225,49 @@ export function replyPreview(message: StoredHumanMessage): string {
   return message.body;
 }
 
+/**
+ * Photos from one send are one bubble, not one bubble per file. The rule is
+ * presentation-only — no schema column and no wire key — so both sides group
+ * the same run: consecutive photos by the same author with no other message
+ * between them, each written within a few seconds of the previous one. Unknown
+ * (zero) timestamps never prove a batch, because a legacy file with no clock
+ * would otherwise merge unrelated photos.
+ */
+const PHOTO_BATCH_GAP_MS = 4000;
+
+export interface PhotoBatches {
+  /** Leader id -> every message in the run, leader first. */
+  batches: Map<string, StoredHumanMessage[]>;
+  /** Members rendered by their leader; the transcript skips them. */
+  followers: Set<string>;
+  /** Follower id -> its visible leader, so a reply or pin still lands on screen. */
+  leaderOf: Map<string, string>;
+}
+
+export function photoBatches(messages: StoredHumanMessage[]): PhotoBatches {
+  const batches = new Map<string, StoredHumanMessage[]>();
+  const followers = new Set<string>();
+  const leaderOf = new Map<string, string>();
+  for (let index = 0; index < messages.length; index += 1) {
+    const first = messages[index]!;
+    if (first.messageType !== "MEDIA" || first.unsentAt !== undefined) continue;
+    const items = [first];
+    while (index + items.length < messages.length) {
+      const next = messages[index + items.length]!;
+      const previous = items[items.length - 1]!;
+      if (next.messageType !== "MEDIA" || next.unsentAt !== undefined || next.authorId !== first.authorId) break;
+      const from = previous.createdAt ?? 0, to = next.createdAt ?? 0;
+      if (!(from > 0 && to >= from && to - from <= PHOTO_BATCH_GAP_MS)) break;
+      items.push(next);
+    }
+    if (items.length < 2) continue;
+    batches.set(first.id, items);
+    for (const item of items.slice(1)) { followers.add(item.id); leaderOf.set(item.id, first.id); }
+    index += items.length - 1;
+  }
+  return { batches, followers, leaderOf };
+}
+
 function RetrySync({ accountId, labelled = false }: { accountId: string; labelled?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -238,10 +281,13 @@ function RetrySync({ accountId, labelled = false }: { accountId: string; labelle
   </>;
 }
 
-function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady }: {
+function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady, grouped = false, label = "View photo" }: {
   accountId: string; conversationId: string; attachment: MediaAttachment;
   onOpen: (id: string, bytes: ArrayBuffer, mime: string) => void;
   onReady: (id: string, content: { bytes: ArrayBuffer; mime: string } | null) => void;
+  /** A grid cell defines the box; the photo fills it instead of setting its own ratio. */
+  grouped?: boolean;
+  label?: string;
 }) {
   const [content, setContent] = useState<{ url: string; bytes: ArrayBuffer } | null>(null);
   const [state, setState] = useState<"loading" | "missing" | "failed" | "unavailable">("loading");
@@ -271,14 +317,44 @@ function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady }: {
     try { await downloadMessagingMedia(accountId, conversationId, attachment.id); setVersion((v) => v + 1); }
     catch (error) { setState(error instanceof PhotoUnavailableError ? "unavailable" : "failed"); }
   }
-  return <div className="fb-chat-photo" data-loading={content && !loaded ? "true" : undefined}
-    style={{ aspectRatio: `${attachment.width} / ${attachment.height}` }}>
-    {content ? <button type="button" aria-label="View photo" onClick={() => onOpen(attachment.messageId, content.bytes, attachment.mime)}>
+  return <div className={`fb-chat-photo${grouped ? " fb-chat-photo-grouped" : ""}`} data-loading={content && !loaded ? "true" : undefined}
+    style={grouped ? undefined : { aspectRatio: `${attachment.width} / ${attachment.height}` }}>
+    {content ? <button type="button" aria-label={label} onClick={() => onOpen(attachment.messageId, content.bytes, attachment.mime)}>
       <img src={content.url} alt="" onLoad={() => setLoaded(true)} onError={() => { onReady(attachment.id, null); setContent(null); setState("failed"); }}
         data-receipt-message={loaded && attachment.state === "READY" ? attachment.messageId : undefined} />
     </button> : <div role="status">{state === "loading" ? "Photo loading…" : state === "failed" ? "Could not load photo." : "Photo unavailable"}
       {canDownload && (state === "missing" || state === "failed") && <button type="button" onClick={() => void download()}>Download again</button>}
     </div>}
+  </div>;
+}
+
+/**
+ * Photos from one send share a bubble. Two sit side by side, three put the
+ * first beside a stacked pair, and four or more use a 2x2 with the remainder
+ * counted on the last cell. Each cell is the canonical ChatPhoto, so loading,
+ * retry, download and the shared viewer keep one implementation; a hidden
+ * follower still opens the viewer at its own photo.
+ */
+function ChatPhotoGroup({ accountId, conversationId, items, media, onOpen, onReady }: {
+  accountId: string; conversationId: string; items: StoredHumanMessage[];
+  media: MediaAttachment[];
+  onOpen: (id: string, bytes: ArrayBuffer, mime: string) => void;
+  onReady: (id: string, content: { bytes: ArrayBuffer; mime: string } | null) => void;
+}) {
+  const visible = items.slice(0, 4);
+  const hidden = items.length - visible.length;
+  return <div className={`fb-chat-photo-grid fb-chat-photo-grid-${Math.min(items.length, 4)}`}
+    role="group" aria-label={`${items.length} photos`}>
+    {visible.map((message, index) => {
+      const attachment = media.find((entry) => entry.messageId === message.id);
+      return <div key={message.id} className="fb-chat-photo-cell">
+        {attachment
+          ? <ChatPhoto accountId={accountId} conversationId={conversationId} attachment={attachment}
+              onOpen={onOpen} onReady={onReady} grouped label={`View photo ${index + 1} of ${items.length}`} />
+          : <span className="fb-chat-photo-missing" role="status">{missingAttachmentCopy(message)}</span>}
+        {hidden > 0 && index === visible.length - 1 && <span className="fb-chat-photo-more" aria-hidden="true">{`+${hidden}`}</span>}
+      </div>;
+    })}
   </div>;
 }
 
@@ -740,6 +816,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   useLayoutEffect(() => { if (!locationAllowed) setSheet(previous => previous === "location" ? null : previous); }, [locationAllowed]);
   const [messageQuery, setMessageQuery] = useState("");
   const [jumpTo, setJumpTo] = useState<string | null>(null);
+  // Two alternating keyframes restart the same transient ring when the same
+  // quote is tapped twice; the state clears when the ring has finished.
+  const [flash, setFlash] = useState<{ id: string; nonce: number } | null>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   // The message a new send answers. It stays until that send is admitted, so a
   // failed send keeps the context instead of silently dropping the quote.
@@ -987,17 +1066,30 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   useLayoutEffect(() => {
     if (nearBottom.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
   }, [messages]);
+  // Presentation-only grouping: the wire still carries one message per photo.
+  const groups = useMemo(() => photoBatches(messages), [messages]);
   useEffect(() => {
     if (sheet || !jumpTo) return;
+    // A grouped photo is drawn by its leader, so a quote that names a follower
+    // still lands on the one visible bubble instead of nowhere.
+    const targetId = groups.leaderOf.get(jumpTo) ?? jumpTo;
     const frame = requestAnimationFrame(() => {
       const target = Array.from(scroll.current?.querySelectorAll<HTMLElement>("[data-chat-message]") ?? [])
-        .find(element => element.dataset.chatMessage === jumpTo);
-      target?.scrollIntoView?.({ block: "center" });
+        .find(element => element.dataset.chatMessage === targetId);
+      target?.scrollIntoView?.({ block: "center", behavior: shouldReduceMotion() ? "auto" : "smooth" });
       target?.focus({ preventScroll: true });
+      // A ring, not a second screen: the original is already here, it only has
+      // to be findable after a long scroll.
+      if (target) setFlash(previous => ({ id: targetId, nonce: (previous?.nonce ?? 0) + 1 }));
       setJumpTo(null);
     });
     return () => cancelAnimationFrame(frame);
-  }, [sheet, jumpTo]);
+  }, [sheet, jumpTo, groups]);
+  useEffect(() => {
+    if (!flash) return;
+    const timer = window.setTimeout(() => setFlash(null), 1600);
+    return () => window.clearTimeout(timer);
+  }, [flash]);
   const highest = messages.reduce((maximum, message) => Math.max(maximum, message.server?.sequence ?? 0), 0);
   useEffect(() => {
     const area = scroll.current;
@@ -1419,15 +1511,35 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       </div>}
       <ol className="fb-chat-transcript" aria-label="Messages">
         {messages.map((message, index) => {
+          // A follower photo is drawn by its leader; the transcript owns only
+          // rows a reader can actually see or focus.
+          if (groups.followers.has(message.id)) return null;
+          const batch = groups.batches.get(message.id);
           const own = message.authorId === accountId;
-          const pending = outbox.find((entry) => entry.messageId === message.id);
           const attachment = media.find((entry) => entry.messageId === message.id);
+          // The run's last photo owns the clock and the ticks; the first owns
+          // the caption, the quote and the bubble. That is the order it was
+          // sent in, so the status cannot describe an older photo than the one
+          // the reader is looking at.
+          const statusMembers = batch ?? [message];
+          const statusMessage = statusMembers[statusMembers.length - 1]!;
+          const statusPending = outbox.find((entry) => entry.messageId === statusMessage.id);
+          const statusAttachment = media.find((entry) => entry.messageId === statusMessage.id);
+          const reviewMember = statusMembers.find((entry) => outbox.some((entryPending) => entryPending.messageId === entry.id && entryPending.status === "NEEDS_REVIEW"));
+          const failedMember = statusMembers.find((entry) => {
+            const entryAttachment = media.find((item) => item.messageId === entry.id);
+            const entryPending = outbox.find((entryPending) => entryPending.messageId === entry.id);
+            return entryAttachment?.state === "FAILED" || (!entry.server && entryPending?.status === "FAILED");
+          });
+          const removableMembers = statusMembers.filter((entry) => (entry.messageType === "MEDIA" || entry.messageType === "VOICE")
+            && media.some((item) => item.messageId === entry.id) && !entry.server);
           // One day chip per calendar day keeps a long thread readable without
           // making every bubble carry a date.
           const day = message.createdAt ? formatChatDay(message.createdAt) : "";
           const before = index > 0 ? messages[index - 1] : undefined;
           const opensDay = !!day && day !== (before?.createdAt ? formatChatDay(before.createdAt) : "");
           const quoted = message.replyToId ? messages.find((entry) => entry.id === message.replyToId) : undefined;
+          const flashClass = flash?.id === message.id ? ` fb-chat-flash-${flash.nonce % 2 ? "a" : "b"}` : "";
           return <Fragment key={message.id}>
             {opensDay && <li className="fb-chat-day" role="presentation"><span>{day}</span></li>}
           {/* The swipe and the menu reach the same reply. Your own bubble
@@ -1448,7 +1560,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
               disabled={!message.server} className="fb-chat-message-surface">
             {({ open, setOpen }) => <>
             <div data-receipt-message={message.messageType === "TEXT" && message.body && message.unsentAt === undefined ? message.id : undefined}
-              className={`fb-chat-message${own ? " fb-chat-message-own" : ""}${message.messageType === "VOICE" && attachment && message.unsentAt === undefined ? " fb-chat-message-voice" : ""}`}>
+              className={`fb-chat-message${own ? " fb-chat-message-own" : ""}${message.messageType === "VOICE" && attachment && message.unsentAt === undefined ? " fb-chat-message-voice" : ""}${flashClass}`}>
             <span className="sr-only">{own ? "You: " : `${name || "Member"}: `}</span>
             {message.unsentAt === undefined && message.replyToId && <button type="button" className="fb-chat-quote"
               onClick={() => { nearBottom.current = false; setJumpTo(message.replyToId!); }}
@@ -1457,41 +1569,56 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
               <span className="fb-chat-quote-preview" dir="auto">{quoted ? replyPreview(quoted) : "Message unavailable"}</span>
             </button>}
             {message.unsentAt !== undefined ? <p>Message unsent</p> : <>
-            {message.messageType === "MEDIA" && attachment && photoAllowed && <ChatPhoto key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} onOpen={openPhoto} onReady={rememberPhoto} />}
+            {batch && photoAllowed && <ChatPhotoGroup accountId={accountId} conversationId={conversationId} items={batch} media={media} onOpen={openPhoto} onReady={rememberPhoto} />}
+            {!batch && message.messageType === "MEDIA" && attachment && photoAllowed && <ChatPhoto key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} onOpen={openPhoto} onReady={rememberPhoto} />}
             {message.messageType === "VOICE" && attachment && photoAllowed && <ChatVoice key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} playback={voice.player} snapshot={playbackSnapshot}
               authorName={own ? user?.displayName || user?.username : name} avatarUrl={own ? user?.avatarUrl : person?.avatarUrl} />}
             {message.contextReportId && <ChatReportContext reportId={message.contextReportId} safetyKey={view?.ownBlocked ? "blocked" : "clear"} />}
             {message.location && <ChatLocation location={message.location} />}
             {message.body ? <p dir="auto" className={isEmojiOnly(message.body) ? "fb-chat-emoji-only" : undefined}>{message.body}</p>
               : message.messageType === "LOCATION" ? (!message.location && <p>Location unavailable</p>)
-              : !attachment && <p>{missingAttachmentCopy(message)}</p>}
-            {!attachment && !message.body && missingAttachmentStale(message) && <button type="button" onClick={() => {
+              : !batch && !attachment && <p>{missingAttachmentCopy(message)}</p>}
+            {!batch && !attachment && !message.body && missingAttachmentStale(message) && <button type="button" onClick={() => {
               // A message whose attachment never arrived is not stuck loading:
               // ask for one full pass before telling the reader it is gone.
               void retryMessagingMedia(accountId).catch(() => setError("Could not check for this attachment. Try syncing again."));
             }}>Check again</button>}
             <span className="fb-chat-message-status">
-              {message.createdAt ? <time className="fb-chat-time" dateTime={new Date(message.createdAt).toISOString()}>
-                {new Date(message.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+              {statusMessage.createdAt ? <time className="fb-chat-time" dateTime={new Date(statusMessage.createdAt).toISOString()}>
+                {new Date(statusMessage.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
               </time> : null}
-              {own && <>{pending?.status === "NEEDS_REVIEW" ? "Needs review" : message.messageType === "MEDIA" && !attachment ? "Photo pending" : message.messageType === "VOICE" && !attachment ? "Voice pending" : attachment && !["READY", "EVICTED"].includes(attachment.state) ? (attachment.state === "FAILED" ? (message.messageType === "VOICE" ? "Voice saved" : "Photo saved") : "Sending…") : message.server ? <ReceiptTicks read={!!(message.readByPeer || readIds.has(message.id))} /> : pending?.status === "FAILED" ? "Message saved" : "Sending…"}
-              {(attachment?.state === "FAILED" || (!message.server && pending?.status === "FAILED")) && pending?.status !== "NEEDS_REVIEW" && <button type="button" onClick={() => {
+              {own && <>{reviewMember ? "Needs review"
+                : failedMember ? (failedMember.messageType === "VOICE" ? "Voice saved" : failedMember.messageType === "MEDIA" ? "Photo saved" : "Message saved")
+                : statusMessage.messageType === "MEDIA" && !statusAttachment ? "Photo pending"
+                : statusMessage.messageType === "VOICE" && !statusAttachment ? "Voice pending"
+                : statusAttachment && !["READY", "EVICTED"].includes(statusAttachment.state)
+                  ? (statusAttachment.state === "FAILED" ? (statusMessage.messageType === "VOICE" ? "Voice saved" : "Photo saved") : "Sending…")
+                : statusMessage.server ? <ReceiptTicks read={!!(statusMessage.readByPeer || readIds.has(statusMessage.id))} />
+                : statusPending?.status === "FAILED" ? "Message saved" : "Sending…"}
+              {failedMember && <button type="button" onClick={() => {
               // A refused send keeps its original boundary; re-flushing it can only
               // fail again. The message-level retry rebinds that boundary because a
               // human asked for it, then flushes. A failed upload on an already
               // accepted message has no boundary to move.
-              const retry = !message.server && pending?.status === "FAILED"
-                ? retryMessagingMessage(accountId, conversationId, message.id)
+              const failedPending = outbox.find((entry) => entry.messageId === failedMember.id);
+              const retry = !failedMember.server && failedPending?.status === "FAILED"
+                ? retryMessagingMessage(accountId, conversationId, failedMember.id)
                 : refreshMessaging(accountId);
               void retry.catch(() => setError("Could not retry. Try syncing again."));
             }}>Retry</button>}</>}
             </span>
-            {own && pending?.status === "NEEDS_REVIEW" && <button type="button" disabled={busy} onClick={() => { setSelectedMessageId(message.id); setSheet("review"); }}>Review message</button>}
-            {own && attachment && !message.server && <button type="button" aria-label={message.messageType === "VOICE" ? "Remove pending voice message" : "Remove pending photo"} onClick={() => {
-              void removeMessagingMessage(accountId, conversationId, message.id, false).catch(() => {
-                setError("Could not confirm this change. Sync and check your chat.");
-                void refreshMessaging(accountId).catch(() => undefined);
-              });
+            {own && reviewMember && <button type="button" disabled={busy} onClick={() => { setSelectedMessageId(reviewMember.id); setSheet("review"); }}>Review message</button>}
+            {own && removableMembers.length > 0 && <button type="button" aria-label={batch ? "Remove pending photos"
+              : message.messageType === "VOICE" ? "Remove pending voice message" : "Remove pending photo"} onClick={() => {
+              // The bubble is the send: removing a still-pending grid removes
+              // every photo in it, never a hidden half the reader cannot see.
+              void (async () => {
+                try { for (const entry of removableMembers) await removeMessagingMessage(accountId, conversationId, entry.id, false); }
+                catch {
+                  setError("Could not confirm this change. Sync and check your chat.");
+                  void refreshMessaging(accountId).catch(() => undefined);
+                }
+              })();
             }}>Remove</button>}
             </>}
             </div>

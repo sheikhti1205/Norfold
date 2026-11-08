@@ -178,7 +178,7 @@ it("saves a new message without waiting for a failed thread refresh", async () =
   const field = screen.getByRole("textbox", { name: "Message" });
   fireEvent.change(field, { target: { value: "Continue offline" } });
   fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-  await waitFor(() => expect(m.text).toHaveBeenCalledWith("account", "chat", "peer", "Continue offline", undefined));
+  await waitFor(() => expect(m.text).toHaveBeenCalledWith("account", "chat", "peer", "Continue offline", undefined, undefined));
   await waitFor(() => expect(field).toHaveProperty("value", ""));
 });
 
@@ -262,7 +262,7 @@ it("keeps the composer usable and preserves newer typing while a text is still b
   fireEvent.change(field, { target: { value: "Second" } });
   fireEvent.click(screen.getByRole("button", { name: "Send message" }));
   await waitFor(() => expect(m.text).toHaveBeenCalledTimes(2));
-  expect(m.text).toHaveBeenLastCalledWith("account", "chat", "peer", "Second", undefined);
+  expect(m.text).toHaveBeenLastCalledWith("account", "chat", "peer", "Second", undefined, undefined);
   expect(field.value).toBe("Second");
   // The first admission settling must not wipe input the person typed after it.
   await act(async () => { resolvers[0]!("saved"); });
@@ -364,11 +364,11 @@ it("attaches a report-origin subject to the first text only", async () => {
   render(thread(`?report=${report}`)); await waitFor(() => expect(screen.queryByText("Opening messages…")).toBeNull());
   const field = screen.getByRole("textbox", { name: "Message" });
   fireEvent.change(field, { target: { value: "About this report" } }); fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-  await waitFor(() => expect(m.text).toHaveBeenCalledExactlyOnceWith("account", "chat", "peer", "About this report", report));
+  await waitFor(() => expect(m.text).toHaveBeenCalledExactlyOnceWith("account", "chat", "peer", "About this report", report, undefined));
   await waitFor(() => expect(field).toHaveProperty("value", ""));
   await waitFor(() => expect(screen.getByTestId("query").textContent).toBe(""));
   fireEvent.change(field, { target: { value: "Now ordinary text" } }); fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-  await waitFor(() => expect(m.text).toHaveBeenLastCalledWith("account", "chat", "peer", "Now ordinary text", undefined));
+  await waitFor(() => expect(m.text).toHaveBeenLastCalledWith("account", "chat", "peer", "Now ordinary text", undefined, undefined));
 });
 
 function geolocation() {
@@ -519,7 +519,7 @@ it("sends desktop Enter once but preserves Shift+Enter and IME composition", asy
   fireEvent.keyDown(field,{key:"Enter",shiftKey:true});expect(m.text).not.toHaveBeenCalled();
   fireEvent.compositionStart(field);fireEvent.keyDown(field,{key:"Enter"});expect(m.text).not.toHaveBeenCalled();
   fireEvent.compositionEnd(field);fireEvent.keyDown(field,{key:"Enter"});
-  await waitFor(()=>expect(m.text).toHaveBeenCalledExactlyOnceWith("account","chat","peer","Hello",undefined));
+  await waitFor(()=>expect(m.text).toHaveBeenCalledExactlyOnceWith("account","chat","peer","Hello",undefined,undefined));
   await waitFor(()=>expect(field).toHaveProperty("value",""));
 });
 it("offers an accessible photo picker in a connected conversation", async () => {
@@ -591,6 +591,53 @@ it("allows removing a locally pending photo without unsending", async () => {
   await open();
   fireEvent.click(screen.getByRole("button", { name: /remove pending photo/i }));
   await waitFor(() => expect(m.remove).toHaveBeenCalledWith("account", "chat", "message", false));
+});
+function photoRun(count: number, start = 1_000) {
+  const messages: Array<Record<string, unknown>> = Array.from({ length: count }, (_, index) => ({
+    id: `photo-${index + 1}`, conversationId: "chat", authorId: "account", recipientId: "peer",
+    body: index === 0 ? "Two shots" : "", messageType: "MEDIA",
+    createdAt: start + index * 1_000, server: { eventId: `event-${index}`, sequence: index + 1 },
+  }));
+  const media: Array<Record<string, unknown>> = messages.map((message, index) => ({
+    id: `media-${index + 1}`, messageId: message.id, direction: "OUT", state: "READY", width: 2, height: 1, mime: "image/jpeg" }));
+  return { messages, media };
+}
+it("renders a photo run as one bubble with the first caption and the last receipt", async () => {
+  const run = photoRun(3); run.messages[2]!.readByPeer = true;
+  m.messages = run.messages; m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
+  await open();
+  expect(screen.getByRole("group", { name: "3 photos" })).toBeTruthy();
+  const cells = await screen.findAllByRole("button", { name: /^View photo \d of 3$/ });
+  expect(cells).toHaveLength(3);
+  // The transcript has one row, one caption and the receipt of the last photo.
+  expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(1);
+  expect(screen.getAllByText("Two shots")).toHaveLength(1);
+  expect(screen.getByRole("img", { name: "Read" })).toBeTruthy();
+  fireEvent.click(cells[2]!);
+  const viewer = await screen.findByRole("dialog", { name: "Photo viewer" });
+  await waitFor(() => expect(within(viewer).getByText("Photo 3 of 3")).toBeTruthy());
+});
+it("jumps a quote that names a hidden photo to the visible group and rings it", async () => {
+  const run = photoRun(3);
+  m.messages = [...run.messages, { id: "reply", conversationId: "chat", authorId: "peer", recipientId: "account",
+    body: "Which one?", messageType: "TEXT", createdAt: 9_000, replyToId: "photo-2",
+    server: { eventId: "reply", sequence: 9 } }];
+  m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
+  await open();
+  fireEvent.click(screen.getByRole("button", { name: /Quoted message from you/ }));
+  const leader = document.querySelector<HTMLElement>('[data-chat-message="photo-1"]');
+  await waitFor(() => expect(leader?.querySelector(".fb-chat-message")?.className).toMatch(/fb-chat-flash-[ab]/));
+  expect(document.activeElement).toBe(leader);
+});
+it("removes a whole still-pending photo run together", async () => {
+  const run = photoRun(2);
+  for (const message of run.messages) delete message.server;
+  for (const attachment of run.media) attachment.state = "QUEUED";
+  m.messages = run.messages; m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
+  await open();
+  fireEvent.click(screen.getByRole("button", { name: "Remove pending photos" }));
+  await waitFor(() => expect(m.remove.mock.calls).toEqual([
+    ["account", "chat", "photo-1", false], ["account", "chat", "photo-2", false]]));
 });
 it("shows a prepared draft preview and revokes it when removed", async () => {
   const create = vi.fn(() => "blob:draft"), revoke = vi.fn();
