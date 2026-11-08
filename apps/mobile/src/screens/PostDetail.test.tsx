@@ -1083,16 +1083,22 @@ describe("PostDetail recovery route lifetime", () => {
       return null;
     }
 
-    render(
-      <MemoryRouter initialEntries={["/posts/p1"]}>
-        <Nav />
-        <Routes>
-          <Route path="/posts/:id" element={<PostDetail />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+    // The initial report read also schedules the recovery-boundary effect; a
+    // click that lands before that effect commits is reset by it. Settle the
+    // first async render before selecting the launcher, as the sibling
+    // "opens the recovery sheet" case does.
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/posts/p1"]}>
+          <Nav />
+          <Routes>
+            <Route path="/posts/:id" element={<PostDetail />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+    });
 
-    const recoveryLauncher = await screen.findByRole("button", { name: "Record recovery…" });
+    const recoveryLauncher = screen.getByRole("button", { name: "Record recovery…" });
     expect(recoveryLauncher.isConnected, "recovery launcher still mounted after async lookup").toBe(true);
     expect(recoveryLauncher).toHaveProperty("disabled", false);
     fireEvent.click(recoveryLauncher);
