@@ -33,10 +33,22 @@ Copy `.env.example` to `.env` and fill in your own values. `.env` files are igno
 npm run dev:mobile   # client dev server (web shell)
 ```
 
-The Android app is the same web build wrapped by Capacitor. `npm run apk` builds a
-signed release; it requires `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`
-to be present and non-empty, and it refuses to build a bundle with a missing URL.
-Never use a `sb_secret_*` or service-role key in a client build.
+The Android app is the same web build wrapped by Capacitor. `npm run apk --
+--variant signeddev` (or `--variant release`) is the device-bound build; it requires
+the canonical signing environment and fails closed after packaging when the APK is
+not signed by the findback-release certificate. Plain `npm run apk` is the debug
+variant: it installs, but it is **not** the certificate registered with Google
+OAuth or the deployed App Links association, so it is never device-acceptance
+evidence.
+
+Every variant requires `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` to
+be present and non-empty, and refuses to build a bundle with a missing URL. Never
+use a `sb_secret_*` or service-role key in a client build.
+
+Packaged builds keep Capacitor bridge logging off (`loggingBehavior: "none"`).
+That switch mirrors every plugin parameter and result into logcat — including
+OAuth tokens, SQL text and message bodies — so it must never be re-enabled. Use
+the enabled DevTools attach point or Sentry for release diagnostics.
 
 ## Checks
 

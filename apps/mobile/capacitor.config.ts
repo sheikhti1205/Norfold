@@ -4,12 +4,13 @@ const config: CapacitorConfig = {
   appId: "com.findback.app",
   appName: "Norfold",
   webDir: "dist",
-  // Owner direction 2026-11-07: a release build must still yield real
-  // diagnostics. `production` forwards WebView console output to logcat in
-  // release, and webContentsDebuggingEnabled lets an authorised developer
-  // attach Chrome DevTools over USB to the installed app. Both are local-only
-  // surfaces; no transport, endpoint or credential changes.
-  loggingBehavior: "production",
+  // Owner direction 2026-11-08: bridge logging is OFF in every packaged build.
+  // `production` mirrored every WebView console line AND every plugin call
+  // result/parameter into logcat, which exposed a Google OAuth access token,
+  // SQL text and message bodies. Release diagnostics stay available through
+  // the explicitly enabled DevTools attach point below and Sentry; they must
+  // never be a world-readable log sink.
+  loggingBehavior: "none",
   android: {
     webContentsDebuggingEnabled: true,
   },
