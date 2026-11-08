@@ -75,6 +75,19 @@ export function checkAssetDirectory(path, config, sentryHost, sentryIdentity) {
 }
 
 export function checkApk(path, config, sentryHost, sentryIdentity) {
+  // Bridge logging mirrors every plugin parameter/result into logcat, including
+  // OAuth tokens and message bodies. The packaged config is the final authority.
+  const packaged = spawnSync("unzip", ["-p", path, "assets/capacitor.config.json"], { encoding: "utf8" });
+  if (packaged.status !== 0) fail("cannot read packaged Capacitor config");
+  let capacitorConfig;
+  try {
+    capacitorConfig = JSON.parse(packaged.stdout);
+  } catch {
+    fail("packaged Capacitor config is not valid JSON");
+  }
+  if (capacitorConfig?.loggingBehavior !== "none") {
+    fail("packaged Capacitor config enables bridge logging");
+  }
   // CI/Android Gradle runs on hosts with unzip; read the APK itself, not a
   // possibly different dist directory. No extraction or credential logging.
   const listing = spawnSync("unzip", ["-Z", "-1", path], { encoding: "utf8" });
