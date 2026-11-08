@@ -270,6 +270,9 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
             ...(message.contextReportId ? { contextReportId: message.contextReportId } : {}),
             ...(message.replyToId ? { replyToId: message.replyToId } : {}),
             ...(message.location ? { location: message.location } : {}),
+            // The instant the user composed it, so a receiver's transcript and
+            // photo-run detector do not depend on delivery latency.
+            ...(message.createdAt !== undefined && message.createdAt > 0 ? { createdAt: message.createdAt } : {}),
             // Absent for a pre-v8 queued row: the server refuses it rather than
             // letting this client re-bind an old send to a newer boundary.
             ...(attempt.expectedEpoch ? { expectedEpoch: attempt.expectedEpoch } : {}),
@@ -517,7 +520,11 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
       const context = mediaContext(), message = copyMediaMessage(value), metadata = copyMediaMetadata(input);
       if (message.authorId !== scope.accountId || metadata.direction !== "OUT" || metadata.messageId !== message.id
         || metadata.expiresAt !== null) throw mediaUnavailable();
-      await history.enqueueOutgoingWithMedia(message, metadata, bytes,
+      // Stamp the admission instant once; SEND later relays this exact value so
+      // the receiver's run detector does not measure upload latency.
+      const composed: HumanMessage = message.createdAt === undefined
+        ? { ...message, createdAt: Date.now() } : message;
+      await history.enqueueOutgoingWithMedia(composed, metadata, bytes,
         await observedEpoch(message.conversationId));
       context.live();
     },

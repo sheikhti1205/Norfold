@@ -1661,7 +1661,7 @@ export async function openSqliteMessagingHistory(
         if (!parent.messageType) await driver.run(S.bindMessageType, [outgoing.messageType ?? "MEDIA", outgoing.id]);
       } else {
         await driver.run(S.insertMessage, [outgoing.id, outgoing.conversationId, outgoing.authorId,
-          outgoing.recipientId, outgoing.body, now(), outgoing.messageType ?? null, null, null, null, null, null]);
+          outgoing.recipientId, outgoing.body, outgoing.createdAt ?? now(), outgoing.messageType ?? null, null, null, null, null, null]);
         await driver.run(S.enqueueOutbox, [outgoing.id, expectedEpoch ?? null]);
         await driver.run(S.touchConversationState, [now(), outgoing.conversationId]);
       }

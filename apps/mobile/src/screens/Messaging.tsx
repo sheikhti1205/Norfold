@@ -843,7 +843,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const stagedUrls = useRef(new Set<string>());
   // Per-photo admission: ids belong to the durable draft owner and must survive
   // an uncertain admission, so a retry of one photo is the same photo.
-  const photoAdmissions = useRef(new Map<string, { metadata: MediaMetadata; caption: string }>());
+  const photoAdmissions = useRef(new Map<string, { metadata: MediaMetadata; caption: string; createdAt: number }>());
   // True between opening the native picker and its result: render state must
   // not cancel a selection the platform is still holding.
   const picking = useRef(false);
@@ -1181,7 +1181,15 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     const frame = requestAnimationFrame(() => {
       const target = Array.from(scroll.current?.querySelectorAll<HTMLElement>("[data-chat-message]") ?? [])
         .find(element => element.dataset.chatMessage === targetId);
-      target?.scrollIntoView?.({ block: "center", inline: "nearest", behavior: shouldReduceMotion() ? "auto" : "smooth" });
+      // A long smooth travel spends the whole ring before the original is even
+      // on screen. Snap when the target is more than a viewport away and keep
+      // the travel only for the short, legible case.
+      const box = target?.getBoundingClientRect();
+      const viewport = scroll.current?.getBoundingClientRect();
+      const travel = box && viewport && !shouldReduceMotion()
+        ? Math.abs((box.top + box.bottom) / 2 - (viewport.top + viewport.bottom) / 2) : Infinity;
+      const snap = shouldReduceMotion() || travel > (viewport?.height ?? 0);
+      target?.scrollIntoView?.({ block: "center", inline: "nearest", behavior: snap ? "auto" : "smooth" });
       target?.focus({ preventScroll: true });
       // A ring, not a second screen: the original is already here, it only has
       // to be findable after a long scroll.
@@ -1473,15 +1481,24 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         setPhotoSending(true);
         // Each photo is its own message, so a failed one leaves the rest of the
         // stack intact. The caption rides the first photo only.
+        // A retry keeps the instant of the admission that already left, so the
+        // repaired stack still groups with it instead of measuring the wait.
+        const batchCreatedAt = photoAdmissions.current.size > 0
+          ? Math.min(...Array.from(photoAdmissions.current.values(), (entry) => entry.createdAt))
+          : Date.now();
         let consumed = false;
         for (const [index, item] of ready.entries()) {
           const admissionKey = item.key;
           const { bytes, ...info } = item.prepared;
           const attempt = photoAdmissions.current.get(admissionKey) ?? { caption: index === 0 ? body : "",
+            // One gesture, one instant: every photo of this admission keeps the
+            // moment the user pressed send, including across a retry, so both
+            // participants group the run instead of measuring upload latency.
+            createdAt: batchCreatedAt,
             metadata: { ...info, durationMs: null,
               id: crypto.randomUUID(), messageId: crypto.randomUUID(), direction: "OUT" as const, expiresAt: null } };
           photoAdmissions.current.set(admissionKey, attempt);
-          await sendMessagingMedia(accountId, conversationId, row.peerId, attempt.caption, attempt.metadata, bytes, replyTargetId);
+          await sendMessagingMedia(accountId, conversationId, row.peerId, attempt.caption, attempt.metadata, bytes, replyTargetId, attempt.createdAt);
           photoAdmissions.current.delete(admissionKey);
           // The caption belonged to the first message that actually left, so
           // clear the draft as soon as it is carried, not at the end of a bulk

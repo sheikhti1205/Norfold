@@ -489,7 +489,7 @@ describe("production messaging media owner", () => {
     await waitForState((state) => state.status === "ready" && sent.length === 1).catch(async (error: Error) => {
       throw new Error(`${error.message}: ${JSON.stringify({ requests: requestLog, state: runtime.getMessagingRuntimeSnapshot(), thread: await runtime.readMessagingThreadState(A, CONV) })}`);
     });
-    expect(sent).toEqual([{ conversationId: CONV, recipientId: B, messageId: id(101), body: "Older caption",
+    expect(sent).toEqual([{ conversationId: CONV, recipientId: B, messageId: id(101), body: "Older caption", createdAt: expect.any(Number),
       expectedHead: { accountId: A, conversationId: CONV, streamId: "fixture-stream", epoch: "fixture-epoch",
         revision: 1, position: 0, messageHead: 0, stateHead: 0, serverTime: 1_000 } }]);
     expect((await runtime.readMessagingThreadState(A, CONV)).outbox).toEqual([]);
@@ -801,8 +801,9 @@ describe("foreground fast path", () => {
     expect(requestLog).toContain("SEND");
     expect(requestLog).toContain("SYNC");
     expect(requestLog).toContain("ACK");
-    // No VIEWS scan, no media sweep, no re-registration for one message.
-    expect(requestLog).not.toContain("VIEWS");
+    // A content-free wake refreshes the shared view projection so pins/mute/
+    // request state stay live; it still skips re-registration and media sweeps.
+    expect(requestLog).toContain("VIEWS");
     expect(requestLog).not.toContain("REGISTER");
     // No attachment upload is attempted by a plain text pass (the chat-wake
     // POST is the message-scoped push hint and is not media work).
@@ -815,7 +816,7 @@ describe("foreground fast path", () => {
     runtime.invalidateMessaging(A);
     await waitForState((state) => state.status === "ready" && state.revision > revision);
     expect(requestLog).toContain("SYNC");
-    expect(requestLog).not.toContain("VIEWS");
+    expect(requestLog).toContain("VIEWS");
     expect(requestLog).not.toContain("REGISTER");
     expect(runtime.getMessagingRuntimeSnapshot().currentProjections?.[CONV]?.mode).toBe("CONNECTED");
   });
