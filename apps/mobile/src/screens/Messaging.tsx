@@ -1603,6 +1603,10 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
           const quoted = message.replyToId ? messages.find((entry) => entry.id === message.replyToId) : undefined;
           const quotedAttachment = quoted?.messageType === "MEDIA" && quoted.unsentAt === undefined
             ? media.find((entry) => entry.messageId === quoted.id) : undefined;
+          // A bare emoji is the message: no bubble fill, no quote, no media.
+          const emojiOnly = message.unsentAt === undefined && message.messageType === "TEXT"
+            && !batch && !attachment && !message.replyToId && !message.contextReportId && !message.location
+            && isEmojiOnly(message.body);
           const flashClass = flash?.id === message.id ? ` fb-chat-flash-${flash.nonce % 2 ? "a" : "b"}` : "";
           return <Fragment key={message.id}>
             {opensDay && <li className="fb-chat-day" role="presentation"><span>{day}</span></li>}
@@ -1625,7 +1629,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
               onOpen={() => { setSelectedMessageId(message.id); haptic("commit"); }}>
             {({ open, setOpen }) => <>
             <div data-receipt-message={message.messageType === "TEXT" && message.body && message.unsentAt === undefined ? message.id : undefined}
-              className={`fb-chat-message${own ? " fb-chat-message-own" : ""}${message.messageType === "VOICE" && attachment && message.unsentAt === undefined ? " fb-chat-message-voice" : ""}${flashClass}`}>
+              className={`fb-chat-message${own ? " fb-chat-message-own" : ""}${message.messageType === "VOICE" && attachment && message.unsentAt === undefined ? " fb-chat-message-voice" : ""}${emojiOnly ? " fb-chat-message-emoji" : ""}${flashClass}`}>
             <span className="sr-only">{own ? "You: " : `${name || "Member"}: `}</span>
             {message.unsentAt === undefined && message.replyToId && <button type="button" className="fb-chat-quote"
               onClick={() => { nearBottom.current = false; setJumpTo(message.replyToId!); }}
