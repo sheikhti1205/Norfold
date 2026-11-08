@@ -76,6 +76,7 @@ beforeEach(() => {
         createdAt: "2026-10-22T10:00:00.000Z",
         reviewedAt: null,
         evidence: { title: "Blue backpack", description_excerpt: "Left it on the bus." },
+        media: [],
       },
     ],
     decisions: [],
@@ -239,12 +240,98 @@ describe("the case sheet", () => {
           createdAt: "2026-10-22T10:00:00.000Z",
           reviewedAt: null,
           evidence: null,
+          media: [],
         },
       ],
       decisions: [],
     });
     renderSheet(["reports_review"]);
     expect(await screen.findByText(/no longer available/i)).toBeTruthy();
+  });
+
+  it("shows the reporter-chosen messages, their kinds and the captured media count", async () => {
+    mockFetchModerationTarget.mockResolvedValue({
+      targetType: "USER",
+      targetId: "user-2",
+      targetExists: true,
+      target: { username: "bluebird", display_name: "Blue Bird" },
+      reports: [
+        {
+          id: "report-1",
+          reason: "HARASSMENT",
+          detail: null,
+          status: "OPEN",
+          createdAt: "2026-10-22T10:00:00.000Z",
+          reviewedAt: null,
+          evidence: {
+            target_type: "USER",
+            username: "bluebird",
+            messages: [
+              {
+                message_id: "m2",
+                message_type: "VOICE",
+                sent_at: "2026-10-22T09:00:00.000Z",
+                body_excerpt: "",
+              },
+              {
+                message_id: "m1",
+                message_type: "TEXT",
+                sent_at: "2026-10-22T08:00:00.000Z",
+                body_excerpt: "You will regret this.",
+              },
+              { message_id: "m3", message_type: "MYSTERY" },
+            ],
+          },
+          media: [
+            {
+              evidenceId: "e1",
+              messageId: "m2",
+              mime: "audio/webm",
+              bytes: 4000,
+              width: 1,
+              height: 1,
+              durationMs: 4200,
+              state: "ATTACHED",
+              expiresAt: "2027-01-01T00:00:00.000Z",
+            },
+          ],
+        },
+      ],
+      decisions: [],
+    });
+    render(
+      <ModerationCaseSheet
+        open
+        entry={{
+          targetType: "USER",
+          targetId: "user-2",
+          reportCount: 1,
+          reasons: ["HARASSMENT"],
+          firstReportedAt: "2026-10-22T10:00:00.000Z",
+          lastReportedAt: "2026-10-22T10:00:00.000Z",
+          currentVisibility: null,
+          targetExists: true,
+          status: "OPEN",
+        }}
+        capabilities={["reports_review"]}
+        isAdmin={false}
+        onClose={() => {}}
+        onApplied={() => {}}
+      />,
+    );
+
+    const bundle = await screen.findByTestId("moderation-case-messages");
+    expect(bundle.textContent).toMatch(/2 messages, not the whole chat/i);
+    expect(bundle.textContent).toContain("Voice note");
+    expect(bundle.textContent).toContain("Text");
+    expect(bundle.textContent).toContain("You will regret this.");
+    // An unlabelled type is dropped, never guessed.
+    expect(bundle.textContent).not.toContain("MYSTERY");
+    const media = screen.getByTestId("moderation-case-media");
+    expect(media.textContent).toContain("1 attached evidence copy");
+    expect(media.textContent).toMatch(/photos and voice notes/i);
+    // No storage key ever reaches the sheet.
+    expect(document.body.textContent).not.toMatch(/evidence\/|objectKey/);
   });
 });
 

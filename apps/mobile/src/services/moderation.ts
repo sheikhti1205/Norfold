@@ -137,6 +137,50 @@ export interface ModerationCaseReport {
   createdAt: string;
   reviewedAt: string | null;
   evidence: Record<string, unknown> | null;
+  /** Captured media copies for this report, metadata only. */
+  media: ModerationCaseMedia[];
+}
+
+/** One captured image/voice copy attached to a report. Never a storage key. */
+export interface ModerationCaseMedia {
+  evidenceId: string;
+  messageId: string;
+  mime: string;
+  bytes: number;
+  width: number;
+  height: number;
+  durationMs: number | null;
+  state: "PENDING" | "ATTACHED";
+  expiresAt: string;
+}
+
+/** Captured media metadata. A malformed row is dropped, never guessed. */
+function parseCaseMedia(value: unknown): ModerationCaseMedia[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(asRecord)
+    .filter((row): row is Record<string, unknown> => row !== null)
+    .map((row) => {
+      const evidenceId = text(row.evidence_id);
+      const messageId = text(row.message_id);
+      const mime = text(row.mime);
+      const expiresAt = text(row.expires_at);
+      const state = row.state === "ATTACHED" || row.state === "PENDING" ? row.state : null;
+      if (!evidenceId || !messageId || !mime || !expiresAt || !state) return null;
+      const duration = row.duration_ms;
+      return {
+        evidenceId,
+        messageId,
+        mime,
+        bytes: count(row.bytes),
+        width: count(row.width),
+        height: count(row.height),
+        durationMs: typeof duration === "number" && Number.isFinite(duration) ? duration : null,
+        state,
+        expiresAt,
+      } satisfies ModerationCaseMedia;
+    })
+    .filter((row): row is ModerationCaseMedia => row !== null);
 }
 
 /** One decision in a target's history. */
@@ -241,12 +285,26 @@ export interface AppealReceiptCursor { submittedAt: string; id: string }
 export interface AppealSubjectCursor { createdAt: string; subjectKind: AppealSubjectKind; subjectId: string }
 export interface AppealPage<T, C> { items: T[]; nextCursor: C | null }
 
-/** Input for `submitReport`. `detail` is optional and bounded to 2000. */
+/** One message the reporter chose to send with a person report. */
+export interface PersonReportMessage {
+  /** The accepted message id. */
+  id: string;
+  /** The exact body the server verifies against its payload digest. */
+  body: string;
+}
+
+/** Input for `submitReport`. `detail` is optional and bounded to 2000. A USER
+ *  report that carries `evidence` becomes one person report with 0..20 selected
+ *  messages; without it, the generic profile-only report is used. */
 export type SubmitReportInput = {
   targetId: string;
   reason: ReportReason;
   detail?: string | null;
-} & ({ targetType: Exclude<ReportTargetType, "MESSAGE"> } | { targetType: "MESSAGE"; accountId: string; body: string });
+} & (
+  | { targetType: Exclude<ReportTargetType, "MESSAGE" | "USER"> }
+  | { targetType: "USER"; conversationId?: string | null; evidence?: PersonReportMessage[] }
+  | { targetType: "MESSAGE"; accountId: string; body: string }
+);
 
 /** Input for `applyModeration`. Every sanction field is optional. */
 export interface ApplyModerationInput {
@@ -381,22 +439,51 @@ export async function submitReport(input: SubmitReportInput, signal?: AbortSigna
     throw new ApiError("Keep the note under 2000 characters.", 400, "DETAIL_TOO_LONG");
   }
 
+  const evidence = input.targetType === "USER" ? input.evidence : undefined;
+  if (evidence !== undefined) {
+    if (!Array.isArray(evidence) || evidence.length > 20) {
+      throw new ApiError("Choose up to 20 messages.", 400, "EVIDENCE_TOO_LARGE");
+    }
+    const ids = new Set<string>();
+    for (const message of evidence) {
+      const id = typeof message?.id === "string" ? message.id.trim() : "";
+      if (id === "" || ids.has(id) || typeof message?.body !== "string" || message.body.length > 100000) {
+        throw new ApiError("Choose the messages to send again.", 400, "EVIDENCE_MALFORMED");
+      }
+      ids.add(id);
+    }
+  }
+
   const sdk = getSupabase();
-  if (input.targetType === "MESSAGE") {
+  let accountId: string | null = null;
+  if (input.targetType === "MESSAGE" || evidence !== undefined) {
     const { data: session, error: sessionError } = await sdk.auth.getSession();
-    if (signal?.aborted || sessionError || session.session?.user.id !== input.accountId) {
+    const uid = session.session?.user.id;
+    if (signal?.aborted || sessionError || !uid) {
       throw new ApiError("Your session changed. Please try again.", 401, "SESSION_CHANGED");
     }
+    if (input.targetType === "MESSAGE" && uid !== input.accountId) {
+      throw new ApiError("Your session changed. Please try again.", 401, "SESSION_CHANGED");
+    }
+    accountId = uid;
   }
   const request = input.targetType === "MESSAGE"
     ? sdk.rpc("findback_submit_message_report", {
         p_account_id: input.accountId, p_message_id: targetId, p_reason: input.reason,
         p_detail: detail, p_body: input.body,
       })
-    : sdk.rpc("findback_submit_report", {
-        p_target_type: input.targetType, p_target_id: targetId,
-        p_reason: input.reason, p_detail: detail,
-      });
+    : input.targetType === "USER" && evidence !== undefined
+      ? sdk.rpc("findback_submit_person_report", {
+          p_account_id: accountId, p_peer_id: targetId,
+          p_conversation_id: text(input.conversationId),
+          p_reason: input.reason, p_detail: detail,
+          p_message_ids: evidence.map((message) => message.id.trim()),
+          p_bodies: evidence.map((message) => message.body),
+        })
+      : sdk.rpc("findback_submit_report", {
+          p_target_type: input.targetType, p_target_id: targetId,
+          p_reason: input.reason, p_detail: detail,
+        });
   const { data, error } = await (signal ? request.abortSignal(signal) : request);
   if (error) throw moderationError(error.message, error.code);
   const reportId = text(data);
@@ -444,6 +531,23 @@ export async function fetchModerationQueue(limit = 50): Promise<ModerationQueueE
       } satisfies ModerationQueueEntry;
     })
     .filter((row): row is ModerationQueueEntry => row !== null);
+}
+
+/**
+ * How many open cases the queue would show, for an honest staff badge.
+ *
+ * One grouped case is one unit, exactly like the queue itself: five reports
+ * about the same person are one case, not five. A caller without
+ * `reports_review` is refused by the server with 42501.
+ */
+export async function fetchModerationQueueCount(): Promise<number> {
+  const { data, error } = await getSupabase().rpc("findback_moderation_queue_count", {});
+  if (error) throw moderationError(error.message, error.code);
+  const value = typeof data === "number" ? data : Number(data);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new ApiError("The server did not return a count.", 500, "UNEXPECTED_SHAPE");
+  }
+  return Math.trunc(value);
 }
 
 /** One case in full: the live target (or null), its reports, its decisions. */
@@ -511,6 +615,7 @@ export async function fetchModerationTarget(
           createdAt,
           reviewedAt: text(row.reviewed_at),
           evidence: asRecord(row.evidence),
+          media: parseCaseMedia(row.media),
         } satisfies ModerationCaseReport;
       })
       .filter((row): row is ModerationCaseReport => row !== null),

@@ -19,6 +19,7 @@ import {
   type ReportTargetType,
 } from "../services/moderation";
 import {
+  CHAT_MESSAGE_TYPE_LABELS,
   MODERATION_ACTION_HINTS,
   MODERATION_ACTION_LABELS,
   MODERATION_VISIBILITY_LABELS,
@@ -111,6 +112,40 @@ export function describeEvidence(evidence: Record<string, unknown> | null): Targ
   push("Name", read("display_name"));
   push("Username", read("username"));
   return lines;
+}
+
+export interface EvidenceMessageLine {
+  messageId: string;
+  type: "TEXT" | "MEDIA" | "VOICE" | "LOCATION";
+  excerpt: string;
+  sentAt: string;
+}
+
+/**
+ * The messages a reporter chose to send with a person report.
+ *
+ * These are "reporter-selected recent messages", never the whole conversation:
+ * the label in the case says so, because a moderator must not mistake a chosen
+ * excerpt for a complete thread. A row whose type is outside the closed
+ * vocabulary is dropped rather than guessed.
+ */
+export function describeEvidenceMessages(evidence: Record<string, unknown> | null): EvidenceMessageLine[] {
+  if (!evidence || !Array.isArray(evidence.messages)) return [];
+  return evidence.messages
+    .filter((value): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value))
+    .map((row) => {
+      const messageId = typeof row.message_id === "string" ? row.message_id : "";
+      const type = row.message_type;
+      if (!messageId) return null;
+      if (type !== "TEXT" && type !== "MEDIA" && type !== "VOICE" && type !== "LOCATION") return null;
+      return {
+        messageId,
+        type,
+        excerpt: typeof row.body_excerpt === "string" ? row.body_excerpt.trim() : "",
+        sentAt: typeof row.sent_at === "string" ? row.sent_at : "",
+      } satisfies EvidenceMessageLine;
+    })
+    .filter((row): row is EvidenceMessageLine => row !== null);
 }
 
 export interface ModerationCaseSheetProps {
@@ -321,6 +356,7 @@ export function ModerationCaseSheet({
             <h3 className="text-sm font-semibold text-on-surface">The reports</h3>
             {target.reports.map((report) => {
               const evidence = describeEvidence(report.evidence);
+              const messages = describeEvidenceMessages(report.evidence);
               return (
                 <div key={report.id} className="fb-admin-log-row">
                   <p className="fb-admin-log-headline">{REPORT_REASON_LABELS[report.reason]}</p>
@@ -338,6 +374,34 @@ export function ModerationCaseSheet({
                         <span className="font-medium text-on-surface">{line.label}:</span> {line.value}
                       </p>
                     ))
+                  ) : null}
+                  {messages.length > 0 ? (
+                    <div className="flex flex-col gap-1" data-testid="moderation-case-messages">
+                      <p className="fb-admin-log-detail">
+                        <span className="font-medium text-on-surface">Reporter-selected recent messages:</span>{" "}
+                        {messages.length === 1 ? "1 message" : `${messages.length} messages`}, not the whole chat.
+                      </p>
+                      <ul className="flex flex-col gap-1">
+                        {messages.map((message) => (
+                          <li key={message.messageId} className="fb-admin-log-detail">
+                            <span className="font-medium text-on-surface">
+                              {CHAT_MESSAGE_TYPE_LABELS[message.type]}
+                            </span>
+                            {message.sentAt ? ` · ${formatSafetyDate(message.sentAt)}` : ""}
+                            {message.excerpt ? ` — “${message.excerpt}”` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {report.media.length > 0 ? (
+                    <p className="fb-admin-log-detail" data-testid="moderation-case-media">
+                      {report.media.length === 1 ? "1 attached evidence copy" : `${report.media.length} attached evidence copies`}
+                      {" · "}
+                      {report.media.filter((item) => item.mime.startsWith("audio/")).length > 0
+                        ? "Photos and voice notes are copied from the sent message."
+                        : "Photos are copied from the sent message."}
+                    </p>
                   ) : null}
                 </div>
               );

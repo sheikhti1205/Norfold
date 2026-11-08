@@ -85,6 +85,26 @@ export const REPORT_TARGET_SUBJECTS: Readonly<Record<ReportTargetType, string>> 
   MESSAGE: "this message",
 };
 
+/** How one chat message is named in the person-report evidence picker. */
+export const CHAT_MESSAGE_TYPE_LABELS: Readonly<Record<"TEXT" | "MEDIA" | "VOICE" | "LOCATION", string>> = {
+  TEXT: "Text",
+  MEDIA: "Photo",
+  VOICE: "Voice note",
+  LOCATION: "Location",
+};
+
+/** The person-report evidence section, in one place. */
+export const PERSON_EVIDENCE_COPY = {
+  title: "Recent messages",
+  hint: "We will send these messages with your report. You can remove any of them.",
+  none: "No recent messages are available. You can still report this person.",
+  fewer: (count: number) => `All ${count === 1 ? "1 recent message" : `${count} recent messages`} will be sent.`,
+  selected: (count: number) => `${count} of 20 selected`,
+  selectAll: "Select all",
+  clear: "Clear",
+  cap: "You can send up to 20 messages with one report.",
+} as const;
+
 /** The nine moderation actions, in words a moderator can picture. */
 export const MODERATION_ACTION_LABELS: Readonly<Record<ModerationAction, string>> = {
   NO_ACTION: "Close without action",

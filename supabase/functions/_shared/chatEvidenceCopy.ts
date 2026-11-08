@@ -13,7 +13,7 @@ export interface EvidenceJob {
   bucket: "findback-chat-moderation-evidence";
   objectKey: string;
   sha256: string;
-  mime: "image/jpeg" | "image/png" | "image/webp";
+  mime: "image/jpeg" | "image/png" | "image/webp" | "audio/webm" | "audio/mp4";
   bytes: number;
   width: number;
   height: number;
@@ -46,7 +46,7 @@ function parseJob(value: unknown): EvidenceJob {
     || typeof v.objectKey !== "string" || !v.objectKey.startsWith("evidence/")
     || !UUID.test(v.objectKey.slice("evidence/".length))
     || typeof v.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(v.sha256)
-    || !["image/jpeg", "image/png", "image/webp"].includes(String(v.mime))) throw new Error("Invalid work");
+    || !["image/jpeg", "image/png", "image/webp", "audio/webm", "audio/mp4"].includes(String(v.mime))) throw new Error("Invalid work");
   for (const [name, max] of [["bytes", MAX_BYTES], ["width", 8192], ["height", 8192]] as const) {
     if (typeof v[name] !== "number" || !Number.isInteger(v[name]) || v[name] < 1 || v[name] > max) throw new Error("Invalid work");
   }

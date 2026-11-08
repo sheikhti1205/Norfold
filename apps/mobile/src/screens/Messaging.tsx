@@ -1144,6 +1144,26 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   }, [messages]);
   // Presentation-only grouping: the wire still carries one message per photo.
   const groups = useMemo(() => photoBatches(messages), [messages]);
+  /**
+   * The messages a person report may carry: accepted, sent by this peer, not
+   * unsent, and newest first. A local pending row has no server position and a
+   * body-less TEXT row has no evidence left, so neither is offered.
+   */
+  const personEvidence = useMemo(() => {
+    const peerId = row?.peerId;
+    if (!peerId) return [];
+    return messages
+      .filter((message) => message.authorId === peerId && message.server !== undefined && message.unsentAt === undefined)
+      .slice()
+      .reverse()
+      .map((message) => {
+        const messageType = message.messageType === "MEDIA" || message.messageType === "VOICE"
+          || message.messageType === "LOCATION" ? message.messageType : "TEXT" as const;
+        return { id: message.id, messageType, body: message.body,
+          ...(message.createdAt !== undefined ? { createdAt: message.createdAt } : {}) };
+      })
+      .filter((message) => message.messageType !== "TEXT" || message.body.trim() !== "");
+  }, [messages, row?.peerId]);
   // Pins are shared conversation state. A pin that names a photo hidden inside
   // a grid still jumps to the one visible bubble, and a pin whose message this
   // device can no longer see (deleted for me, or not yet synced) is not drawn
@@ -1926,7 +1946,8 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       </div> : null}
       {error && <p className="fb-chat-error" role="alert">{error}</p>}
     </AdaptiveTaskSurface>
-    <ReportSheet open={reportTarget !== null} target={reportTarget === "account" && row ? { targetType: "USER", targetId: row.peerId }
+    <ReportSheet open={reportTarget !== null} target={reportTarget === "account" && row
+      ? { targetType: "USER", targetId: row.peerId, conversationId, evidence: personEvidence }
       : reportTarget === "message" && selectedMessage
         ? selectedMessage.unsentAt === undefined
           ? { targetType: "MESSAGE", targetId: selectedMessage.id, accountId, body: selectedMessage.body }

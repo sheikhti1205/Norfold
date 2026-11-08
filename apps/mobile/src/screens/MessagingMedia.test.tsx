@@ -568,7 +568,12 @@ it("reports the participant directly instead of reusing a previously selected me
   fireEvent.click(screen.getByRole("button",{name:"Report account"}));
   const dialog=screen.getByRole("dialog",{name:"Report a problem"});
   expect(within(dialog).getByText("Tell us what is wrong with this person.")).toBeTruthy();
-  expect(within(dialog).queryByText("Caption")).toBeNull();
+  fireEvent.click(within(dialog).getByRole("radio",{name:/harassment/i}));
+  fireEvent.click(within(dialog).getByRole("button",{name:/send report/i}));
+  await waitFor(()=>expect(m.report).toHaveBeenCalledWith(expect.objectContaining({
+    targetType: "USER", targetId: "peer", conversationId: "chat",
+    evidence: [{ id: "message", body: "Caption" }],
+  }), expect.anything()));
 });
 it("reports the held copy of an unsent message, then stops offering it", async () => {
   const held = "00000000-0000-4000-8000-0000000000aa";
