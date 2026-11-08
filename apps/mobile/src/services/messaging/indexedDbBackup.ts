@@ -72,7 +72,8 @@ export function exportPortable(view: PortableView, accountId?: string): HistoryS
       location: suppressed ? null : row.location ? { ...row.location } : null,
       messageType: row.messageType ?? null, serverEventId: server.eventId, serverSequence: server.sequence,
       ...mergeReadFacts(row, row.recipientId === accountId && server.sequence <= (readThrough.get(row.conversationId) ?? 0)
-        ? { readLocally: true } : undefined), unsentAt, createdAt: row.snapshotCreatedAt ?? 0 };
+        ? { readLocally: true } : undefined), unsentAt,
+      createdAt: row.snapshotCreatedAt ?? row.createdAt ?? 0 };
   }).sort((a, b) => a.conversationId.localeCompare(b.conversationId) || a.serverSequence - b.serverSequence || a.id.localeCompare(b.id));
   // A suppressed message does not carry its media into a backup: the bubble is
   // gone, and restoring the bytes would resurrect what the user erased.
@@ -165,7 +166,10 @@ export function mergePortable(view: PortableView, incoming: HistorySnapshot, sco
       || (prior.server && (prior.server.eventId !== row.serverEventId || prior.server.sequence !== row.serverSequence))
       || (!priorSuppressed && row.body !== null && (prior.body !== row.body || !sameMessagePayload(prior, row)))
       || (prior.unsentAt !== undefined && row.unsentAt !== null && prior.unsentAt !== row.unsentAt))) conflict();
-    const knownTime = prior?.snapshotCreatedAt ?? 0, time = row.createdAt ?? 0;
+    const knownTime = prior?.snapshotCreatedAt ?? prior?.createdAt ?? 0, time = row.createdAt ?? 0;
+    // 0 means "never observed": a restored row must carry the real instant in
+    // the same field the transcript reads, not only the merge-only mirror.
+    const resolvedTime = knownTime === 0 ? time : time === 0 ? knownTime : Math.min(knownTime, time);
     const unsentAt = prior?.unsentAt ?? row.unsentAt ?? tombstone?.occurredAt;
     messages.set(row.id, { ...prior, ...mergeReadFacts(prior, row), id: row.id, conversationId: row.conversationId, authorId: row.authorId, recipientId: row.recipientId,
       body: row.body ?? "", server: { eventId: row.serverEventId, sequence: row.serverSequence },
@@ -174,7 +178,7 @@ export function mergePortable(view: PortableView, incoming: HistorySnapshot, sco
       ...(row.location ? { location: { ...row.location } } : {}),
       ...((row.messageType ?? prior?.messageType) ? { messageType: row.messageType ?? prior?.messageType } : {}),
       ...(unsentAt !== undefined ? { unsentAt } : {}), ...(row.body === null ? { snapshotSuppressed: true as const } : {}),
-      snapshotCreatedAt: knownTime === 0 ? time : time === 0 ? knownTime : Math.min(knownTime, time) });
+      createdAt: resolvedTime, snapshotCreatedAt: resolvedTime });
     eventOwners.set(row.serverEventId, row.id); sequenceOwners.set(sequenceKey, row.id);
   }
   // Attachments follow their parent: only a message that survives every

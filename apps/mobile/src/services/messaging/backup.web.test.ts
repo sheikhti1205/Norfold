@@ -31,7 +31,7 @@ async function receive(history: MessagingHistory, n = 1, deviceId = scope.device
   const row = saved(n);
   await history.persistInbound({ ...scope, deviceId, mailboxId: id(300 + n), event: { kind: "TEXT",
     eventId: row.serverEventId, sequence: n, message: { id: row.id, conversationId: CHAT,
-      authorId: B, recipientId: A, body: row.body!, messageType: "TEXT" } } });
+      authorId: B, recipientId: A, body: row.body!, messageType: "TEXT", createdAt: row.createdAt } } });
 }
 beforeEach(() => { factory = new IDBFactory(); handles = []; scratch = []; });
 afterEach(async () => {

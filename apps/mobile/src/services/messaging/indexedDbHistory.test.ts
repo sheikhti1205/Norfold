@@ -7,6 +7,7 @@ import { UNSENT_HOLD_MS } from "./history";
 import { MEDIA_SWEEP_GRACE_MS, type MediaMetadata } from "./media";
 import { afterNextHistoryOperation, FakeMediaBytes, mediaBytes, mediaFixture } from "./mediaTestDoubles";
 import type { StateChangeEnvelope } from "./stateChanges";
+import { copyMailboxEnvelope } from "./mailbox";
 
 const A = "00000000-0000-4000-8000-000000000001";
 const B = "00000000-0000-4000-8000-000000000002";
@@ -699,6 +700,69 @@ function seedV3(version = 3, attachment?: Record<string, unknown>): Promise<void
     };
   });
 }
+
+describe("ported message instants (photo-run grouping)", () => {
+  it("uses the envelope serverTime when a message carries no instant", () => {
+    const env = copyMailboxEnvelope({
+      ...scope, mailboxId: MAILBOX,
+      event: { kind: "TEXT", eventId: EVENT, sequence: 1, serverTime: CLOCK,
+        message: { ...text, authorId: B, recipientId: A } },
+    }, scope);
+    expect(env.event.message.createdAt).toBe(CLOCK);
+  });
+
+  it("keeps the sender's composition instant through export and restore", async () => {
+    const one = await open();
+    const createdAt = CLOCK - 4321;
+    await one.persistInbound(envelope({ ...text, authorId: B, recipientId: A, createdAt }));
+    expect((await one.getMessage(MESSAGE))?.createdAt).toBe(createdAt);
+    const snapshot = await one.exportSnapshot();
+    expect(snapshot.messages.find((message) => message.id === MESSAGE)?.createdAt).toBe(createdAt);
+    const restored = await open({ accountId: A, deviceId: OTHER_DEVICE });
+    await restored.importSnapshot(snapshot);
+    expect((await restored.getMessage(MESSAGE))?.createdAt).toBe(createdAt);
+  });
+
+  it("backfills a v9 row's instant from the merge mirror on upgrade", async () => {
+    const createdAt = CLOCK - 5000;
+    await new Promise<void>((resolve, reject) => {
+      const request = factory.open(DB_NAME, 9);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        db.createObjectStore("messages", { keyPath: "id" }).createIndex("conversation", "conversationId");
+        db.createObjectStore("outbox", { keyPath: "messageId" });
+        db.createObjectStore("mailbox", { keyPath: "mailboxId" });
+        db.createObjectStore("events", { keyPath: "eventId" }).createIndex("sequence", ["conversationId", "sequence"], { unique: true });
+        db.createObjectStore("conversations", { keyPath: "conversationId" });
+        db.createObjectStore("stateEvents", { keyPath: "eventId" }).createIndex("sequence", "sequence", { unique: true });
+        db.createObjectStore("deletions", { keyPath: "messageId" });
+        db.createObjectStore("unsends", { keyPath: "messageId" });
+        db.createObjectStore("clears", { keyPath: "conversationId" });
+        db.createObjectStore("mediaAttachments", { keyPath: "id" }).createIndex("messageId", "messageId", { unique: true });
+        db.createObjectStore("mediaLifecycle");
+        db.createObjectStore("conversationProgress", { keyPath: "conversationId" });
+        db.createObjectStore("rangeStateEvents", { keyPath: "eventId" }).createIndex("sequence", "sequence", { unique: true });
+        db.createObjectStore("conversationCheckpoints", { keyPath: "conversationId" });
+        db.createObjectStore("conversationUnavailable", { keyPath: "id" }).createIndex("conversation", "conversationId");
+        const holds = db.createObjectStore("unsentHolds", { keyPath: "messageId" });
+        holds.createIndex("conversation", "conversationId");
+        holds.createIndex("expiry", "expiresAt");
+      };
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction("messages", "readwrite");
+        tx.objectStore("messages").put({ id: MESSAGE, conversationId: CONVERSATION,
+          authorId: B, recipientId: A, body: "restored", messageType: "MEDIA",
+          snapshotCreatedAt: createdAt });
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onabort = () => reject(tx.error);
+      };
+      request.onerror = () => reject(request.error);
+    });
+    const store = await open();
+    expect(await store.getMessage(MESSAGE)).toMatchObject({ createdAt, snapshotCreatedAt: createdAt });
+  });
+});
 
 describe("chat media records (web parity with SQLite)", () => {
   beforeEach(() => { vi.spyOn(Date, "now").mockReturnValue(CLOCK); });
