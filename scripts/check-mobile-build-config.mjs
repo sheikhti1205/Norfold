@@ -90,9 +90,11 @@ export function checkApk(path, config, sentryHost, sentryIdentity) {
   }
   // CI/Android Gradle runs on hosts with unzip; read the APK itself, not a
   // possibly different dist directory. No extraction or credential logging.
+  // Split on CRLF too: Windows `unzip` ends every name with \r, which would
+  // otherwise make the name filter match nothing.
   const listing = spawnSync("unzip", ["-Z", "-1", path], { encoding: "utf8" });
   if (listing.status !== 0) fail("cannot inspect APK (unzip -Z -1 failed)");
-  const files = listing.stdout.split("\n").filter((name) =>
+  const files = listing.stdout.split(/\r?\n/).filter((name) =>
     /^assets\/public\/assets\/[^/]+\.js$/.test(name));
   const chunks = files.map((name) => {
     const file = spawnSync("unzip", ["-p", path, name], {
