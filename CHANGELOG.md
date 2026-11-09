@@ -35,9 +35,10 @@ track real evolution and do not imply a stable release. The per-commit mapping i
 - Device-bound builds (`signeddev` / `release`) now fail closed when the APK is
   not signed by the canonical findback-release certificate, so a debug-signed
   APK can no longer masquerade as an acceptance build.
-- Beta/source checkpoint, not a GitHub Release, public APK distribution, domain
-  migration or device acceptance. Phone/browser acceptance with real accounts
-  is recorded separately.
+- Published as the `v0.15.0-beta.1` GitHub prerelease with signed APKs built
+  from HEAD `340e201e`; still not a stable public release, domain migration or
+  device acceptance. Phone/browser acceptance with real accounts is recorded
+  separately.
 
 ## 0.14.0-beta.1 — Norfold rebrand
 
@@ -50,8 +51,8 @@ track real evolution and do not imply a stable release. The per-commit mapping i
 - Workspace packages moved to `@norfold/*`; technical identifiers (Android
   application id, Supabase project, `findback_*` SQL, storage buckets,
   migrations) were intentionally kept.
-- Beta/source checkpoint, not a GitHub Release, device acceptance or domain
-  migration. See [the rebrand record](docs/releases/NORFOLD_REBRAND_2026-11-03.md).
+- Published later as the `v0.14.0-beta.1` GitHub prerelease; not device
+  acceptance or domain migration. See [the rebrand record](docs/releases/NORFOLD_REBRAND_2026-11-03.md).
 
 ## 0.13.0-beta.1 — product fit reset (beta checkpoint)
 
