@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
 import { checkAppLinksManifest, checkSigneddevConfig, buildProvenanceReport, PROVENANCE_FIELDS, MANIFEST_PATH } from "./check-signeddev-config.mjs";
+import { writeZipFile } from "./zip-fixture.mjs";
 
 const script = resolve("scripts/check-signeddev-config.mjs");
 const url = "https://sampleproject.supabase.co";
@@ -385,9 +386,10 @@ test("provenance report carries exactly the mandated fields, never values", () =
 test("provenance CLI reports a synthetic APK with the mandated fields only", () => {
   const dir = mkdtempSync(join(tmpdir(), "findback-provenance-"));
   try {
-    writeFileSync(join(dir, "payload.txt"), "not a real apk");
     const apk = join(dir, "app-signeddev.apk");
-    assert.equal(spawnSync("zip", ["-q", "-j", apk, join(dir, "payload.txt")]).status, 0);
+    // Pure-JS fixture: `zip` is absent on Windows. The provenance report only
+    // hashes the file, so any valid archive bytes are enough.
+    writeZipFile(apk, { "payload.txt": "not a real apk" });
     const result = spawnSync(process.execPath,
       [resolve("scripts/check-signeddev-config.mjs"), "--provenance", "--apk", apk],
       { encoding: "utf8", env: { ...process.env, ...baseEnv } });

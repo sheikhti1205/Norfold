@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
 import { effectiveSupabaseConfig } from "./check-mobile-build-config.mjs";
+import { writeZipFile } from "./zip-fixture.mjs";
 
 const script = resolve("scripts/check-mobile-build-config.mjs");
 const url = "https://sampleproject.supabase.co";
@@ -96,15 +97,20 @@ test("final APK gate examines packaged JavaScript, not the build directory", () 
       JSON.stringify({ loggingBehavior: "none" }));
     const js = join(assets, "index-test.js");
     writeFileSync(js, `const dsn="o123.ingest.sentry.io";`);
-    const pack = () => spawnSync("zip", ["-q", "-r", "-FS", apk, "assets"], { cwd: dir });
-    assert.equal(pack().status, 0);
+    // Build the APK with a pure-JS writer: `zip` is absent on Windows, and the
+    // fixture must be buildable on every host the tests run on.
+    const pack = () => writeZipFile(apk, {
+      "assets/capacitor.config.json": readFileSync(join(dir, "assets", "capacitor.config.json")),
+      "assets/public/assets/index-test.js": readFileSync(js),
+    });
+    pack();
     const env = { VITE_SUPABASE_URL: url, VITE_SUPABASE_PUBLISHABLE_KEY: key };
     const missing = run(["--apk", apk], env);
     assert.notEqual(missing.status, 0);
     assert.match(missing.stderr, /Supabase URL missing from APK/);
 
     writeFileSync(js, `const u="${url}",k="${key}",dsn="o123.ingest.sentry.io",share="${share}";`);
-    assert.equal(pack().status, 0);
+    pack();
     const valid = run(["--apk", apk], env);
     assert.equal(valid.status, 0, valid.stderr);
     assert.doesNotMatch(valid.stdout, /sb_publishable_/);
