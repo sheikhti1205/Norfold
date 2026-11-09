@@ -65,8 +65,10 @@ describe("deriveAppVersion (injected reader, asserts sync)", () => {
   const readBoth = (rootVersion, mobileVersion) => {
     const seen = [];
     const read = (path) => {
-      seen.push(path);
-      if (path.endsWith("apps/mobile/package.json")) {
+      // path.resolve() yields backslashes on Windows; compare POSIX-style.
+      const normalized = String(path).replace(/\\/g, "/");
+      seen.push(normalized);
+      if (normalized.endsWith("apps/mobile/package.json")) {
         return JSON.stringify({ version: mobileVersion });
       }
       return JSON.stringify({ version: rootVersion });
