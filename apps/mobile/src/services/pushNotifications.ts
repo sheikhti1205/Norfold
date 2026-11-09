@@ -111,6 +111,13 @@ export function createPushController(options: PushControllerOptions): PushContro
   const cleanups: Array<() => void> = [];
   let running = false;
   let currentToken: string | null = null;
+  /**
+   * True once this process has asked the native plugin to register. Native
+   * token deletion is only attempted then: without it, FCM may not even be
+   * initialised (no google-services.json, permission never granted) and the
+   * plugin throws on its handler thread, crashing the app past any JS catch.
+   */
+  let nativeRegistered = false;
   let generation = 0;
   let pendingRegistration: Promise<void> = Promise.resolve();
   let nativeQueue: Promise<unknown> = Promise.resolve();
@@ -207,6 +214,7 @@ export function createPushController(options: PushControllerOptions): PushContro
               if (url) openReportUrl(url);
             }));
             if (!active()) return "prompt";
+            nativeRegistered = true;
             await adapter.register();
             if (!active()) return "prompt";
             running = true;
@@ -243,8 +251,9 @@ export function createPushController(options: PushControllerOptions): PushContro
           /* retain the token so a failed server cleanup can be retried */
         }
         let deviceReleased = true;
-        try {
+        if (nativeRegistered || token) try {
           await adapter.deleteToken?.();
+          nativeRegistered = false;
         } catch {
           deviceReleased = false;
         }
