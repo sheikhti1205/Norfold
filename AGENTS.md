@@ -3,7 +3,7 @@
 ## Project identity and private context — owner update 2026-11-03
 
 - This is `sheikhti1205/Norfold`, the former FindBack React/Capacitor lost-and-found product. It is NOT the retired Compose workspace `Norfold-App/norfold-compose-legacy`.
-- Read `FindBack-internal/00_CONTROL/START_HERE.md` inside this checkout. This ignored private-folder link points to the existing Drive data; never stage, force-add, copy into tracked files, or publish its contents.
+- Read `D:\GDrive\Norfold\00_CONTROL\START_HERE.md` directly. That folder is the private Drive data and is no longer linked into this checkout; never stage, force-add, copy into tracked files, or publish its contents. Agents may read that path at any time.
 - Do not import the retired project's `Norfold-internal` coordination, Compose/editor phase rules or post-pass policy based on the Norfold name. Current source, the latest owner direction and this product's own control tree govern.
 
 ## Proportional execution — owner order 2026-11-02
@@ -51,10 +51,10 @@
 
 ## Stabilization — source/synthetic accepted 2026-11-05
 
-- Current programme: `FindBack-internal/01_ACTIVE/norfold-stabilization-2026-11-04/`. Read `GOAL.md`, `STATUS.md`, `STABILIZATION-SPEC.md`, `IMPLEMENTATION-PLAN.md`, `DEFECT-REGISTER.md`, `JOURNEY-MATRIX.md` and the consolidated handoff in `packet/`. Use its existing M1–M4/T1–T10 order, not a competing plan.
+- Current programme: `D:\GDrive\Norfold\01_ACTIVE\norfold-stabilization-2026-11-04\`. Read `GOAL.md`, `STATUS.md`, `STABILIZATION-SPEC.md`, `IMPLEMENTATION-PLAN.md`, `DEFECT-REGISTER.md`, `JOURNEY-MATRIX.md` and the consolidated handoff in `packet/`. Use its existing M1-M4/T1-T10 order, not a competing plan.
 - Goal-tool ID: `885c827a-747c-48f0-b98d-1fd9d188f588`, explicitly authorized 2026-11-05 without requested caps. Product source through `7cf46e3b` has passed the final selected source/synthetic gate; use the programme's M4 acceptance ledger for exact evidence and remaining limitations. Retrieve current goal-tool lifecycle rather than treating historical active labels or completed tasks as an execution queue. Device/personal-session access, real-account actions, live writes and release/distribution remain separately gated.
 - Rebrand goal `ce9a50e0-2798-476e-a0f8-09abe06b4b09` is complete; `2074f7c1-faf2-4000-a484-064535db095d` is archived history. Preserve accepted rebrand source at baseline `6ba6fb45` and its independent external/device deferrals. Do not reopen or replay that programme.
-- Preserve version `0.14.0-beta.1`; reconcile current HEAD/version/CI/live state before continuing. No automatic version bump, Release, APK distribution, destructive reset or domain migration. The historical manual production-reset workflow must never be dispatched for stabilization/startup/upgrades.
+- Preserve version `0.15.0-beta.1`; reconcile current HEAD/version/CI/live state before continuing. `v0.15.0-beta.1` is the published prerelease for HEAD `340e201e`, built and published by `android-builds.yml`; the automatic publish path is retained by owner decision. No automatic version bump, destructive reset or domain migration. The historical manual production-reset workflow must never be dispatched for stabilization/startup/upgrades.
 - The owner superseded the packet's no-repo-rename instruction: product repo and workspace scopes are already renamed. Preserve the live `findbackapp.social` address, approved logo and compatibility contracts unless a concrete owner-approved migration changes them.
 - This programme supersedes overlapping M7-P, Product Fit Reset and messaging/public/sync addenda. Those programmes and old control queues are historical evidence, not active execution instructions. Real account/native/Sentry/photo-corpus deferrals remain unpassed until the matching evidence exists.
 - One active writer/coordinator on main. Read-only workers may support bounded research/audits; no independent writers or child fan-out.

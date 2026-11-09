@@ -61,6 +61,10 @@ tmp-*.mjs
 # Private coordination link/data: local only, never public product content.
 /FindBack-internal
 /FindBack-internal/
+/Norfold-internal
+/Norfold-internal/
+/Norfold
+/Norfold/
 
 # Local assistant alias uses AGENTS.md as the single rules source.
 /CLAUDE.md
