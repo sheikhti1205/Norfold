@@ -2,12 +2,14 @@
 // and every chat function answers a browser preflight from it.
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const cors = await import(resolve(ROOT, "supabase/functions/_shared/cors.js"));
+// A bare Windows path ("D:\\...") is rejected by the ESM loader; it needs a
+// file:// URL on every platform.
+const cors = await import(pathToFileURL(resolve(ROOT, "supabase/functions/_shared/cors.js")).href);
 const read = (path) => readFileSync(resolve(ROOT, path), "utf8");
 
 // Exactly what the browser sees for a chat-media upload POST.
@@ -111,7 +113,7 @@ test("chat and media functions share one allow-list", () => {
     assert.doesNotMatch(source, /Access-Control-Allow-(Headers|Methods|Origin)/, `${path} must not hand-maintain CORS`);
   }
   const offenders = walk(resolve(ROOT, "supabase/functions"))
-    .filter((file) => !file.endsWith("/_shared/cors.js"))
+    .filter((file) => !file.endsWith(`${sep}_shared${sep}cors.js`))
     .filter((file) => /Access-Control-Allow-Headers/.test(readFileSync(file, "utf8")));
   assert.deepEqual(offenders, [], "only _shared/cors.js may declare the allowed headers");
 });
