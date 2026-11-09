@@ -41,6 +41,7 @@
  * Usage:
  *   node scripts/check-edge-parity.mjs --manifest <manifest.json>
  *   node scripts/check-edge-parity.mjs --manifest <manifest.json> --root <repo-root>
+ *   node scripts/check-edge-parity.mjs --manifest <manifest.json> --strict
  *
  * Manifest JSON shape (array or { functions: [...] }):
  *   [{ "name": "<fn>", "sha256": "<64-hex>", "version": "...", "verify_jwt": true|false }, ...]
@@ -53,13 +54,25 @@
  *     cause of a production worker running stale code for eleven days.
  *   A function entry with `files` is CURRENT only when every file matches.
  *
- * Extra manifest entries for unknown names are ignored (reported on stderr
- * as warnings, never failures).
+ * `--strict` rejects a manifest that cannot prove parity:
+ *   - legacy index-only entries (they never cover `_shared/*`)
+ *   - an entry without its `<fn>/index.ts` entrypoint
+ *   - a relative import in the function's source that the entry does not list
+ *     (the transitive `./` and `../_shared/` closure, read from the repo)
+ *   - unknown function names
+ * Duplicate function entries and duplicate file paths are rejected in both
+ * modes, because either one silently discards evidence.
+ *
+ * Extra manifest entries for unknown names are ignored in default mode
+ * (reported on stderr as warnings, never failures).
  *
  * Pure injectable API (exported for node --test, no I/O inside):
  *   sha256Hex(text), checkParity({ localHashes, localFiles, manifestEntries }),
  *   computeLocalHashes(readSource), computeLocalFileHashes(readFile, entries),
- *   parseManifest(input), summarize(results), formatParityReport(results)
+ *   parseManifest(input, { strict }), collectRelativeImports(source),
+ *   resolveRelativeImport(importerPath, specifier),
+ *   findUndeclaredImports(entries, readFile),
+ *   summarize(results), formatParityReport(results)
  * Importing this module has no side effects; the CLI runs on direct execution.
  */
 
@@ -157,10 +170,16 @@ export function computeLocalFileHashes(readFile, entries) {
 
 /**
  * Parse + validate a deployed manifest (object or JSON string).
- * Returns an array of { name, sha256, version, verify_jwt }.
+ * Returns an array of { name, sha256, version, verify_jwt } or
+ * { name, files, version, verify_jwt }.
  * Throws on malformed input. Unknown-function entries are kept (caller warns).
+ *
+ * Duplicates always throw: a second entry for the same function, or the same
+ * file listed twice, means the manifest is ambiguous and one copy is silently
+ * ignored. `strict` additionally refuses the legacy index-only shape (it can
+ * never prove `_shared/*` parity) and an entry without its own entrypoint.
  */
-export function parseManifest(input) {
+export function parseManifest(input, { strict = false } = {}) {
   let data = input;
   if (typeof data === "string") {
     try {
@@ -173,6 +192,7 @@ export function parseManifest(input) {
   if (!Array.isArray(list)) {
     throw new Error("check-edge-parity: manifest must be an array or { functions: [...] }");
   }
+  const seenNames = new Set();
   return list.map((entry, index) => {
     if (!entry || typeof entry !== "object") {
       throw new Error(`check-edge-parity: manifest entry ${index} is not an object`);
@@ -181,10 +201,15 @@ export function parseManifest(input) {
     if (typeof name !== "string" || !name) {
       throw new Error(`check-edge-parity: manifest entry ${index} has no name`);
     }
+    if (seenNames.has(name)) {
+      throw new Error(`check-edge-parity: duplicate manifest entry "${name}"`);
+    }
+    seenNames.add(name);
     if (files !== undefined) {
       if (!Array.isArray(files) || files.length === 0) {
         throw new Error(`check-edge-parity: manifest entry "${name}" has invalid files (expected a non-empty array)`);
       }
+      const seenPaths = new Set();
       const parsedFiles = files.map((file, fileIndex) => {
         if (!file || typeof file !== "object") {
           throw new Error(`check-edge-parity: manifest entry "${name}" file ${fileIndex} is not an object`);
@@ -193,18 +218,101 @@ export function parseManifest(input) {
         if (typeof path !== "string" || !path || path.startsWith("/") || path.includes("..") || path.includes("\\")) {
           throw new Error(`check-edge-parity: manifest entry "${name}" file ${fileIndex} has an unsafe path`);
         }
+        if (seenPaths.has(path)) {
+          throw new Error(`check-edge-parity: manifest entry "${name}" lists "${path}" more than once`);
+        }
+        seenPaths.add(path);
         if (typeof fileSha !== "string" || !/^[0-9a-f]{64}$/i.test(fileSha)) {
           throw new Error(`check-edge-parity: manifest entry "${name}" file "${path}" has invalid sha256 (expected 64 hex chars)`);
         }
         return { path, sha256: fileSha.toLowerCase() };
       });
+      if (strict && !seenPaths.has(`${name}/index.ts`)) {
+        throw new Error(`check-edge-parity: strict manifest entry "${name}" is missing its entrypoint ${name}/index.ts`);
+      }
       return { name, files: parsedFiles, version, verify_jwt };
+    }
+    if (strict) {
+      throw new Error(
+        `check-edge-parity: strict manifest entry "${name}" must use "files" (an index-only sha256 cannot prove _shared/* parity)`,
+      );
     }
     if (typeof sha256 !== "string" || !/^[0-9a-f]{64}$/i.test(sha256)) {
       throw new Error(`check-edge-parity: manifest entry "${name}" has invalid sha256 (expected 64 hex chars)`);
     }
     return { name, sha256: sha256.toLowerCase(), version, verify_jwt };
   });
+}
+
+/**
+ * Every relative module specifier in a source file.
+ * Handles `import ... from "./x.ts"`, `export ... from "../_shared/y.ts"`, and
+ * the side-effect form `import "./z.ts"`. External specifiers (npm:, https:,
+ * bare names) are ignored.
+ */
+export function collectRelativeImports(source) {
+  const out = [];
+  const text = String(source);
+  for (const pattern of [/from\s*["'](\.[^"']+)["']/g, /\bimport\s*["'](\.[^"']+)["']/g]) {
+    let match;
+    while ((match = pattern.exec(text))) out.push(match[1]);
+  }
+  return out;
+}
+
+/**
+ * Resolve a relative specifier against the importing file's path.
+ * Both paths are repo-relative inside supabase/functions.
+ *   ("chat-media/handler.ts", "../_shared/cors.js") -> "_shared/cors.js"
+ *   ("_shared/deviceEnrollment.ts", "./deviceProof.ts") -> "_shared/deviceProof.ts"
+ */
+export function resolveRelativeImport(importerPath, specifier) {
+  const slash = importerPath.lastIndexOf("/");
+  const parts = (slash === -1 ? [] : importerPath.slice(0, slash).split("/")).concat(specifier.split("/"));
+  const stack = [];
+  for (const part of parts) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") stack.pop();
+    else stack.push(part);
+  }
+  return stack.join("/");
+}
+
+/**
+ * Walk each entry's transitive relative-import closure from `<fn>/index.ts` and
+ * report repo files the entry does not declare.
+ *
+ * This is the completeness check the hash comparison cannot do on its own: a
+ * manifest that omits `_shared/x.ts` still reports CURRENT for the files it
+ * does list. Returns [{ name, missing: [path, ...] }] (empty when complete).
+ */
+export function findUndeclaredImports(entries, readFile) {
+  const problems = [];
+  for (const entry of entries ?? []) {
+    if (!entry.files) continue;
+    const declared = new Set(entry.files.map((file) => file.path));
+    const seen = new Set();
+    const queue = [`${entry.name}/index.ts`];
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (seen.has(current)) continue;
+      seen.add(current);
+      let source;
+      try {
+        source = readFile(current);
+      } catch {
+        continue; // unreadable files are reported by checkParity, not here
+      }
+      if (typeof source !== "string") continue;
+      for (const specifier of collectRelativeImports(source)) {
+        const resolved = resolveRelativeImport(current, specifier);
+        if (!seen.has(resolved)) queue.push(resolved);
+      }
+    }
+    const missing = [...seen].filter((file) => !declared.has(file));
+    if (missing.length > 0) problems.push({ name: entry.name, missing });
+  }
+  return problems;
 }
 
 /**
@@ -290,14 +398,17 @@ function printHelp() {
   console.log(`check-edge-parity: compare repo Edge Function sources to a deployed manifest
 
 usage:
-  node scripts/check-edge-parity.mjs --manifest <manifest.json> [--root <repo-root>]
+  node scripts/check-edge-parity.mjs --manifest <manifest.json> [--root <repo-root>] [--strict]
 
 options:
   --manifest <path>  deployed manifest JSON (required, read-only input)
   --root <path>      repo root for supabase/functions/* (default: repo root)
+  --strict           reject manifests that cannot prove parity: legacy
+                     index-only entries, a missing <fn>/index.ts, an import
+                     the entry does not list, or an unknown function name
   --help             print this help and exit 0
 
-exit codes: 0 all CURRENT, 1 any STALE/MISSING, 2 usage error`);
+exit codes: 0 all CURRENT, 1 any STALE/MISSING, 2 usage or manifest-rejection error`);
 }
 
 function isMainModule() {
@@ -311,6 +422,7 @@ function main() {
     printHelp();
     process.exit(0);
   }
+  const strict = args.includes("--strict");
   const manifestFlag = args.indexOf("--manifest");
   const manifestPath = manifestFlag !== -1 ? args[manifestFlag + 1] : undefined;
   if (!manifestPath) {
@@ -322,6 +434,7 @@ function main() {
   const unknown = args.filter((arg, index) => {
     if (arg === "--manifest" || index === manifestFlag + 1) return false;
     if (arg === "--root" || index === rootFlag + 1) return false;
+    if (arg === "--strict") return false;
     return arg.startsWith("--");
   });
   if (unknown.length > 0) {
@@ -337,18 +450,34 @@ function main() {
   }
   let manifestEntries;
   try {
-    manifestEntries = parseManifest(manifestRaw);
+    manifestEntries = parseManifest(manifestRaw, { strict });
   } catch (error) {
     console.error(error.message);
     process.exit(2);
   }
-  for (const entry of manifestEntries) {
-    if (!EDGE_FUNCTIONS.includes(entry.name)) {
-      console.error(`check-edge-parity: warning: ignoring unknown manifest entry "${entry.name}"`);
+  const readFile = diskReadFile(resolve(root));
+  if (strict) {
+    const unknownNames = manifestEntries.filter((entry) => !EDGE_FUNCTIONS.includes(entry.name)).map((entry) => entry.name);
+    if (unknownNames.length > 0) {
+      console.error(`check-edge-parity: strict: unknown function(s) in manifest: ${unknownNames.join(", ")}`);
+      process.exit(2);
+    }
+    const undeclared = findUndeclaredImports(manifestEntries, readFile);
+    if (undeclared.length > 0) {
+      for (const problem of undeclared) {
+        console.error(`check-edge-parity: strict: "${problem.name}" does not declare imported file(s): ${problem.missing.join(", ")}`);
+      }
+      process.exit(2);
+    }
+  } else {
+    for (const entry of manifestEntries) {
+      if (!EDGE_FUNCTIONS.includes(entry.name)) {
+        console.error(`check-edge-parity: warning: ignoring unknown manifest entry "${entry.name}"`);
+      }
     }
   }
   const localHashes = computeLocalHashes(diskReadSource(resolve(root)));
-  const localFiles = computeLocalFileHashes(diskReadFile(resolve(root)), manifestEntries);
+  const localFiles = computeLocalFileHashes(readFile, manifestEntries);
   const results = checkParity({ localHashes, localFiles, manifestEntries });
   console.log(formatParityReport(results));
   process.exit(summarize(results).exitCode);

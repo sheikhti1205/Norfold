@@ -9,7 +9,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -21,6 +21,9 @@ import {
   checkParity,
   summarize,
   formatParityReport,
+  collectRelativeImports,
+  resolveRelativeImport,
+  findUndeclaredImports,
 } from "./check-edge-parity.mjs";
 
 const FIXTURE_SOURCE = {
@@ -243,5 +246,124 @@ describe("check-edge-parity per-file manifests", () => {
     const results = checkParity({ localHashes, localFiles, manifestEntries: entries });
     assert.ok(results.every((row) => row.status === "CURRENT"));
     assert.equal(summarize(results).exitCode, 0);
+  });
+});
+
+describe("check-edge-parity manifest integrity", () => {
+  const base = { name: "copy-chat-evidence", version: "2", verify_jwt: false };
+
+  it("rejects a duplicate function entry in either mode", () => {
+    const legacyDup = [manifestFor()[0], manifestFor()[0]];
+    assert.throws(() => parseManifest(JSON.stringify(legacyDup)), /duplicate manifest entry/);
+    const fileEntry = fileManifestFor("copy-chat-evidence", Object.keys(FIXTURE_FILES));
+    assert.throws(
+      () => parseManifest(JSON.stringify([fileEntry, fileEntry]), { strict: true }),
+      /duplicate manifest entry/,
+    );
+  });
+
+  it("rejects the same file listed twice in one entry", () => {
+    const file = { path: "copy-chat-evidence/index.ts", sha256: "a".repeat(64) };
+    assert.throws(
+      () => parseManifest(JSON.stringify([{ ...base, files: [file, file] }])),
+      /lists "copy-chat-evidence\/index\.ts" more than once/,
+    );
+  });
+
+  it("strict mode rejects the legacy index-only shape", () => {
+    assert.doesNotThrow(() => parseManifest(JSON.stringify(manifestFor())));
+    assert.throws(
+      () => parseManifest(JSON.stringify(manifestFor()), { strict: true }),
+      /must use "files"/,
+    );
+  });
+
+  it("strict mode rejects an entry with no entrypoint", () => {
+    const files = [{ path: "_shared/cors.js", sha256: "a".repeat(64) }];
+    assert.throws(
+      () => parseManifest(JSON.stringify([{ ...base, files }]), { strict: true }),
+      /missing its entrypoint copy-chat-evidence\/index\.ts/,
+    );
+    // Default mode still accepts it: the hash comparison reports what it can.
+    assert.doesNotThrow(() => parseManifest(JSON.stringify([{ ...base, files }])));
+  });
+});
+
+describe("check-edge-parity import closure", () => {
+  it("collects relative specifiers and ignores external ones", () => {
+    const source = [
+      'import { a } from "./handler.ts";',
+      'export { b } from "../_shared/cors.js";',
+      'import "npm:@supabase/server@1.6.0";',
+      'import { c } from "https://deno.land/std/mod.ts";',
+      'import { d } from "node:assert";',
+    ].join("\n");
+    assert.deepEqual(collectRelativeImports(source).sort(), ["./handler.ts", "../_shared/cors.js"].sort());
+  });
+
+  it("resolves against the importing file, including imports inside _shared", () => {
+    assert.equal(resolveRelativeImport("chat-media/handler.ts", "../_shared/cors.js"), "_shared/cors.js");
+    assert.equal(resolveRelativeImport("chat-media/index.ts", "./handler.ts"), "chat-media/handler.ts");
+    // The bug this guards: a `./` import inside _shared must stay in _shared.
+    assert.equal(resolveRelativeImport("_shared/deviceEnrollment.ts", "./deviceProof.ts"), "_shared/deviceProof.ts");
+    assert.equal(resolveRelativeImport("_shared/a/b.ts", "../c.ts"), "_shared/c.ts");
+  });
+
+  it("flags a shared module the manifest omits", () => {
+    const files = {
+      "copy-chat-evidence/index.ts": 'export * from "./handler.ts";',
+      "copy-chat-evidence/handler.ts": 'import { copy } from "../_shared/chatEvidenceCopy.ts";',
+      "_shared/chatEvidenceCopy.ts": 'import { reject } from "./emptyPost.ts";',
+      "_shared/emptyPost.ts": "export const reject = 1;",
+    };
+    const entries = [{
+      name: "copy-chat-evidence",
+      files: [
+        { path: "copy-chat-evidence/index.ts", sha256: "a".repeat(64) },
+        { path: "copy-chat-evidence/handler.ts", sha256: "a".repeat(64) },
+        { path: "_shared/chatEvidenceCopy.ts", sha256: "a".repeat(64) },
+      ],
+    }];
+    const problems = findUndeclaredImports(entries, (path) => files[path]);
+    assert.equal(problems.length, 1);
+    assert.equal(problems[0].name, "copy-chat-evidence");
+    assert.deepEqual(problems[0].missing, ["_shared/emptyPost.ts"]);
+  });
+
+  it("reports nothing when the closure is fully declared", () => {
+    const files = {
+      "copy-chat-evidence/index.ts": 'export * from "./handler.ts";',
+      "copy-chat-evidence/handler.ts": 'import { copy } from "../_shared/chatEvidenceCopy.ts";',
+      "_shared/chatEvidenceCopy.ts": 'import { reject } from "./emptyPost.ts";',
+      "_shared/emptyPost.ts": "export const reject = 1;",
+    };
+    const entries = [{
+      name: "copy-chat-evidence",
+      files: Object.keys(files).map((path) => ({ path, sha256: "a".repeat(64) })),
+    }];
+    assert.deepEqual(findUndeclaredImports(entries, (path) => files[path]), []);
+  });
+
+  it("the real live manifest would satisfy strict closure for every function", () => {
+    // Guards the contract that made this mode worth adding: the repo's actual
+    // import graph must be fully declarable, so strict mode cannot false-fail.
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+    const diskRead = (path) => readFileSync(resolve(repoRoot, "supabase", "functions", path), "utf8");
+    const entries = EDGE_FUNCTIONS.map((name) => {
+      const declared = new Set([`${name}/index.ts`]);
+      const queue = [`${name}/index.ts`];
+      while (queue.length > 0) {
+        const current = queue.shift();
+        for (const specifier of collectRelativeImports(diskRead(current))) {
+          const resolved = resolveRelativeImport(current, specifier);
+          if (!declared.has(resolved)) {
+            declared.add(resolved);
+            queue.push(resolved);
+          }
+        }
+      }
+      return { name, files: [...declared].map((path) => ({ path, sha256: sha256Hex(diskRead(path)) })) };
+    });
+    assert.deepEqual(findUndeclaredImports(entries, diskRead), []);
   });
 });
