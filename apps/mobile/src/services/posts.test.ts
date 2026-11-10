@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./session";
+import { setCommentReaction } from "./reactions";
 import * as postsModule from "./posts";
 import {
   addComment,
@@ -749,8 +750,21 @@ describe("reactToPost", () => {
     expect(res.likeCount).toBe(0);
   });
 
-  it("refuses to write a legacy DISLIKE (D1)", async () => {
-    await expect(reactToPost("p1", "DISLIKE")).rejects.toMatchObject({ status: 400 });
+  it("sends DISLIKE to the post reaction RPC", async () => {
+    clientMock.rpc.mockResolvedValue({
+      data: [{ post_id: "p1", like_count: 0, dislike_count: 1, my_reaction: "DISLIKE" }],
+      error: null,
+    });
+    const result = await reactToPost("p1", "DISLIKE");
+    expect(clientMock.rpc).toHaveBeenCalledWith("findback_react_client", {
+      p_post_id: "p1",
+      p_type: "DISLIKE",
+    });
+    expect(result.myReaction).toBe("DISLIKE");
+  });
+
+  it("rejects DISLIKE on comments before RPC", async () => {
+    await expect(setCommentReaction("c1", "DISLIKE")).rejects.toMatchObject({ status: 400 });
     expect(clientMock.rpc).not.toHaveBeenCalled();
   });
 
@@ -807,7 +821,7 @@ describe("fetchComments reaction summary (W3.3)", () => {
   });
 });
 
-describe("reactToPost Like-only writes and historical summaries", () => {
+describe("reactToPost Like/Dislike writes and historical summaries", () => {
   it("returns the per-kind summary when the widened RPC provides it", async () => {
     clientMock.rpc.mockResolvedValue({
       data: [
@@ -842,7 +856,7 @@ describe("reactToPost Like-only writes and historical summaries", () => {
     expect(res.reactionCounts).toBeUndefined();
   });
 
-  it.each(["LOVE", "HELPFUL", "SUPPORT", "WOW", "DISLIKE"] as const)("rejects historical %s before RPC", async (kind) => {
+  it.each(["LOVE", "HELPFUL", "SUPPORT", "WOW"] as const)("rejects historical %s before RPC", async (kind) => {
     await expect(reactToPost("p1", kind)).rejects.toMatchObject({ status: 400 });
     expect(clientMock.rpc).not.toHaveBeenCalled();
   });

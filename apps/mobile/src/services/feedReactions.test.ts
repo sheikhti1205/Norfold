@@ -6,6 +6,7 @@ import {
   likeBucketDeltas,
   seedSummaryFromItem,
   toggleLikeReaction,
+  toggleReaction,
 } from "./feedReactions";
 
 const { clientMock, reactToPostMock } = vi.hoisted(() => ({
@@ -160,6 +161,26 @@ describe("toggleLikeReaction (Like-only wire: LIKE / null)", () => {
   });
 });
 
+describe("toggleReaction (exclusive LIKE / DISLIKE wire)", () => {
+  it.each([
+    [null, "LIKE", "LIKE"],
+    [null, "DISLIKE", "DISLIKE"],
+    ["LIKE", "LIKE", null],
+    ["LIKE", "DISLIKE", "DISLIKE"],
+    ["DISLIKE", "LIKE", "LIKE"],
+    ["DISLIKE", "DISLIKE", null],
+    ...(["LOVE", "HELPFUL", "SUPPORT", "WOW"] as const).flatMap((kind) => [
+      [kind, "LIKE", null] as const,
+      [kind, "DISLIKE", "DISLIKE"] as const,
+    ]),
+  ] as const)("moves %s toward %s via %s", async (current, target, expected) => {
+    reactToPostMock.mockResolvedValue({ postId: "p1", myReaction: expected });
+
+    await toggleReaction("p1", current, target);
+
+    expect(reactToPostMock).toHaveBeenCalledWith("p1", expected);
+  });
+});
 describe("Like-only toggle over canonical-era rows (packet 08 §2)", () => {
   it("treats any positive reaction as mine, so a tap clears it", async () => {
     reactToPostMock.mockResolvedValue({ postId: "p1", likeCount: 4, dislikeCount: 0, myReaction: null });

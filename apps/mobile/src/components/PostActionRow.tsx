@@ -5,11 +5,11 @@ import "./PostActionRow.css";
 
 /**
  * The compact flat action row (owner reference: a single row of icon-only
- * actions — heart + count, comment bubble + count, share arrow, bookmark at
+ * actions — reactions + counts, comment bubble + count, share arrow, bookmark at
  * the end — followed by nothing else).
  *
  * WHY SLOTS AND NOT PROPS: the reaction state owner differs per surface. The
- * home feed's Like control lives in `HomeFeedLoveButton` (feed reaction
+ * home feed's reaction controls live in `HomeFeedReactionButtons` (feed reaction
  * provider), the detail screen owns its own. This component therefore NEVER
  * owns, fetches or re-implements reaction state — it only lays the controls
  * out flat and guarantees the row's own affordances (the comment control with

@@ -143,9 +143,30 @@ describe("PostDetail post Like (packet 08 §2 — Like-only)", () => {
     await waitFor(() => expect(postsMock.reactToPost).toHaveBeenCalledWith("p1", "LIKE"));
     await waitFor(() => expect(like.getAttribute("aria-pressed")).toBe("true"));
     // The optimistic count moves with the tap, before the server answers.
-    expect(like.getAttribute("aria-label")).toBe("Liked, 5 likes");
+    expect(like.getAttribute("aria-label")).toBe("Like, 5 likes");
 
     fireEvent.click(like);
+    await waitFor(() => expect(postsMock.reactToPost).toHaveBeenLastCalledWith("p1", null));
+  });
+
+  it("switches Like to Dislike, locks both controls, and clears Dislike", async () => {
+    postsMock.fetchSocialState.mockResolvedValue({ myReaction: "LIKE", myRating: null });
+    let release!: (value: unknown) => void;
+    postsMock.reactToPost.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    renderDetail();
+    const like = await screen.findByTestId("detail-like");
+    const dislike = screen.getByTestId("detail-dislike");
+    await waitFor(() => expect(like.getAttribute("aria-pressed")).toBe("true"));
+    fireEvent.click(dislike);
+    expect(postsMock.reactToPost).toHaveBeenCalledWith("p1", "DISLIKE");
+    expect(like.getAttribute("aria-label")).toBe("Like, 3 likes");
+    expect(dislike.getAttribute("aria-label")).toBe("Dislike, 2 dislikes");
+    expect(like.getAttribute("aria-pressed")).toBe("false");
+    expect(dislike.getAttribute("aria-pressed")).toBe("true");
+    expect((like as HTMLButtonElement).disabled).toBe(true);
+    expect((dislike as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => release({ postId: "p1", likeCount: 3, dislikeCount: 2, myReaction: "DISLIKE" }));
+    fireEvent.click(dislike);
     await waitFor(() => expect(postsMock.reactToPost).toHaveBeenLastCalledWith("p1", null));
   });
 

@@ -3,7 +3,7 @@ import type { PostItem } from "@norfold/shared";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { HomeFeedLoveButton } from "./HomeFeedLoveButton";
+import { HomeFeedReactionButtons } from "./HomeFeedReactionButtons";
 import { FeedLoveProvider, type FeedPatchItem } from "../hooks/useFeedLove";
 
 const { feedFetchMock, likeToggleMock, rpcMock } = vi.hoisted(() => ({
@@ -14,7 +14,7 @@ const { feedFetchMock, likeToggleMock, rpcMock } = vi.hoisted(() => ({
 
 vi.mock("../services/feedReactions", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/feedReactions")>();
-  return { ...actual, fetchFeedReactionState: feedFetchMock, toggleLikeReaction: likeToggleMock };
+  return { ...actual, fetchFeedReactionState: feedFetchMock, toggleReaction: likeToggleMock };
 });
 
 vi.mock("../services/supabaseClient", () => ({
@@ -56,7 +56,7 @@ function renderButton(
   return render(
     <MemoryRouter>
       <FeedLoveProvider items={[target]} patchItem={vi.fn() as unknown as FeedPatchItem}>
-        <HomeFeedLoveButton postId={target.id} likeCount={target.likeCount} />
+        <HomeFeedReactionButtons postId={target.id} likeCount={target.likeCount} dislikeCount={target.dislikeCount} />
       </FeedLoveProvider>
     </MemoryRouter>,
   );
@@ -85,7 +85,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("HomeFeedLoveButton (packet 08 §2 — Like-only)", () => {
+describe("HomeFeedReactionButtons (packet 08 §2 — Like-only)", () => {
   it("keeps the like testid, flat styling and 44px target, and offers no picker", () => {
     renderButton();
     const like = screen.getByTestId("home-feed-love");
@@ -104,17 +104,20 @@ describe("HomeFeedLoveButton (packet 08 §2 — Like-only)", () => {
     renderButton();
     const like = screen.getByTestId("home-feed-love");
     expect(like.getAttribute("aria-pressed")).toBe("false");
-    expect(like.getAttribute("aria-label")).toBe("Like this report, 24 likes");
+    expect(like.textContent).toBe("24");
+    expect(like.getAttribute("aria-label")).toBe("Like, 24 likes");
 
     fireEvent.click(like);
 
-    await waitFor(() => expect(likeToggleMock).toHaveBeenCalledWith("p1", null));
+    await waitFor(() => expect(likeToggleMock).toHaveBeenCalledWith("p1", null, "LIKE"));
     await waitFor(() => expect(like.getAttribute("aria-pressed")).toBe("true"));
-    expect(like.getAttribute("aria-label")).toBe("Liked, 25 likes");
+    expect(like.getAttribute("aria-label")).toBe("Like, 25 likes");
+
+    expect(like.textContent).toBe("25");
 
     // The second tap sees the written LIKE and clears the caller's row.
     fireEvent.click(like);
-    await waitFor(() => expect(likeToggleMock).toHaveBeenLastCalledWith("p1", "LIKE"));
+    await waitFor(() => expect(likeToggleMock).toHaveBeenLastCalledWith("p1", "LIKE", "LIKE"));
   });
 
   it("counts positive kinds only — a DISLIKE never fills the control", async () => {
@@ -134,7 +137,7 @@ describe("HomeFeedLoveButton (packet 08 §2 — Like-only)", () => {
 
     fireEvent.click(like);
 
-    await waitFor(() => expect(like.getAttribute("aria-label")).toBe("Liked, 23 likes"));
+    await waitFor(() => expect(like.textContent).toBe("23"));
   });
 
   it("treats a hydrated canonical-era kind as mine and clears it on the next tap", async () => {
@@ -142,14 +145,15 @@ describe("HomeFeedLoveButton (packet 08 §2 — Like-only)", () => {
     const like = screen.getByTestId("home-feed-love");
 
     await waitFor(() => expect(like.getAttribute("aria-pressed")).toBe("true"));
-    expect(like.getAttribute("aria-label")).toBe("Liked, 24 likes");
+    expect(like.getAttribute("aria-label")).toBe("Like, 24 likes");
+    expect(like.textContent).toBe("24");
 
     fireEvent.click(like);
 
     // The second argument is the caller's CURRENT reaction (what the toggle
     // reads to decide the move) — not the wire write. The wire write is always
     // LIKE/null and is pinned in `feedReactions.test.ts`.
-    await waitFor(() => expect(likeToggleMock).toHaveBeenCalledWith("p1", "HELPFUL"));
+    await waitFor(() => expect(likeToggleMock).toHaveBeenCalledWith("p1", "HELPFUL", "LIKE"));
   });
 
   it("does not double-fire while a Like is in flight", async () => {
@@ -190,7 +194,7 @@ describe("HomeFeedLoveButton (packet 08 §2 — Like-only)", () => {
       expect((await screen.findByTestId("home-feed-love-error")).textContent).toMatch(/try again/i);
       await waitFor(() => expect(heard.join(" ")).toMatch(/try again/i));
       expect(like.getAttribute("aria-pressed")).toBe("false");
-      expect(like.getAttribute("aria-label")).toBe("Like this report, 24 likes");
+      expect(like.getAttribute("aria-label")).toBe("Like, 24 likes");
       expect(like.getAttribute("aria-describedby")).toBe("home-feed-like-error-p1");
     } finally {
       window.removeEventListener("findback:announce", handler);
@@ -198,19 +202,47 @@ describe("HomeFeedLoveButton (packet 08 §2 — Like-only)", () => {
   });
 
   it("falls back to its own state outside a provider", async () => {
-    render(<HomeFeedLoveButton postId="p1" likeCount={3} />);
+    render(<HomeFeedReactionButtons postId="p1" likeCount={3} dislikeCount={1} />);
     const like = screen.getByTestId("home-feed-love");
-    expect(like.getAttribute("aria-label")).toBe("Like this report, 3 likes");
+    expect(like.getAttribute("aria-label")).toBe("Like, 3 likes");
+    expect(like.textContent).toBe("3");
 
     fireEvent.click(like);
 
-    await waitFor(() => expect(likeToggleMock).toHaveBeenCalledWith("p1", null));
+    await waitFor(() => expect(likeToggleMock).toHaveBeenCalledWith("p1", null, "LIKE"));
     await waitFor(() => expect(like.getAttribute("aria-pressed")).toBe("true"));
+  });
+
+  it("switches Like to Dislike and shows both counts", async () => {
+    likeToggleMock.mockResolvedValueOnce({ postId: "p1", likeCount: 23, dislikeCount: 2, myReaction: "DISLIKE", reactionCounts: { counts: { LOVE: 23, DISLIKE: 2 }, myReaction: "DISLIKE", total: 25 } });
+    renderButton(post(), { p1: { myReaction: "LIKE", myRating: null } });
+    const like = screen.getByRole("button", { name: "Like, 24 likes" });
+    const dislike = screen.getByRole("button", { name: "Dislike, 1 dislike" });
+    await waitFor(() => expect(like.getAttribute("aria-pressed")).toBe("true"));
+    expect(dislike.textContent).toBe("1");
+    expect(dislike.className).toContain("min-h-[44px]");
+    expect(dislike.className).toContain("min-w-[44px]");
+    fireEvent.click(dislike);
+    await waitFor(() => expect(likeToggleMock).toHaveBeenCalledWith("p1", "LIKE", "DISLIKE"));
+    await waitFor(() => expect(dislike.getAttribute("aria-pressed")).toBe("true"));
+    expect(like.getAttribute("aria-pressed")).toBe("false");
+    expect(like.textContent).toBe("23");
+    expect(dislike.textContent).toBe("2");
+  });
+
+  it("rolls back a failed local Dislike and both counts", async () => {
+    likeToggleMock.mockRejectedValueOnce(new Error("offline"));
+    render(<HomeFeedReactionButtons postId="p1" likeCount={3} dislikeCount={1} />);
+    fireEvent.click(screen.getByRole("button", { name: "Dislike, 1 dislike" }));
+    await screen.findByTestId("home-feed-love-error");
+    expect(screen.getByRole("button", { name: "Like, 3 likes" }).textContent).toBe("3");
+    expect(screen.getByRole("button", { name: "Dislike, 1 dislike" }).textContent).toBe("1");
+    expect(screen.getByRole("button", { name: "Dislike, 1 dislike" }).getAttribute("aria-pressed")).toBe("false");
   });
 
   it("reverts the local fallback when the Like fails", async () => {
     likeToggleMock.mockRejectedValueOnce(new Error("offline"));
-    render(<HomeFeedLoveButton postId="p1" likeCount={3} />);
+    render(<HomeFeedReactionButtons postId="p1" likeCount={3} dislikeCount={1} />);
     const like = screen.getByTestId("home-feed-love");
 
     fireEvent.click(like);

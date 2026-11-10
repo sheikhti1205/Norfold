@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { motion } from "framer-motion";
-import { CalendarDays, CircleCheck, CornerDownRight, ExternalLink, Heart, MapPin, Pencil, Star, ThumbsDown, X } from "lucide-react";
+import { CalendarDays, CircleCheck, CornerDownRight, ExternalLink, Heart, MapPin, Pencil, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import type { CommentItem, PostItem, PostStatus, ReactionCounts, ReactionKind, ReactionSummary } from "@norfold/shared";
 import { OWNER_SELECTABLE_STATUSES } from "@norfold/shared";
 import { useAuth } from "../auth";
@@ -53,6 +53,7 @@ import {
   applyCountDeltas,
   likeState,
   nextLikeReaction,
+  nextReaction,
   reactionCountsFromJson,
   reactionMoveDeltas,
   reactionSummaryFromCounts,
@@ -573,7 +574,9 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
         ? { counts: current.reactionSummary.counts, total: current.reactionSummary.total, myReaction }
         : seedSummaryFromItem(current.likeCount, current.dislikeCount, myReaction);
   const postLike = likeState(postSummary);
-  const postLikeLabel = `${postLike.mine ? "Liked" : "Like"}, ${postLike.count} ${postLike.count === 1 ? "like" : "likes"}`;
+  const postLikeLabel = `Like, ${postLike.count} ${postLike.count === 1 ? "like" : "likes"}`;
+  const postDislikeCount = postSummary.counts.DISLIKE ?? 0;
+  const postDislikeLabel = `Dislike, ${postDislikeCount} ${postDislikeCount === 1 ? "dislike" : "dislikes"}`;
 
   async function applyReaction(next: ReactionKind | null) {
     if (reactionPendingRef.current) return;
@@ -630,13 +633,8 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
     }
   }
 
-  /**
-   * Like/Unlike (packet `08` §2 — new writes are Like/null only). A caller
-   * holding any positive reaction un-likes; everyone else likes. A legacy
-   * "not helpful" reaction is replaced by Like, never re-written as one.
-   */
-  function toggleLike() {
-    void applyReaction(nextLikeReaction(myReaction));
+  function toggleLike(target: "LIKE" | "DISLIKE") {
+    void applyReaction(nextReaction(myReaction, target));
   }
 
   /**
@@ -1102,20 +1100,35 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
           slots={{
             onComments: () => scrollToSection("detail-comments"),
             like: (
-              <button
-                type="button"
-                id="detail-love"
-                data-testid="detail-like"
-                className={`fb-report-action gap-1 ${postLike.mine ? "bg-surface-container text-on-surface" : "text-on-surface-variant"}`}
-                onClick={toggleLike}
-                disabled={reactionPending}
-                aria-busy={reactionPending}
-                aria-label={postLikeLabel}
-                aria-pressed={postLike.mine}
-              >
-                <Heart size={20} aria-hidden fill={postLike.mine ? "currentColor" : "none"} />
-                <span aria-hidden className="tabular-nums">{postLike.count}</span>
-              </button>
+              <span className="flex items-center">
+                <button
+                  type="button"
+                  id="detail-love"
+                  data-testid="detail-like"
+                  className={`fb-report-action min-h-[44px] min-w-[44px] gap-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${postLike.mine ? "bg-surface-container text-on-surface" : "text-on-surface-variant"}`}
+                  onClick={() => toggleLike("LIKE")}
+                  disabled={reactionPending}
+                  aria-busy={reactionPending}
+                  aria-label={postLikeLabel}
+                  aria-pressed={postLike.mine}
+                >
+                  <ThumbsUp size={20} aria-hidden fill={postLike.mine ? "currentColor" : "none"} />
+                  <span className="tabular-nums">{postLike.count}</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="detail-dislike"
+                  className={`fb-report-action min-h-[44px] min-w-[44px] gap-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${myReaction === "DISLIKE" ? "bg-surface-container text-on-surface" : "text-on-surface-variant"}`}
+                  onClick={() => toggleLike("DISLIKE")}
+                  disabled={reactionPending}
+                  aria-busy={reactionPending}
+                  aria-label={postDislikeLabel}
+                  aria-pressed={myReaction === "DISLIKE"}
+                >
+                  <ThumbsDown size={20} aria-hidden fill={myReaction === "DISLIKE" ? "currentColor" : "none"} />
+                  <span className="tabular-nums">{postDislikeCount}</span>
+                </button>
+              </span>
             ),
             share: <ReportShareButton postId={post.id} title={post.title} />,
           }}
@@ -1214,16 +1227,6 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
             {myRating != null && <p className="text-sm font-medium">Your rating: {myRating} out of 5</p>}
             <p className="text-xs text-on-surface-variant">Report ratings are read-only.</p>
           </div>
-          {/* Historical "not helpful" reactions stay readable, but there is
-              no longer any way to write one. */}
-          {(post.dislikeCount > 0 || myReaction === "DISLIKE") && (
-            <p className="flex items-center gap-1 text-sm text-on-surface-variant">
-              <ThumbsDown size={16} aria-hidden /> Not helpful reactions · {post.dislikeCount}
-            </p>
-          )}
-          {myReaction === "DISLIKE" && (
-            <p className="text-xs text-on-surface-variant">Your earlier “Not helpful” reaction is still counted here.</p>
-          )}
         </section>
 
         {/* Overview: compact lazy heavy sections. */}

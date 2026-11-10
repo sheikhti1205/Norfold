@@ -49,7 +49,7 @@ function Probe({ postId }: { postId: string }) {
       <span data-testid={`reaction-${postId}`}>{love.myReaction ?? "none"}</span>
       <span data-testid={`likes-${postId}`}>{love.likeCount}</span>
       <span data-testid={`pending-${postId}`}>{love.pending ? "yes" : "no"}</span>
-      <button type="button" data-testid={`toggle-${postId}`} onClick={() => void love.toggle()}>
+      <button type="button" data-testid={`toggle-${postId}`} onClick={() => void love.toggle("LIKE")}>
         toggle {postId}
       </button>
     </div>
@@ -260,7 +260,7 @@ describe("FeedLoveProvider optimistic Love toggle", () => {
           type="button"
           data-testid="toggle-result"
           onClick={() => {
-            void love.toggle().then((ok) => {
+            void love.toggle("LIKE").then((ok) => {
               result = ok;
             });
           }}
@@ -301,7 +301,7 @@ describe("FeedLoveProvider optimistic Love toggle", () => {
           type="button"
           data-testid="toggle-inflight"
           onClick={() => {
-            void love.toggle().then((ok) => {
+            void love.toggle("LIKE").then((ok) => {
               results.push(ok);
             });
           }}
@@ -343,7 +343,7 @@ function LikeProbe({ postId }: { postId: string }) {
       <span data-testid={`reaction-${postId}`}>{love.myReaction ?? "none"}</span>
       <span data-testid={`mine-${postId}`}>{love.mine ? "yes" : "no"}</span>
       <span data-testid={`likes-${postId}`}>{love.likeCount}</span>
-      <button type="button" data-testid={`toggle-${postId}`} onClick={() => void love.toggle()}>
+      <button type="button" data-testid={`toggle-${postId}`} onClick={() => void love.toggle("LIKE")}>
         toggle {postId}
       </button>
     </div>
@@ -455,7 +455,7 @@ describe("FeedLoveProvider Like-only reactions (packet 08 §2)", () => {
           type="button"
           data-testid="like-result"
           onClick={() => {
-            void love.toggle().then((ok) => {
+            void love.toggle("LIKE").then((ok) => {
               result = ok;
             });
           }}

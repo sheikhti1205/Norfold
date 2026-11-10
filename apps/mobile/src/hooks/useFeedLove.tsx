@@ -13,16 +13,16 @@ import {
   applyCountDeltas,
   likeMine,
   likeState,
-  likeToggleDeltas,
-  nextLikeReaction,
+  nextReaction,
+
   reactionMoveDeltas,
   reactionSummaryFromCounts,
 } from "../services/reactions";
 import {
   fetchFeedReactionState,
-  likeBucketDeltas,
+  legacyCountDeltas,
   seedSummaryFromItem,
-  toggleLikeReaction,
+  toggleReaction,
   type FeedReactionEntry,
 } from "../services/feedReactions";
 
@@ -61,7 +61,7 @@ interface FeedLoveContextValue {
   reactions: Record<string, FeedLoveEntry>;
   pendingMap: Record<string, boolean>;
   itemsById: Map<string, PostItem>;
-  togglePost: (postId: string) => Promise<boolean>;
+  togglePost: (postId: string, target: "LIKE" | "DISLIKE") => Promise<boolean>;
 }
 
 const FeedLoveContext = createContext<FeedLoveContextValue | null>(null);
@@ -206,7 +206,7 @@ export function FeedLoveProvider({
    * false (never throws) so the button owns the message.
    */
   const togglePost = useCallback(
-    async (postId: string): Promise<boolean> => {
+    async (postId: string, target: "LIKE" | "DISLIKE"): Promise<boolean> => {
       if (pendingRef.current.has(postId)) return true;
       const currentItem = itemsRef.current.find((p) => p.id === postId);
       const snapshot = currentItem?.reactionSummary ?? null;
@@ -227,8 +227,8 @@ export function FeedLoveProvider({
       };
       const prevLike = currentItem?.likeCount ?? 0;
       const prevDislike = currentItem?.dislikeCount ?? 0;
-      const deltas = likeBucketDeltas(prev.myReaction);
-      const next = nextLikeReaction(prev.myReaction);
+      const next = nextReaction(prev.myReaction, target);
+      const deltas = legacyCountDeltas(prev.myReaction, next);
       // Optimistic per-kind counts, seeded from the number the card is showing
       // right now: a server summary (reconciled with the caller's own row, so
       // it cannot be off by the caller's contribution), else the card's legacy
@@ -238,7 +238,7 @@ export function FeedLoveProvider({
       const prevSummary =
         (displaySummary ? reconcileOwnedRow(displaySummary, prev.myReaction) : null) ??
         seedSummaryFromItem(prevLike, prevDislike, prev.myReaction);
-      const optimisticCounts = applyCountDeltas(prevSummary.counts, likeToggleDeltas(prev.myReaction));
+      const optimisticCounts = applyCountDeltas(prevSummary.counts, reactionMoveDeltas(prev.myReaction, next));
       const optimisticSummary: ReactionSummary = {
         counts: optimisticCounts,
         myReaction: next,
@@ -263,7 +263,7 @@ export function FeedLoveProvider({
         dislikeCount: Math.max(0, prevDislike + deltas.dislike),
       });
       try {
-        const res = await toggleLikeReaction(postId, prev.myReaction);
+        const res = await toggleReaction(postId, prev.myReaction, target);
         // Committed: this row is now the newest truth for the card, so any
         // hydration that started before this point must not overwrite it.
         committedEpochRef.current[postId] = (committedEpochRef.current[postId] ?? 0) + 1;
@@ -324,11 +324,12 @@ export interface FeedLove {
   summary: ReactionSummary | null;
   /** The Like count the card shows: positive kinds once known, else the legacy like column. */
   likeCount: number;
+  dislikeCount: number;
   /** Whether the caller holds any positive reaction. */
   mine: boolean;
   /** True when the toggle landed (or was already in flight — the first request owns the outcome); false only on failure (already rolled back). */
   pending: boolean;
-  toggle: () => Promise<boolean>;
+  toggle: (target: "LIKE" | "DISLIKE") => Promise<boolean>;
 }
 
 /** Null outside a provider — callers (the Like button) fall back to local state. */
@@ -350,8 +351,9 @@ export function useFeedLove(postId: string): FeedLove | null {
     myReaction,
     summary,
     likeCount: summary ? likeState(summary).count : (item?.likeCount ?? 0),
+    dislikeCount: summary ? (summary.counts.DISLIKE ?? 0) : (item?.dislikeCount ?? 0),
     mine: likeMine(myReaction),
     pending: ctx.pendingMap[postId] ?? false,
-    toggle: () => ctx.togglePost(postId),
+    toggle: (target) => ctx.togglePost(postId, target),
   };
 }
