@@ -144,13 +144,12 @@ function RecoveryFlow() {
           <Button type="button" variant="outline" onClick={() => void resend()} disabled={busy || seconds > 0}>
             {seconds > 0 ? `Resend in ${seconds}s` : "Resend code"}
           </Button>
-          <p className="text-sm text-on-surface-variant">If your email includes a reset link, you can use that instead.</p>
           <Link to="/forgot" className="min-h-11 py-3 text-sm underline">Use a different email</Link>
           <Link to="/signin" className="min-h-11 py-3 text-sm underline">Back to sign in</Link>
         </form>
       )}
       {phase === "exchanging" && (
-        <p role="status" className="text-sm text-on-surface-variant">Checking your reset link…</p>
+        <p role="status" className="text-sm text-on-surface-variant">Checking your reset request…</p>
       )}
       {phase === "invalid" && (
         <>
