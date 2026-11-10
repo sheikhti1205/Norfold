@@ -11,7 +11,7 @@ apps/mobile/          React + Capacitor client (Android primary, web build for l
 apps/share-preview/   Read-only same-domain Azure HTTP share renderer
 packages/shared/      Shared schemas, validation and constants
 supabase/migrations/  Ordered SQL migrations (immutable once applied)
-supabase/functions/   Deno Edge Functions (AI help, chat media, push, cleanup, trust)
+supabase/functions/   Deno Edge Functions and shared edge-runtime code
 docs/                 Product, architecture, history and acceptance documentation
 scripts/              Build, verification and release tooling
 ```
@@ -30,6 +30,10 @@ scripts/              Build, verification and release tooling
   matching. No retired local-generative/photo-analysis runtime is reintroduced.
   Optional cloud AI Chat is a separate secondary surface using the user's own
   provider key, not a Norfold server relay.
+- The client-side `askAiHelp` service grounds and screens answers using
+  `apps/mobile/src/services/ai/appKnowledge.ts`, calls OpenRouter with a
+  user-connected key, and supplies a built-in fallback. The current Chat answer
+  screen uses a separate provider path and does not call this service.
 - Startup waits for the one-time data epoch before importing auth, AI, messaging
   or other persisted owners. Native cleanup and the web marker commit last;
   failure stops startup rather than restoring deleted-account history.
@@ -49,9 +53,10 @@ scripts/              Build, verification and release tooling
 
 - Postgres with row-level security on every public table; privileged operations go
   through `SECURITY DEFINER` functions with pinned `search_path` and explicit grants.
-- Edge Functions are the server-side boundary for AI help, chat media, push
-  dispatch, cleanup jobs, trust maintenance and account deletion. They authenticate
-  the caller and re-check authorization on every privileged action.
+- Edge Functions: `chat-media`, `chat-wake`, `cleanup-chat-media`,
+  `cleanup-comment-media`, `cleanup-report-media`, `copy-chat-evidence`,
+  `delete-account`, `device-enroll`, `push-dispatch`, `reply-comment`, and
+  `trust-maintenance`. `_shared` contains shared edge-runtime code.
 - Applied migrations are immutable. Changes are additive, timestamped and verified
   against the hosted migration head before and after deployment.
 - Storage buckets are private; media access is signed and scoped to the caller.
