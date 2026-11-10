@@ -274,6 +274,26 @@ describe("createPushController", () => {
     expect(deleteToken).toHaveBeenCalledTimes(1);
   });
 
+  it("never deletes the native token when push never registered natively", async () => {
+    for (const permission of ["prompt", "denied"] as const) {
+      const deleteToken = vi.fn(async () => {});
+      const { adapter } = fakeAdapter({ checkPermission: async () => permission, deleteToken });
+      const controller = createPushController({ adapter });
+      expect(await controller.start()).toBe(permission);
+      await expect(controller.stop()).resolves.toEqual({ unregistered: true, released: false });
+      expect(adapter.register).not.toHaveBeenCalled();
+      expect(deleteToken).not.toHaveBeenCalled();
+    }
+  });
+
+  it("does not touch the native plugin when stop runs without a start", async () => {
+    const deleteToken = vi.fn(async () => {});
+    const { adapter } = fakeAdapter({ deleteToken });
+    const controller = createPushController({ adapter });
+    await expect(controller.stop()).resolves.toEqual({ unregistered: true, released: false });
+    expect(deleteToken).not.toHaveBeenCalled();
+  });
+
   it("does not unregister when no token was ever registered", async () => {
     const unregisterToken = vi.fn(async () => {});
     const { adapter } = fakeAdapter();
