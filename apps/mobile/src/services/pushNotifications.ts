@@ -26,6 +26,16 @@ export const PUSH_REPORT_LINK_EVENT = "findback:report-link";
 export interface PushAdapter {
   isNative(): boolean;
   platform(): PushPlatform;
+  /**
+   * Whether this build can reach FCM at all. Android builds without
+   * `google-services.json` cannot: every FirebaseMessaging call throws
+   * IllegalStateException, and Capacitor rethrows it on its handler thread, so
+   * the process dies before any JS catch runs. `start()` reports
+   * "unsupported" instead of touching the plugin when this is false.
+   *
+   * Optional: web and test adapters have nothing to configure.
+   */
+  isConfigured?(): Promise<boolean>;
   requestPermission(): Promise<Exclude<PushPermissionState, "unsupported">>;
   register(): Promise<void>;
   /** Current OS permission, without prompting. */
@@ -144,6 +154,9 @@ export function createPushController(options: PushControllerOptions): PushContro
 
     async permission(): Promise<PushPermissionState> {
       if (!adapter.isNative()) return "unsupported";
+      // A build that cannot reach FCM has no usable permission state: say so
+      // instead of offering a switch that start() would refuse.
+      if (adapter.isConfigured && !await adapter.isConfigured()) return "unsupported";
       if (adapter.checkPermission) return adapter.checkPermission();
       return running ? "granted" : "prompt";
     },
@@ -164,6 +177,11 @@ export function createPushController(options: PushControllerOptions): PushContro
         if (!active()) return "prompt";
         return serialize(async (): Promise<PushPermissionState> => {
           try {
+            if (!active()) return "prompt";
+            // Ask before any plugin call: without a Firebase client config the
+            // native register() throws on Capacitor's handler thread and takes
+            // the process with it. This cannot be caught in JS.
+            if (adapter.isConfigured && !await adapter.isConfigured()) return "unsupported";
             if (!active()) return "prompt";
             let permission = await adapter.checkPermission?.() ?? "prompt";
             if (!active()) return "prompt";
@@ -293,6 +311,7 @@ export function createCapacitorPushAdapter(): PushAdapter {
   const settingsPlugin = () =>
     registerPlugin<{
       openSettings(): Promise<void>;
+      isPushConfigured(): Promise<{ configured?: boolean }>;
       setChatAccount(options: { accountId: string | null }): Promise<void>;
       takeChatTap(options: { accountId: string }): Promise<{ data?: unknown }>;
       acknowledgeChatTap(options: { accountId: string; notificationId: string }): Promise<void>;
@@ -302,6 +321,18 @@ export function createCapacitorPushAdapter(): PushAdapter {
   return {
     isNative: native,
     platform,
+    async isConfigured() {
+      if (!native()) return false;
+      // The Firebase crash is Android-only; iOS push does not use it.
+      if (platform() !== "android") return true;
+      try {
+        return (await settingsPlugin().isPushConfigured()).configured === true;
+      } catch {
+        // A shell without the probe predates this guard; keep the old path
+        // rather than silently disabling push on a correctly configured build.
+        return true;
+      }
+    },
     async setChatAccount(accountId) {
       if (native() && platform() === "android") await settingsPlugin().setChatAccount({ accountId });
     },

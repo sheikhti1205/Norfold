@@ -294,6 +294,44 @@ describe("createPushController", () => {
     expect(deleteToken).not.toHaveBeenCalled();
   });
 
+  it("reports unsupported and never reaches the plugin when the build has no Firebase config", async () => {
+    const isConfigured = vi.fn(async () => false);
+    const requestPermission = vi.fn(async () => "granted" as const);
+    const deleteToken = vi.fn(async () => {});
+    const { adapter } = fakeAdapter({ isConfigured, requestPermission, deleteToken });
+    const controller = createPushController({ adapter });
+    expect(await controller.start({ requestPermission: true })).toBe("unsupported");
+    expect(requestPermission).not.toHaveBeenCalled();
+    expect(adapter.register).not.toHaveBeenCalled();
+    expect(controller.isRunning()).toBe(false);
+    await expect(controller.stop()).resolves.toEqual({ unregistered: true, released: false });
+    expect(deleteToken).not.toHaveBeenCalled();
+  });
+
+  it("registers normally when the build is configured", async () => {
+    const isConfigured = vi.fn(async () => true);
+    const { adapter } = fakeAdapter({ isConfigured });
+    const controller = createPushController({ adapter });
+    expect(await controller.start()).toBe("granted");
+    expect(isConfigured).toHaveBeenCalledOnce();
+    expect(adapter.register).toHaveBeenCalledOnce();
+  });
+
+  it("keeps registering when an older shell exposes no configuration probe", async () => {
+    const { adapter } = fakeAdapter();
+    expect(adapter.isConfigured).toBeUndefined();
+    const controller = createPushController({ adapter });
+    expect(await controller.start()).toBe("granted");
+    expect(adapter.register).toHaveBeenCalledOnce();
+  });
+
+  it("reports no usable permission when the build has no Firebase config", async () => {
+    const isConfigured = vi.fn(async () => false);
+    const { adapter } = fakeAdapter({ isConfigured });
+    const controller = createPushController({ adapter });
+    expect(await controller.permission()).toBe("unsupported");
+  });
+
   it("does not unregister when no token was ever registered", async () => {
     const unregisterToken = vi.fn(async () => {});
     const { adapter } = fakeAdapter();
