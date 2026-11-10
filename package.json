@@ -31,7 +31,10 @@
   },
   "type": "module",
   "overrides": {
-    "uuid": "^11.1.1"
+    "uuid": "^11.1.1",
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "^11.0.1"
+    }
   },
   "dependencies": {
     "@supabase/server": "^1.6.0"
