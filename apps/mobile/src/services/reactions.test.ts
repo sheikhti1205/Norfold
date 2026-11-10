@@ -8,6 +8,7 @@ import {
   likeState,
   likeToggleDeltas,
   nextLikeReaction,
+  nextReaction,
   normalizeReactionKind,
   reactionCountsFromJson,
   reactionEmojiForWire,
@@ -143,6 +144,22 @@ describe("Like model (packet 08 §2 — reactions are Like-only)", () => {
   });
 });
 
+describe("nextReaction", () => {
+  it.each([
+    [null, "LIKE", "LIKE"],
+    [null, "DISLIKE", "DISLIKE"],
+    ["LIKE", "LIKE", null],
+    ["LIKE", "DISLIKE", "DISLIKE"],
+    ["DISLIKE", "LIKE", "LIKE"],
+    ["DISLIKE", "DISLIKE", null],
+    ...(["LOVE", "HELPFUL", "SUPPORT", "WOW"] as const).flatMap((kind) => [
+      [kind, "LIKE", null] as const,
+      [kind, "DISLIKE", "DISLIKE"] as const,
+    ]),
+  ] as const)("moves %s toward %s to %s", (current, target, expected) => {
+    expect(nextReaction(current, target)).toBe(expected);
+  });
+});
 describe("reactionMoveDeltas / applyCountDeltas", () => {
   it("moves one reaction across kinds", () => {
     expect(reactionMoveDeltas("DISLIKE", "HELPFUL")).toEqual({ DISLIKE: -1, HELPFUL: 1 });

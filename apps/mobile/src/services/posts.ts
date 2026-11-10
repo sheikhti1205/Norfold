@@ -9,7 +9,7 @@ import type {
   ReactionKind,
   ReactionSummary,
 } from "@norfold/shared";
-import { assertWritableReactionKind, reactionSummaryFromRow } from "./reactions";
+import { assertWritablePostReactionKind, reactionSummaryFromRow } from "./reactions";
 import { mapCommentAttachmentRefs } from "./commentAttachments";
 import { ApiError } from "./session";
 import { refusalStatus } from "../utils/interactionRefusal";
@@ -685,8 +685,9 @@ export async function reactToPost(
   // Seam inputs only: operation + status code + requested kind token.
   // `type` is the typed request kind (null = removal); no counts or text.
   const kind = type ?? "removed";
-  // D1: a legacy DISLIKE is readable history but is never written.
-  assertWritableReactionKind(type);
+  // Posts accept the exclusive Like/Dislike pair; comments remain Like-only.
+  // Historical LOVE/HELPFUL/SUPPORT/WOW kinds are rejected, not coerced.
+  assertWritablePostReactionKind(type);
   const { data, error } = await getSupabase().rpc("findback_react_client", {
     p_post_id: postId,
     p_type: type,

@@ -5,7 +5,7 @@ import { ImageOff } from "lucide-react";
 import { displaySizeOrNull } from "../services/media/displayDimensions";
 import { useMediaUrl } from "../services/media/privateMedia";
 import { MASONRY_FALLBACK_RATIO, masonryAspectRatio } from "./masonryLayout";
-import { HomeFeedLoveButton } from "./HomeFeedLoveButton";
+import { HomeFeedReactionButtons } from "./HomeFeedReactionButtons";
 import { PostActionRow } from "./PostActionRow";
 import { ReportShareButton } from "./ReportShareButton";
 import { PostIdentityHeader, PostStatusTitle, PostFacts, sharedMediaLayoutId, sharedElementTransition } from "./PostAnatomy";
@@ -124,7 +124,7 @@ export function PostCardContent({ post, layout = "classic", enableSharedMedia = 
     <div data-testid="post-footer">
       <div data-testid={layout === "home-feed" ? "home-feed-actions" : undefined}>
         <PostActionRow commentCount={post.commentCount} commentsHref={`/posts/${post.id}#detail-comments`} slots={{
-          like: <HomeFeedLoveButton postId={post.id} likeCount={post.likeCount} />,
+          like: <HomeFeedReactionButtons postId={post.id} likeCount={post.likeCount} dislikeCount={post.dislikeCount} />,
           share: <ReportShareButton postId={post.id} title={post.title} />,
         }} />
       </div>

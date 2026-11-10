@@ -18,7 +18,7 @@ vi.mock("../services/feedReactions", async (importOriginal) => {
   return {
     ...actual,
     fetchFeedReactionState: feedFetchMock,
-    toggleLikeReaction: loveToggleMock,
+    toggleReaction: loveToggleMock,
   };
 });
 
@@ -422,7 +422,7 @@ describe("home-feed detail link + Like action siblings (never nested)", () => {
     );
     const card = screen.getByTestId("post-card");
     const link = screen.getByTestId("home-feed-detail-link");
-    const like = screen.getByRole("button", { name: /like/i });
+    const like = screen.getByRole("button", { name: /^Like, \d+ likes?$/ });
     expect(card.contains(link)).toBe(true);
     expect(card.contains(like)).toBe(true);
     expect(link.contains(like)).toBe(false);
@@ -457,7 +457,7 @@ describe("home-feed Like/Unlike", () => {
   it("offers an unpressed Like toggle showing the live like count", async () => {
     renderHomeFeed(imagePost());
     await waitFor(() => expect(feedFetchMock).toHaveBeenCalledTimes(1));
-    const love = screen.getByRole("button", { name: /like this report/i });
+    const love = screen.getByRole("button", { name: /^Like, \d+ likes?$/ });
     expect(love.getAttribute("aria-pressed")).toBe("false");
     expect(love.textContent).toContain("24");
   });
@@ -467,7 +467,7 @@ describe("home-feed Like/Unlike", () => {
       reactions: { p1: { myReaction: "LIKE", myRating: null } },
     });
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /liked/i }).getAttribute("aria-pressed")).toBe(
+      expect(screen.getByRole("button", { name: /^Like, \d+ likes?$/ }).getAttribute("aria-pressed")).toBe(
         "true",
       ),
     );
@@ -483,15 +483,15 @@ describe("home-feed Like/Unlike", () => {
     const { patchItem } = renderHomeFeed(imagePost());
     await waitFor(() => expect(feedFetchMock).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByRole("button", { name: /like this report/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Like, \d+ likes?$/ }));
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /liked/i }).getAttribute("aria-pressed")).toBe(
+      expect(screen.getByRole("button", { name: /^Like, \d+ likes?$/ }).getAttribute("aria-pressed")).toBe(
         "true",
       ),
     );
     // Like goes through the existing LIKE reaction — never a canonical kind.
-    expect(loveToggleMock).toHaveBeenCalledWith("p1", null);
+    expect(loveToggleMock).toHaveBeenCalledWith("p1", null, "LIKE");
     // Optimistic patch (+1) then server reconciliation land in the feed cache.
     expect(patchItem).toHaveBeenCalledWith("p1", { likeCount: 25, dislikeCount: 1 });
     await waitFor(() =>
@@ -510,18 +510,18 @@ describe("home-feed Like/Unlike", () => {
       reactions: { p1: { myReaction: "LIKE", myRating: null } },
     });
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /liked/i }).getAttribute("aria-pressed")).toBe(
+      expect(screen.getByRole("button", { name: /^Like, \d+ likes?$/ }).getAttribute("aria-pressed")).toBe(
         "true",
       ),
     );
     patchItem.mockClear();
 
-    fireEvent.click(screen.getByRole("button", { name: /liked/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Like, \d+ likes?$/ }));
 
-    expect(loveToggleMock).toHaveBeenCalledWith("p1", "LIKE");
+    expect(loveToggleMock).toHaveBeenCalledWith("p1", "LIKE", "LIKE");
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: /like this report/i }).getAttribute("aria-pressed"),
+        screen.getByRole("button", { name: /^Like, \d+ likes?$/ }).getAttribute("aria-pressed"),
       ).toBe("false"),
     );
     expect(patchItem).toHaveBeenCalled();
@@ -543,7 +543,7 @@ describe("home-feed media polish (edge-to-edge cover for loaded photos)", () => 
     renderHomeFeed(post());
     expect(screen.queryByTestId("home-feed-no-photo")).toBeNull();
     expect(screen.queryByTestId("feed-media-viewport")).toBeNull();
-    expect(screen.getByRole("button", { name: /like/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Like, \d+ likes?$/ })).toBeTruthy();
   });
 });
 

@@ -370,7 +370,7 @@ describe("PostDetail mutation locks", () => {
     // Row truth (3 positive reactions, one of them the caller's) wins over the
     // legacy-bucket seed, which would read 0.
     const likeButton = await screen.findByTestId("detail-like");
-    expect(likeButton.getAttribute("aria-label")).toBe("Liked, 3 likes");
+    expect(likeButton.getAttribute("aria-label")).toBe("Like, 3 likes");
     expect(likeButton.getAttribute("aria-pressed")).toBe("true");
   });
 
@@ -394,14 +394,11 @@ describe("PostDetail mutation locks", () => {
     expect(postsMock.reactToPost).toHaveBeenLastCalledWith("p1", null);
   });
 
-  it("offers no 'not helpful' write path: the legacy count stays readable (D1)", async () => {
+  it("offers Dislike with the existing count", async () => {
     postsMock.fetchPost.mockResolvedValue({ ...basePost, dislikeCount: 3 });
     renderDetail();
     await screen.findByTestId("detail-like");
-    // The control is gone: there is no way to write a DISLIKE reaction.
-    expect(screen.queryByRole("button", { name: /not helpful/i })).toBeNull();
-    // The historical count is still readable.
-    expect(screen.getByText(/Not helpful reactions · 3/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Dislike, 3 dislikes" }).getAttribute("aria-pressed")).toBe("false");
     // And nothing was written.
     expect(postsMock.reactToPost).not.toHaveBeenCalled();
   });
@@ -460,16 +457,13 @@ describe("PostDetail mutation locks", () => {
     expect(screen.getByText(/Report ratings are read-only\./)).toBeTruthy();
   });
 
-  it("keeps the viewer's legacy 'not helpful' history readable (D1)", async () => {
+  it("shows the viewer's existing Dislike and count", async () => {
     postsMock.fetchPost.mockResolvedValue({ ...basePost, dislikeCount: 2 });
     postsMock.fetchSocialState.mockResolvedValue({ myReaction: "DISLIKE", myRating: null });
     renderDetail();
     await screen.findByTestId("detail-like");
-    // The historical count and the reader's own old DISLIKE row stay visible…
-    expect(screen.getByText(/Not helpful reactions · 2/)).toBeTruthy();
-    expect(screen.getByText(/Your earlier .Not helpful. reaction is still counted here\./)).toBeTruthy();
-    // …but there is still no way to write one.
-    expect(screen.queryByRole("button", { name: /not helpful/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Dislike, 2 dislikes" }).textContent).toBe("2");
+    expect(screen.getByRole("button", { name: "Dislike, 2 dislikes" }).getAttribute("aria-pressed")).toBe("true");
     expect(postsMock.reactToPost).not.toHaveBeenCalled();
   });
 

@@ -3,21 +3,17 @@ import { getSupabase } from "./supabaseClient";
 import { reactToPost, type ReactionResult } from "./posts";
 import {
   nextLikeReaction,
+  nextReaction,
   normalizeReactionKind,
   type ReactionKind,
   type ReactionSummary,
 } from "./reactions";
 
 /**
- * Home-feed Like handling on the existing reaction row (packet `08` §2):
- * - Like writes the `LIKE` wire kind; the SQL folds it into LOVE for every
- *   count it returns, so one Like rule covers the feed, the detail page and the
- *   legacy `like_count` column.
- * - Unlike writes null and the caller's row is removed server-side.
- * - A caller already holding a positive reaction (a canonical LOVE/HELPFUL/
- *   SUPPORT/WOW row from the multi-kind era) is "mine": their Like clears it.
- *   A caller holding a legacy DISLIKE gets one Like added and their DISLIKE
- *   dropped — the RPC keeps exactly one row per caller per target.
+ * Home-feed post reactions use an exclusive LIKE/DISLIKE pair. Tapping an
+ * active kind clears it; tapping the other kind replaces the caller's row.
+ * Canonical LOVE/HELPFUL/SUPPORT/WOW reactions count as active Likes. Comments
+ * remain Like-only. SQL folds LIKE into LOVE for returned per-kind counts.
  *
  * The per-card Like count is the caller's own state plus the card's legacy
  * `like_count` (raw LIKE rows). Canonical-era rows are visible on the detail
@@ -81,12 +77,20 @@ export async function fetchFeedReactionState(
   return merged;
 }
 
+/** Toggle an exclusive post reaction through the existing react RPC. */
+export async function toggleReaction(
+  postId: string,
+  current: ReactionKind | null,
+  target: "LIKE" | "DISLIKE",
+): Promise<ReactionResult> {
+  return reactToPost(postId, nextReaction(current, target));
+}
 /** Like/Unlike one post through the existing react RPC (`LIKE` / null). */
 export async function toggleLikeReaction(
   postId: string,
   current: ReactionKind | null,
 ): Promise<ReactionResult> {
-  return reactToPost(postId, nextLikeReaction(current));
+  return toggleReaction(postId, current, "LIKE");
 }
 
 /**

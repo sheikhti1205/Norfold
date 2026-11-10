@@ -9,20 +9,16 @@ import { ApiError } from "./session";
 import { getSupabase } from "./supabaseClient";
 
 /**
- * Norfold reactions — backend/service layer, no UI.
+ * Norfold reactions, backend/service layer, no UI.
  *
- * The stored vocabulary is LOVE / HELPFUL / SUPPORT / WOW with legacy
- * LIKE/DISLIKE still valid on the wire. Since packet `08` §2 the **UI writes
- * Like-only**: a Like writes `LIKE` (which the SQL folds to LOVE for every
- * count it returns) and clears with null. The four canonical kinds remain the
- * keying for counts and the labelling of historical rows, so legacy
- * notification/inbox rows still render consistently; nothing here presents a
- * picker any more.
+ * Post writes accept only LIKE or DISLIKE; comment writes accept only LIKE.
+ * Null clears a reaction. LOVE / HELPFUL / SUPPORT / WOW are read-only
+ * historical kinds: they are rendered and counted, never written.
  *
- * The RPCs are the existing `findback_react_client` (post) and the new
- * `findback_react_comment_client` (comment); both return per-kind counts plus
- * the caller's own reaction. Both writers enforce LIKE/null, matching server
- * authority. Other kinds are historical read vocabulary only.
+ * SQL folds LIKE into LOVE for returned counts. The four canonical kinds remain
+ * the keys for counts and labels for historical notification/inbox rows.
+ * The existing post and comment RPCs return per-kind counts and the caller's
+ * own reaction.
  */
 
 export type { ReactionCounts, ReactionKind, ReactionSummary } from "@norfold/shared";
@@ -89,20 +85,10 @@ export function reactionEmojiForWire(kind: ReactionKind | null): string | null {
 /**
  * THE ONE Like rule (packet `08` §2, "reactions become Like-only").
  *
- * A Like is a positive reaction, so a target's Like count is every
- * LOVE/HELPFUL/SUPPORT/WOW row it has; the SQL folds legacy LIKE rows into
- * LOVE, so history keeps counting. A legacy DISLIKE is **not** a like: it never
- * counts and never fills the control. It stays **readable** as history — the
- * "not helpful" count and the reader's own old DISLIKE row are still shown —
- * but the client has no writer for it any more (D1), so it can only come from
- * rows that already exist. "Mine" is true when the caller holds *any* positive
- * reaction, so a reader who once reacted with Helpful sees a filled Like and
- * tapping it clears their row (one row per caller per target is the RPC's
- * contract — a legacy DISLIKE row is replaced by the LIKE).
- *
- * New writes are `LIKE` or null only (packet §2). Everything here is derived
- * from the canonical counts, so no surface can show a Like total that disagrees
- * with the per-kind truth the server returned.
+ * A Like counts LOVE/HELPFUL/SUPPORT/WOW, including LIKE folded into LOVE.
+ * DISLIKE does not count as a Like. Any positive historical reaction is mine
+ * for the Like control and tapping Like clears it. Post writes may also switch
+ * to DISLIKE; comments remain Like-only. Counts derive from the summary.
  */
 export const LIKE_KINDS: readonly CanonicalReactionKind[] = CANONICAL_REACTION_KINDS;
 
@@ -124,7 +110,16 @@ export function likeMine(current: ReactionKind | null): boolean {
 
 /** The wire kind a Like tap writes: `LIKE` to set it, null to clear the caller's row. */
 export function nextLikeReaction(current: ReactionKind | null): ReactionKind | null {
-  return likeMine(current) ? null : "LIKE";
+  return nextReaction(current, "LIKE");
+}
+
+/** The next exclusive post reaction for a Like or Dislike tap. */
+export function nextReaction(
+  current: ReactionKind | null,
+  target: "LIKE" | "DISLIKE",
+): ReactionKind | null {
+  const active = target === "LIKE" ? likeMine(current) : current === "DISLIKE";
+  return active ? null : target;
 }
 
 /** Per-kind optimistic count deltas for moving `current` → `next` (null = no reaction). */
@@ -264,13 +259,21 @@ function assertKind(kind: ReactionKind | null): void {
 }
 
 /**
- * Guard for the client reaction WRITERS (D1).
+ * Guard for comment reaction writes, which remain Like-only.
  *
- * Historical kinds stay readable, but cannot be sent by a custom caller.
+ * Historical kinds stay readable, but cannot be sent by a custom comment caller.
  */
 export function assertWritableReactionKind(kind: ReactionKind | null): void {
   assertKind(kind);
   if (kind !== null && kind !== "LIKE") {
+    throw new ApiError("Unknown reaction", 400);
+  }
+}
+
+/** Guard for the POST reaction writer: the exclusive Like/Dislike pair. */
+export function assertWritablePostReactionKind(kind: ReactionKind | null): void {
+  assertKind(kind);
+  if (kind !== null && kind !== "LIKE" && kind !== "DISLIKE") {
     throw new ApiError("Unknown reaction", 400);
   }
 }
