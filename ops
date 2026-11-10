@@ -1,1 +1,1 @@
-{"author":{"id":"d6e2f80ff71d017df133f988fc4d284651b885cd1a1882278da0e33414b02a16"},"ops":[{"type":3,"timestamp":1794338404,"nonce":"rUdu1D3pvxnbwD90QvWRy4v0Mac=","message":"Superseded: Beads was replaced by git-bug, which writes nothing into the working tree, so there is no installer to contain. The AGENTS.md rewrite itself was reverted and stays reverted.","files":null}]}
+{"author":{"id":"d6e2f80ff71d017df133f988fc4d284651b885cd1a1882278da0e33414b02a16"},"ops":[{"type":4,"timestamp":1794338404,"nonce":"VajvclNI7JFGD7c0R51sQES6Uak=","status":2}]}
