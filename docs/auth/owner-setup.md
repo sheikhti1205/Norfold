@@ -1,8 +1,10 @@
 # Email codes and password recovery: owner setup
 
-The app prefers six-digit email codes for signup confirmation and forgotten
-passwords. Email/password sign-in, Google sign-in and recovery-link callbacks
-remain available. Source support does **not** establish email/SMS delivery.
+The app uses six-digit email codes for signup confirmation and forgotten
+passwords: the recovery email delivers a code, not a link. Email/password
+sign-in and Google sign-in remain available, and the recovery-link callback is
+retained only as a silent fallback for older emails. Source support does **not**
+establish email/SMS delivery.
 
 ## Configure Supabase separately
 
@@ -19,10 +21,13 @@ are an owner checklist, not an automatic configuration/deployment script.
    team addresses; it is not public-production delivery.
 3. In Email Templates → **Confirm signup**, use the
    [signup sample](confirm-signup-otp.html). The visible code is `{{ .Token }}`.
-4. In **Reset password**, use the [recovery sample](reset-password-otp.html).
-   Keep `{{ .Token }}` visible and preserve `{{ .ConfirmationURL }}` as the
-   optional reset-link alternative. Disable provider link tracking/rewriting
-   where it would damage the auth URL.
+4. In **Reset password**, paste
+   [`supabase/email-templates/reset-password.html`](../../supabase/email-templates/reset-password.html).
+   That file is the canonical reset template; `reset-password-otp.html` in this
+   directory is only a pointer page kept for older links. The template contains
+   `{{ .Token }}` and presents no reset link: the app asks for the six-digit code
+   from that email and has no separate "open the link" step. Disable provider
+   link tracking/rewriting where it would damage the auth URL.
 5. Keep the Site URL at `https://findbackapp.social`. Check the redirect allowlist
    includes `https://findbackapp.social/recovery` and the existing Google callback
    `https://findbackapp.social/auth/callback`. Do not introduce a new domain or
@@ -46,7 +51,9 @@ phone-change flow remains separate from email signup and password recovery.
 - Recovering account B while account A is signed in never updates A's password
   or adopts B's OTP session into A's app session. OTP completion invites sign-in;
   it does not claim the recovered account is already signed in.
-- Test the reset-link alternative and existing Google callback independently.
+- Test the code path manually end to end: request a reset, receive the six-digit
+  code, verify it in the app, set a new password and confirm the old password is
+  rejected. Test the existing Google callback independently.
 - If SMS is enabled, use only a specifically approved test number and confirm
   receipt and identity preservation.
 
