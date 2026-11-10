@@ -84,7 +84,6 @@ manual commands:
 
 ```sh
 node scripts/check-push-config.mjs   # must read all PRESENT + ALIGNED first
-supabase functions deploy ai-help            # JWT verify ON (no flag)
 supabase functions deploy reply-comment --no-verify-jwt
 supabase functions deploy push-dispatch --no-verify-jwt   # only after push-config PASS
 # ONLY after migration 20261013020000 is live:
@@ -142,7 +141,7 @@ logout wipe). Never the owner/real account.
 ```sh
 node scripts/build-apk.mjs --variant=signeddev   # provenance report: SHA,
   # version/code, package, signer, Supabase host, Google PRESENT, FCM, MAPLIBRE
-node scripts/device-harness/provenance.mjs --apk <path>   # artifact manifest
+node scripts/device-harness/apk-provenance.mjs --apk <path-to.apk> [--out <dir>]   # artifact manifest
 adb install <signeddev.apk>   # emulator Norfold_API36 or Xiaomi; fresh-install only
 ```
 
