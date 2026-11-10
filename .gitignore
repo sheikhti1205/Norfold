@@ -80,10 +80,3 @@ apps/share-preview-dist/
 services/api/data/
 services/api/uploads/
 services/api/data-test/
-
-# Beads / Dolt files (added by bd init)
-.dolt/
-*.db
-.beads-credential-key
-.beads/proxieddb/
-*.gate.lock*
