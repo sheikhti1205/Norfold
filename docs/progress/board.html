@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Norfold progress board</title>
+<style>
+:root { color-scheme: light dark; --bg: #f4f3ef; --surface: #fff; --text: #202321; --muted: #505954; --line: #c9ceca; --accent: #784111; --focus: #155a9c; }
+@media (prefers-color-scheme: dark) { :root { --bg: #181c1a; --surface: #222824; --text: #edf1ed; --muted: #c0cbc2; --line: #59665d; --accent: #ffc487; --focus: #8ac5ff; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, sans-serif; }
+header, main { max-width: 1600px; margin: auto; padding: 0 24px; }
+header { padding-top: 28px; }
+h1 { margin: 0; font-size: 1.8rem; line-height: 1.2; letter-spacing: -.03em; }
+header p { color: var(--muted); margin: 8px 0 22px; }
+code, .id, .count, .priority { font-variant-numeric: tabular-nums; }
+code { overflow-wrap: anywhere; }
+.filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding: 16px 0; border-block: 1px solid var(--line); }
+.field { display: grid; gap: 4px; min-width: 130px; flex: 1 1 130px; font-size: .85rem; font-weight: 650; }
+.field.search { flex: 2 1 240px; }
+input, select { width: 100%; min-height: 42px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); color: var(--text); font: inherit; }
+input[type=checkbox] { width: 18px; min-height: 18px; height: 18px; accent-color: var(--accent); }
+.check { display: flex; align-items: center; gap: 8px; min-height: 42px; cursor: pointer; }
+select, summary, button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.board { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 22px; align-items: start; padding: 24px 0 48px; }
+.column { min-width: 0; }
+.column > summary { display: flex; align-items: center; gap: 10px; min-height: 44px; border-bottom: 2px solid var(--text); list-style: none; }
+.column > summary::-webkit-details-marker { display: none; }
+.column > summary::before { content: '−'; font-size: 1.2rem; width: 1em; }
+.column:not([open]) > summary::before { content: '+'; }
+h2 { font-size: 1rem; margin: 0; text-transform: capitalize; }
+.count { margin-left: auto; color: var(--muted); }
+.cards { display: grid; gap: 10px; padding-top: 12px; }
+article { min-width: 0; padding: 14px; background: var(--surface); border: 1px solid var(--line); overflow-wrap: anywhere; }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .8rem; color: var(--muted); }
+.priority { color: var(--accent); font-weight: 750; }
+h3 { font-size: 1rem; line-height: 1.35; margin: 7px 0; }
+.labels { margin: 6px 0; font-size: .82rem; color: var(--muted); }
+.description { margin-top: 8px; font-size: .88rem; }
+.description summary { min-height: 36px; color: var(--muted); }
+.description p { white-space: pre-wrap; margin: 8px 0 0; }
+.empty { color: var(--muted); font-size: .9rem; }
+@media (max-width: 500px) { header, main { padding-left: 16px; padding-right: 16px; } .board { gap: 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Progress board</h1>
+  <p>Generated snapshot, view only. Refresh with <code>node scripts/progress-board.mjs</code>.</p>
+</header>
+<main>
+  <section class="filters" aria-label="Filter issues">
+    <label class="field search">Search<input id="search" type="search" placeholder="Search issues"></label>
+    <label class="field">Priority<select id="priority"><option value="">All priorities</option></select></label>
+    <label class="field">Label<select id="label"><option value="">All labels</option></select></label>
+    <label class="field">Type<select id="type"><option value="">All types</option></select></label>
+    <label class="check"><input id="closed" type="checkbox"> Show closed</label>
+  </section>
+  <div id="board" class="board" aria-live="polite"></div>
+  <noscript>JavaScript is required to display this snapshot.</noscript>
+</main>
+<!-- BOARD_DATA_START -->
+<script type="application/json" id="board-data">[{"_type":"issue","id":"nor-air","title":"Rework onboarding into a text-led, fast flow","description":"Owner: 'it's not landing, it's onboarding ... good and proper flow. Not faked with images ... texts properly with good visuals and animations fast and efficient. Not something to introduce lag.' Text-led, no fabricated imagery, transform/opacity only, uiMotion tokens, reduced motion honoured, 320dp clean, finish action must state that signing in comes next.","acceptance_criteria":"Onboarding + PublicWelcome tests green; tsc exit 0; eslint clean; rendered at 320dp in light/dark/AMOLED/125%.","status":"open","priority":1,"issue_type":"feature","owner":"sheikhti1205@outlook.com","created_at":"2026-11-10T18:46:05Z","created_by":"Sheikh Tawsif Bin Aftab","updated_at":"2026-11-10T18:46:05Z","dependency_count":0,"dependent_count":0,"comment_count":0},{"_type":"issue","id":"nor-d39","title":"Bump app version to 0.15.0-beta.2 for a new APK","description":"Owner needs a new APK; versionName comes from apps/mobile/package.json and versionCode from git history, so a real version change is required or the new APK is indistinguishable.","acceptance_criteria":"Both package.json files read 0.15.0-beta.2; shared build + mobile typecheck pass; android/build.gradle unchanged because it derives both values.","status":"open","priority":1,"issue_type":"task","owner":"sheikhti1205@outlook.com","created_at":"2026-11-10T18:46:04Z","created_by":"Sheikh Tawsif Bin Aftab","updated_at":"2026-11-10T18:46:04Z","dependency_count":0,"dependent_count":0,"comment_count":0},{"_type":"issue","id":"nor-dgu","title":"Test account password rejected (norfold.app@gmail.com)","description":"Sign-in on the local build returned 'We couldn't sign you in.' Supabase is reachable (unauthenticated REST returns the expected 401), so this is credentials, not connectivity. Not retried to avoid lockout. Not verified on findbackapp.social because the in-app browser holds the owner's Admin session and signing out would destroy it.","acceptance_criteria":"Password confirmed or reset; sign-in succeeds; then the Dislike E2E check can run.","status":"open","priority":1,"issue_type":"bug","owner":"sheikhti1205@outlook.com","created_at":"2026-11-10T18:36:30Z","created_by":"Sheikh Tawsif Bin Aftab","updated_at":"2026-11-10T18:36:30Z","dependency_count":0,"dependent_count":0,"comment_count":0},{"_type":"issue","id":"nor-kkh","title":"Verify Dislike end-to-end with a real signed-in account","description":"Server guard is live (migration 20261110010000 applied; deployed findback_react_client accepts LIKE/DISLIKE, comments still LIKE-only). Client is complete and unit-tested. Still unproven: an actual Dislike tap on a real account against the hosted backend. Blocked on credentials.","acceptance_criteria":"Signed in as a test account on a build containing c359c378, tapping Dislike writes a DISLIKE row and the count increments; tapping again clears it.","status":"open","priority":1,"issue_type":"task","owner":"sheikhti1205@outlook.com","created_at":"2026-11-10T18:36:28Z","created_by":"Sheikh Tawsif Bin Aftab","updated_at":"2026-11-10T18:36:28Z","comments":[{"id":"404df62b-80ea-5c13-a731-6eadedd4caa6","issue_id":"nor-kkh","author":"Sheikh Tawsif Bin Aftab","text":"Server side is now live and verified: schema_migrations head 20261110010000, deployed guard 'not in (LIKE,DISLIKE)', comment RPC still '\u003c> LIKE'. The backend no longer rejects Dislike. Remaining gap is only a real signed-in tap.","created_at":"2026-11-10T18:40:56Z"}],"dependency_count":0,"dependent_count":0,"comment_count":1},{"_type":"issue","id":"nor-0qr","title":"Store disposable test-account credentials outside the repo","description":"Owner explicitly authorised saving the throwaway account password. Stored at ~/.config/opencode/secrets/norfold-test-account.md, deliberately outside every git repo so it cannot be committed, and never in a Beads issue because Beads syncs through the git remote.","acceptance_criteria":"File exists outside the repo; nothing in the repo references the value.","status":"open","priority":2,"issue_type":"task","owner":"sheikhti1205@outlook.com","created_at":"2026-11-10T18:46:09Z","created_by":"Sheikh Tawsif Bin Aftab","updated_at":"2026-11-10T18:46:09Z","dependency_count":0,"dependent_count":0,"comment_count":0},{"_type":"issue","id":"nor-m9e","title":"Beads containment policy","description":"bd init made its own commit, appended to the tracked AGENTS.md, and installed Claude/Codex/Cursor integration plus git hooks. All reverted: AGENTS.md restored, foreign dirs deleted, core.hooksPath unset, only .beads kept. Policy: never run bd init in this repo again; no agent-integration directories; no git hooks. If Beads misbehaves again, fall back to the kanban JSON snapshot.","acceptance_criteria":"AGENTS.md contains no Beads block; no .claude/.codex/.cursor/.agents; core.hooksPath unset.","status":"open","priority":2,"issue_type":"task","owner":"sheikhti1205@outlook.com","created_at":"2026-11-10T18:46:07Z","created_by":"Sheikh Tawsif Bin Aftab","updated_at":"2026-11-10T18:46:07Z","dependency_count":0,"dependent_count":0,"comment_count":0},{"_type":"issue","id":"nor-800","title":"Single-file kanban progress board","description":"Self-contained docs/progress/board.html generated from .beads/issues.jsonl by scripts/progress-board.mjs. No CDN, no build step, no overlay; filter/search/collapse with localStorage; regenerable and idempotent.","acceptance_criteria":"Opens by double-click; idempotent regeneration; embedded JSON parses; no subresource fetches.","status":"open","priority":2,"issue_type":"feature","owner":"sheikhti1205@outlook.com","created_at":"2026-11-10T18:46:06Z","created_by":"Sheikh Tawsif Bin Aftab","updated_at":"2026-11-10T18:46:06Z","dependency_count":0,"dependent_count":0,"comment_count":0},{"_type":"issue","id":"nor-sxj","title":"Confirm the 3 failing vitest files are Windows temp-cleanup flake","description":"Full suite in apps/mobile gave 3 failed files / 5 failed tests out of 8032. The one identified failure is EPERM on C:\\Users\\...\\Temp\\findback-sqlite-* at sqliteHistory.test.ts:165 (rmSync on a still-open handle). The other two files were lost when the first run was truncated to 40 lines. A later root-level run was invalid (it picked up Deno Edge Function tests).","acceptance_criteria":"Re-run identifies all three files; each passes in isolation or is proven environmental; no real regression.","status":"closed","priority":2,"issue_type":"bug","owner":"sheikhti1205@outlook.com","created_at":"2026-11-10T18:36:37Z","created_by":"Sheikh Tawsif Bin Aftab","updated_at":"2026-11-10T18:40:56Z","closed_at":"2026-11-10T18:40:56Z","close_reason":"Resolved: of 3 failing files, 1 was real (appCapabilities BACKEND_SCHEMA_VERSION stale after the migration - fixed in 6eaaf833) and 2 are environmental. sqliteHistory: EPERM on Windows temp-dir cleanup. auth.recoveryOtp: recovery falls back to 'check your connection' locally. Neither is touched by this work and both pass in CI on ubuntu.","dependency_count":0,"dependent_count":0,"comment_count":0},{"_type":"issue","id":"nor-jrv","title":"Rubric #7 - 'Rate your experience with Norfold' control","description":"Rubric #3 is now source-complete. #7 remains: rating a participant after a recovery is not the same as rating the app. Proposal was a separate per-account, editable rating with a server-computed average - must not revive findback_rate_client, which is service_role-only.","acceptance_criteria":"One rating per account, editable, average computed server-side, no client-supplied target.","status":"open","priority":2,"issue_type":"feature","owner":"sheikhti1205@outlook.com","created_at":"2026-11-10T18:36:35Z","created_by":"Sheikh Tawsif Bin Aftab","updated_at":"2026-11-10T18:36:35Z","dependency_count":0,"dependent_count":0,"comment_count":0},{"_type":"issue","id":"nor-c1b","title":"Deploy current main to findbackapp.social","description":"Remote main is 14283fa1 but the served site still shows the pre-change UI (old like count, no Dislike). The web deployment must run for the Like/Dislike pair to be live on the real site.","acceptance_criteria":"web.yml succeeds for the current HEAD; served bundle shows the Like/Dislike pair; version.json matches HEAD.","status":"open","priority":2,"issue_type":"task","owner":"sheikhti1205@outlook.com","created_at":"2026-11-10T18:36:33Z","created_by":"Sheikh Tawsif Bin Aftab","updated_at":"2026-11-10T18:36:33Z","dependency_count":0,"dependent_count":0,"comment_count":0},{"_type":"issue","id":"nor-en4","title":"Implement the public landing review (owner decision pending)","description":"docs/design/LANDING-REVIEW.md concluded: keep the entry architecture, fix two things - the four-scene hero plus six chapters explain the same journey twice, and all five 'Get started' CTAs hide the account step (PublicWelcome.tsx:41-46 completes onboarding then navigates to /auth). Not implemented: renaming only PublicWelcome leaves Onboarding's own 'Get started' inconsistent, while renaming Onboarding.tsx also changes the native first-run flow. Needs an owner decision on copy and structure.","acceptance_criteria":"Owner approves the proposed structure/copy; change lands with a rendered review at 320dp in light/dark/AMOLED/125%.","status":"open","priority":2,"issue_type":"feature","owner":"sheikhti1205@outlook.com","created_at":"2026-11-10T18:36:32Z","created_by":"Sheikh Tawsif Bin Aftab","updated_at":"2026-11-10T18:36:32Z","dependency_count":0,"dependent_count":0,"comment_count":0},{"_type":"issue","id":"nor-obd","title":"Enable write-mode Supabase MCP (needs interactive auth)","description":"supabase-write is declared in opencode.json. Adding project_ref to the remote MCP URL invalidated the OAuth session and removed all Supabase tools until reverted, so project scoping must be paired with opencode mcp auth supabase-write. Read-only server is currently restored and working.","acceptance_criteria":"opencode mcp auth supabase-write completes; apply_migration is available; read server also reachable.","status":"open","priority":3,"issue_type":"task","owner":"sheikhti1205@outlook.com","created_at":"2026-11-10T18:36:42Z","created_by":"Sheikh Tawsif Bin Aftab","updated_at":"2026-11-10T18:36:42Z","dependency_count":0,"dependent_count":0,"comment_count":0},{"_type":"issue","id":"nor-vsp","title":"Fix v0.15.0-beta.1 tag drift","description":"The tag targets 340e201e while the served manifest named 36dc9996; HEAD is now 14283fa1. Tag/publish policy is owner-owned - do not move a published tag without instruction.","acceptance_criteria":"Owner decides whether to re-tag; served version.json matches the released commit.","status":"open","priority":3,"issue_type":"task","owner":"sheikhti1205@outlook.com","created_at":"2026-11-10T18:36:40Z","created_by":"Sheikh Tawsif Bin Aftab","updated_at":"2026-11-10T18:36:40Z","dependency_count":0,"dependent_count":0,"comment_count":0},{"_type":"issue","id":"nor-59w","title":"Remove or wire dead askAiHelp service","description":"services/auth.ts:697 defines askAiHelp and it is tested, but no screen calls it - screens/Help.tsx uses ChatController instead. Either delete it with its tests or document why it is retained.","acceptance_criteria":"No untested-by-usage dead service, or a recorded reason for keeping it.","status":"open","priority":3,"issue_type":"task","owner":"sheikhti1205@outlook.com","created_at":"2026-11-10T18:36:38Z","created_by":"Sheikh Tawsif Bin Aftab","updated_at":"2026-11-10T18:36:38Z","dependency_count":0,"dependent_count":0,"comment_count":0}]</script>
+<!-- BOARD_DATA_END -->
+<script>
+(() => {
+  const board = document.getElementById('board');
+  try {
+    const issues = JSON.parse(document.getElementById('board-data').textContent);
+    const controls = Object.fromEntries(['search', 'priority', 'label', 'type', 'closed'].map(id => [id, document.getElementById(id)]));
+    const key = 'norfold-progress-board-filters';
+    const values = (items) => [...new Set(items.filter(value => value !== undefined && value !== null && value !== '').map(String))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const labels = issue => Array.isArray(issue.labels) ? issue.labels : [];
+    for (const [name, options] of Object.entries({ priority: values(issues.map(i => i.priority)), label: values(issues.flatMap(labels)), type: values(issues.map(i => i.issue_type)) })) {
+      for (const value of options) controls[name].add(new Option(name === 'priority' ? `P${value}` : value, value));
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem(key) || '{}');
+      for (const name of ['search', 'priority', 'label', 'type']) if (typeof saved[name] === 'string') controls[name].value = saved[name];
+      controls.closed.checked = saved.closed === true;
+    } catch { /* Storage can be unavailable for local files. */ }
+    const el = (tag, className, text) => {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    };
+    const statuses = (() => {
+      // Active work must lead. Alphabetical order put "closed" first, which is
+      // the one column a reader opening this board least wants to see first.
+      const ORDER = ['open', 'in_progress', 'in-progress', 'blocked', 'deferred', 'closed'];
+      const rank = (status) => { const i = ORDER.indexOf(status); return i < 0 ? ORDER.length : i; };
+      return values(issues.map(i => i.status)).sort((a, b) => rank(a) - rank(b));
+    })();
+    const columns = new Map();
+    const fragment = document.createDocumentFragment();
+    for (const status of statuses) {
+      const column = el('details', 'column');
+      column.open = true;
+      const heading = el('summary');
+      heading.append(el('h2', '', status.replaceAll('_', ' ')));
+      const count = el('span', 'count', '0');
+      heading.append(count);
+      const cards = el('div', 'cards');
+      column.append(heading, cards);
+      columns.set(status, { column, count, cards });
+      fragment.append(column);
+    }
+    board.append(fragment);
+    function render() {
+      const state = { search: controls.search.value, priority: controls.priority.value, label: controls.label.value, type: controls.type.value, closed: controls.closed.checked };
+      try { localStorage.setItem(key, JSON.stringify(state)); } catch { /* Filters still work for this session. */ }
+      const query = state.search.trim().toLocaleLowerCase();
+      for (const [status, group] of columns) {
+        group.column.hidden = status === 'closed' && !state.closed;
+        const matches = issues.filter(issue => issue.status === status && (!state.priority || String(issue.priority) === state.priority) && (!state.label || labels(issue).includes(state.label)) && (!state.type || issue.issue_type === state.type) && (!query || [issue.id, issue.title, issue.description, issue.acceptance_criteria, issue.issue_type, ...labels(issue)].some(value => String(value || '').toLocaleLowerCase().includes(query))));
+        group.count.textContent = String(matches.length);
+        const cards = document.createDocumentFragment();
+        for (const issue of matches) {
+          const card = el('article');
+          const meta = el('div', 'meta');
+          meta.append(el('span', 'id', issue.id), el('span', 'priority', issue.priority == null ? 'No priority' : `P${issue.priority}`), el('span', '', issue.issue_type || 'Unspecified type'));
+          card.append(meta, el('h3', '', issue.title || 'Untitled'));
+          if (labels(issue).length) card.append(el('p', 'labels', labels(issue).join(' · ')));
+          const text = String(issue.description || 'No description.');
+          const details = el('details', 'description');
+          details.append(el('summary', '', text.length > 120 ? `${text.slice(0, 120).trimEnd()}…` : text), el('p', '', text));
+          card.append(details);
+          cards.append(card);
+        }
+        if (!matches.length) cards.append(el('p', 'empty', 'No issues match these filters.'));
+        group.cards.replaceChildren(cards);
+      }
+    }
+    for (const control of Object.values(controls)) control.addEventListener(control === controls.search ? 'input' : 'change', render);
+    render();
+  } catch (error) {
+    board.textContent = 'Could not display the snapshot. Run node scripts/progress-board.mjs to refresh it.';
+    console.error(error);
+  }
+})();
+</script>
+</body>
+</html>
