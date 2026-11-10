@@ -125,12 +125,25 @@ export function checkParity(root = REPO_ROOT) {
     for (const dist of Object.values(DIST_FOR_VARIANT)) {
       if (!SENTRY_DIST_VALUES.includes(dist)) fail("scripts/build-context.mjs:38", `variant dist outside canonical set (${dist.length} chars)`);
     }
+    // Anchored to the `sourcemaps upload` invocation itself. A whole-file
+    // `includes` was satisfied by ANY other step mentioning the same `--dist`
+    // (for example a build-identity manifest), which would let the upload lose
+    // its dist while this check still reported CURRENT.
     for (const [file, dist] of [
       [".github/workflows/ci.yml", "android-debug"],
       [".github/workflows/release.yml", "android-release"],
       [".github/workflows/web.yml", "web-production"],
     ]) {
-      if (!read(file).includes(`--dist ${dist}`)) fail(file, `upload --dist ${dist} missing`);
+      const uploads = read(file)
+        .split(/\r?\n/)
+        .filter((line) => /sourcemaps\s+upload\b/.test(line) && !/^\s*#/.test(line));
+      if (uploads.length === 0) {
+        fail(file, `no sourcemaps upload command found for --dist ${dist}`);
+        continue;
+      }
+      for (const line of uploads) {
+        if (!line.includes(`--dist ${dist}`)) fail(file, `upload --dist ${dist} missing`);
+      }
     }
     // Every workflow that builds a shippable bundle must declare a dist the
     // client can actually report. An out-of-set label resolves to `undefined`

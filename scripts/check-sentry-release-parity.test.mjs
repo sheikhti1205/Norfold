@@ -66,6 +66,14 @@ test("fails closed on every tampered contract", () => {
     ["missing upload dist", (d) => writeFileSync(join(d, ".github/workflows/web.yml"),
       readFileSync(".github/workflows/web.yml", "utf8").replace("--dist web-production", "--dist erased")),
       /upload --dist web-production missing/],
+    // Regression: a dist mentioned by any other step must not satisfy the
+    // upload check. Before this was anchored, a build-identity manifest step
+    // carrying the same `--dist` hid a stripped upload line.
+    ["upload dist stripped but mentioned elsewhere", (d) => {
+      const tampered = readFileSync(".github/workflows/web.yml", "utf8").replace("--dist web-production", "--dist erased");
+      writeFileSync(join(d, ".github/workflows/web.yml"), `${tampered}\n      run: echo --dist web-production\n`);
+    },
+      /upload --dist web-production missing/],
     ["token gains VITE_ prefix", (d) => writeFileSync(join(d, "apps/mobile/vite.config.ts"),
       `${readFileSync("apps/mobile/vite.config.ts", "utf8")}\n// VITE_SENTRY_AUTH_TOKEN must never exist\n`),
       /VITE_ prefix/],
