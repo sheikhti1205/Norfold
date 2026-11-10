@@ -64,8 +64,8 @@ function fakeApi({ initial = {}, patchResponse, swallowPatch = false } = {}) {
   return { fetchImpl, calls, state };
 }
 
-const APPLIED_BY_DEFAULT = { RESET: template("reset-password.html"), SIGNUP: template("confirm-signup.html") };
-const readTemplate = (file) => APPLIED_BY_DEFAULT[file === "reset-password.html" ? "RESET" : "SIGNUP"];
+/** Reads the real file, so a template that fails validation is caught here. */
+const readTemplate = (file) => template(file);
 
 /** Runs the job and returns its report plus exit code. */
 async function run(env, api, overrides = {}) {
@@ -166,17 +166,16 @@ test("a missing token blocks the job instead of writing", async () => {
 
 test("a template that fails validation is rejected before any network call", async () => {
   const api = fakeApi();
-  const poisoned = {
-    RESET: template("reset-password.html").replace("</body>", '<a href="{{ .ConfirmationURL }}">reset</a></body>'),
-    SIGNUP: template("confirm-signup.html"),
-  };
-  const { code, report } = await run(trustedEnv(), api, { readTemplate: (file) => poisoned[file === "reset-password.html" ? "RESET" : "SIGNUP"] });
+  const injected = template("reset-password.html").replace("</body>", '<a href="{{ .ConfirmationURL }}">reset</a></body>');
+  const { code, report } = await run(trustedEnv(), api, {
+    readTemplate: (file) => (file === "reset-password.html" ? injected : template(file)),
+  });
   assert.equal(code, 1);
   assert.equal(report.status, "rejected");
   assert.equal(api.calls.length, 0, "validation must happen before the first request");
 });
 
-test("applies exactly the four template fields and verifies the result", async () => {
+test("applies exactly the eight template fields and verifies the result", async () => {
   const api = fakeApi();
   const { code, report } = await run(trustedEnv(), api);
 
@@ -189,16 +188,24 @@ test("applies exactly the four template fields and verifies the result", async (
     Object.keys(sent).sort(),
     [
       "mailer_subjects_confirmation",
+      "mailer_subjects_email_change",
+      "mailer_subjects_reauthentication",
       "mailer_subjects_recovery",
       "mailer_templates_confirmation_content",
+      "mailer_templates_email_change_content",
+      "mailer_templates_reauthentication_content",
       "mailer_templates_recovery_content",
     ],
-    "only the four template fields may be written",
+    "only the template fields may be written",
   );
   assert.equal(sent.mailer_subjects_recovery, "Your Norfold reset code");
   assert.equal(sent.mailer_subjects_confirmation, "Confirm your Norfold email");
+  assert.equal(sent.mailer_subjects_email_change, "Confirm your new Norfold email");
+  assert.equal(sent.mailer_subjects_reauthentication, "Your Norfold verification code");
   assert.equal(sent.mailer_templates_recovery_content, template("reset-password.html"));
   assert.equal(sent.mailer_templates_confirmation_content, template("confirm-signup.html"));
+  assert.equal(sent.mailer_templates_email_change_content, template("change-email.html"));
+  assert.equal(sent.mailer_templates_reauthentication_content, template("reauthentication.html"));
 
   // Unrelated settings survive untouched.
   assert.equal(api.state.site_url, "https://findbackapp.social");
@@ -206,8 +213,11 @@ test("applies exactly the four template fields and verifies the result", async (
 
   assert.equal(report.project_ref, PROJECT_REF);
   assert.equal(report.settings.mailer_otp_length, 8);
-  const [recovery, confirmation] = report.templates;
-  assert.equal(recovery.flow, "recovery");
+  assert.deepEqual(
+    report.templates.map((entry) => entry.flow),
+    ["recovery", "confirmation", "email_change", "reauthentication"],
+  );
+  const [recovery, confirmation, emailChange, reauthentication] = report.templates;
   assert.equal(recovery.content_matches, true);
   assert.equal(recovery.subject_matches, true);
   assert.equal(recovery.prints_token, true);
@@ -215,6 +225,13 @@ test("applies exactly the four template fields and verifies the result", async (
   assert.equal(recovery.previous_subject, "Reset your password");
   assert.equal(confirmation.carries_confirmation_url, true);
   assert.equal(confirmation.content_matches, true);
+  // Email change keeps a one-tap link; reauthentication must not offer one.
+  assert.equal(emailChange.carries_confirmation_url, true);
+  assert.equal(emailChange.content_matches, true);
+  assert.equal(emailChange.prints_token, true);
+  assert.equal(reauthentication.carries_confirmation_url, false);
+  assert.equal(reauthentication.content_matches, true);
+  assert.equal(reauthentication.prints_token, true);
 });
 
 test("reports the token and template bodies nowhere in the output", async () => {
@@ -233,7 +250,7 @@ test("a project that does not return what was sent is reported as unverified", a
 
   assert.equal(code, 1);
   assert.equal(report.status, "unverified");
-  assert.deepEqual(report.mismatched.sort(), ["confirmation", "recovery"]);
+  assert.deepEqual(report.mismatched.sort(), ["confirmation", "email_change", "reauthentication", "recovery"]);
 });
 
 test("a rejected write is reported without leaking the response body", async () => {
@@ -277,6 +294,29 @@ test("every declared flow targets a distinct pair of config fields", () => {
     assert.equal(flow.subjectField.startsWith("mailer_subjects_"), true);
     assert.equal(flow.contentField.startsWith("mailer_templates_"), true);
     assert.equal(flow.contentField.endsWith("_content"), true);
+  }
+});
+
+test("the apply set is exactly the four owner-approved flows", () => {
+  // Adding a flow writes it to the live project, so this list is a decision.
+  assert.deepEqual(FLOWS.map((flow) => flow.flow), ["recovery", "confirmation", "email_change", "reauthentication"]);
+  assert.deepEqual(
+    FLOWS.map((flow) => flow.file),
+    ["reset-password.html", "confirm-signup.html", "change-email.html", "reauthentication.html"],
+  );
+  // Invites are not used by the product, and magic-link is deliberately not
+  // offered because signInWithOtp could switch accounts.
+  for (const excluded of ["invite.html", "magic-link.html"]) {
+    assert.equal(FLOWS.some((flow) => flow.file === excluded), false, `${excluded} must not be applied`);
+  }
+  // Every flow the job writes must have a template that actually passes validation.
+  for (const flow of FLOWS) {
+    const checked = validateTemplate({
+      content: template(flow.file),
+      requireToken: flow.requireToken,
+      allowConfirmationUrl: flow.allowConfirmationUrl,
+    });
+    assert.equal(checked.ok, true, `${flow.file}: ${checked.problems.join("; ")}`);
   }
 });
 
