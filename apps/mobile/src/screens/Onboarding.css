@@ -19,8 +19,8 @@
 .fb-onboarding-index { margin: 0 0 1.25rem; font-size: .75rem; font-weight: 600; letter-spacing: .12em; color: var(--fb-on-surface-variant); }
 .fb-onboarding-drag { position: relative; min-width: 0; touch-action: pan-y; }
 .fb-onboarding-page { display: grid; min-width: 0; gap: 2rem; width: 100%; }
-.fb-onboarding-title { margin: 0; min-width: 0; font-size: clamp(2.25rem, 14vw, 5.5rem); font-weight: 700; letter-spacing: -.065em; line-height: 1.06; overflow-wrap: anywhere; }
-.fb-onboarding-mask { display: block; overflow: clip; padding-block: .05em; }
+.fb-onboarding-title { margin: 0; min-width: 0; font-size: clamp(2.25rem, 10vw, 5.5rem); font-weight: 700; letter-spacing: -.045em; line-height: 1.1; overflow-wrap: anywhere; }
+.fb-onboarding-mask { display: block; padding-block: .05em; }
 .fb-onboarding-mask > span { display: block; }
 .fb-onboarding-secondary { color: var(--fb-on-surface-variant); }
 .fb-onboarding-page[data-scene="2"] .fb-onboarding-title { font-size: clamp(2rem, 10vw, 4.5rem); }
@@ -33,7 +33,7 @@
 .fb-onboarding-segment[data-filled="true"] { background: var(--fb-on-surface); }
 .fb-onboarding-controls-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; min-width: 0; }
 .fb-onboarding-btn { display: inline-flex; align-items: center; justify-content: center; gap: 1rem; min-width: 44px; min-height: 44px; padding: .625rem 1rem; border: 0; border-radius: 999px; font: inherit; font-size: 1rem; font-weight: 600; cursor: pointer; }
-.fb-onboarding-btn--primary { background: var(--fb-on-surface); color: var(--fb-surface); gap: .5rem; padding-inline: clamp(.5rem, 3vw, 1rem); min-width: 6.25rem; max-width: 100%; margin-left: auto; }
+.fb-onboarding-btn--primary { background: var(--fb-on-surface); color: var(--fb-surface); gap: .5rem; padding-inline: clamp(.5rem, 3vw, 1rem); min-width: 6.25rem; max-width: 100%; margin-left: auto; text-align: center; }
 .fb-onboarding-btn--primary:active { opacity: .8; }
 .fb-onboarding-btn--quiet { padding-inline: .5rem; color: var(--fb-on-surface-variant); background: transparent; }
 .fb-onboarding-btn--quiet:hover { color: var(--fb-on-surface); }

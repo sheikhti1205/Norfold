@@ -62,7 +62,7 @@ export function PublicWelcome() {
           <button onClick={() => chapter("about-norfold")}>About</button>
         </span>
         <Link to="/auth">Sign in</Link>
-        <button className="nf-public-action nf-public-desktop-cta" onClick={start}>Get started</button>
+        <button className="nf-public-action nf-public-desktop-cta" onClick={start}>Sign in or create account</button>
         <details ref={menu} className="nf-public-menu"><summary>Explore</summary><div>
           <button onClick={() => chapter("how-it-works")}>How it works</button>
           <button onClick={() => chapter("safety")}>Safety</button>
@@ -73,7 +73,7 @@ export function PublicWelcome() {
     <main>
       <div ref={hero} className="nf-public-hero">
         <Onboarding publicHero onComplete={() => navigate("/auth")} />
-        <button className="nf-public-action nf-public-hero-cta" onClick={start}>Get started <ArrowRight size={18} aria-hidden="true" /></button>
+        <button className="nf-public-action nf-public-hero-cta" onClick={start}>Sign in or create account <ArrowRight size={18} aria-hidden="true" /></button>
       </div>
       <div className="nf-public-story">
         {chapters.map(([title, copy], index) => <section key={title} className="nf-public-chapter">
@@ -89,7 +89,7 @@ export function PublicWelcome() {
         </section>
         <section ref={final} className="nf-public-final">
           <h2>Let’s find a way back.</h2><p>Start with a report. Take the next step when you’re ready.</p>
-          <button className="nf-public-action" onClick={start}>Get started <ArrowRight size={18} aria-hidden="true" /></button>
+          <button className="nf-public-action" onClick={start}>Sign in or create account <ArrowRight size={18} aria-hidden="true" /></button>
         </section>
       </div>
     </main>
@@ -101,6 +101,6 @@ export function PublicWelcome() {
       </nav>
       <p>{WEBSITE_TRANSITION_NOTE}</p>
     </footer>
-    {showSticky && <div className="nf-public-sticky"><button className="nf-public-action" onClick={start}>Get started <ArrowRight size={18} aria-hidden="true" /></button></div>}
+    {showSticky && <div className="nf-public-sticky"><button className="nf-public-action" onClick={start}>Sign in or create account <ArrowRight size={18} aria-hidden="true" /></button></div>}
   </div>;
 }

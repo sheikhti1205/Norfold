@@ -35,22 +35,22 @@ function goToLastPage() {
 describe("Onboarding first run", () => {
   it("uses the approved editorial narrative without demo cards or illustrations", () => {
     render(<Onboarding />);
-    expect(screen.getByRole("heading", { level: 1, name: "Lost something?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Lost or found something?" })).toBeTruthy();
     expect(screen.queryByRole("figure")).toBeNull();
     expect(document.querySelector("[data-onboarding-art]")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
     fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
-    expect(screen.getByRole("heading", { name: "Search reports. Follow likely matches." })).toBeTruthy();
-    expect(screen.getByText(/suggestion.*not a guarantee/i)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Plan a safe return." })).toBeTruthy();
+    expect(screen.getByText(/meet in a public place/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
-    expect(screen.getByRole("heading", { name: "You stay in control." })).toBeTruthy();
-    expect(screen.getByText(/message requests, blocking and location choices/i)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Ready to begin?" })).toBeTruthy();
+    expect(screen.getByText(/sign in or create an account/i)).toBeTruthy();
   });
   it("fresh launch shows the first page with progress announced", () => {
     render(<Onboarding />);
-    expect(screen.getByRole("heading", { level: 1, name: "Lost something?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Lost or found something?" })).toBeTruthy();
     expect(
-      screen.getByText(/create a report with real photos, useful details/i),
+      screen.getByText(/create a report with what you know/i),
     ).toBeTruthy();
     const progress = screen.getByRole("progressbar", { name: /onboarding progress/i });
     expect(progress.textContent).toMatch(/1 of 4/);
@@ -62,39 +62,39 @@ describe("Onboarding first run", () => {
   it("Next walks through all four exact pages; Back returns", () => {
     render(<Onboarding />);
     fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
-    expect(screen.getByRole("heading", { level: 1, name: "Found something?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Search reports." })).toBeTruthy();
     expect(
-      screen.getByText(/keep enough identifying detail private/i),
+      screen.getByText(/possible match is a starting point, not a guarantee/i),
     ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
     expect(
-      screen.getByRole("heading", { level: 1, name: "Search reports. Follow likely matches." }),
+      screen.getByRole("heading", { level: 1, name: "Plan a safe return." }),
     ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /^back$/i }));
-    expect(screen.getByRole("heading", { level: 1, name: "Found something?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Search reports." })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
     fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
-    expect(screen.getByRole("heading", { level: 1, name: "You stay in control." })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Ready to begin?" })).toBeTruthy();
     expect(
-      screen.getByText(/agree a safe handover/i),
+      screen.getByText(/continue to sign in or create an account/i),
     ).toBeTruthy();
   });
 
-  it("shows Skip on pages 1-3 only, Back on 2-4 only, Get started on page 4 only", () => {
+  it("shows Skip on pages 1-3 only, Back on 2-4 only, and the authentication action on page 4", () => {
     render(<Onboarding />);
     expect(screen.queryByRole("button", { name: /^back$/i })).toBeNull();
     expect(screen.getByRole("button", { name: /^skip$/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^next$/i })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /get started/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /sign in or create account/i })).toBeNull();
 
     goToLastPage();
     expect(screen.queryByRole("button", { name: /^skip$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /^next$/i })).toBeNull();
     expect(screen.getByRole("button", { name: /^back$/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /get started/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /sign in or create account/i })).toBeTruthy();
   });
 
   it("Skip persists completion and notifies the host", () => {
@@ -105,11 +105,11 @@ describe("Onboarding first run", () => {
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
-  it("Get started persists completion and notifies the host", () => {
+  it("the authentication action persists completion and notifies the host", () => {
     const onComplete = vi.fn();
     render(<Onboarding onComplete={onComplete} />);
     goToLastPage();
-    fireEvent.click(screen.getByRole("button", { name: /get started/i }));
+    fireEvent.click(screen.getByRole("button", { name: /sign in or create account/i }));
     expect(localStorage.getItem(ONBOARDING_STORAGE_KEY)).toBe("2");
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
@@ -121,7 +121,7 @@ describe("Onboarding first run", () => {
     // Mounting a replay must not clear completion.
     expect(localStorage.getItem(ONBOARDING_STORAGE_KEY)).toBe("2");
     goToLastPage();
-    fireEvent.click(screen.getByRole("button", { name: /get started/i }));
+    fireEvent.click(screen.getByRole("button", { name: /sign in or create account/i }));
     expect(localStorage.getItem(ONBOARDING_STORAGE_KEY)).toBe("2");
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
@@ -149,10 +149,10 @@ describe("Onboarding first run", () => {
     next.focus();
     expect(document.activeElement).toBe(next);
     fireEvent.keyDown(document.activeElement as Element, { key: "ArrowRight" });
-    expect(screen.getByRole("heading", { level: 1, name: "Found something?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Search reports." })).toBeTruthy();
 
     fireEvent.keyDown(screen.getByRole("region", { name: /onboarding/i }), { key: "ArrowLeft" });
-    expect(screen.getByRole("heading", { level: 1, name: "Lost something?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Lost or found something?" })).toBeTruthy();
   });
 
   it("does not overflow horizontally at Extra-large text", () => {
@@ -167,7 +167,7 @@ describe("Onboarding first run", () => {
     render(<Onboarding />);
     const root = screen.getByRole("region", { name: /onboarding/i });
     expect(root.getAttribute("data-motion")).toBe("static");
-    expect(screen.getByRole("heading", { name: "Lost something?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Lost or found something?" })).toBeTruthy();
     expect(document.querySelector("[data-onboarding-art]")).toBeNull();
   });
 
@@ -184,7 +184,7 @@ describe("Onboarding first run", () => {
       const finish = vi.fn();
       render(<Onboarding onComplete={finish} />);
       vi.advanceTimersByTime(60_000);
-      expect(screen.getByRole("heading", { name: "Lost something?" })).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Lost or found something?" })).toBeTruthy();
       expect(finish).not.toHaveBeenCalled();
       expect(localStorage.getItem(ONBOARDING_STORAGE_KEY)).toBeNull();
     } finally { vi.useRealTimers(); }
@@ -194,18 +194,18 @@ describe("Onboarding first run", () => {
     render(<Onboarding />);
     const next = screen.getByRole("button", { name: /^next$/i });
     fireEvent.keyDown(next, { key: "Enter" });
-    expect(screen.getByRole("heading", { name: "Lost something?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Lost or found something?" })).toBeTruthy();
     fireEvent.click(next);
-    expect(screen.getByRole("heading", { name: "Found something?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Search reports." })).toBeTruthy();
     fireEvent.keyDown(next, { key: "ArrowRight", ctrlKey: true });
-    expect(screen.getByRole("heading", { name: "Found something?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Search reports." })).toBeTruthy();
   });
 
   it("announces scene changes and completes at most once", () => {
     const finish = vi.fn();
     render(<Onboarding initialPage={3} onComplete={finish} />);
-    expect(screen.getByRole("status").textContent).toMatch(/4 of 4.*You stay in control/);
-    const button = screen.getByRole("button", { name: /get started/i });
+    expect(screen.getByRole("status").textContent).toMatch(/4 of 4.*Ready to begin/);
+    const button = screen.getByRole("button", { name: /sign in or create account/i });
     fireEvent.click(button); fireEvent.click(button);
     expect(finish).toHaveBeenCalledTimes(1);
   });
@@ -216,9 +216,10 @@ describe("Onboarding viewport ownership (V1-UI-001)", () => {
     // Static contract on the authoritative owner: Onboarding renders outside
     // Shell (no .fb-app-viewport), so .fb-onboarding must declare its own
     // min-height in dvh (with a vh fallback) and bottom-pinned controls.
-    const { readFileSync } = await import("node:fs");
+    const { existsSync, readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
-    const css = readFileSync(join(process.cwd(), "src/screens/Onboarding.css"), "utf8");
+    const local = join(process.cwd(), "src/screens/Onboarding.css");
+    const css = readFileSync(existsSync(local) ? local : join(process.cwd(), "apps/mobile/src/screens/Onboarding.css"), "utf8");
     const rootRule = /\.fb-onboarding\s*\{[^}]*\}/s.exec(css)?.[0] ?? "";
     expect(rootRule).toMatch(/min-height:\s*100vh/);
     expect(rootRule).toMatch(/min-height:\s*100dvh/);

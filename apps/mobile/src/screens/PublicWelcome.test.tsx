@@ -15,7 +15,7 @@ function welcome() {
 }
 it("reuses the editorial opening and exposes truthful chapters and canonical legal links", () => {
   welcome();
-  expect(screen.getByRole("heading", { name: "Lost something?" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Lost or found something?" })).toBeTruthy();
   expect(screen.getByRole("heading", { name: "A possible match is just that." })).toBeTruthy();
   expect(screen.getByRole("link", { name: "Privacy" }).getAttribute("href")).toBe("/privacy");
   expect(screen.getByText(/current site remains findbackapp.social/i)).toBeTruthy();
@@ -26,7 +26,7 @@ it("signs in deliberately without claiming onboarding was completed", () => {
   expect(screen.getByRole("heading", { name: "Intentional authentication" })).toBeTruthy();
   expect(isOnboardingComplete()).toBe(false);
 });
-it("keeps previous scenes and vertical content available and completes only on Skip/Get started", () => {
+it("keeps previous scenes and vertical content available and completes on Skip", () => {
   welcome();
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   fireEvent.click(screen.getByRole("button", { name: "Back" }));
