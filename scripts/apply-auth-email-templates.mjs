@@ -37,7 +37,13 @@ const API_BASE = "https://api.supabase.com/v1/projects";
  *
  * `allowConfirmationUrl` records intent, not capability: the recovery email
  * must carry a code and nothing else because the app has no "open the reset
- * link" step, while signup may keep a one-tap link beside the code.
+ * link" step, while signup and email change may keep a one-tap link beside the
+ * code.
+ *
+ * `invite` and `magic_link` are deliberately absent. The owner does not use
+ * invites, and nothing in the client calls signInWithOtp because it could
+ * switch accounts (see apps/mobile/src/services/auth.ts). Adding a flow here
+ * means it will be written to the live project, so absence is a decision.
  */
 export const FLOWS = [
   {
@@ -55,6 +61,22 @@ export const FLOWS = [
     contentField: "mailer_templates_confirmation_content",
     requireToken: true,
     allowConfirmationUrl: true,
+  },
+  {
+    flow: "email_change",
+    file: "change-email.html",
+    subjectField: "mailer_subjects_email_change",
+    contentField: "mailer_templates_email_change_content",
+    requireToken: true,
+    allowConfirmationUrl: true,
+  },
+  {
+    flow: "reauthentication",
+    file: "reauthentication.html",
+    subjectField: "mailer_subjects_reauthentication",
+    contentField: "mailer_templates_reauthentication_content",
+    requireToken: true,
+    allowConfirmationUrl: false,
   },
 ];
 
