@@ -5,6 +5,11 @@ described in [docs/history/VERSION_HISTORY.md](docs/history/VERSION_HISTORY.md).
 track real evolution and do not imply a stable release. The per-commit mapping is in
 [docs/history/VERSION_HISTORY.csv](docs/history/VERSION_HISTORY.csv).
 
+## 0.15.0-beta.2 - APK version bump
+
+- Bump the source version for the next APK; publication and device acceptance
+  are not implied.
+
 ## 0.15.0-beta.1 — chat finishing
 
 - Replies jump: tapping a reply's quoted reference scrolls to the original and

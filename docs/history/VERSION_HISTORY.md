@@ -28,7 +28,7 @@ derived line (`product_version`) corrects only labels that are not supportable:
 | — → `0.11.0-beta.2` (r0894–r0895) | functional beta freeze |
 
 Latest reconstructed interval: **0.11.0-beta.2** (through r0895). Current source
-version: **0.15.0-beta.1** — chat finishing (reply jump and highlight, grouped
+version: **0.15.0-beta.2** — APK version bump, following **0.15.0-beta.1** chat finishing (reply jump and highlight, grouped
 photos from one send, shared pinned messages, and the Google system-browser
 fallback) after the **0.14.0-beta.1** Norfold rebrand, the **0.13.0-beta.1**
 Product Fit Reset checkpoint described in
