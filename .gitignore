@@ -58,6 +58,9 @@ tmp-*.mjs
 .serena/
 .superpowers/
 
+# graphify knowledge graph (local derived index; rebuild with `graphify extract . --code-only`)
+graphify-out/
+
 # Private coordination link/data: local only, never public product content.
 /FindBack-internal
 /FindBack-internal/
