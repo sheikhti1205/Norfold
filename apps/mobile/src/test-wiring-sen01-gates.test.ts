@@ -19,19 +19,21 @@
  */
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { resolveSentryDsn } from "./services/monitoring/sentry";
 
-const GATE_SCRIPT = new URL(
-  "../../../scripts/check-mobile-build-config.mjs",
-  import.meta.url,
-);
+const MOBILE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const REPO_ROOT = resolve(MOBILE_ROOT, "../..");
+// Native absolute path. A URL's `pathname` keeps a leading slash, so
+// `node /D:/.../gate.mjs` resolves as `D:\D:\...` on Windows.
+const GATE_SCRIPT = resolve(REPO_ROOT, "scripts/check-mobile-build-config.mjs");
 
 function runGate(env: Record<string, string>): { status: number | null; out: string } {
-  const result = spawnSync(process.execPath, [GATE_SCRIPT.pathname, "--preflight"], {
+  const result = spawnSync(process.execPath, [GATE_SCRIPT, "--preflight"], {
     encoding: "utf8",
     env: { ...process.env, ...env },
   });
@@ -115,7 +117,14 @@ describe.todo("SEN-01 device-only boundary (needs real artifact + installed devi
   it.todo("signed APK carries bundle asserts (needs real artifact + installed device)");
 });
 
-const MOBILE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const requireFromTest = createRequire(import.meta.url);
+const viteManifest = requireFromTest("vite/package.json") as { bin: { vite: string } };
+// `npx` is a shell shim (`npx.cmd`) on Windows and `spawnSync` cannot execute
+// it without a shell, so run the resolved local CLI through this node binary.
+const VITE_BIN = resolve(
+  dirname(requireFromTest.resolve("vite/package.json")),
+  viteManifest.bin.vite,
+);
 
 /** Shell env with every build-config variable scrubbed (files isolated via envDir). */
 function scrubbedEnv(extra: Record<string, string> = {}): Record<string, string> {
@@ -129,7 +138,7 @@ function scrubbedEnv(extra: Record<string, string> = {}): Record<string, string>
 }
 
 function buildWeb(env: Record<string, string>, outDir: string) {
-  return spawnSync("npx", ["--no-install", "vite", "build", "--outDir", outDir, "--emptyOutDir"], {
+  return spawnSync(process.execPath, [VITE_BIN, "build", "--outDir", outDir, "--emptyOutDir"], {
     cwd: MOBILE_ROOT,
     encoding: "utf8",
     env,
