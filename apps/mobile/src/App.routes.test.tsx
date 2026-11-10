@@ -201,7 +201,7 @@ describe("consumer route map", () => {
   it.each([false, true])("opens the public root with approved onboarding (native=%s)", platform => {
     native.platform = platform;
     renderAt("/");
-    expect(screen.getByRole("heading", { name: "Lost something?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Lost or found something?" })).toBeTruthy();
     expect(screen.queryByText("Report it. Match it. Return it.")).toBeNull();
     expect(screen.getByRole("link", { name: "Sign in" })).toBeTruthy();
     expect(router?.state.location.pathname).toBe("/");
@@ -215,7 +215,7 @@ describe("consumer route map", () => {
     native.platform = false;
     returningGuest();
     renderAt("/");
-    expect(screen.getByRole("heading", { name: "Lost something?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Lost or found something?" })).toBeTruthy();
     expect(router?.state.location.pathname).toBe("/");
   });
 
@@ -224,7 +224,7 @@ describe("consumer route map", () => {
     signedIn(); rememberAccount(auth.user!); auth.user = null;
     auth.booting = true;
     renderAt("/");
-    expect(screen.queryByRole("heading", { name: "Lost something?" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Lost or found something?" })).toBeNull();
     expect(screen.queryByText("Gateway:email")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Welcome back" })).toBeNull();
     expect(router?.state.location.pathname).toBe("/");
@@ -236,7 +236,7 @@ describe("consumer route map", () => {
     rememberAuthReturnTo("/saved");
     renderAt("/");
     expect(screen.getByRole("button", { name: /retry/i })).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Lost something?" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Lost or found something?" })).toBeNull();
     expect(peekAuthReturnTo()).toBe("/saved");
     fireEvent.click(screen.getByRole("button", { name: /retry/i }));
     expect(auth.retryBoot).toHaveBeenCalled();
@@ -250,7 +250,7 @@ describe("consumer route map", () => {
     rememberAccount(auth.user!);
     renderAt("/");
     expect(screen.getByText("Home screen")).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Lost something?" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Lost or found something?" })).toBeNull();
   });
 
   it.each(["/", "/onboarding"])("resumes an incomplete profile from %s before onboarding or pending links", route => {
@@ -310,7 +310,7 @@ describe("consumer route map", () => {
     signedIn(); rememberAccount(auth.user!); auth.user = null;
     renderAt("/");
     fireEvent.click(screen.getByRole("link", { name: "Back to Norfold" }));
-    expect(screen.getByRole("heading", { name: "Lost something?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Lost or found something?" })).toBeTruthy();
     expect(readRememberedAccounts()).toHaveLength(1);
     expect(localStorage.getItem(ONBOARDING_STORAGE_KEY)).toBeNull();
   });
@@ -443,7 +443,7 @@ describe("consumer route map", () => {
 
   it("renders first-run onboarding for a fresh guest", () => {
     renderAt("/onboarding");
-    expect(screen.getByRole("heading", { name: "Lost something?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Lost or found something?" })).toBeTruthy();
   });
 
   it.each([
@@ -576,7 +576,7 @@ describe("consumer route map", () => {
     // The explicit Home escape is a presentation choice, not a cancellation.
     await act(async () => { await router!.navigate("/", { state: { showPublic: true } }); });
     expect(router?.state.location.pathname).toBe("/");
-    expect(screen.getByRole("heading", { name: "Lost something?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Lost or found something?" })).toBeTruthy();
     expect(peekAuthReturnTo()).toBe("/profile/edit?from=search");
 
     // Signing in from the public Home resumes it, and the destination is used once.
@@ -599,7 +599,7 @@ describe("consumer route map", () => {
     await waitFor(() => expect(router?.state.location.pathname).toBe("/auth"));
 
     await act(async () => { await router!.navigate("/", { state: { showPublic: true } }); });
-    expect(screen.getByRole("heading", { name: "Lost something?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Lost or found something?" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Welcome back" })).toBeNull();
     expect(peekAuthReturnTo()).toBe("/profile/edit");
     expect(readRememberedAccounts()).toHaveLength(1);
@@ -629,7 +629,7 @@ describe("consumer route map", () => {
 
     // The public Home link keeps both, and signing in still honours the share.
     await act(async () => { await router!.navigate("/", { state: { showPublic: true } }); });
-    expect(screen.getByRole("heading", { name: "Lost something?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Lost or found something?" })).toBeTruthy();
     expect(peekAuthReturnTo()).toBe("/profile/edit");
     expect(sessionStorage.getItem("findback.pendingReportLink")).toContain(postId);
 
