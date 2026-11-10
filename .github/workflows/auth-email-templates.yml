@@ -1,0 +1,34 @@
+name: Apply auth email templates
+# Owner-dispatched only. The app signs up and resets passwords with six-digit
+# codes, so the hosted GoTrue templates are product surface; this copies the
+# canonical files in supabase/email-templates/ into the live project instead of
+# relying on a hand-paste that drifts from the repository.
+#
+# Reads the current config, writes only the four template fields, then re-reads
+# and compares. Safe to rerun; an unchanged project simply reports verified.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: norfold-auth-email-templates
+  cancel-in-progress: false
+jobs:
+  apply:
+    if: github.repository == 'sheikhti1205/Norfold' && github.ref == 'refs/heads/main' && github.actor == 'sheikhti1205' && github.triggering_actor == 'sheikhti1205'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: backend
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Prove the template contract before touching the project
+        run: node --test scripts/apply-auth-email-templates.test.mjs
+      - name: Apply and verify the hosted auth email templates
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node scripts/apply-auth-email-templates.mjs
