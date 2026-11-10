@@ -24,6 +24,12 @@ import {
   collectRelativeImports,
   resolveRelativeImport,
   findUndeclaredImports,
+  DEFAULT_EXPECTATIONS_PATH,
+  parseExpectations,
+  checkJwtContract,
+  summarizeJwtContract,
+  formatJwtReport,
+  evaluateJwtContract,
 } from "./check-edge-parity.mjs";
 
 const FIXTURE_SOURCE = {
@@ -365,5 +371,149 @@ describe("check-edge-parity import closure", () => {
       return { name, files: [...declared].map((path) => ({ path, sha256: sha256Hex(diskRead(path)) })) };
     });
     assert.deepEqual(findUndeclaredImports(entries, diskRead), []);
+  });
+});
+
+describe("check-edge-parity verify_jwt contract", () => {
+  const EVIDENCE = [{ class: "deploy", source: "fixture", detail: "fixture evidence" }];
+
+  /** Deployed results from a fixture manifest; omit a name to model a manifest that does not state verify_jwt. */
+  const deployedResults = (verifyJwtFor = {}) => {
+    const localHashes = computeLocalHashes(fixtureReader);
+    const manifestEntries = EDGE_FUNCTIONS.map((name) => ({
+      name,
+      sha256: sha256Hex(FIXTURE_SOURCE[name]),
+      version: "1",
+      ...(name in verifyJwtFor ? { verify_jwt: verifyJwtFor[name] } : { verify_jwt: false }),
+    }));
+    return checkParity({ localHashes, manifestEntries });
+  };
+
+  /** Expectations manifest; `unknownFor` names are recorded as deliberately unresolved. */
+  const expectationsFor = (verifyJwtFor = {}, unknownFor = []) => {
+    const functions = {};
+    for (const name of EDGE_FUNCTIONS) {
+      if (unknownFor.includes(name)) {
+        functions[name] = { verifyJwt: "unknown", status: "UNKNOWN", evidence: EVIDENCE };
+      } else {
+        functions[name] = {
+          verifyJwt: name in verifyJwtFor ? verifyJwtFor[name] : false,
+          status: "DERIVED",
+          evidence: EVIDENCE,
+        };
+      }
+    }
+    return parseExpectations(JSON.stringify({ functions }));
+  };
+
+  it("matches when every deployed verify_jwt equals its expectation", () => {
+    const rows = checkJwtContract(deployedResults(), expectationsFor());
+    assert.ok(rows.every((row) => row.verdict === "MATCH"), JSON.stringify(rows.filter((r) => r.verdict !== "MATCH")));
+    assert.equal(summarizeJwtContract(rows).exitCode, 0);
+    assert.match(formatJwtReport(rows), /11 MATCH, 0 MISMATCH, 0 UNKNOWN/);
+  });
+
+  it("fails on a mismatch and names the function, expected and deployed value", () => {
+    const rows = checkJwtContract(deployedResults(), expectationsFor({ "delete-account": true }));
+    const row = rows.find((r) => r.name === "delete-account");
+    assert.equal(row.verdict, "MISMATCH");
+    assert.equal(row.expected, true);
+    assert.equal(row.deployed, false);
+    const summary = summarizeJwtContract(rows);
+    assert.equal(summary.MISMATCH, 1);
+    assert.equal(summary.exitCode, 1);
+    const report = formatJwtReport(rows);
+    assert.match(report, /delete-account \| true \| false \| MISMATCH \| deployed verify_jwt=false, expected true/);
+    assert.ok(rows.filter((r) => r.name !== "delete-account").every((r) => r.verdict === "MATCH"));
+  });
+
+  it("fails when a deployed true disagrees with a false expectation", () => {
+    const rows = checkJwtContract(deployedResults({ "chat-media": true }), expectationsFor({ "chat-media": false }));
+    const row = rows.find((r) => r.name === "chat-media");
+    assert.equal(row.verdict, "MISMATCH");
+    assert.equal(row.expected, false);
+    assert.equal(row.deployed, true);
+    assert.match(formatJwtReport(rows), /chat-media \| false \| true \| MISMATCH/);
+    assert.equal(summarizeJwtContract(rows).exitCode, 1);
+  });
+
+  it("reports an unresolved expectation as UNKNOWN, never a pass", () => {
+    const rows = checkJwtContract(deployedResults(), expectationsFor({}, ["reply-comment"]));
+    const row = rows.find((r) => r.name === "reply-comment");
+    assert.equal(row.verdict, "UNKNOWN");
+    assert.match(row.reason, /unresolved/);
+    assert.equal(summarizeJwtContract(rows).UNKNOWN, 1);
+    assert.equal(summarizeJwtContract(rows).exitCode, 1);
+  });
+
+  it("reports a missing expectation as UNKNOWN", () => {
+    const expectations = expectationsFor();
+    delete expectations["trust-maintenance"];
+    const rows = checkJwtContract(deployedResults(), expectations);
+    const row = rows.find((r) => r.name === "trust-maintenance");
+    assert.equal(row.verdict, "UNKNOWN");
+    assert.match(row.reason, /no expectation recorded/);
+    assert.equal(summarizeJwtContract(rows).exitCode, 1);
+  });
+
+  it("reports a deployed manifest that does not state verify_jwt as UNKNOWN", () => {
+    const localHashes = computeLocalHashes(fixtureReader);
+    const manifestEntries = EDGE_FUNCTIONS.map((name) => ({
+      name,
+      sha256: sha256Hex(FIXTURE_SOURCE[name]),
+      version: "1",
+    }));
+    const results = checkParity({ localHashes, manifestEntries });
+    const rows = checkJwtContract(results, expectationsFor());
+    assert.ok(rows.every((row) => row.verdict === "UNKNOWN"));
+    assert.match(rows[0].reason, /does not state verify_jwt/);
+    assert.equal(summarizeJwtContract(rows).exitCode, 1);
+  });
+
+  it("does not evaluate the contract in default (non-strict) mode", () => {
+    const results = deployedResults({ "delete-account": false });
+    assert.equal(evaluateJwtContract({ strict: false, results, expectations: expectationsFor() }), null);
+    // Non-strict parity still reports what it always did: the deployed value, no verdict.
+    assert.equal(summarize(results).exitCode, 0);
+    assert.doesNotMatch(formatParityReport(results), /verify_jwt/);
+    const strict = evaluateJwtContract({ strict: true, results, expectations: expectationsFor({ "delete-account": true }) });
+    assert.equal(strict.summary.MISMATCH, 1);
+    assert.equal(strict.summary.exitCode, 1);
+  });
+
+  it("rejects malformed expectations fail-closed", () => {
+    const ok = (entry) => JSON.stringify({ functions: { "chat-media": entry } });
+    const evidence = [{ class: "caller", source: "fixture", detail: "fixture" }];
+    assert.throws(() => parseExpectations("not json"), /not valid JSON/);
+    assert.throws(() => parseExpectations(JSON.stringify({ nope: true })), /"functions" map/);
+    assert.throws(() => parseExpectations(JSON.stringify({ functions: {} })), /no functions/);
+    assert.throws(() => parseExpectations(ok({ verifyJwt: false, status: "GUESSED", evidence })), /invalid status/);
+    assert.throws(() => parseExpectations(ok({ verifyJwt: "unknown", status: "DERIVED", evidence })), /must set a boolean verifyJwt/);
+    assert.throws(() => parseExpectations(ok({ verifyJwt: true, status: "UNKNOWN", evidence })), /must set verifyJwt to "unknown"/);
+    assert.throws(() => parseExpectations(ok({ verifyJwt: false, status: "DERIVED", evidence: [] })), /records no evidence/);
+    assert.throws(
+      () => parseExpectations(ok({ verifyJwt: false, status: "DERIVED", evidence: [{ class: "vibes", source: "x", detail: "y" }] })),
+      /unknown class "vibes"/,
+    );
+    assert.throws(
+      () => parseExpectations(ok({ verifyJwt: false, status: "DERIVED", evidence: [{ class: "caller", source: "x" }] })),
+      /has no detail/,
+    );
+  });
+
+  it("the shipped expectations manifest covers every edge function with cited evidence", () => {
+    const manifest = parseExpectations(readFileSync(DEFAULT_EXPECTATIONS_PATH, "utf8"));
+    assert.deepEqual(Object.keys(manifest).sort(), [...EDGE_FUNCTIONS].sort());
+    for (const name of EDGE_FUNCTIONS) {
+      const entry = manifest[name];
+      assert.ok(entry.evidence.length > 0, `${name} has no evidence`);
+      // Every recorded expectation must be a decided boolean, not a placeholder.
+      assert.equal(typeof entry.verifyJwt, "boolean", `${name} is not DERIVED`);
+      assert.equal(entry.status, "DERIVED");
+      assert.ok(
+        entry.evidence.some((item) => item.class === "source-auth" || item.class === "caller"),
+        `${name} cites no source-auth or caller evidence`,
+      );
+    }
   });
 });

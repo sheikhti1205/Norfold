@@ -60,6 +60,16 @@
  *   - a relative import in the function's source that the entry does not list
  *     (the transitive `./` and `../_shared/` closure, read from the repo)
  *   - unknown function names
+ *
+ * `--strict` also checks the gateway JWT contract (docs/I-43): the deployed
+ * `verify_jwt` must equal the expectation recorded in
+ * scripts/edge-jwt-expectations.json (override with --expectations <path>).
+ *   MATCH    — deployed verify_jwt equals the derived expectation
+ *   MISMATCH — deployed verify_jwt disagrees (a failure in strict mode)
+ *   UNKNOWN  — no expectation for the function, the expectation is marked
+ *              `unknown`, or the deployed manifest does not state verify_jwt.
+ *              Never treated as a pass: an unproven contract is not a proven one.
+ * Default (non-strict) mode does not read the expectations file at all.
  * Duplicate function entries and duplicate file paths are rejected in both
  * modes, because either one silently discards evidence.
  *
@@ -73,6 +83,9 @@
  *   resolveRelativeImport(importerPath, specifier),
  *   findUndeclaredImports(entries, readFile),
  *   summarize(results), formatParityReport(results)
+ *   parseExpectations(input), checkJwtContract(results, expectations),
+ *   summarizeJwtContract(rows), formatJwtReport(rows),
+ *   evaluateJwtContract({ strict, results, expectations })
  * Importing this module has no side effects; the CLI runs on direct execution.
  */
 
@@ -394,21 +407,172 @@ export function formatParityReport(results) {
   return lines.join("\n");
 }
 
+/** Expectations manifest shipped beside this checker (not a supabase/config.toml). */
+export const DEFAULT_EXPECTATIONS_PATH = resolve(HERE, "edge-jwt-expectations.json");
+
+const EXPECTATION_STATUSES = ["DERIVED", "UNKNOWN"];
+const EVIDENCE_CLASSES = ["source-auth", "caller", "deploy", "live"];
+
+/**
+ * Parse + validate the JWT expectations manifest (object or JSON string).
+ * Returns { [name]: { verifyJwt, status, evidence } }.
+ *
+ * Fail-closed on every ambiguity: a DERIVED entry must carry a boolean, an
+ * UNKNOWN entry must say "unknown", and every entry must record at least one
+ * evidence item - an expectation with no evidence is an invented value.
+ */
+export function parseExpectations(input) {
+  let data = input;
+  if (typeof data === "string") {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      throw new Error("check-edge-parity: expectations manifest is not valid JSON");
+    }
+  }
+  const functions = data?.functions;
+  if (!functions || typeof functions !== "object" || Array.isArray(functions)) {
+    throw new Error("check-edge-parity: expectations manifest must be an object with a \"functions\" map");
+  }
+  const names = Object.keys(functions);
+  if (names.length === 0) {
+    throw new Error("check-edge-parity: expectations manifest has no functions");
+  }
+  const out = {};
+  for (const name of names) {
+    if (!name.trim()) throw new Error("check-edge-parity: expectations manifest has an empty function name");
+    const entry = functions[name];
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error(`check-edge-parity: expectation "${name}" is not an object`);
+    }
+    const { verifyJwt, status, evidence } = entry;
+    if (!EXPECTATION_STATUSES.includes(status)) {
+      throw new Error(`check-edge-parity: expectation "${name}" has invalid status (expected DERIVED or UNKNOWN)`);
+    }
+    if (status === "DERIVED" && typeof verifyJwt !== "boolean") {
+      throw new Error(`check-edge-parity: DERIVED expectation "${name}" must set a boolean verifyJwt`);
+    }
+    if (status === "UNKNOWN" && verifyJwt !== "unknown") {
+      throw new Error(`check-edge-parity: UNKNOWN expectation "${name}" must set verifyJwt to "unknown"`);
+    }
+    if (!Array.isArray(evidence) || evidence.length === 0) {
+      throw new Error(`check-edge-parity: expectation "${name}" records no evidence`);
+    }
+    evidence.forEach((item, index) => {
+      if (!item || typeof item !== "object") {
+        throw new Error(`check-edge-parity: expectation "${name}" evidence ${index} is not an object`);
+      }
+      for (const field of ["class", "source", "detail"]) {
+        if (typeof item[field] !== "string" || !item[field].trim()) {
+          throw new Error(`check-edge-parity: expectation "${name}" evidence ${index} has no ${field}`);
+        }
+      }
+      if (!EVIDENCE_CLASSES.includes(item.class)) {
+        throw new Error(
+          `check-edge-parity: expectation "${name}" evidence ${index} has unknown class "${item.class}" (expected ${EVIDENCE_CLASSES.join("/")})`,
+        );
+      }
+    });
+    out[name] = { verifyJwt, status, evidence };
+  }
+  return out;
+}
+
+/**
+ * Compare each function's deployed verify_jwt to its expectation. Pure.
+ * results: output of checkParity (carries the deployed verify_jwt).
+ * Returns [{ name, expected, deployed, verdict, reason? }] where verdict is
+ * MATCH, MISMATCH, or UNKNOWN (never a silent pass).
+ */
+export function checkJwtContract(results, expectations) {
+  return (results ?? []).map((row) => {
+    const expectation = expectations?.[row.name];
+    const deployed = row.verify_jwt;
+    if (!expectation) {
+      return { name: row.name, expected: undefined, deployed, verdict: "UNKNOWN", reason: "no expectation recorded" };
+    }
+    if (expectation.verifyJwt === "unknown") {
+      return { name: row.name, expected: "unknown", deployed, verdict: "UNKNOWN", reason: "expectation is unresolved" };
+    }
+    if (typeof deployed !== "boolean") {
+      return {
+        name: row.name,
+        expected: expectation.verifyJwt,
+        deployed,
+        verdict: "UNKNOWN",
+        reason: "deployed manifest does not state verify_jwt",
+      };
+    }
+    if (deployed === expectation.verifyJwt) {
+      return { name: row.name, expected: expectation.verifyJwt, deployed, verdict: "MATCH" };
+    }
+    return {
+      name: row.name,
+      expected: expectation.verifyJwt,
+      deployed,
+      verdict: "MISMATCH",
+      reason: `deployed verify_jwt=${deployed}, expected ${expectation.verifyJwt}`,
+    };
+  });
+}
+
+/** Count JWT contract verdicts; exitCode 0 only when every row MATCHes. */
+export function summarizeJwtContract(rows) {
+  const counts = { MATCH: 0, MISMATCH: 0, UNKNOWN: 0 };
+  for (const row of rows ?? []) {
+    if (counts[row.verdict] !== undefined) counts[row.verdict] += 1;
+  }
+  const exitCode = counts.MISMATCH === 0 && counts.UNKNOWN === 0 ? 0 : 1;
+  return { ...counts, exitCode };
+}
+
+function showValue(value) {
+  return value === undefined ? "-" : String(value);
+}
+
+/** Human-readable verify_jwt contract table. */
+export function formatJwtReport(rows) {
+  const lines = ["check-edge-parity: verify_jwt contract (name | expected | deployed | verdict) "];
+  for (const row of rows ?? []) {
+    const reason = row.reason ? ` | ${row.reason}` : "";
+    lines.push(`  ${row.name} | ${showValue(row.expected)} | ${showValue(row.deployed)} | ${row.verdict}${reason}`);
+  }
+  const summary = summarizeJwtContract(rows);
+  lines.push(`check-edge-parity: verify_jwt: ${summary.MATCH} MATCH, ${summary.MISMATCH} MISMATCH, ${summary.UNKNOWN} UNKNOWN`);
+  return lines.join("\n");
+}
+
+/**
+ * The strict-only seam: non-strict returns null so default mode keeps its
+ * existing behaviour and never reads the expectations file.
+ */
+export function evaluateJwtContract({ strict, results, expectations }) {
+  if (!strict) return null;
+  const rows = checkJwtContract(results, expectations);
+  return { rows, summary: summarizeJwtContract(rows) };
+}
+
 function printHelp() {
   console.log(`check-edge-parity: compare repo Edge Function sources to a deployed manifest
 
 usage:
   node scripts/check-edge-parity.mjs --manifest <manifest.json> [--root <repo-root>] [--strict]
+        [--expectations <path>]
 
 options:
-  --manifest <path>  deployed manifest JSON (required, read-only input)
-  --root <path>      repo root for supabase/functions/* (default: repo root)
-  --strict           reject manifests that cannot prove parity: legacy
-                     index-only entries, a missing <fn>/index.ts, an import
-                     the entry does not list, or an unknown function name
-  --help             print this help and exit 0
+  --manifest <path>       deployed manifest JSON (required, read-only input)
+  --root <path>           repo root for supabase/functions/* (default: repo root)
+  --strict                reject manifests that cannot prove parity: legacy
+                          index-only entries, a missing <fn>/index.ts, an import
+                          the entry does not list, or an unknown function name;
+                          also fail when a deployed verify_jwt disagrees with
+                          its recorded expectation or the contract is UNKNOWN
+  --expectations <path>   verify_jwt expectations manifest (default:
+                          scripts/edge-jwt-expectations.json; strict mode only)
+  --help                  print this help and exit 0
 
-exit codes: 0 all CURRENT, 1 any STALE/MISSING, 2 usage or manifest-rejection error`);
+exit codes: 0 all CURRENT and contract-proven, 1 any STALE/MISSING or
+verify_jwt MISMATCH/UNKNOWN, 2 usage or manifest-rejection error`);
 }
 
 function isMainModule() {
@@ -431,9 +595,18 @@ function main() {
   }
   const rootFlag = args.indexOf("--root");
   const root = rootFlag !== -1 ? (args[rootFlag + 1] ?? REPO_ROOT) : REPO_ROOT;
+  const expectationsFlag = args.indexOf("--expectations");
+  const expectationsPath = expectationsFlag !== -1
+    ? args[expectationsFlag + 1]
+    : DEFAULT_EXPECTATIONS_PATH;
+  if (strict && !expectationsPath) {
+    console.error("check-edge-parity: --expectations requires a path");
+    process.exit(2);
+  }
   const unknown = args.filter((arg, index) => {
     if (arg === "--manifest" || index === manifestFlag + 1) return false;
     if (arg === "--root" || index === rootFlag + 1) return false;
+    if (arg === "--expectations" || index === expectationsFlag + 1) return false;
     if (arg === "--strict") return false;
     return arg.startsWith("--");
   });
@@ -480,7 +653,35 @@ function main() {
   const localFiles = computeLocalFileHashes(readFile, manifestEntries);
   const results = checkParity({ localHashes, localFiles, manifestEntries });
   console.log(formatParityReport(results));
-  process.exit(summarize(results).exitCode);
+  let exitCode = summarize(results).exitCode;
+
+  if (strict) {
+    // Strict mode cannot prove the gateway contract without the expectations
+    // manifest, so an unreadable/invalid one is a usage error, not a pass.
+    let expectations;
+    try {
+      expectations = parseExpectations(readFileSync(resolve(expectationsPath), "utf8"));
+    } catch (error) {
+      console.error(`check-edge-parity: strict: ${error.message}`);
+      process.exit(2);
+    }
+    const stale = Object.keys(expectations).filter((name) => !EDGE_FUNCTIONS.includes(name));
+    if (stale.length > 0) {
+      console.error(`check-edge-parity: strict: warning: expectation(s) for unknown function(s): ${stale.join(", ")}`);
+    }
+    const contract = evaluateJwtContract({ strict, results, expectations });
+    console.log(formatJwtReport(contract.rows));
+    for (const row of contract.rows) {
+      if (row.verdict === "MISMATCH") {
+        console.error(`check-edge-parity: strict: "${row.name}" verify_jwt mismatch: deployed ${row.deployed}, expected ${row.expected}`);
+      } else if (row.verdict === "UNKNOWN") {
+        console.error(`check-edge-parity: strict: "${row.name}" verify_jwt UNKNOWN: ${row.reason}`);
+      }
+    }
+    if (contract.summary.exitCode !== 0) exitCode = 1;
+  }
+
+  process.exit(exitCode);
 }
 
 if (isMainModule()) {
