@@ -82,6 +82,25 @@ jobs:
           grep -q "$DSN_HOST" "$JS" || { echo "Sentry DSN host missing from built bundle"; exit 1; }
           grep -q "$SENTRY_RELEASE" "$JS" || { echo "Sentry release identity missing from built bundle"; exit 1; }
           echo "web bundle carries DSN host $DSN_HOST, release $SENTRY_RELEASE, dist web-production"
+      # `sourcemaps upload --release` only ASSOCIATES an upload with a release; it
+      # does not create one. Without this step no release row ever exists for a
+      # web deploy, so release health has no baseline and the upload points at a
+      # version Sentry does not know about. `releases info` first makes a re-run
+      # of the same sha idempotent instead of failing on a duplicate.
+      - name: Create the Sentry release before uploading sourcemaps
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          [ -n "${SENTRY_AUTH_TOKEN:-}" ] || { echo "SENTRY_AUTH_TOKEN secret is empty — add it in repo Settings → Secrets and variables → Actions → Secrets (owner action)"; exit 1; }
+          [ -n "${SENTRY_ORG:-}" ] || { echo "SENTRY_ORG variable is empty — add it in repo Settings → Variables"; exit 1; }
+          [ -n "${SENTRY_PROJECT:-}" ] || { echo "SENTRY_PROJECT variable is empty — add it in repo Settings → Variables"; exit 1; }
+          [ -n "${SENTRY_RELEASE:-}" ] || { echo "SENTRY_RELEASE was not computed — the Compute step above must run first"; exit 1; }
+          if npx -y @sentry/cli@3.8.0 releases info "$SENTRY_RELEASE" --org "$SENTRY_ORG" --project "$SENTRY_PROJECT" >/dev/null 2>&1; then
+            echo "release ${SENTRY_RELEASE} already exists"
+          else
+            npx -y @sentry/cli@3.8.0 releases new "$SENTRY_RELEASE" --org "$SENTRY_ORG" --project "$SENTRY_PROJECT"
+          fi
       - name: Upload sourcemaps to Sentry
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -95,6 +114,16 @@ jobs:
           [ "$MAPS" -gt 0 ] || { echo "no .map files in apps/mobile/dist — the build must run with SENTRY_UPLOAD_SOURCEMAPS=true"; exit 1; }
           echo "uploading $MAPS sourcemap(s) for release ${SENTRY_RELEASE} dist web-production (org/project from job env)"
           npx -y @sentry/cli@3.8.0 sourcemaps upload --org "$SENTRY_ORG" --project "$SENTRY_PROJECT" --release "$SENTRY_RELEASE" --dist web-production apps/mobile/dist
+      # Proves the gap cannot silently return: the release must be readable now,
+      # after the upload, not merely accepted as a request argument.
+      - name: Assert the Sentry release exists for this build
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx -y @sentry/cli@3.8.0 releases info "$SENTRY_RELEASE" --org "$SENTRY_ORG" --project "$SENTRY_PROJECT" >/dev/null \
+            || { echo "release ${SENTRY_RELEASE} is not readable in Sentry after the upload — sourcemaps are attached to a release that does not exist"; exit 1; }
+          echo "release ${SENTRY_RELEASE} exists in Sentry"
       - name: Strip sourcemaps from distributed assets
         run: |
           find apps/mobile/dist -name '*.map' -delete
@@ -104,6 +133,20 @@ jobs:
             echo "sourceMappingURL reference remains in shipped bundle — refusing to deploy"; exit 1;
           fi
           echo "sourcemap strip verified: no .map files, no sourceMappingURL references in dist"
+      # Deployed-identity manifest: `<site>/version.json` answers "which commit
+      # is production serving?" in one request. Written after the static build
+      # produced dist/, asserted against the SENTRY_RELEASE computed above, and
+      # in place before the deploy step uploads apps/mobile/dist.
+      - name: Write deployed identity manifest (dist/version.json)
+        run: |
+          set -euo pipefail
+          [ -n "${SENTRY_RELEASE:-}" ] || { echo "SENTRY_RELEASE was not computed — the Compute step above must run first"; exit 1; }
+          GIT_COMMIT=$(git rev-parse HEAD) node scripts/write-web-version.mjs --out apps/mobile/dist/version.json --release "$SENTRY_RELEASE" --dist web-production
+      - name: Assert version.json manifest matches the computed release
+        run: |
+          set -euo pipefail
+          [ -n "${SENTRY_RELEASE:-}" ] || { echo "SENTRY_RELEASE was not computed — the Compute step above must run first"; exit 1; }
+          node scripts/write-web-version.mjs --verify apps/mobile/dist/version.json --release "$SENTRY_RELEASE" --dist web-production
       - name: Verify baked configuration and App Links association
         run: node scripts/check-mobile-build-config.mjs --assets apps/mobile/dist/assets && node scripts/check-drive-web-config.mjs --assets apps/mobile/dist/assets && node scripts/check-klipy-config.mjs --assets apps/mobile/dist/assets && node scripts/check-web-association.mjs apps/mobile/dist
         env:
