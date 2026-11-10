@@ -1,6 +1,7 @@
 ---
 description: Read-only FindBack UI/UX reviewer that rejects generic, bulky, inaccessible, or physically implausible interfaces.
 mode: subagent
+model: openai/gpt-6.1-terra
 permissions:
   - action: edit
     resource: "*"

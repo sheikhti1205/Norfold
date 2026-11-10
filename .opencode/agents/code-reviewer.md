@@ -1,6 +1,7 @@
 ---
 description: Read-only adversarial reviewer for FindBack implementation waves, with security, regression, privacy, and test-quality checks.
 mode: subagent
+model: openai/gpt-6.1-terra
 permissions:
   - action: edit
     resource: "*"
