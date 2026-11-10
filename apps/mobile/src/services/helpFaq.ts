@@ -700,7 +700,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     ownWords: /^(?:password|passwords|reset|change|forgot|forgotten|recover|recovery|sign|signin|login)$/,
     examples: ["How do I reset my password?", "How do I change my password?"],
     answer:
-      "Open the sign-in screen and tap Forgot password, then enter your email. Norfold emails a reset link to that address; opening it lets you choose a new password and signs you in. The message is the same whether or not an account uses that email.",
+      "Open the sign-in screen and tap Forgot password, then enter your email. Norfold emails a six-digit code to that address; enter the code in the app, then choose a new password. The message is the same whether or not an account uses that email.",
   },
 ];
 

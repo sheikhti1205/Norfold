@@ -724,7 +724,7 @@ describe("askAiHelp", () => {
   });
 });
 
-describe("password recovery (Forgot password → reset email → verified deep link → new password)", () => {
+describe("password recovery (Forgot password → six-digit recovery code → new password; the link callback is a legacy fallback)", () => {
   const ORIGIN = "https://recovery-test.example";
 
   beforeEach(() => {

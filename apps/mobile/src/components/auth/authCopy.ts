@@ -15,8 +15,9 @@ export const SIGNIN_GENERIC_ERROR =
 export const PASSWORD_RESET_SENT =
   "If an account uses this email, check your inbox for a recovery code.";
 
-/** Recovery link states. */
-export const RECOVERY_INVALID_LINK = "This password-reset link is invalid or expired. Request a new one.";
+/** Recovery states. The wording stays neutral: the app asks for a code, and a
+ * link callback from an older email is only a silent fallback. */
+export const RECOVERY_INVALID_LINK = "This password-reset attempt is invalid or expired. Request a new one.";
 export const RECOVERY_SUCCESS = "Your password is updated. You're signed in.";
 export const RECOVERY_OTP_SUCCESS = "Your password is updated. You can now sign in with your new password.";
 
