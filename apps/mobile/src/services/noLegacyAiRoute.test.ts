@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -43,7 +43,17 @@ import { describe, expect, it } from "vitest";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const mobileSrcRoot = resolve(here, "..");
-const selfRel = relative(mobileSrcRoot, fileURLToPath(import.meta.url));
+
+/**
+ * Every project-relative path in this file is compared against forward-slash
+ * literals, but `path.relative` separates with `\` on Windows. Normalise once,
+ * here, at the boundary where enumerated paths enter the scan.
+ */
+function toPosix(p: string): string {
+  return p.split(sep).join("/");
+}
+
+const selfRel = toPosix(relative(mobileSrcRoot, fileURLToPath(import.meta.url)));
 
 type SourceFile = {
   abs: string;
@@ -236,7 +246,7 @@ const TEST_ONLY_TOKENS: Array<{ id: string; re: RegExp }> = [
 
 const files: SourceFile[] = walk(mobileSrcRoot)
   .map((abs) => {
-    const rel = relative(mobileSrcRoot, abs);
+    const rel = toPosix(relative(mobileSrcRoot, abs));
     const raw = readFileSync(abs, "utf8");
     return { abs, rel, isTest: TEST_RE.test(rel), raw, code: stripComments(raw) };
   })
@@ -283,10 +293,12 @@ function buildImportGraph(entryAbs: string): { nodes: string[]; unresolved: stri
       ];
       const hit = candidates.find((c) => existsSync(c) && statSync(c).isFile());
       if (hit) queue.push(hit);
-      else unresolved.push(`${relative(mobileSrcRoot, file)} -> ${spec}`);
+      else unresolved.push(`${toPosix(relative(mobileSrcRoot, file))} -> ${spec}`);
     }
   }
-  return { nodes: [...seen].map((p) => relative(mobileSrcRoot, p)).sort(), unresolved };
+  // Same posix normalisation: these are matched against `files[].rel`, and a
+  // backslash list would silently empty `graphFiles` (a vacuous graph check).
+  return { nodes: [...seen].map((p) => toPosix(relative(mobileSrcRoot, p))).sort(), unresolved };
 }
 
 const graph = buildImportGraph(resolve(mobileSrcRoot, "main.tsx"));
