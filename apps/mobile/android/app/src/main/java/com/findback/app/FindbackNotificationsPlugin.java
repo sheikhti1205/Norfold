@@ -10,6 +10,7 @@ import com.getcapacitor.JSObject;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.findback.app.push.ChatPushData;
 import com.findback.app.push.ChatPushState;
+import com.google.firebase.FirebaseOptions;
 
 /**
  * Opens the OS-level Norfold notification settings so a user who denied the
@@ -18,6 +19,34 @@ import com.findback.app.push.ChatPushState;
  */
 @CapacitorPlugin(name = "FindbackNotifications")
 public class FindbackNotificationsPlugin extends Plugin {
+    /**
+     * Whether this build carries a usable Firebase Android client config.
+     *
+     * A build without google-services.json never initialises FirebaseApp, and
+     * every FirebaseMessaging call then throws IllegalStateException. Capacitor
+     * rethrows plugin exceptions on its handler thread (Bridge.java:856), so the
+     * process dies before any JS catch can run. JS asks this first and never
+     * calls register()/unregister() when the answer is false.
+     *
+     * Reads the generated string resources rather than FirebaseApp.getApps():
+     * the app list is populated by an async startup provider, so it can still be
+     * empty during the first seconds of a correctly configured launch.
+     */
+    @PluginMethod
+    public void isPushConfigured(PluginCall call) {
+        JSObject result = new JSObject();
+        boolean configured;
+        try {
+            configured = FirebaseOptions.fromResource(getContext()) != null;
+        } catch (Exception error) {
+            // Fail closed: an unreadable config would crash on the first
+            // FirebaseMessaging call, and a crash is worse than inert push.
+            configured = false;
+        }
+        result.put("configured", configured);
+        call.resolve(result);
+    }
+
     @PluginMethod
     public void setChatAccount(PluginCall call) {
         String account = call.getString("accountId");
