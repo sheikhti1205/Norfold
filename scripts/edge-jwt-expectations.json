@@ -1,0 +1,259 @@
+{
+  "schemaVersion": 1,
+  "description": "Intended gateway verify_jwt contract for every Norfold Edge Function, derived from primary evidence in this repo (function source, its callers, and the deploy command that ships it). Read by scripts/check-edge-parity.mjs --strict; a deployed verify_jwt that disagrees is a failure there.",
+  "whyNotSupabaseConfigToml": "A supabase/config.toml would imply CLI-managed deploy configuration; this repo deploys through .github/workflows/backend-deploy.yml and scripts/deploy-required-edge-functions.mjs, so an expectations manifest beside the checker carries the contract without claiming a config source of truth the deploy path does not read.",
+  "evidenceClasses": {
+    "source-auth": "the function's own index.ts/handler: which auth mode its wrapper enforces, and its explicit deploy note",
+    "caller": "src/apps code, CI workflow, pg_cron/pg_net SQL, or docs that invoke the function and show which credentials it sends",
+    "deploy": "the command line (or deploy-set entry) that publishes the function, including --no-verify-jwt",
+    "live": "read-only observation of the deployed function's verify_jwt via the Supabase management API"
+  },
+  "functions": {
+    "chat-media": {
+      "verifyJwt": false,
+      "status": "DERIVED",
+      "evidence": [
+        {
+          "class": "source-auth",
+          "source": "supabase/functions/chat-media/index.ts",
+          "detail": "\"Deploy with --no-verify-jwt; the wrapper verifies the caller's user JWT.\" The handler uses withSupabase({ auth: \"user\" }) and rejects a missing ctx.userClaims.id with 401."
+        },
+        {
+          "class": "caller",
+          "source": "apps/mobile/src/services/messaging/supabaseSession.ts",
+          "detail": "calls fetchSupabaseFunction(\"chat-media\", ...), which sends `Authorization: Bearer <user jwt>` plus the anon apikey; the user JWT is checked by the function body, not the gateway."
+        },
+        {
+          "class": "deploy",
+          "source": ".github/workflows/backend-deploy.yml",
+          "detail": "supabase functions deploy chat-media --no-verify-jwt --yes"
+        }
+      ]
+    },
+    "chat-wake": {
+      "verifyJwt": false,
+      "status": "DERIVED",
+      "evidence": [
+        {
+          "class": "source-auth",
+          "source": "supabase/functions/chat-wake/index.ts",
+          "detail": "\"Deploy with --no-verify-jwt; the wrapper verifies the caller's user JWT.\""
+        },
+        {
+          "class": "source-auth",
+          "source": "supabase/functions/chat-wake/handler.ts",
+          "detail": "withSupabase({ auth: \"user\" }) and an explicit authority note: \"the caller must present their own session JWT (deployed with `--no-verify-jwt`; the wrapper verifies it ...)\"."
+        },
+        {
+          "class": "caller",
+          "source": "apps/mobile/src/services/messaging/chatWake.ts",
+          "detail": "fetchSupabaseFunction(\"chat-wake\", accountId, ...) sends the caller's Bearer session token; the wrapper validates it."
+        },
+        {
+          "class": "deploy",
+          "source": ".github/workflows/backend-deploy.yml",
+          "detail": "supabase functions deploy chat-wake --no-verify-jwt --yes"
+        }
+      ]
+    },
+    "cleanup-chat-media": {
+      "verifyJwt": false,
+      "status": "DERIVED",
+      "evidence": [
+        {
+          "class": "source-auth",
+          "source": "supabase/functions/cleanup-chat-media/index.ts",
+          "detail": "\"Deploy with --no-verify-jwt: the canonical wrapper verifies the server secret API key. No anonymous/public/user route is permitted to sweep private media.\" Handler uses withSupabase({ auth: \"secret\" })."
+        },
+        {
+          "class": "caller",
+          "source": ".github/workflows/chat-media-maintenance.yml",
+          "detail": "curl POST /functions/v1/cleanup-chat-media with only `-H \"apikey: ${SUPABASE_SECRET_KEY}\"` (no Authorization header)."
+        },
+        {
+          "class": "caller",
+          "source": "supabase/migrations/20261028060000_chat_media_worker_schedule.sql",
+          "detail": "pg_cron net.http_post to /functions/v1/cleanup-chat-media with headers jsonb_build_object('apikey', <vault chat_media_worker_secret>) - no user JWT exists in that path."
+        },
+        {
+          "class": "deploy",
+          "source": ".github/workflows/backend-deploy.yml",
+          "detail": "supabase functions deploy cleanup-chat-media --no-verify-jwt --yes"
+        }
+      ]
+    },
+    "cleanup-comment-media": {
+      "verifyJwt": false,
+      "status": "DERIVED",
+      "evidence": [
+        {
+          "class": "source-auth",
+          "source": "supabase/functions/cleanup-comment-media/index.ts",
+          "detail": "\"Production authorization: canonical server wrapper, secret API key in `apikey`. No cron-secret/bearer fallback. Ordinary callers never reach queue/Storage.\" Handler uses withSupabase({ auth: \"secret\" })."
+        },
+        {
+          "class": "caller",
+          "source": ".github/workflows/cleanup-comment-media.yml",
+          "detail": "curl POST /functions/v1/cleanup-comment-media with only `-H \"apikey: ${SUPABASE_SECRET_KEY}\"`."
+        },
+        {
+          "class": "deploy",
+          "source": ".github/workflows/backend-deploy.yml",
+          "detail": "supabase functions deploy cleanup-comment-media --no-verify-jwt --yes"
+        }
+      ]
+    },
+    "cleanup-report-media": {
+      "verifyJwt": false,
+      "status": "DERIVED",
+      "evidence": [
+        {
+          "class": "source-auth",
+          "source": "supabase/functions/cleanup-report-media/index.ts",
+          "detail": "\"Production authorization: the canonical server wrapper verifies a secret API key in `apikey` ... Anonymous and ordinary user credentials cannot sweep.\" Handler uses withSupabase({ auth: \"secret\" })."
+        },
+        {
+          "class": "caller",
+          "source": ".github/workflows/cleanup-report-media.yml",
+          "detail": "curl POST /functions/v1/cleanup-report-media with only `-H \"apikey: ${SUPABASE_SECRET_KEY}\"`."
+        },
+        {
+          "class": "deploy",
+          "source": ".github/workflows/backend-deploy.yml",
+          "detail": "supabase functions deploy cleanup-report-media --no-verify-jwt --yes"
+        }
+      ]
+    },
+    "copy-chat-evidence": {
+      "verifyJwt": false,
+      "status": "DERIVED",
+      "evidence": [
+        {
+          "class": "source-auth",
+          "source": "supabase/functions/copy-chat-evidence/index.ts",
+          "detail": "\"Deploy with --no-verify-jwt: the canonical wrapper verifies the server secret API key. No anonymous/public/user route is permitted to claim evidence work.\" Handler uses withSupabase({ auth: \"secret\" })."
+        },
+        {
+          "class": "caller",
+          "source": ".github/workflows/chat-media-maintenance.yml",
+          "detail": "curl POST /functions/v1/copy-chat-evidence with only the secret `apikey` header."
+        },
+        {
+          "class": "caller",
+          "source": "supabase/migrations/20261028060000_chat_media_worker_schedule.sql",
+          "detail": "pg_cron net.http_post to /functions/v1/copy-chat-evidence with only the vault-held apikey header."
+        },
+        {
+          "class": "deploy",
+          "source": ".github/workflows/backend-deploy.yml",
+          "detail": "supabase functions deploy copy-chat-evidence --no-verify-jwt --yes"
+        }
+      ]
+    },
+    "delete-account": {
+      "verifyJwt": true,
+      "status": "DERIVED",
+      "evidence": [
+        {
+          "class": "source-auth",
+          "source": "supabase/functions/delete-account/index.ts",
+          "detail": "\"The caller presents their own session JWT (`Authorization: Bearer <jwt>`); the function resolves the uid from that JWT via `auth.getUser()` and deletes ONLY that uid.\""
+        },
+        {
+          "class": "caller",
+          "source": "apps/mobile/src/services/auth.ts",
+          "detail": "client.functions.invoke(\"delete-account\", { method: \"POST\", headers: { Authorization: `Bearer ${session.access_token}` } }) - a real end-user JWT, not an anon key."
+        },
+        {
+          "class": "deploy",
+          "source": "scripts/deploy-required-edge-functions.mjs",
+          "detail": "REQUIRED_FUNCTIONS entry { name: \"delete-account\", verifyJwt: true } - deployArgs() omits --no-verify-jwt, so the gateway verifies the JWT and the function verifies it again via getUser(). The deploy-set comment records \"JWT verify ON (no flag; gateway-enforced AND ...)\"."
+        }
+      ]
+    },
+    "device-enroll": {
+      "verifyJwt": false,
+      "status": "DERIVED",
+      "evidence": [
+        {
+          "class": "source-auth",
+          "source": "supabase/functions/device-enroll/handler.ts",
+          "detail": "withSupabase({ auth: \"user\" }); rejects when ctx.userClaims?.id or ctx.jwtClaims?.session_id is absent (401), so the wrapper - not the gateway - owns identity."
+        },
+        {
+          "class": "caller",
+          "source": "apps/mobile/src/services/messaging/supabaseSession.ts",
+          "detail": "fetchSupabaseFunction(\"device-enroll\", scope.accountId, ...) sends the caller's Bearer session token for the wrapper to verify."
+        },
+        {
+          "class": "deploy",
+          "source": ".github/workflows/backend-deploy.yml",
+          "detail": "supabase functions deploy device-enroll --no-verify-jwt --yes"
+        }
+      ]
+    },
+    "push-dispatch": {
+      "verifyJwt": false,
+      "status": "DERIVED",
+      "evidence": [
+        {
+          "class": "source-auth",
+          "source": "supabase/functions/push-dispatch/index.ts",
+          "detail": "\"Invocation is server-to-server only: callers present `x-findback-dispatch-secret` matching the `PUSH_DISPATCH_SECRET` function secret.\" The fetch handler gates on isAuthorized(req.headers.get(\"x-findback-dispatch-secret\"), secret)."
+        },
+        {
+          "class": "caller",
+          "source": ".github/workflows/push-dispatch.yml",
+          "detail": "curl POST /functions/v1/push-dispatch with `-H \"x-findback-dispatch-secret: ${PUSH_DISPATCH_SECRET}\"` and no Authorization header."
+        },
+        {
+          "class": "deploy",
+          "source": ".github/workflows/backend-deploy.yml",
+          "detail": "supabase functions deploy push-dispatch --no-verify-jwt --yes"
+        }
+      ]
+    },
+    "reply-comment": {
+      "verifyJwt": false,
+      "status": "DERIVED",
+      "evidence": [
+        {
+          "class": "source-auth",
+          "source": "supabase/functions/reply-comment/index.ts",
+          "detail": "\"Deploy with `--no-verify-jwt`; the token is the sole credential.\" The single-use, hashed reply token is the authorization; no user session is involved."
+        },
+        {
+          "class": "caller",
+          "source": "docs/runbooks/SHARING_AND_PUSH_INFRASTRUCTURE.md",
+          "detail": "documents reply-comment as the device-facing function called with `{ token, body }` from the notification shade, with no session."
+        },
+        {
+          "class": "deploy",
+          "source": ".github/workflows/backend-deploy.yml",
+          "detail": "supabase functions deploy reply-comment --no-verify-jwt --yes"
+        }
+      ]
+    },
+    "trust-maintenance": {
+      "verifyJwt": false,
+      "status": "DERIVED",
+      "evidence": [
+        {
+          "class": "source-auth",
+          "source": "supabase/functions/trust-maintenance/index.ts",
+          "detail": "\"--no-verify-jwt: the pinned canonical SDK verifies the internal secret key. No consumer route is allowed to expire appeals or erase report evidence.\" Handler uses withSupabase({ auth: \"secret\" })."
+        },
+        {
+          "class": "caller",
+          "source": ".github/workflows/chat-media-maintenance.yml",
+          "detail": "curl POST /functions/v1/trust-maintenance with only the secret `apikey` header."
+        },
+        {
+          "class": "deploy",
+          "source": ".github/workflows/backend-deploy.yml",
+          "detail": "supabase functions deploy trust-maintenance --no-verify-jwt --yes"
+        }
+      ]
+    }
+  }
+}
