@@ -417,9 +417,6 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
   background:var(--fb-error);color:var(--fb-on-error);
   font-size:calc(var(--fs) * .6875);font-weight:700;line-height:1.2;
 }
-.rail-link .badge,.pill-link .badge{position:absolute;top:2px;right:2px;z-index:2}
-.rail[data-pinned="true"] .rail-link .badge{position:static;margin-inline-start:auto;top:auto;right:auto}
-.rail-link[aria-current="page"] .badge{box-shadow:0 0 0 2px var(--fb-primary-container)}
 .bell-wrap{position:relative;display:inline-flex}
 .bell-wrap .badge{position:absolute;top:-3px;right:-5px}
 
@@ -1193,10 +1190,11 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
                   </a>
                 </li>
                 <li>
+                  <!-- Destination rows carry no unread counts; only the notification bell has a badge.
+                       The prototype must not imply per-destination counts. -->
                   <a class="rail-link" href="#/chats" data-nav="chats" aria-label="Chats">
                     <svg class="icon" aria-hidden="true"><use href="#i-chat"></use></svg>
                     <span class="rail-label">Chats</span>
-                    <span class="badge" data-badge="chats" hidden>9</span>
                   </a>
                 </li>
                 <li>
@@ -1577,7 +1575,6 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
                 <a class="pill-link" href="#/chats" data-nav="chats" aria-label="Chats">
                   <svg class="icon" aria-hidden="true"><use href="#i-chat"></use></svg>
                   <span class="pill-label">Chats</span>
-                  <span class="badge" data-badge="chats" hidden>9</span>
                 </a>
                 <a class="pill-link" href="#/settings" data-nav="settings" aria-label="Settings">
                   <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
@@ -1594,12 +1591,275 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
           <div class="tip" id="tip" role="tooltip" hidden></div>
           <div class="scrim" id="scrim" hidden></div>
           <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-<!--__SHEET__-->
+          <div class="sheet" id="createSheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
+            <div class="sheet-head"><h2 id="sheetTitle">Create report</h2><button type="button" class="iconbtn" data-action="close-sheet" aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button></div>
+            <form id="createForm" class="sheet-body">
+              <div class="field"><label for="reportTitle">What was lost or found?</label><input id="reportTitle" required></div>
+              <div class="field"><label for="reportType">Type</label><select id="reportType"><option>Lost</option><option>Found</option></select></div>
+              <div class="field"><label for="reportDescription">Description</label><textarea id="reportDescription"></textarea></div>
+              <button type="submit" class="btn-primary">Post report</button>
+            </form>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </main>
-<!--__SCRIPT__-->
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const all = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+  const frame = $('frame'), app = $('app'), rail = $('rail'), flyout = $('flyout');
+  const tip = $('tip'), scrim = $('scrim'), sheet = $('createSheet'), toast = $('toast');
+  const filterHome = $('chatFilters').parentNode, filterNext = $('chatFilters').nextSibling;
+  const defaults = {viewport:'1280', theme:'light', text:'100', motion:'off', panel:'collapsed', surface:'home', unread:'9'};
+  const state = {...defaults};
+  let openTimer, closeTimer, toastTimer, activeThread = 0, searchTab = 'reports';
+  let homeFilter = 'all', myFilter = 'all', chatFilter = 'all', settingsSection = 'appearance';
+  const reports = [
+    {title:'Black umbrella with a wooden hook handle', type:'Lost', place:'Riverside Walk', icon:'umbrella'},
+    {title:'Set of keys on a blue ring', type:'Found', place:'Market Square', icon:'key'},
+    {title:'Reading glasses in a brown case', type:'Lost', place:'Library', icon:'glasses'},
+    {title:'Notebook with a green cover', type:'Found', place:'Station', icon:'book'}
+  ];
+  const people = ['Maya Okafor', 'Alex Chen', 'Sam Rivera', 'Riley Ellis'];
+  const conversations = [
+    {name:'Maya Okafor', subject:'About the black umbrella', filter:'unread', messages:['Hi, I think I saw your umbrella near the boathouse.']},
+    {name:'Alex Chen', subject:'About the set of keys', filter:'requests', messages:['Are these the keys you found?']},
+    {name:'Sam Rivera', subject:'About the notebook', filter:'archived', messages:['Thank you for your help.']}
+  ];
+  const sections = {appearance:'Appearance', account:'Account', notifications:'Notifications', privacy:'Privacy', help:'Help'};
+  const destinations = {
+    home:[['Home','home'],['Search','search'],['Notifications','notifications']],
+    my:[['My Reports','mine'],['Empty state','empty'],['Create report','create']],
+    chats:[['Chats','chats']],
+    settings:[['Appearance','settings'],['Account','settings'],['Help','settings']]
+  };
+  const esc = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const icon = name => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
+  function notify(message) {
+    clearTimeout(toastTimer);
+    toast.innerHTML = `<span class="proto">PROTOTYPE</span><span>${esc(message)}</span>`;
+    toast.hidden = false;
+    toast.classList.add('is-open');
+    toastTimer = setTimeout(hideToast, 3000);
+  }
+  function hideToast() { clearTimeout(toastTimer); toast.classList.remove('is-open'); toast.hidden = true; }
+  function closeFlyout() {
+    clearTimeout(openTimer); clearTimeout(closeTimer);
+    flyout.classList.remove('is-open'); flyout.hidden = true;
+    if (state.panel === 'flyout') { state.panel = 'collapsed'; syncControls(); app.dataset.panel = state.panel; }
+  }
+  function hideTip() { tip.classList.remove('is-open'); tip.hidden = true; }
+  function closeOverlay() {
+    sheet.classList.remove('is-open'); sheet.hidden = true;
+    scrim.classList.remove('is-open'); scrim.hidden = true;
+    filterHome.insertBefore($('chatFilters'), filterNext);
+    $('chatFilters').style.position = ''; $('chatFilters').style.zIndex = '';
+    $('chatFilters').style.top = ''; $('chatFilters').style.left = ''; $('chatFilters').style.background = '';
+    $('chatFilterBtn').setAttribute('aria-expanded', 'false');
+  }
+  function openSheet() {
+    closeFlyout(); closeOverlay(); scrim.hidden = false; sheet.hidden = false;
+    scrim.classList.add('is-open'); sheet.classList.add('is-open'); $('reportTitle').focus();
+  }
+  function syncControls() {
+    all('button[data-set]').forEach(button => button.setAttribute('aria-pressed', String(state[button.dataset.set] === button.dataset.value)));
+  }
+  function fit() {
+    const width = Number(state.viewport), canvas = $('stageCanvas');
+    const height = width < 600 ? 800 : 760;
+    frame.style.width = width + 'px'; frame.style.height = height + 'px';
+    frame.dataset.viewport = state.viewport;
+    app.style.flexDirection = width < 600 ? 'column' : 'row';
+    const scale = Math.min(1, canvas.clientWidth / width, canvas.clientHeight / height);
+    $('fit').style.width = width * scale + 'px'; $('fit').style.height = height * scale + 'px';
+    frame.style.transformOrigin = 'top left'; frame.style.transform = `scale(${scale})`;
+    $('scaleChip').textContent = `fit ${Math.round(scale * 100)}%`;
+    $('caption').textContent = `${width} px · ${width < 600 ? 'phone' : width < 840 ? 'tablet' : 'desktop'} · ${state.panel}`;
+    $('stageNote').textContent = `${state.theme} · ${state.text}% text · ${width}px`;
+    const contentWidth = width - (width < 600 ? 0 : state.panel === 'pinned' ? 224 : width >= 1200 ? 80 : 72);
+    $('chatSplit').classList.toggle('split', contentWidth >= 720);
+    $('settingsSplit').classList.toggle('split', contentWidth >= 720);
+  }
+  function navForSurface(surface) {
+    return surface === 'mine' || surface === 'empty' ? 'my' : surface === 'chats' || surface === 'settings' ? surface : 'home';
+  }
+  function renderNav() {
+    const active = navForSurface(state.surface);
+    all('[data-nav]').forEach(link => {
+      const selected = link.dataset.nav === active;
+      if (selected) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
+      if (link.classList.contains('pill-link')) {
+        const old = link.querySelector('.pill-active');
+        if (selected && !old) { const marker = document.createElement('span'); marker.className = 'pill-active'; marker.setAttribute('aria-hidden','true'); link.prepend(marker); }
+        if (!selected && old) old.remove();
+      }
+    });
+    $('railTitle').textContent = active === 'my' ? 'My Reports' : active[0].toUpperCase() + active.slice(1);
+    $('railSection').innerHTML = navRows(active);
+  }
+  function navRows(key) {
+    return (destinations[key] || destinations.home).map(([label, target]) => `<button type="button" class="nav-row" data-destination="${target}" data-section="${esc(label.toLowerCase())}"><span class="nav-row-label">${esc(label)}</span></button>`).join('');
+  }
+  function setSurface(surface) {
+    if (!$('surface-' + surface)) return;
+    closeFlyout(); hideTip(); closeOverlay(); state.surface = surface;
+    all('section[data-surface]').forEach(section => { section.hidden = section.dataset.surface !== surface; });
+    renderNav(); syncControls();
+  }
+  function setState(key, value) {
+    if (key === 'surface') { setSurface(value); return; }
+    if (key === 'panel') closeFlyout();
+    state[key] = value;
+    if (key === 'theme') { frame.classList.remove('theme-light','theme-dark','theme-amoled'); frame.classList.add('theme-' + value); app.dataset.theme = value; }
+    if (key === 'text') frame.classList.toggle('text-200', value === '200');
+    if (key === 'motion') { frame.classList.toggle('reduce', value === 'off'); frame.style.transition = value === 'off' ? 'none' : ''; }
+    if (key === 'panel') {
+      app.dataset.panel = value; rail.dataset.pinned = String(value === 'pinned');
+      $('railToggle').setAttribute('aria-expanded', String(value === 'pinned'));
+      const label = value === 'pinned' ? 'Collapse navigation' : 'Expand navigation';
+      $('railToggle').setAttribute('aria-label', label); $('railToggle').title = label;
+      $('railToggle').querySelector('use').setAttribute('href', value === 'pinned' ? '#i-panel-close' : '#i-panel-open');
+    }
+    if (key === 'unread') all('[data-badge="bell"]').forEach(badge => { badge.hidden = value === '0'; badge.textContent = Number(value) > 99 ? '99+' : value; });
+    syncControls(); fit();
+    if (key === 'panel' && value === 'flyout') showFlyout(rail.querySelector(`[data-nav="${navForSurface(state.surface)}"]`));
+  }
+  function showFlyout(link) {
+    if (!link || state.panel === 'pinned' || Number(state.viewport) < 600) return;
+    clearTimeout(openTimer); clearTimeout(closeTimer);
+    const box = link.getBoundingClientRect(), root = app.getBoundingClientRect(), scale = root.width / app.offsetWidth;
+    flyout.innerHTML = `<div class="flyout-title"><strong>${esc(link.getAttribute('aria-label'))}</strong></div>${navRows(link.dataset.nav)}`;
+    flyout.style.left = ((rail.getBoundingClientRect().right - root.left) / scale) + 'px';
+    flyout.style.top = Math.max(8, (box.top - root.top) / scale) + 'px';
+    flyout.hidden = false; flyout.classList.add('is-open');
+    state.panel = 'flyout'; app.dataset.panel = 'flyout'; syncControls();
+  }
+  function showTip(link) {
+    if (state.panel === 'pinned') return;
+    const box = link.getBoundingClientRect(), root = app.getBoundingClientRect(), scale = root.width / app.offsetWidth;
+    tip.textContent = link.getAttribute('aria-label'); tip.style.left = ((box.right - root.left) / scale + 8) + 'px';
+    tip.style.top = ((box.top - root.top) / scale) + 'px'; tip.hidden = false; tip.classList.add('is-open');
+  }
+  function row(report) {
+    return `<button type="button" class="row" data-action="open-post">${icon(report.icon)}<span class="row-copy"><span class="row-title">${esc(report.title)}</span><span class="row-meta">${esc(report.type)} · ${esc(report.place)}</span></span></button>`;
+  }
+  function renderReports() {
+    const filtered = reports.filter(r => homeFilter === 'all' || homeFilter === 'nearby' || homeFilter === 'recent' || r.type.toLowerCase() === homeFilter);
+    $('homeFeed').innerHTML = filtered.map(row).join(''); $('homeEmpty').hidden = filtered.length > 0;
+    $('offlineFeed').innerHTML = reports.slice(0,4).map(row).join('');
+    const mine = myFilter === 'all' || myFilter === 'open' ? reports.slice(0,2) : [];
+    $('myList').innerHTML = mine.map(row).join(''); $('myEmpty').hidden = mine.length > 0;
+    renderSearch();
+  }
+  function renderSearch() {
+    const q = $('searchInput').value.trim().toLowerCase();
+    const matches = reports.filter(r => `${r.title} ${r.type} ${r.place}`.toLowerCase().includes(q));
+    const matchingPeople = people.filter(name => name.toLowerCase().includes(q));
+    $('searchReports').innerHTML = matches.map(row).join('');
+    $('searchPeople').innerHTML = matchingPeople.map(name => `<button type="button" class="person" data-action="person"><span class="avatar">${esc(name.split(' ').map(x => x[0]).join(''))}</span><span class="person-name">${esc(name)}</span></button>`).join('');
+    $('searchReportCount').textContent = matches.length; $('searchPeopleCount').textContent = matchingPeople.length;
+    $('searchClear').hidden = !q;
+    $('searchReportsPane').hidden = searchTab !== 'reports'; $('searchPeoplePane').hidden = searchTab !== 'people';
+    all('[data-search-tab]').forEach(button => button.setAttribute('aria-selected', String(button.dataset.searchTab === searchTab)));
+    $('searchNoResults').hidden = (searchTab === 'reports' ? matches : matchingPeople).length > 0;
+    $('searchNoResults').textContent = 'No results found.';
+  }
+  function renderChats() {
+    const visible = conversations.map((chat, index) => ({...chat, index})).filter(chat => chatFilter === 'all' || chat.filter === chatFilter);
+    $('chatList').innerHTML = visible.map(chat => `<li><button type="button" class="chat-item" data-thread="${chat.index}"><span class="avatar">${esc(chat.name.split(' ').map(x => x[0]).join(''))}</span><span class="chat-item-copy"><span class="chat-item-name">${esc(chat.name)}</span><span class="chat-item-snip">${esc(chat.subject)}</span></span></button></li>`).join('');
+    $('chatListEmpty').hidden = visible.length > 0; $('chatListEmpty').textContent = 'No conversations in this view.';
+  }
+  function selectThread(index) {
+    activeThread = index; const chat = conversations[index];
+    $('threadEmpty').hidden = true; $('thread').hidden = false; $('chatSplit').classList.add('show-thread');
+    $('threadName').textContent = chat.name; $('threadSub').textContent = chat.subject;
+    $('threadAvatar').textContent = chat.name.split(' ').map(x => x[0]).join('');
+    $('composerInput').placeholder = `Message ${chat.name.split(' ')[0]}`;
+    $('messages').innerHTML = chat.messages.map(message => `<div class="bubble">${esc(message)}</div>`).join('');
+  }
+  function renderSettings() {
+    const query = $('settingsSearch').value.toLowerCase();
+    const matches = Object.entries(sections).filter(([, label]) => label.toLowerCase().includes(query));
+    $('settingsNav').innerHTML = matches.map(([key,label]) => `<button type="button" class="settings-link" data-settings="${key}" ${key === settingsSection ? 'aria-current="page"' : ''}>${esc(label)}</button>`).join('');
+    $('settingsNoResults').hidden = matches.length > 0;
+    $('settingsTitle').textContent = sections[settingsSection];
+    $('settingsContent').innerHTML = `<p class="t-sm muted">${esc(sections[settingsSection])} settings are a prototype.</p>`;
+  }
+  function setFilter(button, attr) {
+    all(`[${attr}]`).forEach(item => item.setAttribute('aria-pressed', String(item.getAttribute(attr) === button.getAttribute(attr))));
+  }
+  document.addEventListener('click', event => {
+    const button = event.target.closest('button, a'); if (!button) return;
+    if (button.dataset.set) { setState(button.dataset.set, button.dataset.value); return; }
+    if (button.dataset.nav) { event.preventDefault(); setSurface(button.dataset.nav === 'my' ? 'mine' : button.dataset.nav); return; }
+    if (button.dataset.destination) { const target = button.dataset.destination; if (target === 'create') openSheet(); else { if (target === 'settings' && sections[button.dataset.section]) settingsSection = button.dataset.section; setSurface(target); renderSettings(); } return; }
+    if (button.dataset.homeFilter) { homeFilter = button.dataset.homeFilter; setFilter(button,'data-home-filter'); renderReports(); return; }
+    if (button.dataset.myFilter) { myFilter = button.dataset.myFilter; setFilter(button,'data-my-filter'); renderReports(); return; }
+    if (button.dataset.chatFilter) { chatFilter = button.dataset.chatFilter; setFilter(button,'data-chat-filter'); renderChats(); closeOverlay(); return; }
+    if (button.dataset.searchTab) { searchTab = button.dataset.searchTab; renderSearch(); return; }
+    if (button.dataset.thread !== undefined) { selectThread(Number(button.dataset.thread)); return; }
+    if (button.dataset.settings) { settingsSection = button.dataset.settings; $('settingsSplit').classList.add('show-detail'); renderSettings(); return; }
+    if (button.id === 'railToggle') { setState('panel', state.panel === 'pinned' ? 'collapsed' : 'pinned'); return; }
+    if (button.id === 'resetBtn') { reset(); return; }
+    if (button.id === 'searchClear') { $('searchInput').value = ''; renderSearch(); $('searchInput').focus(); return; }
+    if (button.id === 'searchFilterChip') { const pressed = button.getAttribute('aria-pressed') !== 'true'; button.setAttribute('aria-pressed', String(pressed)); notify('Search filters are a visual fixture.'); return; }
+    if (button.id === 'chatFilterBtn') { if (button.getAttribute('aria-expanded') === 'true') closeOverlay(); else { const box = $('chatFilters').getBoundingClientRect(), root = app.getBoundingClientRect(), scale = root.width / app.offsetWidth, filters = $('chatFilters'); app.appendChild(filters); filters.style.position = 'absolute'; filters.style.zIndex = '81'; filters.style.top = (box.top - root.top) / scale + 'px'; filters.style.left = (box.left - root.left) / scale + 'px'; filters.style.background = 'var(--fb-surface)'; scrim.hidden = false; scrim.classList.add('is-open'); button.setAttribute('aria-expanded','true'); } return; }
+    if (button.id === 'markAllRead') { setState('unread','0'); notify('Notifications marked read in this prototype.'); return; }
+    if (button.id === 'settingsBack') { $('settingsSplit').classList.remove('show-detail'); return; }
+    const action = button.dataset.action;
+    if (action === 'go') { if (button.dataset.section && sections[button.dataset.section]) { settingsSection = button.dataset.section; renderSettings(); } setSurface(button.dataset.surface); }
+    else if (action === 'create') openSheet();
+    else if (action === 'close-sheet') closeOverlay();
+    else if (action === 'open-post') setSurface('post');
+    else if (action === 'thread-back') $('chatSplit').classList.remove('show-thread');
+    else if (action === 'post-message') { setSurface('chats'); selectThread(0); }
+    else if (action === 'post-save') { const saved = button.getAttribute('aria-pressed') !== 'true'; button.setAttribute('aria-pressed', String(saved)); notify(saved ? 'Saved for this session.' : 'Removed from saved reports.'); }
+    else if (action) notify(({attach:'Photo attachment is unavailable in this prototype.', 'post-share':'Sharing is unavailable in this prototype.', 'offline-retry':'Offline state is simulated.', person:'Profile is unavailable in this prototype.'})[action] || 'This action is not available in the prototype.');
+  });
+  all('.rail-link').forEach(link => {
+    link.addEventListener('mouseenter', () => { clearTimeout(closeTimer); showTip(link); clearTimeout(openTimer); openTimer = setTimeout(() => showFlyout(link), 120); });
+    link.addEventListener('mouseleave', hideTip);
+    link.addEventListener('focus', () => { showTip(link); showFlyout(link); });
+    link.addEventListener('blur', hideTip);
+  });
+  [rail, flyout].forEach(element => {
+    element.addEventListener('mouseenter', () => clearTimeout(closeTimer));
+    element.addEventListener('mouseleave', () => { clearTimeout(openTimer); closeTimer = setTimeout(closeFlyout, 180); });
+  });
+  $('railNav').addEventListener('keydown', event => {
+    if (!['ArrowUp','ArrowDown'].includes(event.key)) return;
+    const links = all('.rail-link', $('railNav')), index = links.indexOf(document.activeElement);
+    if (index < 0) return; event.preventDefault(); links[(index + (event.key === 'ArrowDown' ? 1 : -1) + links.length) % links.length].focus();
+  });
+  all('[data-scroll]').forEach(element => element.addEventListener('scroll', closeFlyout));
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeFlyout(); hideTip(); closeOverlay(); hideToast(); } });
+  scrim.addEventListener('click', closeOverlay);
+  $('searchInput').addEventListener('input', renderSearch);
+  $('settingsSearch').addEventListener('input', renderSettings);
+  $('composerInput').addEventListener('input', () => { $('sendBtn').disabled = !$('composerInput').value.trim(); });
+  $('composer').addEventListener('submit', event => {
+    event.preventDefault(); const input = $('composerInput'), message = input.value.trim(); if (!message) return;
+    conversations[activeThread].messages.push(message); selectThread(activeThread); input.value = ''; $('sendBtn').disabled = true;
+    $('threadScroll').scrollTop = $('threadScroll').scrollHeight; notify('Message added to this prototype only.');
+  });
+  $('createForm').addEventListener('submit', event => {
+    event.preventDefault(); const title = $('reportTitle').value.trim(); if (!title) return;
+    reports.unshift({title, type:$('reportType').value, place:'This session', icon:'clipboard'});
+    $('createForm').reset(); closeOverlay(); renderReports(); setSurface('home'); notify('Report added for this session only.');
+  });
+  function reset() {
+    closeFlyout(); closeOverlay(); hideToast(); homeFilter = 'all'; myFilter = 'all'; chatFilter = 'all'; searchTab = 'reports'; settingsSection = 'appearance';
+    $('searchInput').value = ''; $('settingsSearch').value = ''; $('composerInput').value = ''; $('sendBtn').disabled = true;
+    all('[data-home-filter], [data-my-filter], [data-chat-filter]').forEach(button => button.setAttribute('aria-pressed', String((button.dataset.homeFilter || button.dataset.myFilter || button.dataset.chatFilter) === 'all')));
+    Object.entries(defaults).forEach(([key,value]) => setState(key,value)); renderReports(); renderChats(); renderSettings();
+  }
+  $('notifList').innerHTML = '<p class="row-empty">Notifications are simulated in this prototype.</p>';
+  window.addEventListener('resize', fit);
+  reset();
+})();
+</script>
 </body>
 </html>
