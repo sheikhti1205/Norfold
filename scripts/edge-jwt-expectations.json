@@ -234,6 +234,17 @@
         }
       ]
     },
+    "telegram-auth-webhook": {
+      "verifyJwt": false,
+      "status": "DERIVED",
+      "evidence": [
+        {
+          "class": "source-auth",
+          "source": "supabase/functions/telegram-auth-webhook/index.ts",
+          "detail": "Deploy with --no-verify-jwt; the webhook authenticates requests using the Telegram secret token header."
+        }
+      ]
+    },
     "trust-maintenance": {
       "verifyJwt": false,
       "status": "DERIVED",

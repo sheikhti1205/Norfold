@@ -43,6 +43,7 @@ const FIXTURE_SOURCE = {
   "device-enroll": "device-enroll source v1",
   "push-dispatch": "push-dispatch source v1",
   "reply-comment": "reply-comment source v1",
+  "telegram-auth-webhook": "telegram-auth-webhook source v1",
   "trust-maintenance": "trust-maintenance source v1",
 };
 
@@ -96,6 +97,7 @@ describe("check-edge-parity fixtures", () => {
       "device-enroll",
       "push-dispatch",
       "reply-comment",
+      "telegram-auth-webhook",
       "trust-maintenance",
     ]);
   });
@@ -178,7 +180,7 @@ describe("check-edge-parity fixtures", () => {
     const results = checkParity({ localHashes, manifestEntries: manifestFor() });
     const report = formatParityReport(results);
     for (const name of EDGE_FUNCTIONS) assert.ok(report.includes(name), `missing ${name}`);
-    assert.match(report, /11 CURRENT, 0 STALE, 0 MISSING/);
+    assert.match(report, /12 CURRENT, 0 STALE, 0 MISSING/);
   });
 });
 
@@ -410,7 +412,7 @@ describe("check-edge-parity verify_jwt contract", () => {
     const rows = checkJwtContract(deployedResults(), expectationsFor());
     assert.ok(rows.every((row) => row.verdict === "MATCH"), JSON.stringify(rows.filter((r) => r.verdict !== "MATCH")));
     assert.equal(summarizeJwtContract(rows).exitCode, 0);
-    assert.match(formatJwtReport(rows), /11 MATCH, 0 MISMATCH, 0 UNKNOWN/);
+    assert.match(formatJwtReport(rows), /12 MATCH, 0 MISMATCH, 0 UNKNOWN/);
   });
 
   it("fails on a mismatch and names the function, expected and deployed value", () => {

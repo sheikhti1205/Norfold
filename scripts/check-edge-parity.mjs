@@ -108,6 +108,7 @@ export const EDGE_FUNCTIONS = [
   "device-enroll",
   "push-dispatch",
   "reply-comment",
+  "telegram-auth-webhook",
   "trust-maintenance",
 ];
 
