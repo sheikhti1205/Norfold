@@ -45,6 +45,14 @@ describe("gating", () => {
 });
 
 describe("redaction", () => {
+  it("withholds an eight-digit code from an exported bundle", () => {
+    setDiagEnabled(true);
+    diag("recovery.error", { detail: "received 48392157" });
+    const bundle = exportDiagBundle({ probes: { detail: "48392157" } });
+    expect(bundle).not.toContain("48392157");
+    expect(JSON.parse(bundle).probes.detail).toBe("[redacted]");
+    expect(getDiagEvents()[0]!.fields.detail).toBe("[redacted]");
+  });
   it("never lets PII-shaped values survive in ring or bridge payload", () => {
     setDiagEnabled(true);
     diag(

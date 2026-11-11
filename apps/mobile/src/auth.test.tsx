@@ -29,6 +29,8 @@ const hoisted = vi.hoisted(() => ({
   fetchMe: vi.fn(() => new Promise(() => {})),
   authCallback: null as ((event: string, session: unknown) => void) | null,
   storedSession: false,
+  createAccountPassword: vi.fn(),
+  readPasswordSetupUser: vi.fn(),
 }));
 
 vi.mock("@capacitor/core", () => ({
@@ -45,6 +47,9 @@ vi.mock("./services/auth", () => ({
   restoreSession: (...args: unknown[]) => hoisted.restoreSession(...args),
   sendPendingEmailCode: vi.fn(),
   verifyPendingEmailCode: vi.fn(),
+  needsPasswordSetup: (user: { identities?: { provider: string }[] } | null) => user != null && !user.identities?.some((item) => item.provider === "email"),
+  createAccountPassword: (...args: unknown[]) => hoisted.createAccountPassword(...args),
+  readPasswordSetupUser: () => hoisted.readPasswordSetupUser(),
 }));
 
 vi.mock("./services/supabaseClient", () => ({
@@ -148,6 +153,26 @@ afterEach(async () => {
   aiCredentials.clearSession();
   storage.removeItem("findback.auth.deletedAccountCleanup");
   vi.unstubAllGlobals();
+});
+
+it("keeps a Google session gated until the reread confirms email sign-in", async () => {
+  const capture: { current: AuthState | null } = { current: null };
+  const Harness = probeHarness(capture);
+  render(<Harness />);
+  expect(capture.current?.passwordSetupSettled).toBe(false);
+  const google = { id: USER_A.id, identities: [{ provider: "google" }] };
+  act(() => hoisted.authCallback!("INITIAL_SESSION", { user: google, access_token: "token" }));
+  expect(capture.current?.passwordSetupSettled).toBe(true);
+  expect(capture.current?.needsPasswordSetup).toBe(true);
+  hoisted.createAccountPassword.mockResolvedValue(undefined);
+  hoisted.readPasswordSetupUser.mockResolvedValueOnce(google).mockResolvedValueOnce({ ...google, identities: [{ provider: "email" }] });
+  await act(async () => { await capture.current!.saveRequiredPassword("password123"); });
+  act(() => hoisted.authCallback!("USER_UPDATED", { user: { ...google, identities: [{ provider: "email" }] }, access_token: "token" }));
+  expect(capture.current?.needsPasswordSetup).toBe(true);
+  await act(async () => { expect(await capture.current!.confirmRequiredPassword()).toBe(false); });
+  expect(capture.current?.needsPasswordSetup).toBe(true);
+  await act(async () => { expect(await capture.current!.confirmRequiredPassword()).toBe(true); });
+  expect(capture.current?.needsPasswordSetup).toBe(false);
 });
 
 describe("F08 AuthProvider logout purges AI provider credentials", () => {

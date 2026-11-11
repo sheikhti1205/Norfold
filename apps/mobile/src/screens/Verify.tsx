@@ -130,7 +130,7 @@ function VerifyRow({ channel }: { channel: Channel }) {
         </p>
       )}
 
-      <OtpField label={channel === "PHONE" ? "Phone verification code" : "Verification code"} value={code} onChange={setCode} maxLength={channel === "PHONE" ? 10 : 6} disabled={sending || verifying} />
+      <OtpField label={channel === "PHONE" ? "Phone verification code" : "Verification code"} value={code} onChange={setCode} maxLength={10} disabled={sending || verifying} />
 
       <div className="flex flex-col gap-2">
         <Button onClick={onVerify} loading={verifying} disabled={sending || verifyIn > 0 || (channel === "PHONE" && (!sent || !/^\d{6,10}$/.test(code.trim())))} size="lg">
@@ -155,7 +155,7 @@ function PendingEmailVerify({ email }: { email: string }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(
-    "If your signup is awaiting verification, check your email for a six-digit code.",
+    "If your signup is awaiting verification, check your email for a code.",
   );
   const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
@@ -188,7 +188,7 @@ function PendingEmailVerify({ email }: { email: string }) {
 
   async function onVerify() {
     if (inFlight.current) return;
-    if (!/^\d{6}$/.test(code)) { setError("Enter the six-digit verification code from your email."); return; }
+    if (!/^\d{6,10}$/.test(code)) { setError("Enter the verification code from your email."); return; }
     inFlight.current = true;
     setVerifying(true);
     setError(null);
@@ -210,7 +210,7 @@ function PendingEmailVerify({ email }: { email: string }) {
   return (
     <AuthShell
       title="Check your email"
-      supporting="Enter your six-digit email code to finish creating your account."
+      supporting="Enter your email code to finish creating your account."
     >
       <p className="rounded-m3-md bg-surface-container-low px-4 py-3 text-sm">
         <span className="break-all font-medium text-on-surface">{email}</span>
@@ -228,7 +228,7 @@ function PendingEmailVerify({ email }: { email: string }) {
           </p>
         )}
 
-        <OtpField value={code} onChange={setCode} disabled={verifying || resending} />
+        <OtpField value={code} onChange={setCode} maxLength={10} disabled={verifying || resending} />
 
         <Button type="submit" loading={verifying} disabled={resending} size="lg">
           Verify and continue

@@ -85,6 +85,16 @@ describe("Verify pending-signup mode (no session yet)", () => {
     await waitFor(() => expect(screen.getByText("Shared report destination")).toBeTruthy());
   });
 
+  it("accepts an eight-digit signup code unchanged", async () => {
+    authMock.verifyPendingEmail.mockResolvedValue({ id: "u1" });
+    renderVerify();
+    const input = screen.getByLabelText("Verification code") as HTMLInputElement;
+    expect(input.maxLength).toBe(10);
+    fireEvent.change(input, { target: { value: "12345678" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify and continue" }));
+    await waitFor(() => expect(authMock.verifyPendingEmail).toHaveBeenCalledWith("12345678"));
+  });
+
   it("announces resend status without leaving the screen", async () => {
     authMock.resendPendingEmail.mockResolvedValue(undefined);
     vi.useFakeTimers();

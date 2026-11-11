@@ -101,7 +101,7 @@ describe("Recovery", () => {
   it("verifies a pasted recovery code, then changes the password without shared-session mutation", async () => {
     renderRecovery(otpEntry);
     const input = screen.getByLabelText("Recovery code") as HTMLInputElement;
-    expect(input.maxLength).toBe(6); expect(input.autocomplete).toBe("one-time-code");
+    expect(input.maxLength).toBe(10); expect(input.autocomplete).toBe("one-time-code");
     fireEvent.paste(input, { clipboardData: { getData: () => "123 456" } });
     expect(input.value).toBe("123456");
     fireEvent.submit(input.closest("form")!);
@@ -116,6 +116,21 @@ describe("Recovery", () => {
     expect(servicesMock.updatePassword).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
     await screen.findByText("Sign in destination");
+  });
+  it("accepts ten digits and forwards them unchanged", async () => {
+    renderRecovery(otpEntry);
+    const input = screen.getByLabelText("Recovery code") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "1234567890" } });
+    expect(input.value).toBe("1234567890");
+    fireEvent.submit(input.closest("form")!);
+    await screen.findByLabelText("New password");
+    expect(recoveryMock.verify).toHaveBeenCalledWith("recover@example.invalid", "1234567890");
+  });
+  it("shows a length-neutral validation error", () => {
+    renderRecovery(otpEntry);
+    fireEvent.click(screen.getByRole("button", { name: "Verify code" }));
+    expect(screen.getByRole("alert").textContent).not.toMatch(/\b(?:six|\d+)[- ]?digit/i);
+    expect(recoveryMock.verify).not.toHaveBeenCalled();
   });
   it("keeps expired recovery codes on the code screen without exposing a password form", async () => {
     recoveryMock.verify.mockRejectedValueOnce(new Error("Invalid or expired verification code"));
