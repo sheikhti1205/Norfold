@@ -109,6 +109,19 @@ describe("private report media addresses", () => {
     expect(peekMediaUrl(key("signed"))).toBe("https://signed.test/photo.jpg");
   });
 
+  it("isolates cached and in-flight report URLs across accounts", async () => {
+    let finish!: (result: { data: { signedUrl: string }; error: null }) => void;
+    createSignedUrlMock.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const pending = resolveMediaUrl(key("account-switch"));
+    await waitFor(() => expect(createSignedUrlMock).toHaveBeenCalledTimes(1));
+    auth.getSession.mockResolvedValue({ data: { session: { user: { id: "reader-b" } } } });
+    createSignedUrlMock.mockResolvedValueOnce({ data: { signedUrl: "https://signed.test/b" }, error: null });
+    await expect(resolveMediaUrl(key("account-switch"))).resolves.toBe("https://signed.test/b");
+    finish({ data: { signedUrl: "https://signed.test/a" }, error: null });
+    await expect(pending).resolves.toBeUndefined();
+    expect(peekMediaUrl(key("account-switch"))).toBe("https://signed.test/b");
+  });
+
   it("falls back to the raw key when signing fails, so the caller's error state runs", async () => {
     createSignedUrlMock.mockResolvedValueOnce({ data: null, error: { message: "denied" } });
     await expect(resolveMediaUrl(key("denied"))).resolves.toBeUndefined();
