@@ -1,7 +1,7 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ThumbsDown, ThumbsUp } from "lucide-react";
 import type { ReactionKind, ReactionSummary } from "@norfold/shared";
-import { announce } from "./LiveRegion";
+import { announce, announceQuietly } from "./LiveRegion";
 import { useFeedLove } from "../hooks/useFeedLove";
 import { applyCountDeltas, likeMine, likeState, nextReaction, reactionMoveDeltas } from "../services/reactions";
 import { seedSummaryFromItem, toggleReaction } from "../services/feedReactions";
@@ -16,6 +16,8 @@ export function HomeFeedReactionButtons({ postId, likeCount, dislikeCount }: {
   const [localSummary, setLocalSummary] = useState<ReactionSummary | null>(null);
   const [localPending, setLocalPending] = useState(false);
   const localPendingRef = useRef(false);
+  const postIdRef = useRef(postId);
+  postIdRef.current = postId;
   const [failed, setFailed] = useState(false);
   const myReaction = love ? love.myReaction : localReaction;
   const summary = love ? love.summary : localSummary;
@@ -23,6 +25,13 @@ export function HomeFeedReactionButtons({ postId, likeCount, dislikeCount }: {
   const dislikes = love ? love.dislikeCount : summary ? (summary.counts.DISLIKE ?? 0) : dislikeCount;
   const pending = love?.pending ?? localPending;
   const errorId = `home-feed-like-error-${postId}`;
+  const [settledPost, setSettledPost] = useState<string | null>(null);
+  useEffect(() => {
+    if (settledPost === postId && !pending) {
+      announceQuietly(`${likes} ${likes === 1 ? "like" : "likes"}, ${dislikes} ${dislikes === 1 ? "dislike" : "dislikes"}.`);
+      setSettledPost(null);
+    }
+  }, [postId, likes, dislikes, pending, settledPost]);
 
   function fail() {
     setFailed(true);
@@ -32,7 +41,14 @@ export function HomeFeedReactionButtons({ postId, likeCount, dislikeCount }: {
   async function onToggle(target: "LIKE" | "DISLIKE") {
     setFailed(false);
     if (love) {
-      if (!(await love.toggle(target))) fail();
+      if (localPendingRef.current || love.pending) return;
+      localPendingRef.current = true;
+      const success = await love.toggle(target);
+      localPendingRef.current = false;
+      if (postIdRef.current === postId) {
+        if (success) setSettledPost(postId);
+        else fail();
+      }
       return;
     }
     if (localPendingRef.current) return;
@@ -49,6 +65,7 @@ export function HomeFeedReactionButtons({ postId, likeCount, dislikeCount }: {
       const res = await toggleReaction(postId, previous, target);
       setLocalReaction(res.myReaction);
       setLocalSummary(res.reactionCounts ?? seedSummaryFromItem(res.likeCount, res.dislikeCount, res.myReaction));
+      if (postIdRef.current === postId) setSettledPost(postId);
     } catch {
       setLocalReaction(previous);
       setLocalSummary(previousSummary);

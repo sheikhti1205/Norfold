@@ -131,7 +131,30 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("PostDetail post Like (packet 08 §2 — Like-only)", () => {
+describe("PostDetail post reactions (Like and Dislike)", () => {
+  it("announces only the settled reaction count once without a snackbar", async () => {
+    const quiet = vi.fn();
+    const normal = vi.fn();
+    window.addEventListener("findback:announce-quietly", quiet);
+    window.addEventListener("findback:announce", normal);
+    render(<LiveRegion />);
+    let release!: (value: unknown) => void;
+    postsMock.reactToPost.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    renderDetail();
+    const like = await screen.findByTestId("detail-like");
+    fireEvent.click(like);
+    expect(like.getAttribute("aria-label")).toBe("Like, 5 likes");
+    expect(quiet).not.toHaveBeenCalled();
+    await act(async () => release({ postId: "p1", likeCount: 6, dislikeCount: 1, myReaction: "LIKE", reactionCounts: { counts: { LOVE: 6, DISLIKE: 1 }, myReaction: "LIKE", total: 7 } }));
+    await waitFor(() => expect(quiet).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(like.getAttribute("aria-busy")).toBe("false"));
+    expect(quiet).toHaveBeenCalledTimes(1);
+    expect(normal).not.toHaveBeenCalled();
+    expect(screen.getByTestId("live-region-announcement").textContent).toBe("6 likes, 1 dislike.");
+    expect(screen.queryByTestId("snackbar-message")).toBeNull();
+    window.removeEventListener("findback:announce-quietly", quiet);
+    window.removeEventListener("findback:announce", normal);
+  });
   it("taps Like over the real post RPC and unlikes on the second tap", async () => {
     renderDetail();
     const like = await screen.findByTestId("detail-like");
@@ -213,6 +236,8 @@ describe("PostDetail post Like (packet 08 §2 — Like-only)", () => {
   });
 
   it("announces a failed Like inline and reverts the optimistic state", async () => {
+    const quiet = vi.fn();
+    window.addEventListener("findback:announce-quietly", quiet);
     render(<LiveRegion />);
     renderDetail();
     const like = await screen.findByTestId("detail-like");
@@ -229,9 +254,13 @@ describe("PostDetail post Like (packet 08 §2 — Like-only)", () => {
     );
     await waitFor(() => expect(like.getAttribute("aria-pressed")).toBe("false"));
     expect(like.getAttribute("aria-label")).toBe("Like, 4 likes");
+    expect(quiet).not.toHaveBeenCalled();
+    window.removeEventListener("findback:announce-quietly", quiet);
   });
 
   it("counts only positive kinds from a reaction:changed broadcast", async () => {
+    const quiet = vi.fn();
+    window.addEventListener("findback:announce-quietly", quiet);
     renderDetail();
     await screen.findByTestId("detail-like");
     const handler = realtimeHandlers.get("reaction:changed");
@@ -250,6 +279,8 @@ describe("PostDetail post Like (packet 08 §2 — Like-only)", () => {
     expect((await screen.findByTestId("detail-like")).getAttribute("aria-label")).toBe(
       "Like, 11 likes",
     );
+    expect(quiet).not.toHaveBeenCalled();
+    window.removeEventListener("findback:announce-quietly", quiet);
   });
 });
 

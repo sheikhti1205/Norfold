@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HomeFeedReactionButtons } from "./HomeFeedReactionButtons";
+import { announce, announceQuietly, LiveRegion } from "./LiveRegion";
 import { FeedLoveProvider, type FeedPatchItem } from "../hooks/useFeedLove";
 
 const { feedFetchMock, likeToggleMock, rpcMock } = vi.hoisted(() => ({
@@ -85,7 +86,57 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("HomeFeedReactionButtons (packet 08 §2 — Like-only)", () => {
+describe("HomeFeedReactionButtons (Like and Dislike)", () => {
+  it("keeps background count updates silent", () => {
+    const listener = vi.fn();
+    const normalListener = vi.fn();
+    window.addEventListener("findback:announce-quietly", listener);
+    window.addEventListener("findback:announce", normalListener);
+    render(<LiveRegion />);
+    const view = render(<HomeFeedReactionButtons postId="p1" likeCount={2} dislikeCount={0} />);
+    view.rerender(<HomeFeedReactionButtons postId="p1" likeCount={3} dislikeCount={0} />);
+    expect(listener).not.toHaveBeenCalled();
+    expect(normalListener).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("snackbar-message")).toBeNull();
+    window.removeEventListener("findback:announce-quietly", listener);
+    window.removeEventListener("findback:announce", normalListener);
+  });
+  it.each([true, false])("announces only settled counts after a local tap (provider: %s)", async (provider) => {
+    const quiet = vi.fn();
+    window.addEventListener("findback:announce-quietly", quiet);
+    let release!: (value: unknown) => void;
+    likeToggleMock.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    const item = { ...post(), likeCount: 2, dislikeCount: 0 };
+    if (provider) renderButton(item);
+    else render(<HomeFeedReactionButtons postId="p1" likeCount={2} dislikeCount={0} />);
+    fireEvent.click(screen.getByTestId("home-feed-love"));
+    expect(screen.getByTestId("home-feed-love").textContent).toBe("3");
+    expect(quiet).not.toHaveBeenCalled();
+    await act(async () => release({ postId: "p1", likeCount: 4, dislikeCount: 0, myReaction: "LIKE", reactionCounts: { counts: { LOVE: 4 }, myReaction: "LIKE", total: 4 } }));
+    await waitFor(() => expect(quiet).toHaveBeenCalledTimes(1));
+    expect((quiet.mock.calls[0]?.[0] as CustomEvent<string>).detail).toBe("4 likes, 0 dislikes.");
+    window.removeEventListener("findback:announce-quietly", quiet);
+  });
+  it("keeps normal snackbars separate from quiet announcements", () => {
+    render(<LiveRegion />);
+    act(() => announce("Could not save"));
+    expect(screen.getByTestId("live-region-announcement").textContent).toBe("Could not save");
+    expect(screen.getByTestId("snackbar-message").textContent).toBe("Could not save");
+    act(() => announceQuietly("3 likes"));
+    expect(screen.getByTestId("live-region-announcement").textContent).toBe("3 likes");
+    expect(screen.getByTestId("snackbar-message").textContent).toBe("Could not save");
+  });
+  it("uses a later snapshot's counts without losing the viewer's reaction", async () => {
+    const original = { ...post(), reactionSummary: { counts: { LOVE: 24, DISLIKE: 1 }, total: 25, myReaction: null } } as PostItem;
+    const view = (item: PostItem) => <MemoryRouter><FeedLoveProvider items={[item]} patchItem={vi.fn()}><HomeFeedReactionButtons postId="p1" likeCount={item.likeCount} dislikeCount={item.dislikeCount} /></FeedLoveProvider></MemoryRouter>;
+    const rendered = render(view(original));
+    fireEvent.click(screen.getByTestId("home-feed-love"));
+    await waitFor(() => expect(screen.getByTestId("home-feed-love").getAttribute("aria-pressed")).toBe("true"));
+    await waitFor(() => expect(screen.getByTestId("home-feed-love").getAttribute("aria-busy")).toBe("false"));
+    rendered.rerender(view({ ...original, reactionSummary: { counts: { LOVE: 26, DISLIKE: 1 }, total: 27, myReaction: "LIKE" } } as PostItem));
+    expect(screen.getByTestId("home-feed-love").textContent).toBe("26");
+    expect(screen.getByTestId("home-feed-love").getAttribute("aria-pressed")).toBe("true");
+  });
   it("keeps the like testid, flat styling and 44px target, and offers no picker", () => {
     renderButton();
     const like = screen.getByTestId("home-feed-love");
@@ -180,6 +231,8 @@ describe("HomeFeedReactionButtons (packet 08 §2 — Like-only)", () => {
 
   it("announces a failed Like inline and reverts the control", async () => {
     const heard: string[] = [];
+    const quiet = vi.fn();
+    window.addEventListener("findback:announce-quietly", quiet);
     const handler = (e: Event) => {
       heard.push((e as CustomEvent<string>).detail ?? "");
     };
@@ -196,7 +249,9 @@ describe("HomeFeedReactionButtons (packet 08 §2 — Like-only)", () => {
       expect(like.getAttribute("aria-pressed")).toBe("false");
       expect(like.getAttribute("aria-label")).toBe("Like, 24 likes");
       expect(like.getAttribute("aria-describedby")).toBe("home-feed-like-error-p1");
+      expect(quiet).not.toHaveBeenCalled();
     } finally {
+      window.removeEventListener("findback:announce-quietly", quiet);
       window.removeEventListener("findback:announce", handler);
     }
   });

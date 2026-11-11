@@ -27,7 +27,7 @@ import {
 } from "../services/feedReactions";
 
 /**
- * Home-feed Like state (packet `08` §2 — Like-only).
+ * Home-feed Like and Dislike state.
  *
  * One provider per feed hydrates the caller's own reaction for every visible
  * card with a SINGLE batch RPC (chunked <=20 by the service) — card buttons
@@ -43,18 +43,17 @@ import {
 export type FeedPatchItem = (id: string, patch: Partial<PostItem>) => void;
 
 /**
- * An entry plus the card snapshot's own row at the moment the entry was written.
+ * Hydration tracks the card row at read time; committed writes track their result.
  *
  * The snapshot (`item.reactionSummary`) is frozen at feed-fetch time and the
  * entry is newer, so the entry normally wins — including when it says `null`.
- * That authority is not permanent: a snapshot that moves *after* the entry was
- * written (a refresh that reports a change made on another client) is newer than
- * the entry, and shadows it from then on. `seenReaction` is what makes that
- * comparison possible; it is re-stamped by every write that puts newer truth in
- * the entry (hydration, commit), never by a write that only made it optimistic.
+ * A changed snapshot can supersede a hydration read. For a committed write,
+ * only a snapshot agreeing with the resulting row supplies its counts.
  */
 interface FeedLoveEntry extends FeedReactionEntry {
   seenReaction: ReactionKind | null;
+  seenSummary?: ReactionSummary | null;
+  committedWrite?: boolean;
 }
 
 interface FeedLoveContextValue {
@@ -97,18 +96,27 @@ function reconcileOwnedRow(
  *
  * Two sources describe the caller's own row: the card snapshot (frozen at
  * feed-fetch time) and the entry (batch hydration, or the write that landed).
- * The entry is the newer of the two and is authoritative even when it says
+ * A hydrated entry is authoritative even when it says
  * `null` — a frozen snapshot must never refill a heart the tap would then
  * contradict. That authority ends the moment the snapshot moves: a snapshot
  * whose own row differs from the one the entry was written against is newer than
  * the read the entry came from, so it wins. A card with no summary states
- * nothing about the row and leaves the entry in charge.
+ * nothing about the row and leaves the entry in charge. After a committed write,
+ * an agreeing snapshot supplies counts; a disagreeing snapshot is stale.
  */
 function resolveOwnRow(
   entry: FeedLoveEntry | undefined,
   snapshot: ReactionSummary | null,
 ): { myReaction: ReactionKind | null; base: ReactionSummary | null } {
   const snapshotOwn = snapshot?.myReaction ?? null;
+  if (entry?.committedWrite) {
+    return {
+      myReaction: entry.myReaction,
+      base: snapshot && snapshotOwn === entry.seenReaction && snapshot !== entry.seenSummary
+        ? snapshot
+        : (entry.summary ?? snapshot),
+    };
+  }
   if (entry !== undefined && (snapshot === null || entry.seenReaction === snapshotOwn)) {
     return { myReaction: entry.myReaction, base: entry.summary ?? snapshot };
   }
@@ -223,7 +231,11 @@ export function FeedLoveProvider({
         // Roll back to the summary the card is displaying, never to one the
         // snapshot has already replaced.
         ...(resolved.base ? { summary: resolved.base } : {}),
-        seenReaction: snapshot?.myReaction ?? entry?.seenReaction ?? null,
+        seenReaction: entry?.committedWrite
+          ? entry.seenReaction
+          : (snapshot?.myReaction ?? entry?.seenReaction ?? null),
+        seenSummary: entry?.seenSummary,
+        committedWrite: entry?.committedWrite,
       };
       const prevLike = currentItem?.likeCount ?? 0;
       const prevDislike = currentItem?.dislikeCount ?? 0;
@@ -255,7 +267,7 @@ export function FeedLoveProvider({
           // The write is newer than every snapshot on screen, but the snapshot
           // it was written against has not moved — the stamp only changes when
           // newer truth (a read, a commit, a fresh snapshot) arrives.
-          seenReaction: prev.seenReaction,
+          seenReaction: snapshot?.myReaction ?? null,
         },
       }));
       patchItem(postId, {
@@ -267,10 +279,7 @@ export function FeedLoveProvider({
         // Committed: this row is now the newest truth for the card, so any
         // hydration that started before this point must not overwrite it.
         committedEpochRef.current[postId] = (committedEpochRef.current[postId] ?? 0) + 1;
-        // Stamped against the snapshot the card holds now: a refresh that moves
-        // the caller's own row afterwards is newer than this write and wins.
-        const commitSeen =
-          itemsRef.current.find((p) => p.id === postId)?.reactionSummary?.myReaction ?? null;
+        const seenSummary = itemsRef.current.find((p) => p.id === postId)?.reactionSummary ?? null;
         setReactions((r) => ({
           ...r,
           [postId]: {
@@ -279,7 +288,9 @@ export function FeedLoveProvider({
             // The RPC returns server truth per kind; keep it so the card reads
             // exact counts without a second fetch.
             ...(res.reactionCounts ? { summary: res.reactionCounts } : {}),
-            seenReaction: commitSeen,
+            seenReaction: res.myReaction,
+            seenSummary,
+            committedWrite: true,
           },
         }));
         patchItem(postId, {
