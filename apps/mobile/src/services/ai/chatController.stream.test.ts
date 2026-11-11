@@ -154,6 +154,21 @@ function pausedAdapter() {
 describe("chatController streaming state (M2)", () => {
   const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
+  it("does not persist the question when a provider completes without an answer", async () => {
+    const { store, chatId } = await seedStore();
+    const adapter: ProviderAdapter = {
+      id: "openrouter", capabilities: caps,
+      async *complete() { yield { kind: "done", attempt: 1, stopReason: "complete" }; },
+    };
+    const controller = new ChatController({
+      store, selection, adapter, systemPolicy: policy, knowledge, budget: budgetTerms(), catalog: freeCatalog,
+    });
+    const before = store.continueChat("acct-a", chatId).turns.length;
+    await expect(controller.send(chatId, "question")).rejects.toThrow(ControllerError);
+    expect(store.continueChat("acct-a", chatId).turns).toHaveLength(before);
+    expect(controller.getState().phase).toBe("failed");
+  });
+
   it("accumulates deltas into partialText via subscribe while streaming", async () => {
     const { store, chatId } = await seedStore();
     const adapter = pausedAdapter();

@@ -32,6 +32,7 @@
  */
 import { hasNoInlineImageBytesOrKeys, priceClassFromLines } from "../providerContract";
 import { cloudCatalogMetadata } from "./catalogueQualification";
+import { sharedError, errorEnvelopeCode } from "./sharedErrors";
 import type {
   ModelRecord,
   NormalizedRequest,
@@ -193,6 +194,8 @@ function errorForStatus(
   body: unknown,
 ): { code: string; message: string; retryable: boolean } {
   const detail = apiErrorMessage(body);
+  const shared = sharedError(status, errorEnvelopeCode(body));
+  if (shared) return { ...shared, message: detail ?? "DeepSeek rejected the request." };
   if (status === 400)
     return { code: "bad-request", message: detail ?? "DeepSeek rejected the request format.", retryable: false };
   if (status === 401)
@@ -442,9 +445,10 @@ export function createDeepSeekAdapter(options: DeepSeekAdapterOptions): Provider
     const dataLines: string[] = [];
     let firstTokenSent = false;
     let failed = false;
+    let sawDone = false;
 
     const handlePayload = function* (payload: string): Generator<StreamEvent> {
-      if (payload === "[DONE]") return;
+      if (payload === "[DONE]") { sawDone = true; return; }
       let parsed: unknown = null;
       try {
         parsed = JSON.parse(payload);
@@ -514,7 +518,7 @@ export function createDeepSeekAdapter(options: DeepSeekAdapterOptions): Provider
         yield {
           kind: "error",
           attempt,
-          code: "content-filter",
+          code: "response-refused",
           message: "DeepSeek stopped the response because of a content filter.",
           retryable: false,
         };
@@ -637,8 +641,7 @@ export function createDeepSeekAdapter(options: DeepSeekAdapterOptions): Provider
         }
       }
       buffer += decoder.decode();
-      // Tolerate a missing trailing blank line / missing [DONE]: flush any
-      // pending event and terminate the single attempt normally.
+      // Flush the final frame before checking the terminal marker.
       const tailLines: string[] = [];
       if (buffer !== "") {
         tailLines.push(buffer.endsWith("\r") ? buffer.slice(0, -1) : buffer);
@@ -672,7 +675,11 @@ export function createDeepSeekAdapter(options: DeepSeekAdapterOptions): Provider
       yield { kind: "done", attempt, stopReason: "error" };
       return;
     }
-    // A clean EOF without [DONE] still terminates the single attempt.
+    if (!sawDone) {
+      yield { kind: "error", attempt, code: "response-incomplete", message: "The response ended before it was complete.", retryable: true } as const;
+      yield { kind: "done", attempt, stopReason: "error" } as const;
+      return;
+    }
     yield { kind: "phase", phase: "complete", attempt };
     yield { kind: "done", attempt, stopReason: "complete" };
   }

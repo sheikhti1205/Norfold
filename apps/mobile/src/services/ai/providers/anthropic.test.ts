@@ -575,7 +575,7 @@ describe("anthropic error mapping", () => {
       expect(events.at(-2)).toMatchObject({
         kind: "error",
         attempt: 1,
-        code: testCase.type,
+        code: ({ 401: "auth-invalid", 402: "payment-required", 403: "auth-forbidden", 429: "rate-limited" } as Record<number, string>)[testCase.status] ?? testCase.type,
         retryable: testCase.retryable,
         message: `provider said ${testCase.type}`,
       });
@@ -681,13 +681,23 @@ describe("anthropic error mapping", () => {
     expect(texts(events)).toBe("cut short");
     expect(events.at(-2)).toMatchObject({
       kind: "error",
-      code: "stream_truncated",
+      code: "response-incomplete",
       retryable: true,
     });
     expect(events.at(-1)).toMatchObject({
       kind: "done",
       stopReason: "error",
     });
+  });
+
+  it("reports an Anthropic refusal instead of completing the turn", async () => {
+    const refusal = 'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"refusal"}}\n\n';
+    const { fetchImpl } = makeFetchStub(sseResponse([messageStart() + refusal + MESSAGE_STOP]));
+    const adapter = createAnthropicAdapter({ getApiKey: async () => TEST_KEY, fetchImpl });
+    const { request } = baseRequest();
+    const events = await collect(adapter.complete(request));
+    expect(events).toContainEqual(expect.objectContaining({ kind: "error", code: "response-refused" }));
+    expect(events.at(-1)).toMatchObject({ kind: "done", stopReason: "error" });
   });
 });
 

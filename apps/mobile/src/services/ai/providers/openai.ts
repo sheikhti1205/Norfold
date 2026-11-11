@@ -97,6 +97,8 @@ export type OpenAiErrorCode =
   | "server_error"
   | "network_error"
   | "stream_malformed"
+  | "response-incomplete"
+  | "response-refused"
   | "provider_error"
   | "credential_unavailable"
   | "image_unavailable"
@@ -183,8 +185,13 @@ function* failureEvents(
   message: string,
   retryable: boolean,
 ): Generator<StreamEvent> {
-  yield { kind: "phase", phase: "failed", attempt: ATTEMPT, message: code };
-  yield { kind: "error", attempt: ATTEMPT, code, message: clipMessage(message), retryable };
+  const sharedCode = code === "authentication_failed" ? "auth-invalid"
+    : code === "permission_denied" ? "auth-forbidden"
+    : code === "quota_exhausted" ? "payment-required"
+    : code === "rate_limited" ? "rate-limited"
+    : code;
+  yield { kind: "phase", phase: "failed", attempt: ATTEMPT, message: sharedCode };
+  yield { kind: "error", attempt: ATTEMPT, code: sharedCode, message: clipMessage(message), retryable };
   yield { kind: "done", attempt: ATTEMPT, stopReason: "error" };
 }
 
@@ -686,11 +693,16 @@ export function createOpenAiAdapter(deps: OpenAiAdapterDeps): OpenAiProviderAdap
       const frame = parsed as {
         error?: ProviderErrorBody;
         usage?: { prompt_tokens?: number; completion_tokens?: number } | null;
-        choices?: Array<{ delta?: { content?: unknown } | null }>;
+        choices?: Array<{ delta?: { content?: unknown; refusal?: unknown } | null; finish_reason?: unknown }>;
       };
       if (typeof frame.error === "object" && frame.error !== null) {
         const { code, retryable } = mapStreamError(frame.error);
         yield* failureEvents(code, providerErrorMessage(undefined, parsed), retryable);
+        return "doomed";
+      }
+      if (frame.choices?.[0]?.finish_reason === "content_filter" ||
+          typeof frame.choices?.[0]?.delta?.refusal === "string") {
+        yield* failureEvents("response-refused", "The provider refused the request.", false);
         return "doomed";
       }
       const usage = frame.usage;
@@ -751,12 +763,15 @@ export function createOpenAiAdapter(deps: OpenAiAdapterDeps): OpenAiProviderAdap
         return;
       }
       if (done) {
-        // EOF without `[DONE]` still completes; a partial trailing frame is
-        // kept only when it parses, otherwise ignored (dropped connection).
         buffer += decoder.decode();
         if (buffer.trim().length > 0) {
           const action = yield* feedLine(buffer, true);
           if (action === "doomed") return;
+          if (action === "complete") sawDone = true;
+        } else {
+          const action = yield* dispatch(true);
+          if (action === "doomed") return;
+          if (action === "complete") sawDone = true;
         }
         break;
       }
@@ -774,6 +789,10 @@ export function createOpenAiAdapter(deps: OpenAiAdapterDeps): OpenAiProviderAdap
       if (sawDone) break;
     }
 
+    if (!sawDone) {
+      yield* failureEvents("response-incomplete", "The response ended before it was complete.", false);
+      return;
+    }
     yield { kind: "phase", phase: "complete", attempt: ATTEMPT };
     yield { kind: "done", attempt: ATTEMPT, stopReason: "complete" };
   }

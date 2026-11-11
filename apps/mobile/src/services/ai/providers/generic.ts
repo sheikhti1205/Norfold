@@ -32,6 +32,8 @@ import type {
   ProviderId,
   StreamEvent,
 } from "../providerContract";
+import { untrustedSummary } from "./untrustedSummary";
+import { sharedError, errorEnvelopeCode } from "./sharedErrors";
 
 const ERROR_BODY_MAX_CHARS = 65536;
 const ERROR_MESSAGE_MAX_CHARS = 500;
@@ -53,6 +55,7 @@ export interface GenericAdapterOptions {
    */
   getApiKey: () => Promise<string | null>;
   fetchImpl?: typeof fetch;
+  buildSystemText?: (request: NormalizedRequest) => string | undefined;
   /**
    * Optional extra headers sent on both chat and models calls (e.g.
    * `HTTP-Referer`, `X-Title`). `Authorization`, `Content-Type`, and
@@ -157,6 +160,8 @@ function errorForStatus(
   body: unknown,
 ): { code: string; message: string; retryable: boolean } {
   const detail = apiErrorMessage(body);
+  const shared = sharedError(status, errorEnvelopeCode(body));
+  if (shared) return { ...shared, message: detail ?? "Custom endpoint rejected the request." };
   if (status === 400)
     return { code: "bad-request", message: detail ?? "Custom endpoint rejected the request.", retryable: false };
   if (status === 401)
@@ -206,8 +211,10 @@ export function createGenericAdapter(
       apiKey !== null && apiKey !== "" ? { Authorization: `Bearer ${apiKey}` } : {};
 
     const messages: OutgoingMessage[] = [];
+    const systemText = options.buildSystemText?.(request);
+    if (systemText) messages.push({ role: "system", content: systemText });
     if (request.summary !== undefined) {
-      messages.push({ role: "system", content: request.summary.summaryText });
+      messages.push({ role: "user", content: untrustedSummary(request.summary.summaryText) });
     }
     for (const turn of request.recentTurns) {
       messages.push({ role: turn.role, content: turn.text });
@@ -325,9 +332,13 @@ export function createGenericAdapter(
     const dataLines: string[] = [];
     let firstTokenSent = false;
     let failed = false;
+    let sawDone = false;
 
     const handlePayload = function* (payload: string): Generator<StreamEvent> {
-      if (payload === "[DONE]") return;
+      if (payload === "[DONE]") {
+        sawDone = true;
+        return;
+      }
       let parsed: unknown = null;
       try {
         parsed = JSON.parse(payload);
@@ -351,8 +362,13 @@ export function createGenericAdapter(
       const first = Array.isArray(choices) ? choices[0] : undefined;
       const delta =
         typeof first === "object" && first !== null
-          ? ((first as { delta?: unknown }).delta as { content?: unknown } | undefined)
+          ? ((first as { delta?: unknown }).delta as { content?: unknown; refusal?: unknown } | undefined)
           : undefined;
+      if ((typeof first === "object" && first !== null && (first as { finish_reason?: unknown }).finish_reason === "content_filter") ||
+          typeof delta?.refusal === "string") {
+        yield { kind: "error", attempt, code: "response-refused", message: "The provider refused the request.", retryable: false } as const;
+        return;
+      }
       const content = delta?.content;
       if (typeof content === "string" && content !== "") {
         if (!firstTokenSent) {
@@ -482,8 +498,7 @@ export function createGenericAdapter(
         }
       }
       buffer += decoder.decode();
-      // Tolerate a missing trailing blank line / missing [DONE]: flush any
-      // pending event and terminate the single attempt normally.
+      // Flush an unterminated final SSE frame before checking for [DONE].
       const tailLines: string[] = [];
       if (buffer !== "") {
         tailLines.push(buffer.endsWith("\r") ? buffer.slice(0, -1) : buffer);
@@ -521,7 +536,12 @@ export function createGenericAdapter(
       yield { kind: "done", attempt, stopReason: "error" } as const;
       return;
     }
-    // A clean EOF without [DONE] still terminates the single attempt.
+    if (!sawDone) {
+      yield { kind: "phase", phase: "failed", attempt } as const;
+      yield { kind: "error", attempt, code: "response-incomplete", message: "The response ended before it was complete.", retryable: true } as const;
+      yield { kind: "done", attempt, stopReason: "error" } as const;
+      return;
+    }
     yield { kind: "phase", phase: "complete", attempt } as const;
     yield { kind: "done", attempt, stopReason: "complete" } as const;
   }

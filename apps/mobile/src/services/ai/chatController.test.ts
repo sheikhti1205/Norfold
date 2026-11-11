@@ -462,6 +462,8 @@ describe("consumerSendErrorCopy", () => {
     expect(copy).not.toContain("context_length");
     expect(copy).toMatch(/another model/i);
 
+    expect(consumerSendErrorCopy(new ControllerError("send-failed", "boom", "response-incomplete"))).toMatch(/stopped early/i);
+    expect(consumerSendErrorCopy(new ControllerError("send-failed", "boom", "response-refused"))).toMatch(/could not respond/i);
     expect(consumerSendErrorCopy(new ControllerError("send-failed", "boom", "rate-limited"))).toMatch(
       /too many requests/i,
     );

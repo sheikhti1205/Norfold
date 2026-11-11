@@ -401,14 +401,22 @@ describe("openai adapter — SSE stream parsing", () => {
     expect(doneEvents(events)[0]).toMatchObject({ stopReason: "complete", attempt: 1 });
   });
 
-  it("completes even when the server never sends [DONE]", async () => {
+  it("fails incomplete when the server never sends [DONE]", async () => {
     const { fetchImpl } = scriptedFetch([sseResponse([deltaFrame("bye")])]);
     const events = await collect(createOpenAiAdapter(makeDeps({ fetchImpl })), makeRequest());
 
     expect(textDeltas(events)).toBe("bye");
-    expect(phasesOf(events)).toEqual(["queued", "sending", "first-token", "streaming", "complete"]);
-    expect(doneEvents(events)[0]?.stopReason).toBe("complete");
-    expect(errorEvents(events)).toHaveLength(0);
+    expect(phasesOf(events)).toEqual(["queued", "sending", "first-token", "streaming", "failed"]);
+    expect(doneEvents(events)[0]?.stopReason).toBe("error");
+    expect(errorEvents(events)[0]?.code).toBe("response-incomplete");
+  });
+
+  it("fails a content-filtered response instead of completing it", async () => {
+    const frame = `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "content_filter" }] })}\n\n`;
+    const { fetchImpl } = scriptedFetch([sseResponse([frame, DONE_FRAME])]);
+    const events = await collect(createOpenAiAdapter(makeDeps({ fetchImpl })), makeRequest());
+    expect(errorEvents(events)[0]?.code).toBe("response-refused");
+    expect(doneEvents(events)[0]?.stopReason).toBe("error");
   });
 
   it("emits exactly one usage event from the final usage chunk", async () => {
@@ -479,13 +487,13 @@ describe("openai adapter — HTTP error mapping", () => {
     {
       status: 401,
       error: { type: "invalid_request_error", message: "Incorrect API key provided" },
-      code: "authentication_failed",
+      code: "auth-invalid",
       retryable: false,
     },
     {
       status: 403,
       error: { type: "invalid_request_error", message: "Country, region, or territory not supported" },
-      code: "permission_denied",
+      code: "auth-forbidden",
       retryable: false,
     },
     {
@@ -521,13 +529,13 @@ describe("openai adapter — HTTP error mapping", () => {
     {
       status: 429,
       error: { type: "rate_limit_error", code: "rate_limit_exceeded", message: "Rate limit reached" },
-      code: "rate_limited",
+      code: "rate-limited",
       retryable: true,
     },
     {
       status: 429,
       error: { type: "insufficient_quota", code: "insufficient_quota", message: "You exceeded your current quota" },
-      code: "quota_exhausted",
+      code: "payment-required",
       retryable: false,
     },
     {
