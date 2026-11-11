@@ -772,6 +772,8 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const [loaded, setLoaded] = useState(!!cached);
   const [draft, setDraft] = useState("");
   const draftRevision = useRef(0);
+  const textAttempts = useRef(new Map<number, string>());
+  const textInFlight = useRef(new Set<number>());
   // A report-linked entry carries the subject once; the first send consumes it so
   // a later ordinary message is never silently tagged with the same report.
   const route = useLocation();
@@ -855,6 +857,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const cameraInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sendStatus, setSendStatus] = useState<string | null>(null);
   const [sheet, setSheet] = useState<"actions" | "search" | "media" | "location" | "end" | "delete" | "unsend" | "clear" | "review" | null>(null);
   const [showJump, setShowJump] = useState(false);
   useLayoutEffect(() => { if (!locationAllowed) setSheet(previous => previous === "location" ? null : previous); }, [locationAllowed]);
@@ -1461,13 +1464,18 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     if (photos.length > 0 && (view?.mode !== "CONNECTED" || view.ownBlocked)) return;
     if (photos.length === 0 && !draft.trim()) return;
     const body = convertEmoticons(draft), sendingRevision = draftRevision.current;
+    if (ready.length === 0 && textInFlight.current.has(sendingRevision)) return;
+    if (ready.length === 0) textInFlight.current.add(sendingRevision);
     // Captured once: the reply belongs to this send, and a later gesture while
     // the message is in flight is newer intent for the next message.
     const replyTargetId = replyTo?.id;
-    setError(null);
+    setError(null); setSendStatus(null);
     try {
       if (ready.length === 0) {
-        await sendMessagingText(accountId, conversationId, row.peerId, body, reportContext ?? undefined, replyTargetId);
+        const messageId = textAttempts.current.get(sendingRevision) ?? crypto.randomUUID();
+        textAttempts.current.set(sendingRevision, messageId);
+        const result = await sendMessagingText(accountId, conversationId, row.peerId, body, reportContext ?? undefined, replyTargetId, messageId);
+        textAttempts.current.delete(sendingRevision);
         if (alive.current) {
           nearBottom.current = true;
           // Only clear what this draft owned: typing that arrived while it was
@@ -1476,6 +1484,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
           if (reportContext) clearReportContext(reportContext);
           setReplyTo(null);
           setAdmissionFailed(false);
+          if (typeof result !== "string" && result.viewStale) setSendStatus("Message saved to send. The view may be out of date.");
         }
       } else {
         setPhotoSending(true);
@@ -1520,9 +1529,12 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     } catch {
       if (alive.current) {
         if (photos.length > 0) { setAdmissionFailed(true); setError("Those photos could not all be saved. The unsent ones are still here."); }
-        else setError("Your message could not be saved. Your draft is still here.");
+        else setError("Your message was not sent. Your draft is still here.");
       }
-    } finally { if (alive.current) setPhotoSending(false); }
+    } finally {
+      if (ready.length === 0) textInFlight.current.delete(sendingRevision);
+      if (alive.current) setPhotoSending(false);
+    }
   }
   /**
    * Open the report sheet for one message. An unsent message has no body in the
@@ -1678,7 +1690,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       }}>Try again</button>
     </div>}
     <div className="fb-chat-messages" ref={scroll}>
-      <p className="fb-chat-sync" role="status">{chat.status === "offline" ? "Messages are saved here and will send when you reconnect." : ""}</p>
+      <p className="fb-chat-sync" role="status">{sendStatus ?? (chat.status === "offline" ? "Messages are saved here and will send when you reconnect." : "")}</p>
       {!loaded && <p role="status" className="fb-chat-secondary">Opening messages…</p>}
       {loaded && messages.length === 0 && <p className="fb-chat-empty">{view?.request === "INCOMING" ? "A new message request."
         : "Say hello and explain why you’d like to connect."}</p>}

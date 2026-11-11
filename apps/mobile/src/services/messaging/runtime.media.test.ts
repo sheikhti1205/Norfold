@@ -764,6 +764,21 @@ describe("production messaging media owner", () => {
 });
 
 describe("foreground fast path", () => {
+  it("keeps one admitted text when its local reload fails", async () => {
+    runtime.setMessagingAccount(A);
+    await waitForState(state => state.status === "ready" && !!state.currentProjections);
+    const history = boundary.handles[0]!.history;
+    const enqueue = history.enqueueOutgoing.bind(history);
+    vi.spyOn(history, "enqueueOutgoing").mockImplementation(async (...args) => {
+      await enqueue(...args);
+      vi.spyOn(history, "listConversations").mockRejectedValueOnce(new Error("reload failed"));
+    });
+    const result = await runtime.sendMessagingText(A, CONV, B, "Saved once");
+    expect(result).toEqual({ id: expect.any(String), viewStale: true });
+    const messages = await history.listMessages(CONV);
+    expect(messages.filter(message => message.body === "Saved once")).toHaveLength(1);
+    expect(messages.find(message => message.body === "Saved once")?.id).toBe((result as { id: string }).id);
+  });
   it("discovers committed incoming photo bytes after a foreground hint without a focus or manual full refresh", async () => {
     runtime.setMessagingAccount(A); await waitForState(state => state.status === "ready" && !!state.currentProjections);
     requestLog.length = 0;

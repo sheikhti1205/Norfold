@@ -735,14 +735,19 @@ export async function downloadMessagingMedia(accountId: string, conversationId: 
  * it never changes a plain text send into a different capability.
  */
 export async function sendMessagingText(accountId: string, conversationId: string, peerId: string, body: string,
-  contextReportId?: string, replyToId?: string): Promise<string> {
+  contextReportId?: string, replyToId?: string, messageId?: string): Promise<string | { id: string; viewStale: true }> {
   const owner = ownerFor(accountId);
-  const id = uuid(crypto.randomUUID());
+  const id = uuid(messageId ?? crypto.randomUUID());
   await owner.session.send({ id, conversationId: uuid(conversationId), authorId: uuid(accountId), recipientId: uuid(peerId), body, createdAt: Date.now(),
     ...(contextReportId ? { messageType: "TEXT" as const, contextReportId: uuid(contextReportId) } : {}),
     ...(replyToId ? { replyToId: uuid(replyToId) } : {}) });
-  assertOwner(owner);
-  await reload(owner); // Queued send appears without waiting for connectivity.
+  try {
+    assertOwner(owner);
+    await reload(owner); // Queued send appears without waiting for connectivity.
+  } catch {
+    if (current === owner && owner.generation === generation) void requestRefresh(owner, "fast");
+    return { id, viewStale: true };
+  }
   // Settle this send and the peer's echo; projections/media stay on full passes.
   void requestRefresh(owner, "fast");
   return id;
