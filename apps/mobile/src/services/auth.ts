@@ -25,7 +25,17 @@ export interface RegisterResult {
 
 const DUPLICATE_ACCOUNT_MESSAGE = "An account with these details already exists.";
 const RATE_LIMIT_MESSAGE = "Too many attempts. Please wait a moment and try again.";
+const EMAIL_SEND_LIMIT_MESSAGE = "You've asked for several codes. The most recent code still works. Try requesting another code later.";
 const INVALID_CODE_MESSAGE = "Invalid or expired verification code";
+
+export class EmailSendLimitedError extends ApiError {
+  retryAfterSeconds?: number;
+  constructor(retryAfterSeconds?: number) {
+    const wait = retryAfterSeconds === undefined ? "" : ` Try requesting another code in ${retryAfterSeconds} seconds.`;
+    super(retryAfterSeconds === undefined ? EMAIL_SEND_LIMIT_MESSAGE : `You've asked for several codes. The most recent code still works.${wait}`, 429, "EMAIL_SEND_LIMITED");
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
 
 /** Boot restore budget: local session read + validation. Never indefinite. */
 const SESSION_RESTORE_TIMEOUT_MS = 12_000;
@@ -61,6 +71,7 @@ interface AuthErrorLike {
   message?: string;
   code?: string | undefined;
   status?: number | undefined;
+  retryAfterSeconds?: number | undefined;
 }
 
 function isRateLimited(code: string, message: string): boolean {
@@ -78,7 +89,7 @@ function isEnumerationError(code: string): boolean {
 }
 
 /** Map SDK errors to user-facing messages without leaking provider internals. */
-function mapAuthError(error: AuthErrorLike): ApiError {
+function mapAuthError(error: AuthErrorLike, recoverySend = false): ApiError {
   const code = error.code ?? "";
   const message = (error.message ?? "").toLowerCase();
 
@@ -94,6 +105,10 @@ function mapAuthError(error: AuthErrorLike): ApiError {
     code === "23505"
   ) {
     return new ApiError(DUPLICATE_ACCOUNT_MESSAGE, 409);
+  }
+  if (code === "over_email_send_rate_limit" || (recoverySend && error.status === 429)) {
+    const retry = error.retryAfterSeconds;
+    return new EmailSendLimitedError(typeof retry === "number" && Number.isSafeInteger(retry) && retry > 0 ? retry : undefined);
   }
   if (error.status === 429 || isRateLimited(code, message)) {
     return new ApiError(RATE_LIMIT_MESSAGE, 429);
@@ -309,7 +324,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
   const { error } = await withTimeout(() => getSupabase().auth.resetPasswordForEmail(address, {
     redirectTo: passwordRecoveryRedirect(),
   }), 15_000, "The email request timed out. Please try again.");
-  if (error && !isEnumerationError(error.code ?? "")) throw mapAuthError(error);
+  if (error && !isEnumerationError(error.code ?? "")) throw mapAuthError(error, true);
 }
 
 /** A screen-owned recovery capability. Its SDK session never replaces app auth. */

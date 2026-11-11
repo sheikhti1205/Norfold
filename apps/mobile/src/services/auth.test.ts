@@ -794,7 +794,18 @@ describe("password recovery (Forgot password → recovery code → new password;
       data: {},
       error: { code: "over_email_send_rate_limit", message: "slow down" },
     });
-    await expect(requestPasswordReset("user@example.com")).rejects.toThrow(/too many attempts/i);
+    await expect(requestPasswordReset("user@example.com")).rejects.toMatchObject({ code: "EMAIL_SEND_LIMITED", status: 429, message: expect.stringMatching(/most recent code still works/i) });
+  });
+
+  it("maps an unclassified recovery 429 and preserves a supplied retry delay", async () => {
+    clientMock.auth.resetPasswordForEmail.mockResolvedValue({ data: {}, error: { status: 429, retryAfterSeconds: 3600 } });
+    await expect(requestPasswordReset("user@example.com")).rejects.toMatchObject({ code: "EMAIL_SEND_LIMITED", retryAfterSeconds: 3600, message: expect.stringContaining("3600 seconds") });
+    expect(clientMock.auth.resetPasswordForEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps non-email verification limits generic", async () => {
+    clientMock.auth.verifyOtp.mockResolvedValue({ data: {}, error: { status: 429, code: "over_request_rate_limit" } });
+    await expect(createPasswordRecovery().verify(USER.email, "123456")).rejects.toMatchObject({ status: 429, message: "Too many attempts. Please wait a moment and try again." });
   });
 
   it("exchanges a recovery code for a session, rejecting empty/invalid/used links", async () => {

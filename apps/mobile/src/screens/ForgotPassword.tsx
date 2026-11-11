@@ -34,7 +34,9 @@ export function ForgotPassword() {
       await requestPasswordReset(address);
       if (alive.current) navigate("/recovery", { state: { recoveryEmail: address } });
     } catch (err) {
-      if (alive.current) setError(err instanceof Error ? err.message : "Email recovery is temporarily unavailable. Please try again.");
+      if (alive.current && err instanceof Error && "code" in err && err.code === "EMAIL_SEND_LIMITED") {
+        navigate("/recovery", { state: { recoveryEmail: email.trim(), emailSendLimitedMessage: err.message } });
+      } else if (alive.current) setError(err instanceof Error ? err.message : "Email recovery is temporarily unavailable. Please try again.");
     } finally {
       inFlight.current = false;
       if (alive.current) setBusy(false);

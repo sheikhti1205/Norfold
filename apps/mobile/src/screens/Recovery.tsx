@@ -27,7 +27,7 @@ function RecoveryFlow() {
   const navigate = useNavigate();
   const location = useLocation();
   const bridgeState = (location.state ?? null) as
-    | { recovered?: boolean; linkError?: boolean; recoveryEmail?: unknown }
+    | { recovered?: boolean; linkError?: boolean; recoveryEmail?: unknown; emailSendLimitedMessage?: unknown }
     | null;
   const preExchanged = bridgeState?.recovered === true;
   const preFailed = bridgeState?.linkError === true;
@@ -41,8 +41,9 @@ function RecoveryFlow() {
   const recovery = useRef<PasswordRecovery | null>(null);
   const alive = useRef(true);
   const inFlight = useRef(false);
-  const { seconds, setSeconds } = useOtpCountdown(otpMode ? 30 : 0);
-  const [message, setMessage] = useState(PASSWORD_RESET_SENT);
+  const { seconds, setSeconds } = useOtpCountdown(otpMode ? 60 : 0);
+  const [sendLimited, setSendLimited] = useState(typeof bridgeState?.emailSendLimitedMessage === "string");
+  const [message, setMessage] = useState(typeof bridgeState?.emailSendLimitedMessage === "string" ? bridgeState.emailSendLimitedMessage : PASSWORD_RESET_SENT);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -81,16 +82,22 @@ function RecoveryFlow() {
   }
 
   async function resend() {
-    if (inFlight.current || seconds > 0) return;
+    if (inFlight.current || seconds > 0 || sendLimited) return;
     inFlight.current = true; setBusy(true); setError(null);
     try {
       await requestPasswordReset(email);
       if (alive.current) {
         await recovery.current?.dispose(); recovery.current = null;
-        setCode(""); setSeconds(30); setMessage(PASSWORD_RESET_SENT);
+        setCode(""); setSeconds(60); setMessage(PASSWORD_RESET_SENT);
       }
     } catch (err) {
-      if (alive.current) { setError(err instanceof Error ? err.message : "Email recovery is temporarily unavailable."); setSeconds(60); }
+      if (alive.current) {
+        if (err instanceof Error && "code" in err && err.code === "EMAIL_SEND_LIMITED") {
+          setSendLimited(true); setMessage(err.message);
+        } else {
+          setError(err instanceof Error ? err.message : "Email recovery is temporarily unavailable."); setSeconds(60);
+        }
+      }
     } finally { inFlight.current = false; if (alive.current) setBusy(false); }
   }
 
@@ -141,9 +148,9 @@ function RecoveryFlow() {
           {error && <p role="alert" className="text-sm text-error">{error}</p>}
           <OtpField label="Recovery code" value={code} onChange={setCode} maxLength={10} disabled={busy} />
           <Button type="submit" loading={busy}>Verify code</Button>
-          <Button type="button" variant="outline" onClick={() => void resend()} disabled={busy || seconds > 0}>
+          {!sendLimited && <Button type="button" variant="outline" onClick={() => void resend()} disabled={busy || seconds > 0}>
             {seconds > 0 ? `Resend in ${seconds}s` : "Resend code"}
-          </Button>
+          </Button>}
           <Link to="/forgot" className="min-h-11 py-3 text-sm underline">Use a different email</Link>
           <Link to="/signin" className="min-h-11 py-3 text-sm underline">Back to sign in</Link>
         </form>
