@@ -35,6 +35,17 @@ beforeEach(() => { factory = new IDBFactory(); handles = []; });
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllGlobals(); await Promise.all(handles.map((store) => store.close())); });
 
 describe("durable human messaging history (not AI chat)", () => {
+  it("claims and displays pending messages in enqueue order after reopening", async () => {
+    const first = await open();
+    const earlier = { ...text, id: "00000000-0000-4000-8000-00000000000e" };
+    await first.enqueueOutgoing(earlier);
+    await first.enqueueOutgoing(text);
+    await first.close();
+    const reopened = await open();
+    expect((await reopened.listMessages(CONVERSATION)).map((message) => message.id)).toEqual([earlier.id, text.id]);
+    expect((await reopened.claimNextOutgoing())?.message.id).toBe(earlier.id);
+    expect((await reopened.claimNextOutgoing())?.message.id).toBe(text.id);
+  });
   it("reopens the same immutable outgoing message and queued outbox", async () => {
     const first = await open();
     await first.enqueueOutgoing(text);

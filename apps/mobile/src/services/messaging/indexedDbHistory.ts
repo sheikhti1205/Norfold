@@ -28,6 +28,22 @@ export const MESSAGING_IDB_VERSION = 10;
 const STORES = ["messages", "outbox", "events", "mailbox", "conversations", "stateEvents", "rangeStateEvents", "deletions", "clears", "unsends", "mediaAttachments", "mediaLifecycle", "conversationCheckpoints", "conversationProgress", "conversationUnavailable", "unsentHolds"];
 const LEASE_MS = 60_000;
 
+type OrderedMessage = StoredHumanMessage & { enqueueOrder?: number };
+function pendingOrder(a: OrderedMessage, b: OrderedMessage): number {
+  return (a.enqueueOrder ?? 0) - (b.enqueueOrder ?? 0) || a.id.localeCompare(b.id);
+}
+
+function assignEnqueueOrder(tx: IDBTransaction, guard: (callback: () => void) => () => void,
+  save: (order: number) => void) {
+  const store = tx.objectStore("mediaLifecycle");
+  const request = store.get("enqueueOrder");
+  request.onsuccess = guard(() => {
+    const order = (typeof request.result === "number" ? request.result : 0) + 1;
+    store.put(order, "enqueueOrder");
+    save(order);
+  });
+}
+
 interface EventIdentity {
   eventId: string;
   conversationId: string;
@@ -190,7 +206,11 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
       const deleted = new Set((deletions.result as Array<{ messageId: string }>).map((row) => row.messageId));
       const cleared = new Map((clears.result as Array<{ conversationId: string; throughSequence: number }>).map((row) => [row.conversationId, row.throughSequence]));
       done(messages.filter((message) => !deleted.has(message.id)
-        && (!message.server || message.server.sequence > (cleared.get(message.conversationId) ?? 0))));
+        && (!message.server || message.server.sequence > (cleared.get(message.conversationId) ?? 0)))
+        .map((message) => {
+          const { enqueueOrder: _enqueueOrder, ...visible } = message as OrderedMessage;
+          return visible;
+        }));
     });
     deletions.onsuccess = complete; clears.onsuccess = complete;
   }
@@ -263,9 +283,11 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
         const existing = request.result as StoredHumanMessage | undefined;
         if (existing && !sameMessage(existing, message)) throw new Error("Immutable message conflict");
         if (!existing) {
-          messages.add({ ...message, createdAt: message.createdAt ?? Date.now() });
-          tx.objectStore("outbox").add({ messageId: message.id, status: "QUEUED", attempts: 0,
-            ...(expectedEpoch ? { expectedEpoch } : {}) } satisfies OutboxEntry);
+          assignEnqueueOrder(tx, guard, (enqueueOrder) => {
+            messages.add({ ...message, createdAt: message.createdAt ?? Date.now(), enqueueOrder });
+            tx.objectStore("outbox").add({ messageId: message.id, status: "QUEUED", attempts: 0,
+              ...(expectedEpoch ? { expectedEpoch } : {}) } satisfies OutboxEntry);
+          });
           updateConversation(tx, guard, message.conversationId, conversationPeer(scope, message),
             (state) => ({ ...state, updatedAt: Date.now() }));
         } else if (!existing.messageType && !existing.server && existing.unsentAt === undefined && queued.result) {
@@ -382,7 +404,7 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
         const messages = (request.result as StoredHumanMessage[])
           .filter((message) => message.server !== undefined || message.unsentAt === undefined);
         // Pending messages have no server order. UUID tie-breaker, never timestamp inference.
-        messages.sort((a, b) => (a.server?.sequence ?? Infinity) - (b.server?.sequence ?? Infinity) || a.id.localeCompare(b.id));
+        messages.sort((a, b) => (a.server?.sequence ?? Infinity) - (b.server?.sequence ?? Infinity) || pendingOrder(a, b));
         visibleMessages(tx, guard, messages, result);
       });
     });
@@ -484,23 +506,27 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
     const skip = new Set(except.filter((id) => typeof id === "string" && id.length > 0));
     return transaction("readwrite", (tx, result, guard) => {
       const outbox = tx.objectStore("outbox");
-      const cursor = outbox.openCursor();
-      cursor.onsuccess = guard(() => {
-        const current = cursor.result;
-        if (!current) { result(null); return; }
-        const entry = current.value as OutboxEntry;
-        if (skip.has(entry.messageId)) { current.continue(); return; }
+      const entries = outbox.getAll();
+      const messages = tx.objectStore("messages").getAll();
+      let remaining = 2;
+      const complete = guard(() => {
+        if (--remaining) return;
+        const byId = new Map((messages.result as OrderedMessage[]).map((message) => [message.id, message]));
+        const ordered = (entries.result as OutboxEntry[]).sort((a, b) => {
+          const left = byId.get(a.messageId), right = byId.get(b.messageId);
+          return left && right ? pendingOrder(left, right) : a.messageId.localeCompare(b.messageId);
+        });
+        for (const entry of ordered) {
+        if (skip.has(entry.messageId)) continue;
         const now = Date.now();
         if (entry.status === "SENDING" && (entry.leaseUntil ?? Infinity) > now) {
-          current.continue(); return;
+          continue;
         }
-        const request = tx.objectStore("messages").get(entry.messageId);
-        request.onsuccess = guard(() => {
-          const message = request.result as StoredHumanMessage | undefined;
+          const message = byId.get(entry.messageId);
           if (!message || message.server) throw new Error("Messaging outbox identity conflict");
           // NULL/absent classification itself is the durable quarantine. Do not
           // lease or increment attempts; later classified sends must progress.
-          if (!message.messageType) { current.continue(); return; }
+          if (!message.messageType) continue;
           const token = crypto.randomUUID();
           const attempts = entry.attempts + 1;
           outbox.put({ messageId: entry.messageId, status: "SENDING", attempts, token, leaseUntil: now + LEASE_MS,
@@ -509,8 +535,11 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
           // refuse the send instead of this client inventing one for it.
           result({ message: copyReceivedMessage(message), token, attempt: attempts,
             ...(entry.expectedEpoch ? { expectedEpoch: entry.expectedEpoch } : {}) });
-        });
+          return;
+        }
+        result(null);
       });
+      entries.onsuccess = complete; messages.onsuccess = complete;
     });
   }
 
@@ -1033,9 +1062,11 @@ export async function openWebMessagingHistory(identity: MessagingScope, options:
               tx.objectStore("messages").put({ ...parent, messageType: message.messageType ?? "MEDIA" });
             }
           } else {
-            tx.objectStore("messages").add({ ...message, createdAt: message.createdAt ?? Date.now() });
-            tx.objectStore("outbox").add({ messageId: message.id, status: "QUEUED", attempts: 0,
-              ...(expectedEpoch ? { expectedEpoch } : {}) } satisfies OutboxEntry);
+            assignEnqueueOrder(tx, guard, (enqueueOrder) => {
+              tx.objectStore("messages").add({ ...message, createdAt: message.createdAt ?? Date.now(), enqueueOrder });
+              tx.objectStore("outbox").add({ messageId: message.id, status: "QUEUED", attempts: 0,
+                ...(expectedEpoch ? { expectedEpoch } : {}) } satisfies OutboxEntry);
+            });
             updateConversation(tx, guard, message.conversationId, conversationPeer(scope, message),
               (state) => ({ ...state, updatedAt: Date.now() }));
           }

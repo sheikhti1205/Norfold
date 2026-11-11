@@ -706,16 +706,22 @@ describe("two installations writing one account", () => {
     expect(restoredTarget.unsentAt).toBe(500);
   });
 
-  it("refuses to guess which installation to drop when the manifest bound is exceeded", async () => {
+  it("refuses a new installation at the manifest bound without damaging the backup", async () => {
     const store = memoryStore();
     // Every reinstall can leave its own manifest behind; past the bound a restore
     // fails closed instead of silently ignoring one installation's history.
-    for (let index = 0; index < 17; index++) {
+    for (let index = 0; index < 16; index++) {
       const deviceId = uuid(0x200 + index);
       const snapshot = snapshotOf([{ chat: CHAT, count: 1, base: 0x3000 + index * 0x10 }]);
       await upload(store, snapshot, { scope: { accountId: A, deviceId }, now: NOW + index });
     }
-    await expect(download(store)).rejects.toMatchObject({ code: "backup: invalid manifest" });
+    const before = store.names();
+    await expect(upload(store, snapshotOf([{ chat: CHAT, count: 1, base: 0x5000 }]),
+      { scope: { accountId: A, deviceId: uuid(0x210) } })).rejects.toMatchObject({
+      code: "backup: device limit reached; remove an old device backup before adding another",
+    });
+    expect(store.names()).toEqual(before);
+    expect((await download(store)).snapshot.messages).toHaveLength(16);
   });
 
   it("keeps a legacy single-manifest backup readable and untouched", async () => {
@@ -777,6 +783,17 @@ describe("media in an encrypted Drive backup", () => {
     const restored = await download(store);
     expect(new Uint8Array(restored.media.get(f.attachments[0]!.id)!)).toEqual(photo);
     expect(new Uint8Array(restored.media.get(f.attachments[1]!.id)!)).toEqual(voice);
+  });
+
+  it("refuses to compact media when retained attachment metadata is missing", async () => {
+    const store = memoryStore(), f = await fixture();
+    await upload(store, f.snapshot, { media: f.media });
+    const before = store.names();
+    await expect(upload(store, { ...f.snapshot, attachments: f.attachments.slice(1) }))
+      .rejects.toMatchObject({ code: "backup: incomplete snapshot" });
+    expect(store.names()).toEqual(before);
+    const restored = await download(store);
+    expect(new Uint8Array(restored.media.get(f.attachments[0]!.id)!)).toEqual(photo);
   });
 
   it("compacts media once its message is retired", async () => {

@@ -166,6 +166,30 @@ afterEach(() => {
 });
 
 describe("schema and durability", () => {
+  it("claims and displays pending messages in enqueue order after reopening", async () => {
+    const first = await open();
+    await first.enqueueOutgoing({ ...outgoing, id: MESSAGE_2 });
+    await first.enqueueOutgoing(outgoing);
+    await first.close();
+    database = new DatabaseSync(path);
+    const reopened = await open();
+    expect((await reopened.listMessages(CONVERSATION)).map((message) => message.id)).toEqual([MESSAGE_2, MESSAGE]);
+    expect((await reopened.claimNextOutgoing())?.message.id).toBe(MESSAGE_2);
+    expect((await reopened.claimNextOutgoing())?.message.id).toBe(MESSAGE);
+    await reopened.close();
+  });
+
+  it("preserves supplied inbound creation time and defaults an absent time to receipt time", async () => {
+    const first = await open();
+    await first.persistInbound(inbound({ createdAt: clock - 5000 }));
+    await first.persistInbound(inbound({ id: MESSAGE_2 }, EVENT_2, MAILBOX_2, 2));
+    await first.close();
+    database = new DatabaseSync(path);
+    const reopened = await open();
+    expect((await reopened.getMessage(MESSAGE))?.createdAt).toBe(clock - 5000);
+    expect((await reopened.getMessage(MESSAGE_2))?.createdAt).toBe(clock);
+    await reopened.close();
+  });
   it("exports only accepted history and restores it without producing mailbox or outbox work", async () => {
     const history = await open();
     await history.persistInbound(inbound());
@@ -1424,7 +1448,7 @@ describe("chat media schema and migration", () => {
     // and the v12 upgrade adds the reply column the same way.
     const payload = { context_report_id: null, reply_to_id: null, location_lat: null, location_lng: null, location_accuracy_m: null };
     expect(database.prepare("select * from messages order by id").all()).toEqual([
-      { ...before[0], message_type: null, ...payload }, { ...before[1], message_type: "MEDIA", ...payload },
+      { ...before[0], message_type: null, ...payload, enqueue_order: 1 }, { ...before[1], message_type: "MEDIA", ...payload, enqueue_order: 2 },
     ]);
     expect(database.prepare("select * from outbox").all()).toEqual(outbox);
     // The v11 rebuild adds the voice duration column with a NULL for a photo.
@@ -1584,6 +1608,18 @@ describe("chat media schema and migration", () => {
 });
 
 describe("chat media records", () => {
+  it("keeps a media reply through reopen and outbox claim", async () => {
+    const port = new FakeMediaBytes(() => clock);
+    const first = await openWithMedia(port);
+    const fixture = await mediaFixture(ATTACHMENT, MESSAGE);
+    await first.enqueueOutgoingWithMedia({ ...outgoing, body: "", replyToId: MESSAGE_2 }, fixture.metadata, fixture.bytes);
+    await first.close();
+    database = new DatabaseSync(path);
+    const reopened = await openWithMedia(port);
+    expect((await reopened.claimNextOutgoing())?.message.replyToId).toBe(MESSAGE_2);
+    await reopened.close();
+  });
+
   it("reopens authoritative TEXT and MEDIA classifications", async () => {
     const first = await openWithMedia(new FakeMediaBytes(() => clock));
     await first.enqueueOutgoing(outgoing);
@@ -2196,6 +2232,22 @@ describe("chat media records", () => {
     expect(await port.keys(A)).toEqual([ATTACHMENT_2]);
     // The EVICTED row keeps its metadata; only its bytes are gone.
     expect(rawMedia(ATTACHMENT)).toMatchObject({ state: "EVICTED", sha256: ready.metadata.sha256 });
+    await history.close();
+  });
+
+  it("restores evicted bytes as readable and keeps them during orphan sweep", async () => {
+    const port = new FakeMediaBytes(() => clock);
+    const history = await openWithMedia(port);
+    await history.persistInbound(inbound());
+    const ready = await mediaFixture(ATTACHMENT, MESSAGE, { direction: "IN", expiresAt: clock + 1_000_000 });
+    await history.persistVerifiedMediaAndAck(ready.metadata, ready.bytes, async () => undefined);
+    const snapshot = await history.exportSnapshot();
+    await history.evictMedia(1);
+    await history.importSnapshot(snapshot, new Map([[ATTACHMENT, ready.bytes]]));
+    expect(await history.readMedia(ATTACHMENT)).toEqual(ready.bytes);
+    clock += MEDIA_SWEEP_GRACE_MS + 1;
+    expect(await history.sweepOrphanMedia(10)).toBe(0);
+    expect(await history.readMedia(ATTACHMENT)).toEqual(ready.bytes);
     await history.close();
   });
 

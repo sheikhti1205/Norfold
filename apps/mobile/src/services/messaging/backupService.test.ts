@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { HistorySnapshot, SnapshotMessage } from "./history";
 import type { BackupDriveStore } from "./backupDrive";
-import { downloadBackup } from "./backupDrive";
+import { BackupDriveError, downloadBackup } from "./backupDrive";
 import { importBackupKey } from "./backupCrypto";
 import { DriveStoreError } from "./driveStore";
 import { DriveAuthError, type DriveAccess } from "./driveAuth";
@@ -100,6 +100,14 @@ function fakeAuth(options: { available?: boolean; reason?: "native" | "unconfigu
 }
 
 describe("safe backup failure diagnosis", () => {
+  it("persists the device limit in the existing backup failure vocabulary", async () => {
+    const store = memoryStore();
+    store.list = async () => { throw new BackupDriveError("backup: device limit reached; remove an old device backup before adding another"); };
+    const h = harness({ store });
+    await expect(h.backup.connect()).resolves.toEqual({ kind: "failed", reason: "device-limit" });
+    expect(h.backup.status()).toMatchObject({ kind: "attention", lastError: "device-limit" });
+    expect(parseBackupState(h.storage.raw()).lastError).toBe("device-limit");
+  });
   it("does not mislabel a rejected Drive contract as an offline connection", async () => {
     const store = memoryStore();
     store.list = async () => { throw new DriveStoreError("invalid", 0, 403, "api-disabled"); };

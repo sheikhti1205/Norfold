@@ -140,6 +140,7 @@ export type BackupDriveErrorCode =
   | "backup: key generation changed"
   | "backup: empty snapshot"
   | "backup: incomplete snapshot"
+  | "backup: device limit reached; remove an old device backup before adding another"
   | "backup: unsupported version"
   | "backup: chunk missing"
   | "backup: chunk mismatch";
@@ -531,6 +532,21 @@ function assertCoverage(previous: HistorySnapshot, next: HistorySnapshot): void 
       || kept.serverEventId !== row.serverEventId || kept.authorId !== row.authorId || kept.recipientId !== row.recipientId
       || (row.body === null && kept.body !== null) || (row.unsentAt !== null && kept.unsentAt === null)) incomplete();
   }
+  const priorMessages = new Map(previous.messages.map(row => [row.id, row]));
+  const attachments = new Map((next.attachments ?? []).map(row => [row.id, row]));
+  for (const row of previous.attachments ?? []) {
+    const message = priorMessages.get(row.messageId);
+    if (!message) { incomplete(); continue; }
+    const tombstone = tombstones.get(message.id), deletion = deletions.get(message.id);
+    const retired = (clears.get(message.conversationId) ?? -1) >= message.serverSequence
+      || (tombstone?.conversationId === message.conversationId
+        && tombstone.unsentBy === message.authorId && tombstone.recipientId === message.recipientId)
+      || (deletion !== undefined && (deletion.conversationId === null || deletion.conversationId === message.conversationId));
+    if (retired) continue;
+    const kept = attachments.get(row.id);
+    if (!kept || kept.messageId !== row.messageId || kept.direction !== row.direction
+      || kept.sha256 !== row.sha256 || kept.mime !== row.mime || kept.byteSize !== row.byteSize) incomplete();
+  }
 }
 
 /**
@@ -548,6 +564,11 @@ export async function uploadBackup(input: BackupUploadInput): Promise<BackupUplo
   const files = (await store.list()).filter((file) => isBackupName(file.name, scope.accountId));
   const existingManifests = files.filter((file) => file.name === ownManifestName);
   if (existingManifests.length > 1) throw fail("backup: invalid manifest");
+  const deviceManifestCount = files.filter((file) => MANIFEST.exec(file.name)?.[1] === scope.accountId).length;
+  if (deviceManifestCount > MAX_BACKUP_DEVICES
+    || (!existingManifests.length && deviceManifestCount >= MAX_BACKUP_DEVICES)) {
+    throw fail("backup: device limit reached; remove an old device backup before adding another");
+  }
   // An unreadable backup cannot establish what a replacement would omit.
   const previousManifest = existingManifests[0]
     ? await readManifestFile(store, existingManifests[0], key, scope, crypto) : null;

@@ -176,7 +176,7 @@ const SUPPORTED_PRIOR_VERSIONS: readonly string[] = [
   // every existing install refuse to open its own chat history. "11" is the
   // voice build, which gains the reply column on upgrade. "12" is the reply
   // build; it opens here and gains the local unsent-hold table.
-  "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", String(MESSAGING_SQLITE_SCHEMA_VERSION),
+  "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", String(MESSAGING_SQLITE_SCHEMA_VERSION),
 ];
 
 function defaultToken(): string {
@@ -536,6 +536,18 @@ export async function openSqliteMessagingHistory(
       try { await driver.exec("rollback"); } catch { /* commit may already have failed */ }
       throw error;
     }
+  }
+  // Existing message rowid is the best available insertion ordering for v13.
+  await driver.exec("begin immediate");
+  try {
+    const columns = await driver.all<{ name: string }>(S.messageColumns);
+    if (!columns.some((column) => column.name === "enqueue_order")) await driver.exec(S.addMessageEnqueueOrder);
+    await driver.run(S.backfillMessageEnqueueOrder);
+    await driver.run(S.setSchemaVersion, [String(MESSAGING_SQLITE_SCHEMA_VERSION)]);
+    await driver.exec("commit");
+  } catch (error) {
+    try { await driver.exec("rollback"); } catch { /* transaction may already be gone */ }
+    throw error;
   }
   } catch (error) {
     await driver.close();
@@ -1007,7 +1019,7 @@ export async function openSqliteMessagingHistory(
           ]);
         } else {
           await driver.run(S.insertMessage, [
-            message.id, message.conversationId, message.authorId, message.recipientId, message.body, now(), message.messageType ?? null,
+            message.id, message.conversationId, message.authorId, message.recipientId, message.body, message.createdAt ?? now(), message.messageType ?? null,
             message.contextReportId ?? null, message.replyToId ?? null,
             message.location?.lat ?? null, message.location?.lng ?? null,
             message.location?.accuracy ?? null,
@@ -1554,6 +1566,7 @@ export async function openSqliteMessagingHistory(
             try { await verifyMediaBytes(attachment, stored); }
             catch { throw new BackupError("backup: identity conflict"); }
           } else await store.put(scope.accountId, attachment.id, bytes);
+          if (existing?.state === "EVICTED") await driver.run(S.restoreEvictedMedia, [now(), attachment.id]);
         }
         report.attachments += 1;
       }
@@ -1661,7 +1674,7 @@ export async function openSqliteMessagingHistory(
         if (!parent.messageType) await driver.run(S.bindMessageType, [outgoing.messageType ?? "MEDIA", outgoing.id]);
       } else {
         await driver.run(S.insertMessage, [outgoing.id, outgoing.conversationId, outgoing.authorId,
-          outgoing.recipientId, outgoing.body, outgoing.createdAt ?? now(), outgoing.messageType ?? null, null, null, null, null, null]);
+          outgoing.recipientId, outgoing.body, outgoing.createdAt ?? now(), outgoing.messageType ?? null, null, outgoing.replyToId ?? null, null, null, null]);
         await driver.run(S.enqueueOutbox, [outgoing.id, expectedEpoch ?? null]);
         await driver.run(S.touchConversationState, [now(), outgoing.conversationId]);
       }

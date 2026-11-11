@@ -28,6 +28,7 @@ function requireOutcome(result: BackupOperationResult, kind: "committed" | "rest
       ? "Norfold couldn't read your chats on this device. Your existing backup was left as it was."
       : result.reason === "account"
         ? "This device can't use the backup key. Sign in again; if this device was removed, add it again."
+      : result.reason === "device-limit" ? "Remove an old device backup before adding another, then try again."
       : result.reason === "storage" ? "Backup didn't finish. Check available storage, then try again."
       : result.reason === "throttled" ? "Google Drive asked us to wait. Try again later."
       : result.reason === "provider" ? "Google Drive rejected the backup request. Try again; if it keeps happening, contact support."
@@ -82,6 +83,7 @@ function statusCopy(status: BackupStatus): { title: string; description: string;
             description: "Google Drive asked us to slow down. We'll try again automatically." }
            : { title: "Google Drive backup", label: "Needs attention", tone: "warning",
               description: status.lastError === "integrity" ? "Your existing backup couldn't be opened safely. It has not been replaced."
+                : status.lastError === "device-limit" ? "Remove an old device backup before adding another, then try again."
                 : status.lastError === "storage" ? "Check available storage, then retry the backup."
                   : status.lastError === "provider" ? "Google Drive rejected the last backup request."
                   : "The last backup didn't finish. We'll retry while Norfold is open." };

@@ -45,8 +45,7 @@ describe.each(["web", "android"] as const)("%s durable read knowledge", platform
       h = await open("source"); handles.push(h);
       expect(await h.getMessage(M)).toMatchObject({ readByPeer: true });
       expect(await h.getMessage(N)).toMatchObject({ readLocally: true, receiptObserved: true });
-      // Same deterministic tie-break on both adapters, not platform-local
-      // insertion timestamps (which differ across restore/replay/device).
+      // The enqueue key, not UUID order or the wall clock, positions pending sends.
       const pendingIds = ["00000000-0000-4000-8000-000000000009", "00000000-0000-4000-8000-000000000008"];
       const clock = vi.spyOn(Date, "now");
       try {
@@ -55,7 +54,11 @@ describe.each(["web", "android"] as const)("%s durable read knowledge", platform
           await h.enqueueOutgoing({ id, conversationId: C, authorId: A, recipientId: B, body: "pending", messageType: "TEXT" }, "a".repeat(64));
         }
       } finally { clock.mockRestore(); }
-      expect((await h.listMessages(C)).map(message => message.id)).toEqual([M, N, ...[...pendingIds].reverse()]);
+      await h.close();
+      h = await open("source"); handles.push(h);
+      expect((await h.listMessages(C)).map(message => message.id)).toEqual([M, N, ...pendingIds]);
+      expect((await h.claimNextOutgoing())?.message.id).toBe(pendingIds[0]);
+      expect((await h.claimNextOutgoing())?.message.id).toBe(pendingIds[1]);
       const backup = await decodeBackup(encodeBackup(await createBackup(h, scope, 100)));
       const restored = await open("target"); handles.push(restored);
       await restored.importSnapshot(backup.snapshot);
