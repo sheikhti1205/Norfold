@@ -53,6 +53,11 @@ function renderScreen() {
 }
 
 describe("the devices signed in to an account", () => {
+  it("does not expose an internal device error", async () => {
+    mockListDevices.mockRejectedValue(new ApiError("private device endpoint secret", 418));
+    renderScreen();
+    expect((await screen.findByTestId("devices-error")).textContent).toBe("Something went wrong. Try again.");
+  });
   it("shows a friendly name, the platform and recency, marking this device", async () => {
     renderScreen();
     expect(await screen.findByRole("button", { name: "My phone" })).toBeTruthy();

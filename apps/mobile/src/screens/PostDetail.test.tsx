@@ -87,6 +87,7 @@ vi.mock("../components/RecoverySheet", async (importOriginal) => {
 import { PostDetail } from "./PostDetail";
 import { mapCommentAttachmentRefs } from "../services/commentAttachments";
 import { LiveRegion } from "../components/LiveRegion";
+import { ApiError } from "../services/session";
 
 beforeEach(() => {
   reportGate.enabled = false;
@@ -143,6 +144,29 @@ function renderDetail(entry = "/posts/p1") {
     </MemoryRouter>,
   );
 }
+
+describe("PostDetail initial load", () => {
+  beforeEach(() => {
+    postsMock.fetchComments.mockResolvedValue([]);
+    postsMock.fetchSocialState.mockResolvedValue({ myReaction: null, myRating: null });
+  });
+  afterEach(cleanup);
+
+  it("retries a transient failure", async () => {
+    postsMock.fetchPost.mockRejectedValueOnce(new Error("network failure")).mockResolvedValueOnce(basePost);
+    renderDetail();
+    expect(await screen.findByText("Could not load post")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByTestId("detail-like")).toBeTruthy();
+  });
+
+  it("does not retry a missing post", async () => {
+    postsMock.fetchPost.mockRejectedValueOnce(new ApiError("private", 404));
+    renderDetail();
+    expect(await screen.findByText("Post unavailable")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+});
 
 describe("PostDetail overflow", () => {
   beforeEach(() => {

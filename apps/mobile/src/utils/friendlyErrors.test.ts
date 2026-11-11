@@ -11,6 +11,20 @@ import { friendlyError } from "./friendlyErrors";
  * failed save.
  */
 describe("friendlyError", () => {
+  it("never displays arbitrary exception text", () => {
+    expect(friendlyError(new Error("private endpoint /people/secret"))).toEqual({
+      code: "UNKNOWN", message: "Something went wrong. Try again.",
+    });
+    expect(friendlyError(new ApiError("private endpoint /people/secret", 400, "P0001")).message)
+      .not.toContain("private endpoint");
+  });
+
+  it("uses distinct fixed copy for permission, rate limit and not found", () => {
+    expect(friendlyError(new ApiError("You cannot block yourself", 400, "22023")).message).toBe("You cannot block yourself.");
+    expect(friendlyError(new ApiError("secret", 403)).message).toBe("You do not have permission to do that.");
+    expect(friendlyError(new ApiError("secret", 429)).message).toBe("Too many attempts. Wait a moment and try again.");
+    expect(friendlyError(new ApiError("secret", 404)).message).toBe("That item could not be found.");
+  });
   it("keeps a landed write that could not be read back out of the generic copy", () => {
     const error = new ApiError(
       "Your report was saved, but the app could not read it back. Refresh to see it.",

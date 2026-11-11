@@ -3,7 +3,6 @@ import { BottomSheet } from "../components/BottomSheet";
 import { Button } from "../components/Button";
 import { announce } from "../components/LiveRegion";
 import { SettingsGroup, SettingsPage, SettingsRow, StatusPill } from "../components/settings";
-import { ApiError } from "../services/session";
 import {
   describeDeviceActivity,
   describeDevicePlatform,
@@ -16,7 +15,6 @@ import { friendlyError } from "../utils/friendlyErrors";
 
 /** One human sentence for a device operation, never raw transport text. */
 function deviceError(err: unknown): string {
-  if (err instanceof ApiError && err.message) return err.message;
   return friendlyError(err).message;
 }
 
