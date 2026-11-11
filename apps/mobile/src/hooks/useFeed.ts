@@ -14,6 +14,8 @@ export interface FeedState {
   refreshing: boolean;
   loadingMore: boolean;
   error: string | null;
+  failedOperation?: "refresh" | "loadMore" | null;
+  updatesAvailable?: boolean;
   hasMore: boolean;
   refresh: () => Promise<void>;
   loadMore: () => Promise<void>;
@@ -75,10 +77,9 @@ export function useFeed(filters: FeedFilters, options: UseFeedOptions = {}): Fee
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const cursorRef = useRef<string | null>(null);
-  if (cacheKey && cursorRef.current === null) {
-    cursorRef.current = loadFeedCache(cacheKey)?.cursor ?? null;
-  }
+  const [failedOperation, setFailedOperation] = useState<"refresh" | "loadMore" | null>(null);
+  const [updatesAvailable, setUpdatesAvailable] = useState(false);
+  const cursorRef = useRef<string | null>(cacheKey ? loadFeedCache(cacheKey)?.cursor ?? null : null);
   const generationRef = useRef(0);
   const loadedRef = useRef(false);
   // The invalidation epoch this feed's visible data belongs to. A save with an
@@ -102,6 +103,8 @@ export function useFeed(filters: FeedFilters, options: UseFeedOptions = {}): Fee
     // response cannot overwrite the newly selected (possibly cached) feed.
     generationRef.current += 1;
     restoredScrollRef.current = null;
+    setUpdatesAvailable(false);
+    setFailedOperation(null);
     cursorRef.current = null;
     if (cacheKey) {
       const cached = loadFeedCache(cacheKey);
@@ -177,10 +180,12 @@ export function useFeed(filters: FeedFilters, options: UseFeedOptions = {}): Fee
       // the items on screen and reconcile atomically when this generation
       // resolves. Only an empty list takes the cold-loading path.
       const isRefresh = !append && latestRef.current.items.length > 0;
+      const startedAtTop = (scrollRef?.current?.scrollTop ?? 0) <= 0;
       if (append) setLoadingMore(true);
       else if (isRefresh) setRefreshing(true);
       else setLoading(true);
       setError(null);
+      setFailedOperation(null);
       const startedAt = Date.now();
       const fetchEpoch = feedCacheEpoch();
       try {
@@ -188,12 +193,18 @@ export function useFeed(filters: FeedFilters, options: UseFeedOptions = {}): Fee
         recordLoadTiming("feed", Date.now() - startedAt);
         // Discard if filters/generation changed while we were fetching
         if (gen !== generationRef.current) return;
+        if (isRefresh && startedAtTop && (scrollRef?.current?.scrollTop ?? 0) > 0) {
+          dirtyRef.current = true;
+          setUpdatesAvailable(true);
+          return;
+        }
         loadedRef.current = true;
         // Only a full replacement can certify every retained row. An append
         // keeps the base snapshot's epoch and dirty provenance.
         if (!append) {
           dirtyRef.current = false;
           loadedEpochRef.current = fetchEpoch;
+          setUpdatesAvailable(false);
         }
         // Keep the initial full filtered total stable: keyset follow-up
         // pages carry a page-relative count, so appends must never overwrite it.
@@ -204,6 +215,7 @@ export function useFeed(filters: FeedFilters, options: UseFeedOptions = {}): Fee
         recordLoadTiming("feed", Date.now() - startedAt);
         if (gen !== generationRef.current) return;
         setError(friendlyError(err).message);
+        setFailedOperation(append ? "loadMore" : "refresh");
         // A failed refresh keeps the visible items; only a failed cold load
         // clears the list.
         if (!append && !isRefresh) setItems([]);
@@ -226,11 +238,14 @@ export function useFeed(filters: FeedFilters, options: UseFeedOptions = {}): Fee
     loadedEpochRef.current = feedCacheEpoch();
     dirtyRef.current = cached ? cached.dirty : false;
     if (cached && !cached.dirty) return;
+    if (cached?.dirty && cached.scrollTop > 0) {
+      setUpdatesAvailable(true);
+      return;
+    }
     void load(null, false);
   }, [cacheKey, filterKey, load]);
 
   const refresh = useCallback(async () => {
-    cursorRef.current = null;
     await load(null, false);
   }, [load]);
 
@@ -270,6 +285,8 @@ export function useFeed(filters: FeedFilters, options: UseFeedOptions = {}): Fee
     refreshing,
     loadingMore,
     error,
+    failedOperation,
+    updatesAvailable,
     hasMore: Boolean(cursorRef.current),
     refresh,
     loadMore,

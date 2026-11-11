@@ -20,6 +20,7 @@ interface PostListProps {
   loading: boolean;
   loadingMore: boolean;
   error: string | null;
+  failedOperation?: "refresh" | "loadMore" | null;
   hasMore: boolean;
   onLoadMore: () => Promise<void>;
   onRetry?: () => Promise<void>;
@@ -44,6 +45,7 @@ export function PostList({
   loading,
   loadingMore,
   error,
+  failedOperation,
   hasMore,
   onLoadMore,
   onRetry,
@@ -249,7 +251,7 @@ export function PostList({
                 <span>{error}</span>
                 <button
                   type="button"
-                  onClick={() => void onLoadMore()}
+                  onClick={() => void (failedOperation === "refresh" ? onRetry?.() : onLoadMore())}
                   className="min-h-[48px] shrink-0 px-3 font-medium underline"
                 >
                   Retry

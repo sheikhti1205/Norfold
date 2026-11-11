@@ -7,6 +7,7 @@ import type { PostType } from "@norfold/shared";
 import { Segmented } from "../components/Segmented";
 import { EmptyState } from "../components/PostCard";
 import { PostList } from "../components/PostList";
+import { NewPostsPill } from "../components/NewPostsPill";
 import { PeopleSearch } from "../components/PeopleSearch";
 import { useFeed } from "../hooks/useFeed";
 import { useUrlParam } from "../hooks/useUrlParam";
@@ -454,7 +455,7 @@ function ReportSearch(props: SearchScreenProps) {
     setQParam(appliedQuery);
   }, [appliedQuery, setQParam]);
 
-  const { items, total, loading, loadingMore, error, hasMore, refresh, loadMore } = useFeed(
+  const { items, total, loading, loadingMore, error, failedOperation, updatesAvailable, hasMore, refresh, loadMore } = useFeed(
     {
       type: type === "ALL" ? "" : type,
       category: advanced.category || undefined,
@@ -693,6 +694,7 @@ function ReportSearch(props: SearchScreenProps) {
           way to tell an empty search from a broken one. The floor holds the
           list at a usable height, and the column gives up the difference. */}
       <div ref={scrollRef} data-testid="search-results-scroller" onScroll={handleResultsScroll} className="min-h-[4rem] flex-1 overflow-y-auto">
+        <NewPostsPill count={0} hasUpdates={updatesAvailable} onTap={() => { void refreshReports(); scrollRef.current?.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" }); }} />
         {feedEmpty || placeEmpty ? (
           <EmptyState
             compact
@@ -725,6 +727,7 @@ function ReportSearch(props: SearchScreenProps) {
             loading={loading}
             loadingMore={loadingMore}
             error={error}
+            failedOperation={failedOperation}
             hasMore={hasMore}
             onLoadMore={loadMoreReports}
             onRetry={refreshReports}

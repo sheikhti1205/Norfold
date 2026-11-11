@@ -66,6 +66,14 @@ function list(items: PostItem[]) {
 }
 
 describe("PostList refresh contract", () => {
+  it.each(["refresh", "loadMore"] as const)("retries the failed %s operation", (operation) => {
+    const refresh = vi.fn(async () => {});
+    const loadMore = vi.fn(async () => {});
+    render(<MemoryRouter><PostList {...base} items={[post("p1", "Keys")]} error="Network problem" failedOperation={operation} onRetry={refresh} onLoadMore={loadMore} /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(operation === "refresh" ? refresh : loadMore).toHaveBeenCalledTimes(1);
+    expect(operation === "refresh" ? loadMore : refresh).not.toHaveBeenCalled();
+  });
   it("renders no refresh text state: no Refreshing row while lists settle", () => {
     const { container } = render(list([post("p1", "Keys"), post("p2", "Wallet")]));
     expect(screen.queryByText(/refreshing/i)).toBeNull();
