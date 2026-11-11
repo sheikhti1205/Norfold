@@ -1,9 +1,9 @@
 # Version history
 
-FindBack is **beta / pre-public**. This page describes how the project's versions are
+Norfold is **beta / pre-public**. This page describes how the project's versions are
 derived, what each interval contains, and what the history does *not* prove. The
-per-commit record is [VERSION_HISTORY.csv](VERSION_HISTORY.csv) — one row per source
-commit, `r0001`–`r0895`.
+historical reconstruction is [VERSION_HISTORY.csv](VERSION_HISTORY.csv), covering
+source commits `r0001`–`r0895`.
 
 ## How versions are derived
 
