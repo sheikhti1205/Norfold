@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { Updates } from "./Updates";
+import { UpdateChanges } from "../components/UpdateChanges";
 
 // SettingsPage renders the shared TopUtilities, whose unread-badge owner is
 // auth-scoped. This suite exercises update state, not sign-in state.
@@ -95,6 +96,18 @@ afterEach(() => {
 });
 
 describe("updates screen", () => {
+  it("explains unavailable changes without inventing build or account facts", () => {
+    const feature = { id: "one", releaseId: "one", summary: "A change", destinationId: "search", platforms: ["web" as const], acceptedBuildShas: ["a".repeat(40)], acceptanceReceipt: "receipt", prerequisites: [] };
+    const context = { platform: "web" as const, buildGitSha: "a".repeat(40), signedIn: true, capabilities: [], satisfiedPrerequisites: [] };
+    const view = render(<MemoryRouter><UpdateChanges features={[feature]} context={{ ...context, buildGitSha: "" }} /></MemoryRouter>);
+    expect(screen.getByText("We couldn't determine if this is available to you.")).toBeTruthy();
+    view.rerender(<MemoryRouter><UpdateChanges features={[feature]} context={{ ...context, signedIn: false }} /></MemoryRouter>);
+    expect(screen.getByText("Sign in to use this.")).toBeTruthy();
+    view.rerender(<MemoryRouter><UpdateChanges features={[feature]} context={{ ...context, buildGitSha: "b".repeat(40) }} /></MemoryRouter>);
+    expect(screen.getByText("Not available in this build.")).toBeTruthy();
+    view.rerender(<MemoryRouter><UpdateChanges features={[{ ...feature, prerequisites: ["unknown"] }]} context={context} /></MemoryRouter>);
+    expect(screen.getByText("We couldn't determine if this is available to you.")).toBeTruthy();
+  });
   it("does not call an unverifiable native installation up to date after a successful check", () => {
     runtime.native = true;
     runtime.snapshot = snapshot({ lastCheck: { attemptedAt: 2_000, status: "ok", checkedAt: 1_000 } });

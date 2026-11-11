@@ -46,7 +46,7 @@ export function AdminAuditLog() {
   return (
     <SettingsPage
       title="Activity log"
-      description="Every change to a role or a permission, newest first. Entries cannot be edited or removed."
+      description="The most recent 100 changes to roles or permissions, newest first. Entries cannot be edited or removed."
       backTo="/settings/team"
     >
       <SettingsGroup title="Recent activity">
