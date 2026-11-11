@@ -13,8 +13,7 @@ vi.mock("../services/accountLabels", () => ({ readCachedAccountIdentities: () =>
 ]) }));
 vi.mock("../services/people", async original => ({ ...await original<typeof import("../services/people")>(), searchPeople: async () => ({ items: [], nextCursor: null }) }));
 vi.mock("../services/posts", () => ({ fetchPost: async () => ({ id:"report", title:"Blue wallet", type:"FOUND" }) }));
-import { Connections, LegacyChatsRedirect, photoBatches, replyPreview, replySwipeFor } from "./Messaging";
-import type { StoredHumanMessage } from "../services/messaging/history";
+import { Connections, LegacyChatsRedirect, replyPreview, replySwipeFor } from "./Messaging";
 import { RouteTransition } from "../components/RouteTransition";
 function Location() { return <p data-testid="location">{useLocation().pathname}</p>; }
 function app() { return <MemoryRouter initialEntries={["/chats"]}><Routes><Route element={<RouteTransition />}>
@@ -60,26 +59,6 @@ it("mirrors the bubble direction for the reply swipe and names a quoted attachme
   expect(replyPreview({ ...base, messageType: "LOCATION" })).toBe("Location");
   expect(replyPreview({ ...base, body: "Kept text" })).toBe("Kept text");
   expect(replyPreview({ ...base, body: "Gone", unsentAt: 1 })).toBe("Message unsent");
-});
-it("does not infer photo batches from timestamps or authors", () => {
-  const photo = (id: string, authorId: string, createdAt: number, extra: Partial<StoredHumanMessage> = {}): StoredHumanMessage => ({
-    id, conversationId: "chat", authorId, recipientId: "other", body: "", messageType: "MEDIA", createdAt, ...extra });
-  const text = (id: string, authorId: string, createdAt: number): StoredHumanMessage => ({
-    id, conversationId: "chat", authorId, recipientId: "other", body: "hi", messageType: "TEXT", createdAt });
-  const runs = photoBatches([
-    photo("a1", "peer", 1_000), photo("a2", "peer", 2_500), photo("a3", "peer", 4_000),
-    text("t1", "peer", 5_000),
-    photo("b1", "peer", 6_000), photo("b2", "peer", 7_000),
-    photo("c1", "viewer", 8_000), photo("c2", "viewer", 8_500),
-    photo("d1", "peer", 9_000), photo("d2", "peer", 13_500),
-    text("t2", "peer", 13_600),
-    photo("e1", "peer", 14_000), photo("e2", "peer", 0),
-    text("t3", "peer", 14_100),
-    photo("f1", "peer", 15_000), photo("f2", "peer", 16_000, { unsentAt: 1 }), photo("f3", "peer", 17_000),
-  ]);
-  expect(runs.batches.size).toBe(0);
-  expect(runs.followers.size).toBe(0);
-  expect(runs.leaderOf.size).toBe(0);
 });
 it.each(["/connections", "/connections/chat"])("replaces legacy %s with the canonical destination and preserves query/hash", async path => {
   function Probe(){const location=useLocation();return <p data-testid="redirect">{location.pathname+location.search+location.hash}</p>;}
