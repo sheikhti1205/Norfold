@@ -10,14 +10,12 @@
 .nf-public-action { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; min-height: 44px; padding: .65rem 1.25rem; border-radius: 999px; background: var(--fb-primary); color: var(--fb-on-primary); font-weight: 600; }
 .nf-public-action:active { opacity: .85; }
 .nf-public-desktop-links { display: none; }
-.nf-public .nf-public-nav .nf-public-desktop-cta { display: none; }
 .nf-public-menu { position: relative; }
 .nf-public-menu summary { cursor: pointer; }
 .nf-public-menu > div { position: absolute; inset-inline-end: 0; top: 100%; z-index: 5; display: flex; flex-direction: column; width: 11rem; padding: .5rem 1rem; background: var(--fb-surface-container); box-shadow: 0 4px 16px #0002; border-radius: .75rem; }
 .nf-public-hero { position: relative; padding-bottom: 1.5rem; }
 .fb-onboarding--public { min-height: min(46rem, calc(100svh - 5rem)); padding-top: 0; padding-bottom: 1rem; }
 .fb-onboarding--public .fb-onboarding-header { min-height: 2.75rem; }
-.nf-public-hero-cta { margin-inline: clamp(1.25rem, 4vw, 4rem); }
 .nf-public-story { max-width: 72rem; margin-inline: auto; padding: 2rem clamp(1.25rem, 4vw, 4rem); }
 .nf-public-chapter { padding-block: clamp(2.5rem, 8vw, 6rem); }
 .nf-public-number { display: block; margin-bottom: .75rem; color: var(--fb-on-surface-variant); font-size: .75rem; }
@@ -33,14 +31,12 @@
 .nf-public-footer > span { font-weight: 700; }
 .nf-public-footer nav { display: flex; flex-wrap: wrap; column-gap: 1.5rem; }
 .nf-public-footer p { max-width: none; font-size: .8125rem; }
-.nf-public-sticky { position: fixed; bottom: 0; inset-inline: 0; z-index: 10; padding: .5rem 1rem max(.5rem, env(safe-area-inset-bottom)); background: var(--fb-surface); display: flex; justify-content: flex-end; box-shadow: 0 -1px 8px #0001; }
 .nf-public-skip { position: fixed; top: .5rem; left: .5rem; z-index: 20; transform: translateY(-200%); background: var(--fb-surface); padding: .75rem; }
 .nf-public-skip:focus { transform: none; }
 .nf-public-document { padding: max(1rem, env(safe-area-inset-top)) 1rem max(2rem, env(safe-area-inset-bottom)); min-height: 100dvh; background: var(--fb-surface); color: var(--fb-on-surface); }
 @media (min-width: 48rem) {
   .nf-public-desktop-links { display: inline-flex; gap: 1.25rem; }
-  .nf-public .nf-public-nav .nf-public-desktop-cta { display: inline-flex; }
-  .nf-public-menu, .nf-public-sticky, .nf-public-hero-cta { display: none; }
+  .nf-public-menu { display: none; }
   .nf-public-chapter { display: grid; grid-template-columns: 2rem minmax(0, 1fr) minmax(0, 1fr); gap: 2rem; align-items: start; }
   .nf-public-number { margin-bottom: 0; padding-top: .6rem; }
   .nf-public-chapter p { grid-column: 3; margin-top: 0; padding-top: .3rem; }

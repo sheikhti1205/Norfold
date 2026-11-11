@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { Link, useNavigate } from "react-router";
 import { ArrowRight } from "lucide-react";
 import { BrandMark } from "../components/BrandMark";
@@ -19,24 +19,7 @@ const chapters = [
 /** Public product explanation, not a fabricated feed or an authentication gate. */
 export function PublicWelcome() {
   const navigate = useNavigate();
-  const hero = useRef<HTMLDivElement>(null);
   const menu = useRef<HTMLDetailsElement>(null);
-  const final = useRef<HTMLElement>(null);
-  const [showSticky, setShowSticky] = useState(false);
-  useEffect(() => {
-    if (typeof IntersectionObserver === "undefined") return;
-    let pastHero = false, atFinal = false;
-    const observer = new IntersectionObserver(entries => {
-      for (const entry of entries) {
-        if (entry.target === hero.current) pastHero = !entry.isIntersecting && entry.boundingClientRect.top < 0;
-        if (entry.target === final.current) atFinal = entry.isIntersecting;
-      }
-      setShowSticky(pastHero && !atFinal);
-    });
-    if (hero.current) observer.observe(hero.current);
-    if (final.current) observer.observe(final.current);
-    return () => observer.disconnect();
-  }, []);
 
   function start() {
     // Browsing the public explanation never cancels a pending sign-in
@@ -62,7 +45,6 @@ export function PublicWelcome() {
           <button onClick={() => chapter("about-norfold")}>About</button>
         </span>
         <Link to="/auth">Sign in</Link>
-        <button className="nf-public-action nf-public-desktop-cta" onClick={start}>Sign in or create account</button>
         <details ref={menu} className="nf-public-menu"><summary>Explore</summary><div>
           <button onClick={() => chapter("how-it-works")}>How it works</button>
           <button onClick={() => chapter("safety")}>Safety</button>
@@ -71,9 +53,8 @@ export function PublicWelcome() {
       </nav>
     </header>
     <main>
-      <div ref={hero} className="nf-public-hero">
+      <div className="nf-public-hero">
         <Onboarding publicHero onComplete={() => navigate("/auth")} />
-        <button className="nf-public-action nf-public-hero-cta" onClick={start}>Sign in or create account <ArrowRight size={18} aria-hidden="true" /></button>
       </div>
       <div className="nf-public-story">
         {chapters.map(([title, copy], index) => <section key={title} className="nf-public-chapter">
@@ -87,7 +68,7 @@ export function PublicWelcome() {
           <h2 id="about-norfold" tabIndex={-1}>A place to begin looking.</h2>
           <p>Norfold is a lost-and-found network for reporting, matching and recovering items. It is currently in beta. It cannot guarantee a match, a response or a return.</p>
         </section>
-        <section ref={final} className="nf-public-final">
+        <section className="nf-public-final">
           <h2>Let’s find a way back.</h2><p>Start with a report. Take the next step when you’re ready.</p>
           <button className="nf-public-action" onClick={start}>Sign in or create account <ArrowRight size={18} aria-hidden="true" /></button>
         </section>
@@ -101,6 +82,5 @@ export function PublicWelcome() {
       </nav>
       <p>{WEBSITE_TRANSITION_NOTE}</p>
     </footer>
-    {showSticky && <div className="nf-public-sticky"><button className="nf-public-action" onClick={start}>Sign in or create account <ArrowRight size={18} aria-hidden="true" /></button></div>}
   </div>;
 }
