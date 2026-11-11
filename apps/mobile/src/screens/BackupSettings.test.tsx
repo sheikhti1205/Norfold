@@ -58,7 +58,7 @@ describe("the backup settings surface", () => {
     mocks.backup.status.mockReturnValue({ kind: "attention", lastError: "device-limit", enabled: true });
     mocks.backup.uploadNow.mockResolvedValue({ kind: "failed", reason: "device-limit" });
     renderScreen();
-    const copy = "Remove an old device backup before adding another, then try again.";
+    const copy = "The device backup limit has been reached. Contact support for help.";
     expect(screen.getByText(copy)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Back up now" }));
     expect((await screen.findByTestId("backup-error")).textContent).toBe(copy);

@@ -99,7 +99,7 @@ export function parseFeatureAnnouncements(raw: unknown): readonly FeatureAnnounc
  */
 export function featureAvailability(
   feature: FeatureAnnouncement,
-  context: FeatureContext,
+  context: FeatureContext & { capabilitiesKnown?: boolean },
 ): FeatureAvailability {
   if (!feature.platforms.includes(context.platform)) {
     return { kind: "unavailable", reason: "platform" };
@@ -117,7 +117,11 @@ export function featureAvailability(
     return { kind: "unavailable", reason: "prerequisite" };
   }
   // Route ownership stays in S5; auth/capability/platform gates are its answer.
-  return resolveDestination(feature.destinationId, context);
+  const result = resolveDestination(feature.destinationId, context);
+  if (result.kind === "unavailable" && result.reason === "capability" && context.capabilitiesKnown === false) {
+    return { kind: "unavailable", reason: "unknown" };
+  }
+  return result;
 }
 
 /** The announcements this caller can use now, in catalogue order. */

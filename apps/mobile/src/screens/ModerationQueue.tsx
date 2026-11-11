@@ -37,6 +37,8 @@ const QUEUE_CAPABILITY = "reports_review";
 export function ModerationQueue() {
   const [role, setRole] = useState<MyRole | null>(null);
   const [roleReady, setRoleReady] = useState(false);
+  const [roleError, setRoleError] = useState(false);
+  const [roleAttempt, setRoleAttempt] = useState(0);
   const [queue, setQueue] = useState<ModerationQueueEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [unavailable, setUnavailable] = useState<string | null>(null);
@@ -63,6 +65,8 @@ export function ModerationQueue() {
 
   useEffect(() => {
     let alive = true;
+    setRoleReady(false);
+    setRoleError(false);
     void fetchMyRole()
       .then((value) => {
         if (!alive) return;
@@ -71,12 +75,13 @@ export function ModerationQueue() {
       })
       .catch(() => {
         if (!alive) return;
+        setRoleError(true);
         setRoleReady(true);
       });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [roleAttempt]);
 
   useEffect(() => {
     if (!allowed) return;
@@ -96,22 +101,28 @@ export function ModerationQueue() {
           </p>
         ) : null}
 
-        {roleReady && !allowed ? (
+        {roleReady && roleError ? (
+          <div role="alert" className="fb-admin-error">
+            Couldn't check your permissions. <button type="button" onClick={() => setRoleAttempt(value => value + 1)}>Try again</button>
+          </div>
+        ) : null}
+
+        {roleReady && !roleError && !allowed ? (
           <p role="status" data-testid="moderation-queue-denied" className="fb-admin-note">
             You do not have permission to review reports.
           </p>
         ) : null}
 
         {allowed && error ? (
-          <p role="alert" data-testid="moderation-queue-error" className="fb-admin-error">
-            {error}
-          </p>
+          <div role="alert" data-testid="moderation-queue-error" className="fb-admin-error">
+            {error} <button type="button" onClick={() => void load()}>Try again</button>
+          </div>
         ) : null}
 
         {allowed && unavailable ? (
-          <p role="status" data-testid="moderation-queue-unavailable" className="fb-admin-note">
-            {unavailable}
-          </p>
+          <div role="status" data-testid="moderation-queue-unavailable" className="fb-admin-note">
+            {unavailable} <button type="button" onClick={() => void load()}>Try again</button>
+          </div>
         ) : null}
 
         {allowed && !error && !unavailable && queue === null ? (

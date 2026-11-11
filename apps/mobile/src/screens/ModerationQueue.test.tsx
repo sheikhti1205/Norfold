@@ -105,6 +105,24 @@ describe("the moderation queue", () => {
     await waitFor(() => expect(screen.getByTestId("moderation-queue-error")).toBeTruthy());
   });
 
+  it("retries a failed role check without requesting the queue first", async () => {
+    mockFetchMyRole.mockRejectedValueOnce(new Error("offline"));
+    renderScreen();
+    expect(await screen.findByText(/couldn't check your permissions/i)).toBeTruthy();
+    expect(screen.queryByTestId("moderation-queue-denied")).toBeNull();
+    expect(mockFetchModerationQueue).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByTestId("moderation-queue-list")).toBeTruthy();
+  });
+
+  it("retries a failed queue read", async () => {
+    mockFetchModerationQueue.mockRejectedValueOnce(new Error("offline"));
+    renderScreen();
+    expect(await screen.findByTestId("moderation-queue-error")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByTestId("moderation-queue-list")).toBeTruthy();
+  });
+
   it("says there is nothing to review when the queue is empty", async () => {
     mockFetchModerationQueue.mockResolvedValue([]);
     renderScreen();

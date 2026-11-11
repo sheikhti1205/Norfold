@@ -4,7 +4,7 @@ import { featureAvailability } from "../services/updates/availability";
 import type { FeatureAnnouncement, FeatureContext } from "../services/updates/types";
 
 /** Informational changes stay readable; only accepted, usable destinations link. */
-export function UpdateChanges({ features, context }: { features: readonly FeatureAnnouncement[]; context: FeatureContext }) {
+export function UpdateChanges({ features, context }: { features: readonly FeatureAnnouncement[]; context: FeatureContext & { capabilitiesKnown?: boolean } }) {
   if (features.length === 0) return null;
   return <ul className="mt-2 space-y-2">
     {features.map(feature => {
@@ -15,7 +15,11 @@ export function UpdateChanges({ features, context }: { features: readonly Featur
           ? <Link className="inline-flex min-h-11 items-center underline underline-offset-4" to={availability.route}>
             {destinationFor(feature.destinationId)?.title}
           </Link>
-          : <p className="mt-1 text-xs">Not available in this build.</p>}
+          : <p className="mt-1 text-xs">{availability.reason === "platform" || (availability.reason === "build" && context.buildGitSha.trim() !== "")
+            ? "Not available in this build."
+            : availability.reason === "auth" ? "Sign in to use this."
+              : availability.reason === "capability" ? "Your account cannot use this."
+                : "We couldn't determine if this is available to you."}</p>}
       </li>;
     })}
   </ul>;

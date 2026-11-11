@@ -18,6 +18,8 @@ import {
 } from "../services/updates/runtime";
 import { formatTimestamp } from "../utils/dates";
 import { readBuildInfo } from "../services/buildInfo";
+import { useAuth } from "../auth";
+import { fetchMyRole } from "../services/roles";
 
 /** One human sentence per failure cause; never a raw transport or provider string. */
 export function checkFailureCopy(code: UpdateCheckFailure): string {
@@ -79,12 +81,22 @@ function InstalledIdentity({ snapshot, native }: { snapshot: UpdateSnapshot; nat
 }
 
 export function Updates() {
+  const { user } = useAuth();
+  const [role, setRole] = useState<{ userId: string; capabilities: readonly string[] } | null>(null);
   const snapshot = useUpdateSnapshot();
   const native = Capacitor.isNativePlatform();
   const job = useNativeUpdateState();
   const check = snapshot.lastCheck;
   const status = checkStatusCopy(snapshot, native);
   const [buildGitSha, setBuildGitSha] = useState("");
+  useEffect(() => {
+    let live = true;
+    setRole(null);
+    if (user?.id) void fetchMyRole().then(value => {
+      if (live) setRole({ userId: user.id, capabilities: value.capabilities });
+    }).catch(() => {});
+    return () => { live = false; };
+  }, [user?.id]);
   useEffect(() => {
     let live = true;
     void readBuildInfo().then(info => { if (live) setBuildGitSha(info.buildGitSha ?? ""); });
@@ -201,7 +213,7 @@ export function Updates() {
                         <p className="text-sm font-medium text-on-surface">{release.versionName}</p>
                         <p className="mt-1 text-sm text-on-surface-variant">{release.summary}</p>
                         <UpdateChanges features={(snapshot.features ?? []).filter(feature => feature.releaseId === release.id)}
-                          context={{ platform: native ? "android" : "web", buildGitSha, signedIn: true, capabilities: [], satisfiedPrerequisites: [] }} />
+                          context={{ platform: native ? "android" : "web", buildGitSha, signedIn: !!user, capabilities: role && role.userId === user?.id ? role.capabilities : [], capabilitiesKnown: role !== null && role.userId === user?.id, satisfiedPrerequisites: [] }} />
                         <p className="mt-1 text-xs text-on-surface-variant">
                           {formatTimestamp(release.publishedAt)}
                            {!("artifacts" in release) || release.artifacts.length === 0 ? " · announcement" : ""}
