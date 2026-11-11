@@ -10,6 +10,8 @@ import { openPlatformMessagingHistory, purgePlatformMessagingAccount, type Platf
 import { beginMessagingAccountDeletion } from "./scopedMediaBytes";
 import { createSupabaseMessagingSession } from "./supabaseSession";
 import { isUuid, uuid } from "./validation";
+import { markConversationPainted, markHintReceived } from "./latency";
+import { mergeRefresh, ticketFor, type RefreshMode, type RefreshTicket } from "./refreshTicket";
 import type { MessagingPreferences } from "./session";
 import { onRealtime } from "../realtime";
 import { getSupabaseBackendUrl } from "../supabaseClient";
@@ -68,8 +70,10 @@ interface Owner {
   /**
    * A hint that arrived while a pass was already running. Full outranks fast:
    * a relationship/authority pass must never be downgraded by a message hint.
+   * A ticket may also carry the conversation the hint named, but only while the
+   * followed-up pass may stay scoped to it (see `mergeRefresh`).
    */
-  pendingRefresh: RefreshMode | null;
+  pendingRefresh: RefreshTicket | null;
   /** REGISTER has completed for this owner; SYNC is only valid after it. */
   started: boolean;
   authorityVersion: number;
@@ -78,17 +82,19 @@ interface Owner {
 }
 
 /**
- * Foreground message traffic and relationship/authority recovery are different
- * costs (owner handoff 2026-11-03):
+ * The conversation a hint may scope its pass to, or undefined for "treat this
+ * exactly like a content-free wake".
  *
- *   fast — flush the pending outbox, drain the newest authorized mailbox page
- *          (persist + ACK), reload local summaries. No VIEWS scan, no full
- *          history drain, no media sweep: those are what made an ordinary
- *          message wait on unrelated reconciliation.
- *   full — startup, reconnect/focus, relationship or block changes, explicit
- *          Sync, media sends and error recovery. Everything the old path did.
+ * A targeted pass skips the account-wide projection read, so it is only valid
+ * for a conversation this account already knows and only after the first full
+ * pass has established projections. An absent, unknown or foreign id therefore
+ * falls back to today's account-wide fast pass rather than guessing.
  */
-type RefreshMode = "fast" | "full";
+function conversationTarget(owner: Owner, value: unknown): string | undefined {
+  if (!owner.started || snapshot.status !== "ready" || !isUuid(value)) return undefined;
+  if (snapshot.currentProjections?.[value] !== undefined) return value;
+  return snapshot.conversations.some((row) => row.conversationId === value) ? value : undefined;
+}
 
 let snapshot = EMPTY_MESSAGING_SNAPSHOT;
 let generation = 0;
@@ -287,8 +293,13 @@ function closeOwner(owner: Owner): Promise<void> {
     Promise.all([owner.session.close(), owner.handle.close()]).then(() => undefined));
 }
 
-/** Signals only trigger ordinary mailbox synchronization; no signal payload is
- * ever interpreted as a message, relationship change, or persistence receipt. */
+/**
+ * Signals never carry message or receipt truth; they only choose which
+ * authorized read to run. A hint may name the conversation it concerns, which
+ * lets the fast pass stay scoped to that conversation instead of re-reading the
+ * whole projection set. An id that is absent, unknown or belongs to another
+ * account changes nothing: the ordinary account-wide fast pass runs.
+ */
 function attachResume(owner: Owner): () => void {
   if (typeof window === "undefined") return () => undefined;
   const resume = () => { owner.peers?.resume();void requestRefresh(owner, "full"); };
@@ -301,10 +312,13 @@ function attachResume(owner: Owner): () => void {
   };
   const unsubscribeChat = onRealtime("chat:invalidate", (payload) => {
     if (current !== owner || owner.generation !== generation || payload.accountId !== owner.handle.scope.accountId) return;
-    // The payload is a content-free hint, never a message or receipt. The
-    // fast path settles the new message and the sender's own echo; unrelated
-    // projections and media work stay with the full pass.
-    void requestRefresh(owner, "fast");
+    // The payload is a content-free hint, never a message or receipt. The fast
+    // path settles the new message and the sender's own echo; unrelated
+    // projections and media work stay with the full pass. When the server names
+    // a conversation this account already knows, settle only that one.
+    const hinted = typeof payload.conversationId === "string" ? payload.conversationId : undefined;
+    markHintReceived(hinted);
+    void requestRefresh(owner, "fast", conversationTarget(owner, hinted));
   });
   window.addEventListener("online", resume);
   window.addEventListener("focus", resume);
@@ -328,7 +342,7 @@ function retryRefresh(owner: Owner) {
   }, delay);
 }
 
-function requestRefresh(owner: Owner, mode: RefreshMode): Promise<void> {
+function requestRefresh(owner: Owner, mode: RefreshMode, conversationId?: string): Promise<void> {
   if (owner.retryTimer !== null) clearTimeout(owner.retryTimer);
   owner.retryTimer = null;
   // Full is the only mode that may drop live receipt authority; it refetches it.
@@ -337,10 +351,16 @@ function requestRefresh(owner: Owner, mode: RefreshMode): Promise<void> {
     // A send/wake can arrive after the running flush already exhausted its
     // outbox. Coalesce one follow-up instead of dropping that invalidation, and
     // never let a fast hint downgrade a queued full pass.
-    owner.pendingRefresh = mode === "full" || owner.pendingRefresh === "full" ? "full" : "fast";
+    owner.pendingRefresh = mergeRefresh(owner.pendingRefresh, ticketFor(mode, conversationId));
     return owner.refreshing;
   }
   const run = mode === "full" || !owner.started ? "full" : "fast";
+  // The hint is already validated by the caller; re-check here because a queued
+  // ticket can outlive the projections it was captured against.
+  const target = run === "fast" ? conversationTarget(owner, conversationId) : undefined;
+  // A hint that this pass consumes is "painted" once the pass publishes; a pass
+  // that fails or is superseded leaves the sample unmeasured (latency.ts drops
+  // it) instead of reporting a duration that never reached the reader.
   const work = async () => {
     let finishRestore: (() => void) | undefined;
     const onRestore = (missing: number) => {
@@ -350,7 +370,10 @@ function requestRefresh(owner: Owner, mode: RefreshMode): Promise<void> {
     try {
       assertOwner(owner);
       if (run === "full") publish({ ...snapshot, currentProjections: null });
-      // Registration is idempotent and precedes SEND/SYNC for this installation.
+      // Projections come from different owners per mode: a full pass refetches
+      // the whole account, an untargeted fast pass refetches views (pins, mute
+      // and request state only change through a view), and a targeted fast pass
+      // deliberately skips that scan and reconciles just the named conversation.
       let projections: ConversationProjection[] | null = null;
       if (run === "full") {
         await owner.session.start(owner.handle.platform);
@@ -360,11 +383,27 @@ function requestRefresh(owner: Owner, mode: RefreshMode): Promise<void> {
         // projections would leave the composer unable to judge eligibility.
         owner.started = true;
         owner.peers?.start();
-      } else {
+      } else if (target === undefined) {
         // A content-free wake is the only notification a pin, mute or request
         // change produces. Refetching views here keeps the open conversation's
         // strip and state live instead of waiting for focus or a remount.
         projections = await owner.session.refreshConversations();
+      } else if (target !== owner.activeThread?.conversationId) {
+        // Targeted wake: the hint named a conversation this account already
+        // knows, so reconcile that conversation's durable thread (HEAD, state,
+        // missing prefix, ACK) instead of paging every projection. There is no
+        // per-conversation projection read; relationship state for the rest of
+        // the account stays with the next full pass. The active thread is
+        // reconciled by reconcileActiveThread below, so it is skipped here.
+        try {
+          await owner.session.reconcileConversation(target);
+          assertOwner(owner);
+        } catch (error) {
+          // One conversation failing to reconcile is not an account outage: let
+          // this pass finish, then ask for the authoritative full pass.
+          if (current !== owner || owner.generation !== generation) throw error;
+          owner.pendingRefresh = ticketFor("full");
+        }
       }
       // Open/reconnect compare the active thread before pending SEND admission.
       // A thread failure stays gated while unrelated mailbox recovery can proceed.
@@ -382,13 +421,14 @@ function requestRefresh(owner: Owner, mode: RefreshMode): Promise<void> {
       } else if (await owner.session.sync(onRestore) > 0) {
         // The fast path drains the newest authorized page (persist + ACK). A
         // full page means more is waiting: ask for one bounded follow-up pass
-        // rather than looping here and holding the hint open.
-        owner.pendingRefresh = owner.pendingRefresh === "full" ? "full" : "fast";
+        // rather than looping here and holding the hint open. The follow-up
+        // stays scoped to the same conversation when this pass was.
+        owner.pendingRefresh = mergeRefresh(owner.pendingRefresh, ticketFor("fast", target));
       }
       // A committed incoming MEDIA parent is durable now, but the fast path
       // does not discover/download bytes. Publish catch-up promptly, then
       // coalesce one bounded full recovery instead of leaving a loading ghost.
-      if (run === "fast" && owner.session.needsMediaDiscovery()) owner.pendingRefresh = "full";
+      if (run === "fast" && owner.session.needsMediaDiscovery()) owner.pendingRefresh = ticketFor("full");
       let mediaFailed = false;
       // Uploading already-admitted photos is bounded (10 per pass) and is a no-op
       // when nothing is queued: a photo must never wait for the next full sweep.
@@ -410,6 +450,7 @@ function requestRefresh(owner: Owner, mode: RefreshMode): Promise<void> {
       publish({ ...snapshot, status: "ready", error: mediaFailed ? "Some photos could not sync. Try again."
         : sendFailed ? "Some messages could not send. Try again." : null,
         currentProjections: projectionsNow });
+      if (conversationId) markConversationPainted(conversationId);
       if (mediaFailed || sendFailed || snapshot.threadSync?.mode === "error") retryRefresh(owner);
       else owner.retryAttempts = 0;
     } catch {
@@ -429,7 +470,7 @@ function requestRefresh(owner: Owner, mode: RefreshMode): Promise<void> {
     owner.refreshing = null;
     const pending = owner.pendingRefresh;
     owner.pendingRefresh = null;
-    if (pending && current === owner && owner.generation === generation) void requestRefresh(owner, pending);
+    if (pending && current === owner && owner.generation === generation) void requestRefresh(owner, pending.mode, pending.conversationId);
     releaseActivity();
   });
   return owner.refreshing;

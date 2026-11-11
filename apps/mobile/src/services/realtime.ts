@@ -13,6 +13,21 @@ export type RealtimeEvent =
   | "chat:invalidate"
   | "notification:added";
 
+/**
+ * `chat:invalidate` payload. `accountId` is added by this module from the
+ * private topic's owner; the server may also name the conversation (and, for a
+ * message wake, the message) the hint is about. Those ids are only a routing
+ * hint: consumers must still read everything through an authorized call, and a
+ * subscriber that ignores them keeps the previous account-wide behaviour.
+ */
+export type ChatInvalidatePayload = {
+  /** Signed-in account whose private notification topic produced this hint. */
+  accountId: string;
+  invalidate?: true;
+  conversationId?: string;
+  messageId?: string;
+};
+
 type Handler = (payload: Record<string, unknown>) => void;
 
 const listeners = new Map<RealtimeEvent, Set<Handler>>();
@@ -305,10 +320,20 @@ export function joinInboxRoom(userId: string): void {
       ["notification:added", "notification:added"],
       ["comment:invalidate", "comment:invalidate"],
     ], () => client === c && inboxChannel === channel && boundInboxUser === userId && desiredInboxUser === userId);
-    channel.on("broadcast", { event: "chat:invalidate" }, () => {
+    channel.on("broadcast", { event: "chat:invalidate" }, (message) => {
       if (client !== c || inboxChannel !== channel || boundInboxUser !== userId || desiredInboxUser !== userId) return;
-      // The private room is the authority; never interpret the wire payload.
-      dispatch("chat:invalidate", { accountId: userId });
+      // The private room is the authority for WHICH account this hint belongs
+      // to; the server may additionally name the conversation it concerns.
+      // Forward those ids verbatim (never interpreted here) so a consumer can
+      // scope its own authorized read, and keep the payload id-free when the
+      // server sends none — every existing subscriber keeps working.
+      const wire = (message?.payload ?? {}) as Record<string, unknown>;
+      const payload: ChatInvalidatePayload = { accountId: userId };
+      for (const key of ["conversationId", "messageId"] as const) {
+        const value = wire[key];
+        if (typeof value === "string" && value.length > 0) payload[key] = value;
+      }
+      dispatch("chat:invalidate", payload);
     });
     // Slot first (a synchronous subscribe failure must be able to clear it).
     inboxChannel = channel;
