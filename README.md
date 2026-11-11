@@ -4,9 +4,8 @@
 
 [![CI](https://github.com/sheikhti1205/Norfold/actions/workflows/ci.yml/badge.svg)](https://github.com/sheikhti1205/Norfold/actions/workflows/ci.yml)
 
-**Status: internal beta (pre-public).** Not a public release; builds are only
-installable from a verified GitHub release, and an engineering checkpoint is not
-release approval.
+**Status: internal beta (pre-public).** This is not a public release. Install builds
+only from a verified GitHub release; an engineering checkpoint is not release approval.
 
 Norfold (formerly FindBack) is a local-first lost-and-found network for reporting, matching and recovering lost items.
 
@@ -58,7 +57,7 @@ Capture dimensions and checksums: [screenshot manifest](docs/screenshots/manifes
 - Optional AI Chat using your own API key from the provider you choose
 
 This is an internal beta under validation, not a public-ready release. The current
-source version is `0.15.0-beta.2`. Product Fit Reset migrations have exact hosted
+source version is `0.16.0-beta.1`. Product Fit Reset migrations have exact hosted
 readback; final CI and web deployment receipts are tracked separately. A source
 version is not an installable release or a real-device acceptance claim.
 

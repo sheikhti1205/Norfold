@@ -5,6 +5,33 @@ described in [docs/history/VERSION_HISTORY.md](docs/history/VERSION_HISTORY.md).
 track real evolution and do not imply a stable release. The per-commit mapping is in
 [docs/history/VERSION_HISTORY.csv](docs/history/VERSION_HISTORY.csv).
 
+## 0.16.0-beta.1
+
+- On-device chat and photo analysis have been removed. AI chat uses your own
+  provider key; the local search helper and sentence model remain. Files from
+  older downloaded models are found on upgrade and offered for removal.
+- Downloaded models now offer Try again when the device cannot be checked;
+  unsupported devices are told the helper needs a 64-bit ARM device.
+- Rate Norfold once per account and edit your rating later. The average is
+  calculated by the server; ratings of reports remain read-only.
+- Feed updates no longer identify posts on the shared channel, and individual
+  post updates are available only to people who can see that post.
+- AI chat distinguishes invalid keys, blocked accounts, exhausted quotas and
+  rate limits. Interrupted answers are marked incomplete, and refusals are
+  shown without being saved as replies.
+- Message order stays stable after reopening or restoring a device backup.
+  When the backup limit is reached, the app asks you to remove an old backup.
+- Search retries the failed operation, describes empty places more accurately,
+  announces which filter a chip clears and keeps distance changes while locating.
+- Photo privacy now clears all stripped WebP metadata flags. Animated GIFs keep
+  their animation without embedded metadata; oversized GIFs become a still with
+  a disclosure that only sampled frames are seen.
+- Screen readers announce reaction counts only after your own action changes
+  them, without a visible count-update toast.
+- Shared-report links work with uppercase letters, and Android update versions
+  are ordered correctly for prereleases.
+- Web deployment and signed APK builds wait for a successful CI run.
+
 ## 0.15.0-beta.2 - APK version bump
 
 - Bump the source version for the next APK; publication and device acceptance
