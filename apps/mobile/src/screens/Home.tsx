@@ -279,7 +279,7 @@ export function Home() {
     setQParam(appliedQuery);
   }, [appliedQuery, setQParam]);
 
-  const { items, loading, refreshing, loadingMore, error, hasMore, refresh, loadMore, removeItem, patchItem } = useFeed(
+  const { items, loading, refreshing, loadingMore, error, failedOperation, updatesAvailable, hasMore, refresh, loadMore, removeItem, patchItem } = useFeed(
     feedFilters,
     { cacheKey: HOME_CACHE_KEY, scrollRef },
   );
@@ -574,6 +574,7 @@ export function Home() {
                 hasMore={hasMore}
                 onLoadMore={loadMore}
                 onRetry={refresh}
+                failedOperation={failedOperation}
                 density={feedDensity(resolvedLayout)}
                 masonryColumns={masonryColumns(feedWidth)}
                 emptyTitle={appliedQuery || advanced.category || advanced.status || nearbyActive ? "No matches" : "Nothing here yet"}
@@ -651,7 +652,7 @@ export function Home() {
         onConfirm={onMapConfirm}
       />
 
-      <NewPostsPill count={newPostCount} hasUpdates={hasUpdates} onTap={onNewPostsTap} />
+      <NewPostsPill count={newPostCount} hasUpdates={hasUpdates || updatesAvailable} onTap={onNewPostsTap} />
 
     </div>
   );

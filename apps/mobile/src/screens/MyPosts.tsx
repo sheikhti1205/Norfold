@@ -4,6 +4,7 @@ import type { PostItem, PostStatus, PostType } from "@norfold/shared";
 import { POST_STATUS_LABELS } from "@norfold/shared";
 import { AppBar } from "../components/AppBar";
 import { PostList } from "../components/PostList";
+import { NewPostsPill } from "../components/NewPostsPill";
 import { PullToRefresh, type PullToRefreshHandle } from "../components/PullToRefresh";
 import { useFeed } from "../hooks/useFeed";
 import { useTabTap } from "../components/TabTap";
@@ -120,7 +121,7 @@ export function MyPosts() {
   // The feed filter carries userId, so the resolved cache key is already
   // user-scoped: `my:reports:<filterKey>`. Passing the base (not a
   // pre-scoped key) keeps it identical to the hook's own key.
-  const { items, total, loading, refreshing, loadingMore, error, hasMore, refresh, loadMore, removeItem, patchItem } = useFeed(
+  const { items, total, loading, refreshing, loadingMore, error, failedOperation, updatesAvailable, hasMore, refresh, loadMore, removeItem, patchItem } = useFeed(
     { userId: user?.id, status: ownerStatus === "ALL" ? "" : ownerStatus },
     { cacheKey: MY_CACHE_BASE, scrollRef },
   );
@@ -646,12 +647,14 @@ export function MyPosts() {
 
       <OwnerReportActionsProvider value={actions}>
         <PullToRefresh ref={scrollRef} onRefresh={refresh} disabled={loading || refreshing} className="flex-1">
+          <NewPostsPill count={0} hasUpdates={updatesAvailable} onTap={() => { void refresh(); scrollRef.current?.scrollToTop(); }} />
           <MatchActivity accountId={user?.id ?? null} />
           <PostList
             items={items}
             loading={loading}
             loadingMore={loadingMore}
             error={error}
+            failedOperation={failedOperation}
             hasMore={hasMore}
             onLoadMore={loadMore}
             onRetry={refresh}
