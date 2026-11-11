@@ -18,7 +18,7 @@ import { createHash } from "node:crypto";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MIG = join(ROOT, "migrations");
-const read = (p) => readFileSync(p, "utf8");
+const read = (p) => readFileSync(p, "utf8").replace(/\r\n/g, "\n");
 const mig = (name) => read(join(MIG, name));
 const ls = () => readdirSync(MIG).filter((f) => f.endsWith(".sql")).sort();
 
@@ -735,6 +735,7 @@ const CLIENT_EXECUTE_ROLES = ["public", "authenticated"];
  */
 // M4: 85 names independently verified against the real full-chain PostgreSQL
 // catalog (has_function_privilege), not copied from a partially parsed chain.
+// The two app-rating additions are verified against their migration, not the catalog.
 const CLIENT_REACHABLE_DEFINERS = Object.freeze([
   "complete_social_profile",
   "findback_accept_role_offer",
@@ -742,6 +743,7 @@ const CLIENT_REACHABLE_DEFINERS = Object.freeze([
   "findback_add_comment_client",
   "findback_add_comment_with_attachments",
   "findback_admit_public_action",
+  "findback_app_rating_context",
   "findback_apply_moderation",
   "findback_audit_log",
   "findback_backup_key",
@@ -812,6 +814,7 @@ const CLIENT_REACHABLE_DEFINERS = Object.freeze([
   "findback_propose_match",
   "findback_query_posts_client",
   "findback_query_posts_nearby_client",
+  "findback_rate_app_client",
   "findback_rate_return",
   "findback_react_client",
   "findback_react_comment_client",
