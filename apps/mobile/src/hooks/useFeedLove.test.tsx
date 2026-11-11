@@ -852,11 +852,8 @@ describe("FeedLoveProvider summary reconciliation (REVIEW-CF030-CODE I1 M1/M2)",
     });
   });
 
-  // M-B: the two count sources are ordered, and a commit re-stamps the row the
-  // card holds *when it lands*. Both were unprotected: swapping the order of
-  // `base` in either branch of `resolveOwnRow`, or stamping the commit with the
-  // pre-write stamp, passed the whole suite while showing a count the server
-  // had already contradicted. These three cases pin each choice.
+  // M-B: after a write, snapshot counts win only when its own row agrees with
+  // the write result. Otherwise the confirmed write remains authoritative.
 
   it("M-B: a write the snapshot still agrees with keeps the counts the server returned", async () => {
     clientMock.rpc.mockResolvedValueOnce({
@@ -892,11 +889,19 @@ describe("FeedLoveProvider summary reconciliation (REVIEW-CF030-CODE I1 M1/M2)",
     });
     expect(screen.getByTestId("likes-p1").textContent).toBe("4");
 
-    // The card is refreshed with the *same* own row the write was stamped
-    // against, so the snapshot has not moved and cannot outrank the write —
-    // its count must not replace the one the RPC confirmed. (A snapshot whose
-    // own row had changed would be newer than the write and would win, which is
-    // the case the test below pins.)
+    // A reconstructed copy of the pre-write snapshot is still stale.
+    view.rerender(
+      <FeedLoveProvider
+        items={[item({ id: "p1", likeCount: 5, dislikeCount: 0, reactionSummary: { counts: { LOVE: 5 }, myReaction: "LIKE", total: 5 } })]}
+        patchItem={vi.fn()}
+      >
+        <LikeProbe postId="p1" />
+      </FeedLoveProvider>,
+    );
+    expect(screen.getByTestId("likes-p1").textContent).toBe("4");
+
+    // The refreshed snapshot still disagrees with the cleared own row, so its
+    // count cannot replace the one the RPC confirmed.
     view.rerender(
       <FeedLoveProvider
         items={[
@@ -973,8 +978,9 @@ describe("FeedLoveProvider summary reconciliation (REVIEW-CF030-CODE I1 M1/M2)",
     expect(screen.getByTestId("likes-p1").textContent).toBe("6");
   });
 
-  it("M-B: a write that lands after the snapshot moved keeps its own server counts", async () => {
+  it("M-B: a snapshot present at commit cannot override the write", async () => {
     const react = deferred<{ data: unknown; error: null }>();
+    const seenSummary = { counts: { LOVE: 9 }, myReaction: "LIKE", total: 9 } as const;
     clientMock.rpc.mockResolvedValueOnce({
       data: [{ post_id: "p1", my_reaction: null, my_rating: null }],
       error: null,
@@ -1009,7 +1015,7 @@ describe("FeedLoveProvider summary reconciliation (REVIEW-CF030-CODE I1 M1/M2)",
             id: "p1",
             likeCount: 9,
             dislikeCount: 0,
-            reactionSummary: { counts: { LOVE: 9 }, myReaction: "LIKE", total: 9 },
+            reactionSummary: seenSummary,
           }),
         ]}
         patchItem={vi.fn()}
@@ -1018,9 +1024,7 @@ describe("FeedLoveProvider summary reconciliation (REVIEW-CF030-CODE I1 M1/M2)",
       </FeedLoveProvider>,
     );
 
-    // The write lands *after* that move, so it is the newer truth: it is stamped
-    // against the row the card holds now (LIKE), which leaves the moved snapshot
-    // agreeing with it instead of overriding the counts the RPC just confirmed.
+    // The snapshot arrived before the write completed, so the write wins.
     await act(async () => {
       react.resolve({
         data: [
@@ -1038,5 +1042,25 @@ describe("FeedLoveProvider summary reconciliation (REVIEW-CF030-CODE I1 M1/M2)",
 
     expect(screen.getByTestId("mine-p1").textContent).toBe("yes");
     expect(screen.getByTestId("likes-p1").textContent).toBe("5");
+
+    view.rerender(
+      <FeedLoveProvider
+        items={[item({ id: "p1", likeCount: 9, dislikeCount: 0, reactionSummary: seenSummary })]}
+        patchItem={vi.fn()}
+      >
+        <LikeProbe postId="p1" />
+      </FeedLoveProvider>,
+    );
+    expect(screen.getByTestId("likes-p1").textContent).toBe("5");
+
+    view.rerender(
+      <FeedLoveProvider
+        items={[item({ id: "p1", likeCount: 10, dislikeCount: 0, reactionSummary: { counts: { LOVE: 10 }, myReaction: "LIKE", total: 10 } })]}
+        patchItem={vi.fn()}
+      >
+        <LikeProbe postId="p1" />
+      </FeedLoveProvider>,
+    );
+    expect(screen.getByTestId("likes-p1").textContent).toBe("10");
   });
 });

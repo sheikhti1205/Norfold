@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { motionDurations, snackbarVariants } from "./uiMotion";
 
 const EVENT = "findback:announce";
+const QUIET_EVENT = "findback:announce-quietly";
 
 /** Visible toast lifetime before it auto-exits (the announcement persists). */
 export const SNACKBAR_AUTO_EXIT_MS = 3000;
@@ -10,6 +11,11 @@ export const SNACKBAR_AUTO_EXIT_MS = 3000;
 /** Announce a meaningful event to screen readers (and any visible toast host). */
 export function announce(message: string): void {
   window.dispatchEvent(new CustomEvent<string>(EVENT, { detail: message }));
+}
+
+/** Announce a state change without showing a snackbar. */
+export function announceQuietly(message: string): void {
+  window.dispatchEvent(new CustomEvent<string>(QUIET_EVENT, { detail: message }));
 }
 
 /**
@@ -56,23 +62,32 @@ export function Snackbar({
 /** Polite live region. Mount once (in Shell) — screens announce via `announce()`. */
 export function LiveRegion({ autoExitMs = SNACKBAR_AUTO_EXIT_MS }: { autoExitMs?: number }) {
   const [message, setMessage] = useState("");
+  const [snackbarMessage, setSnackbarMessage] = useState("");
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     const handler = (e: Event) => {
       const text = (e as CustomEvent<string>).detail ?? "";
       setMessage(text);
+      setSnackbarMessage(text);
       setVisible(text !== "");
     };
+    const quietHandler = (e: Event) => {
+      setMessage((e as CustomEvent<string>).detail ?? "");
+    };
     window.addEventListener(EVENT, handler);
-    return () => window.removeEventListener(EVENT, handler);
+    window.addEventListener(QUIET_EVENT, quietHandler);
+    return () => {
+      window.removeEventListener(EVENT, handler);
+      window.removeEventListener(QUIET_EVENT, quietHandler);
+    };
   }, []);
 
   useEffect(() => {
     if (!visible) return;
     const timer = window.setTimeout(() => setVisible(false), autoExitMs);
     return () => window.clearTimeout(timer);
-  }, [visible, message, autoExitMs]);
+  }, [visible, snackbarMessage, autoExitMs]);
 
   return (
     <>
@@ -84,7 +99,7 @@ export function LiveRegion({ autoExitMs = SNACKBAR_AUTO_EXIT_MS }: { autoExitMs?
       >
         {message}
       </div>
-      <Snackbar open={visible} message={message} live={false} />
+      <Snackbar open={visible} message={snackbarMessage} live={false} />
     </>
   );
 }

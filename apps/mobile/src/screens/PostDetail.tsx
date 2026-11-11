@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { motion } from "framer-motion";
-import { CalendarDays, CircleCheck, CornerDownRight, ExternalLink, Heart, MapPin, Pencil, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { CalendarDays, CircleCheck, CornerDownRight, ExternalLink, MapPin, Pencil, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import type { CommentItem, PostItem, PostStatus, ReactionCounts, ReactionKind, ReactionSummary } from "@norfold/shared";
 import { OWNER_SELECTABLE_STATUSES } from "@norfold/shared";
 import { useAuth } from "../auth";
@@ -32,7 +32,7 @@ import { RecoverySheet } from "../components/RecoverySheet";
 import { ConfirmDialog } from "../components/AdaptiveTaskSurface";
 import { PostActionRow } from "../components/PostActionRow";
 import { ReportMatches } from "../components/ReportMatches";
-import { announce } from "../components/LiveRegion";
+import { announce, announceQuietly } from "../components/LiveRegion";
 import { listItemVariants, motionDurations, shouldReduceMotion } from "../components/uiMotion";
 import { friendlyError } from "../utils/friendlyErrors";
 import { recordLoadTiming } from "../utils/loadTiming";
@@ -88,7 +88,7 @@ function scrollToSection(id: string) {
  * C2 per-comment Like control (packet `08` §2 — reactions are Like-only).
  *
  * One tap toggles the caller's Like (`LIKE`/null through the real comment RPC),
- * the count is the comment's positive-reaction total, and the heart is filled
+ * the count is the comment's positive-reaction total, and the thumb is filled
  * for the caller's own Like. There is no tray, no chevron picker and no
  * long-press. Writes go through the parent's `onToggle`; failures revert there
  * and surface through the page's existing inline actionError + announce
@@ -121,7 +121,7 @@ function CommentLikeButton({
       onClick={onToggle}
       className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1 rounded-full px-1.5 text-xs font-medium ${state.mine ? "text-primary" : "text-on-surface-variant"}`}
     >
-      <Heart size={15} aria-hidden fill={state.mine ? "currentColor" : "none"} />
+      <ThumbsUp size={15} aria-hidden fill={state.mine ? "currentColor" : "none"} />
       <span>{state.mine ? "Liked" : "Like"}</span>
       {state.count > 0 && <span aria-hidden className="tabular-nums">{state.count}</span>}
     </button>
@@ -285,6 +285,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
         if (loadGen.current !== gen) return;
         postPresentRef.current = true;
         setError(null);
+        setPostCountsOverride(null);
         setPost(p);
       } catch (err) {
         recordLoadTiming("post", Date.now() - startedAt);
@@ -478,6 +479,13 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
         const p = payload as { postId: string };
         if (p.postId === id) void load();
       }),
+      onRealtime("post:deleted", (payload) => {
+        if (payload.postId !== id) return;
+        ++loadGen.current; ++commentsSeq.current; ++socialSeq.current;
+        postPresentRef.current = false;
+        setPost(null); setComments([]); setPostCountsOverride(null);
+        setLoading(false); setError("This post is no longer available.");
+      }),
     ];
     return () => {
       leavePostRoom(id);
@@ -605,13 +613,11 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
         );
         // The RPC returns server-truth per-kind counts; keep them so the Like
         // control reads exact counts without a refetch.
-        if (res.reactionCounts) {
-          setPostCountsOverride({
-            postId: res.postId,
-            counts: res.reactionCounts.counts,
-            total: res.reactionCounts.total,
-          });
-        }
+        const settled = res.reactionCounts ?? seedSummaryFromItem(res.likeCount, res.dislikeCount, res.myReaction);
+        setPostCountsOverride({ postId: res.postId, counts: settled.counts, total: settled.total });
+        const likes = likeState(settled).count;
+        const dislikes = settled.counts.DISLIKE ?? 0;
+        announceQuietly(`${likes} ${likes === 1 ? "like" : "likes"}, ${dislikes} ${dislikes === 1 ? "dislike" : "dislikes"}.`);
       }
     } catch (e) {
       // Only rollback if this is still the latest request; failures stay
