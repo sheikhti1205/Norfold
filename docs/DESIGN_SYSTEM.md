@@ -83,20 +83,18 @@ screen readers, Sentry ingestion or the owner's phone-photo matching corpus.
 The application root uses the same session-first guards on Web and native.
 Restoration/error retry precedes guest routing; incomplete profiles resume their
 completion, pending links bypass onboarding without being consumed, fresh guests
-see onboarding and completed guests reach the unified `/auth` entry. There is no
-separate public marketing landing or fabricated Lost/Found recovery demo.
+see onboarding and completed guests reach the unified `/auth` entry. Signed-out
+visitors also have a public landing at `/`, without a fabricated feed.
 
-`screens/Onboarding.tsx` owns the user-paced four-scene editorial introduction:
-Lost / Found / Search and likely matches / Control. It uses the current
-`BrandMark`, app typography and semantic surface/text/focus tokens. Portrait is
-type-led; landscape, tablet/unfolded and desktop use independent headline and
-support regions. Short windows and enlarged text grow into natural scroll rather
-than clipping content or pinning controls over it.
-
-No autoplay, illustrated explainer cards, mock Home, ambient infinite animation,
-or prototype toolbar ships. Masked headline/support transitions and resisted
-horizontal dragging reuse `uiMotion`; reduced motion removes travel and keeps
-native buttons. One visible heading, announced scene/progress, visible focus and
-arrow-key paging accompany Skip/Back/Next/Get started. Native button Enter must
-advance only once. The existing onboarding service (completion version 2) and
-guard still own first-run/replay/pending-link behavior and actual app routing.
+`screens/Onboarding.tsx` owns one naturally scrolling introduction shared by
+the public landing and standalone `/onboarding`. It explains reporting,
+searching and arranging a safe return, followed by safety, about and closing
+sections. The public host supplies its own navigation and footer; standalone
+includes a compact header and legal links. There is no pager, progress or swipe.
+Replay uses “Back to settings” actions. The onboarding service retains completion
+version 2, and the guard retains first-run, replay and pending-link routing.
+The editorial reveal system uses masked headline lines, a hero rule, route-line
+draw, safety-band wash and section stagger to guide the reading order. It uses
+`motionDurations.reveal`, `motionEasings.editorial` and `motionStaggerEditorial`;
+in-view reveals run once, reduced motion renders the final state without travel,
+and animation uses transform and opacity only.

@@ -271,7 +271,7 @@ describe("consumer route map", () => {
     expect(screen.queryByText("Report it. Match it. Return it.")).toBeNull();
     expect(screen.getByRole("link", { name: "Sign in" })).toBeTruthy();
     expect(router?.state.location.pathname).toBe("/");
-    fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Sign in or create account" })[0]!);
     expect(screen.getByText("Gateway:email")).toBeTruthy();
     expect(router?.state.location.pathname).toBe("/auth");
     expect(localStorage.getItem(ONBOARDING_STORAGE_KEY)).toBe(String(ONBOARDING_VERSION));

@@ -159,10 +159,7 @@ describe("QA-K guard matrix additions", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "Lost or found something?" }),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /sign in or create account/i }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Back to settings" })[0]!);
     expect(localStorage.getItem(ONBOARDING_STORAGE_KEY)).toBe(String(ONBOARDING_VERSION));
     expect(screen.getByText("Auth screen")).toBeTruthy();
   });
