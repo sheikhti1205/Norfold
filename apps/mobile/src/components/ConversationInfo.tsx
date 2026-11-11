@@ -55,7 +55,9 @@ export function ConversationInfo({ accountId, conversationId, peer }: {
   }, [accountId, conversationId, chat.revision]);
 
   const galleries = useMemo(() => media.filter((attachment) =>
-    messages.some((message) => message.id === attachment.messageId && message.unsentAt === undefined)), [media, messages]);
+    attachment.mime.startsWith("image/") && messages.some((message) =>
+      message.id === attachment.messageId && message.unsentAt === undefined &&
+      (message.messageType === "MEDIA" || message.messageType === undefined))), [media, messages]);
   const highest = messages.reduce((maximum, message) => Math.max(maximum, message.server?.sequence ?? 0), 0);
 
   async function act(work: () => Promise<void>, done: string) {

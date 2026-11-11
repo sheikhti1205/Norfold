@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { MessagingThread } from "./Messaging";
+import { ConversationInfo } from "../components/ConversationInfo";
 import { LiveRegion } from "../components/LiveRegion";
 import { MessagingRestoration } from "../components/MessagingRestoration";
 import { Capacitor } from "@capacitor/core";
@@ -739,20 +740,43 @@ function photoRun(count: number, start = 1_000) {
     id: `media-${index + 1}`, messageId: message.id, direction: "OUT", state: "READY", width: 2, height: 1, mime: "image/jpeg" }));
   return { messages, media };
 }
-it("renders a photo run as one bubble with the first caption and the last receipt", async () => {
+it("shows only live image attachments from photo or legacy messages in shared photos", async () => {
+  m.messages = [
+    { id: "photo", messageType: "MEDIA" }, { id: "legacy" },
+    { id: "voice", messageType: "VOICE" }, { id: "audio-media", messageType: "MEDIA" },
+    { id: "text", messageType: "TEXT" }, { id: "unsent", messageType: "MEDIA", unsentAt: 1 },
+  ];
+  m.media = [
+    ["photo", "image/jpeg"], ["legacy", "image/png"], ["voice", "audio/webm"],
+    ["audio-media", "audio/webm"], ["text", "image/jpeg"], ["unsent", "image/jpeg"],
+  ].map(([messageId, mime]) => ({ id: messageId, messageId, mime, width: 2, height: 1 }));
+  m.read.mockResolvedValue(new Uint8Array([1]).buffer);
+  render(<MemoryRouter><ConversationInfo accountId="account" conversationId="chat" peer={{ id: "peer", username: "peer", name: "Peer" }} /></MemoryRouter>);
+  const gallery = screen.getByRole("region", { name: "Shared photos" });
+  await waitFor(() => expect(within(gallery).getByText("2")).toBeTruthy());
+  await waitFor(() => expect(within(gallery).getAllByRole("button", { name: "View photo" })).toHaveLength(2));
+  expect(m.read.mock.calls.map((call) => call[1]).sort()).toEqual(["legacy", "photo"]);
+});
+it("renders nearby photos as individual messages with their own actions", async () => {
   const run = photoRun(3); run.messages[2]!.readByPeer = true;
   m.messages = run.messages; m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  expect(screen.getByRole("group", { name: "3 photos" })).toBeTruthy();
-  const cells = await screen.findAllByRole("button", { name: /^View photo \d of 3$/ });
-  expect(cells).toHaveLength(3);
-  // The transcript has one row, one caption and the receipt of the last photo.
-  expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(1);
+  expect(screen.queryByRole("group", { name: "3 photos" })).toBeNull();
+  expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(3);
   expect(screen.getAllByText("Two shots")).toHaveLength(1);
   expect(screen.getByRole("img", { name: "Read" })).toBeTruthy();
-  fireEvent.click(cells[2]!);
-  const viewer = await screen.findByRole("dialog", { name: "Photo viewer" });
-  await waitFor(() => expect(within(viewer).getByText("Photo 3 of 3")).toBeTruthy());
+  expect(document.querySelector('[data-chat-message="photo-2"]')).toBeTruthy();
+});
+it("deletes only the selected sent photo when photos are close together", async () => {
+  const run = photoRun(2);
+  m.messages = run.messages; m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
+  await open();
+  const second = document.querySelector<HTMLElement>('[data-chat-message="photo-2"]')!;
+  fireEvent.click(within(second).getByRole("button", { name: "Options for your message" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Delete for me" }));
+  const dialog = screen.getByRole("alertdialog", { name: "Delete for me?" });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Delete for me" }));
+  await waitFor(() => expect(m.remove.mock.calls).toEqual([["account", "chat", "photo-2", false]]));
 });
 it("starts a new bubble when the next photo carries its own caption", async () => {
   const run = photoRun(1);
@@ -784,22 +808,14 @@ it("does not preview a quoted photo while the conversation hides photos", async 
   expect(quote.querySelector("img.fb-chat-quote-thumb")).toBeNull();
   expect(within(quote).getByText("Photo")).toBeTruthy();
 });
-it("renders four or more photos as one 2x2 bubble and counts the overflow", async () => {
+it("renders five nearby photos separately without hiding overflow", async () => {
   const run = photoRun(5);
   m.messages = run.messages; m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  expect(screen.getByRole("group", { name: "5 photos" })).toBeTruthy();
-  expect(document.querySelector(".fb-chat-photo-grid-4")).toBeTruthy();
-  const cells = await screen.findAllByRole("button", { name: /^View photo \d of 5$/ });
-  expect(cells).toHaveLength(4);
-  expect(screen.getByText("+1")).toBeTruthy();
-  expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(1);
-  // The last cell hides one photo; the viewer still names the whole send.
-  fireEvent.click(cells[3]!);
-  const viewer = await screen.findByRole("dialog", { name: "Photo viewer" });
-  await waitFor(() => expect(within(viewer).getByText("Photo 4 of 5")).toBeTruthy());
+  expect(screen.queryByRole("group", { name: "5 photos" })).toBeNull();
+  expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(5);
 });
-it("jumps a quote that names a hidden photo to the visible group and rings it", async () => {
+it("jumps a quote to the exact photo and rings it", async () => {
   const run = photoRun(3);
   m.messages = [...run.messages, { id: "reply", conversationId: "chat", authorId: "peer", recipientId: "account",
     body: "Which one?", messageType: "TEXT", createdAt: 9_000, replyToId: "photo-2",
@@ -809,19 +825,19 @@ it("jumps a quote that names a hidden photo to the visible group and rings it", 
   const quote = screen.getByRole("button", { name: /Quoted message from you/ });
   await waitFor(() => expect(quote.querySelector("img.fb-chat-quote-thumb")).toBeTruthy());
   fireEvent.click(quote);
-  const leader = document.querySelector<HTMLElement>('[data-chat-message="photo-1"]');
+  const leader = document.querySelector<HTMLElement>('[data-chat-message="photo-2"]');
   await waitFor(() => expect(leader?.querySelector(".fb-chat-message")?.className).toMatch(/fb-chat-flash-[ab]/));
   expect(document.activeElement).toBe(leader);
 });
-it("removes a whole still-pending photo run together", async () => {
+it("removes only the selected pending photo", async () => {
   const run = photoRun(2);
   for (const message of run.messages) delete message.server;
   for (const attachment of run.media) attachment.state = "QUEUED";
   m.messages = run.messages; m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  fireEvent.click(screen.getByRole("button", { name: "Remove pending photos" }));
-  await waitFor(() => expect(m.remove.mock.calls).toEqual([
-    ["account", "chat", "photo-1", false], ["account", "chat", "photo-2", false]]));
+  const second = document.querySelector<HTMLElement>('[data-chat-message="photo-2"]')!;
+  fireEvent.click(within(second).getByRole("button", { name: "Remove pending photo" }));
+  await waitFor(() => expect(m.remove.mock.calls).toEqual([["account", "chat", "photo-2", false]]));
 });
 it("shows a prepared draft preview and revokes it when removed", async () => {
   const create = vi.fn(() => "blob:draft"), revoke = vi.fn();
