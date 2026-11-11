@@ -39,6 +39,10 @@ on:
         description: "Deploy the push-dispatch Edge Function"
         type: boolean
         default: false
+      deploy_telegram_webhook:
+        description: "Deploy the Telegram auth webhook Edge Function"
+        type: boolean
+        default: false
       deploy_reply_comment:
         description: "Deploy the reply-comment Edge Function"
         type: boolean
@@ -156,6 +160,14 @@ jobs:
           # Server-to-server only: the function enforces its own
           # x-findback-dispatch-secret, so the gateway JWT check is redundant.
           supabase functions deploy push-dispatch --no-verify-jwt --yes
+      - name: Deploy telegram-auth-webhook
+        if: inputs.deploy_telegram_webhook
+        run: |
+          set -euo pipefail
+          supabase functions deploy telegram-auth-webhook --no-verify-jwt --project-ref "$PROJECT_REF" --yes
+          STATUS=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+            "https://${PROJECT_REF}.supabase.co/functions/v1/telegram-auth-webhook")
+          [ "$STATUS" = '401' ] || { echo "Webhook secret check returned HTTP $STATUS, expected 401"; exit 1; }
       - name: Deploy reply-comment
         if: inputs.deploy_reply_comment
         run: |
