@@ -474,7 +474,7 @@ export function Home() {
   );
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
       {/* Owner feedback 2026-11-06: the bar is inside the feed's own scroll.
           It leaves at exactly the speed the reader scrolls and comes back the
           moment they reverse — no timer, no height animation, so the feed's
@@ -652,7 +652,7 @@ export function Home() {
         onConfirm={onMapConfirm}
       />
 
-      <NewPostsPill count={newPostCount} hasUpdates={hasUpdates || updatesAvailable} onTap={onNewPostsTap} />
+      <NewPostsPill count={newPostCount} hasUpdates={hasUpdates || updatesAvailable} onTap={onNewPostsTap} overlay />
 
     </div>
   );
