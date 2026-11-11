@@ -58,7 +58,7 @@ describe("adaptive report filters", () => {
     expect(io.feed.mock.calls.at(-1)?.[0].nearLat).toBeUndefined();
     const dialog = await openFilters();
     expect(within(dialog).getByRole("button", { name: "Use my location once" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Remove nearby filter" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Remove nearby filter/ })).toBeNull();
   });
   it("queries a rounded explicit center and selected radius together with ordinary filters", async () => {
     render(tree("/search?q=wallet&type=FOUND&category=Electronics&dateFrom=2026-10-01&near=25"));
@@ -70,7 +70,7 @@ describe("adaptive report filters", () => {
     fireEvent.change(within(dialog).getByLabelText("Distance"), { target: { value: "5" } });
     await waitFor(() => expect(io.feed.mock.calls.at(-1)?.[0].radiusM).toBe(5000));
     fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
-    const chip = await screen.findByRole("button", { name: "Remove nearby filter" });
+    const chip = await screen.findByRole("button", { name: "Remove nearby filter: 5 km" });
     expect(chip.textContent).toContain("5 km");
     expect(screen.getByTestId("route").textContent).toContain("near=5");
     expect(screen.getByTestId("route").textContent).not.toMatch(/23\.78|90\.40|lat=|lng=/);

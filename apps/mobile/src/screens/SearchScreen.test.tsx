@@ -10,6 +10,11 @@ const { fetchFeedMock, tabTapState, nlExtractLiveMock, nlHelperStateMock } = vi.
   nlExtractLiveMock: vi.fn(),
   nlHelperStateMock: vi.fn(),
 }));
+const locationFixMock = vi.hoisted(() => vi.fn());
+vi.mock("../services/locationAdapter", () => ({
+  createProductionLocationAdapter: () => ({}),
+  requestFixWithGeneration: locationFixMock,
+}));
 
 // This suite asserts the settled result state, not the status row's motion
 // choreography. Under a fully loaded suite the shared exit-before-enter
@@ -35,6 +40,8 @@ vi.mock("../services/people", async original => ({
   searchPeople: async () => ({ items: [], nextCursor: null }),
 }));
 import { clearFeedCaches } from "../hooks/feedCache";
+import * as feedHook from "../hooks/useFeed";
+import { clearNearbySession, getNearbySession } from "../services/nearby";
 import { makePost } from "../fixture/posts";
 import { NEEDLE_DESCRIPTOR } from "../services/ai/modelDescriptors";
 import { mustProfile, stubGenerate } from "../services/ai/ops/testSupport";
@@ -100,6 +107,7 @@ describe("SearchScreen URL filters", () => {
     nlHelperStateMock.mockResolvedValue("ready");
     tabTapState.tapCount = 0;
     clearFeedCaches();
+    clearNearbySession();
     fetchFeedMock.mockResolvedValue({ items: [], nextCursor: null, total: 0 });
   });
 
@@ -129,7 +137,12 @@ describe("SearchScreen URL filters", () => {
   });
 
   it("restores every filter from the URL on mount", async () => {
+    fetchFeedMock.mockImplementation(async (filters) => ({
+      items: filters.type === "FOUND" && filters.category === "Electronics" && filters.status === "OPEN" && filters.sort === "oldest" && filters.q === "phone"
+        ? [makePost("phone-result", { title: "Found phone" })] : [], nextCursor: null, total: 1,
+    }));
     renderSearch("/search?type=FOUND&category=Electronics&status=OPEN&sort=oldest&q=phone");
+    expect(await screen.findByText("Found phone")).toBeTruthy();
     await waitFor(() =>
       expect(fetchFeedMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -144,6 +157,22 @@ describe("SearchScreen URL filters", () => {
     );
     expect(screen.getByRole("radio", { name: "Found" }).getAttribute("aria-checked")).toBe("true");
     expect((screen.getByLabelText("Search posts") as HTMLInputElement).value).toBe("phone");
+  });
+
+  it("keeps the distance changed while location is pending", async () => {
+    let resolveFix!: (value: { kind: string; lat: number; lng: number }) => void;
+    locationFixMock.mockImplementation(() => new Promise(resolve => { resolveFix = resolve; }));
+    renderSearch();
+    fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Use my location once" }));
+    fireEvent.change(screen.getByLabelText("Distance"), { target: { value: "25" } });
+    resolveFix({ kind: "fix", lat: 12.345, lng: 77.654 });
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toContain("near=25"));
+    await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ radiusM: 25000 }), undefined));
+    expect(getNearbySession()?.radiusKm).toBe(25);
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByRole("button", { name: "Remove nearby filter: 25 km" })).toBeTruthy();
+    expect(fetchFeedMock).not.toHaveBeenCalledWith(expect.objectContaining({ radiusM: 10000 }), undefined);
   });
 
   it("degrades unknown deep-linked values to empty", async () => {
@@ -323,6 +352,10 @@ describe("SearchScreen URL filters", () => {
 
     it("applies an extracted patch to the ordinary editable controls", async () => {
       const seen: string[] = [];
+      fetchFeedMock.mockImplementation(async (filters) => ({
+        items: filters.q === "black wallet" && filters.category === "Bags & Wallets" && filters.status === "OPEN" && filters.dateFrom === "2026-09-18" && filters.dateTo === "2026-09-25"
+          ? [makePost("wallet-result", { title: "Black wallet result" })] : [], nextCursor: null, total: 1,
+      }));
       renderWithNl(async (input: string) => {
         seen.push(input);
         return {
@@ -342,8 +375,8 @@ describe("SearchScreen URL filters", () => {
 
       expect(await screen.findByText("Category: Bags & Wallets")).toBeTruthy();
       expect(await screen.findByText("Status: Open")).toBeTruthy();
-      expect(await screen.findByRole("button", { name: "Remove start date filter" })).toBeTruthy();
-      expect(await screen.findByRole("button", { name: "Remove end date filter" })).toBeTruthy();
+      expect(await screen.findByRole("button", { name: "Remove start date filter: 2026-09-18" })).toBeTruthy();
+      expect(await screen.findByRole("button", { name: "Remove end date filter: 2026-09-25" })).toBeTruthy();
       await waitFor(() =>
         expect(fetchFeedMock).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -357,6 +390,7 @@ describe("SearchScreen URL filters", () => {
         ),
       );
       expect(seen).toEqual(["black wallet lost last week"]);
+      expect(await screen.findByText("Black wallet result")).toBeTruthy();
       // The query lands in the editable search field, not a hidden filter.
       expect((screen.getByLabelText("Search posts") as HTMLInputElement).value).toBe("black wallet");
     });
@@ -765,16 +799,16 @@ describe("SearchScreen URL filters", () => {
 
       fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "last week" } });
       fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-      expect(await screen.findByRole("button", { name: "Remove start date filter" })).toBeTruthy();
+      expect(await screen.findByRole("button", { name: "Remove start date filter: 2026-09-18" })).toBeTruthy();
 
       fetchFeedMock.mockClear();
-      fireEvent.click(screen.getByRole("button", { name: "Remove start date filter" }));
+      fireEvent.click(screen.getByRole("button", { name: "Remove start date filter: 2026-09-18" }));
       await waitFor(() =>
         expect(screen.getByTestId("location").textContent).not.toContain("dateFrom="),
       );
-      await waitFor(() => expect(screen.queryByRole("button", { name: "Remove start date filter" })).toBeNull());
+      await waitFor(() => expect(screen.queryByRole("button", { name: "Remove start date filter: 2026-09-18" })).toBeNull());
       // The end-date chip remains editable.
-      expect(screen.getByRole("button", { name: "Remove end date filter" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Remove end date filter: 2026-09-25" })).toBeTruthy();
     });
 
     it("disables smart filters when no extractor is wired", async () => {
@@ -983,7 +1017,7 @@ describe("SearchScreen URL filters", () => {
       fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
       expect(await screen.findByText("Place: Gulshan")).toBeTruthy();
 
-      fireEvent.click(screen.getByRole("button", { name: "Remove place filter" }));
+      fireEvent.click(screen.getByRole("button", { name: "Remove place filter: Gulshan" }));
 
       await waitFor(() =>
         expect(screen.getByTestId("location").textContent).not.toContain("place="),
@@ -1135,15 +1169,12 @@ describe("SearchScreen URL filters", () => {
     });
 
     it("says so when the place keeps none of the loaded reports, and offers more", async () => {
-      fetchFeedMock.mockResolvedValue({
-        items: [chattogramReport],
-        nextCursor: "page-2",
-        total: 1,
-      });
+      fetchFeedMock.mockResolvedValueOnce({ items: [chattogramReport], nextCursor: "page-2", total: 2 })
+        .mockResolvedValueOnce({ items: [dhakaReport], nextCursor: null, total: 1 });
       renderSearch("/search?place=Gulshan");
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-      expect(await screen.findByText("No report in Gulshan yet")).toBeTruthy();
+      expect(await screen.findByText("No matching reports loaded yet")).toBeTruthy();
       expect(screen.getByText("Try another place, or load more reports.")).toBeTruthy();
       // The reader can widen the search themselves: the place is applied on
       // the device, so more reports may carry the place.
@@ -1151,6 +1182,88 @@ describe("SearchScreen URL filters", () => {
       await waitFor(() =>
         expect(fetchFeedMock).toHaveBeenCalledWith(expect.anything(), "page-2"),
       );
+      expect(await screen.findByText("Umbrella in Gulshan")).toBeTruthy();
+      expect(screen.queryByText("Umbrella in Agrabad")).toBeNull();
+    });
+
+    it("retries a failed page without losing the place or resetting the cursor", async () => {
+      fetchFeedMock.mockResolvedValueOnce({ items: [chattogramReport], nextCursor: "page-2", total: 2 })
+        .mockRejectedValueOnce(new Error("offline"))
+        .mockResolvedValueOnce({ items: [dhakaReport], nextCursor: null, total: 1 });
+      renderSearch("/search?place=Gulshan");
+      fireEvent.click(await screen.findByRole("button", { name: "Show more reports" }));
+      expect(await screen.findByText("No matching reports loaded yet")).toBeTruthy();
+      fireEvent.click(await screen.findByRole("button", { name: "Retry loading more reports" }));
+      expect(await screen.findByText("Umbrella in Gulshan")).toBeTruthy();
+      expect(fetchFeedMock.mock.calls.map(call => call[1])).toEqual([undefined, "page-2", "page-2"]);
+    });
+
+    it("retries a failed refresh when no more pages are available", async () => {
+      const originalScrollTo = HTMLElement.prototype.scrollTo;
+      HTMLElement.prototype.scrollTo = vi.fn();
+      try {
+      fetchFeedMock.mockResolvedValueOnce({ items: [chattogramReport], nextCursor: null, total: 1 })
+        .mockRejectedValueOnce(new Error("offline"))
+        .mockResolvedValueOnce({ items: [dhakaReport], nextCursor: null, total: 1 });
+      const { rerender } = renderSearch("/search?place=Gulshan");
+      expect(await screen.findByText("No report in Gulshan yet")).toBeTruthy();
+      tabTapState.tapCount = 1;
+      rerender(<MemoryRouter initialEntries={["/search?place=Gulshan"]}><SearchScreen /><LocationProbe /></MemoryRouter>);
+      expect(await screen.findByText("Couldn't refresh reports. Try again.")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      expect(await screen.findByText("Umbrella in Gulshan")).toBeTruthy();
+      expect(fetchFeedMock.mock.calls.map(call => call[1])).toEqual([undefined, undefined, undefined]);
+      } finally {
+        HTMLElement.prototype.scrollTo = originalScrollTo;
+      }
+    });
+
+    it("retries a failed refresh instead of loading the next page", async () => {
+      const originalScrollTo = HTMLElement.prototype.scrollTo;
+      HTMLElement.prototype.scrollTo = vi.fn();
+      try {
+        fetchFeedMock.mockResolvedValueOnce({ items: [chattogramReport], nextCursor: "page-2", total: 2 })
+          .mockRejectedValueOnce(new Error("offline"))
+          .mockResolvedValueOnce({ items: [dhakaReport], nextCursor: null, total: 1 });
+        const { rerender } = renderSearch("/search?place=Gulshan");
+        expect(await screen.findByRole("button", { name: "Show more reports" })).toBeTruthy();
+        tabTapState.tapCount = 1;
+        rerender(<MemoryRouter initialEntries={["/search?place=Gulshan"]}><SearchScreen /><LocationProbe /></MemoryRouter>);
+        expect(await screen.findByText("Couldn't refresh reports. Try again.")).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "Retry loading more reports" })).toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+        expect(await screen.findByText("Umbrella in Gulshan")).toBeTruthy();
+        expect(fetchFeedMock.mock.calls.map(call => call[1])).toEqual([undefined, undefined, undefined]);
+      } finally {
+        HTMLElement.prototype.scrollTo = originalScrollTo;
+      }
+    });
+
+    it("offers refresh retry for a refresh error even when more pages exist", async () => {
+      const refresh = vi.fn().mockResolvedValue(undefined);
+      const loadMore = vi.fn().mockResolvedValue(undefined);
+      const useFeed = vi.spyOn(feedHook, "useFeed").mockReturnValue({
+        items: [chattogramReport], total: 2, loading: false, refreshing: false,
+        loadingMore: false, error: "offline", hasMore: true, refresh, loadMore,
+        removeItem: vi.fn(), patchItem: vi.fn(),
+      });
+      try {
+        const { rerender } = renderSearch("/search?place=Gulshan");
+        expect(screen.getByText("Couldn't refresh reports. Try again.")).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "Retry loading more reports" })).toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+        expect(refresh).toHaveBeenCalledOnce();
+        expect(loadMore).not.toHaveBeenCalled();
+        useFeed.mockReturnValue({
+          items: [dhakaReport], total: 1, loading: false, refreshing: false,
+          loadingMore: false, error: null, hasMore: false, refresh, loadMore,
+          removeItem: vi.fn(), patchItem: vi.fn(),
+        });
+        rerender(<MemoryRouter initialEntries={["/search?place=Gulshan"]}><SearchScreen /><LocationProbe /></MemoryRouter>);
+        expect(await screen.findByText("Umbrella in Gulshan")).toBeTruthy();
+      } finally {
+        useFeed.mockRestore();
+      }
     });
 
     it("does not offer to load more reports when there is nothing more to load", async () => {

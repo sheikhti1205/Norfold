@@ -284,7 +284,7 @@ export function AdvancedSearchFilters({
                 layout
                 type="button"
                 onClick={() => postType?.onChange("")}
-                aria-label="Remove type filter"
+                aria-label={`Remove type filter: ${postType?.value === "LOST" ? "Lost" : "Found"}`}
                 whileTap={pressFeedback.button}
                 variants={fadeVariants}
                 initial="hidden"
@@ -298,7 +298,7 @@ export function AdvancedSearchFilters({
             )}
           </AnimatePresence>
           {additionalFilters.map(item => <button key={item.key} type="button" onClick={item.clear}
-            aria-label={`Remove ${item.key} filter`} className="fb-search-chip">{item.label}<X size={14} aria-hidden /></button>)}
+            aria-label={`Remove ${item.key} filter: ${item.label.split(": ").slice(1).join(": ") || item.label}`} className="fb-search-chip">{item.label}<X size={14} aria-hidden /></button>)}
           {active.length > 0 && (
             <AnimatePresence initial={false}>
               {active.map(item => (
@@ -307,7 +307,7 @@ export function AdvancedSearchFilters({
                   layout
                   type="button"
                   onClick={item.clear}
-                  aria-label={`Remove ${item.key} filter`}
+                  aria-label={`Remove ${item.key} filter: ${item.label.split(": ").slice(1).join(": ") || item.label}`}
                   whileTap={pressFeedback.button}
                   variants={fadeVariants}
                   initial="hidden"

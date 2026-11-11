@@ -467,6 +467,16 @@ function ReportSearch(props: SearchScreenProps) {
     },
     { cacheKey: "search:feed", scrollRef },
   );
+  const lastOperation = useRef<"refresh" | "more">("refresh");
+  useEffect(() => { lastOperation.current = "refresh"; }, [refresh]);
+  const refreshReports = useCallback(() => {
+    lastOperation.current = "refresh";
+    return refresh();
+  }, [refresh]);
+  const loadMoreReports = useCallback(() => {
+    lastOperation.current = "more";
+    return loadMore();
+  }, [loadMore]);
 
   // The place scope is applied ON THE DEVICE: the feed RPC matches the
   // title and the description and has no place filter, so the loaded
@@ -483,15 +493,15 @@ function ReportSearch(props: SearchScreenProps) {
   // The feed itself found nothing: no report matches the words and filters.
   const feedEmpty = items.length === 0 && !loading && !error;
   // The feed found reports, but none of them carries the place.
-  const placeEmpty = !feedEmpty && placeInForce && visibleItems.length === 0 && !loading && !error;
+  const placeEmpty = items.length > 0 && placeInForce && visibleItems.length === 0 && !loading;
 
   // Active Search tab tap: rerun current filters + scroll top, preserve filters.
   // Smooth normally, instant when the OS prefers reduced motion.
   useEffect(() => {
     if (tapCount === 0) return;
-    void refresh();
+    void refreshReports();
     scrollRef.current?.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
-  }, [tapCount, refresh, reduceMotion]);
+  }, [tapCount, refreshReports, reduceMotion]);
 
   // One guarded setState per toolbar crossing, never per pixel, so scroll
   // cannot rerender the results list.
@@ -687,18 +697,26 @@ function ReportSearch(props: SearchScreenProps) {
           <EmptyState
             compact
             icon={<Search size={16} aria-hidden />}
-            title={placeEmpty ? `No report in ${place} yet` : "No matches"}
+            title={placeEmpty ? hasMore ? "No matching reports loaded yet" : `No report in ${place} yet` : "No matches"}
             subtitle={
               placeEmpty
-                ? hasMore
+                ? error && lastOperation.current === "more"
+                  ? "Couldn't load more reports. Try again."
+                  : error
+                    ? "Couldn't refresh reports. Try again."
+                  : hasMore
                   ? "Try another place, or load more reports."
                   : "Try another place."
                 : "Try different filters or a broader search."
             }
             action={
-              placeEmpty && hasMore
-                ? { label: "Show more reports", onPress: () => void loadMore() }
-                : undefined
+              placeEmpty && error
+                ? lastOperation.current === "more"
+                  ? { label: "Retry loading more reports", onPress: () => void loadMoreReports() }
+                  : { label: "Retry", onPress: () => void refreshReports() }
+                : placeEmpty && hasMore
+                  ? { label: "Show more reports", onPress: () => void loadMoreReports() }
+                  : undefined
             }
           />
         ) : (
@@ -708,8 +726,8 @@ function ReportSearch(props: SearchScreenProps) {
             loadingMore={loadingMore}
             error={error}
             hasMore={hasMore}
-            onLoadMore={loadMore}
-            onRetry={refresh}
+            onLoadMore={loadMoreReports}
+            onRetry={refreshReports}
             density="compact"
             emptyTitle="No matches"
             emptySubtitle="Try different filters or a broader search."

@@ -15,6 +15,8 @@ import { useUrlParam } from "../hooks/useUrlParam";
 export function useSearchNearby() {
   const [nearParam, setNearParam] = useUrlParam("near");
   const radius = parseNearbyRadiusParam(nearParam) ?? DEFAULT_NEARBY_RADIUS_KM;
+  const radiusRef = useRef(radius);
+  radiusRef.current = radius;
   const [center, setCenter] = useState<NearbyCenter | null>(null);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,8 +32,8 @@ export function useSearchNearby() {
       if (request !== generation.current) return;
       if (result.kind === "fix" && isValidCenter({ lat: result.lat, lng: result.lng })) {
         const rounded = roundNearbyCenter(result.lat, result.lng);
-        setCenter(rounded); setNearParam(String(radius));
-        setNearbySession({ center: rounded, radiusKm: radius, active: true });
+        setCenter(rounded); setNearParam(String(radiusRef.current));
+        setNearbySession({ center: rounded, radiusKm: radiusRef.current, active: true });
       } else {
         setError(result.kind === "denied" ? "Location access is off. Enable it in Settings, or search by place name."
           : "Location is unavailable right now. Try again or search by place name.");
@@ -43,6 +45,7 @@ export function useSearchNearby() {
     setCenter(null); setNearParam(""); clearNearbySession();
   }
   function setRadius(next: NearbyRadiusKm) {
+    radiusRef.current = next;
     setNearParam(String(next));
     if (active) setNearbySession({ radiusKm: next });
   }
