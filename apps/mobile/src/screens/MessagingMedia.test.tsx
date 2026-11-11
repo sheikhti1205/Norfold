@@ -171,6 +171,57 @@ async function open() {
   await waitFor(() => expect(screen.queryByText("Opening messages…")).toBeNull());
   return rendered;
 }
+
+it("clears an admitted draft and reports a stale view without inviting a resend", async () => {
+  m.text.mockResolvedValue({ id: "saved", viewStale: true });
+  await open();
+  const field = screen.getByRole("textbox", { name: "Message" });
+  fireEvent.change(field, { target: { value: "Saved once" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(field).toHaveProperty("value", ""));
+  expect(m.text).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText(/could not be saved/i)).toBeNull();
+  expect(screen.getByText(/view may be out of date/i)).toBeTruthy();
+});
+
+it("retains a failed draft and retries with the same message identity", async () => {
+  m.text.mockRejectedValueOnce(new Error("admission failed")).mockResolvedValueOnce("saved");
+  await open();
+  const field = screen.getByRole("textbox", { name: "Message" });
+  fireEvent.change(field, { target: { value: "Try again" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await screen.findByText(/not sent/i);
+  expect(field).toHaveProperty("value", "Try again");
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(m.text).toHaveBeenCalledTimes(2));
+  expect(m.text.mock.calls[0]?.[6]).toBe(m.text.mock.calls[1]?.[6]);
+  await waitFor(() => expect(field).toHaveProperty("value", ""));
+});
+
+it("ignores two synchronous sends of the same draft", async () => {
+  let finish!: (value: string) => void;
+  m.text.mockReturnValue(new Promise<string>(resolve => { finish = resolve; }));
+  await open();
+  fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Once" } });
+  const button = screen.getByRole("button", { name: "Send message" });
+  act(() => { button.click(); button.click(); });
+  expect(m.text).toHaveBeenCalledTimes(1);
+  await act(async () => finish("saved"));
+});
+
+it("preserves a new draft typed while the first send is in flight", async () => {
+  let finish!: (value: string) => void;
+  m.text.mockReturnValueOnce(new Promise<string>(resolve => { finish = resolve; }));
+  await open();
+  const field = screen.getByRole("textbox", { name: "Message" });
+  fireEvent.change(field, { target: { value: "First" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  fireEvent.change(field, { target: { value: "Second" } });
+  await act(async () => finish("saved"));
+  expect(field).toHaveProperty("value", "Second");
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(m.text).toHaveBeenCalledTimes(2));
+});
 function RouteState() { return <output data-testid="query">{useLocation().search}</output>; }
 function thread(search = "") { return <MemoryRouter initialEntries={[`/connections/chat${search}`]}><LiveRegion /><MessagingRestoration /><Routes><Route path="/connections/:conversationId" element={<><MessagingThread /><RouteState /></>} /></Routes></MemoryRouter>; }
 
@@ -189,7 +240,7 @@ it("saves a new message without waiting for a failed thread refresh", async () =
   const field = screen.getByRole("textbox", { name: "Message" });
   fireEvent.change(field, { target: { value: "Continue offline" } });
   fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-  await waitFor(() => expect(m.text).toHaveBeenCalledWith("account", "chat", "peer", "Continue offline", undefined, undefined));
+  await waitFor(() => expect(m.text).toHaveBeenCalledWith("account", "chat", "peer", "Continue offline", undefined, undefined, expect.any(String)));
   await waitFor(() => expect(field).toHaveProperty("value", ""));
 });
 
@@ -273,7 +324,7 @@ it("keeps the composer usable and preserves newer typing while a text is still b
   fireEvent.change(field, { target: { value: "Second" } });
   fireEvent.click(screen.getByRole("button", { name: "Send message" }));
   await waitFor(() => expect(m.text).toHaveBeenCalledTimes(2));
-  expect(m.text).toHaveBeenLastCalledWith("account", "chat", "peer", "Second", undefined, undefined);
+  expect(m.text).toHaveBeenLastCalledWith("account", "chat", "peer", "Second", undefined, undefined, expect.any(String));
   expect(field.value).toBe("Second");
   // The first admission settling must not wipe input the person typed after it.
   await act(async () => { resolvers[0]!("saved"); });
@@ -388,11 +439,11 @@ it("attaches a report-origin subject to the first text only", async () => {
   render(thread(`?report=${report}`)); await waitFor(() => expect(screen.queryByText("Opening messages…")).toBeNull());
   const field = screen.getByRole("textbox", { name: "Message" });
   fireEvent.change(field, { target: { value: "About this report" } }); fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-  await waitFor(() => expect(m.text).toHaveBeenCalledExactlyOnceWith("account", "chat", "peer", "About this report", report, undefined));
+  await waitFor(() => expect(m.text).toHaveBeenCalledExactlyOnceWith("account", "chat", "peer", "About this report", report, undefined, expect.any(String)));
   await waitFor(() => expect(field).toHaveProperty("value", ""));
   await waitFor(() => expect(screen.getByTestId("query").textContent).toBe(""));
   fireEvent.change(field, { target: { value: "Now ordinary text" } }); fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-  await waitFor(() => expect(m.text).toHaveBeenLastCalledWith("account", "chat", "peer", "Now ordinary text", undefined, undefined));
+  await waitFor(() => expect(m.text).toHaveBeenLastCalledWith("account", "chat", "peer", "Now ordinary text", undefined, undefined, expect.any(String)));
 });
 
 function geolocation() {
@@ -605,7 +656,7 @@ it("sends desktop Enter once but preserves Shift+Enter and IME composition", asy
   fireEvent.keyDown(field,{key:"Enter",shiftKey:true});expect(m.text).not.toHaveBeenCalled();
   fireEvent.compositionStart(field);fireEvent.keyDown(field,{key:"Enter"});expect(m.text).not.toHaveBeenCalled();
   fireEvent.compositionEnd(field);fireEvent.keyDown(field,{key:"Enter"});
-  await waitFor(()=>expect(m.text).toHaveBeenCalledExactlyOnceWith("account","chat","peer","Hello",undefined,undefined));
+  await waitFor(()=>expect(m.text).toHaveBeenCalledExactlyOnceWith("account","chat","peer","Hello",undefined,undefined,expect.any(String)));
   await waitFor(()=>expect(field).toHaveProperty("value",""));
 });
 it("offers an accessible photo picker in a connected conversation", async () => {
