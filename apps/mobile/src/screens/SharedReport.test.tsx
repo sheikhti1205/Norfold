@@ -11,11 +11,28 @@ import { getPendingReportRoute } from "../utils/pendingReportLink";
 const id = "5b6f7c8d-1234-4abc-8def-123456789012";
 function Destination() { const l=useLocation(); return <output>{l.pathname}{l.search}{l.hash}</output>; }
 function renderLink(path=`/shared/${id}`) {
-  return render(<MemoryRouter initialEntries={[path]}><Routes><Route path="/shared/:id" element={<SharedReport />} /><Route path="/posts/:id" element={<Destination />} /><Route path="/signin" element={<Destination />} /></Routes></MemoryRouter>);
+  return render(<MemoryRouter initialEntries={[path]}><Routes><Route path="/shared/:id" element={<SharedReport />} /><Route path="/posts/:id" element={<Destination />} /><Route path="/signin" element={<Destination />} /><Route path="/" element={<HomeDestination />} /></Routes></MemoryRouter>);
 }
+function HomeDestination() { const location = useLocation(); return <output>{JSON.stringify(location.state)}</output>; }
 beforeEach(() => { auth.user=null; auth.booting=false; sessionStorage.clear(); data.get.mockReset(); data.get.mockResolvedValue({id,type:"FOUND",title:"Black backpack",category:"Bags & Wallets",event_month:"2026-11",excerpt:"A found item report. Sign in to compare the details and contact the person who posted it."}); vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", "https://findbackapp.social"); });
 afterEach(() => { cleanup(); vi.unstubAllEnvs(); });
 describe("public shared-report gate", () => {
+  it("links the ready preview brand to the public home", async () => {
+    renderLink();
+    await screen.findByRole("heading", { name: "Black backpack" });
+    const brand = screen.getByRole("link", { name: "Norfold" });
+    expect(brand.getAttribute("href")).toBe("/");
+    fireEvent.click(brand);
+    expect(screen.getByRole("status").textContent).toBe(JSON.stringify({ showPublic: true }));
+  });
+  it("links the loading preview brand to the public home", () => {
+    data.get.mockImplementationOnce(() => new Promise(() => {}));
+    renderLink();
+    const brand = screen.getByRole("link", { name: "Norfold" });
+    expect(brand.getAttribute("href")).toBe("/");
+    fireEvent.click(brand);
+    expect(screen.getByRole("status").textContent).toBe(JSON.stringify({ showPublic: true }));
+  });
   it("renderer contact CTA enters sign-in with the pending report retained, without anonymous fetch", async () => {
     renderLink(`/shared/${id}?contact=1`);
     expect((await screen.findByRole("status")).textContent).toBe("/signin");

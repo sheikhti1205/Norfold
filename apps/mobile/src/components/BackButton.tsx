@@ -5,6 +5,8 @@ import { historyDepth } from "./backNavigation";
 interface BackButtonProps {
   /** Fallback destination when there is no history to go back to. */
   fallbackTo: string;
+  /** State for the fallback: StartScreen reinterprets a bare "/" destination. */
+  fallbackState?: Record<string, unknown>;
   /** Accessible label, e.g. "Back to feed". */
   label: string;
 }
@@ -14,14 +16,14 @@ interface BackButtonProps {
  * otherwise falls back to a safe destination. Uses the same router index
  * as the hardware back handler so both buttons agree.
  */
-export function BackButton({ fallbackTo, label }: BackButtonProps) {
+export function BackButton({ fallbackTo, fallbackState, label }: BackButtonProps) {
   const navigate = useNavigate();
 
   const goBack = () => {
     if (historyDepth() > 0) {
       navigate(-1);
     } else {
-      navigate(fallbackTo, { replace: true });
+      navigate(fallbackTo, { replace: true, state: fallbackState });
     }
   };
 

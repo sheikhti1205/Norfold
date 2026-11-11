@@ -8,6 +8,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("../auth", () => ({
   useAuth: () => ({ user: { id: "test-reader" }, booting: false, bootError: null }),
 }));
+vi.mock("../components/responsive", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../components/responsive")>(),
+  useViewportWidth: () => 320,
+}));
 
 import { CommunityGuidelines, PrivacyPolicy, Terms } from "./Legal";
 
@@ -36,6 +40,19 @@ const UNBUILT_CAPABILITIES: readonly { pattern: RegExp; missing: string }[] = [
 ];
 
 describe("legal documents", () => {
+  it.each([Terms, PrivacyPolicy, CommunityGuidelines])("hides private utilities on public documents", (Document) => {
+    window.history.replaceState({ idx: 0 }, "");
+    const { container } = render(<MemoryRouter><Document publicView /></MemoryRouter>);
+    expect(container.querySelector('a[href="/search"]')).toBeNull();
+    expect(container.querySelector('a[href="/notifications"]')).toBeNull();
+    expect(screen.getByRole("button", { name: "Back to Norfold" })).toBeTruthy();
+  });
+
+  it.each([Terms, PrivacyPolicy, CommunityGuidelines])("keeps utilities on app documents", (Document) => {
+    const { container } = render(<MemoryRouter><Document /></MemoryRouter>);
+    expect(container.querySelector('a[href="/search"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/notifications"]')).not.toBeNull();
+  });
   it("distinguishes durable peer messages from ephemeral AI chat and discloses safety retention", () => {
     const { container } = render(<MemoryRouter><PrivacyPolicy /></MemoryRouter>);
     const copy = container.textContent ?? "";

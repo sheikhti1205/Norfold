@@ -41,7 +41,7 @@ export function SharedReport() {
   const current = state.id === id ? state : { id, status: "loading" as const };
   const preview = current.preview;
   return <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-5 bg-surface px-[min(1.5rem,5vw)] py-12 text-on-surface">
-    <p className="text-lg font-semibold">Norfold</p>
+    <Link to="/" state={{ showPublic: true }} className="inline-flex min-h-11 items-center self-start text-lg font-semibold">Norfold</Link>
     <article aria-label="Shared report preview" className="min-w-0 break-words" aria-live="polite" aria-busy={current.status === "loading"}>
       {preview && <span className="inline-block rounded-full px-3 py-1 text-xs font-semibold" style={{background:`var(--fb-${preview.type.toLowerCase()}-bg)`,color:`var(--fb-${preview.type.toLowerCase()}-ink)`}}>{preview.type === "LOST" ? "Lost" : "Found"}</span>}
       <h1 ref={title} tabIndex={-1} className="mt-4 text-3xl font-semibold tracking-tight">{preview?.title ?? (current.status === "unavailable" ? "This report is no longer available" : current.status === "error" ? "Couldn't load this report" : "Shared report")}</h1>
