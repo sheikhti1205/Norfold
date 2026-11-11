@@ -1,1 +1,1 @@
-{"author":{"id":"d6e2f80ff71d017df133f988fc4d284651b885cd1a1882278da0e33414b02a16"},"ops":[{"type":3,"timestamp":1794358799,"nonce":"UJ5TQ+qsCU0IZspYh5JGldVVS1w=","message":"Disabled in ~/.config/opencode/opencode.json. opencode mcp list now shows 'beads disabled'; supabase and supabase-write stayed connected through the reload.","files":null}]}
+{"author":{"id":"d6e2f80ff71d017df133f988fc4d284651b885cd1a1882278da0e33414b02a16"},"ops":[{"type":4,"timestamp":1794358799,"nonce":"+7ApTrIn0JgJsoxAoBnlOpOl3e4=","status":2}]}
