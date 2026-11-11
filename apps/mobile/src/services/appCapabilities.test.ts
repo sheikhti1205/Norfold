@@ -64,7 +64,6 @@ describe("capability docs", () => {
   it("names the OpenRouter default route and the connected-provider architecture, without a retired price gate", () => {
     expect(APP_CAPABILITIES.aiConnection.join(" ")).toMatch(/openrouter\/free/i);
     expect(APP_CAPABILITIES.aiConnection.join(" ")).toMatch(/billed by your provider/i);
-    expect(APP_CAPABILITIES.photoAnalysis.join(" ")).toMatch(/AI provider/i);
     expect(APP_CAPABILITIES.helpAssistant.join(" ")).toMatch(/AI provider/i);
     expect(APP_CAPABILITIES.privacy.join(" ")).toMatch(/provider you connect/i);
     // The retired free-only gate is the opposite of what ships: the model you
@@ -77,22 +76,7 @@ describe("capability docs", () => {
   });
 
   it("keeps report photos off the server until the user publishes", () => {
-    expect(APP_CAPABILITIES.photoAnalysis.join(" ")).toMatch(/upload only when you publish/i);
     expect(APP_CAPABILITIES.privacy.join(" ")).toMatch(/until you publish/i);
-  });
-
-  it("states that photo analysis is not available instead of describing a retired engine", () => {
-    const photoCopy = APP_CAPABILITIES.photoAnalysis.join(" ");
-    expect(photoCopy).toMatch(/photo analysis isn't available/i);
-    expect(photoCopy).toMatch(/no photo is sent to an AI provider/i);
-    for (const copy of [photoCopy]) {
-      expect(copy).not.toMatch(/local-first/i);
-      expect(copy).not.toMatch(/on-device-only/i);
-      expect(copy).not.toMatch(/skips local inference/i);
-      expect(copy).not.toMatch(/automatic mode/i);
-      expect(copy).not.toMatch(/SmolVLM/);
-      expect(copy).not.toMatch(/Measure (?:CPU|GPU)/);
-    }
   });
 
   it("never describes a removed inference-mode selector", () => {
