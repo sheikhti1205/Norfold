@@ -7,6 +7,19 @@ import { createPasswordRecovery, exchangeRecoveryCode, requestPasswordReset, upd
 import { OtpField } from "../components/auth/OtpField";
 import { useOtpCountdown } from "../components/auth/useOtpCountdown";
 
+// Keep deadlines for the lifetime of a recovery history entry, including remounts.
+const recoveryDeadlines = new Map<string, number>();
+const deadlineListeners = new Map<string, Set<(deadline: number) => void>>();
+
+function readRecoveryDeadline(key: string, storageKey: string): number | undefined {
+  let stored: number | undefined;
+  try {
+    const value = sessionStorage.getItem(storageKey);
+    if (value !== null && Number.isFinite(Number(value))) stored = Number(value);
+  } catch { /* The in-memory deadline still covers component remounts. */ }
+  return Math.max(recoveryDeadlines.get(key) ?? 0, stored ?? 0) || undefined;
+}
+
 /**
  * Recovery-link landing (`/recovery?code=…`, also reachable via App Links).
  * Public route: the link itself carries the credential, so no session is
@@ -42,7 +55,11 @@ function RecoveryFlow() {
   const alive = useRef(true);
   const inFlight = useRef(false);
   const limitedOnEntry = typeof bridgeState?.emailSendLimitedMessage === "string";
-  const entryDeadline = typeof bridgeState?.emailRetryDeadline === "number" && Number.isFinite(bridgeState.emailRetryDeadline) ? bridgeState.emailRetryDeadline : undefined;
+  const routeDeadline = typeof bridgeState?.emailRetryDeadline === "number" && Number.isFinite(bridgeState.emailRetryDeadline) ? bridgeState.emailRetryDeadline : undefined;
+  const recoveryKey = `${location.key}:${email}`;
+  const storageKey = `recovery-deadline:${location.key}`;
+  const storedDeadline = readRecoveryDeadline(recoveryKey, storageKey);
+  const entryDeadline = routeDeadline === undefined ? storedDeadline : Math.max(routeDeadline, storedDeadline ?? 0);
   const { seconds, setSeconds } = useOtpCountdown(otpMode ? 60 : 0, entryDeadline);
   const [unknownLimit, setUnknownLimit] = useState(limitedOnEntry && entryDeadline === undefined);
   const [message, setMessage] = useState(typeof bridgeState?.emailSendLimitedMessage === "string" ? bridgeState.emailSendLimitedMessage : PASSWORD_RESET_SENT);
@@ -51,6 +68,16 @@ function RecoveryFlow() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const exchanged = useRef(false);
+
+  useEffect(() => {
+    const listeners = deadlineListeners.get(recoveryKey) ?? new Set<(deadline: number) => void>();
+    deadlineListeners.set(recoveryKey, listeners);
+    const update = (deadline: number) => setSeconds(Math.max(0, (deadline - Date.now()) / 1000));
+    listeners.add(update);
+    const deadline = Math.max(routeDeadline ?? 0, readRecoveryDeadline(recoveryKey, storageKey) ?? 0);
+    if (deadline && deadline > Date.now()) update(deadline);
+    return () => { listeners.delete(update); if (listeners.size === 0) deadlineListeners.delete(recoveryKey); };
+  }, [recoveryKey, storageKey, routeDeadline, setSeconds]);
 
   useEffect(() => {
     alive.current = true;
@@ -93,6 +120,13 @@ function RecoveryFlow() {
         setCode(""); setSeconds(60); setUnknownLimit(false); setMessage(PASSWORD_RESET_SENT);
       }
     } catch (err) {
+      if (err instanceof Error && "code" in err && err.code === "EMAIL_SEND_LIMITED") {
+        const retry = "retryAfterSeconds" in err && typeof err.retryAfterSeconds === "number" && Number.isFinite(err.retryAfterSeconds) && err.retryAfterSeconds > 0 ? err.retryAfterSeconds : 60;
+        const deadline = Math.max(entryDeadline ?? 0, readRecoveryDeadline(recoveryKey, storageKey) ?? 0, Date.now() + retry * 1000);
+        recoveryDeadlines.set(recoveryKey, deadline);
+        try { sessionStorage.setItem(storageKey, String(deadline)); } catch { /* Keep the in-memory deadline. */ }
+        deadlineListeners.get(recoveryKey)?.forEach((update) => update(deadline));
+      }
       if (alive.current) {
         if (err instanceof Error && "code" in err && err.code === "EMAIL_SEND_LIMITED") {
           const retry = "retryAfterSeconds" in err && typeof err.retryAfterSeconds === "number" && Number.isFinite(err.retryAfterSeconds) && err.retryAfterSeconds > 0 ? err.retryAfterSeconds : null;

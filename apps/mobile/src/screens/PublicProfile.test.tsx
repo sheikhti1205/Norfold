@@ -222,6 +222,13 @@ describe("PublicProfile", () => {
     expect(fetchFeedMock).not.toHaveBeenCalled();
   });
 
+  it("shows the not-found message for an ordinary error with a 404 status", async () => {
+    fetchPublicProfileMock.mockRejectedValueOnce(Object.assign(new Error("nope"), { status: 404 }));
+    renderRoute("ghost");
+    expect((await screen.findByRole("alert")).textContent).toMatch(/could not be found/i);
+    expect(fetchFeedMock).not.toHaveBeenCalled();
+  });
+
   // W5-IDENTITY appended cases: cursor pagination for a member's reports.
   it("offers no load-more action when the server reports no cursor", async () => {
     fetchFeedMock.mockResolvedValue({ items: [post], nextCursor: null, total: 1 });

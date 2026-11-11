@@ -23,6 +23,10 @@ describe("native media intake seam", () => {
     native.chooseImage.mockResolvedValue({ cancelled: true });
     expect(await chooseNativeImage({ source: "photos" })).toBeNull();
   });
+  it("maps a camera bridge rejection without leaking its details", async () => {
+    native.chooseImage.mockRejectedValueOnce(new Error("private camera path"));
+    await expect(chooseNativeImage({ source: "camera" })).rejects.toMatchObject({ clientCode: "CAMERA_UNAVAILABLE", message: "Camera busy or unavailable. Try again." });
+  });
   it.each([{ width: 32000 }, { width: 1441 }, { locationMetadataStripped: false }, { derivativeBase64: "not base64!" }])("rejects invalid native contracts %o", async (overrides) => {
     native.chooseImage.mockResolvedValue(result(overrides));
     await expect(chooseNativeImage({ source: "photos" })).rejects.toMatchObject({ code: "CORRUPT_IMAGE" });

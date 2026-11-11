@@ -52,7 +52,7 @@ beforeEach(() => {
   servicesMock.createPasswordRecovery.mockReset().mockReturnValue(recoveryMock);
 });
 
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); sessionStorage.clear(); vi.useRealTimers(); });
 
 describe("ForgotPassword", () => {
   it("owns the viewport outside Shell (V1-UI-002: full-height main + safe-area insets)", () => {
@@ -185,7 +185,7 @@ describe("Recovery", () => {
     vi.useFakeTimers();
     const error = Object.assign(new Error("You've asked for several codes. The most recent code still works. Try requesting another code in 120 seconds."), { code: "EMAIL_SEND_LIMITED", retryAfterSeconds: 120 });
     servicesMock.requestPasswordReset.mockRejectedValueOnce(error);
-    renderRecovery(otpEntry);
+    renderRecovery({ pathname: "/recovery", state: { recoveryEmail: "deadline@example.invalid" } });
     await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Resend code" })); });
     expect(screen.getByText(error.message)).toBeTruthy();
@@ -196,6 +196,21 @@ describe("Recovery", () => {
     expect((screen.getByRole("button", { name: "Resend code" }) as HTMLButtonElement).disabled).toBe(false);
     expect(servicesMock.requestPasswordReset).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText("Recovery code")).toBeTruthy();
+  });
+  it("keeps a later refusal deadline after the recovery screen remounts", async () => {
+    vi.useFakeTimers();
+    const entry = { pathname: "/recovery", state: { recoveryEmail: "remount@example.invalid" } };
+    servicesMock.requestPasswordReset.mockRejectedValueOnce(Object.assign(new Error("Try again later."), { code: "EMAIL_SEND_LIMITED", retryAfterSeconds: 120 }));
+    const view = renderRecovery(entry);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Resend code" })); });
+    view.unmount();
+    renderRecovery(entry);
+    expect((screen.getByRole("button", { name: "Resend in 120s" }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect((screen.getByRole("button", { name: "Resend in 60s" }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect((screen.getByRole("button", { name: "Resend code" }) as HTMLButtonElement).disabled).toBe(false);
   });
   it("offers a conservative manual retry when the provider gives no interval", async () => {
     vi.useFakeTimers();

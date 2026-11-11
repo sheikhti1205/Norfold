@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import { CLIENT_ERROR_MESSAGES, ClientError, PhotoImportError } from "../utils/clientErrors";
 
 const { publishReportMock, publishReportWithPhotosMock, photo, nativeMedia, announceMock } = vi.hoisted(() => ({
   announceMock: vi.fn(),
@@ -14,9 +15,9 @@ const { publishReportMock, publishReportWithPhotosMock, photo, nativeMedia, anno
     // normalize-first acceptance path is unit-tested in photo.test.ts.
     normalizeForUpload: vi.fn(async (file: File) => {
       if (!file.type.startsWith("image/") && file.type !== "" && file.type !== "application/octet-stream") {
-        throw new Error(`"${file.name}" doesn't look like a photo file. It may be corrupt or renamed.`);
+        throw new PhotoImportError(CLIENT_ERROR_MESSAGES.INVALID_PHOTO, "INVALID_PHOTO");
       }
-      if (file.size > 8 * 1024 * 1024) throw new Error("That photo is still too large after preparing. Try a smaller image or re-save it as JPEG.");
+      if (file.size > 8 * 1024 * 1024) throw new PhotoImportError(CLIENT_ERROR_MESSAGES.PHOTO_TOO_LARGE, "PHOTO_TOO_LARGE");
       return file;
     }),
   },
@@ -282,7 +283,7 @@ describe("CreateReport", () => {
   });
 
   it("keeps the selected photo when publish fails", async () => {
-    publishReportMock.mockRejectedValue(new Error("Could not publish"));
+    publishReportMock.mockRejectedValue(new ClientError("PUBLISH_FAILED"));
     seedDescription("a black phone lost near the library");
     render(<CreateReport />);
     fireEvent.change(screen.getByLabelText(/what did you lose/i), { target: { value: "Lost phone" } });
@@ -581,7 +582,7 @@ describe("CreateReport", () => {
 
   it("surfaces a friendly error when native capture fails", async () => {
     photo.isNativeCameraAvailable.mockReturnValue(true);
-    nativeMedia.chooseNativeImage.mockRejectedValue(new Error("camera busy"));
+    nativeMedia.chooseNativeImage.mockRejectedValue(new ClientError("CAMERA_UNAVAILABLE"));
     try {
       render(<CreateReport />);
       fireEvent.click(await screen.findByRole("button", { name: /take photo/i }));

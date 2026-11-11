@@ -1,5 +1,6 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { IMPORT_MAX_DERIVATIVE_BYTES, IMPORT_MAX_EDGE, MediaError, probeDimensions, sniffImage, type ImportedImage, type SniffedKind } from "./importImage";
+import { ClientError } from "../../utils/clientErrors";
 
 export type NativeMediaSource = "photos" | "camera" | "files";
 export interface NativeMediaOptions {
@@ -73,7 +74,13 @@ function importedDerivative(result: NativeMediaDerivative, options: NativeMediaO
 /** Main Help/composer should call this INSTEAD OF the Android HTML File input. null = user cancelled. */
 export async function chooseNativeImage(options: NativeMediaOptions & { source: NativeMediaSource }): Promise<ImportedImage | null> {
   requireAndroid();
-  const result = await plugin.chooseImage({ source: options.source, highQuality: options.highQuality === true });
+  let result: Awaited<ReturnType<MediaPlugin["chooseImage"]>>;
+  try {
+    result = await plugin.chooseImage({ source: options.source, highQuality: options.highQuality === true });
+  } catch (err) {
+    if (options.source === "camera") throw new ClientError("CAMERA_UNAVAILABLE");
+    throw err;
+  }
   return "cancelled" in result ? null : importedDerivative(result, options);
 }
 

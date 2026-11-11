@@ -1,5 +1,6 @@
 import { ApiError } from "../services/session";
 import { interactionRefusalCopy, isStandingRefusal } from "./interactionRefusal";
+import { CLIENT_ERROR_MESSAGES, ClientError, PhotoImportError } from "./clientErrors";
 
 /**
  * Central error taxonomy: raw failures become one clear human message plus a
@@ -26,6 +27,14 @@ export interface FriendlyError {
 const DOMAIN_MESSAGES: Record<string, FriendlyError> = {
   "Invalid category": { code: "VALIDATION", message: "Invalid category" },
   "Title is required": { code: "VALIDATION", message: "Title is required" },
+  "Invalid post type": { code: "VALIDATION", message: "Invalid post type" },
+  "Title must be 3-120 characters": { code: "VALIDATION", message: "Title must be 3-120 characters" },
+  "Description must be 10-3000 characters": { code: "VALIDATION", message: "Description must be 10-3000 characters" },
+  "A valid date is required": { code: "VALIDATION", message: "A valid date is required" },
+  "The date can't be in the future": { code: "VALIDATION", message: "The date can't be in the future" },
+  "Invalid latitude": { code: "VALIDATION", message: "Invalid latitude" },
+  "Invalid longitude": { code: "VALIDATION", message: "Invalid longitude" },
+  "Location label is too long": { code: "VALIDATION", message: "Location label is too long" },
   "This post violates our guidelines": { code: "VALIDATION", message: "This post violates our guidelines" },
   "You have already rated this recovery": { code: "CONFLICT", message: "You have already rated this recovery" },
   "you have reached today's limit of 5": { code: "RATE_LIMIT", message: "you have reached today's limit of 5" },
@@ -37,6 +46,9 @@ const DOMAIN_MESSAGES: Record<string, FriendlyError> = {
 };
 
 export function friendlyError(err: unknown): FriendlyError {
+  if ((err instanceof ClientError || err instanceof PhotoImportError) && err.clientCode && Object.hasOwn(CLIENT_ERROR_MESSAGES, err.clientCode)) {
+    return { code: "UNKNOWN", message: CLIENT_ERROR_MESSAGES[err.clientCode] };
+  }
   // A confirmed write stays confirmed even if connectivity drops before
   // read-back. Never echo an arbitrary message just because it has this code.
   if (err instanceof ApiError && err.code === "READ_BACK_FAILED") {
@@ -87,7 +99,7 @@ export function friendlyError(err: unknown): FriendlyError {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     return { code: "OFFLINE", message: "You are offline. Check your connection and try again." };
   }
-  const status = err instanceof ApiError ? err.status : null;
+  const status = err instanceof ApiError ? err.status : err instanceof Error && "status" in err && err.status === 404 ? 404 : null;
   const raw = err instanceof Error ? err.message : String(err ?? "");
   const lower = raw.toLowerCase();
 
