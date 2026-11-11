@@ -61,7 +61,7 @@ it("mirrors the bubble direction for the reply swipe and names a quoted attachme
   expect(replyPreview({ ...base, body: "Kept text" })).toBe("Kept text");
   expect(replyPreview({ ...base, body: "Gone", unsentAt: 1 })).toBe("Message unsent");
 });
-it("groups only consecutive photos from one author inside the batch window", () => {
+it("does not infer photo batches from timestamps or authors", () => {
   const photo = (id: string, authorId: string, createdAt: number, extra: Partial<StoredHumanMessage> = {}): StoredHumanMessage => ({
     id, conversationId: "chat", authorId, recipientId: "other", body: "", messageType: "MEDIA", createdAt, ...extra });
   const text = (id: string, authorId: string, createdAt: number): StoredHumanMessage => ({
@@ -77,16 +77,9 @@ it("groups only consecutive photos from one author inside the batch window", () 
     text("t3", "peer", 14_100),
     photo("f1", "peer", 15_000), photo("f2", "peer", 16_000, { unsentAt: 1 }), photo("f3", "peer", 17_000),
   ]);
-  expect([...runs.batches.keys()]).toEqual(["a1", "b1", "c1"]);
-  expect([...runs.followers].sort()).toEqual(["a2", "a3", "b2", "c2"]);
-  expect(runs.leaderOf.get("a2")).toBe("a1");
-  expect(runs.leaderOf.get("a3")).toBe("a1");
-  // A text between photos, another author, a slow gap, an unknown timestamp and
-  // an unsent photo all end the run instead of merging unrelated sends.
-  expect(runs.followers.has("d2")).toBe(false);
-  expect(runs.followers.has("e2")).toBe(false);
-  expect(runs.followers.has("f2")).toBe(false);
-  expect(runs.followers.has("f3")).toBe(false);
+  expect(runs.batches.size).toBe(0);
+  expect(runs.followers.size).toBe(0);
+  expect(runs.leaderOf.size).toBe(0);
 });
 it.each(["/connections", "/connections/chat"])("replaces legacy %s with the canonical destination and preserves query/hash", async path => {
   function Probe(){const location=useLocation();return <p data-testid="redirect">{location.pathname+location.search+location.hash}</p>;}

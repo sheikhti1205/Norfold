@@ -226,16 +226,6 @@ export function replyPreview(message: StoredHumanMessage): string {
   return message.body;
 }
 
-/**
- * Photos from one send are one bubble, not one bubble per file. The rule is
- * presentation-only — no schema column and no wire key — so both sides group
- * the same run: consecutive photos by the same author with no other message
- * between them, each written within a few seconds of the previous one. Unknown
- * (zero) timestamps never prove a batch, because a legacy file with no clock
- * would otherwise merge unrelated photos.
- */
-const PHOTO_BATCH_GAP_MS = 4000;
-
 export interface PhotoBatches {
   /** Leader id -> every message in the run, leader first. */
   batches: Map<string, StoredHumanMessage[]>;
@@ -245,31 +235,11 @@ export interface PhotoBatches {
   leaderOf: Map<string, string>;
 }
 
-export function photoBatches(messages: StoredHumanMessage[]): PhotoBatches {
+export function photoBatches(_messages: StoredHumanMessage[]): PhotoBatches {
   const batches = new Map<string, StoredHumanMessage[]>();
   const followers = new Set<string>();
   const leaderOf = new Map<string, string>();
-  for (let index = 0; index < messages.length; index += 1) {
-    const first = messages[index]!;
-    if (first.messageType !== "MEDIA" || first.unsentAt !== undefined) continue;
-    const items = [first];
-    while (index + items.length < messages.length) {
-      const next = messages[index + items.length]!;
-      const previous = items[items.length - 1]!;
-      if (next.messageType !== "MEDIA" || next.unsentAt !== undefined || next.authorId !== first.authorId) break;
-      // Only a bare photo joins the run. A caption, a quote, a report card or a
-      // location belongs to its own bubble; merging it would hide what the
-      // writer actually sent from the transcript, search and pins.
-      if (next.body || next.replyToId || next.contextReportId || next.location) break;
-      const from = previous.createdAt ?? 0, to = next.createdAt ?? 0;
-      if (!(from > 0 && to >= from && to - from <= PHOTO_BATCH_GAP_MS)) break;
-      items.push(next);
-    }
-    if (items.length < 2) continue;
-    batches.set(first.id, items);
-    for (const item of items.slice(1)) { followers.add(item.id); leaderOf.set(item.id, first.id); }
-    index += items.length - 1;
-  }
+  // No persisted send identity exists, so timing cannot establish a batch.
   return { batches, followers, leaderOf };
 }
 
