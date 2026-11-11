@@ -1,5 +1,5 @@
 import { CATEGORIES } from "@norfold/shared";
-import { sharePreviewLink } from "../utils/reportLinks";
+import { normalizeReportId, sharePreviewLink } from "../utils/reportLinks";
 
 export interface PublicReportPreview {
   id: string;
@@ -12,6 +12,7 @@ export interface PublicReportPreview {
 
 /** Same-domain renderer and SPA use the same server-authoritative projection. */
 export async function getSharedPreview(id: string, signal?: AbortSignal): Promise<PublicReportPreview | null> {
+  id = normalizeReportId(id);
   const controller = new AbortController();
   const abort = () => controller.abort();
   if (signal?.aborted) controller.abort();

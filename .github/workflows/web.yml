@@ -1,6 +1,8 @@
 name: Web
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 permissions:
@@ -10,6 +12,12 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -32,6 +40,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -65,6 +74,8 @@ jobs:
           echo "VITE_SENTRY_TRACES_SAMPLE_RATE=${RATE}" >> "$GITHUB_ENV"
       - name: Typecheck and test link routing
         run: npm run typecheck && npm test -w @norfold/mobile -- src/utils/reportLinks.test.ts src/components/ReportLinkHandler.test.tsx src/screens/SharedReport.test.tsx src/services/sharedPreview.test.ts --maxWorkers=2
+      - name: Test public share preview handler
+        run: node --test apps/share-preview/handler.test.cjs apps/share-preview/android-updates/version.test.cjs
       - name: Verify and package same-domain public preview renderer
         run: |
           node --test scripts/share-preview.test.mjs scripts/prepare-share-preview.test.mjs
