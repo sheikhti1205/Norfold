@@ -1,10 +1,5 @@
 import { useId } from "react";
 
-/**
- * Accessible OTP input: ONE real input (screen-reader/keyboard/paste friendly)
- * with grouped visual cells rendered aria-hidden beneath it. The cells are
- * pure decoration — all interaction goes through the single labelled input.
- */
 export function OtpField({
   label = "Verification code",
   value,
@@ -15,7 +10,7 @@ export function OtpField({
   label?: string;
   value: string;
   onChange: (next: string) => void;
-  maxLength?: 6 | 10;
+  maxLength?: 6 | 7 | 8 | 9 | 10;
   disabled?: boolean;
 }) {
   const id = useId();
@@ -26,26 +21,6 @@ export function OtpField({
       <label htmlFor={id} className="mb-1 block text-sm font-medium text-on-surface">
         {label}
       </label>
-      <div
-        aria-hidden="true"
-        className="mb-2 grid gap-1.5"
-        style={{ gridTemplateColumns: `repeat(${maxLength}, minmax(0, 1fr))` }}
-      >
-        {Array.from({ length: maxLength }, (_, i) => (
-          <span
-            key={i}
-            className={`flex min-h-[44px] items-center justify-center rounded-m3-sm border text-lg font-semibold ${
-              digits[i] != null
-                ? "border-on-surface text-on-surface"
-                : i === digits.length
-                  ? "border-on-surface text-on-surface-variant"
-                  : "border-outline-variant text-on-surface-variant"
-            }`}
-          >
-            {digits[i] ?? ""}
-          </span>
-        ))}
-      </div>
       <input
         id={id}
         value={digits}
@@ -56,10 +31,9 @@ export function OtpField({
         }}
         inputMode="numeric"
         autoComplete="one-time-code"
-        placeholder="Enter code"
         maxLength={maxLength}
         disabled={disabled}
-        className="w-full rounded-m3-sm border border-outline-variant bg-surface px-3.5 py-3 text-base tracking-[0.3em] text-on-surface placeholder:tracking-normal placeholder:text-on-surface-variant focus:border-on-surface"
+        className="min-h-11 w-full min-w-0 rounded-m3-sm border border-outline-variant bg-surface px-3.5 py-3 font-mono text-xl font-semibold tracking-wide text-on-surface focus:border-on-surface disabled:cursor-not-allowed disabled:bg-surface-container-low disabled:text-on-surface-variant"
       />
     </div>
   );
