@@ -5,6 +5,8 @@ import { MediaError, emptyInputMessage, oversizedInputMessage, probeDimensions, 
 import { detectMotionPhotoBounded, strippedVideoBytes } from "./media/motionPhoto";
 import { normalizeImage } from "./image";
 import { BootTimeoutError, throwIfAborted, withTimeout } from "./timeout";
+import { CLIENT_ERROR_MESSAGES, PhotoImportError } from "../utils/clientErrors";
+export { PhotoImportError } from "../utils/clientErrors";
 
 /**
  * True when the available decoder attempted the file and refused it
@@ -24,12 +26,6 @@ function isDecoderRejection(err: unknown): boolean {
  * (network TypeErrors, unexpected failures) must stay generic so private
  * native URIs never leak into the interface.
  */
-export class PhotoImportError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "PhotoImportError";
-  }
-}
 
 export interface PickedPhoto {
   nativeUri: string;
@@ -105,7 +101,7 @@ export { SOURCE_LIMIT_MESSAGE } from "./media/mediaPolicy";
 // cannot be parametrized. Wherever a filename is known, the refusal uses
 // oversizedInputMessage(name, size) — one parametrized message per gate.
 export const TOO_LARGE_TO_PROCESS = SOURCE_LIMIT_MESSAGE;
-export const TOO_LARGE_FOR_UPLOAD = "That photo is still too large after preparing. Try a smaller image or re-save it as JPEG.";
+export const TOO_LARGE_FOR_UPLOAD = CLIENT_ERROR_MESSAGES.PHOTO_TOO_LARGE;
 export const DECODE_FAILED =
   "couldn't be decoded on this device. The file may be damaged — re-save or export it and try again.";
 
@@ -215,7 +211,7 @@ export async function normalizeForUpload(source: File, opts?: PhotoPipelineOpts)
     const out = new File([normalized.blob], withExtension(source.name, normalized.mimeType), {
       type: normalized.mimeType,
     });
-    if (out.size > MAX_UPLOAD_BYTES) throw new PhotoImportError(TOO_LARGE_FOR_UPLOAD);
+    if (out.size > MAX_UPLOAD_BYTES) throw new PhotoImportError(TOO_LARGE_FOR_UPLOAD, "PHOTO_TOO_LARGE");
     return out;
   } catch (err) {
     // Timeout/abort propagate typed — never mask them with the fallback path.
@@ -230,7 +226,7 @@ export async function normalizeForUpload(source: File, opts?: PhotoPipelineOpts)
       // publish time. Fail here with an actionable message instead.
       throw new PhotoImportError(`"${source.name}" ${DECODE_FAILED}`);
     }
-    if (source.size > MAX_UPLOAD_BYTES) throw new PhotoImportError(TOO_LARGE_FOR_UPLOAD);
+    if (source.size > MAX_UPLOAD_BYTES) throw new PhotoImportError(TOO_LARGE_FOR_UPLOAD, "PHOTO_TOO_LARGE");
     // The decoder is unavailable (or failed opaquely): do NOT trust the
     // declared MIME type — verify the actual bytes before accepting the
     // original. Magic bytes reject renamed non-photos, the declared-type
@@ -247,7 +243,7 @@ export async function normalizeForUpload(source: File, opts?: PhotoPipelineOpts)
     const kind = sniffImage(bytes);
     if (!kind) {
       throw new PhotoImportError(
-        `"${source.name}" doesn't look like a photo file. It may be corrupt or renamed — choose a ${ACCEPTED_STILL_FORMATS_LABEL} photo.`,
+        `"${source.name}" doesn't look like a photo file. It may be corrupt or renamed — choose a ${ACCEPTED_STILL_FORMATS_LABEL} photo.`, "INVALID_PHOTO",
       );
     }
     if (!FALLBACK_ACCEPTED_KINDS.has(kind)) {
@@ -385,7 +381,7 @@ export async function photoToFile(photo: PickedPhoto, name?: string, opts?: Phot
         if (err instanceof BootTimeoutError) throw new PhotoStageTimeoutError("normalize", err.message);
         throw err;
       });
-      if (converted.blob.size > MAX_UPLOAD_BYTES) throw new PhotoImportError(TOO_LARGE_FOR_UPLOAD);
+      if (converted.blob.size > MAX_UPLOAD_BYTES) throw new PhotoImportError(TOO_LARGE_FOR_UPLOAD, "PHOTO_TOO_LARGE");
       return withVideoTailInfo(new File([converted.blob], "photo.jpg", { type: "image/jpeg" }), 0);
     } catch (err) {
       if (isAbort(err, signal)) throw err;

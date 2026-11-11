@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../services/session";
 import { friendlyError } from "./friendlyErrors";
+import { CLIENT_ERROR_MESSAGES, ClientError, PhotoImportError } from "./clientErrors";
 
 /**
  * The error taxonomy every consumer surface renders.
@@ -11,6 +12,17 @@ import { friendlyError } from "./friendlyErrors";
  * failed save.
  */
 describe("friendlyError", () => {
+  it("maps known client failures to fixed copy without exposing their error text", () => {
+    for (const code of ["INVALID_PHOTO", "PHOTO_TOO_LARGE"] as const) {
+      expect(friendlyError(new PhotoImportError("private path /secret", code)).message).toBe(CLIENT_ERROR_MESSAGES[code]);
+    }
+    for (const code of ["CAMERA_UNAVAILABLE", "PUBLISH_FAILED"] as const) {
+      const error = new ClientError(code);
+      error.message = "private provider detail";
+      expect(friendlyError(error).message).toBe(CLIENT_ERROR_MESSAGES[code]);
+    }
+    expect(friendlyError(new PhotoImportError("private path /secret")).message).toBe("Something went wrong. Try again.");
+  });
   it("never displays arbitrary exception text", () => {
     expect(friendlyError(new Error("private endpoint /people/secret"))).toEqual({
       code: "UNKNOWN", message: "Something went wrong. Try again.",
@@ -62,6 +74,22 @@ describe("friendlyError", () => {
     const friendly = friendlyError(error);
     expect(friendly.code).toBe("VALIDATION");
     expect(friendly.message).toBe("Invalid category");
+  });
+
+  it.each([
+    "Invalid post type",
+    "Title must be 3-120 characters",
+    "Description must be 10-3000 characters",
+    "Invalid category",
+    "A valid date is required",
+    "The date can't be in the future",
+    "Invalid latitude",
+    "Invalid longitude",
+    "Location label is too long",
+  ])("preserves the allowlisted validation message %s", (message) => {
+    expect(friendlyError(new ApiError(message, 400, "22023"))).toEqual({ code: "VALIDATION", message });
+    expect(friendlyError(new ApiError(`${message} SQL secret id`, 400, "22023")).message)
+      .toBe("Check the highlighted fields and try again.");
   });
 
   it("never leaks backend jargon into a reader's copy", () => {

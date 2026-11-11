@@ -14,6 +14,7 @@ import type { ReportDraft, ReportPhotoRef } from "../services/reportDraft";
 import { friendlyError } from "../utils/friendlyErrors";
 import { isNativeCameraAvailable, normalizeForUpload, type PickedPhoto } from "../services/photo";
 import { chooseNativeImage, chooseNativeImages, importNativeImageUri, importedImageToFile } from "../services/media/nativeMedia";
+import { ClientError } from "../utils/clientErrors";
 import { ACCEPTED_STILL_FORMATS_LABEL, ACCEPTED_STILL_MIME_TYPES, isAcceptedStillMime, UPLOAD_MAX_BYTES } from "../services/media/mediaPolicy";
 import { AnimatePresence, motion } from "framer-motion";
 import { ReportMediaPicker } from "../components/ReportMediaPicker";
@@ -1512,7 +1513,8 @@ function ReportForm() {
           setUncertain(true);
           setError(err.message);
         } else {
-          setError(friendlyError(err).message);
+          const friendly = friendlyError(err);
+          setError(friendly.code === "UNKNOWN" ? friendlyError(new ClientError("PUBLISH_FAILED")).message : friendly.message);
         }
       }
     } finally {
