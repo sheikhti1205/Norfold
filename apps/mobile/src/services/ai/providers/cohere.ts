@@ -1,14 +1,10 @@
 /**
  * Cohere BYOK provider adapter (packet AI-020d).
  *
- * Wire shape follows Cohere's OpenAI-compatible Chat API v2:
+ * Wire shape follows Cohere's Chat API v2:
  * - `POST https://api.cohere.com/v2/chat`,
  *   `Authorization: Bearer <key>`.
- * - OpenAI-compatible SSE: `data:` chunks with
- *   `choices[0].delta.content`, `:` keepalive comments, terminator
- *   `data: [DONE]`. Usage is requested via
- *   `stream_options: { include_usage: true }` and arrives as
- *   `prompt_tokens` / `completion_tokens`.
+ * - SSE uses `content-delta` text events and a terminal `message-end` event.
  * - Mid-stream errors arrive as SSE `data:` events with a top-level
  *   `error` field and/or `finish_reason: "error"` (HTTP stays 200).
  *
@@ -42,6 +38,8 @@ import type {
   StreamEvent,
 } from "../providerContract";
 import { hasNoInlineImageBytesOrKeys } from "../providerContract";
+import { untrustedSummary } from "./untrustedSummary";
+import { sharedError, errorEnvelopeCode } from "./sharedErrors";
 
 /** Sole allowlisted origin for this adapter. No proxy, no override. */
 export const COHERE_API_ORIGIN = "https://api.cohere.com";
@@ -58,6 +56,7 @@ export interface CohereAdapterOptions {
   /** Resolve the caller's BYOK key; `null` means unauthenticated. Never embedded here. */
   getApiKey: () => Promise<string | null>;
   fetchImpl?: typeof fetch;
+  buildSystemText?: (request: NormalizedRequest) => string | undefined;
   /**
    * Resolve an approved image id to a deliverable URL. When request images
    * exist but no resolver is configured the call fails loudly instead of
@@ -141,6 +140,8 @@ function errorForStatus(
   apiKey: string,
 ): { code: string; message: string; retryable: boolean } {
   const detail = apiErrorMessage(body, apiKey);
+  const shared = sharedError(status, errorEnvelopeCode(body));
+  if (shared) return { ...shared, message: detail ?? "Cohere rejected the request." };
   if (status === 400)
     return { code: "bad-request", message: detail ?? "Cohere rejected the request.", retryable: false };
   if (status === 401)
@@ -211,11 +212,13 @@ export function createCohereAdapter(
     }
 
     const messages: OutgoingMessage[] = [];
+    const systemText = options.buildSystemText?.(request);
+    if (systemText) messages.push({ role: "system", content: systemText });
     if (
       request.summary !== undefined &&
       request.summary.summaryText.trim() !== ""
     ) {
-      messages.push({ role: "system", content: request.summary.summaryText });
+      messages.push({ role: "user", content: untrustedSummary(request.summary.summaryText) });
     }
     for (const turn of request.recentTurns) {
       if (turn.text.trim() === "") continue;
@@ -302,7 +305,6 @@ export function createCohereAdapter(
             ? {}
             : { max_tokens: maxOutputTokens }),
           stream: true,
-          stream_options: { include_usage: true },
         }),
         signal: request.signal,
       });
@@ -348,8 +350,10 @@ export function createCohereAdapter(
     const dataLines: string[] = [];
     let firstTokenSent = false;
     let failed = false;
+    let sawDone = false;
 
     const handlePayload = function* (payload: string): Generator<StreamEvent> {
+      // Cohere v2 terminates with message-end; [DONE] is not its terminal event.
       if (payload === "[DONE]") return;
       let parsed: unknown = null;
       try {
@@ -362,23 +366,37 @@ export function createCohereAdapter(
       const errorField = chunk["error"];
       if (errorField !== undefined) {
         let message = "Cohere reported a mid-stream error.";
-        if (
-          typeof errorField === "object" &&
-          errorField !== null &&
-          typeof (errorField as { message?: unknown }).message === "string"
-        ) {
-          message = truncate(
-            (errorField as { message: string }).message,
-            ERROR_MESSAGE_MAX_CHARS,
-          );
+        if (typeof errorField === "object" && errorField !== null && typeof (errorField as { message?: unknown }).message === "string") {
+          message = truncate((errorField as { message: string }).message, ERROR_MESSAGE_MAX_CHARS);
         }
-        yield {
-          kind: "error",
-          attempt: ATTEMPT,
-          code: "stream-error",
-          message: scrubKey(message, apiKey, "Cohere reported a mid-stream error."),
-          retryable: false,
-        } as const;
+        yield { kind: "error", attempt: ATTEMPT, code: "stream-error", message: scrubKey(message, apiKey, "Cohere reported a mid-stream error."), retryable: false } as const;
+        return;
+      }
+      if (chunk["type"] === "content-delta") {
+        const delta = chunk["delta"] as { message?: { content?: { text?: unknown } } } | undefined;
+        const text = delta?.message?.content?.text;
+        if (typeof text === "string" && text !== "") {
+          if (!firstTokenSent) {
+            firstTokenSent = true;
+            yield { kind: "phase", phase: "first-token", attempt: ATTEMPT } as const;
+          }
+          yield { kind: "text", attempt: ATTEMPT, delta: text } as const;
+        }
+        return;
+      }
+      if (chunk["type"] === "message-end") {
+        const delta = chunk["delta"] as { finish_reason?: unknown; usage?: { tokens?: { input_tokens?: unknown; output_tokens?: unknown } } } | undefined;
+        const reason = delta?.finish_reason;
+        if (reason === "ERROR" || reason === "TIMEOUT") {
+          yield { kind: "error", attempt: ATTEMPT, code: "stream-error", message: "Cohere ended the stream with an error.", retryable: reason === "TIMEOUT" } as const;
+          return;
+        }
+        const inputTokens = positiveInt(delta?.usage?.tokens?.input_tokens);
+        const outputTokens = positiveInt(delta?.usage?.tokens?.output_tokens);
+        if (inputTokens !== undefined || outputTokens !== undefined) {
+          yield { kind: "usage", attempt: ATTEMPT, ...(inputTokens === undefined ? {} : { inputTokens }), ...(outputTokens === undefined ? {} : { outputTokens }) } as const;
+        }
+        sawDone = true;
         return;
       }
       const choices = chunk["choices"];
@@ -415,7 +433,9 @@ export function createCohereAdapter(
         typeof first === "object" && first !== null
           ? (first as { finish_reason?: unknown }).finish_reason
           : undefined;
-      if (finishReason === "error") {
+      if (finishReason === "content_filter" || finishReason === "content_filtering") {
+        yield { kind: "error", attempt: ATTEMPT, code: "response-refused", message: "The provider refused the request.", retryable: false } as const;
+      } else if (finishReason === "error") {
         yield {
           kind: "error",
           attempt: ATTEMPT,
@@ -521,8 +541,7 @@ export function createCohereAdapter(
         }
       }
       buffer += decoder.decode();
-      // Tolerate a missing trailing blank line / missing [DONE]: flush any
-      // pending event and terminate the single attempt normally.
+      // Flush the final frame before checking the terminal marker.
       const tailLines: string[] = [];
       if (buffer !== "") {
         tailLines.push(buffer.endsWith("\r") ? buffer.slice(0, -1) : buffer);
@@ -560,7 +579,11 @@ export function createCohereAdapter(
       yield { kind: "done", attempt: ATTEMPT, stopReason: "error" } as const;
       return;
     }
-    // A clean EOF without [DONE] still terminates the single attempt.
+    if (!sawDone) {
+      yield { kind: "error", attempt: ATTEMPT, code: "response-incomplete", message: "The response ended before it was complete.", retryable: true } as const;
+      yield { kind: "done", attempt: ATTEMPT, stopReason: "error" } as const;
+      return;
+    }
     yield { kind: "phase", phase: "complete", attempt: ATTEMPT } as const;
     yield { kind: "done", attempt: ATTEMPT, stopReason: "complete" } as const;
   }

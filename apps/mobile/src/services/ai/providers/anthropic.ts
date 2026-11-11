@@ -22,6 +22,7 @@
  * - Unknown context/output limits stay `unknown`; no prices or model ids are
  *   hard-coded, so `listModels` is intentionally not implemented.
  */
+import { sharedError } from "./sharedErrors";
 import type {
   NormalizedRequest,
   ProviderAdapter,
@@ -186,9 +187,9 @@ async function readHttpFailure(
     text = "anthropic request failed";
   }
   return {
-    code: type ?? `http_${status}`,
+    code: sharedError(status, type)?.code ?? type ?? `http_${status}`,
     message: text,
-    retryable: isRetryableHttpFailure(status, type),
+    retryable: sharedError(status, type)?.retryable ?? isRetryableHttpFailure(status, type),
   };
 }
 
@@ -595,6 +596,13 @@ async function* completeAnthropic(
             : null);
         if (type === null) continue;
 
+        if (type === "error" || asRecord(payload)["error"] !== undefined) {
+          const failure = readStreamError(payload);
+          const shared = sharedError(undefined, failure.code);
+          yield* failureEvents(shared?.code ?? failure.code, failure.message, shared?.retryable ?? isRetryableStreamError(failure.code));
+          return;
+        }
+
         if (type === "message_start") {
           const tokens = readInputTokens(payload);
           if (tokens !== undefined) {
@@ -615,6 +623,10 @@ async function* completeAnthropic(
           continue;
         }
         if (type === "message_delta") {
+          if (asRecord(asRecord(payload)["delta"])["stop_reason"] === "refusal") {
+            yield* failureEvents("response-refused", "The provider refused the request.", false);
+            return;
+          }
           const tokens = readOutputTokens(payload);
           if (tokens !== undefined) {
             outputTokens = tokens;
@@ -631,15 +643,6 @@ async function* completeAnthropic(
           sawMessageStop = true;
           continue;
         }
-        if (type === "error") {
-          const failure = readStreamError(payload);
-          yield* failureEvents(
-            failure.code,
-            failure.message,
-            isRetryableStreamError(failure.code),
-          );
-          return;
-        }
         // `ping`, content_block_start/stop and unknown future events are
         // intentionally ignored for forward compatibility.
       }
@@ -655,7 +658,7 @@ async function* completeAnthropic(
 
   if (!sawMessageStop) {
     yield* failureEvents(
-      "stream_truncated",
+      "response-incomplete",
       "the stream ended before message_stop",
       true,
     );

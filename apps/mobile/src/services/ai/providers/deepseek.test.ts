@@ -283,7 +283,7 @@ describe("deepseek complete — wire format", () => {
     expect(errSpy).not.toHaveBeenCalled();
   });
 
-  it("ends complete when the stream closes without [DONE]", async () => {
+  it("rejects EOF without [DONE]", async () => {
     const { fetchImpl } = makeFetchStub(
       streamResponse([
         enc.encode('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'),
@@ -296,9 +296,10 @@ describe("deepseek complete — wire format", () => {
     const { request } = baseRequest();
     const events = await collect(adapter.complete(request));
     expect(texts(events)).toBe("partial");
+    expect(events).toContainEqual(expect.objectContaining({ kind: "error", code: "response-incomplete" }));
     expect(last(events)).toMatchObject({
       kind: "done",
-      stopReason: "complete",
+      stopReason: "error",
     });
   });
 });
@@ -489,7 +490,7 @@ describe("deepseek complete — errors", () => {
     });
     expect(events.find((e) => e.kind === "error")).toMatchObject({
       kind: "error",
-      code: "content-filter",
+      code: "response-refused",
       retryable: false,
     });
     expect(last(events)).toMatchObject({

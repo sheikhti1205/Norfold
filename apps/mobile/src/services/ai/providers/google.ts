@@ -10,7 +10,7 @@
  * - SSE `data:` frames, each a `GenerateContentResponse` JSON object with
  *   `candidates[0].content.parts[].text`, `finishReason`, and
  *   `usageMetadata{promptTokenCount,candidatesTokenCount,totalTokenCount}`.
- *   There is NO `[DONE]` sentinel — EOF terminates the attempt.
+ *   There is no `[DONE]` sentinel; a candidate finishReason terminates it.
  * - HTTP errors use the standard Google envelope
  *   `{"error":{"code":<http-status>,"message":...,"status":"<SLUG>"}}`.
  *
@@ -40,6 +40,7 @@
  *   intentionally not implemented (official pricing lives at
  *   `https://ai.google.dev/gemini-api/docs/pricing`, catalog-owned).
  */
+import { sharedError } from "./sharedErrors";
 import type {
   NormalizedRequest,
   ProviderAdapter,
@@ -183,9 +184,9 @@ async function readHttpFailure(
     text = "google request failed";
   }
   return {
-    code: slug ?? fallback,
+    code: sharedError(status, slug)?.code ?? slug ?? fallback,
     message: text,
-    retryable: isRetryableHttpFailure(status),
+    retryable: sharedError(status, slug)?.retryable ?? isRetryableHttpFailure(status),
   };
 }
 
@@ -295,7 +296,8 @@ function readStreamError(payload: unknown): {
     numeric !== undefined
       ? numeric === 429 || numeric >= 500
       : code === "stream_error";
-  return { code, message, retryable };
+  const shared = sharedError(numeric, statusValue);
+  return { code: shared?.code ?? code, message, retryable: shared?.retryable ?? retryable };
 }
 
 /** Read one chunk, rejecting as soon as the caller aborts. */
@@ -553,6 +555,7 @@ async function* completeGoogle(
   const decoder = new TextDecoder();
   let buffer = "";
   let sawText = false;
+  let sawFinish = false;
 
   try {
     for (;;) {
@@ -604,11 +607,22 @@ async function* completeGoogle(
         const blockReason = readBlockReason(payload);
         if (blockReason !== null) {
           yield* failureEvents(
-            "content-blocked",
+            "response-refused",
             `google blocked the prompt (${blockReason})`,
             false,
           );
           return;
+        }
+
+        const candidates = asRecord(payload)["candidates"];
+        const first = Array.isArray(candidates) ? asRecord(candidates[0]) : {};
+        const finishReason = first["finishReason"];
+        if (typeof finishReason === "string" && finishReason !== "") {
+          if (["SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "IMAGE_SAFETY"].includes(finishReason)) {
+            yield* failureEvents("response-refused", "The provider refused the request.", false);
+            return;
+          }
+          sawFinish = true;
         }
 
         for (const delta of readTextParts(payload)) {
@@ -634,7 +648,11 @@ async function* completeGoogle(
     reader.releaseLock();
   }
 
-  // Gemini SSE defines no terminal sentinel: a clean EOF ends the attempt.
+  // Gemini uses a candidate finishReason instead of an SSE [DONE] sentinel.
+  if (!sawFinish) {
+    yield* failureEvents("response-incomplete", "The response ended before it was complete.", true);
+    return;
+  }
   yield { kind: "phase", phase: "complete", attempt: ATTEMPT };
   yield { kind: "done", attempt: ATTEMPT, stopReason: "complete" };
 }

@@ -25,6 +25,9 @@ import {
   priceClassFromLines,
 } from "../providerContract";
 import { cloudCatalogMetadata } from "./catalogueQualification";
+import { untrustedSummary } from "./untrustedSummary";
+import { sharedError, errorEnvelopeCode } from "./sharedErrors";
+import { isOpenAiRefusal } from "./openAiRefusal";
 import type {
   ModelRecord,
   NormalizedRequest,
@@ -46,6 +49,7 @@ export interface OpenRouterAdapterOptions {
   /** Resolve the caller's BYOK key; `null` means unauthenticated. Never embedded here. */
   getApiKey: () => Promise<string | null>;
   fetchImpl?: typeof fetch;
+  buildSystemText?: (request: NormalizedRequest) => string | undefined;
   /** Optional app attribution headers (rankings only). */
   referer?: string;
   title?: string;
@@ -108,6 +112,8 @@ function errorForStatus(
   body: unknown,
 ): { code: string; message: string; retryable: boolean } {
   const detail = apiErrorMessage(body);
+  const shared = sharedError(status, errorEnvelopeCode(body));
+  if (shared) return { ...shared, message: detail ?? "OpenRouter rejected the request." };
   if (status === 400)
     return { code: "bad-request", message: detail ?? "OpenRouter rejected the request.", retryable: false };
   if (status === 401)
@@ -224,8 +230,13 @@ export function createOpenRouterAdapter(
     }
 
     const messages: OutgoingMessage[] = [];
+    const systemText = options.buildSystemText?.(request);
+    if (systemText) messages.push({ role: "system", content: systemText });
     if (request.summary !== undefined) {
-      messages.push({ role: "system", content: request.summary.summaryText });
+      messages.push({
+        role: "user",
+        content: untrustedSummary(request.summary.summaryText),
+      });
     }
     for (const turn of request.recentTurns) {
       messages.push({ role: turn.role, content: turn.text });
@@ -348,9 +359,10 @@ export function createOpenRouterAdapter(
     const dataLines: string[] = [];
     let firstTokenSent = false;
     let failed = false;
+    let sawDone = false;
 
     const handlePayload = function* (payload: string): Generator<StreamEvent> {
-      if (payload === "[DONE]") return;
+      if (payload === "[DONE]") { sawDone = true; return; }
       let parsed: unknown = null;
       try {
         parsed = JSON.parse(payload);
@@ -372,6 +384,10 @@ export function createOpenRouterAdapter(
       }
       const choices = chunk["choices"];
       const first = Array.isArray(choices) ? choices[0] : undefined;
+      if (isOpenAiRefusal(first)) {
+        yield { kind: "error", attempt, code: "response-refused", message: "The provider refused the request.", retryable: false } as const;
+        return;
+      }
       const delta =
         typeof first === "object" && first !== null
           ? ((first as { delta?: unknown }).delta as { content?: unknown } | undefined)
@@ -509,8 +525,7 @@ export function createOpenRouterAdapter(
         }
       }
       buffer += decoder.decode();
-      // Tolerate a missing trailing blank line / missing [DONE]: flush any
-      // pending event and terminate the single attempt normally.
+      // Flush the final frame before checking the terminal marker.
       const tailLines: string[] = [];
       if (buffer !== "") {
         tailLines.push(buffer.endsWith("\r") ? buffer.slice(0, -1) : buffer);
@@ -548,7 +563,11 @@ export function createOpenRouterAdapter(
       yield { kind: "done", attempt, stopReason: "error" } as const;
       return;
     }
-    // A clean EOF without [DONE] still terminates the single attempt.
+    if (!sawDone) {
+      yield { kind: "error", attempt, code: "response-incomplete", message: "The response ended before it was complete.", retryable: true } as const;
+      yield { kind: "done", attempt, stopReason: "error" } as const;
+      return;
+    }
     yield { kind: "phase", phase: "complete", attempt } as const;
     yield { kind: "done", attempt, stopReason: "complete" } as const;
   }

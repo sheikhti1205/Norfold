@@ -93,24 +93,26 @@ export function createProviderAdapter(
   // Account-keyed seam for the factories that take the account per call.
   const getAccountKey = (id: string): Promise<string | null> =>
     resolveKey(id, provider as "anthropic" | "google");
+  const buildSystemText = (request: NormalizedRequest): string =>
+    options.assembleSystemText?.(request) ?? "";
 
   switch (provider) {
     case "openrouter":
-      return createOpenRouterAdapter({ getApiKey, fetchImpl, resolveImageUrl });
+      return createOpenRouterAdapter({ getApiKey, fetchImpl, resolveImageUrl, buildSystemText });
     case "deepseek":
-      return createDeepSeekAdapter({ getApiKey, fetchImpl, resolveImageUrl });
+      return createDeepSeekAdapter({ getApiKey, fetchImpl, resolveImageUrl, buildSystemText });
     case "mistral":
-      return createMistralAdapter({ getApiKey, fetchImpl, resolveImageUrl });
+      return createMistralAdapter({ getApiKey, fetchImpl, resolveImageUrl, buildSystemText });
     case "groq":
-      return createGroqAdapter({ getApiKey, fetchImpl, resolveImageUrl });
+      return createGroqAdapter({ getApiKey, fetchImpl, resolveImageUrl, buildSystemText });
     case "xai":
-      return createXaiAdapter({ getApiKey, fetchImpl, resolveImageUrl });
+      return createXaiAdapter({ getApiKey, fetchImpl, resolveImageUrl, buildSystemText });
     case "cohere":
-      return createCohereAdapter({ getApiKey, fetchImpl, resolveImageUrl });
+      return createCohereAdapter({ getApiKey, fetchImpl, resolveImageUrl, buildSystemText });
     case "anthropic":
-      return createAnthropicAdapter({ getApiKey: getAccountKey, fetchImpl });
+      return createAnthropicAdapter({ getApiKey: getAccountKey, fetchImpl, buildSystemText });
     case "google":
-      return createGoogleAdapter({ getApiKey: getAccountKey, fetchImpl });
+      return createGoogleAdapter({ getApiKey: getAccountKey, fetchImpl, buildSystemText });
     case "generic": {
       const direct = options.genericBaseURL?.trim() ?? "";
       const stored =
@@ -119,7 +121,7 @@ export function createProviderAdapter(
         throw new Error(
           "A generic key without an endpoint is unusable: set a custom endpoint base URL for this account first. No default endpoint is assumed.",
         );
-      return createGenericAdapter({ baseURL: stored, getApiKey, fetchImpl, resolveImageUrl });
+      return createGenericAdapter({ baseURL: stored, getApiKey, fetchImpl, resolveImageUrl, buildSystemText });
     }
     case "openai": {
       const assembleSystemText = options.assembleSystemText;

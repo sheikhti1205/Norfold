@@ -91,6 +91,9 @@ const TRANSPORT_ERROR_COPY: Record<string, string> = Object.assign(Object.create
   "auth-missing": "No AI key is saved for this account yet. Add one in Chat options → Providers.",
   "payment-required": "The AI provider reports no remaining credit for this key.",
   "rate-limited": "Too many requests right now. Try again in a moment.",
+  "response-incomplete": "The reply stopped early. Try again.",
+  "response-refused": "The assistant could not respond to that request.",
+  stream_truncated: "The reply stopped early. Try again.",
   "network-error": "The assistant could not reach the network. Check your connection and try again.",
   "provider-error": "The AI service is having trouble. Try again in a moment.",
   "request-failed": "The assistant could not reach the AI service. Try again.",
@@ -760,6 +763,11 @@ export class ChatController {
         sanitizeControllerError(message, [text]),
         lastErrorCode === "" ? undefined : lastErrorCode,
       );
+    }
+
+    if (answer.trim() === "") {
+      this.update({ phase: "failed", partialText: "", lastError: "The provider returned an empty response." });
+      throw new ControllerError("send-failed", "The provider returned an empty response.");
     }
 
     if (!built.transient) {

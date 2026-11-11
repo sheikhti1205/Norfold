@@ -343,18 +343,18 @@ describe("google stream framing", () => {
     expect(phases(events)).toContain("first-token");
   });
 
-  it("terminates cleanly at EOF with no finishReason and no [DONE]", async () => {
+  it("rejects EOF with no finishReason", async () => {
     const { fetchImpl } = makeFetchStub(sseResponse([chunk("partial")]));
     const { request } = baseRequest();
     const events = await collect(
       createGoogleAdapter({ ...keyDeps(), fetchImpl }).complete(request),
     );
     expect(texts(events)).toBe("partial");
-    expect(phases(events)).toContain("complete");
+    expect(events).toContainEqual(expect.objectContaining({ kind: "error", code: "response-incomplete" }));
     expect(events.at(-1)).toEqual({
       kind: "done",
       attempt: 1,
-      stopReason: "complete",
+      stopReason: "error",
     });
   });
 
@@ -416,9 +416,17 @@ describe("google stream framing", () => {
     expect(error).toMatchObject({
       kind: "error",
       attempt: 1,
-      code: "content-blocked",
+      code: "response-refused",
       retryable: false,
     });
+  });
+
+  it("rejects a safety finish reason as a refusal", async () => {
+    const { fetchImpl } = makeFetchStub(sseResponse(['data: {"candidates":[{"finishReason":"SAFETY"}]}\n\n']));
+    const { request } = baseRequest();
+    const events = await collect(createGoogleAdapter({ ...keyDeps(), fetchImpl }).complete(request));
+    expect(events).toContainEqual(expect.objectContaining({ kind: "error", code: "response-refused" }));
+    expect(events.at(-1)).toMatchObject({ kind: "done", stopReason: "error" });
   });
 });
 
@@ -482,7 +490,7 @@ describe("google errors, auth, and abort", () => {
       createGoogleAdapter({ ...keyDeps(), fetchImpl }).complete(request),
     );
     expect(events.find((e) => e.kind === "error")).toMatchObject({
-      code: "permission_denied",
+      code: "auth-forbidden",
       retryable: false,
     });
   });
