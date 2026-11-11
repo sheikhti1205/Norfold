@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderHook, act, waitFor } from "@testing-library/react";
-import { createRef, useImperativeHandle } from "react";
+import { render, renderHook, act, waitFor } from "@testing-library/react";
+import { createElement, createRef, useImperativeHandle, useRef } from "react";
 import { useFeed } from "./useFeed";
 import {
   buildFeedCacheKey,
@@ -30,6 +30,41 @@ describe("useFeed", () => {
     clearFeedCaches();
   });
 
+  it.each([
+    { response: ["x", "a", "b"], expectedScroll: 250, updates: false },
+    { response: ["x", "a"], expectedScroll: 0, updates: true },
+  ])("anchors a dirty restore to a surviving row or returns to top", async ({ response, expectedScroll, updates }) => {
+    const key = buildFeedCacheKey("test:anchor", {});
+    saveFeedCache(key, { items: [{ id: "a" }, { id: "b" }] as never, total: 2, cursor: "old", scrollTop: 150 });
+    invalidateFeedCaches();
+    let resolve: (value: unknown) => void = () => {};
+    fetchFeedMock.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+    function Feed() {
+      const scrollRef = useRef<HTMLDivElement>(null);
+      const feed = useFeed({}, { cacheKey: "test:anchor", scrollRef });
+      return createElement("div", { ref: scrollRef, "data-testid": "scroll" },
+        createElement("span", { "data-testid": "updates" }, String(feed.updatesAvailable)),
+        ...feed.items.map((item, index) => createElement("div", {
+          key: item.id, "data-feed-post-id": item.id,
+          ref: (el: HTMLDivElement | null) => {
+            if (el) el.getBoundingClientRect = () => {
+              const top = 100 + index * 100 - (scrollRef.current?.scrollTop ?? 0);
+              return { top, bottom: top + 100 } as DOMRect;
+            };
+          },
+        }, item.id)));
+    }
+    const view = render(createElement(Feed));
+    const container = view.getByTestId("scroll");
+    container.getBoundingClientRect = () => ({ top: 100 }) as DOMRect;
+    expect(container.scrollTop).toBe(150);
+    await act(async () => { resolve(page(response.map((id) => ({ id })), "new", response.length)); });
+    expect(container.scrollTop).toBe(expectedScroll);
+    expect(view.getByTestId("updates").textContent).toBe(String(updates));
+    expect(Array.from(container.querySelectorAll("[data-feed-post-id]")).map((el) => el.textContent)).toEqual(response);
+    view.unmount();
+  });
+
   it("retains the pagination cursor when refresh fails", async () => {
     fetchFeedMock.mockResolvedValueOnce(page([{ id: "a" }], "cur-1", 2))
       .mockRejectedValueOnce(new Error("network down"))
@@ -43,22 +78,15 @@ describe("useFeed", () => {
     expect(fetchFeedMock).toHaveBeenLastCalledWith({}, "cur-1");
   });
 
-  it("keeps dirty scrolled pages until the reader requests updates", async () => {
+  it("revalidates dirty scrolled pages and removes restricted rows", async () => {
     const key = buildFeedCacheKey("test:scrolled-dirty", {});
     saveFeedCache(key, { items: [{ id: "a" }, { id: "b" }] as never, total: 2, cursor: "cur", scrollTop: 400 });
     invalidateFeedCaches();
     fetchFeedMock.mockResolvedValue(page([{ id: "fresh" }], null, 1));
     const scrollRef = { current: { scrollTop: 0 } };
-    const { result, unmount } = renderHook(() => useFeed({}, { cacheKey: "test:scrolled-dirty", scrollRef }));
-    expect(result.current.items.map((i) => i.id)).toEqual(["a", "b"]);
-    expect(result.current.updatesAvailable).toBe(true);
-    expect(fetchFeedMock).not.toHaveBeenCalled();
-    unmount();
-    expect(loadFeedCache(key)?.dirty).toBe(true);
-    const again = renderHook(() => useFeed({}, { cacheKey: "test:scrolled-dirty", scrollRef }));
-    await act(async () => again.result.current.refresh());
-    expect(again.result.current.items.map((i) => i.id)).toEqual(["fresh"]);
-    expect(again.result.current.updatesAvailable).toBe(false);
+    const { result } = renderHook(() => useFeed({}, { cacheKey: "test:scrolled-dirty", scrollRef }));
+    await waitFor(() => expect(result.current.items.map((i) => i.id)).toEqual(["fresh"]));
+    expect(fetchFeedMock).toHaveBeenCalled();
   });
 
   it("refreshes a dirty snapshot restored at the top", async () => {
@@ -70,7 +98,7 @@ describe("useFeed", () => {
     await waitFor(() => expect(result.current.items.map((i) => i.id)).toEqual(["fresh"]));
   });
 
-  it("does not replace a top-started refresh after the reader scrolls", async () => {
+  it("replaces a top-started refresh after the reader scrolls", async () => {
     let resolveRefresh: (value: unknown) => void = () => {};
     fetchFeedMock.mockResolvedValueOnce(page([{ id: "old" }], "cur", 2))
       .mockImplementationOnce(() => new Promise((resolve) => { resolveRefresh = resolve; }));
@@ -81,9 +109,8 @@ describe("useFeed", () => {
     act(() => { pending = result.current.refresh(); });
     scrollRef.current.scrollTop = 300;
     await act(async () => { resolveRefresh(page([{ id: "fresh" }], null, 1)); await pending; });
-    expect(result.current.items.map((i) => i.id)).toEqual(["old"]);
-    expect(result.current.updatesAvailable).toBe(true);
-    expect(result.current.hasMore).toBe(true);
+    expect(result.current.items.map((i) => i.id)).toEqual(["fresh"]);
+    expect(result.current.hasMore).toBe(false);
   });
 
   it("ignores a stale response after filters change (generation guard)", async () => {
@@ -308,6 +335,8 @@ describe("useFeed", () => {
 
     const { result, unmount } = renderHook(() => useFeed({}, { cacheKey: "test:dirty-failed" }));
     await waitFor(() => expect(result.current.error).toBeTruthy());
+    expect(result.current.items.map((item) => item.id)).toEqual(["p1"]);
+    expect(result.current.updatesAvailable).toBe(true);
     unmount();
 
     expect(loadFeedCache(key)?.dirty).toBe(true);

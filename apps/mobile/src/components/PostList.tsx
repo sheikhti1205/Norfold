@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { PostItem } from "@norfold/shared";
 import { AnimatePresence, motion } from "framer-motion";
 import { FileQuestion } from "lucide-react";
@@ -158,11 +158,12 @@ export function PostList({
     const card = cardFor(post, index);
     // Already-seen rows render untouched (no remount, no flash).
     if (seenIdsRef.current!.has(post.id)) {
-      return <Fragment key={post.id}>{card}</Fragment>;
+      return <div key={post.id} data-feed-post-id={post.id}>{card}</div>;
     }
     return (
       <motion.div
         key={post.id}
+        data-feed-post-id={post.id}
         data-reconcile="enter"
         variants={listItemVariants}
         initial="hidden"
@@ -241,7 +242,6 @@ export function PostList({
           variants={fadeVariants}
           initial="hidden"
           animate="visible"
-          exit="exit"
           transition={stateTransition}
         >
           <div className={listClass}
