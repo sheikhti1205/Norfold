@@ -152,7 +152,7 @@ void ready.then(() => {
       channel.on("broadcast", { event: "post:changed" }, (message) => {
         const payload = (message?.payload ?? {}) as Record<string, unknown>;
         const change = String(payload.change ?? payload.op ?? "").toUpperCase();
-        if (change === "INSERT" || change === "UPDATE" || change === "DELETE") {
+        if (payload.invalidate === true || change === "INSERT" || change === "UPDATE" || change === "DELETE") {
           invalidateFeedCaches();
         }
         dispatch("feed:changed", payload);
@@ -236,6 +236,7 @@ export function joinPostRoom(postId: string): void {
         if (postChannels.get(postId) !== channel || client !== c) return;
         clearRetry(key);
         dispatch("comment:invalidate", { postId, invalidate: true });
+        dispatch("post:updated", { postId });
         return;
       }
       if (!isFailedStatus(status)) return;
