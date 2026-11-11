@@ -76,18 +76,18 @@ export function buildUpdateInput(
   const youtubeUrl = values.youtubeUrl.trim();
   if (youtubeUrl === "" && baseline.youtubeUrl.trim() !== "") clearFields.push("youtube_url");
 
-  return {
-    type: values.type,
-    title: values.title.trim(),
-    description: values.description.trim(),
-    category: values.category === "" ? undefined : values.category,
-    eventDate: values.eventDate,
-    latitude: values.location.latitude,
-    longitude: values.location.longitude,
-    locationLabel: nextLabel === "" ? null : nextLabel,
-    youtubeUrl: youtubeUrl === "" ? null : youtubeUrl,
-    clearFields,
-  };
+  const input: UpdatePostInput = {};
+  if (values.type !== baseline.type) input.type = values.type;
+  if (values.title.trim() !== baseline.title.trim()) input.title = values.title.trim();
+  if (values.description.trim() !== baseline.description.trim()) input.description = values.description.trim();
+  if (values.category !== baseline.category && values.category !== "") input.category = values.category;
+  if (values.eventDate !== baseline.eventDate) input.eventDate = values.eventDate;
+  if (values.location.latitude != null && values.location.latitude !== baseline.location.latitude) input.latitude = values.location.latitude;
+  if (values.location.longitude != null && values.location.longitude !== baseline.location.longitude) input.longitude = values.location.longitude;
+  if (nextLabel && nextLabel !== baselineLabel) input.locationLabel = nextLabel;
+  if (youtubeUrl && youtubeUrl !== baseline.youtubeUrl.trim()) input.youtubeUrl = youtubeUrl;
+  if (clearFields.length) input.clearFields = clearFields;
+  return input;
 }
 
 /**
@@ -338,7 +338,9 @@ function EditReportSession({ id, userId }: { id: string; userId?: string }) {
         <div role="status" className="rounded-m3-sm bg-surface-container-low px-3 py-2 text-sm">
           <p className="font-medium">This report is {post.status === "RECOVERED" ? "recovered" : "closed"}.</p>
           <p className="mt-1 text-on-surface-variant">
-            A resolved report cannot be edited here. Set it back to Open on My Reports to change the details.
+            {post.status === "RECOVERED"
+              ? "A recovered report cannot be reopened or edited here."
+              : "A closed report cannot be edited here. Set it back to Open on My Reports to change the details."}
           </p>
         </div>
       )}

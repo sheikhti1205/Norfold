@@ -325,7 +325,6 @@ describe("EditReport", () => {
     await waitFor(() => expect(updatePostMock).toHaveBeenCalled());
     expect(updatePostMock.mock.calls[0]![1]).toMatchObject({
       youtubeUrl: "https://youtu.be/dQw4w9WgXcQ",
-      clearFields: [],
     });
   });
 
@@ -351,7 +350,7 @@ describe("EditReport", () => {
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
     await waitFor(() => expect(updatePostMock).toHaveBeenCalled());
     const [, input] = updatePostMock.mock.calls[0]!;
-    expect(input.youtubeUrl).toBeNull();
+    expect(input.youtubeUrl).toBeUndefined();
     expect(input.clearFields).toEqual(["youtube_url"]);
   });
 
@@ -361,7 +360,7 @@ describe("EditReport", () => {
     fireEvent.change(screen.getByLabelText("What did you lose?"), { target: { value: "Another title" } });
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
     await waitFor(() => expect(updatePostMock).toHaveBeenCalled());
-    expect(updatePostMock.mock.calls[0]![1].clearFields).toEqual([]);
+    expect(updatePostMock.mock.calls[0]![1].clearFields).toBeUndefined();
   });
 
   it("asks before leaving the page itself when there are unsaved changes", async () => {
@@ -395,6 +394,14 @@ describe("EditReport", () => {
     expect(screen.queryByRole("button", { name: /save changes/i })).toBeNull();
   });
 
+  it("explains that a recovered report cannot be reopened or edited", async () => {
+    fetchPostMock.mockResolvedValue(post({ status: "RECOVERED" }));
+    renderEditor();
+    expect(await screen.findByText(/cannot be reopened or edited/i)).toBeTruthy();
+    expect(screen.queryByText(/set it back to open/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /save changes/i })).toBeNull();
+  });
+
   it("asks before leaving with unsaved changes and stays when the owner declines", async () => {
     renderEditor({ postId: "p1" });
     await waitFor(() => expect(screen.getByLabelText("What did you lose?")).toBeTruthy());
@@ -414,7 +421,8 @@ describe("EditReport", () => {
     await waitFor(() => expect(updatePostMock).toHaveBeenCalled());
     const [id, input] = updatePostMock.mock.calls[0]!;
     expect(id).toBe("p1");
-    expect(input).toMatchObject({ title: "Another title", clearFields: [] });
+    expect(input).toEqual({ title: "Another title" });
+    expect(input.clearFields).toBeUndefined();
     await waitFor(() => expect(screen.getByText("My Reports")).toBeTruthy());
   });
 
@@ -427,9 +435,9 @@ describe("EditReport", () => {
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
     await waitFor(() => expect(updatePostMock).toHaveBeenCalled());
     const [, input] = updatePostMock.mock.calls[0]!;
-    expect(input.locationLabel).toBeNull();
-    expect(input.latitude).toBeNull();
-    expect(input.longitude).toBeNull();
+    expect(input.locationLabel).toBeUndefined();
+    expect(input.latitude).toBeUndefined();
+    expect(input.longitude).toBeUndefined();
     expect(input.clearFields).toEqual(["location_label", "latitude", "longitude"]);
   });
 
@@ -446,9 +454,11 @@ describe("EditReport", () => {
     await waitFor(() => expect(updatePostMock).toHaveBeenCalled());
     const [, input] = updatePostMock.mock.calls[0]!;
     expect(input.locationLabel).toBe("Dhaka Cantonment");
-    expect(input.latitude).toBe(23.81);
-    expect(input.longitude).toBe(90.41);
-    expect(input.clearFields).toEqual([]);
+    // Omission plus server coalescing preserves the published pin.
+    expect(input.latitude).toBeUndefined();
+    expect(input.longitude).toBeUndefined();
+    expect(input.clearFields ?? []).not.toContain("latitude");
+    expect(input.clearFields ?? []).not.toContain("longitude");
   });
 
   it.each([90.41, null])("never clears an unchanged legacy pin with an empty label (longitude %s)", async (longitude) => {
@@ -458,9 +468,11 @@ describe("EditReport", () => {
     fireEvent.change(screen.getByLabelText("What did you lose?"), { target: { value: "Another title" } });
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
     await waitFor(() => expect(updatePostMock).toHaveBeenCalled());
-    expect(updatePostMock.mock.calls[0]![1]).toMatchObject({
-      clearFields: [], latitude: 23.81, longitude,
-    });
+    const input = updatePostMock.mock.calls[0]![1];
+    expect(input).toEqual({ title: "Another title" });
+    expect(input.clearFields).toBeUndefined();
+    expect(input.latitude).toBeUndefined();
+    expect(input.longitude).toBeUndefined();
   });
 
   it("shows and saves the published pin after clearing then retyping the place", async () => {
@@ -474,9 +486,11 @@ describe("EditReport", () => {
     expect(screen.getAllByText(/23\.81/).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
     await waitFor(() => expect(updatePostMock).toHaveBeenCalled());
-    expect(updatePostMock.mock.calls[0]![1]).toMatchObject({
-      clearFields: [], latitude: 23.81, longitude: 90.41, locationLabel: "Dhaka Cantonment",
-    });
+    const input = updatePostMock.mock.calls[0]![1];
+    expect(input.locationLabel).toBe("Dhaka Cantonment");
+    expect(input.latitude).toBeUndefined();
+    expect(input.longitude).toBeUndefined();
+    expect(input.clearFields).toBeUndefined();
   });
 
   it("clears a HALF pin (a legacy row with only one coordinate) when the place is emptied", async () => {

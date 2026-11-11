@@ -52,9 +52,9 @@ function GenericAvatarGlyph({ size }: { size: number }) {
  * rendered adjacent to every call site; pass a `className` to restyle.
  */
 export function UserAvatar({ avatarUrl, username, size = 40, className = "", shape = "circle" }: UserAvatarProps) {
-  const [imageFailed, setImageFailed] = useState(false);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const name = (username ?? "").trim();
-  const showImage = Boolean(avatarUrl) && !imageFailed;
+  const showImage = Boolean(avatarUrl) && avatarUrl !== failedUrl;
 
   return (
     <span
@@ -70,7 +70,7 @@ export function UserAvatar({ avatarUrl, username, size = 40, className = "", sha
           width={size}
           height={size}
           className="h-full w-full object-cover"
-          onError={() => setImageFailed(true)}
+          onError={() => setFailedUrl(avatarUrl ?? null)}
         />
       ) : name ? (
         <span

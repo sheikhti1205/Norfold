@@ -95,7 +95,10 @@ describe("legal documents", () => {
     const copy = container.textContent ?? "";
     expect(copy).toMatch(/limited public preview without an account/i);
     expect(copy).toMatch(/does not reveal contact details or exact location/i);
-    expect(copy).toMatch(/does not compare photos or generate report fields/i);
+    expect(copy).toMatch(/optional on-device helpers can suggest report fields such as\s+a title, description and date/i);
+    expect(copy).toMatch(/review and edit suggestions; nothing is published\s+automatically/i);
+    expect(copy).toMatch(/does not compare or analyze photos/i);
+    expect(copy).not.toMatch(/does not[^.]*generate report fields/i);
     expect(copy).toMatch(/optional encrypted Google Drive backup/i);
     expect(copy).toMatch(/web and Android apps/i);
     expect(copy).toMatch(/separate Google account/i);
@@ -106,7 +109,7 @@ describe("legal documents", () => {
     expect(copy).toMatch(/not a zero-knowledge backup/i);
     expect(copy).not.toMatch(/no consumer Drive backup option/i);
     expect(copy).not.toMatch(/not available in the Android app/i);
-    expect(copy).not.toMatch(/report-field suggestions|AI models you downloaded|shared report link requires a Norfold account/i);
+    expect(copy).not.toMatch(/AI models you downloaded|shared report link requires a Norfold account/i);
   });
 
   it("says how a reader removes their own data", () => {

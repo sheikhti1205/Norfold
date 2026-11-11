@@ -173,11 +173,7 @@ export function AuthGateway({ initialMode = "email", initialEmail = "" }: AuthGa
                   Google sign-in didn&apos;t complete. Please try again.
                 </p>
               )}
-              {/* W0-C (S3) insertion ONLY: Google affordance + divider ABOVE the
-                  email form. Mode "signup" is the superset entry point (full
-                  account chooser + verified-phone request for new users);
-                  returning users still resolve via the S2 outcome. Renders
-                  nothing until the S1 bridge is configured (fail closed). */}
+              {/* Google uses the shared sign-in flow without a signup-only phone permission request. */}
               {isGoogleSignInAvailable() && (
                 <>
                   <GoogleSignInButton mode="signup" onDone={handleGoogleDone} />

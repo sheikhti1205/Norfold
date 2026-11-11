@@ -93,7 +93,7 @@ describe("Verify pending-signup mode (no session yet)", () => {
     vi.useRealTimers();
     fireEvent.click(screen.getByRole("button", { name: "Resend code" }));
     await waitFor(() => expect(authMock.resendPendingEmail).toHaveBeenCalled());
-    expect(screen.getByRole("status")).toBeTruthy();
+    expect(await screen.findByRole("status")).toBeTruthy();
     // Still on verify: the code input is intact.
     expect(screen.getByLabelText("Verification code")).toBeTruthy();
   });

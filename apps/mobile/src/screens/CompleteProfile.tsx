@@ -81,7 +81,7 @@ export function buildUsernameSuggestion(name: string | null, email: string): str
   return cleaned;
 }
 
-type UsernameState = "idle" | "loading" | "available" | "taken" | "invalid";
+type UsernameState = "idle" | "loading" | "available" | "taken" | "invalid" | "failed";
 
 function initialsOf(displayName: string, email: string): string {
   const source = displayName.trim() || email;
@@ -133,7 +133,7 @@ export function CompleteProfile({
           }
         })
         .catch(() => {
-          if (checkSeq.current === seq) setUsernameState("idle");
+          if (checkSeq.current === seq) setUsernameState("failed");
         });
     }, USERNAME_CHECK_DEBOUNCE_MS);
     return () => clearTimeout(timer);
@@ -154,6 +154,17 @@ export function CompleteProfile({
     }
     if (!/^[a-zA-Z0-9_]{3,20}$/.test(chosen)) {
       setError("Username must be 3–20 letters, numbers or underscores.");
+      return;
+    }
+    if (usernameState === "failed") {
+      const seq = ++checkSeq.current;
+      setUsernameState("loading");
+      try {
+        const result = await checkUsername(chosen);
+        if (checkSeq.current === seq) setUsernameState(result.available ? "available" : "taken");
+      } catch {
+        if (checkSeq.current === seq) setUsernameState("failed");
+      }
       return;
     }
     if (usernameState === "loading" || usernameState === "idle") {
@@ -292,6 +303,7 @@ export function CompleteProfile({
             {usernameState === "taken" && "✗ Username already exists"}
             {usernameState === "invalid" && "3–20 letters, numbers or underscores"}
             {usernameState === "loading" && "Checking availability…"}
+            {usernameState === "failed" && "Could not check availability. Press Continue to retry."}
             {usernameState === "idle" && "Checked live while you type — no page reload."}
           </p>
         </div>

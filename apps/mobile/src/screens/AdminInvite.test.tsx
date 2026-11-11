@@ -68,6 +68,7 @@ describe("adding someone by email", () => {
   it("a denied role write discards the private draft and disables further grants", async () => {
     mockGrantRole.mockRejectedValueOnce(new ApiError("revoked", 403, "42501"));
     renderInvite();typeEmail("private@example.com");
+    await waitFor(() => expect(screen.getByRole("button", { name: /give access/i })).toHaveProperty("disabled", false));
     fireEvent.click(screen.getByRole("button", { name: /give access/i }));await screen.findByRole("alert");
     expect(screen.queryByDisplayValue("private@example.com")).toBeNull();
     expect(screen.getByRole("button", { name: /give access/i })).toHaveProperty("disabled", true);
@@ -75,6 +76,7 @@ describe("adding someone by email", () => {
   it("says so when the role landed on an existing account", async () => {
     renderInvite();
     typeEmail("sam@example.com");
+    await waitFor(() => expect(screen.getByRole("button", { name: /give access/i })).toHaveProperty("disabled", false));
     fireEvent.click(screen.getByRole("button", { name: /give access/i }));
     const status = await screen.findByRole("status");
     expect(status.textContent).toMatch(/sam@example\.com now has moderator access/i);
@@ -88,6 +90,7 @@ describe("adding someone by email", () => {
     });
     renderInvite();
     typeEmail("new@example.com");
+    await waitFor(() => expect(screen.getByRole("button", { name: /give access/i })).toHaveProperty("disabled", false));
     fireEvent.click(screen.getByRole("button", { name: /give access/i }));
     const status = await screen.findByRole("status");
     expect(status.textContent).toMatch(/as soon as they sign up with that address/i);
@@ -97,6 +100,7 @@ describe("adding someone by email", () => {
     renderInvite();
     typeEmail("sam@example.com");
     fireEvent.click(screen.getByRole("checkbox", { name: "Review reports" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /give access/i })).toHaveProperty("disabled", false));
     fireEvent.click(screen.getByRole("button", { name: /give access/i }));
     await waitFor(() =>
       expect(mockGrantRole).toHaveBeenCalledWith("sam@example.com", "MODERATOR", [
@@ -123,6 +127,7 @@ describe("adding someone by email", () => {
     );
     renderInvite();
     typeEmail("sam@example.com");
+    await waitFor(() => expect(screen.getByRole("button", { name: /give access/i })).toHaveProperty("disabled", false));
     fireEvent.click(screen.getByRole("button", { name: /give access/i }));
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/only an admin may give someone a role/i);
@@ -131,6 +136,7 @@ describe("adding someone by email", () => {
   it("does not send an address that is not an email address", async () => {
     renderInvite();
     typeEmail("not-an-address");
+    await waitFor(() => expect(screen.getByRole("button", { name: /give access/i })).toHaveProperty("disabled", false));
     fireEvent.click(screen.getByRole("button", { name: /give access/i }));
     expect(await screen.findByText(/enter a valid email address/i)).toBeTruthy();
     expect(mockGrantRole).not.toHaveBeenCalled();
@@ -141,6 +147,7 @@ describe("adding someone by email", () => {
     typeEmail("boss@example.com");
     fireEvent.click(screen.getByRole("radio", { name: /admin/i }));
     expect(screen.queryByRole("checkbox", { name: "Review reports" })).toBeNull();
+    await waitFor(() => expect(screen.getByRole("button", { name: /give access/i })).toHaveProperty("disabled", false));
     fireEvent.click(screen.getByRole("button", { name: /give access/i }));
     await waitFor(() =>
       expect(mockGrantRole).toHaveBeenCalledWith("boss@example.com", "ADMIN", []),
@@ -198,6 +205,7 @@ describe("the confirmation tells the server's truth", () => {
     mockGrantRole.mockResolvedValue({ kind: "account", email: "sam@example.com", role: "ADMIN" });
     renderInvite();
     typeEmail("sam@example.com");
+    await waitFor(() => expect(screen.getByRole("button", { name: /give access/i })).toHaveProperty("disabled", false));
     fireEvent.click(screen.getByRole("button", { name: /give access/i }));
     expect(await screen.findByText(/sam@example.com now has admin access/i)).toBeTruthy();
     expect(screen.queryByText(/now has moderator access/i)).toBeNull();
@@ -205,6 +213,16 @@ describe("the confirmation tells the server's truth", () => {
 });
 
 describe("when the membership list cannot be read", () => {
+  it("does not submit while the membership lookup is pending", () => {
+    mockListRoleAssignments.mockReturnValue(new Promise(() => {}));
+    renderInvite();
+    typeEmail("someone@example.com");
+    const button = screen.getByRole("button", { name: /give access/i });
+    expect(button).toHaveProperty("disabled", true);
+    fireEvent.submit(button.closest("form")!);
+    expect(mockGrantRole).not.toHaveBeenCalled();
+  });
+
   it("asks before it can replace a role it could not check", async () => {
     mockListRoleAssignments.mockRejectedValue(new Error("offline"));
     renderInvite();
