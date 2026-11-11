@@ -18,6 +18,9 @@ import {
   restoreSession,
   sendPendingEmailCode,
   verifyPendingEmailCode,
+  needsPasswordSetup as userNeedsPasswordSetup,
+  createAccountPassword,
+  readPasswordSetupUser,
 } from "./services/auth";
 import {
   beginAccountSwitch,
@@ -69,6 +72,10 @@ export type RegisterOutcome =
 
 interface AuthContextValue {
   user: PublicUser | null;
+  needsPasswordSetup: boolean;
+  passwordSetupSettled: boolean;
+  saveRequiredPassword: (password: string) => Promise<void>;
+  confirmRequiredPassword: () => Promise<boolean>;
   /** SDK session routing identity only; never a token or authority certificate. */
   authSessionId: string | null;
   /** True while we try to hydrate a stored session on boot. */
@@ -116,6 +123,9 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const DELETION_CLEANUP_KEY = "findback.auth.deletedAccountCleanup";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
+  const [passwordSetupSettled, setPasswordSetupSettled] = useState(false);
+  const passwordGate = useRef<{ account: string | null; required: boolean }>({ account: null, required: false });
   const [authSessionId,setAuthSessionId]=useState<string|null>(null);
   const sdkSessionId=useRef<string|null>(null);
   const [user, publishUser] = useState<PublicUser | null>(null);
@@ -226,6 +236,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session) clearSessionExpired();
         if (event === "SIGNED_OUT") hadStoredSession.current = false;
         const nextAccount = session?.user.id ?? null;
+        const required = nextAccount !== null && (
+          (passwordGate.current.account === nextAccount && passwordGate.current.required) || userNeedsPasswordSetup(session?.user)
+        );
+        passwordGate.current = { account: nextAccount, required };
+        setNeedsPasswordSetup(required);
+        setPasswordSetupSettled(true);
         const nextSessionId=readAuthSessionId(session);
         // A same-account SIGNED_IN may replace the SDK session without SIGNED_OUT.
         // Fence old messaging/media/RTC work synchronously, before React effects
@@ -342,6 +358,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const epoch = authEpoch.current;
     const next = await fetchMe();
     if (epoch === authEpoch.current) setUserState(next);
+  }, []);
+
+  const saveRequiredPassword = useCallback(async (password: string) => {
+    const account = passwordGate.current.account;
+    if (!account || !passwordGate.current.required) throw new AuthAccountChangedError();
+    await createAccountPassword(password);
+    if (passwordGate.current.account !== account) throw new AuthAccountChangedError();
+  }, []);
+
+  const confirmRequiredPassword = useCallback(async () => {
+    const account = passwordGate.current.account;
+    if (!account || !passwordGate.current.required) throw new AuthAccountChangedError();
+    const refreshed = await readPasswordSetupUser();
+    if (passwordGate.current.account !== account || refreshed.id !== account) throw new AuthAccountChangedError();
+    const required = userNeedsPasswordSetup(refreshed);
+    passwordGate.current = { account, required };
+    setNeedsPasswordSetup(required);
+    return !required;
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -673,6 +707,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       user,
+      needsPasswordSetup,
+      passwordSetupSettled,
+      saveRequiredPassword,
+      confirmRequiredPassword,
       authSessionId,
       booting,
       bootError,
@@ -697,6 +735,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }),
     [
       user,
+      needsPasswordSetup,
+      passwordSetupSettled,
+      saveRequiredPassword,
+      confirmRequiredPassword,
       authSessionId,
       booting,
       bootError,

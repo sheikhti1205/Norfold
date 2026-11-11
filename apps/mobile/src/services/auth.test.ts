@@ -4,6 +4,7 @@ import { clearAllAuth, getToken, setToken } from "./session";
 import {
   askAiHelp,
   checkUsername,
+  createPasswordRecovery,
   exchangeRecoveryCode,
   fetchMe,
   login,
@@ -19,6 +20,9 @@ import {
   updatePassword,
   verifyPhoneChangeCode,
   saveProfilePhone,
+  needsPasswordSetup,
+  createAccountPassword,
+  readPasswordSetupUser,
 } from "./auth";
 import { isLikelySecretKey, SupabaseConfigError, validateSupabaseConfig } from "./supabaseClient";
 import { aiCredentials } from "./aiCredentials";
@@ -79,6 +83,25 @@ const USER = {
   email: "tester@example.com",
   user_metadata: { phone: "01812345678" },
 };
+
+describe("password setup capability", () => {
+  const identity = (provider: string) => ({ provider } as NonNullable<import("@supabase/supabase-js").User["identities"]>[number]);
+  it("requires setup only for a user with no email identity", () => {
+    expect(needsPasswordSetup({ identities: [identity("google")] })).toBe(true);
+    expect(needsPasswordSetup({ identities: [identity("email")] })).toBe(false);
+    expect(needsPasswordSetup({ identities: [identity("google"), identity("email")] })).toBe(false);
+    expect(needsPasswordSetup(null)).toBe(false);
+    expect(needsPasswordSetup(undefined)).toBe(false);
+  });
+  it("saves and rereads through the auth service", async () => {
+    clientMock.auth.updateUser.mockResolvedValue({ error: null });
+    clientMock.auth.getUser.mockResolvedValue({ data: { user: USER }, error: null });
+    await createAccountPassword("password123");
+    expect(clientMock.auth.updateUser).toHaveBeenCalledWith({ password: "password123" });
+    expect(await readPasswordSetupUser()).toEqual(USER);
+    expect(clientMock.auth.getUser).toHaveBeenCalledOnce();
+  });
+});
 
 const fetchMock = vi.fn();
 
@@ -725,7 +748,7 @@ describe("askAiHelp", () => {
   });
 });
 
-describe("password recovery (Forgot password → six-digit recovery code → new password; the link callback is a legacy fallback)", () => {
+describe("password recovery (Forgot password → recovery code → new password; the link callback is a legacy fallback)", () => {
   const ORIGIN = "https://recovery-test.example";
 
   beforeEach(() => {
@@ -734,6 +757,19 @@ describe("password recovery (Forgot password → six-digit recovery code → new
 
   afterEach(() => {
     vi.unstubAllEnvs();
+  });
+
+  it.each(["12345678", "1234567890"])("verifies a %s recovery code unchanged", async (code) => {
+    clientMock.auth.verifyOtp.mockResolvedValue({ data: { user: USER, session: { user: USER, access_token: "token" } }, error: null });
+    const recovery = createPasswordRecovery();
+    await expect(recovery.verify(USER.email, code)).resolves.toBeUndefined();
+    expect(clientMock.auth.verifyOtp).toHaveBeenCalledWith({ email: USER.email, token: code, type: "recovery" });
+  });
+
+  it.each(["12345", "12345678901", "12345x78"])("rejects malformed recovery code %s locally", async (code) => {
+    const recovery = createPasswordRecovery();
+    await expect(recovery.verify(USER.email, code)).rejects.toMatchObject({ status: 400, message: expect.not.stringMatching(/\b(?:six|\d+)[- ]?digit/i) });
+    expect(clientMock.auth.verifyOtp).not.toHaveBeenCalled();
   });
 
   it("builds the recovery redirect on the public share origin (App Links compatible)", () => {

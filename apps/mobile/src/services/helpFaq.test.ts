@@ -140,7 +140,8 @@ describe("builtInHelp", () => {
     // old `:129`, which expected the scope note here.
     const reset = builtInHelp("How do I reset my password?");
     expect(reset).toMatch(/Forgot password/i);
-    expect(reset.toLowerCase()).toContain("six-digit code");
+    expect(reset.toLowerCase()).toContain("code");
+    expect(reset).not.toMatch(/\b(?:six|\d+)[- ]?digit/i);
     expect(reset).not.toContain("I can help with Norfold");
     expect(reset).not.toMatch(/don't know|does not have|not in this build/i);
 

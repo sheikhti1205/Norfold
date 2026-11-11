@@ -69,7 +69,7 @@ function RecoveryFlow() {
   async function verifyCode(e: FormEvent) {
     e.preventDefault();
     if (inFlight.current || phase !== "code") return;
-    if (!/^\d{6}$/.test(code)) { setError("Enter the six-digit recovery code from your email."); return; }
+    if (!/^\d{6,10}$/.test(code)) { setError("Enter the recovery code from your email."); return; }
     inFlight.current = true; setBusy(true); setError(null);
     try {
       recovery.current ??= createPasswordRecovery();
@@ -139,7 +139,7 @@ function RecoveryFlow() {
           <p role="status" className="text-sm text-on-surface-variant">{message}</p>
           <p className="break-all text-sm font-medium">{email}</p>
           {error && <p role="alert" className="text-sm text-error">{error}</p>}
-          <OtpField label="Recovery code" value={code} onChange={setCode} disabled={busy} />
+          <OtpField label="Recovery code" value={code} onChange={setCode} maxLength={10} disabled={busy} />
           <Button type="submit" loading={busy}>Verify code</Button>
           <Button type="button" variant="outline" onClick={() => void resend()} disabled={busy || seconds > 0}>
             {seconds > 0 ? `Resend in ${seconds}s` : "Resend code"}

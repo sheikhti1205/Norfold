@@ -35,6 +35,10 @@ const PROFILE_LOAD_TIMEOUT_MS = 15_000;
 /** Re-exported so boot UI can distinguish "unreachable" from "signed out". */
 export { BootTimeoutError };
 
+export function needsPasswordSetup(user: Pick<User, "identities"> | null | undefined): boolean {
+  return user != null && !user.identities?.some((identity) => identity.provider === "email");
+}
+
 /** Same syntax/length the registration trigger enforces (^[A-Za-z0-9_]{3,20}$). */
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,20}$/;
 
@@ -374,8 +378,8 @@ export function createPasswordRecovery(): PasswordRecovery {
     dispose,
     verify: async (email, code) => {
       const address = email.trim().toLowerCase();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address) || !/^\d{6}$/.test(code)) {
-        throw new ApiError("Enter the six-digit recovery code from your email.", 400);
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address) || !/^\d{6,10}$/.test(code)) {
+        throw new ApiError("Enter the recovery code from your email.", 400);
       }
       await run(async () => {
         identity = null;
@@ -439,6 +443,21 @@ export async function setAccountPassword(password: string): Promise<void> {
   if (password.length < MIN_PASSWORD_LENGTH) throw new ApiError("Password must be at least 8 characters.", 400);
   const { error } = await getSupabase().auth.updateUser({ password });
   if (error) throw mapAuthError(error);
+}
+
+export async function createAccountPassword(password: string): Promise<void> {
+  if (password.length < MIN_PASSWORD_LENGTH) throw new ApiError("Password must be at least 8 characters.", 400);
+  const client = getSupabase();
+  const { error } = await withTimeout(() => client.auth.updateUser({ password }), 15_000, "Password update timed out. Please try again.");
+  if (error) throw mapAuthError(error);
+}
+
+export async function readPasswordSetupUser(): Promise<User> {
+  const client = getSupabase();
+  const result = await withTimeout(() => client.auth.getUser(), 15_000, "Could not confirm your password. Please try again.");
+  if (result.error) throw mapAuthError(result.error);
+  if (!result.data.user) throw new ApiError("Could not confirm your password. Please try again.", 401);
+  return result.data.user;
 }
 
 /** Server-reported result of self-serve account deletion (FBA-036). */

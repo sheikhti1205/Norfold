@@ -18,6 +18,7 @@ import { Register } from "./screens/Register";
 import { Verify } from "./screens/Verify";
 import { ForgotPassword } from "./screens/ForgotPassword";
 import { Recovery } from "./screens/Recovery";
+import { CreatePassword } from "./screens/CreatePassword";
 import { Home } from "./screens/Home";
 import { SearchScreen } from "./screens/SearchScreen";
 import { CreateReport } from "./screens/CreateReport";
@@ -147,11 +148,17 @@ export function App({ router }: { router: ReturnType<typeof createAppRouter> }) 
 
 function AppRouteTree() {
   const location = useLocation();
-  const { user, booting, needsProfile } = useAuth();
+  const { user, booting, needsProfile, needsPasswordSetup, passwordSetupSettled } = useAuth();
   useEffect(() => {
     if (user && peekAuthReturnTo() === `${location.pathname}${location.search}${location.hash}`) clearAuthReturnTo();
   }, [user, location.pathname, location.search, location.hash]);
   const background = postBackgroundLocation(location, user?.id ?? null);
+  if (passwordSetupSettled === false) return <Splash />;
+  if (needsPasswordSetup) {
+    return location.pathname === "/create-password"
+      ? <CreatePassword />
+      : <Navigate to="/create-password" replace />;
+  }
   return (
     <>
           <AuthLinkBootstrap />
@@ -212,7 +219,8 @@ function AppRouteTree() {
                 seed is present. */}
             <Route path="/complete-profile" element={<CompleteProfileRoute />} />
             <Route path="/forgot" element={<ForgotPassword />} />
-            <Route path="/recovery" element={<Recovery />} />
+              <Route path="/recovery" element={<Recovery />} />
+              <Route path="/create-password" element={<Navigate to="/" replace />} />
             <Route
               element={
                 <RequireAuth>

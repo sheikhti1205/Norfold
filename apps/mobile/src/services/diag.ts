@@ -64,8 +64,8 @@ const SENSITIVE_VALUE_PATTERNS = [
   /\b\+?\d[\d\s().-]{7,}\d\b/, // phone-like runs
   /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i, // emails
   /\b(id|passport|license|nid)\b[\s\S]{0,12}?[A-Z0-9-]{4,}/i, // id-like runs
-  /\b(?:otp|one[\s-]?time|verification|code|pin)[\s:]*\d{4,8}\b/i, // OTP with keyword
-  /\b\d{6}\b/, // bare 6-digit OTP
+  /\b(?:otp|one[\s-]?time|verification|code|pin)[\s:]*\d{4,10}\b/i, // OTP with keyword
+  /\b\d{6,10}\b/, // bare OTP
   /\bhttps?:\/\/\S+/i, // QR URL payloads
   /\bWIFI:[^\s]+/i, // QR Wi-Fi payloads
   /\bBEGIN:(?:VCARD|VEVENT)/i, // QR vCard/event payloads
