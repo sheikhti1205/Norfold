@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { FeedPage, PostItem } from "@norfold/shared";
 import { fetchFeed, type FeedFilters } from "../services/posts";
 import { friendlyError } from "../utils/friendlyErrors";
@@ -33,7 +33,7 @@ interface UseFeedOptions {
   /** Session cache key — enables Detail→Back scroll restore for this feed. */
   cacheKey?: string;
   /** Scroll container ref whose scrollTop is saved/restored with the cache. */
-  scrollRef?: React.RefObject<{ scrollTop: number } | null>;
+  scrollRef?: React.RefObject<{ scrollTop: number; element?: HTMLElement | null } | null>;
 }
 
 /**
@@ -92,7 +92,25 @@ export function useFeed(filters: FeedFilters, options: UseFeedOptions = {}): Fee
   const dirtyRef = useRef(false);
   const restoredScrollRef = useRef<string | null>(null);
   const latestRef = useRef({ items, total, cursor: cursorRef.current });
+  const anchorRef = useRef<{ id: string | null; offset: number } | null>(null);
   latestRef.current = { items, total, cursor: cursorRef.current };
+
+  useLayoutEffect(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    anchorRef.current = null;
+    const handle = scrollRef?.current;
+    const container = handle instanceof HTMLElement ? handle : handle?.element;
+    if (!handle || !container) return;
+    const row = Array.from(container.querySelectorAll<HTMLElement>("[data-feed-post-id]"))
+      .find((el) => el.dataset.feedPostId === anchor.id);
+    if (row) {
+      handle.scrollTop += row.getBoundingClientRect().top - container.getBoundingClientRect().top - anchor.offset;
+    } else {
+      handle.scrollTop = 0;
+      setUpdatesAvailable(true);
+    }
+  }, [items, scrollRef]);
 
   // Changing filter starts a new fetch: restore per-filter cache or reset.
   const prevCacheKeyRef = useRef(cacheKey);
@@ -180,7 +198,6 @@ export function useFeed(filters: FeedFilters, options: UseFeedOptions = {}): Fee
       // the items on screen and reconcile atomically when this generation
       // resolves. Only an empty list takes the cold-loading path.
       const isRefresh = !append && latestRef.current.items.length > 0;
-      const startedAtTop = (scrollRef?.current?.scrollTop ?? 0) <= 0;
       if (append) setLoadingMore(true);
       else if (isRefresh) setRefreshing(true);
       else setLoading(true);
@@ -193,10 +210,20 @@ export function useFeed(filters: FeedFilters, options: UseFeedOptions = {}): Fee
         recordLoadTiming("feed", Date.now() - startedAt);
         // Discard if filters/generation changed while we were fetching
         if (gen !== generationRef.current) return;
-        if (isRefresh && startedAtTop && (scrollRef?.current?.scrollTop ?? 0) > 0) {
-          dirtyRef.current = true;
-          setUpdatesAvailable(true);
-          return;
+        if (isRefresh) {
+          const handle = scrollRef?.current;
+          const container = handle instanceof HTMLElement ? handle : handle?.element;
+          if (container) {
+            const top = container.getBoundingClientRect().top;
+            const row = Array.from(container.querySelectorAll<HTMLElement>("[data-feed-post-id]"))
+              .filter((el) => {
+                const rect = el.getBoundingClientRect();
+                return rect.top <= top && rect.bottom > top;
+              })
+              .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)[0];
+            if (row) anchorRef.current = { id: row.dataset.feedPostId ?? null, offset: row.getBoundingClientRect().top - top };
+            else if ((handle?.scrollTop ?? 0) > 0) anchorRef.current = { id: null, offset: 0 };
+          }
         }
         loadedRef.current = true;
         // Only a full replacement can certify every retained row. An append
@@ -216,6 +243,7 @@ export function useFeed(filters: FeedFilters, options: UseFeedOptions = {}): Fee
         if (gen !== generationRef.current) return;
         setError(friendlyError(err).message);
         setFailedOperation(append ? "loadMore" : "refresh");
+        if (!append && isRefresh && dirtyRef.current) setUpdatesAvailable(true);
         // A failed refresh keeps the visible items; only a failed cold load
         // clears the list.
         if (!append && !isRefresh) setItems([]);
@@ -238,10 +266,7 @@ export function useFeed(filters: FeedFilters, options: UseFeedOptions = {}): Fee
     loadedEpochRef.current = feedCacheEpoch();
     dirtyRef.current = cached ? cached.dirty : false;
     if (cached && !cached.dirty) return;
-    if (cached?.dirty && cached.scrollTop > 0) {
-      setUpdatesAvailable(true);
-      return;
-    }
+    if (cached?.dirty) setUpdatesAvailable(true);
     void load(null, false);
   }, [cacheKey, filterKey, load]);
 
