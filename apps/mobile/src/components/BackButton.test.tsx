@@ -1,7 +1,18 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router";
-import { afterEach, describe, expect, it } from "vitest";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { afterEach, describe, expect, it, vi } from "vitest";
+const navigation = vi.hoisted(() => ({ calls: vi.fn() }));
+vi.mock("react-router", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router")>();
+  return { ...actual, useNavigate: () => {
+    const navigate = actual.useNavigate();
+    return (...args: Parameters<typeof navigate>) => {
+      navigation.calls(...args);
+      return navigate(...args);
+    };
+  } };
+});
 import { BackButton } from "./BackButton";
 
 /**
@@ -32,6 +43,7 @@ function renderBack() {
 
 afterEach(() => {
   cleanup();
+  navigation.calls.mockClear();
   window.history.replaceState(null, "");
 });
 
@@ -50,6 +62,21 @@ describe("BackButton accessible label", () => {
 });
 
 describe("BackButton behaviour", () => {
+  it.each([undefined, { showPublic: true }])("passes fallback state %s on an empty stack", (state) => {
+    window.history.replaceState({ idx: 0 }, "");
+    function Destination() {
+      const location = useLocation();
+      return <output>{JSON.stringify(location.state)}</output>;
+    }
+    render(<MemoryRouter initialEntries={["/page"]}><Routes>
+      <Route path="/page" element={<BackButton fallbackTo="/" fallbackState={state} label="Back home" />} />
+      <Route path="/" element={<Destination />} />
+    </Routes></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button"));
+    expect(navigation.calls).toHaveBeenCalledWith("/", { replace: true, state });
+    expect(navigation.calls.mock.calls[0]?.[1]).toHaveProperty("state", state);
+    expect(screen.getByRole("status").textContent).toBe(JSON.stringify(state ?? null));
+  });
   it("walks history when the app stack has an entry, whatever the fallback is", () => {
     window.history.replaceState({ idx: 1 }, "");
     renderBack();

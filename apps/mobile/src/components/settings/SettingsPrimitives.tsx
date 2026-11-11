@@ -31,6 +31,7 @@ export interface SettingsPageProps {
   children: ReactNode;
   /** Uses the shared history-aware BackButton; omit for a root settings page. */
   backTo?: string;
+  backState?: Record<string, unknown>;
   backLabel?: string;
   className?: string;
   headingLevel?: 1 | 2;
@@ -39,7 +40,7 @@ export interface SettingsPageProps {
   utilities?: boolean;
 }
 /** Content only: Shell remains the sole viewport/safe-area/scroll owner. */
-export function SettingsPage({ title, description, children, backTo, backLabel = "Back to Settings", className = "", headingLevel = 1, autoFocus = true, utilities = true }: SettingsPageProps) {
+export function SettingsPage({ title, description, children, backTo, backState, backLabel = "Back to Settings", className = "", headingLevel = 1, autoFocus = true, utilities = true }: SettingsPageProps) {
   const heading = useRef<HTMLHeadingElement>(null);
   const Heading = headingLevel === 1 ? "h1" : "h2";
   useEffect(() => {
@@ -54,7 +55,7 @@ export function SettingsPage({ title, description, children, backTo, backLabel =
   }, [title, autoFocus]);
   return <section className={`fb-settings-page ${className}`}>
     <div className="fb-settings-sticky">
-      {backTo && <BackButton fallbackTo={backTo} label={backLabel} />}
+      {backTo && <BackButton fallbackTo={backTo} fallbackState={backState} label={backLabel} />}
       <Heading ref={heading} tabIndex={-1}>{title}</Heading>
       {utilities && <TopUtilities />}
     </div>
