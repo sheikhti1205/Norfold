@@ -5,6 +5,7 @@ import { requestAccountDeletion, setAccountPassword } from "../services/auth";
 import { fetchPhoneChangeEligibility, formatPhoneChangeEligibleAt } from "../services/profile";
 import { Button } from "../components/Button";
 import { UserAvatar } from "../components/UserAvatar";
+import { TelegramSettings } from "../components/settings/TelegramSettings";
 import {
   SettingsGroup,
   SettingsPage,
@@ -302,6 +303,8 @@ export function AccountSettings() {
           </form>
         )}
       </SettingsGroup>
+
+      <TelegramSettings key={userId} />
 
       <Button
         variant="outline"
