@@ -117,6 +117,17 @@ describe("Recovery", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
     await screen.findByText("Sign in destination");
   });
+
+  it("opens code entry with the send limit held when the first request is limited", async () => {
+    const error = Object.assign(new Error("You've asked for several codes. The most recent code still works. Try requesting another code later."), { code: "EMAIL_SEND_LIMITED" });
+    servicesMock.requestPasswordReset.mockRejectedValueOnce(error);
+    renderForgot("/forgot?email=user%40example.com");
+    fireEvent.click(screen.getByRole("button", { name: "Send recovery code" }));
+    await screen.findByLabelText("Recovery code");
+    expect(screen.getByText(error.message)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /resend/i })).toBeNull();
+    expect(servicesMock.requestPasswordReset).toHaveBeenCalledTimes(1);
+  });
   it("accepts ten digits and forwards them unchanged", async () => {
     renderRecovery(otpEntry);
     const input = screen.getByLabelText("Recovery code") as HTMLInputElement;
@@ -163,12 +174,26 @@ describe("Recovery", () => {
   });
   it("honors the initial resend cooldown, then requests a code without claiming delivery", async () => {
     vi.useFakeTimers(); renderRecovery(otpEntry);
-    expect((screen.getByRole("button", { name: "Resend in 30s" }) as HTMLButtonElement).disabled).toBe(true);
-    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); }); vi.useRealTimers();
+    expect((screen.getByRole("button", { name: "Resend in 60s" }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); }); vi.useRealTimers();
     fireEvent.click(screen.getByRole("button", { name: "Resend code" }));
-    await screen.findByRole("button", { name: "Resend in 30s" });
+    await screen.findByRole("button", { name: "Resend in 60s" });
     expect(servicesMock.requestPasswordReset).toHaveBeenCalledWith("recover@example.invalid");
     expect(screen.queryByText(/we sent/i)).toBeNull();
+  });
+  it("holds resends after an email limit without automatic retries", async () => {
+    vi.useFakeTimers();
+    const error = Object.assign(new Error("You've asked for several codes. The most recent code still works. Try requesting another code later."), { code: "EMAIL_SEND_LIMITED" });
+    servicesMock.requestPasswordReset.mockRejectedValueOnce(error);
+    renderRecovery(otpEntry);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Resend code" })); });
+    expect(screen.getByText(error.message)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /resend/i })).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_600_000); });
+    expect(screen.queryByRole("button", { name: /resend/i })).toBeNull();
+    expect(servicesMock.requestPasswordReset).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("Recovery code")).toBeTruthy();
   });
   it("owns the viewport outside Shell (V1-UI-003: full-height main + safe-area insets)", () => {
     const { container } = renderRecovery();
