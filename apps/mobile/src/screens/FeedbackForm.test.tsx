@@ -3,9 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 
-const { mockSubmitFeedback, mockListMyFeedback } = vi.hoisted(() => ({
+const { mockSubmitFeedback, mockListMyFeedback, mockRatingContext, mockRateApp } = vi.hoisted(() => ({
   mockSubmitFeedback: vi.fn(),
   mockListMyFeedback: vi.fn(),
+  mockRatingContext: vi.fn(),
+  mockRateApp: vi.fn(),
 }));
 
 vi.mock("../services/feedback", async (importOriginal) => {
@@ -14,6 +16,8 @@ vi.mock("../services/feedback", async (importOriginal) => {
     ...actual,
     submitFeedback: (...args: unknown[]) => mockSubmitFeedback(...args),
     listMyFeedback: (...args: unknown[]) => mockListMyFeedback(...args),
+    fetchAppRatingContext: (...args: unknown[]) => mockRatingContext(...args),
+    rateApp: (...args: unknown[]) => mockRateApp(...args),
   };
 });
 
@@ -28,6 +32,8 @@ beforeEach(() => {
   viewer.id = "me";
   vi.clearAllMocks();
   mockSubmitFeedback.mockResolvedValue("feedback-1");
+  mockRatingContext.mockReset().mockResolvedValue({ myScore: null, average: null, count: 0 });
+  mockRateApp.mockReset();
   mockListMyFeedback.mockResolvedValue([
     {
       id: "feedback-1",
@@ -107,7 +113,7 @@ describe("the one feedback form", () => {
   });
   it("offers the four kinds the server knows", () => {
     renderScreen();
-    expect(screen.getAllByRole("radio")).toHaveLength(4);
+    expect(screen.getAllByRole("radio", { name: /something is broken|an idea|hard to use|something else/i })).toHaveLength(4);
     expect(screen.getByRole("radio", { name: /something is broken/i })).toBeTruthy();
     expect(screen.getByRole("radio", { name: /hard to use/i })).toBeTruthy();
   });
@@ -210,5 +216,75 @@ describe("the one feedback form", () => {
     expect(error.textContent).not.toMatch(/PGRST202|schema/i);
     // No fake success.
     expect(screen.queryByTestId("feedback-notice")).toBeNull();
+  });
+});
+
+describe("app rating", () => {
+  it("shows the empty state and saves the first rating", async () => {
+    mockRateApp.mockResolvedValue({ myScore: 5, average: 5, count: 1 });
+    renderScreen();
+    expect(await screen.findByText(/no ratings yet/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("radio", { name: "5 out of 5" }));
+    expect(await screen.findByText(/5\.0 out of 5 from 1 rating/i)).toBeTruthy();
+    expect((screen.getByRole("radio", { name: "5 out of 5" }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText(/rating saved/i)).toBeTruthy();
+    expect(screen.getByLabelText(/tell us what happened/i)).toBeTruthy();
+  });
+  it("shows the current score and aggregate, and updates both after editing", async () => {
+    mockRatingContext.mockResolvedValue({ myScore: 2, average: 3.5, count: 2 });
+    mockRateApp.mockResolvedValue({ myScore: 4, average: 4.5, count: 2 });
+    renderScreen();
+    expect(await screen.findByText(/3\.5 out of 5 from 2 ratings/i)).toBeTruthy();
+    expect((screen.getByRole("radio", { name: "2 out of 5" }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole("radio", { name: "4 out of 5" }));
+    expect(await screen.findByText(/4\.5 out of 5 from 2 ratings/i)).toBeTruthy();
+    expect((screen.getByRole("radio", { name: "4 out of 5" }) as HTMLInputElement).checked).toBe(true);
+  });
+  it("keeps the pending score selected on failure and retries that choice", async () => {
+    mockRatingContext.mockResolvedValue({ myScore: 2, average: 2, count: 1 });
+    mockRateApp.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({ myScore: 3, average: 3, count: 1 });
+    renderScreen();
+    await screen.findByText(/2\.0 out of 5 from 1 rating/i);
+    fireEvent.click(screen.getByRole("radio", { name: "3 out of 5" }));
+    expect(await screen.findByText(/could not save your rating/i)).toBeTruthy();
+    const selected = screen.getByRole("radio", { name: "3 out of 5" }) as HTMLInputElement;
+    expect(selected.checked).toBe(true);
+    expect(screen.getByText("Rating not saved yet.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /retry rating/i }));
+    expect(mockRateApp).toHaveBeenLastCalledWith(Number(selected.value));
+    expect(await screen.findByText(/3\.0 out of 5 from 1 rating/i)).toBeTruthy();
+  });
+  it("changes selection with arrow navigation without saving or disabling controls", async () => {
+    mockRatingContext.mockResolvedValue({ myScore: 1, average: 1, count: 1 });
+    renderScreen();
+    const first = await screen.findByRole("radio", { name: "1 out of 5" });
+    const second = screen.getByRole("radio", { name: "2 out of 5" }) as HTMLInputElement;
+    fireEvent.keyDown(first, { key: "ArrowRight" });
+    fireEvent.change(second, { target: { checked: true } });
+    expect(mockRateApp).not.toHaveBeenCalled();
+    expect(second.disabled).toBe(false);
+    expect(second.closest("fieldset")?.disabled).toBe(false);
+  });
+  it("commits a clicked score once", async () => {
+    mockRateApp.mockResolvedValue({ myScore: 4, average: 4, count: 1 });
+    renderScreen();
+    fireEvent.click(await screen.findByRole("radio", { name: "4 out of 5" }));
+    expect(mockRateApp).toHaveBeenCalledOnce();
+    expect(mockRateApp).toHaveBeenCalledWith(4);
+    await screen.findByText("Rating saved. Thank you.");
+  });
+  it("guards repeated clicks during saving and keeps focus", async () => {
+    let finish!: (value: { myScore: number; average: number; count: number }) => void;
+    mockRateApp.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    renderScreen();
+    const radio = await screen.findByRole("radio", { name: "4 out of 5" });
+    radio.focus();
+    fireEvent.click(radio);
+    fireEvent.click(radio);
+    expect(mockRateApp).toHaveBeenCalledOnce();
+    expect(document.activeElement).toBe(radio);
+    expect(radio.closest("fieldset")?.getAttribute("aria-busy")).toBe("true");
+    expect((radio as HTMLInputElement).disabled).toBe(false);
+    await act(async () => { finish({ myScore: 4, average: 4, count: 1 }); });
   });
 });

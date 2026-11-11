@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { Button } from "../components/Button";
 import { TextAreaField } from "../components/Fields";
@@ -11,10 +11,13 @@ import {
   FEEDBACK_CATEGORIES,
   FEEDBACK_MESSAGE_MAX,
   FEEDBACK_STATUS_LABELS,
+  fetchAppRatingContext,
   listMyFeedback,
+  rateApp,
   submitFeedback,
   type FeedbackCategory,
   type MyFeedback,
+  type AppRatingContext,
 } from "../services/feedback";
 import { friendlyError } from "../utils/friendlyErrors";
 import { UNAVAILABLE_SENTENCES, formatSafetyDate } from "../utils/safetyCopy";
@@ -57,6 +60,44 @@ function ScopedFeedbackForm() {
   const [notice, setNotice] = useState<string | null>(null);
   const [mine, setMine] = useState<MyFeedback[] | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [rating, setRating] = useState<AppRatingContext | null>(null);
+  const [ratingError, setRatingError] = useState<"load" | "save" | null>(null);
+  const [ratingBusy, setRatingBusy] = useState(false);
+  const ratingSaving = useRef(false);
+  const [pendingScore, setPendingScore] = useState<number | null>(null);
+  const [ratingNotice, setRatingNotice] = useState<string | null>(null);
+
+  const loadRating = useCallback(async () => {
+    setRatingError(null);
+    try {
+      const result = await fetchAppRatingContext();
+      if (alive.current) setRating(result);
+    } catch {
+      if (alive.current) setRatingError("load");
+    }
+  }, [alive]);
+
+  const saveRating = async (score: number) => {
+    if (ratingSaving.current) return;
+    ratingSaving.current = true;
+    setRatingBusy(true);
+    setPendingScore(score);
+    setRatingError(null);
+    setRatingNotice(null);
+    try {
+      const result = await rateApp(score);
+      if (!alive.current) return;
+      setRating(result);
+      setPendingScore((current) => current === score ? null : current);
+      setRatingNotice("Rating saved. Thank you.");
+      announce("Rating saved. Thank you.");
+    } catch {
+      if (alive.current) setRatingError("save");
+    } finally {
+      ratingSaving.current = false;
+      if (alive.current) setRatingBusy(false);
+    }
+  };
 
   const loadMine = useCallback(async () => {
     setHistoryError(null);
@@ -74,6 +115,8 @@ function ScopedFeedbackForm() {
   useEffect(() => {
     void loadMine();
   }, [loadMine]);
+
+  useEffect(() => { void loadRating(); }, [loadRating]);
 
   const scalars = useMemo(() => {
     if (!includeTechnical) {
@@ -142,6 +185,35 @@ function ScopedFeedbackForm() {
       backTo="/settings"
       description="Tell us what is working and what is not."
     >
+      <SettingsGroup title="Rate your experience with Norfold">
+        <div className="px-3 py-2">
+          {rating ? <>
+            <fieldset aria-busy={ratingBusy} className="flex flex-wrap gap-1">
+              <legend className="sr-only">Rate your experience with Norfold</legend>
+              {[1, 2, 3, 4, 5].map((score) => (
+                <label key={score} className="flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center gap-1 text-sm text-on-surface">
+                  <input type="radio" name="app-rating" value={score} aria-label={`${score} out of 5`}
+                    checked={(pendingScore ?? rating.myScore) === score} onChange={() => setPendingScore(score)}
+                    onClick={() => void saveRating(score)} className="accent-primary" />
+                  <span>{score}</span>
+                </label>
+              ))}
+            </fieldset>
+            {pendingScore !== null && <p className="text-sm text-on-surface-variant">Rating not saved yet.</p>}
+            <p className="text-sm text-on-surface-variant">
+              {rating.count === 0 ? "No ratings yet." : `${rating.average!.toFixed(1)} out of 5 from ${rating.count} ${rating.count === 1 ? "rating" : "ratings"}.`}
+            </p>
+          </> : !ratingError ? <p role="status" className="text-sm text-on-surface-variant">Loading ratings…</p> : null}
+          {ratingNotice && <p className="text-sm text-on-surface-variant">{ratingNotice}</p>}
+          {ratingError && <div role="alert" className="text-sm text-error">
+            <p>{ratingError === "load" ? "Could not load ratings." : "Could not save your rating."}</p>
+            <button type="button" className="min-h-[44px] underline" onClick={() => {
+              if (ratingError === "load") void loadRating();
+              else if (pendingScore !== null) void saveRating(pendingScore);
+            }}>Retry rating</button>
+          </div>}
+        </div>
+      </SettingsGroup>
       <SettingsGroup title="What kind of feedback is this?">
         <fieldset className="fb-choice-fieldset flex flex-col">
           <legend className="sr-only">What kind of feedback is this?</legend>

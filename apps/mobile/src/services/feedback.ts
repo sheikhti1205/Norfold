@@ -183,6 +183,33 @@ function feedbackTime(value: unknown): value is string {
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
+export interface AppRatingContext { myScore: number | null; average: number | null; count: number }
+
+function parseAppRating(value: unknown): AppRatingContext {
+  const row = record(value);
+  const score = row?.my_score;
+  const average = row?.average;
+  const count = row?.count;
+  if (!row || (score !== null && (typeof score !== "number" || !Number.isInteger(score) || score < 1 || score > 5))
+    || typeof count !== "number" || !Number.isSafeInteger(count) || count < 0
+    || (count === 0 ? average !== null || score !== null : typeof average !== "number" || !Number.isFinite(average) || average < 1 || average > 5)) {
+    throw new ApiError("The server did not return a rating.", 500, "UNEXPECTED_SHAPE");
+  }
+  return { myScore: score as number | null, average: average as number | null, count };
+}
+
+export async function fetchAppRatingContext(): Promise<AppRatingContext> {
+  const { data, error } = await getSupabase().rpc("findback_app_rating_context");
+  if (error) throw feedbackError(error.message, error.code);
+  return parseAppRating(data);
+}
+
+export async function rateApp(score: number): Promise<AppRatingContext> {
+  if (!Number.isInteger(score) || score < 1 || score > 5) throw new ApiError("Choose a score from 1 to 5.", 400, "INVALID_SCORE");
+  const { data, error } = await getSupabase().rpc("findback_rate_app_client", { p_score: score });
+  if (error) throw feedbackError(error.message, error.code);
+  return parseAppRating(data);
+}
 function feedbackShapeError(): ApiError { return new ApiError("The server did not return feedback to review.", 500, "UNEXPECTED_SHAPE"); }
 function staffFeedbackSummary(value: unknown): MyFeedback | null {
   const row = record(value);

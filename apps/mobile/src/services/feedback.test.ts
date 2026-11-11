@@ -7,6 +7,8 @@ import {
   FEEDBACK_STATUS_LABELS,
   listMyFeedback,
   submitFeedback,
+  fetchAppRatingContext,
+  rateApp,
 } from "./feedback";
 
 const { clientMock, orderMock, selectMock, fromMock } = vi.hoisted(() => {
@@ -15,6 +17,26 @@ const { clientMock, orderMock, selectMock, fromMock } = vi.hoisted(() => {
   const fromMock = vi.fn((_table: string) => ({ select: selectMock }));
   const clientMock = { rpc: vi.fn(), from: fromMock };
   return { clientMock, orderMock, selectMock, fromMock };
+});
+
+describe("app experience rating", () => {
+  it("parses the empty and populated server context", async () => {
+    clientMock.rpc.mockResolvedValueOnce({ data: { my_score: null, average: null, count: 0 }, error: null });
+    await expect(fetchAppRatingContext()).resolves.toEqual({ myScore: null, average: null, count: 0 });
+    clientMock.rpc.mockResolvedValueOnce({ data: { my_score: 4, average: 3.5, count: 2 }, error: null });
+    await expect(rateApp(4)).resolves.toEqual({ myScore: 4, average: 3.5, count: 2 });
+    expect(lastCall("findback_rate_app_client")).toEqual({ p_score: 4 });
+  });
+  it.each([null, [], {}, { my_score: 6, average: 3, count: 2 }, { my_score: null, average: null, count: 1 }, { my_score: null, average: 4, count: 0 }, { my_score: 2, average: "3", count: 2 }])("rejects unexpected response %j", async (data) => {
+    clientMock.rpc.mockResolvedValue({ data, error: null });
+    await expect(fetchAppRatingContext()).rejects.toMatchObject({ code: "UNEXPECTED_SHAPE" });
+  });
+  it("rejects invalid scores and server errors", async () => {
+    await expect(rateApp(0)).rejects.toMatchObject({ status: 400 });
+    expect(clientMock.rpc).not.toHaveBeenCalled();
+    clientMock.rpc.mockResolvedValue({ data: null, error: { message: "refused", code: "28000" } });
+    await expect(rateApp(3)).rejects.toMatchObject({ status: 401 });
+  });
 });
 
 vi.mock("./supabaseClient", async (importOriginal) => {
