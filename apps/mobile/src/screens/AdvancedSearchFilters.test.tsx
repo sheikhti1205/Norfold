@@ -80,9 +80,9 @@ describe("AdvancedSearchFilters controlled + hideTrigger (Home search bar)", () 
     expect(screen.getByRole("button", { name: "Filters, 2 active" })).toBeTruthy();
     expect(screen.getByTestId("filters-active-count")).toHaveProperty("textContent", "2");
     expect(
-      await screen.findByRole("button", { name: /remove category filter/i }),
+      await screen.findByRole("button", { name: "Remove category filter: Electronics" }),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: /remove status filter/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove status filter: Open" })).toBeTruthy();
   });
 
   it("updates the badge count when a chip is removed", async () => {
@@ -295,7 +295,7 @@ describe("AdvancedSearchFilters optional type and place (Search only)", () => {
       </MemoryRouter>,
     );
     expect(screen.getByText("Type: Lost")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Remove type filter" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove type filter: Lost" }));
     expect(onTypeChange).toHaveBeenCalledWith("");
   });
 
@@ -339,7 +339,7 @@ describe("AdvancedSearchFilters optional type and place (Search only)", () => {
       </MemoryRouter>,
     );
     expect(screen.getByText("Place: Gulshan")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Remove place filter" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove place filter: Gulshan" }));
     expect(onPlaceChange).toHaveBeenCalledWith("");
   });
 

@@ -151,6 +151,12 @@ describe("Home nearby discovery (UXN-1)", () => {
   });
 
   it("combines Lost + Nearby without changing the type filter", async () => {
+    fetchFeedMock.mockImplementation(async (filters) => ({
+      items: filters.type === "LOST" && filters.radiusM === 10_000
+        ? [{ id: "nearby-lost", title: "Nearby lost item" }]
+        : [{ id: "b", title: "Other item" }],
+      nextCursor: null, total: 1,
+    }));
     renderHome();
     await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
     fireEvent.click(screen.getByRole("radio", { name: "Lost" }));
@@ -158,6 +164,8 @@ describe("Home nearby discovery (UXN-1)", () => {
       expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ type: "LOST" }), undefined),
     );
     await enableNearby();
+    expect(await screen.findByText("nearby-lost")).toBeTruthy();
+    expect(screen.queryByText("b")).toBeNull();
     expect(fetchFeedMock).toHaveBeenCalledWith(
       expect.objectContaining({ type: "LOST", nearLat: 12.346, nearLng: 77.654, radiusM: 10_000 }),
       undefined,

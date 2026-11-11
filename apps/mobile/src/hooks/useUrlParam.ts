@@ -4,10 +4,10 @@ import { useSearchParams } from "react-router";
 /**
  * useState persisted to a URL search param.
  *
- * The param is the shareable source of truth: back-nav from a detail page,
- * deep-links, and copied links all restore the filter on mount. Edits replace
- * the current history entry so typing does not spam history. An empty value
- * removes the param to keep links clean.
+ * The initial value is seeded from the URL on mount, allowing deep-links and
+ * copied links to restore the filter. Later URL changes are not read back.
+ * Edits replace the current history entry so typing does not spam history.
+ * An empty value removes the param to keep links clean.
  */
 export function useUrlParam(key: string, initial = ""): [string, (value: string) => void] {
   const [params, setParams] = useSearchParams();
