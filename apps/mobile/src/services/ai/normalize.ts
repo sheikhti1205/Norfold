@@ -31,14 +31,12 @@ import {
   isAskUserPrompt,
   isAssistantAction,
   isIntent,
-  PHOTO_ANALYSIS_KEYS,
   type Action,
   type AiError,
   type AiResult,
   type AskUserPrompt,
   type AssistantAction,
   type ClassifiedIntent,
-  type PhotoAnalysis,
   type ReportSlotFields,
   type SearchFilterFields,
 } from "./types";
@@ -54,12 +52,8 @@ function pass<T>(value: T): AiResult<T> {
 
 /** Evidence-derived provisional bounds (see report for alternatives). */
 export const MAX_STRING_CHARS = 280;
-export const MAX_ITEM_CHARS = 80;
-export const MAX_ARRAY_ITEMS = 12;
 export const MAX_HELP_CHARS = 2000;
 const MIN_ECHO_CHARS = 40;
-const MIN_STUFF_VALUE_CHARS = 4;
-const CROSS_FIELD_STUFF_LIMIT = 3;
 const SCHEMA_ECHO_PATTERN = /string\s*(\[\]| *\| *null)/i;
 
 export interface NormalizeContext {
@@ -173,130 +167,11 @@ export function containsEcho(value: string, context: NormalizeContext | undefine
   return false;
 }
 
-/** R5: array stuffed by length, filler repetition, or majority echo. */
-function isStuffedArray(items: readonly string[]): boolean {
-  if (items.length > MAX_ARRAY_ITEMS) return true;
-  if (items.length >= 4) {
-    const distinct = new Set(items.map((item) => norm(item)));
-    if (distinct.size / items.length <= 0.5) return true;
-  }
-  return false;
-}
-
-function checkStringSlot(
-  value: unknown,
-  field: string,
-  maxChars: number,
-  context: NormalizeContext | undefined,
-): AiResult<string | null> {
-  if (value === null) return pass(null);
-  if (typeof value !== "string") return fail("INVALID_OUTPUT", `R1_BAD_FIELD:${field}`);
-  if (value.length > maxChars) return fail("INVALID_OUTPUT", `R5_FIELD_TOO_LONG:${field}`);
-  if (containsEcho(value, context)) return fail("INVALID_OUTPUT", `R6_CONTEXT_ECHO:${field}`);
-  return pass(value);
-}
-
-function checkStringArraySlot(
-  value: unknown,
-  field: string,
-  context: NormalizeContext | undefined,
-): AiResult<readonly string[]> {
-  if (!Array.isArray(value)) return fail("INVALID_OUTPUT", `R1_BAD_FIELD:${field}`);
-  for (const item of value) {
-    if (typeof item !== "string" || item.length > MAX_ITEM_CHARS) {
-      return fail("INVALID_OUTPUT", `R5_FIELD_TOO_LONG:${field}`);
-    }
-    if (containsEcho(item, context)) {
-      return fail("INVALID_OUTPUT", `R6_CONTEXT_ECHO:${field}`);
-    }
-  }
-  if (isStuffedArray(value as readonly string[])) {
-    return fail("INVALID_OUTPUT", `R5_FIELD_STUFFING:${field}`);
-  }
-  return pass(value as readonly string[]);
-}
-
 function rejectCoordinates(value: string, field: string): AiResult<string> {
   if (looksLikeCoordinates(value)) {
     return fail("INVALID_OUTPUT", `R5_COORDINATES_NOT_ACCEPTED:${field}`);
   }
   return pass(value);
-}
-
-/**
- * R1-strict + R5 + R6 validator for the 9-field photo schema. Unknown keys
- * (e.g. vision-model "title"/"description" aliases), wrong types,
- * stuffed arrays, cross-field value repetition, overlong strings,
- * coordinates, and prompt echoes all fail — even when the JSON parses.
- */
-export function validatePhotoAnalysis(
-  value: unknown,
-  context?: NormalizeContext,
-): AiResult<PhotoAnalysis> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return fail("INVALID_OUTPUT", "R1_BAD_PHOTO_OBJECT");
-  }
-  const record = value as Record<string, unknown>;
-  for (const key of Object.keys(record)) {
-    if (!(PHOTO_ANALYSIS_KEYS as readonly string[]).includes(key)) {
-      return fail("INVALID_OUTPUT", `R1_UNKNOWN_FIELD:${key}`);
-    }
-  }
-  for (const key of PHOTO_ANALYSIS_KEYS) {
-    if (!(key in record)) return fail("INVALID_OUTPUT", `R1_MISSING_FIELD:${key}`);
-  }
-
-  const scalarFields = [
-    "objectName",
-    "suggestedCategory",
-    "visibleBrand",
-    "suggestedTitle",
-    "suggestedDescription",
-  ] as const;
-  const scalars: Record<string, string | null> = {};
-  for (const field of scalarFields) {
-    const checked = checkStringSlot(record[field], field, MAX_STRING_CHARS, context);
-    if (!checked.ok) return checked;
-    scalars[field] = checked.value;
-  }
-  const arrayFields = ["colors", "visibleText", "identifyingFeatures", "uncertainFields"] as const;
-  const arrays: Record<string, readonly string[]> = {};
-  for (const field of arrayFields) {
-    const checked = checkStringArraySlot(record[field], field, context);
-    if (!checked.ok) return checked;
-    arrays[field] = checked.value;
-  }
-
-  const seen = new Map<string, number>();
-  const scalarValues = Object.values(scalars).filter(
-    (entry): entry is string => typeof entry === "string" && norm(entry).length >= MIN_STUFF_VALUE_CHARS,
-  );
-  const flat: string[] = [...scalarValues];
-  for (const field of arrayFields) {
-    for (const item of arrays[field] ?? []) {
-      if (norm(item).length >= MIN_STUFF_VALUE_CHARS) flat.push(item);
-    }
-  }
-  for (const entry of flat) {
-    seen.set(norm(entry), (seen.get(norm(entry)) ?? 0) + 1);
-  }
-  for (const [entry, count] of seen) {
-    if (count >= CROSS_FIELD_STUFF_LIMIT) {
-      return fail("INVALID_OUTPUT", `R5_FIELD_STUFFING:repeated:${entry.slice(0, 32)}`);
-    }
-  }
-
-  return pass({
-    objectName: scalars["objectName"] ?? null,
-    suggestedCategory: scalars["suggestedCategory"] ?? null,
-    colors: arrays["colors"] ?? [],
-    visibleBrand: scalars["visibleBrand"] ?? null,
-    visibleText: arrays["visibleText"] ?? [],
-    identifyingFeatures: arrays["identifyingFeatures"] ?? [],
-    suggestedTitle: scalars["suggestedTitle"] ?? null,
-    suggestedDescription: scalars["suggestedDescription"] ?? null,
-    uncertainFields: arrays["uncertainFields"] ?? [],
-  });
 }
 
 function checkNarrowString(

@@ -127,18 +127,6 @@ function validateProposeComment(args: unknown): boolean {
   return isReferenceId(args["reportId"]) && isBoundedText(args["body"], COMMENT_BODY_MAX);
 }
 
-function validateAnalyzePhoto(args: unknown): boolean {
-  if (!isRecord(args)) return false;
-  if (!isReferenceId(args["imageId"])) return false;
-  const keys = new Set(Object.keys(args));
-  if (keys.size > 2 || keys.size < 1) return false;
-  if (!keys.has("imageId")) return false;
-  if (keys.has("userContext") && !isBoundedText(args["userContext"], TEXT_FIELD_MAX, true)) {
-    return false;
-  }
-  return true;
-}
-
 function validateAnswerHelp(args: unknown): boolean {
   if (!isRecord(args)) return false;
   const keys = Object.keys(args);
@@ -253,7 +241,6 @@ export function evaluateProposal(raw: unknown, context: GateContext): GateDecisi
   if (op === "open_my_reports") argsValid = validateOpenMyReports(args);
   else if (op === "fill_report_fields") argsValid = validateFillReportFields(args);
   else if (op === "propose_comment") argsValid = validateProposeComment(args);
-  else if (op === "analyze_photo") argsValid = validateAnalyzePhoto(args);
   else if (op === "answer_help") argsValid = validateAnswerHelp(args);
   else if (op === "route_intent") argsValid = validateRouteIntent(args);
   else if (op === "embed_texts") argsValid = validateEmbedTexts(args);

@@ -16,9 +16,9 @@ import { LocalIntelligence } from "./LocalIntelligence";
 
 afterEach(cleanup);
 
-function nativeService() {
+function nativeService(supportedAbis: () => Promise<string[]> = async () => ["arm64-v8a"]) {
   return new ApplicationAiService({ android: true, driver: {
-    supportedAbis: async () => ["arm64-v8a"],
+    supportedAbis,
     rootDir: async () => "/private/models", freeBytes: async () => 2e9,
     stagedSize: async () => 0, readJournalText: async () => null,
     download: async () => { throw new Error("Unexpected transfer"); },
@@ -73,14 +73,15 @@ describe("Local intelligence", () => {
     await screen.findByText(/couldn't check the downloaded files/i);
     expect(screen.queryByText("Try reopening Norfold.")).toBeNull();
   });
-  it("waits for compatibility instead of acting on the service's optimistic default", async () => {
-    const service = nativeService();
-    let finish!: () => void;
-    vi.spyOn(service, "ensureCompatibility").mockImplementation(() => new Promise<void>((resolve) => { finish = resolve; }));
+  it("waits for the compatibility check and then offers the download", async () => {
+    let finish!: (abis: string[]) => void;
+    const service = nativeService(() => new Promise<string[]>((resolve) => { finish = resolve; }));
     render(<MemoryRouter><LocalIntelligence service={service} /></MemoryRouter>);
     expect(screen.getByText("Checking downloads…")).toBeTruthy();
+    expect(service.compatibility(NEEDLE_DESCRIPTOR.modelId).state).toBe("unknown");
     expect(screen.queryByRole("button", { name: /download/i })).toBeNull();
-    await act(async () => finish());
+    await act(async () => finish(["arm64-v8a"]));
+    expect(service.compatibility(NEEDLE_DESCRIPTOR.modelId).state).toBe("compatible");
     expect(await screen.findByRole("button", { name: "Download · 35.3 MB" })).toBeTruthy();
   });
 });

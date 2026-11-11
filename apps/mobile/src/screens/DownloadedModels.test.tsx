@@ -17,7 +17,7 @@ import { DownloadedModels } from "./DownloadedModels";
 
 afterEach(cleanup);
 
-function device({ failStorage = false, abi = "arm64-v8a" } = {}) {
+function device({ failStorage = false, abi = "arm64-v8a", probe }: { failStorage?: boolean; abi?: string; probe?: () => Promise<string[]> } = {}) {
   const files = new Map<string, string>();
   let staged = 0;
   let journal: string | null = null;
@@ -25,7 +25,7 @@ function device({ failStorage = false, abi = "arm64-v8a" } = {}) {
   const removed: string[] = [];
   let unloaded = false;
   const service = new ApplicationAiService({ android: true, driver: {
-    supportedAbis: async () => [abi],
+    supportedAbis: probe ?? (async () => [abi]),
     rootDir: async () => { if (failStorage) throw new Error("disk unavailable"); return "/private/models"; }, freeBytes: async () => 2e9,
     stagedSize: async () => staged, readJournalText: async () => journal,
     download: async (attempt) => {
@@ -52,6 +52,23 @@ function device({ failStorage = false, abi = "arm64-v8a" } = {}) {
 }
 
 describe("Downloaded models", () => {
+  it("offers a retry after an unknown device check and shows download after recovery", async () => {
+    const probe = vi.fn().mockRejectedValueOnce(new Error("not ready")).mockResolvedValue(["arm64-v8a"]);
+    const { service } = device({ probe });
+    render(<MemoryRouter><DownloadedModels service={service} /></MemoryRouter>);
+    await screen.findByText("Norfold couldn't check this device.");
+    expect(screen.queryByRole("button", { name: /download ·/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("button", { name: "Download · 35.3 MB" })).toBeTruthy();
+    expect(probe).toHaveBeenCalledTimes(2);
+  });
+  it("explains a known incompatible device without a retry or download", async () => {
+    const { service } = device({ probe: async () => ["x86_64", "x86"] });
+    render(<MemoryRouter><DownloadedModels service={service} /></MemoryRouter>);
+    await screen.findByText("The helper needs a 64-bit ARM Android device.");
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /download ·/i })).toBeNull();
+  });
   it("uses the real lifecycle for explicit download, pause, resume and confirmed removal", async () => {
     const { service, offsets, removed } = device();
     await service.ready;
@@ -213,7 +230,7 @@ describe("Downloaded models", () => {
     const { service } = device({ abi: "x86_64" });
     await service.ready;
     render(<MemoryRouter><DownloadedModels service={service} /></MemoryRouter>);
-    await screen.findByText("Unavailable on this device.");
+    await screen.findByText("The helper needs a 64-bit ARM Android device.");
     expect(screen.queryByRole("button", { name: /download/i })).toBeNull();
   });
   it("still reports a verified file as installed when the device cannot run it", async () => {

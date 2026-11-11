@@ -10,7 +10,7 @@
  */
 import { isTaskId, tryDeterministic } from "./taskRegistry";
 
-export type RuntimeKind = "deterministic" | "model" | "embedding" | "vision";
+export type RuntimeKind = "deterministic" | "model" | "embedding";
 
 export interface RuntimeInvokeInput {
   readonly taskId: string;

@@ -30,6 +30,8 @@ function tombstone(modelId: string, revision: string, fileName: string, bytes: n
 }
 
 export const RETIRED_CURATED_CLEANUP: readonly ModelDescriptor[] = Object.freeze([
+  tombstone("smolvlm2-500M-vision", "dad030b6e56756201d670cfb4d042736a2ce3a5c", "SmolVLM2-500M.litertlm", 360822960, "b808b328d845a600a33c5295f93d9217487317bd334dbc91b2a8d50e26e60ad0", true),
+  tombstone("qwen3-0.6b-dynamic-int4", "a3c5d805ae362dff7f580bc25f2dfb9a5a7eaa76", "Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm", 344671744, "03e7da1eb1108b50dffaa9bb52cc7bcbad2eb0c66ca990267f480c1e545d2856"),
   tombstone("qwen3-1.7b-dynamic-int4", "79bf0667b32ae025b972e5fe555fe72ca6e8816c", "Qwen3-1.7B_dynamic_wi4b32_afp32.litertlm", 977184032, "2a72330b504a6596d53a2c00923c57173b10f1b83e6a541213ffec08d1fc5de8"),
   tombstone("lfm2-350m-q4_0", "8fdc9d526b7ed346b19257551b05816c7912ecc2", "LFM2-350M-Q4_0.gguf", 219306944, "8e3ebc1c608dc8683adf8c3b3e6a40e2f4eab22aa33b908bff2ac03a1c16d796"),
   tombstone("lfm2-700m-q4_0", "fd39e80d7a5ac61494ffff577e61bbbfddbd0d02", "LFM2-700M-Q4_0.gguf", 446321600, "bf9c70678aff2a6ee2152b6fef4b2993892eae6449d056cf77cc1e34072424b3"),

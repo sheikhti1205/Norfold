@@ -156,7 +156,6 @@ describe("advertised Needle roles have real production generators", () => {
       const result = await service.route(taskId, { prompt: "a red umbrella" }, { traceId: `trace-needle-${taskId}` });
       expect(result.ok).toBe(true);
     }
-    expect(service.registry.visionDescriptor()).toBeUndefined();
   });
 
   it("every advertised role has an explicit task interpreter (no implicit success)", () => {

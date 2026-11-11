@@ -11,7 +11,10 @@ vi.mock("../auth", () => ({
 }));
 
 import { ApplicationAiService } from "../services/ai/applicationAi";
-import { NEEDLE_DESCRIPTOR, QWEN_TEXT_DESCRIPTOR, SMOL_VISION_DESCRIPTOR, type ModelDescriptor } from "../services/ai/modelDescriptors";
+import { NEEDLE_DESCRIPTOR, type ModelDescriptor } from "../services/ai/modelDescriptors";
+import { RETIRED_CURATED_CLEANUP } from "../services/ai/retiredModelCleanup";
+const retiredQwen = RETIRED_CURATED_CLEANUP.find((d) => d.modelId === "qwen3-0.6b-dynamic-int4")!;
+const retiredSmol = RETIRED_CURATED_CLEANUP.find((d) => d.modelId === "smolvlm2-500M-vision")!;
 import type { ModelDownloadDriver } from "../services/ai/download/driver";
 import { parseRetiredImportedModels, type LegacyImportRecord } from "../services/ai/download/retiredImports";
 import { DownloadedModels } from "./DownloadedModels";
@@ -75,7 +78,7 @@ it("does not advertise obsolete models or cleanup on a clean installation", asyn
 
 it("removes old installed and partial downloads only after consent, preserving the installed helper", async () => {
   const f = fixture(); await f.service.ready;
-  f.seed(NEEDLE_DESCRIPTOR); f.seed(QWEN_TEXT_DESCRIPTOR); f.seed(SMOL_VISION_DESCRIPTOR, "partial");
+  f.seed(NEEDLE_DESCRIPTOR); f.seed(retiredQwen); f.seed(retiredSmol, "partial");
   render(<MemoryRouter><DownloadedModels service={f.service} /></MemoryRouter>);
   const dialog = await openCleanup();
   expect(within(dialog).getByText(/search helper.*stay/i)).toBeTruthy();
@@ -89,15 +92,15 @@ it("removes old installed and partial downloads only after consent, preserving t
   await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
   const result = screen.getByText("Older downloads removed. Your local search helper is unchanged.");
   expect(document.activeElement).toBe(result);
-  expect(f.service.manager.statusOf(QWEN_TEXT_DESCRIPTOR.modelId)?.download).toBe("not-installed");
-  expect(f.service.manager.statusOf(SMOL_VISION_DESCRIPTOR.modelId)?.download).toBe("not-installed");
+  expect(f.service.manager.statusOf(retiredQwen.modelId)?.download).toBe("not-installed");
+  expect(f.service.manager.statusOf(retiredSmol.modelId)?.download).toBe("not-installed");
   expect(f.service.manager.statusOf(NEEDLE_DESCRIPTOR.modelId)?.checksumVerified).toBe(true);
   expect(f.unloadNeedle).not.toHaveBeenCalled();
   expect([...f.disk.values()]).toEqual([NEEDLE_DESCRIPTOR.sha256]);
 });
 
 it("does not duplicate or dismiss an in-flight cleanup", async () => {
-  const f = fixture(); await f.service.ready; f.seed(QWEN_TEXT_DESCRIPTOR);
+  const f = fixture(); await f.service.ready; f.seed(retiredQwen);
   let release!: () => void;
   const held = new Promise<void>((resolve) => { release = resolve; });
   const remove = vi.spyOn(f.service, "remove").mockImplementation(async () => { await held; });
@@ -113,18 +116,18 @@ it("does not duplicate or dismiss an in-flight cleanup", async () => {
 
 it("keeps partial cleanup retryable without leaking native errors or removing the helper", async () => {
   const f = fixture(); await f.service.ready;
-  f.seed(NEEDLE_DESCRIPTOR); f.seed(SMOL_VISION_DESCRIPTOR); f.seed(QWEN_TEXT_DESCRIPTOR);
+  f.seed(NEEDLE_DESCRIPTOR); f.seed(retiredSmol); f.seed(retiredQwen);
   const realRemove = f.driver.removeFile;
   let fail = true;
-  f.driver.removeFile = async (path) => { if (fail && path.includes(QWEN_TEXT_DESCRIPTOR.modelId)) throw new Error("private path /data/files qwen ABI"); await realRemove(path); };
+  f.driver.removeFile = async (path) => { if (fail && path.includes(retiredQwen.modelId)) throw new Error("private path /data/files qwen ABI"); await realRemove(path); };
   render(<MemoryRouter><DownloadedModels service={f.service} /></MemoryRouter>);
   const dialog = await openCleanup();
   fireEvent.click(within(dialog).getByRole("button", { name: "Remove older downloads" }));
   const error = await within(dialog).findByRole("alert");
   expect(error.textContent).not.toMatch(/qwen|ABI|\/data|private/i);
   expect(screen.queryByText("Older downloads removed. Your local search helper is unchanged.")).toBeNull();
-  expect(f.service.manager.statusOf(QWEN_TEXT_DESCRIPTOR.modelId)?.download).toBe("failed");
-  expect(f.service.manager.statusOf(SMOL_VISION_DESCRIPTOR.modelId)?.download).toBe("not-installed");
+  expect(f.service.manager.statusOf(retiredQwen.modelId)?.download).toBe("failed");
+  expect(f.service.manager.statusOf(retiredSmol.modelId)?.download).toBe("not-installed");
   fail = false;
   fireEvent.click(within(dialog).getByRole("button", { name: "Remove older downloads" }));
   await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
@@ -134,7 +137,7 @@ it("keeps partial cleanup retryable without leaking native errors or removing th
 
 it("does not retire future narrow-tool runtimes or offer clean generative descriptors for deletion", async () => {
   const future = { ...NEEDLE_DESCRIPTOR, modelId: "future-narrow-tool", runtimeId: "future-narrow-runtime" };
-  const f = fixture([NEEDLE_DESCRIPTOR, QWEN_TEXT_DESCRIPTOR, future]); await f.service.ready;
+  const f = fixture([NEEDLE_DESCRIPTOR, retiredQwen, future]); await f.service.ready;
   f.seed(future); f.seed(NEEDLE_DESCRIPTOR);
   render(<MemoryRouter><DownloadedModels service={f.service} /></MemoryRouter>);
   await screen.findByText("Installed");
@@ -145,8 +148,8 @@ it("does not retire future narrow-tool runtimes or offer clean generative descri
 
 it("includes a previously failed generative transfer and allows Escape cancellation", async () => {
   const f = fixture(); await f.service.ready;
-  f.seed(QWEN_TEXT_DESCRIPTOR, "partial");
-  f.service.manager.dispatch(QWEN_TEXT_DESCRIPTOR.modelId, { type: "FAIL", reason: "transfer failed" });
+  f.seed(retiredQwen, "partial");
+  f.service.manager.dispatch(retiredQwen.modelId, { type: "FAIL", reason: "transfer failed" });
   render(<MemoryRouter><DownloadedModels service={f.service} /></MemoryRouter>);
   await openCleanup();
   fireEvent.keyDown(document, { key: "Escape" });

@@ -17,6 +17,10 @@ describe("model-neutral platform ABI bridge", () => {
     native.supportedAbis.mockResolvedValue({ abis: ["arm64-v8a", "armeabi-v7a"] });
     expect(await new CapacitorModelDownloadDriver().supportedAbis()).toEqual(["arm64-v8a", "armeabi-v7a"]);
   });
+  it("preserves an empty native ABI list", async () => {
+    native.supportedAbis.mockResolvedValue({ abis: [] });
+    expect(await new CapacitorModelDownloadDriver().supportedAbis()).toEqual([]);
+  });
   it("does not invent an ABI on web", async () => {
     native.available = false;
     await expect(new CapacitorModelDownloadDriver().supportedAbis()).rejects.toThrow(/absent on web/);
@@ -27,6 +31,6 @@ describe("model-neutral platform ABI bridge", () => {
   });
   it.each([undefined, null, 42, {}, { abis: "arm64-v8a" }, { abis: ["arm64-v8a", 42] }, { abis: ["arm64-v8a", null] }, { abis: ["arm64-v8a", ""] }, { abis: ["arm64-v8a", " arm64-v8a "] }, { abis: ["arm64-v8a", "arm64-v8a\n"] }, { abis: Object.assign(new Array<unknown>(2), { 0: "arm64-v8a" }) }])("rejects the entire malformed native payload: %j", async (raw) => {
     native.supportedAbis.mockResolvedValue(raw);
-    expect(await new CapacitorModelDownloadDriver().supportedAbis()).toEqual([]);
+    expect(await new CapacitorModelDownloadDriver().supportedAbis()).toBeUndefined();
   });
 });

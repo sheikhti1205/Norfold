@@ -29,6 +29,7 @@ export function LocalSearchHelperRow({ service, descriptor, phase, onRemove, des
 }) {
   const titleId = useId();
   const [pending, setPending] = useState<LocalAssetAction | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const operation = useRef(0);
   /** How many operations are in flight at once (overlapping actions count). */
   const busyOperations = useRef(0);
@@ -37,9 +38,10 @@ export function LocalSearchHelperRow({ service, descriptor, phase, onRemove, des
   const modelId = descriptor?.modelId;
   const status = modelId ? service.manager.statusOf(modelId) : undefined;
   const view = descriptor ? localSearchHelperView(descriptor, status, service.notice(descriptor.modelId)) : null;
-  const supported = service.android && modelId !== undefined && service.compatibility(modelId).compatible;
+  const compatibility = modelId ? service.compatibility(modelId) : undefined;
+  const supported = service.android && compatibility?.compatible === true;
   const available = phase === "ready" && supported;
-  const locked = (pending !== null && pending !== "download") || (modelId !== undefined && service.busy(modelId));
+  const locked = retrying || (pending !== null && pending !== "download") || (modelId !== undefined && service.busy(modelId));
   // An unreadable model store must not strand the user: removal is a
   // canonical, file-level action that still works when the status read
   // failed, so it stays offered in that phase.
@@ -55,7 +57,8 @@ export function LocalSearchHelperRow({ service, descriptor, phase, onRemove, des
             : !supported
               ? view?.installed
                 ? "Installed · unavailable on this device"
-                : "Unavailable on this device."
+                : compatibility?.state === "unknown" ? "Norfold couldn't check this device."
+                  : "The helper needs a 64-bit ARM Android device."
               : view?.state ?? "Unavailable in this app.";
 
   function run(action: LocalAssetAction) {
@@ -79,6 +82,16 @@ export function LocalSearchHelperRow({ service, descriptor, phase, onRemove, des
     });
   }
 
+  function retryCompatibility() {
+    if (locked) return;
+    setRetrying(true);
+    onBusyChange?.(true);
+    void service.ensureCompatibility(true).finally(() => {
+      setRetrying(false);
+      onBusyChange?.(busyOperations.current > 0);
+    });
+  }
+
   return <article aria-labelledby={titleId} className="flex min-w-0 flex-col gap-2 px-1 py-3">
     <div className="min-w-0">
       <h3 id={titleId} className="text-sm font-medium">Local search helper</h3>
@@ -91,6 +104,7 @@ export function LocalSearchHelperRow({ service, descriptor, phase, onRemove, des
       {status?.download === "downloading" && <progress className="w-full accent-primary" aria-label="Local search helper download progress" max={100} value={view.progress ?? undefined} />}
       {available && view.notice && <p className="text-sm text-on-surface-variant">{view.notice}</p>}
       <div className="flex flex-wrap items-center gap-2">
+        {phase === "ready" && service.android && compatibility?.state === "unknown" && <Button variant="outline" disabled={locked} onClick={retryCompatibility}>Try again</Button>}
         {available && descriptor?.downloadable && view.primary && <Button variant="outline" disabled={locked} onClick={() => run(view.primary!.action)}>{view.primary.label}</Button>}
         {service.android && removable && onRemove && <Button variant="text" disabled={locked} aria-label="Remove local search helper" onClick={onRemove}>Remove</Button>}
       </div>

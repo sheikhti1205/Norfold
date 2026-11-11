@@ -8,7 +8,7 @@ import { CapacitorModelDownloadDriver, runManagedDownload, removeManagedModel, v
 import type { AiTaskId } from "./types";
 import type { RouteContext } from "./orchestrator/AiOrchestrator";
 import type { ProductionTextCompletion } from "./orchestrator/productionRuntimes";
-import { createModelRegistry, NEEDLE_RUNTIME_ID, productionModelRegistry, RETIRED_MODEL_NOTICE, distributionPolicyOf, modelSupportsAbi, type ModelDescriptor, type ModelRegistry } from "./modelDescriptors";
+import { createModelRegistry, NEEDLE_RUNTIME_ID, productionModelRegistry, distributionPolicyOf, modelSupportsAbi, type ModelDescriptor, type ModelRegistry } from "./modelDescriptors";
 import { ResidencyCoordinator, ResidencyBusyError } from "./residencyCoordinator";
 import { sourcesFor, validateArtifactMirrors, type ArtifactMirrors } from "./modelSupply";
 import { runManagedBundle } from "./download/bundle";
@@ -127,6 +127,7 @@ const STRUCTURED_STRATEGIES: Readonly<Record<string, StructuredStrategy>> = {
 export interface DeviceCompatibility {
   readonly compatible: boolean;
   readonly reason?: string;
+  readonly state?: "compatible" | "incompatible" | "unknown";
 }
 
 /**
@@ -284,19 +285,19 @@ export class ApplicationAiService {
   private bridges() { return { needle: this.needle !== undefined }; }
   /**
    * Device ABI set from the shared platform/download bridge, not a model
-   * runtime that can be retired. Unreadable or absent facts yield an empty
-   * set, which no descriptor verifies — fail-closed.
+   * runtime that can be retired. Unreadable or absent facts stay unknown
+   * and are not cached; callers still fail closed.
    */
-  private async deviceAbis(): Promise<readonly string[]> {
+  private async deviceAbis(): Promise<readonly string[] | undefined> {
     if (this.deviceAbiCache === undefined) {
-      let abis: readonly string[] = [];
       try {
         const raw: unknown = await this.driver?.supportedAbis?.();
-        abis = validatedDeviceAbis(raw);
+        const abis = validatedDeviceAbis(raw);
+        if (abis === undefined) return undefined;
+        this.deviceAbiCache = abis;
       } catch {
-        abis = [];
+        return undefined;
       }
-      this.deviceAbiCache = abis;
     }
     return this.deviceAbiCache;
   }
@@ -305,17 +306,19 @@ export class ApplicationAiService {
     const cached = this.compatCache.get(modelId);
     if (cached !== undefined) return cached;
     if (!this.android) return { compatible: false, reason: "On-device downloads need the Android app." };
-    return { compatible: true };
+    return { compatible: false, state: "unknown" };
   }
   /** Refresh every descriptor compatibility snapshot from live device facts. */
-  async ensureCompatibility(): Promise<void> {
+  async ensureCompatibility(retry = false): Promise<void> {
     if (!this.android) return;
+    if (retry) this.deviceAbiCache = undefined;
     const abis = await this.deviceAbis();
     let changed = false;
     for (const descriptor of this.registry.descriptors) {
-      const next = compatibilityOf(descriptor, abis, this.bridges());
+      const result = abis === undefined ? undefined : compatibilityOf(descriptor, abis, this.bridges());
+      const next: DeviceCompatibility = result ? { ...result, state: result.compatible ? "compatible" : "incompatible" } : { compatible: false, state: "unknown" };
       const prev = this.compatCache.get(descriptor.modelId);
-      if (prev?.compatible !== next.compatible || prev?.reason !== next.reason) {
+      if (prev?.compatible !== next.compatible || prev?.reason !== next.reason || prev?.state !== next.state) {
         this.compatCache.set(descriptor.modelId, next);
         changed = true;
       }
@@ -328,7 +331,9 @@ export class ApplicationAiService {
    * substitutes for this check.
    */
   private async requireCompatible(descriptor: ModelDescriptor): Promise<void> {
-    const compat = compatibilityOf(descriptor, await this.deviceAbis(), this.bridges());
+    const abis = await this.deviceAbis();
+    const result = abis === undefined ? undefined : compatibilityOf(descriptor, abis, this.bridges());
+    const compat: DeviceCompatibility = result ? { ...result, state: result.compatible ? "compatible" : "incompatible" } : { compatible: false, state: "unknown", reason: "Norfold couldn't check this device." };
     this.compatCache.set(descriptor.modelId, compat);
     this.changed();
     if (!compat.compatible) {
@@ -342,7 +347,7 @@ export class ApplicationAiService {
     if (!describeOfflineReadiness(this.manager, modelId).ready) throw new Error("Model is not installed and verified");
   }
   private requireActive(descriptor: ModelDescriptor): void {
-    if (descriptor.cleanupOnly) throw new Error(RETIRED_MODEL_NOTICE);
+    if (descriptor.cleanupOnly) throw new Error("This model is no longer available. Remove its downloaded files in Settings.");
   }
   async download(modelId: string, mirror?: string | ArtifactMirrors, signal?: AbortSignal): Promise<void> {
     return duringAppActivity(() => this.downloadWork(modelId, mirror, signal));
@@ -539,7 +544,8 @@ export class ApplicationAiService {
     // enforcement (or a device whose facts changed) must not run.
     const needleDescriptor = this.registry.descriptorFor(NEEDLE_MODEL_ID);
     if (needleDescriptor === undefined) return false;
-    if (!compatibilityOf(needleDescriptor, await this.deviceAbis(), this.bridges()).compatible) return false;
+    const abis = await this.deviceAbis();
+    if (abis === undefined || !compatibilityOf(needleDescriptor, abis, this.bridges()).compatible) return false;
     if (!this.loadingNeedle) this.loadingNeedle = (async () => {
       if (!this.embedder || !(await this.needle!.isNeedleAvailable())) {
         // Single-resident rule via the coordinator: Needle is the only

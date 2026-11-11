@@ -1,9 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ApplicationAiService, compatibilityOf, DEVICE_INCOMPATIBLE_REASON } from "./applicationAi";
 import { localSearchFailureOf } from "./localSearchDiagnosis";
-import { NEEDLE_DESCRIPTOR, SMOL_VISION_DESCRIPTOR, type ModelDescriptor } from "./modelDescriptors";
+import { NEEDLE_DESCRIPTOR, type ModelDescriptor } from "./modelDescriptors";
 import { NEEDLE_MODEL_ID } from "./needle/embedder";
-import type { ModelDownloadDriver } from "./download/driver";
+import { CapacitorModelDownloadDriver, type ModelDownloadDriver } from "./download/driver";
 import { appActivityBusy } from "../appActivity";
 
 function platform() {
@@ -52,7 +52,7 @@ describe("local intelligence lifecycle", () => {
     const p = platform();
     const before = new ApplicationAiService({ android: true, ...p }); await before.ready;
     // The retired photo runtime survives only as an upgrade-cleanup identity.
-    const d = SMOL_VISION_DESCRIPTOR;
+    const d = before.registry.requireDescriptor("smolvlm2-500M-vision");
     const path = before.manager.stagingPathsFor("/private/ai-models", d.modelId, d.revision, d.fileName).installedPath;
     p.disk.set(path, "a".repeat(64));
     const restarted = new ApplicationAiService({ android: true, ...p }); await restarted.ready;
@@ -322,10 +322,48 @@ describe("local intelligence lifecycle", () => {
     await service.ensureCompatibility();
     expect(service.compatibility(NEEDLE_MODEL_ID)).toEqual({
       compatible: false,
-      reason: DEVICE_INCOMPATIBLE_REASON,
+      state: "unknown",
     });
-    await expect(service.download(NEEDLE_MODEL_ID)).rejects.toThrow(DEVICE_INCOMPATIBLE_REASON);
+    await expect(service.download(NEEDLE_MODEL_ID)).rejects.toThrow("Norfold couldn't check this device.");
     expect(p.calls).not.toContain("download");
+  });
+
+  it("retries failed and malformed ABI probes but caches a successful answer", async () => {
+    const p = platform();
+    const probe = vi.fn().mockRejectedValueOnce(new Error("not ready"))
+      .mockResolvedValueOnce(["arm64-v8a", 42]).mockResolvedValue(["arm64-v8a"]);
+    p.driver.supportedAbis = probe;
+    const service = new ApplicationAiService({ android: true, ...p });
+    await service.ensureCompatibility();
+    expect(service.compatibility(NEEDLE_MODEL_ID).state).toBe("unknown");
+    await service.ensureCompatibility();
+    expect(service.compatibility(NEEDLE_MODEL_ID).state).toBe("unknown");
+    await service.ensureCompatibility();
+    expect(service.compatibility(NEEDLE_MODEL_ID).state).toBe("compatible");
+    await service.ensureCompatibility();
+    expect(probe).toHaveBeenCalledTimes(3);
+  });
+
+  it("retries malformed production bridge facts and caches a genuine empty answer", async () => {
+    const p = platform();
+    const probe = vi.fn().mockResolvedValueOnce({ abis: ["arm64-v8a", ""] }).mockResolvedValueOnce({ abis: ["arm64-v8a"] });
+    const native = new CapacitorModelDownloadDriver();
+    Object.assign(native, { plugin: { supportedAbis: probe } });
+    p.driver.supportedAbis = () => native.supportedAbis();
+    const service = new ApplicationAiService({ android: true, ...p });
+    await service.ensureCompatibility();
+    expect(service.compatibility(NEEDLE_MODEL_ID).state).toBe("unknown");
+    await service.ensureCompatibility(true);
+    expect(service.compatibility(NEEDLE_MODEL_ID)).toMatchObject({ compatible: true, state: "compatible" });
+    expect(probe).toHaveBeenCalledTimes(2);
+
+    const emptyProbe = vi.fn().mockResolvedValue({ abis: [] });
+    Object.assign(native, { plugin: { supportedAbis: emptyProbe } });
+    const emptyService = new ApplicationAiService({ android: true, ...p });
+    await emptyService.ensureCompatibility();
+    await emptyService.ensureCompatibility();
+    expect(emptyService.compatibility(NEEDLE_MODEL_ID)).toMatchObject({ compatible: false, state: "incompatible" });
+    expect(emptyProbe).toHaveBeenCalledTimes(1);
   });
 
   it("reports a native load failure as the runtime boundary, not an absent model", async () => {

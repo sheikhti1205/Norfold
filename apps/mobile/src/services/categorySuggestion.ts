@@ -24,7 +24,7 @@ import {
 } from "./ai/ops/classifyCategory";
 import type { AiResult, GenerateFn } from "./ai/types";
 
-export const CATEGORY_SUGGESTION_SOURCES = ["classify-category", "photo"] as const;
+export const CATEGORY_SUGGESTION_SOURCES = ["classify-category"] as const;
 export type CategorySuggestionSource = (typeof CATEGORY_SUGGESTION_SOURCES)[number];
 
 export interface CategorySuggestion {
@@ -66,9 +66,7 @@ export interface ResolvedCategorySuggestion {
 }
 
 /**
- * Pure resolver shared by the text path (classify-category) and the photo
- * path (a validated photo-analysis category string, e.g. from the vision
- * runtime's `buildCategorySuggestionFromPhoto` caller). Released canonicals
+ * Pure resolver for the classify-category text path. Released canonicals
  * pass straight through; lowercase op vocabulary maps via
  * ITEM_CATEGORY_TO_RELEASED; anything else (null, empty, unknown) downgrades to
  * null. A resolved value is always released — an unreleased mapping target
@@ -104,13 +102,6 @@ export function buildCategorySuggestionFromClassification(
   classified: ClassifiedCategory,
 ): ResolvedCategorySuggestion {
   return resolveCategorySuggestion(classified.category, "classify-category", classified.confidence);
-}
-
-/** Builds the reviewable suggestion from a photo-analysis category string. */
-export function buildCategorySuggestionFromPhoto(
-  photoCategory: string | null | undefined,
-): ResolvedCategorySuggestion {
-  return resolveCategorySuggestion(photoCategory, "photo");
 }
 
 export interface SuggestCategoryOptions {

@@ -10,13 +10,34 @@ import {
   removeManagedModel,
   runManagedDownload,
   DriverError,
+  validatedDeviceAbis,
+  CapacitorModelDownloadDriver,
   type ManagedDownloadRequest,
   type ModelDownloadDriver,
 } from "./driver";
 import { buildJournal } from "./journal";
 
+describe("device ABI validation", () => {
+  it.each([undefined, null, 42, "arm64-v8a", {}, ["arm64-v8a", ""]])("rejects malformed facts: %j", (raw) => {
+    expect(validatedDeviceAbis(raw)).toBeUndefined();
+  });
+
+  it("accepts empty and valid ABI arrays", () => {
+    expect(validatedDeviceAbis([])).toEqual([]);
+    expect(validatedDeviceAbis(["arm64-v8a"])).toEqual(["arm64-v8a"]);
+  });
+
+  it("preserves unknown and empty answers through the production bridge", async () => {
+    const supportedAbis = vi.fn().mockResolvedValueOnce({ abis: ["arm64-v8a", ""] }).mockResolvedValueOnce({ abis: [] });
+    const driver = new CapacitorModelDownloadDriver();
+    Object.assign(driver, { plugin: { supportedAbis } });
+    await expect(driver.supportedAbis()).resolves.toBeUndefined();
+    await expect(driver.supportedAbis()).resolves.toEqual([]);
+  });
+});
+
 const PIN: OfflineAssetPin = {
-  modelId: "smolvlm2-500m-vision",
+  modelId: "needle3-cact-l20",
   sha256: "c".repeat(64),
   downloadBytes: 1_000,
   minFreeRamMb: 1500,
@@ -120,8 +141,8 @@ describe("managed downloads", () => {
     expect(status?.checksumVerified).toBe(true);
     expect(driver.promotes).toEqual([
       [
-        "/root/ai-models/staging/smolvlm2-500m-vision/dad030b6/model.litertlm",
-        "/root/ai-models/models/smolvlm2-500m-vision/dad030b6/model.litertlm",
+        "/root/ai-models/staging/needle3-cact-l20/dad030b6/model.litertlm",
+        "/root/ai-models/models/needle3-cact-l20/dad030b6/model.litertlm",
       ],
     ]);
   });
@@ -169,7 +190,7 @@ describe("managed downloads", () => {
     const outcome = await runManagedDownload(mgr, driver, REQUEST);
     expect(outcome).toMatchObject({ ok: false, code: "CHECKSUM_MISMATCH" });
     expect(driver.removed).toContain(
-      "/root/ai-models/staging/smolvlm2-500m-vision/dad030b6/model.litertlm",
+      "/root/ai-models/staging/needle3-cact-l20/dad030b6/model.litertlm",
     );
     expect(driver.promotes).toEqual([]);
     expect(mgr.statusOf(PIN.modelId)?.download).toBe("failed");

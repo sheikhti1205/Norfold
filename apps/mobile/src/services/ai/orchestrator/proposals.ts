@@ -22,7 +22,6 @@ export const PROPOSAL_OPS = [
   "open_my_reports",
   "fill_report_fields",
   "propose_comment",
-  "analyze_photo",
   "answer_help",
   "route_intent",
   "embed_texts",
@@ -46,12 +45,6 @@ export type FillReportFieldsArgs = ReportSlotFields;
 export interface ProposeCommentArgs {
   readonly reportId: string;
   readonly body: string;
-}
-
-/** Args for `analyze_photo`: an id reference, never image bytes. */
-export interface AnalyzePhotoArgs {
-  readonly imageId: string;
-  readonly userContext?: string;
 }
 
 /** Args for `answer_help`: the help question to answer. */
@@ -92,7 +85,6 @@ export type ProposalArgs =
   | OpenMyReportsArgs
   | FillReportFieldsArgs
   | ProposeCommentArgs
-  | AnalyzePhotoArgs
   | AnswerHelpArgs
   | RouteIntentArgs
   | EmbedTextsArgs
