@@ -50,13 +50,13 @@ async function readBounded(response) {
   finally { await reader.cancel().catch(()=>{}); }
 }
 async function handleShare(req, config, http = fetch) {
-  let status=200,p=null,json=false;const id=req.params?.id ?? '';
+  let status=200,p=null,json=false;const rawId=req.params?.id ?? '';const id=rawId.toLowerCase();
   const headers = { 'Cache-Control':'no-store, max-age=0', 'X-Robots-Tag':'noindex, nofollow', 'X-Content-Type-Options':'nosniff', 'Referrer-Policy':'no-referrer', 'Content-Security-Policy':"default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" };
   try {
     const url=new URL(req.url);
     json=url.searchParams.get('format')==='json';
     if(!['GET','HEAD'].includes(req.method?.toUpperCase()))status=405;
-    else if(!UUID.test(id) || url.pathname!==`/api/share/${id}`)status=404;
+    else if(!UUID.test(rawId) || url.pathname!==`/api/share/${rawId}`)status=404;
     else if([...url.searchParams.keys()].some(k=>!['format','focus','comment'].includes(k)||url.searchParams.getAll(k).length!==1)
       || (url.searchParams.has('format') && !json)
       || (url.searchParams.has('focus') && !['comments','activity','manage'].includes(url.searchParams.get('focus')))

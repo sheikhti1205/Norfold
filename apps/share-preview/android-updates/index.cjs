@@ -2,19 +2,20 @@
 // release downloads directly (CORS); native APK downloads remain direct.
 const REPO = 'sheikhti1205/Norfold';
 const RELEASES_URL = `https://api.github.com/repos/${REPO}/releases?per_page=20`;
-const VERSION_TAG = /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+const VERSION_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const MAX_BYTES = 128 * 1024;
 const { Buffer } = require('node:buffer');
 function compareVersions(a,b) {
-  const parts=tag=>{const [main,pre]=tag.slice(1).split('-');return {main:main.split('.').map(Number),pre:pre?.split('.')};};
+  const parts=tag=>{const match=VERSION_TAG.exec(tag);return {main:match.slice(1,4),pre:match[4]?.split('.')};};
+  const numeric=(l,r)=>l.length!==r.length?l.length-r.length:l<r?-1:l>r?1:0;
   const x=parts(a),y=parts(b);
-  for(let i=0;i<3;i++)if(x.main[i]!==y.main[i])return x.main[i]-y.main[i];
+  for(let i=0;i<3;i++)if(x.main[i]!==y.main[i])return numeric(x.main[i],y.main[i]);
   if(!x.pre||!y.pre)return !x.pre&&!y.pre?0:!x.pre?1:-1;
   for(let i=0;i<Math.max(x.pre.length,y.pre.length);i++) {
     const l=x.pre[i],r=y.pre[i];if(l===r)continue;
     if(l===undefined||r===undefined)return l===undefined?-1:1;
     const ln=/^\d+$/.test(l),rn=/^\d+$/.test(r);
-    if(ln&&rn)return Number(l)-Number(r);
+    if(ln&&rn)return numeric(l,r);
     if(ln!==rn)return ln?-1:1;
     return l<r?-1:1;
   }

@@ -1,5 +1,9 @@
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export function normalizeReportId(id: string): string {
+  return id.toLowerCase();
+}
+
 export interface ReportLink {
   postId: string;
   route: string;
@@ -44,7 +48,7 @@ export function parseReportLink(input: string, origin?: string): ReportLink | nu
     if (focus !== null && !["comments", "activity", "manage"].includes(focus)) return null;
     const comment = url.searchParams.get("comment");
     if (comment !== null && (!UUID.test(comment) || focus !== "comments")) return null;
-    const postId = match[1]!;
+    const postId = normalizeReportId(match[1]!);
     const query = new URLSearchParams();
     if (focus) query.set("focus", focus);
     if (comment) query.set("comment", comment);

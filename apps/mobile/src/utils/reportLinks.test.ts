@@ -6,6 +6,13 @@ const id = "5b6f7c8d-1234-4abc-8def-123456789012";
 afterEach(() => vi.unstubAllEnvs());
 
 describe("external report link contract", () => {
+  it("normalizes uppercase report IDs for both navigation routes", () => {
+    for (const path of ["r", "api/share"]) {
+      expect(parseReportLink(`${origin}/${path}/${id.toUpperCase()}`, origin))
+        .toEqual(parseReportLink(`${origin}/${path}/${id}`, origin));
+      expect(parseReportLink(`${origin}/${path}/not-a-uuid`, origin)).toBeNull();
+    }
+  });
   it("uses same-domain server HTML for new shares while retaining legacy links and focus allowlists", () => {
     vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
     expect(sharePreviewLink(id)).toBe(`${origin}/api/share/${id}`);

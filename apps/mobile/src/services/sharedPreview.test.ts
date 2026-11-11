@@ -4,6 +4,12 @@ const id="5b6f7c8d-1234-4abc-8def-123456789012";
 const p={id,type:"FOUND",title:"Black backpack",category:"Bags & Wallets",event_month:"2026-11",excerpt:"A found item report. Sign in to compare the details and contact the person who posted it."};
 afterEach(()=>{vi.unstubAllGlobals();vi.unstubAllEnvs();});
 describe("anonymous shared projection transport",()=>{
+ it("normalizes an uppercase ID before fetching and validating the preview",async()=>{
+  vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN","https://findbackapp.social");
+  const http=vi.fn().mockResolvedValue(new Response(JSON.stringify(p)));vi.stubGlobal("fetch",http);
+  expect(await getSharedPreview(id.toUpperCase())).toEqual(p);
+  expect(http).toHaveBeenCalledWith(`https://findbackapp.social/api/share/${id}?format=json`,expect.anything());
+ });
  it("requests only same-domain public JSON without cookies or auth",async()=>{
   vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN","https://findbackapp.social");
   const http=vi.fn().mockResolvedValue(new Response(JSON.stringify(p)));vi.stubGlobal("fetch",http);
