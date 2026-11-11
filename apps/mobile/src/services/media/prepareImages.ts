@@ -19,7 +19,8 @@ export const ANIMATED_FRAME_DISCLOSURE =
   "sampled still frame(s) — not every frame.";
 
 export const MOTION_STILL_DISCLOSURE = "Motion photo · still frame used.";
-export const SAMPLED_STILL_DISCLOSURE = "Animated photo · still frame used. The animation is not attached.";
+export const SAMPLED_STILL_DISCLOSURE =
+  "Animated photo · a sampled still frame used, not every frame. The animation is not attached.";
 
 export type PrepareErrorCode = "TRAY_FULL" | "REPORT_LIMIT" | "NOT_FOUND" | "BAD_INDEX";
 

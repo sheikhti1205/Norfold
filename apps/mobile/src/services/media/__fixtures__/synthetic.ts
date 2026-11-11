@@ -89,9 +89,10 @@ export function buildGif(
     ascii("GIF89a"),
     u16le(width),
     u16le(height),
-    new Uint8Array([0x70, 0x00, 0x00]),
+    new Uint8Array([0x80, 0x00, 0x00, 0, 0, 0, 255, 255, 255]),
   );
-  const frame = new Uint8Array([0x2c, 0, 0, 0, 0, 1, 0, 1, 0, 0x00]);
+  // A 1x1 black pixel: LZW codes clear (4), pixel (0), end (5), packed LSB-first.
+  const frame = new Uint8Array([0x2c, 0, 0, 0, 0, 1, 0, 1, 0, 0x00, 2, 2, 0x44, 0x01, 0]);
   if (options.animated !== true) {
     return concat(header, frame, new Uint8Array([0x3b]));
   }
@@ -100,7 +101,8 @@ export function buildGif(
     ascii("NETSCAPE2.0"),
     new Uint8Array([0x03, 0x01, 0x00, 0x00, 0x00]),
   );
-  return concat(header, netscape, frame, frame, new Uint8Array([0x3b]));
+  const control = new Uint8Array([0x21, 0xf9, 4, 0, 5, 0, 0, 0]);
+  return concat(header, netscape, control, frame, control, frame, new Uint8Array([0x3b]));
 }
 
 function exifPayload(orientation: number, gps: boolean): Uint8Array {

@@ -19,7 +19,7 @@ export const PRIVATE_MEDIA_BUCKET = "findback-report-media";
 
 /** Supabase Storage maximum is one week; an hour is plenty for a page view. */
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
-/** Refresh before the URL actually expires so a visible photo never flickers. */
+/** Refresh before the URL actually expires. */
 const REFRESH_MARGIN_MS = 5 * 60 * 1000;
 
 interface CachedMediaUrl {
@@ -29,6 +29,23 @@ interface CachedMediaUrl {
 
 const cache = new Map<string, CachedMediaUrl>();
 const inFlight = new Map<string, Promise<string | null>>();
+let account: string | undefined;
+let authGeneration = 0;
+let listening = false;
+
+function observeAuth() {
+  if (listening) return;
+  listening = true;
+  getSupabase().auth.onAuthStateChange((_event, session) => {
+    const next = session?.user.id;
+    if (next !== account) {
+      account = next;
+      authGeneration += 1;
+      cache.clear();
+      inFlight.clear();
+    }
+  });
+}
 
 /** Stable new addresses and legacy public addresses in the now-private bucket. */
 export function privateCommentMediaKey(value?: string | null): string | undefined {
@@ -62,7 +79,7 @@ export function peekMediaUrl(value?: string | null): string | undefined {
   return hit && hit.expiresAt > Date.now() ? hit.url : undefined;
 }
 
-async function signOne(key: string): Promise<string | null> {
+async function signOne(key: string, owner: string, generation: number): Promise<string | null> {
   const shared = inFlight.get(key);
   if (shared) return shared;
   const task = (async () => {
@@ -70,7 +87,8 @@ async function signOne(key: string): Promise<string | null> {
       const { data, error } = await getSupabase()
         .storage.from(PRIVATE_MEDIA_BUCKET)
         .createSignedUrl(key, SIGNED_URL_TTL_SECONDS);
-      if (error || !data?.signedUrl) return null;
+      const after = (await getSupabase().auth.getSession()).data.session?.user.id;
+      if (error || !data?.signedUrl || after !== owner || generation !== authGeneration) return null;
       cache.set(key, {
         url: data.signedUrl,
         expiresAt: Date.now() + SIGNED_URL_TTL_SECONDS * 1000 - REFRESH_MARGIN_MS,
@@ -79,7 +97,7 @@ async function signOne(key: string): Promise<string | null> {
     } catch {
       return null;
     } finally {
-      inFlight.delete(key);
+      if (generation === authGeneration) inFlight.delete(key);
     }
   })();
   inFlight.set(key, task);
@@ -101,11 +119,21 @@ export async function resolveMediaUrl(value?: string | null): Promise<string | u
     } catch { return undefined; }
   }
   if (!isPrivateMediaKey(value)) return value;
+  observeAuth();
+  const generation = authGeneration;
+  const owner = (await getSupabase().auth.getSession()).data.session?.user.id;
+  if (generation !== authGeneration || !owner) return undefined;
+  if (owner !== account) {
+    account = owner;
+    authGeneration += 1;
+    cache.clear();
+    inFlight.clear();
+  }
   // A fresh cached URL is the answer: re-signing per consumer would turn one
   // page of photos into one Storage round trip each.
   const cached = peekMediaUrl(value);
   if (cached) return cached;
-  return (await signOne(value)) ?? undefined;
+  return (await signOne(value, owner, authGeneration)) ?? undefined;
 }
 
 /**
@@ -125,7 +153,6 @@ export function useMediaUrl(value?: string | null): string | undefined {
 
   useEffect(() => {
     if (!value || !isPrivateMediaKey(value)) return;
-    if (peekMediaUrl(value)) return;
     const key = value;
     let live = true;
     let generation = 0;
@@ -137,13 +164,13 @@ export function useMediaUrl(value?: string | null): string | undefined {
       });
     };
     refresh();
-    const timer = comment ? window.setInterval(refresh, 45_000) : undefined;
-    const subscription = comment ? getSupabase().auth.onAuthStateChange(() => {
+    const timer = window.setInterval(refresh, comment ? 45_000 : REFRESH_MARGIN_MS);
+    const subscription = getSupabase().auth.onAuthStateChange(() => {
       ++generation;
       setSigned(null);
       // Do not make SDK calls inside its synchronous auth callback lock.
       queueMicrotask(() => { if (live) refresh(); });
-    }).data.subscription : undefined;
+    }).data.subscription;
     return () => {
       live = false;
       ++generation;

@@ -11,6 +11,7 @@ import {
   type TranscodeRequest,
 } from "./importImage";
 import { SOURCE_MAX_BYTES } from "./mediaPolicy";
+import { ANIMATED_FRAME_DISCLOSURE, SAMPLED_STILL_DISCLOSURE, buildReportManifest, frameDisclosureFor } from "./prepareImages";
 import {
   ascii,
   buildAvifFtyp,
@@ -39,6 +40,13 @@ function fakeTranscode(sizes: number[], seen?: TranscodeRequest[]) {
 
 function deps(overrides: Partial<ImportDeps> = {}): ImportDeps {
   return { transcode: fakeTranscode([1024]), webpEncodeSupported: true, ...overrides };
+}
+
+function validGif(animated = true): Uint8Array {
+  const header = [71, 73, 70, 56, 57, 97, 1, 0, 1, 0, 0x80, 0, 0, 0, 0, 0, 255, 255, 255];
+  const loop = [0x21, 0xff, 11, ...ascii("NETSCAPE2.0"), 3, 1, 7, 0, 0];
+  const frame = (delay: number) => [0x21, 0xf9, 4, 1, delay, 0, 0, 0, 0x2c, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 0x44, 1, 0];
+  return new Uint8Array([...header, ...(animated ? loop : []), ...frame(5), ...(animated ? frame(9) : []), 0x3b]);
 }
 
 describe("sniffImage", () => {
@@ -249,7 +257,7 @@ describe("importImage intake", () => {
     const payload = 2_100_000;
     const chunk = new Uint8Array(12 + payload);
     new DataView(chunk.buffer).setUint32(0, payload);
-    chunk.set([0x74, 0x45, 0x58, 0x74], 4);
+    chunk.set([0x49, 0x44, 0x41, 0x54], 4);
     const bytes = new Uint8Array(base.length + chunk.length);
     bytes.set(base.subarray(0, base.length - 12));
     bytes.set(chunk, base.length - 12);
@@ -338,18 +346,112 @@ describe("importImage intake", () => {
     expect(new TextDecoder("latin1").decode(result.derivative.bytes)).not.toContain("GPS");
   });
 
-  it("passes animated GIFs through with the animation flag set", async () => {
+  it("preserves under-cap animated GIFs and samples over-cap GIFs to a disclosed still", async () => {
+    const small = validGif();
+    const large = new Uint8Array(IMPORT_MAX_DERIVATIVE_BYTES + 1);
+    large.set(small);
     const result = await importImage(
       {
-        bytes: buildGif(64, 64, { animated: true }),
+        bytes: small,
         fileName: "anim.gif",
         declaredMimeType: "image/gif",
       },
       deps(),
     );
     expect(result.animated).toBe(true);
+    expect(result.sampledStill).toBe(false);
     expect(result.sniffed).toBe("gif-animated");
     expect(result.derivative.mimeType).toBe("image/gif");
+    expect(result.derivative.bytes).toEqual(small);
+    expect(result.locationMetadataStripped).toBe(true);
+    expect(buildReportManifest([result]).entries[0]?.frameDisclosure).toBe(ANIMATED_FRAME_DISCLOSURE);
+
+    const sampled = await importImage(
+      { bytes: large, fileName: "large.gif", declaredMimeType: "image/gif" },
+      deps(),
+    );
+    expect(sampled.animated).toBe(false);
+    expect(sampled.sampledStill).toBe(true);
+    expect(sampled.sniffed).toBe("gif-animated");
+    expect(sampled.derivative.mimeType).toBe("image/jpeg");
+    expect(sampled.locationMetadataStripped).toBe(true);
+    expect(frameDisclosureFor(sampled)).toBe(SAMPLED_STILL_DISCLOSURE);
+  });
+
+  it("strips GIF metadata while preserving loop, frame data, transparency and delays", async () => {
+    const original = validGif();
+    const app = (id: string, payload: string) => [0x21, 0xff, 11, ...ascii(id), payload.length, ...ascii(payload), 0];
+    const metadata = [...app("XMP DataXMP", "GPS-XMP"), 0x21, 0xfe, 6, ...ascii("AUTHOR"), 0, ...app("ICCRGBG1012", "ICC-DATA")];
+    const bytes = new Uint8Array([...original.subarray(0, 19), ...metadata, ...original.subarray(19)]);
+    const result = await importImage({ bytes, fileName: "metadata.gif" }, deps());
+    expect(result.derivative.bytes).toEqual(original);
+    expect(result.animated).toBe(true);
+    expect(result.locationMetadataStripped).toBe(true);
+    const text = new TextDecoder().decode(result.derivative.bytes);
+    for (const removed of ["XMP DataXMP", "GPS-XMP", "AUTHOR", "ICCRGBG1012", "ICC-DATA"]) expect(text).not.toContain(removed);
+    expect(text).toContain("NETSCAPE2.0");
+  });
+
+  it("rejects truncated GIFs without emitting or transcoding a partial result", async () => {
+    const bytes = validGif().slice(0, -2);
+    const transcode = fakeTranscode([32]);
+    await expect(importImage({ bytes, fileName: "broken.gif" }, deps({ transcode }))).rejects.toMatchObject({ code: "CORRUPT_IMAGE" });
+    expect(transcode).not.toHaveBeenCalled();
+  });
+
+  it("clears stripped WebP metadata flags without clearing alpha or animation", () => {
+    const webp = buildWebp(64, 64, { animated: true, exifGps: true });
+    webp[20] = 0x3e;
+    const chunk = (type: string, payload: string) => {
+      const bytes = new Uint8Array(12);
+      bytes.set(ascii(type));
+      new DataView(bytes.buffer).setUint32(4, 4, true);
+      bytes.set(ascii(payload), 8);
+      return bytes;
+    };
+    const iccp = chunk("ICCP", "ICC!");
+    const xmp = chunk("XMP ", "XMP!");
+    const bytes = new Uint8Array(webp.length + iccp.length + xmp.length);
+    bytes.set(webp.subarray(0, 30));
+    bytes.set(iccp, 30);
+    bytes.set(webp.subarray(30), 30 + iccp.length);
+    bytes.set(xmp, webp.length + iccp.length);
+    new DataView(bytes.buffer).setUint32(4, bytes.length - 8, true);
+
+    const stripped = stripWebpExifChunk(bytes);
+    const text = new TextDecoder("latin1").decode(stripped);
+    for (const removed of ["ICCP", "ICC!", "EXIF", "GPSFIX", "XMP ", "XMP!"]) {
+      expect(text).not.toContain(removed);
+    }
+    expect(stripped[20]! & 0x2c).toBe(0);
+    expect(stripped[20]! & 0x12).toBe(0x12);
+  });
+
+  it("removes WebP XMP and PNG text metadata while retaining animation", async () => {
+    const webp = buildWebp(64, 64, { animated: true });
+    const xmp = new Uint8Array(12); xmp.set(ascii("XMP ")); new DataView(xmp.buffer).setUint32(4, 4, true); xmp.set(ascii("GPS!"), 8);
+    const webpWithXmp = new Uint8Array(webp.length + xmp.length); webpWithXmp.set(webp); webpWithXmp.set(xmp, webp.length);
+    const png = buildPng(64, 64, { animated: true });
+    const text = new Uint8Array(16); new DataView(text.buffer).setUint32(0, 4); text.set(ascii("tEXtGPS!"), 4);
+    const pngWithText = new Uint8Array(png.length + text.length); pngWithText.set(png.subarray(0, png.length - 12)); pngWithText.set(text, png.length - 12); pngWithText.set(png.subarray(png.length - 12), png.length - 12 + text.length);
+    for (const bytes of [webpWithXmp, pngWithText]) {
+      const result = await importImage({ bytes, fileName: "animation" }, deps());
+      expect(result.animated).toBe(true);
+      expect(new TextDecoder().decode(result.derivative.bytes)).not.toContain("GPS!");
+    }
+  });
+
+  it.each([buildWebp(2500, 1200, { animated: true }), buildPng(2500, 1200, { animated: true })])("reports the dimensions of animated passthrough bytes", async (bytes) => {
+    const result = await importImage({ bytes, fileName: "animation" }, deps());
+    expect(result.derivative).toMatchObject(probeDimensions(result.derivative.bytes, result.sniffed)!);
+    expect(result.preview).toMatchObject({ width: 2500, height: 1200 });
+  });
+
+  it("retries a large lossless PNG at smaller dimensions without losing alpha", async () => {
+    const seen: TranscodeRequest[] = [];
+    const result = await importImage({ bytes: buildPng(1920, 1200, { colorType: 6 }), fileName: "detail.png" }, deps({ transcode: fakeTranscode([2_100_000, 1_000_000], seen) }));
+    expect(seen[1]).toMatchObject({ mimeType: "image/png", quality: null, targetWidth: 1344 });
+    expect(result.derivative.width).toBe(1344);
   });
 
   it("marks still inputs as not animated", async () => {
@@ -400,7 +502,7 @@ describe("importImage intake", () => {
 
   it("re-encodes still GIF and BMP inputs to PNG derivatives", async () => {
     const gif = await importImage(
-      { bytes: buildGif(32, 32), fileName: "still.gif", declaredMimeType: "image/gif" },
+      { bytes: validGif(false), fileName: "still.gif", declaredMimeType: "image/gif" },
       deps(),
     );
     expect(gif.derivative.mimeType).toBe("image/png");

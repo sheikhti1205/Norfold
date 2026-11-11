@@ -469,7 +469,77 @@ export function readExifOrientation(bytes: Uint8Array): number {
   return 1;
 }
 
-/** Rebuild a RIFF/WEBP container without EXIF chunks (location data removed). */
+/** Rebuild a GIF from complete rendering blocks, discarding non-animation extensions. */
+function stripGifMetadata(bytes: Uint8Array): Uint8Array | null {
+  if (bytes.length < 14) return null;
+  const packed = bytes[10]!;
+  let offset = 13 + ((packed & 0x80) ? 3 * (1 << ((packed & 7) + 1)) : 0);
+  if (offset > bytes.length) return null;
+  const kept: Uint8Array[] = [bytes.subarray(0, offset)];
+  let images = 0;
+  let pendingControl: Uint8Array | null = null;
+  const subBlocksEnd = (start: number): number | null => {
+    let at = start;
+    while (at < bytes.length) {
+      const length = bytes[at++]!;
+      if (length === 0) return at;
+      if (at + length > bytes.length) return null;
+      at += length;
+    }
+    return null;
+  };
+  while (offset < bytes.length) {
+    const start = offset;
+    const marker = bytes[offset++]!;
+    if (marker === 0x3b) {
+      if (offset !== bytes.length || images === 0 || pendingControl !== null) return null;
+      kept.push(bytes.subarray(start, offset));
+      const out = new Uint8Array(kept.reduce((sum, part) => sum + part.length, 0));
+      let at = 0;
+      for (const part of kept) { out.set(part, at); at += part.length; }
+      return out;
+    }
+    if (marker === 0x2c) {
+      if (offset + 9 > bytes.length) return null;
+      const flags = bytes[offset + 8]!;
+      offset += 9 + ((flags & 0x80) ? 3 * (1 << ((flags & 7) + 1)) : 0);
+      if (offset >= bytes.length || bytes[offset]! < 2 || bytes[offset]! > 8) return null;
+      const end = subBlocksEnd(offset + 1);
+      if (end === null || end === offset + 2) return null;
+      if (pendingControl) kept.push(pendingControl);
+      pendingControl = null;
+      kept.push(bytes.subarray(start, end));
+      images += 1;
+      offset = end;
+      continue;
+    }
+    if (marker !== 0x21 || offset >= bytes.length) return null;
+    const label = bytes[offset++]!;
+    if (label === 0xf9) {
+      if (pendingControl || offset + 6 > bytes.length || bytes[offset] !== 4 || bytes[offset + 5] !== 0) return null;
+      offset += 6;
+      pendingControl = bytes.subarray(start, offset);
+      continue;
+    }
+    if (label === 0xff && (offset >= bytes.length || bytes[offset] !== 11)) return null;
+    if (label === 0x01 && (offset >= bytes.length || bytes[offset] !== 12)) return null;
+    const end = subBlocksEnd(offset);
+    if (end === null) return null;
+    if (label === 0xff) {
+      const identifier = sliceAscii(bytes, offset + 1, 11);
+      if (identifier === "NETSCAPE2.0" || identifier === "ANIMEXTS1.0") {
+        // Only the standard loop-count payload is safe to retain.
+        if (end !== offset + 17 || bytes[offset + 12] !== 3 || bytes[offset + 13] !== 1) return null;
+        kept.push(bytes.subarray(start, end));
+      }
+    }
+    if (label === 0x01) pendingControl = null;
+    offset = end;
+  }
+  return null;
+}
+
+/** Keep only image and animation chunks, dropping metadata and unknown extensions. */
 export function stripWebpExifChunk(bytes: Uint8Array): Uint8Array {
   if (sliceAscii(bytes, 0, 4) !== "RIFF" || sliceAscii(bytes, 8, 4) !== "WEBP") {
     return bytes.slice();
@@ -489,8 +559,10 @@ export function stripWebpExifChunk(bytes: Uint8Array): Uint8Array {
       offset = dataStart;
       continue;
     }
-    if (fourcc !== "EXIF") {
-      kept.push(bytes.slice(offset, dataStart + padded));
+    if (["VP8X", "ANIM", "ANMF", "VP8 ", "VP8L", "ALPH"].includes(fourcc)) {
+      const chunk = bytes.slice(offset, dataStart + padded);
+      if (fourcc === "VP8X" && chunk.length > 8) chunk[8] = chunk[8]! & ~0x2c;
+      kept.push(chunk);
     }
     offset = dataStart + padded;
   }
@@ -515,7 +587,7 @@ export function stripWebpExifChunk(bytes: Uint8Array): Uint8Array {
   return out;
 }
 
-/** Rebuild a PNG without eXIf chunks (location data removed, kept chunks verbatim). */
+/** Keep image and animation chunks only, discarding metadata and unknown extensions. */
 export function stripPngExIfChunk(bytes: Uint8Array): Uint8Array {
   if (bytes.length < 8) return bytes.slice();
   const kept: Uint8Array[] = [bytes.slice(0, 8)];
@@ -526,7 +598,7 @@ export function stripPngExIfChunk(bytes: Uint8Array): Uint8Array {
     if (length === null || type === null || length > bytes.length) break;
     const end = offset + 12 + length;
     if (end > bytes.length) break;
-    if (type !== "eXIf") {
+    if (["IHDR", "PLTE", "IDAT", "IEND", "tRNS", "acTL", "fcTL", "fdAT"].includes(type)) {
       kept.push(bytes.slice(offset, end));
     }
     if (type === "IEND") break;
@@ -794,7 +866,7 @@ export async function importImage(input: ImportInput, deps: ImportDeps): Promise
     orientation >= 5
       ? { width: probed.height, height: probed.width }
       : { width: probed.width, height: probed.height };
-  const target = fitWithin(IMPORT_MAX_EDGE, oriented.width, oriented.height);
+  let target = fitWithin(IMPORT_MAX_EDGE, oriented.width, oriented.height);
   const animatedSource =
     sniffed === "gif-animated" || sniffed === "webp-animated" || sniffed === "png-animated";
   const animatedMime =
@@ -805,17 +877,25 @@ export async function importImage(input: ImportInput, deps: ImportDeps): Promise
   let quality: number | null;
   let animated = animatedSource;
   let sampledStill = false;
+  let sanitizedGif: Uint8Array | null = null;
+  if ((sniffed === "gif" || sniffed === "gif-animated") && !(animatedSource && still.length > IMPORT_MAX_DERIVATIVE_BYTES)) {
+    sanitizedGif = stripGifMetadata(still);
+    if (sanitizedGif === null) {
+      throw new MediaError("CORRUPT_IMAGE", `"${fileName}" could not be safely read. Try re-saving the file - nothing was imported.`);
+    }
+  }
   if (animatedSource) {
     const passthrough =
       sniffed === "webp-animated"
         ? stripWebpExifChunk(still)
         : sniffed === "png-animated"
           ? stripPngExIfChunk(still)
-          : still.slice();
+          : still.length > IMPORT_MAX_DERIVATIVE_BYTES ? still : sanitizedGif!;
     if (passthrough.length <= IMPORT_MAX_DERIVATIVE_BYTES) {
       derivativeMime = animatedMime;
       derivativeBytes = passthrough;
       quality = null;
+      target = oriented;
     } else {
       // Over-cap animation: sample a still frame with disclosure instead of
       // refusing. The decoder reads the first frame; the animation stays out
@@ -878,14 +958,19 @@ export async function importImage(input: ImportInput, deps: ImportDeps): Promise
       derivativeBytes = picked.bytes;
       quality = picked.quality;
     } else {
-      derivativeBytes = await deps.transcode({
-        bytes: still,
-        sniffed,
-        targetWidth: target.width,
-        targetHeight: target.height,
-        mimeType: derivativeMime,
-        quality: null,
-      });
+      derivativeBytes = new Uint8Array(0);
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        derivativeBytes = await deps.transcode({
+          bytes: sanitizedGif ?? still,
+          sniffed,
+          targetWidth: target.width,
+          targetHeight: target.height,
+          mimeType: derivativeMime,
+          quality: null,
+        });
+        if (derivativeBytes.length <= IMPORT_MAX_DERIVATIVE_BYTES) break;
+        if (attempt < 4) target = fitWithin(Math.max(1, Math.floor(Math.max(target.width, target.height) * 0.7)), target.width, target.height);
+      }
       quality = null;
       if (derivativeBytes.length > IMPORT_MAX_DERIVATIVE_BYTES) {
         throw new MediaError(
