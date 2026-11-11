@@ -8,6 +8,7 @@ const { authMock, pendingMock, servicesMock } = vi.hoisted(() => ({
     user: null as null | Record<string, unknown>,
     booting: false,
     pendingEmail: null as null | string,
+    pendingEmailDeadline: 0,
     verifyPendingEmail: vi.fn(),
     resendPendingEmail: vi.fn(),
     refreshUser: vi.fn(),
@@ -45,6 +46,7 @@ function renderVerify(path = "/verify") {
 beforeEach(() => {
   authMock.user = null;
   authMock.pendingEmail = null;
+  authMock.pendingEmailDeadline = 0;
   authMock.verifyPendingEmail.mockReset();
   authMock.resendPendingEmail.mockReset();
   authMock.refreshUser.mockReset();
@@ -106,6 +108,19 @@ describe("Verify pending-signup mode (no session yet)", () => {
     expect(await screen.findByRole("status")).toBeTruthy();
     // Still on verify: the code input is intact.
     expect(screen.getByLabelText("Verification code")).toBeTruthy();
+  });
+
+  it("restores the original pending deadline on remount", async () => {
+    vi.useFakeTimers();
+    authMock.pendingEmailDeadline = Date.now() + 120_000;
+    const view = renderVerify();
+    expect((screen.getByRole("button", { name: "Resend in 120s" }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(45_000); });
+    view.unmount();
+    renderVerify();
+    expect((screen.getByRole("button", { name: "Resend in 75s" }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(75_000); });
+    expect((screen.getByRole("button", { name: "Resend code" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("offers Back and a change-email exit that preserve backend behavior", () => {

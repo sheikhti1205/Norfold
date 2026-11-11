@@ -181,19 +181,32 @@ describe("Recovery", () => {
     expect(servicesMock.requestPasswordReset).toHaveBeenCalledWith("recover@example.invalid");
     expect(screen.queryByText(/we sent/i)).toBeNull();
   });
-  it("holds resends after an email limit without automatic retries", async () => {
+  it("holds resends until the provider deadline without automatic retries", async () => {
     vi.useFakeTimers();
-    const error = Object.assign(new Error("You've asked for several codes. The most recent code still works. Try requesting another code later."), { code: "EMAIL_SEND_LIMITED" });
+    const error = Object.assign(new Error("You've asked for several codes. The most recent code still works. Try requesting another code in 120 seconds."), { code: "EMAIL_SEND_LIMITED", retryAfterSeconds: 120 });
     servicesMock.requestPasswordReset.mockRejectedValueOnce(error);
     renderRecovery(otpEntry);
     await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Resend code" })); });
     expect(screen.getByText(error.message)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /resend/i })).toBeNull();
-    await act(async () => { await vi.advanceTimersByTimeAsync(3_600_000); });
-    expect(screen.queryByRole("button", { name: /resend/i })).toBeNull();
+    expect((screen.getByRole("button", { name: "Resend in 120s" }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(119_000); });
+    expect((screen.getByRole("button", { name: "Resend in 1s" }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect((screen.getByRole("button", { name: "Resend code" }) as HTMLButtonElement).disabled).toBe(false);
     expect(servicesMock.requestPasswordReset).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText("Recovery code")).toBeTruthy();
+  });
+  it("offers a conservative manual retry when the provider gives no interval", async () => {
+    vi.useFakeTimers();
+    servicesMock.requestPasswordReset.mockRejectedValueOnce(Object.assign(new Error("Try requesting another code later."), { code: "EMAIL_SEND_LIMITED" }));
+    renderRecovery(otpEntry);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Resend code" })); });
+    expect((screen.getByRole("button", { name: "Please wait before retrying" }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect((screen.getByRole("button", { name: "Resend code" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(servicesMock.requestPasswordReset).toHaveBeenCalledTimes(1);
   });
   it("owns the viewport outside Shell (V1-UI-003: full-height main + safe-area insets)", () => {
     const { container } = renderRecovery();

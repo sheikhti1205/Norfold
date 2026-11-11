@@ -14,8 +14,8 @@ import { useOtpCountdown } from "../components/auth/useOtpCountdown";
 
 type Channel = "EMAIL" | "PHONE";
 
-function useResendCountdown(initial = 0) {
-  const { seconds, setSeconds } = useOtpCountdown(initial);
+function useResendCountdown(initial = 0, deadline?: number) {
+  const { seconds, setSeconds } = useOtpCountdown(initial, deadline);
   return { resendIn: seconds, setResendIn: setSeconds } as const;
 }
 
@@ -57,7 +57,10 @@ function VerifyRow({ channel }: { channel: Channel }) {
     } catch (err) {
       if (!alive.current) return;
       setError(err instanceof Error ? err.message : "Could not send code");
-      if (err instanceof Error && /too many attempts/i.test(err.message)) setResendIn(60);
+      if (err instanceof Error && "code" in err && err.code === "EMAIL_SEND_LIMITED") {
+        const retry = "retryAfterSeconds" in err && typeof err.retryAfterSeconds === "number" && Number.isFinite(err.retryAfterSeconds) && err.retryAfterSeconds > 0 ? err.retryAfterSeconds : 60;
+        setResendIn(retry);
+      } else if (err instanceof Error && /too many attempts/i.test(err.message)) setResendIn(60);
     } finally {
       busy.current = false;
       if (alive.current) setSending(false);
@@ -150,7 +153,7 @@ function VerifyRow({ channel }: { channel: Channel }) {
  * is stored and the pending destination (usually the shared report) is entered.
  */
 function PendingEmailVerify({ email }: { email: string }) {
-  const { verifyPendingEmail, resendPendingEmail } = useAuth();
+  const { verifyPendingEmail, resendPendingEmail, pendingEmailDeadline } = useAuth();
   const navigate = useNavigate();
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -159,7 +162,7 @@ function PendingEmailVerify({ email }: { email: string }) {
   );
   const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
-  const { resendIn, setResendIn } = useResendCountdown(30);
+  const { resendIn, setResendIn } = useResendCountdown(0, pendingEmailDeadline ?? 0);
   const inFlight = useRef(false);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -173,7 +176,6 @@ function PendingEmailVerify({ email }: { email: string }) {
     try {
       await resendPendingEmail();
       if (!alive.current) return;
-      setResendIn(30);
       setMessage("If your signup is awaiting verification, check your email for a fresh code.");
     } catch (err) {
       if (alive.current) {

@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 
-export function useOtpCountdown(initial = 0) {
-  const [deadline, setDeadline] = useState(() => Date.now() + initial * 1000);
+export function useOtpCountdown(initial = 0, absoluteDeadline?: number) {
+  const [deadline, setDeadline] = useState(() => absoluteDeadline ?? Date.now() + initial * 1000);
   const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (absoluteDeadline !== undefined) {
+      setNow(Date.now());
+      setDeadline(absoluteDeadline);
+    }
+  }, [absoluteDeadline]);
   useEffect(() => {
     if (deadline <= Date.now()) return;
     const timer = setInterval(() => {

@@ -200,13 +200,32 @@ export async function login(input: {
   password: string;
 }): Promise<PublicUser> {
   const tokenRevision = getTokenRevision();
-  const { data, error } = await getSupabase().auth.signInWithPassword({
-    email: input.email,
-    password: input.password,
-  });
-  if (error) throw mapAuthError(error);
+  let response: Awaited<ReturnType<ReturnType<typeof getSupabase>["auth"]["signInWithPassword"]>>;
+  try {
+    response = await getSupabase().auth.signInWithPassword({
+      email: input.email,
+      password: input.password,
+    });
+  } catch (error) {
+    if (error instanceof TypeError) throw new ApiError("Authentication unavailable", 503, "AUTH_UNAVAILABLE");
+    throw error;
+  }
+  const { data, error } = response;
+  if (error) {
+    if (error.name === "AuthRetryableFetchError" || error.status === 0 || (error.status !== undefined && error.status >= 500)) {
+      throw new ApiError("Authentication unavailable", 503, "AUTH_UNAVAILABLE");
+    }
+    throw mapAuthError(error);
+  }
   if (data.session) cacheSessionToken(data.session.access_token, tokenRevision);
-  return fetchMe(data.session?.user?.id);
+  try {
+    return await fetchMe(data.session?.user?.id);
+  } catch (error) {
+    if (error instanceof TypeError || (error instanceof ApiError && error.status !== 401 && error.status !== 409)) {
+      throw new ApiError("Authentication unavailable", 503, "AUTH_UNAVAILABLE");
+    }
+    throw error;
+  }
 }
 
 export async function fetchMe(expectedUserId?: string): Promise<PublicUser> {

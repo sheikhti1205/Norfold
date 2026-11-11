@@ -27,7 +27,7 @@ function RecoveryFlow() {
   const navigate = useNavigate();
   const location = useLocation();
   const bridgeState = (location.state ?? null) as
-    | { recovered?: boolean; linkError?: boolean; recoveryEmail?: unknown; emailSendLimitedMessage?: unknown }
+    | { recovered?: boolean; linkError?: boolean; recoveryEmail?: unknown; emailSendLimitedMessage?: unknown; emailRetryDeadline?: unknown }
     | null;
   const preExchanged = bridgeState?.recovered === true;
   const preFailed = bridgeState?.linkError === true;
@@ -41,8 +41,10 @@ function RecoveryFlow() {
   const recovery = useRef<PasswordRecovery | null>(null);
   const alive = useRef(true);
   const inFlight = useRef(false);
-  const { seconds, setSeconds } = useOtpCountdown(otpMode ? 60 : 0);
-  const [sendLimited, setSendLimited] = useState(typeof bridgeState?.emailSendLimitedMessage === "string");
+  const limitedOnEntry = typeof bridgeState?.emailSendLimitedMessage === "string";
+  const entryDeadline = typeof bridgeState?.emailRetryDeadline === "number" && Number.isFinite(bridgeState.emailRetryDeadline) ? bridgeState.emailRetryDeadline : undefined;
+  const { seconds, setSeconds } = useOtpCountdown(otpMode ? 60 : 0, entryDeadline);
+  const [unknownLimit, setUnknownLimit] = useState(limitedOnEntry && entryDeadline === undefined);
   const [message, setMessage] = useState(typeof bridgeState?.emailSendLimitedMessage === "string" ? bridgeState.emailSendLimitedMessage : PASSWORD_RESET_SENT);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -82,18 +84,19 @@ function RecoveryFlow() {
   }
 
   async function resend() {
-    if (inFlight.current || seconds > 0 || sendLimited) return;
+    if (inFlight.current || seconds > 0) return;
     inFlight.current = true; setBusy(true); setError(null);
     try {
       await requestPasswordReset(email);
       if (alive.current) {
         await recovery.current?.dispose(); recovery.current = null;
-        setCode(""); setSeconds(60); setMessage(PASSWORD_RESET_SENT);
+        setCode(""); setSeconds(60); setUnknownLimit(false); setMessage(PASSWORD_RESET_SENT);
       }
     } catch (err) {
       if (alive.current) {
         if (err instanceof Error && "code" in err && err.code === "EMAIL_SEND_LIMITED") {
-          setSendLimited(true); setMessage(err.message);
+          const retry = "retryAfterSeconds" in err && typeof err.retryAfterSeconds === "number" && Number.isFinite(err.retryAfterSeconds) && err.retryAfterSeconds > 0 ? err.retryAfterSeconds : null;
+          setUnknownLimit(retry === null); setSeconds(retry ?? 60); setMessage(err.message);
         } else {
           setError(err instanceof Error ? err.message : "Email recovery is temporarily unavailable."); setSeconds(60);
         }
@@ -148,9 +151,9 @@ function RecoveryFlow() {
           {error && <p role="alert" className="text-sm text-error">{error}</p>}
           <OtpField label="Recovery code" value={code} onChange={setCode} maxLength={10} disabled={busy} />
           <Button type="submit" loading={busy}>Verify code</Button>
-          {!sendLimited && <Button type="button" variant="outline" onClick={() => void resend()} disabled={busy || seconds > 0}>
-            {seconds > 0 ? `Resend in ${seconds}s` : "Resend code"}
-          </Button>}
+          <Button type="button" variant="outline" onClick={() => void resend()} disabled={busy || seconds > 0}>
+            {seconds > 0 ? unknownLimit ? "Please wait before retrying" : `Resend in ${seconds}s` : "Resend code"}
+          </Button>
           <Link to="/forgot" className="min-h-11 py-3 text-sm underline">Use a different email</Link>
           <Link to="/signin" className="min-h-11 py-3 text-sm underline">Back to sign in</Link>
         </form>

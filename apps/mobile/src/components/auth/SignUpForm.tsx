@@ -194,7 +194,7 @@ export function SignUpForm({
             {usernameState === "invalid" && usernameMessage.invalid}
             {usernameState === "loading" && "Checking availability…"}
             {usernameState === "failed" && "Could not check availability. Press Create account to retry."}
-            {usernameState === "idle" && "Checked live while you type — no page reload."}
+            {usernameState === "idle" && "3–20 letters, numbers or underscores. Must be unique."}
           </p>
         </div>
 
