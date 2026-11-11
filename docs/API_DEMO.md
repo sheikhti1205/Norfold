@@ -104,6 +104,9 @@ curl -X POST "$SUPABASE_URL/rest/v1/rpc/findback_report" \
 
 ## AI Help
 
+`askAiHelp` is unused legacy code with no production caller. The live Chat
+screen, `apps/mobile/src/screens/Help.tsx`, uses `ChatController` instead.
+
 `askAiHelp` in `apps/mobile/src/services/auth.ts` builds a prompt using the
 app-controlled policy and knowledge in `apps/mobile/src/services/ai/appKnowledge.ts`
 and calls the OpenRouter client with the connected key. It screens the returned

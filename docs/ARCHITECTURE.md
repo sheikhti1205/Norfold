@@ -59,7 +59,10 @@ scripts/              Build, verification and release tooling
   `trust-maintenance`. `_shared` contains shared edge-runtime code.
 - Applied migrations are immutable. Changes are additive, timestamped and verified
   against the hosted migration head before and after deployment.
-- Storage buckets are private; media access is signed and scoped to the caller.
+- `findback-report-media` and `findback-comment-media` are private; access uses
+  signed URLs scoped to the caller. `findback-images` remains public for
+  profile-public avatars. A public avatar URL is unguessable-by-obscurity at
+  best and must be treated as public. Legacy report-photo URLs may also be public.
 
 ## Data flow: a report
 
@@ -71,8 +74,8 @@ scripts/              Build, verification and release tooling
 3. The invoker/RLS v2 candidate RPC scores category/text/date/location before its
    bounded80 pool. Existing local Needle/USE/visual ranking remains stage two;
    web retains a non-native baseline. Local embeddings are not sent to this RPC.
-4. Recovery is confirmed by the current owner of the report; the rating is created
-   only from a real recovery.
+4. Recovery is confirmed by the current owner of the report. Report ratings are
+   read-only; a recovery-participant rating writer remains pending and untested.
 
 ## Data flow: private chat
 
