@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { motion } from "framer-motion";
+import { motion, useMotionValueEvent, useScroll, useTransform } from "framer-motion";
 import { ArrowRight, KeyRound, MapPin, ShieldCheck, Wallet } from "lucide-react";
 import { Link } from "react-router";
 import { BrandMark } from "../components/BrandMark";
@@ -8,6 +8,17 @@ import { completeOnboarding } from "../services/onboarding";
 import "./Onboarding.css";
 
 const EASE = motionEasings.editorial;
+export const STEP_THRESHOLDS = [0.08, 0.33, 0.66] as const;
+
+function RouteProgress({ stepsRef, onProgress }: { stepsRef: React.RefObject<HTMLDivElement | null>; onProgress: (value: number) => void }) {
+  const { scrollYProgress } = useScroll({ target: stepsRef, offset: ["start 0.85", "end 0.55"] });
+  const lineScale = useTransform(scrollYProgress, [0, 1], [0, 1]);
+  useMotionValueEvent(scrollYProgress, "change", onProgress);
+  return <>
+    <motion.span className="fb-onboarding-route fb-onboarding-route--v" aria-hidden="true" style={{ scaleY: lineScale }} />
+    <motion.span className="fb-onboarding-route fb-onboarding-route--h" aria-hidden="true" style={{ scaleX: lineScale }} />
+  </>;
+}
 
 function useInViewOnce<T extends Element>() {
   const ref = useRef<T>(null);
@@ -51,7 +62,11 @@ export interface OnboardingProps {
 export function Onboarding({ onComplete, embedded = false, replay = false }: OnboardingProps) {
   const reduced = useShouldReduceMotion();
   const finished = useRef(false);
-  const [stepsRef, stepsSeen] = useInViewOnce<HTMLElement>();
+  const stepsRef = useRef<HTMLDivElement>(null);
+  const [reached, setReached] = useState(0);
+  const handleProgress = useCallback((value: number) => {
+    setReached(previous => Math.max(previous, value >= STEP_THRESHOLDS[2] ? 3 : value >= STEP_THRESHOLDS[1] ? 2 : value >= STEP_THRESHOLDS[0] ? 1 : 0));
+  }, []);
   const [safetyRef, safetySeen] = useInViewOnce<HTMLElement>();
   const [aboutRef, aboutSeen] = useInViewOnce<HTMLElement>();
   const [closingRef, closingSeen] = useInViewOnce<HTMLElement>();
@@ -62,16 +77,6 @@ export function Onboarding({ onComplete, embedded = false, replay = false }: Onb
     onComplete?.();
   }, [onComplete]);
   const action = replay ? "Back to settings" : "Sign in or create account";
-  const routeMotion = {
-    initial: reduced ? (false as const) : { scaleX: 0, scaleY: 0 },
-    animate: stepsSeen || reduced ? { scaleX: 1, scaleY: 1 } : { scaleX: 0, scaleY: 0 },
-    transition: { duration: 1.1, ease: EASE, delay: 0.05 },
-  };
-  const markerMotion = (delay: number) => ({
-    initial: reduced ? (false as const) : { scale: 0.72, opacity: 0 },
-    animate: stepsSeen || reduced ? { scale: 1, opacity: 1 } : { scale: 0.72, opacity: 0 },
-    transition: { duration: 0.45, ease: EASE, delay },
-  });
 
   return <div className="fb-onboarding" data-motion={reduced ? "static" : "full"}>
     {!embedded && <header className="fb-onboarding-header">
@@ -95,15 +100,14 @@ export function Onboarding({ onComplete, embedded = false, replay = false }: Onb
       {!replay && <motion.p className="fb-onboarding-note" {...revealProps(true, reduced, 0.48, 10)} transition={{ duration: 0.4, ease: EASE, delay: 0.48 }}>An account is needed to report an item or search reports.</motion.p>}
       <motion.span className="fb-onboarding-rule" aria-hidden="true" initial={reduced ? false : { scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: 1, ease: EASE, delay: 0.34 }} />
     </section>
-    <section ref={stepsRef} id="how-it-works" className="fb-onboarding-inner fb-onboarding-section" aria-labelledby="how-it-works-heading" data-reveal={stepsSeen || reduced ? "shown" : "pending"}>
-      <h2 id="how-it-works-heading" tabIndex={-1} aria-label="How it works"><MaskLine shown={stepsSeen} reduced={reduced}>How it works</MaskLine></h2>
-      <div className="fb-onboarding-route-wrap">
-        <motion.span className="fb-onboarding-route fb-onboarding-route--v" aria-hidden="true" {...routeMotion} />
-        <motion.span className="fb-onboarding-route fb-onboarding-route--h" aria-hidden="true" {...routeMotion} />
+    <section id="how-it-works" className="fb-onboarding-inner fb-onboarding-section" aria-labelledby="how-it-works-heading" data-reveal={reached > 0 || reduced ? "shown" : "pending"}>
+      <h2 id="how-it-works-heading" tabIndex={-1} aria-label="How it works"><MaskLine shown reduced={reduced}>How it works</MaskLine></h2>
+      <div ref={stepsRef} className="fb-onboarding-route-wrap">
+        {reduced ? <><span className="fb-onboarding-route fb-onboarding-route--v" aria-hidden="true" /><span className="fb-onboarding-route fb-onboarding-route--h" aria-hidden="true" /></> : <RouteProgress stepsRef={stepsRef} onProgress={handleProgress} />}
         <ol className="fb-onboarding-steps">
-        <motion.li {...revealProps(stepsSeen, reduced, 0.2, 18)}><motion.span aria-hidden="true" {...markerMotion(0.2)}>01</motion.span><div><h3>Report what you know.</h3><p>Add a photo, the date and an approximate area. Keep one identifying detail private so you can check that the right person has the item.</p></div></motion.li>
-        <motion.li {...revealProps(stepsSeen, reduced, 0.32, 18)}><motion.span aria-hidden="true" {...markerMotion(0.32)}>02</motion.span><div><h3>Search what you remember.</h3><p>Look through reports by category, date and area. A possible match is a starting point, not proof of ownership.</p></div></motion.li>
-        <motion.li {...revealProps(stepsSeen, reduced, 0.44, 18)}><motion.span aria-hidden="true" {...markerMotion(0.44)}>03</motion.span><div><h3>Arrange a safe return.</h3><p>Start with a message request. Agree the details together, meet in a public place, then mark the return when it happens.</p></div></motion.li>
+        <li><span aria-hidden="true" data-reached={reduced || reached >= 1}>01</span><div><h3>Report what you know.</h3><p>Add a photo, the date and an approximate area. Keep one identifying detail private so you can check that the right person has the item.</p></div></li>
+        <li><span aria-hidden="true" data-reached={reduced || reached >= 2}>02</span><div><h3>Search what you remember.</h3><p>Look through reports by category, date and area. A possible match is a starting point, not proof of ownership.</p></div></li>
+        <li><span aria-hidden="true" data-reached={reduced || reached >= 3}>03</span><div><h3>Arrange a safe return.</h3><p>Start with a message request. Agree the details together, meet in a public place, then mark the return when it happens.</p></div></li>
         </ol>
       </div>
     </section>

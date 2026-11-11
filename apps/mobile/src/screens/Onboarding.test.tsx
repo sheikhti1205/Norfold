@@ -3,7 +3,14 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ONBOARDING_STORAGE_KEY } from "../services/onboarding";
-import { Onboarding } from "./Onboarding";
+import { Onboarding, STEP_THRESHOLDS } from "./Onboarding";
+
+const scroll = vi.hoisted(() => ({ progress: null as import("framer-motion").MotionValue<number> | null }));
+vi.mock("framer-motion", async importOriginal => {
+  const actual = await importOriginal<typeof import("framer-motion")>();
+  scroll.progress = actual.motionValue(0);
+  return { ...actual, useScroll: () => ({ scrollYProgress: scroll.progress }) };
+});
 
 let reduceMotion = false;
 window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -11,7 +18,7 @@ window.matchMedia = vi.fn().mockImplementation((query: string) => ({
   onchange: null, addEventListener: vi.fn(), removeEventListener: vi.fn(),
   addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
 })) as unknown as typeof window.matchMedia;
-beforeEach(() => { reduceMotion = false; localStorage.clear(); });
+beforeEach(() => { reduceMotion = false; scroll.progress?.set(0); localStorage.clear(); });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 function show(props: React.ComponentProps<typeof Onboarding> = {}) {
   return render(<MemoryRouter><Onboarding {...props} /></MemoryRouter>);
@@ -42,26 +49,24 @@ describe("Onboarding", () => {
     expect(container.querySelector("ol > .fb-onboarding-route")).toBeNull();
     expect(container.querySelector("#safety")?.firstElementChild?.classList.contains("fb-onboarding-safety-wash")).toBe(true);
     for (const button of screen.getAllByRole("button", { name: "Sign in or create account" })) expect(button.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
-    expect(container.querySelectorAll('[data-reveal="pending"]')).toHaveLength(0);
+    expect(container.querySelector('#how-it-works')?.getAttribute("data-reveal")).toBe("pending");
   });
-  it("reveals the steps when any part intersects", () => {
-    const observers: { callback: IntersectionObserverCallback; options?: IntersectionObserverInit; observe: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }[] = [];
-    const Observer = vi.fn(function (this: IntersectionObserver, callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
-      const observe = vi.fn();
-      const disconnect = vi.fn();
-      observers.push({ callback, options, observe, disconnect });
-      this.observe = observe;
-      this.disconnect = disconnect;
-    });
-    vi.stubGlobal("IntersectionObserver", Observer);
+  it("reveals and latches steps as the route is travelled", () => {
     const { container } = show();
     const steps = container.querySelector("#how-it-works")!;
-    const observer = observers.find(item => item.observe.mock.calls.some(([node]) => node === steps))!;
-    expect(observer.options).toEqual({ threshold: 0, rootMargin: "0px 0px -10% 0px" });
     expect(steps.getAttribute("data-reveal")).toBe("pending");
-    act(() => observer.callback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver));
+    act(() => scroll.progress!.set(0.34));
     expect(steps.getAttribute("data-reveal")).toBe("shown");
-    expect(observer.disconnect).toHaveBeenCalled();
+    expect(steps.querySelectorAll('[data-reached="true"]')).toHaveLength(2);
+    act(() => scroll.progress!.set(0));
+    expect(steps.querySelectorAll('[data-reached="true"]')).toHaveLength(2);
+    act(() => scroll.progress!.set(0.66));
+    expect(steps.querySelectorAll('[data-reached="true"]')).toHaveLength(3);
+  });
+  it("uses strictly ordered step thresholds", () => {
+    expect(STEP_THRESHOLDS).toEqual([0.08, 0.33, 0.66]);
+    expect(STEP_THRESHOLDS[0]).toBeLessThan(STEP_THRESHOLDS[1]);
+    expect(STEP_THRESHOLDS[1]).toBeLessThan(STEP_THRESHOLDS[2]);
   });
   it("scrolls and focuses the how-it-works heading", () => {
     show();
@@ -126,6 +131,7 @@ describe("Onboarding", () => {
     reduceMotion = true; const { container } = show();
     expect(container.querySelector(".fb-onboarding")?.getAttribute("data-motion")).toBe("static");
     expect(container.querySelectorAll('[data-reveal="pending"]')).toHaveLength(0);
+    expect(container.querySelectorAll('.fb-onboarding-steps [data-reached="true"]')).toHaveLength(3);
     for (const span of container.querySelectorAll<HTMLElement>(".fb-onboarding-mask > span")) expect(span.style.transform).not.toContain("125%");
     expect(screen.getByRole("heading", { name: "Arrange a safe return." })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Let’s find a way back." })).toBeTruthy();
