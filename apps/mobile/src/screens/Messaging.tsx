@@ -226,23 +226,6 @@ export function replyPreview(message: StoredHumanMessage): string {
   return message.body;
 }
 
-export interface PhotoBatches {
-  /** Leader id -> every message in the run, leader first. */
-  batches: Map<string, StoredHumanMessage[]>;
-  /** Members rendered by their leader; the transcript skips them. */
-  followers: Set<string>;
-  /** Follower id -> its visible leader, so a reply or pin still lands on screen. */
-  leaderOf: Map<string, string>;
-}
-
-export function photoBatches(_messages: StoredHumanMessage[]): PhotoBatches {
-  const batches = new Map<string, StoredHumanMessage[]>();
-  const followers = new Set<string>();
-  const leaderOf = new Map<string, string>();
-  // No persisted send identity exists, so timing cannot establish a batch.
-  return { batches, followers, leaderOf };
-}
-
 function RetrySync({ accountId, labelled = false }: { accountId: string; labelled?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -256,13 +239,10 @@ function RetrySync({ accountId, labelled = false }: { accountId: string; labelle
   </>;
 }
 
-function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady, grouped = false, label = "View photo" }: {
+function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady }: {
   accountId: string; conversationId: string; attachment: MediaAttachment;
   onOpen: (id: string, bytes: ArrayBuffer, mime: string) => void;
   onReady: (id: string, content: { bytes: ArrayBuffer; mime: string } | null) => void;
-  /** A grid cell defines the box; the photo fills it instead of setting its own ratio. */
-  grouped?: boolean;
-  label?: string;
 }) {
   const [content, setContent] = useState<{ url: string; bytes: ArrayBuffer } | null>(null);
   const [state, setState] = useState<"loading" | "missing" | "failed" | "unavailable">("loading");
@@ -309,9 +289,9 @@ function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady, gro
     try { await downloadMessagingMedia(accountId, conversationId, attachment.id); setVersion((v) => v + 1); }
     catch (error) { setState(error instanceof PhotoUnavailableError ? "unavailable" : "failed"); }
   }
-  return <div ref={host} className={`fb-chat-photo${grouped ? " fb-chat-photo-grouped" : ""}`} data-loading={content && !loaded ? "true" : undefined}
-    style={grouped ? undefined : { aspectRatio: `${attachment.width} / ${attachment.height}` }}>
-    {content ? <button type="button" aria-label={label} onClick={() => onOpen(attachment.messageId, content.bytes, attachment.mime)}>
+  return <div ref={host} className="fb-chat-photo" data-loading={content && !loaded ? "true" : undefined}
+    style={{ aspectRatio: `${attachment.width} / ${attachment.height}` }}>
+    {content ? <button type="button" aria-label="View photo" onClick={() => onOpen(attachment.messageId, content.bytes, attachment.mime)}>
       <img src={content.url} alt="" loading="lazy" decoding="async" onLoad={() => setLoaded(true)} onError={() => { onReady(attachment.id, null); setContent(null); setState("failed"); }}
         data-receipt-message={loaded && attachment.state === "READY" ? attachment.messageId : undefined} />
     </button> : <div role="status">{state === "loading" ? "Photo loading…" : state === "failed" ? "Could not load photo." : "Photo unavailable"}
@@ -335,38 +315,6 @@ function ChatQuotePhoto({ accountId, attachment }: { accountId: string; attachme
   }, [accountId, attachment.id, attachment.mime]);
   return url ? <img className="fb-chat-quote-thumb" src={url} alt="" loading="lazy" decoding="async" />
     : <span className="fb-chat-quote-thumb" aria-hidden="true" />;
-}
-
-/**
- * Photos from one send share a bubble. Two sit side by side, three put the
- * first beside a stacked pair, and four or more use a 2x2 with the remainder
- * counted on the last cell. Each cell is the canonical ChatPhoto, so loading,
- * retry, download and the shared viewer keep one implementation; the tapped
- * cell names its whole run, so the viewer counter matches the grid even when
- * the last cell hides most of the photos.
- */
-function ChatPhotoGroup({ accountId, conversationId, items, media, onOpen, onReady }: {
-  accountId: string; conversationId: string; items: StoredHumanMessage[];
-  media: MediaAttachment[];
-  onOpen: (id: string, bytes: ArrayBuffer, mime: string, group: string[]) => void;
-  onReady: (id: string, content: { bytes: ArrayBuffer; mime: string } | null) => void;
-}) {
-  const visible = items.slice(0, 4);
-  const hidden = items.length - visible.length;
-  return <div className={`fb-chat-photo-grid fb-chat-photo-grid-${Math.min(items.length, 4)}`}
-    role="group" aria-label={`${items.length} photos`}>
-    {visible.map((message, index) => {
-      const attachment = media.find((entry) => entry.messageId === message.id);
-      return <div key={message.id} className="fb-chat-photo-cell">
-        {attachment
-          ? <ChatPhoto accountId={accountId} conversationId={conversationId} attachment={attachment}
-              onOpen={(id, bytes, mime) => onOpen(id, bytes, mime, items.map((entry) => entry.id))}
-              onReady={onReady} grouped label={`View photo ${index + 1} of ${items.length}`} />
-          : <span className="fb-chat-photo-missing" role="status">{missingAttachmentCopy(message)}</span>}
-        {hidden > 0 && index === visible.length - 1 && <span className="fb-chat-photo-more" aria-hidden="true">{`+${hidden}`}</span>}
-      </div>;
-    })}
-  </div>;
 }
 
 /**
@@ -949,15 +897,14 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     haptic("commit");
     composer.current?.focus();
   }
-  async function openPhoto(id: string, bytes: ArrayBuffer, mime: string, group?: string[]) {
+  async function openPhoto(id: string, bytes: ArrayBuffer, mime: string) {
     if (!photoAllowed) return;
     const generation = ++viewerGeneration.current;
     setDraftViewer(null);
-    // A single cell pages through every live photo in the conversation; a
-    // group cell pages through its own send. Photos outside the lazy-read
+    // The viewer pages through every live photo in the conversation. Photos outside the lazy-read
     // margin are read here, on the explicit open, so the counter names the
     // real sequence instead of only the cells that happened to be on screen.
-    const scope = group ?? messages.filter((message) => message.unsentAt === undefined && message.messageType === "MEDIA")
+    const scope = messages.filter((message) => message.unsentAt === undefined && message.messageType === "MEDIA")
       .map((message) => message.id);
     const resolved = await Promise.all(scope.map(async (messageId) => {
       const message = messages.find((entry) => entry.id === messageId);
@@ -1115,8 +1062,6 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   useLayoutEffect(() => {
     if (nearBottom.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
   }, [messages]);
-  // Presentation-only grouping: the wire still carries one message per photo.
-  const groups = useMemo(() => photoBatches(messages), [messages]);
   /**
    * The messages a person report may carry: accepted, sent by this peer, not
    * unsent, and newest first. A local pending row has no server position and a
@@ -1137,20 +1082,15 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       })
       .filter((message) => message.messageType !== "TEXT" || message.body.trim() !== "");
   }, [messages, row?.peerId]);
-  // Pins are shared conversation state. A pin that names a photo hidden inside
-  // a grid still jumps to the one visible bubble, and a pin whose message this
-  // device can no longer see (deleted for me, or not yet synced) is not drawn
-  // as a dead chip.
+  // Do not draw a dead chip for a message this device cannot see.
   const pinnedIds = view?.pinnedMessageIds ?? [];
   const pinnedRows = pinnedIds.flatMap((id) => {
-    const message = messages.find(entry => entry.id === (groups.leaderOf.get(id) ?? id));
+    const message = messages.find(entry => entry.id === id);
     return message && message.unsentAt === undefined ? [{ id, message }] : [];
   });
   useEffect(() => {
     if (sheet || !jumpTo) return;
-    // A grouped photo is drawn by its leader, so a quote that names a follower
-    // still lands on the one visible bubble instead of nowhere.
-    const targetId = groups.leaderOf.get(jumpTo) ?? jumpTo;
+    const targetId = jumpTo;
     const frame = requestAnimationFrame(() => {
       const target = Array.from(scroll.current?.querySelectorAll<HTMLElement>("[data-chat-message]") ?? [])
         .find(element => element.dataset.chatMessage === targetId);
@@ -1170,7 +1110,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       setJumpTo(null);
     });
     return () => cancelAnimationFrame(frame);
-  }, [sheet, jumpTo, groups]);
+  }, [sheet, jumpTo]);
   useEffect(() => {
     if (!flash) return;
     const timer = window.setTimeout(() => setFlash(null), 1600);
@@ -1460,8 +1400,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         setPhotoSending(true);
         // Each photo is its own message, so a failed one leaves the rest of the
         // stack intact. The caption rides the first photo only.
-        // A retry keeps the instant of the admission that already left, so the
-        // repaired stack still groups with it instead of measuring the wait.
+        // A retry keeps the instant of the admission that already left.
         const batchCreatedAt = photoAdmissions.current.size > 0
           ? Math.min(...Array.from(photoAdmissions.current.values(), (entry) => entry.createdAt))
           : Date.now();
@@ -1470,9 +1409,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
           const admissionKey = item.key;
           const { bytes, ...info } = item.prepared;
           const attempt = photoAdmissions.current.get(admissionKey) ?? { caption: index === 0 ? body : "",
-            // One gesture, one instant: every photo of this admission keeps the
-            // moment the user pressed send, including across a retry, so both
-            // participants group the run instead of measuring upload latency.
+            // Keep the send instant across retries.
             createdAt: batchCreatedAt,
             metadata: { ...info, durationMs: null,
               id: crypto.randomUUID(), messageId: crypto.randomUUID(), direction: "OUT" as const, expiresAt: null } };
@@ -1675,17 +1612,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       </div>}
       <ol className="fb-chat-transcript" aria-label="Messages">
         {messages.map((message, index) => {
-          // A follower photo is drawn by its leader; the transcript owns only
-          // rows a reader can actually see or focus.
-          if (groups.followers.has(message.id)) return null;
-          const batch = groups.batches.get(message.id);
           const own = message.authorId === accountId;
           const attachment = media.find((entry) => entry.messageId === message.id);
-          // The run's last photo owns the clock and the ticks; the first owns
-          // the caption, the quote and the bubble. That is the order it was
-          // sent in, so the status cannot describe an older photo than the one
-          // the reader is looking at.
-          const statusMembers = batch ?? [message];
+          const statusMembers = [message];
           const statusMessage = statusMembers[statusMembers.length - 1]!;
           const statusPending = outbox.find((entry) => entry.messageId === statusMessage.id);
           const statusAttachment = media.find((entry) => entry.messageId === statusMessage.id);
@@ -1707,7 +1636,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             ? media.find((entry) => entry.messageId === quoted.id) : undefined;
           // A bare emoji is the message: no bubble fill, no quote, no media.
           const emojiOnly = message.unsentAt === undefined && message.messageType === "TEXT"
-            && !batch && !attachment && !message.replyToId && !message.contextReportId && !message.location
+            && !attachment && !message.replyToId && !message.contextReportId && !message.location
             && isEmojiOnly(message.body);
           const flashClass = flash?.id === message.id ? ` fb-chat-flash-${flash.nonce % 2 ? "a" : "b"}` : "";
           return <Fragment key={message.id}>
@@ -1744,10 +1673,8 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
               </span>
             </button>}
             {message.unsentAt !== undefined ? <p>Message unsent</p> : <>
-            {batch && photoAllowed && <ChatPhotoGroup accountId={accountId} conversationId={conversationId} items={batch} media={media} onOpen={openPhoto} onReady={rememberPhoto} />}
-            {batch && !photoAllowed && <p>Photos are available when connected.</p>}
-            {!batch && message.messageType === "MEDIA" && attachment && photoAllowed && <ChatPhoto key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} onOpen={openPhoto} onReady={rememberPhoto} />}
-            {!batch && message.messageType === "MEDIA" && attachment && !photoAllowed && <p>Photos are available when connected.</p>}
+            {message.messageType === "MEDIA" && attachment && photoAllowed && <ChatPhoto key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} onOpen={openPhoto} onReady={rememberPhoto} />}
+            {message.messageType === "MEDIA" && attachment && !photoAllowed && <p>Photos are available when connected.</p>}
             {message.messageType === "VOICE" && attachment && photoAllowed && <ChatVoice key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} playback={voice.player} snapshot={playbackSnapshot}
               authorName={own ? user?.displayName || user?.username : name} avatarUrl={own ? user?.avatarUrl : person?.avatarUrl} />}
             {message.messageType === "VOICE" && attachment && !photoAllowed && <p>Voice messages are available when connected.</p>}
@@ -1755,8 +1682,8 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             {message.location && <ChatLocation location={message.location} />}
             {message.body ? <p dir="auto" className={emojiOnly ? "fb-chat-emoji-only" : undefined}>{message.body}</p>
               : message.messageType === "LOCATION" ? (!message.location && <p>Location unavailable</p>)
-              : !batch && !attachment && <p>{missingAttachmentCopy(message)}</p>}
-            {!batch && !attachment && !message.body && missingAttachmentStale(message) && <button type="button" onClick={() => {
+              : !attachment && <p>{missingAttachmentCopy(message)}</p>}
+            {!attachment && !message.body && missingAttachmentStale(message) && <button type="button" onClick={() => {
               // A message whose attachment never arrived is not stuck loading:
               // ask for one full pass before telling the reader it is gone.
               void retryMessagingMedia(accountId).catch(() => setError("Could not check for this attachment. Try syncing again."));
@@ -1786,10 +1713,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             }}>Retry</button>}</>}
             </span>
             {own && reviewMember && <button type="button" disabled={busy} onClick={() => { setSelectedMessageId(reviewMember.id); setSheet("review"); }}>Review message</button>}
-            {own && removableMembers.length > 0 && <button type="button" aria-label={batch ? "Remove pending photos"
-              : message.messageType === "VOICE" ? "Remove pending voice message" : "Remove pending photo"} onClick={() => {
-              // The bubble is the send: removing a still-pending grid removes
-              // every photo in it, never a hidden half the reader cannot see.
+            {own && removableMembers.length > 0 && <button type="button" aria-label={message.messageType === "VOICE" ? "Remove pending voice message" : "Remove pending photo"} onClick={() => {
               void (async () => {
                 try { for (const entry of removableMembers) await removeMessagingMessage(accountId, conversationId, entry.id, false); }
                 catch {
