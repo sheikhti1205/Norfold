@@ -47,9 +47,9 @@ class DownloadPolicyTest {
 
     @Test fun journalJsonMatchesTsV1Shape() {
         val json = DownloadPolicy.journalJson(
-            modelId = "smolvlm2-500m-vision",
-            revision = "dad030b6",
-            filePath = "model.litertlm",
+            modelId = "needle3-cact-l20",
+            revision = "c7c415a3",
+            filePath = "needle3.cact",
             url = "https://cdn.example.com/m",
             offset = 42L,
             total = 100L,
@@ -57,7 +57,7 @@ class DownloadPolicyTest {
             updatedAtIso = "2026-10-03T00:00:00.000Z",
         )
         assertTrue(json.contains("\"v\":1"))
-        assertTrue(json.contains("\"modelId\":\"smolvlm2-500m-vision\""))
+        assertTrue(json.contains("\"modelId\":\"needle3-cact-l20\""))
         assertTrue(json.contains("\"offset\":42"))
         assertTrue(json.contains("\"total\":100"))
         // org.json is on the unit-test classpath: the journal must parse

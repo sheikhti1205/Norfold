@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { ApplicationAiService } from "./applicationAi";
 import { downloadProblemStage } from "./localSearchDiagnosis";
-import { isRetiredGenerativeRuntime, type ModelDescriptor } from "./modelDescriptors";
+import { type ModelDescriptor } from "./modelDescriptors";
 import { NEEDLE_MODEL_ID } from "./needle/embedder";
 import type { OfflineModelStatus } from "./offlineModelManager";
 import { acquisitionBytes } from "./modelSupply";
@@ -32,7 +32,7 @@ export function isLocalIntelligenceOwnedModel(modelId: string | undefined | null
 export function olderGenerativeDownloads(service: LocalIntelligenceService): readonly ModelDescriptor[] {
   if (!service.android) return [];
   return service.registry.descriptors.filter((d) => {
-    if (!isRetiredGenerativeRuntime(d.runtimeId)) return false;
+    if (!d.cleanupOnly || !["smolvlm2-litertlm", "qwen3-litertlm-text", "llamacpp-gguf"].includes(d.runtimeId)) return false;
     const status = service.manager.statusOf(d.modelId);
     // An imported record is evidence of an earlier acquisition. Retain its
     // cleanup after a restart if bytes were deleted but metadata saving failed.
@@ -84,7 +84,8 @@ export function localOperationNotice(notice: string | null): string | null {
     return "Free some space on this device, then try again.";
   }
   if (/busy|in use/i.test(notice)) return "This tool is in use. Try again when it has finished.";
-  if (/unavailable on this device|incompatible/i.test(notice)) return "Unavailable on this device.";
+  if (/couldn't check this device/i.test(notice)) return "Norfold couldn't check this device.";
+  if (/unavailable on this device|incompatible/i.test(notice)) return "The helper needs a 64-bit ARM Android device.";
   if (/checksum|verification|installed file.*missing/i.test(notice)) return "The downloaded file couldn't be checked. Download it again.";
   if (/transfer|download failed|interrupted/i.test(notice)) return "The download was interrupted. Retry to continue.";
   // Transfer, integrity and install failures are different recoveries and get

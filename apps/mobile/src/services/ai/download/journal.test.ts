@@ -46,7 +46,7 @@ function memoryFs(files: Record<string, Uint8Array> = {}): JournalFs & {
 }
 
 const INPUT: JournalWriteInput = {
-  modelId: "smolvlm2-500m-vision",
+  modelId: "needle3-cact-l20",
   revision: "dad030b6",
   filePath: "model.litertlm",
   url: "https://cdn.example.com/m.litertlm",

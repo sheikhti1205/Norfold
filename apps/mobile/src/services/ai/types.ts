@@ -56,7 +56,6 @@ export const NARROW_OPS = [
   "extract-report-fields",
   "answer-help",
   "extract-search-filters",
-  "analyze-image",
 ] as const;
 export type NarrowOp = (typeof NARROW_OPS)[number];
 
@@ -209,36 +208,6 @@ export interface SearchExtraction {
 export interface HelpAnswer {
   readonly answerText: string;
   readonly action: AssistantAction;
-}
-
-/**
- * Photo-analysis schema: exactly these 9 fields (VISION_STRUCTURED_V2).
- * Vision models emit lookalike aliases ("title", "description"); the strict
- * validator accepts only these keys.
- */
-export const PHOTO_ANALYSIS_KEYS = [
-  "objectName",
-  "suggestedCategory",
-  "colors",
-  "visibleBrand",
-  "visibleText",
-  "identifyingFeatures",
-  "suggestedTitle",
-  "suggestedDescription",
-  "uncertainFields",
-] as const;
-export type PhotoAnalysisKey = (typeof PHOTO_ANALYSIS_KEYS)[number];
-
-export interface PhotoAnalysis {
-  readonly objectName: string | null;
-  readonly suggestedCategory: string | null;
-  readonly colors: readonly string[];
-  readonly visibleBrand: string | null;
-  readonly visibleText: readonly string[];
-  readonly identifyingFeatures: readonly string[];
-  readonly suggestedTitle: string | null;
-  readonly suggestedDescription: string | null;
-  readonly uncertainFields: readonly string[];
 }
 
 /**

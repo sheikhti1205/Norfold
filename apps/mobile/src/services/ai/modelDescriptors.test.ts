@@ -12,10 +12,6 @@ import {
   modelSupportsAbi,
   NEEDLE_DESCRIPTOR,
   productionModelRegistry,
-  QWEN_TEXT_DESCRIPTOR,
-  QWEN_TEXT_MODEL_ID,
-  SMOL_VISION_DESCRIPTOR,
-  tierOf,
 } from "./modelDescriptors";
 import { profileFor } from "./modelProfiles";
 import { NEEDLE_MODEL_ID } from "./needle/embedder";
@@ -40,20 +36,18 @@ describe("modelDescriptors", () => {
     expect(productionModelRegistry()).toBe(registry);
   });
 
-  it("retains Qwen's historical byte identity without promoting its former roles or acquisition", () => {
-    const descriptor = productionModelRegistry().requireDescriptor(QWEN_TEXT_MODEL_ID);
-    expect(profileFor(QWEN_TEXT_MODEL_ID)).toBeUndefined();
-    expect(QWEN_TEXT_DESCRIPTOR.revision).toBe("a3c5d805ae362dff7f580bc25f2dfb9a5a7eaa76");
-    expect(QWEN_TEXT_DESCRIPTOR.sha256).toBe("03e7da1eb1108b50dffaa9bb52cc7bcbad2eb0c66ca990267f480c1e545d2856");
-    expect(QWEN_TEXT_DESCRIPTOR.format).toBe("litertlm");
-    expect(QWEN_TEXT_DESCRIPTOR.maturity).toBe("production");
-    expect(tierOf(QWEN_TEXT_DESCRIPTOR)).toBe("recommended");
+  it("retains Qwen's historical identity only for cleanup", () => {
+    const descriptor = productionModelRegistry().requireDescriptor("qwen3-0.6b-dynamic-int4");
+    expect(profileFor(descriptor.modelId)).toBeUndefined();
+    expect(descriptor.revision).toBe("a3c5d805ae362dff7f580bc25f2dfb9a5a7eaa76");
+    expect(descriptor.sha256).toBe("03e7da1eb1108b50dffaa9bb52cc7bcbad2eb0c66ca990267f480c1e545d2856");
+    expect(descriptor.fileName).toBe("Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm");
+    expect(descriptor.bytes).toBe(344671744);
+    expect(descriptor.url).toBe("");
     expect(descriptor.downloadable).toBe(false);
     expect(distributionPolicyOf(descriptor)).toBe("unavailable");
     expect(descriptor.taskRoles).toEqual([]);
     expect(descriptor.cleanupOnly).toBe(true);
-    expect(modelSupportsAbi(QWEN_TEXT_DESCRIPTOR, "arm64-v8a")).toBe(true);
-    expect(modelSupportsAbi(QWEN_TEXT_DESCRIPTOR, "x86_64")).toBe(false);
   });
 
   it("never advertises an install action this build cannot perform", () => {
@@ -73,35 +67,6 @@ describe("modelDescriptors", () => {
     }
   });
 
-  it("resolves the vision model from explicit policy, never catalogue order", () => {
-    const synthetic = { ...SMOL_VISION_DESCRIPTOR, modelId: "test-vision", cleanupOnly: false };
-    const reordered = createModelRegistry([synthetic, NEEDLE_DESCRIPTOR], {
-      defaultVisionModelId: synthetic.modelId,
-    });
-    expect(reordered.visionDescriptor()?.modelId).toBe("test-vision");
-    expect(reordered.descriptorFor(NEEDLE_MODEL_ID)?.runtimeId).toBe("needle-cact");
-    expect(reordered.descriptorFor("nope")).toBeUndefined();
-    expect(() => reordered.requireDescriptor("nope")).toThrow(/unknown on-device model/i);
-  });
-
-  it("never routes a cleanup identity even when explicitly configured as the vision default", () => {
-    const registry = createModelRegistry([SMOL_VISION_DESCRIPTOR], {
-      defaultVisionModelId: SMOL_VISION_DESCRIPTOR.modelId,
-    });
-    expect(registry.visionDescriptor()).toBeUndefined();
-  });
-
-  it("names no vision default unless the registry configures one", () => {
-    const unconfigured = createModelRegistry([SMOL_VISION_DESCRIPTOR, NEEDLE_DESCRIPTOR]);
-    expect(unconfigured.visionDescriptor()).toBeUndefined();
-  });
-
-  it("rejects a vision default that is not registered", () => {
-    expect(() =>
-      createModelRegistry([NEEDLE_DESCRIPTOR], { defaultVisionModelId: SMOL_VISION_DESCRIPTOR.modelId }),
-    ).toThrow(/not registered/i);
-  });
-
   it("rejects duplicate model ids instead of building a split-brain registry", () => {
     expect(() => createModelRegistry([NEEDLE_DESCRIPTOR, NEEDLE_DESCRIPTOR])).toThrow(/duplicate/i);
   });
@@ -109,16 +74,12 @@ describe("modelDescriptors", () => {
   it("binds immutable pins from the model profiles, never invented values", () => {
     expect(NEEDLE_DESCRIPTOR.revision.length).toBeGreaterThan(0);
     expect(NEEDLE_DESCRIPTOR.sha256).toHaveLength(64);
-    expect(SMOL_VISION_DESCRIPTOR.revision).toHaveLength(40);
-    expect(SMOL_VISION_DESCRIPTOR.sha256).toHaveLength(64);
-    expect(SMOL_VISION_DESCRIPTOR.format).toBe("litertlm");
     expect(NEEDLE_DESCRIPTOR.format).toBe("cact");
   });
 
   it("reports ABI truth: verified arm64 only, unknown ABI never counts", () => {
     expect(modelSupportsAbi(NEEDLE_DESCRIPTOR, "arm64-v8a")).toBe(true);
     expect(modelSupportsAbi(NEEDLE_DESCRIPTOR, "x86_64")).toBe(false);
-    expect(modelSupportsAbi(SMOL_VISION_DESCRIPTOR, "x86_64")).toBe(false);
     expect(modelSupportsAbi(NEEDLE_DESCRIPTOR, "")).toBe(false);
   });
 

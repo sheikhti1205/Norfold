@@ -29,19 +29,6 @@ export function fakeGenerate(fake: FakeAiProvider): GenerateFn {
     ).text;
 }
 
-/** Drive a vision op from the deterministic fault simulator (photo path). */
-export function fakePhotoGenerate(fake: FakeAiProvider, imageUri: string): GenerateFn {
-  return async (prompt, options) =>
-    (
-      await fake.analyzePhoto({
-        imageUri,
-        instruction: prompt,
-        maxOutputTokens: options.maxOutputTokens,
-        temperature: options.temperature,
-      })
-    ).text;
-}
-
 /** Canned single- or multi-shot generator (arrays serve one text per call). */
 export function stubGenerate(texts: string | readonly string[]): GenerateFn & { calls: number } {
   const queue = Array.isArray(texts) ? [...texts] : [texts];

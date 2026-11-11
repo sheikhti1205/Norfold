@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { stubGenerate, mustProfile } from "./ai/ops/testSupport";
 import {
   buildCategorySuggestionFromClassification,
-  buildCategorySuggestionFromPhoto,
   ITEM_CATEGORY_TO_RELEASED,
   resolveCategorySuggestion,
   suggestCategoryForText,
@@ -13,9 +12,9 @@ import { DROPPED_CATEGORY_NOTE } from "./reportSuggestionNotes";
 const PROFILE = mustProfile("test-thought-envelope");
 
 describe("resolveCategorySuggestion (pure resolver)", () => {
-  it("passes a released canonical straight through (photo path)", () => {
-    expect(resolveCategorySuggestion("Phones & Tablets", "photo")).toEqual({
-      suggestion: { suggestedCategory: "Phones & Tablets", source: "photo" },
+  it("passes a released canonical straight through", () => {
+    expect(resolveCategorySuggestion("Phones & Tablets", "classify-category")).toEqual({
+      suggestion: { suggestedCategory: "Phones & Tablets", source: "classify-category" },
       dropped: false,
     });
   });
@@ -49,7 +48,7 @@ describe("resolveCategorySuggestion (pure resolver)", () => {
   });
 
   it("returns null without dropped for empty input (nothing suggested)", () => {
-    expect(resolveCategorySuggestion(null, "photo")).toEqual({ suggestion: null, dropped: false });
+    expect(resolveCategorySuggestion(null, "classify-category")).toEqual({ suggestion: null, dropped: false });
     expect(resolveCategorySuggestion("   ", "classify-category")).toEqual({ suggestion: null, dropped: false });
   });
 });
@@ -62,12 +61,6 @@ describe("buildCategorySuggestion helpers", () => {
     });
   });
 
-  it("builds a confirmable suggestion from a photo category", () => {
-    expect(buildCategorySuggestionFromPhoto("Keys")).toEqual({
-      suggestion: { suggestedCategory: "Keys", source: "photo" },
-      dropped: false,
-    });
-  });
 });
 
 describe("suggestCategoryForText (classify-category consumer, fakes only)", () => {

@@ -53,18 +53,18 @@ export interface DownloadAttemptResult {
 
 /** Reject a malformed fact list as a whole; never salvage an eligible ABI
  * from a partially invalid response. Copy so callers cannot mutate the cache. */
-export function validatedDeviceAbis(raw: unknown): readonly string[] {
+export function validatedDeviceAbis(raw: unknown): readonly string[] | undefined {
   const abis: unknown[] | null = Array.isArray(raw) ? Array.from(raw) : null;
   return abis?.every((entry): entry is string =>
     typeof entry === "string" && entry.trim() === entry && /^[a-z0-9][a-z0-9_-]*$/.test(entry),
-  ) ? abis : [];
+  ) ? abis : undefined;
 }
 
 /** Platform seam behind every managed download. Faked in tests. */
 export interface ModelDownloadDriver {
   /** Platform compatibility facts, independent of any optional model runtime.
    * Missing discovery fails closed in the application service. */
-  supportedAbis?(): Promise<readonly string[]>;
+  supportedAbis?(): Promise<readonly string[] | undefined>;
   pickAndStage?(args: { stagingPath: string; maxBytes: number; expectedBytes?: number; expectedSha256?: string; format: string }): Promise<{ actualHex: string; bytes: number }>;
   readMetadata?(path: string): Promise<string | null>;
   writeMetadata?(path: string, text: string): Promise<void>;
@@ -424,7 +424,7 @@ export class CapacitorModelDownloadDriver implements ModelDownloadDriver {
     return rootDir;
   }
 
-  async supportedAbis(): Promise<readonly string[]> {
+  async supportedAbis(): Promise<readonly string[] | undefined> {
     const payload = await this.bridge().supportedAbis();
     return validatedDeviceAbis(payload && typeof payload === "object" && "abis" in payload ? payload.abis : null);
   }

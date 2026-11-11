@@ -15,21 +15,11 @@
  *   resume and never reported as installed.
  * - `services/models/shippedCatalogue.ts` -> fail closed while unpublished:
  *   an asset without a SHA-256 pin or distribution record never downloads.
- * - `android/.../vlm/VlmTypes.kt` (`VlmState`) -> the state vocabulary, here
- *   collapsed to the stable subset (see DISCARDED below).
- * - `android/.../vlm/GenerativeResidencyArbiter.kt` -> single-resident
- *   invariant: residency is runtime-only state, recorded separately from
- *   install state, and never persisted across process death.
- * - `services/models/qwenLifecycle.ts` -> `installed` means
- *   transfer-verified + checksum-pinned, never mere file presence (mirrored
- *   by `checksumVerified`).
+ * - Residency is runtime-only state, recorded separately from install state,
+ *   and never persisted across process death. Installed means transfer-verified
+ *   and checksum-pinned, never mere file presence.
  *
  * DELIBERATELY DISCARDED from the archive:
- * - The ~20-state `VlmState` machine (WAITING_FOR_NETWORK/WIFI,
- *   VERIFYING_CHUNK/FILE, REPAIR_NEEDED/REPAIRING, GPU_SELF_TESTING,
- *   READY_GPU/GPU_UNAVAILABLE, ...): network-gated and GPU-probe states
- *   belong to a native runtime worker with real hardware, not to this
- *   transport-agnostic ledger.
  * - ZIP/`.fbmodel` import/export framing and per-file manifests
  *   (`modelTransfers.ts` import/export paths): a later packet if ever.
  * - Multi-entry catalogue wiring and HF/release URL pins: assets are

@@ -1,5 +1,5 @@
 /** Decode old imports.json only to rediscover/remove bytes; never an import API. */
-import { cleanupOnlyDescriptor, type ModelDescriptor, type ModelArtifactFormat } from "../modelDescriptors";
+import { type ModelDescriptor, type ModelArtifactFormat } from "../modelDescriptors";
 import { safeSourceUrl } from "./sourcePolicy";
 
 export interface LegacyImportRecord { readonly sha256: string; readonly bytes: number; readonly format: ModelArtifactFormat; readonly modality?: "text" | "vision"; readonly license: string; readonly url?: string }
@@ -14,12 +14,13 @@ function validateLegacyRecord(input: unknown): LegacyImportRecord {
 }
 /** Exact historical path identity, with acquisition and serving disabled. */
 function cleanupIdentity(s: LegacyImportRecord): ModelDescriptor {
-  return cleanupOnlyDescriptor({
+  return Object.freeze<ModelDescriptor>({
     modelId: `imported-${s.sha256}`, revision: s.sha256, sha256: s.sha256, bytes: s.bytes,
     format: s.format, fileName: `model.${s.format}`, url: s.url ?? "", displayName: "Imported model", consumerTitle: "Imported model",
     consumerDetail: "Remove downloaded files", runtimeId: s.format === "gguf" ? "llamacpp-gguf" : s.format === "cact" ? "needle-cact" : s.modality === "vision" ? "smolvlm2-litertlm" : "qwen3-litertlm-text",
     capabilities: [s.modality === "vision" ? "vision" : "text"], taskRoles: [], maturity: "lab", trust: "imported", license: s.license,
     minRamMb: 2048, recommendedRamMb: 4096, abis: ["arm64-v8a"], deviceQualifiedAbis: [], tier: "advanced", downloadable: false, importable: false,
+    cleanupOnly: true, distributionNote: "This model is no longer available. Remove its downloaded files in Settings.",
     untrustedImport: true,
   });
 }

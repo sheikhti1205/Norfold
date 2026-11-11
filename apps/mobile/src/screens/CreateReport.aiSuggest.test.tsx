@@ -68,7 +68,7 @@ vi.mock("../services/categorySuggestion", async (importOriginal) => {
 });
 
 import { CreateReport } from "./CreateReport";
-import { NEEDLE_DESCRIPTOR, QWEN_TEXT_DESCRIPTOR } from "../services/ai/modelDescriptors";
+import { NEEDLE_DESCRIPTOR } from "../services/ai/modelDescriptors";
 import { clearDraft } from "../services/reportDraft";
 import { clearPhotoStore } from "../services/photoStore";
 
@@ -331,7 +331,6 @@ describe("CreateReport field suggestions from description", () => {
     expect(NEEDLE_DESCRIPTOR.taskRoles).toEqual(
       expect.arrayContaining(["extract-report-fields", "classify-category"]),
     );
-    expect(QWEN_TEXT_DESCRIPTOR.taskRoles).not.toContain("extract-report-fields");
     await requestSuggestions("Black umbrella lost yesterday near the central market.");
     for (const op of [suggestFieldsMock, suggestCategoryMock]) {
       const profile = op.mock.calls[0]![2] as { id: string; thoughtEnvelope?: unknown };

@@ -14,8 +14,8 @@ import {
 const ALL_MODES: FaultMode[] = [...FAULT_MODES];
 
 describe("FakeAiProvider scaffolding", () => {
-  it("declares all 31 required modes", () => {
-    expect(ALL_MODES).toHaveLength(31);
+  it("declares all 30 required modes", () => {
+    expect(ALL_MODES).toHaveLength(30);
     for (const mode of [
       "GOOD",
       "SLOW",
@@ -44,7 +44,6 @@ describe("FakeAiProvider scaffolding", () => {
       "NPU_ABSENT",
       "INVALID_UTF8",
       "PROCESS_DEATH",
-      "TWO_VLM_RACE",
       "MODEL_UPDATE_DURING_INFERENCE",
       "CLOUD_OFFLINE",
       "PATH_TRAVERSAL",
@@ -81,19 +80,15 @@ describe("FakeAiProvider scaffolding", () => {
     expect(PROPOSED_MODE_ERROR_MAP.NPU_ABSENT).toBe("RUNTIME_ERROR");
     expect(PROPOSED_MODE_ERROR_MAP.INVALID_UTF8).toBe("INVALID_OUTPUT");
     expect(PROPOSED_MODE_ERROR_MAP.PROCESS_DEATH).toBe("RUNTIME_ERROR");
-    expect(PROPOSED_MODE_ERROR_MAP.TWO_VLM_RACE).toBe("RUNTIME_ERROR");
     expect(PROPOSED_MODE_ERROR_MAP.MODEL_UPDATE_DURING_INFERENCE).toBe("RUNTIME_ERROR");
     expect(PROPOSED_MODE_ERROR_MAP.CLOUD_OFFLINE).toBe("UNSUPPORTED_REQUEST");
     expect(PROPOSED_MODE_ERROR_MAP.PATH_TRAVERSAL).toBe("UNSUPPORTED_REQUEST");
   });
 
-  it("GOOD returns deterministic help text and valid photo JSON", async () => {
+  it("GOOD returns deterministic help text", async () => {
     const fake = new FakeAiProvider({ mode: "GOOD" });
     const help = await fake.generateText({ prompt: "How do I report a lost item?" });
     expect(help.text).toContain("Report tab");
-    const photo = await fake.analyzePhoto({ imageUri: "x", instruction: "describe" });
-    expect(() => JSON.parse(photo.text)).not.toThrow();
-    expect(JSON.parse(photo.text).objectName).toBe("black umbrella");
   });
 
   it("SLOW succeeds after the configured delay and is not itself an error", async () => {
@@ -136,15 +131,15 @@ describe("FakeAiProvider scaffolding", () => {
 
   it("FENCED_JSON / PROSE_PLUS_JSON yield ONE recoverable object; multiples → INVALID_OUTPUT", async () => {
     const fenced = new FakeAiProvider({ mode: "FENCED_JSON" });
-    const fencedText = (await fenced.analyzePhoto({ imageUri: "x", instruction: "y" })).text;
+    const fencedText = (await fenced.generateText({ prompt: "y" })).text;
     const fencedOut = extractSingleJsonObject(fencedText);
     expect(fencedOut.count).toBe(1);
-    expect(JSON.parse(fencedOut.json as string).objectName).toBe("black umbrella");
+    expect(JSON.parse(fencedOut.json as string).intent).toBe("SEARCH");
     const prose = new FakeAiProvider({ mode: "PROSE_PLUS_JSON" });
-    const proseText = (await prose.analyzePhoto({ imageUri: "x", instruction: "y" })).text;
+    const proseText = (await prose.generateText({ prompt: "y" })).text;
     const proseOut = extractSingleJsonObject(proseText);
     expect(proseOut.count).toBe(1);
-    expect(JSON.parse(proseOut.json as string).objectName).toBe("black umbrella");
+    expect(JSON.parse(proseOut.json as string).intent).toBe("SEARCH");
     expect(extractSingleJsonObject('{"a":1} {"b":2}').count).toBe(2);
   });
 
@@ -223,7 +218,6 @@ describe("FakeAiProvider scaffolding", () => {
       "GPU_INIT_ERROR",
       "NPU_ABSENT",
       "PROCESS_DEATH",
-      "TWO_VLM_RACE",
       "MODEL_UPDATE_DURING_INFERENCE",
     ] as const) {
       await expect(new FakeAiProvider({ mode }).generateText({ prompt: "hi" })).rejects.toMatchObject({
@@ -271,14 +265,14 @@ describe("FakeAiProvider scaffolding", () => {
 
   it("deleteModel then generate rejects MODEL_UNAVAILABLE; switchModel releases the old runtime", async () => {
     const fake = new FakeAiProvider({ mode: "GOOD" });
-    fake.deleteModel("smolvlm2-500m");
+    fake.deleteModel("needle3-cact-l20");
     await expect(fake.generateText({ prompt: "hi" })).rejects.toMatchObject({
       errorClass: "MODEL_UNAVAILABLE",
     });
     const switcher = new FakeAiProvider({ mode: "GOOD" });
-    switcher.switchModel("smolvlm-256m");
-    expect(switcher.loadedModel()).toBe("smolvlm-256m");
-    expect(switcher.releasedModels()).toEqual(["smolvlm2-500m"]);
+    switcher.switchModel("test-other-model");
+    expect(switcher.loadedModel()).toBe("test-other-model");
+    expect(switcher.releasedModels()).toEqual(["needle3-cact-l20"]);
     expect(() => switcher.switchModel("not-a-model")).toThrowError(/not installed/);
   });
 });

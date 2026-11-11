@@ -8,7 +8,6 @@ import {
   normalizeProse,
   stripThoughtEnvelope,
   validateIntentPayload,
-  validatePhotoAnalysis,
   validateReportSlots,
   validateSearchFilters,
   type NormalizeOptions,
@@ -24,18 +23,6 @@ const THOUGHT_PLUS_JSON =
 const THOUGHT_ONLY = "[thought] The user lost a jacket and asks about dates [/thought]";
 const THOUGHT_PLUS_PROSE =
   "[thought] This is a help question. [/thought]\n\nOpen the Report tab and choose Lost.";
-
-const VALID_PHOTO = {
-  objectName: "black umbrella",
-  suggestedCategory: "accessories",
-  colors: ["black"],
-  visibleBrand: null,
-  visibleText: [],
-  identifyingFeatures: ["curved wooden handle"],
-  suggestedTitle: "Black umbrella found near the library",
-  suggestedDescription: "A black umbrella with a curved wooden handle.",
-  uncertainFields: ["visibleBrand"],
-};
 
 describe("R1 de-fence: one object only, then strict validation", () => {
   it("extracts fenced and prose-wrapped single objects", () => {
@@ -57,21 +44,7 @@ describe("R1 de-fence: one object only, then strict validation", () => {
     if (!truncated.ok) expect(truncated.error.diagnostic).toBe("R1_MALFORMED_JSON");
   });
 
-  it("rejects lookalike alias keys and missing fields in photo objects", () => {
-    const alias = validatePhotoAnalysis({ ...VALID_PHOTO, title: "Umbrella" });
-    expect(alias.ok).toBe(false);
-    if (!alias.ok) expect(alias.error.diagnostic).toBe("R1_UNKNOWN_FIELD:title");
-    const { colors: _dropped, ...missing } = VALID_PHOTO;
-    const missed = validatePhotoAnalysis(missing);
-    expect(missed.ok).toBe(false);
-    if (!missed.ok) expect(missed.error.diagnostic).toBe("R1_MISSING_FIELD:colors");
-  });
 
-  it("rejects wrong-typed fields (BV02-stock colors-as-string shape)", () => {
-    const bad = validatePhotoAnalysis({ ...VALID_PHOTO, colors: "brown" });
-    expect(bad.ok).toBe(false);
-    if (!bad.ok) expect(bad.error.diagnostic).toBe("R1_BAD_FIELD:colors");
-  });
 });
 
 describe("R2 reasoning-envelope stripping is profile-specific", () => {
@@ -146,74 +119,6 @@ describe("R4 empty is not refusal", () => {
 });
 
 describe("R5 field-stuffing fails even when JSON parses", () => {
-  it("rejects a 60-item color repetition dump", () => {
-    const stuffed = validatePhotoAnalysis({
-      ...VALID_PHOTO,
-      visibleText: Array.from({ length: 60 }, () => "red"),
-    });
-    expect(stuffed.ok).toBe(false);
-    if (!stuffed.ok) expect(stuffed.error.diagnostic).toContain("R5_FIELD_STUFFING");
-  });
-
-  it("rejects one value repeated across fields (Champion-everywhere shape)", () => {
-    const champion = {
-      objectName: "Champion",
-      suggestedCategory: "Champion",
-      colors: ["red"],
-      visibleBrand: "Champion",
-      visibleText: ["Champion"],
-      identifyingFeatures: ["Champion"],
-      suggestedTitle: "Champion",
-      suggestedDescription: "Champion backpack",
-      uncertainFields: ["Champion"],
-    };
-    const rejected = validatePhotoAnalysis(champion);
-    expect(rejected.ok).toBe(false);
-    if (!rejected.ok) expect(rejected.error.diagnostic).toContain("R5_FIELD_STUFFING");
-  });
-
-  it("rejects 3-field cross-field duplication (BV03/BV04-stock shape)", () => {
-    const duped = validatePhotoAnalysis({
-      ...VALID_PHOTO,
-      colors: ["brown"],
-      visibleText: ["brown"],
-      identifyingFeatures: ["brown"],
-    });
-    expect(duped.ok).toBe(false);
-    if (!duped.ok) expect(duped.error.diagnostic).toContain("R5_FIELD_STUFFING");
-  });
-
-  it("rejects BV11-stock shape (8 items / 4 distinct + cross-field broken bag)", () => {
-    const bv11 = validatePhotoAnalysis({
-      ...VALID_PHOTO,
-      objectName: "broken bag",
-      suggestedTitle: "broken bag",
-      colors: ["black", "gray", "white", "red", "blue", "yellow", "orange", "purple"],
-      identifyingFeatures: [
-        "strap",
-        "strap",
-        "buckle",
-        "buckle",
-        "zipper",
-        "zipper",
-        "pocket",
-        "pocket",
-      ],
-    });
-    expect(bv11.ok).toBe(false);
-    if (!bv11.ok) expect(bv11.error.diagnostic).toContain("R5_FIELD_STUFFING");
-  });
-
-  it("accepts the valid photo object and sparse nulls", () => {
-    const sparse = validatePhotoAnalysis({
-      ...VALID_PHOTO,
-      visibleBrand: null,
-      visibleText: [],
-      suggestedCategory: null,
-    });
-    expect(sparse.ok).toBe(true);
-  });
-
   it("rejects model-chosen coordinates in location slots", () => {
     const coords = validateReportSlots({ locationNote: "12.3456, 65.4321" });
     expect(coords.ok).toBe(false);
@@ -269,28 +174,6 @@ describe("R5 field-stuffing fails even when JSON parses", () => {
     const long = normalizeProse("x".repeat(2001), mustProfile(SMOL_TEXT));
     expect(long.ok).toBe(false);
     if (!long.ok) expect(long.error.diagnostic).toBe("R5_ANSWER_TOO_LONG");
-  });
-});
-
-describe("R6 prompt/context-echo rejection", () => {
-  it("rejects schema regurgitation (BV05 shape)", () => {
-    const echo = validatePhotoAnalysis({
-      ...VALID_PHOTO,
-      objectName: "string | null",
-      suggestedCategory: "string | null",
-    });
-    expect(echo.ok).toBe(false);
-    if (!echo.ok) expect(echo.error.diagnostic).toContain("R6_CONTEXT_ECHO");
-  });
-
-  it("rejects values reproducing userContext", () => {
-    const userContext = "found near the central market fountain by the north gate entrance";
-    const echoed = validatePhotoAnalysis(
-      { ...VALID_PHOTO, suggestedDescription: `A photo. ${userContext} and more words here.` },
-      { userContext },
-    );
-    expect(echoed.ok).toBe(false);
-    if (!echoed.ok) expect(echoed.error.diagnostic).toContain("R6_CONTEXT_ECHO");
   });
 });
 

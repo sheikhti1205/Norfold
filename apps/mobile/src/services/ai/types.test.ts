@@ -8,7 +8,6 @@ import {
   isAssistantAction,
   isIntent,
   makeAiError,
-  PHOTO_ANALYSIS_KEYS,
 } from "./types";
 
 describe("AI common contract vocabularies", () => {
@@ -84,17 +83,4 @@ describe("AI common contract vocabularies", () => {
     });
   });
 
-  it("fixes the nine-field photo schema", () => {
-    expect([...PHOTO_ANALYSIS_KEYS]).toEqual([
-      "objectName",
-      "suggestedCategory",
-      "colors",
-      "visibleBrand",
-      "visibleText",
-      "identifyingFeatures",
-      "suggestedTitle",
-      "suggestedDescription",
-      "uncertainFields",
-    ]);
-  });
 });

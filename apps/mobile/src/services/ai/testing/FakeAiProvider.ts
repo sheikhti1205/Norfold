@@ -2,7 +2,7 @@
  * Fake AI provider for deterministic fault-injection scaffolding.
  *
  * Coded against the planned application contract: text generation plus
- * structured photo analysis, with the stable
+ * the stable
  * mode→error-class mapping below. GenerationGuard owns
  * the generation deadline; the production timeout budget is an explicit TBD
  * fed by evaluation measurements + ModelProfile. Ambiguous location resolves
@@ -40,7 +40,6 @@ export type FaultMode =
   | "NPU_ABSENT"
   | "INVALID_UTF8"
   | "PROCESS_DEATH"
-  | "TWO_VLM_RACE"
   | "MODEL_UPDATE_DURING_INFERENCE"
   | "CLOUD_OFFLINE"
   | "PATH_TRAVERSAL";
@@ -73,7 +72,6 @@ export const FAULT_MODES: readonly FaultMode[] = [
   "NPU_ABSENT",
   "INVALID_UTF8",
   "PROCESS_DEATH",
-  "TWO_VLM_RACE",
   "MODEL_UPDATE_DURING_INFERENCE",
   "CLOUD_OFFLINE",
   "PATH_TRAVERSAL",
@@ -143,7 +141,6 @@ export const PROPOSED_MODE_ERROR_MAP: Record<FaultMode, AiErrorClass | null> = {
   NPU_ABSENT: "RUNTIME_ERROR",
   INVALID_UTF8: "INVALID_OUTPUT",
   PROCESS_DEATH: "RUNTIME_ERROR",
-  TWO_VLM_RACE: "RUNTIME_ERROR",
   MODEL_UPDATE_DURING_INFERENCE: "RUNTIME_ERROR",
   CLOUD_OFFLINE: "UNSUPPORTED_REQUEST",
   PATH_TRAVERSAL: "UNSUPPORTED_REQUEST",
@@ -249,14 +246,6 @@ export interface FakeTextRequest {
   temperature?: number;
 }
 
-/** Minimal photo-analysis request mirroring AnalyzeRequest (vlmPlugin.ts). */
-export interface FakePhotoRequest {
-  imageUri: string;
-  instruction: string;
-  maxOutputTokens?: number;
-  temperature?: number;
-}
-
 export interface FakeAiResult {
   text: string;
   modelId: string;
@@ -271,21 +260,11 @@ export interface FakeAiProviderOptions {
   timeoutMs?: number;
   /** Installed models for MODEL_MISSING / delete-while-open scenarios. */
   installedModels?: string[];
-  /** Model the fake pretends to serve. Default "smolvlm2-500m". */
+  /** Model the fake pretends to serve. Default "needle3-cact-l20". */
   modelId?: string;
 }
 
-const VALID_PHOTO_JSON = JSON.stringify({
-  objectName: "black umbrella",
-  suggestedCategory: "accessories",
-  colors: ["black"],
-  visibleBrand: null,
-  visibleText: [],
-  identifyingFeatures: ["curved wooden handle"],
-  suggestedTitle: "Black umbrella found near the library",
-  suggestedDescription: "A black umbrella with a curved wooden handle.",
-  uncertainFields: ["visibleBrand"],
-});
+const VALID_JSON = JSON.stringify({ intent: "SEARCH" });
 
 const LOOP_SENTENCE_TEXT =
   "Tap Report, then Lost, then fill the form. ".repeat(12).trim();
@@ -331,14 +310,13 @@ export class FakeAiProvider {
   private readonly releasedRuntimes: string[];
   /** Captured generation requests so callers can assert cap propagation. */
   readonly textRequests: FakeTextRequest[] = [];
-  readonly photoRequests: FakePhotoRequest[] = [];
 
   constructor(options: FakeAiProviderOptions) {
     this.mode = options.mode;
     this.slowDelayMs = options.slowDelayMs ?? 250;
     this.timeoutMs = options.timeoutMs ?? 50;
-    this.installed = new Set(options.installedModels ?? ["smolvlm2-500m", "smolvlm-256m"]);
-    this.modelId = options.modelId ?? "smolvlm2-500m";
+    this.installed = new Set(options.installedModels ?? ["needle3-cact-l20", "test-other-model"]);
+    this.modelId = options.modelId ?? "needle3-cact-l20";
     this.loadedRuntime = this.modelId;
     this.releasedRuntimes = [];
   }
@@ -385,15 +363,10 @@ export class FakeAiProvider {
 
   async generateText(request: FakeTextRequest, signal?: AbortSignal): Promise<FakeAiResult> {
     this.textRequests.push({ ...request });
-    return this.run(request.prompt, "help", signal);
+    return this.run(request.prompt, signal);
   }
 
-  async analyzePhoto(request: FakePhotoRequest, signal?: AbortSignal): Promise<FakeAiResult> {
-    this.photoRequests.push({ ...request });
-    return this.run(request.instruction, "photo", signal);
-  }
-
-  private async run(input: string, kind: "help" | "photo", signal?: AbortSignal): Promise<FakeAiResult> {
+  private async run(input: string, signal?: AbortSignal): Promise<FakeAiResult> {
     if (signal?.aborted) {
       throw new FakeAiError("CANCELLED", "CANCELLED", "aborted before start");
     }
@@ -426,8 +399,6 @@ export class FakeAiProvider {
         throw new FakeAiError("RUNTIME_ERROR", this.mode, "npu delegate absent on this device");
       case "PROCESS_DEATH":
         throw new FakeAiError("RUNTIME_ERROR", this.mode, "host process died mid-generation");
-      case "TWO_VLM_RACE":
-        throw new FakeAiError("RUNTIME_ERROR", this.mode, "concurrent vlm sessions conflict");
       case "MODEL_UPDATE_DURING_INFERENCE":
         throw new FakeAiError("RUNTIME_ERROR", this.mode, "model revision changed mid-inference");
       case "CLOUD_OFFLINE":
@@ -446,17 +417,15 @@ export class FakeAiProvider {
     if (!this.installed.has(this.modelId)) {
       throw new FakeAiError("MODEL_UNAVAILABLE", "MODEL_MISSING", `model not installed: ${this.modelId}`);
     }
-    return { text: this.cannedText(input, kind), modelId: this.modelId, backend: "fake" };
+    return { text: this.cannedText(input), modelId: this.modelId, backend: "fake" };
   }
 
-  private cannedText(input: string, kind: "help" | "photo"): string {
+  private cannedText(input: string): string {
     void input;
     switch (this.mode) {
       case "GOOD":
       case "SLOW":
-        return kind === "photo"
-          ? VALID_PHOTO_JSON
-          : "Open the Report tab, choose Lost, fill the form, then Publish.";
+        return "Open the Report tab, choose Lost, fill the form, then Publish.";
       case "LOOP_SENTENCE":
         return LOOP_SENTENCE_TEXT;
       case "LOOP_PARAGRAPH":
@@ -466,11 +435,11 @@ export class FakeAiProvider {
       case "INVALID_JSON":
         return "{objectName: black umbrella, colors: [}";
       case "FENCED_JSON":
-        return "```json\n" + VALID_PHOTO_JSON + "\n```";
+        return "```json\n" + VALID_JSON + "\n```";
       case "PROSE_PLUS_JSON":
-        return "Here is the analysis you asked for:\n" + VALID_PHOTO_JSON + "\nLet me know if you need anything else.";
+        return "Here is the analysis you asked for:\n" + VALID_JSON + "\nLet me know if you need anything else.";
       case "TRUNCATED_JSON":
-        return VALID_PHOTO_JSON.slice(0, Math.floor(VALID_PHOTO_JSON.length / 2));
+        return VALID_JSON.slice(0, Math.floor(VALID_JSON.length / 2));
       case "WRONG_ACTION":
         return JSON.stringify({ action: "delete_someone_elses_post", args: { postId: "abc" } });
       case "UNKNOWN_ACTION":
@@ -493,7 +462,6 @@ export class FakeAiProvider {
       case "GPU_INIT_ERROR":
       case "NPU_ABSENT":
       case "PROCESS_DEATH":
-      case "TWO_VLM_RACE":
       case "MODEL_UPDATE_DURING_INFERENCE":
       case "CLOUD_OFFLINE":
       case "PATH_TRAVERSAL":
