@@ -138,6 +138,19 @@ afterEach(() => {
 });
 
 describe("MyPosts (My Reports alignment)", () => {
+  it("offers to clear an empty status filter without claiming there are no reports", async () => {
+    fetchFeedMock.mockImplementation(async (filters) => filters.status
+      ? { items: [], nextCursor: null, total: 0 }
+      : { items: [post("p1")], nextCursor: null, total: 1 });
+    renderMyPosts();
+    await screen.findByText("Report p1");
+    fireEvent.click(screen.getByRole("radio", { name: "Closed" }));
+    await screen.findByText("No reports with this status");
+    expect(screen.queryByText("You have no reports yet")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
+    expect(await screen.findByText("Report p1")).toBeTruthy();
+  });
+
   it("keeps the userId feed restriction on every fetch", async () => {
     renderMyPosts();
     await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());

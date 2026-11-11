@@ -159,6 +159,22 @@ describe("SearchScreen URL filters", () => {
     expect((screen.getByLabelText("Search posts") as HTMLInputElement).value).toBe("phone");
   });
 
+  it("hides the result count until a first request succeeds", async () => {
+    let resolve!: (value: { items: never[]; nextCursor: null; total: number }) => void;
+    fetchFeedMock.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+    renderSearch();
+    expect(screen.queryByText("0 results")).toBeNull();
+    resolve({ items: [], nextCursor: null, total: 0 });
+    expect(await screen.findByText("0 results")).toBeTruthy();
+  });
+
+  it("does not announce a zero count after a failed first request", async () => {
+    fetchFeedMock.mockRejectedValueOnce(new Error("offline"));
+    renderSearch();
+    await screen.findByText("Could not load");
+    expect(screen.queryByText("0 results")).toBeNull();
+  });
+
   it("keeps the distance changed while location is pending", async () => {
     let resolveFix!: (value: { kind: string; lat: number; lng: number }) => void;
     locationFixMock.mockImplementation(() => new Promise(resolve => { resolveFix = resolve; }));

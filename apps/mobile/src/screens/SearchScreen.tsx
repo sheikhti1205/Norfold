@@ -544,7 +544,7 @@ function ReportSearch(props: SearchScreenProps) {
         }`}
       >
         <h1 className="text-lg font-semibold tracking-tight">Search reports</h1>
-        <AnimatePresence initial={false} mode="wait">
+        {(!loading && (!error || items.length > 0)) && <AnimatePresence initial={false} mode="wait">
           <motion.p
             key={`${total}:${visibleItems.length}`}
             variants={fadeVariants}
@@ -559,7 +559,7 @@ function ReportSearch(props: SearchScreenProps) {
               ? `${visibleItems.length} matching report${visibleItems.length === 1 ? "" : "s"} loaded for ${place}`
               : `${total} result${total === 1 ? "" : "s"}`}
           </motion.p>
-        </AnimatePresence>
+        </AnimatePresence>}
       </header>
 
       {/* Ordinary search stays visible; only the advanced fields occupy a panel.

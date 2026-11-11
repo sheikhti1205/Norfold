@@ -658,11 +658,18 @@ export function MyPosts() {
             hasMore={hasMore}
             onLoadMore={loadMore}
             onRetry={refresh}
-            emptyTitle="You have no reports yet"
-            emptySubtitle="Tap Report to post a lost or found item."
+            emptyTitle={ownerStatus === "ALL" ? "You have no reports yet" : "No reports with this status"}
+            emptySubtitle={ownerStatus === "ALL" ? "Tap Report to post a lost or found item." : "Try another status or clear the filter."}
             density="owner-feed"
             masonryColumns={ownerColumns}
           />
+          {ownerStatus !== "ALL" && items.length === 0 && !loading && !error && (
+            <div className="flex justify-center">
+              <button type="button" onClick={() => setOwnerStatus("ALL")} className="min-h-[44px] px-4 text-sm font-medium underline">
+                Clear filter
+              </button>
+            </div>
+          )}
         </PullToRefresh>
       </OwnerReportActionsProvider>
 

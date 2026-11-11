@@ -8,6 +8,7 @@ interface NewPostsPillProps {
   count: number;
   hasUpdates?: boolean;
   onTap: () => void;
+  overlay?: boolean;
 }
 
 /**
@@ -23,7 +24,7 @@ interface NewPostsPillProps {
  * (reported Wave-D gap), so the travel uses a small inline y with the
  * shared standard duration/easing — transform/opacity only.
  */
-export function NewPostsPill({ count, hasUpdates, onTap }: NewPostsPillProps) {
+export function NewPostsPill({ count, hasUpdates, onTap, overlay = false }: NewPostsPillProps) {
   const visible = count > 0 || hasUpdates === true;
   const label = count > 0 ? `${count} new post${count === 1 ? "" : "s"}` : "Updates";
   return (
@@ -37,7 +38,7 @@ export function NewPostsPill({ count, hasUpdates, onTap }: NewPostsPillProps) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: motionDurations.standard, ease: motionEasings.out }}
-            className="sticky top-2 z-10 flex min-h-[48px] justify-center px-4"
+            className={`${overlay ? "absolute inset-x-0" : "sticky"} top-2 z-10 flex min-h-[48px] justify-center px-4`}
           >
             <button
               type="button"

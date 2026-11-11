@@ -26,4 +26,9 @@ describe("NewPostsPill", () => {
     render(<NewPostsPill count={0} hasUpdates onTap={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Updates — tap to refresh" })).toBeTruthy();
   });
+
+  it("positions the visible pill outside normal layout flow", () => {
+    render(<NewPostsPill count={0} hasUpdates onTap={vi.fn()} overlay />);
+    expect(screen.getByRole("button").parentElement?.className).toContain("absolute");
+  });
 });

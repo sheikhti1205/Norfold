@@ -135,7 +135,7 @@ describe("Home realtime", () => {
     expect(fetchFeedMock).not.toHaveBeenCalled();
   });
 
-  it("ignores a provable non-member insert under a type filter", async () => {
+  it("refreshes an invalidated type-filtered feed at the top", async () => {
     renderHome();
     await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
 
@@ -145,39 +145,21 @@ describe("Home realtime", () => {
     );
     fetchFeedMock.mockClear();
 
-    act(() =>
-      emit("feed:changed", {
-        change: "INSERT",
-        op: "INSERT",
-        postId: "x",
-        postType: "FOUND",
-        title: "Found keys",
-      }),
-    );
+    act(() => emit("feed:changed", { invalidate: true }));
 
-    expect(fetchFeedMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledTimes(1));
     expect(screen.queryByText(/new post/i)).toBeNull();
     expect(screen.queryByText(/^updates$/i)).toBeNull();
   });
 
-  it("refreshes for a matching insert under a type filter", async () => {
+  it("refreshes an invalidated unfiltered feed at the top", async () => {
     renderHome();
     await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
 
-    fireEvent.click(screen.getByRole("radio", { name: "Lost" }));
-    await waitFor(() =>
-      expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ type: "LOST" }), undefined),
-    );
     fetchFeedMock.mockClear();
 
     act(() =>
-      emit("feed:changed", {
-        change: "INSERT",
-        op: "INSERT",
-        postId: "y",
-        postType: "LOST",
-        title: "Lost wallet",
-      }),
+      emit("feed:changed", { invalidate: true }),
     );
 
     await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledTimes(1));
@@ -193,19 +175,13 @@ describe("Home realtime", () => {
       { timeout: 3000 },
     );
 
-    // Scroll the reader down, then receive an insert.
+    // Scroll the reader down, then receive an invalidation.
     const scroller = container.querySelector(".overflow-y-auto");
     expect(scroller).toBeTruthy();
     (scroller as HTMLElement).scrollTop = 100;
 
     act(() =>
-      emit("feed:changed", {
-        change: "INSERT",
-        op: "INSERT",
-        postId: "z",
-        postType: "LOST",
-        title: "Lost wallet",
-      }),
+      emit("feed:changed", { invalidate: true }),
     );
 
     expect(await screen.findByRole("button", { name: "Updates — tap to refresh" })).toBeTruthy();
@@ -509,7 +485,7 @@ describe("Home realtime", () => {
     expect(fetchFeedMock).not.toHaveBeenCalled();
   });
 
-  it("shows the new-posts pill when scrolled and removes it cleanly on tap", async () => {
+  it("shows the updates pill when scrolled and removes it cleanly on tap", async () => {
     const scrollTo = vi.fn();
     const originalScrollTo = HTMLElement.prototype.scrollTo;
     HTMLElement.prototype.scrollTo = scrollTo as unknown as typeof HTMLElement.prototype.scrollTo;
@@ -523,22 +499,22 @@ describe("Home realtime", () => {
       (scroller as HTMLElement).scrollTop = 100;
 
       act(() =>
-        emit("feed:changed", { change: "INSERT", op: "INSERT", postId: "n1", postType: "LOST", title: "Lost wallet" }),
+        emit("feed:changed", { invalidate: true }),
       );
-      expect(await screen.findByRole("button", { name: "1 new post — tap to refresh" })).toBeTruthy();
+      expect(await screen.findByRole("button", { name: "Updates — tap to refresh" })).toBeTruthy();
 
-      // A second insert updates the count label (no full re-render of rows).
+      // A second invalidation remains an update, not a new-post count.
       act(() =>
-        emit("feed:changed", { change: "INSERT", op: "INSERT", postId: "n2", postType: "FOUND", title: "Found keys" }),
+        emit("feed:changed", { invalidate: true }),
       );
-      expect(await screen.findByRole("button", { name: "2 new posts — tap to refresh" })).toBeTruthy();
+      expect(await screen.findByRole("button", { name: "Updates — tap to refresh" })).toBeTruthy();
       expect(screen.getByText("a")).toBeTruthy();
 
       fetchFeedMock.mockClear();
       fireEvent.click(screen.getByRole("button", { name: /tap to refresh/i }));
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledTimes(1));
       expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "smooth" });
-      await waitFor(() => expect(screen.queryByRole("button", { name: /new posts? — tap to refresh/i })).toBeNull());
+      await waitFor(() => expect(screen.queryByRole("button", { name: "Updates — tap to refresh" })).toBeNull());
     } finally {
       HTMLElement.prototype.scrollTo = originalScrollTo;
     }
