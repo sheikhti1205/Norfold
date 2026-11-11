@@ -29,6 +29,14 @@ describe("UserAvatar", () => {
     expect(screen.getByText("TE")).toBeTruthy();
   });
 
+  it("tries a replacement URL after an image failure", () => {
+    const view = render(<UserAvatar avatarUrl="broken.png" username="tester" />);
+    fireEvent.error(view.container.querySelector("img")!);
+    expect(screen.getByText("TE")).toBeTruthy();
+    view.rerender(<UserAvatar avatarUrl="fixed.png" username="tester" />);
+    expect(view.container.querySelector("img")?.getAttribute("src")).toBe("fixed.png");
+  });
+
   it("renders a generic glyph when there is no username and no image", () => {
     const { container } = render(<UserAvatar username="" />);
     expect(container.querySelector("svg")).toBeTruthy();

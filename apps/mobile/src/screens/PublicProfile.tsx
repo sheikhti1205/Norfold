@@ -49,6 +49,8 @@ function PublicProfileSession({ username }: { username: string }) {
   const pageInFlight = useRef(false);
   const [profile, setProfile] = useState<PublicProfileShape | null>(null);
   const [reports, setReports] = useState<PostItem[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(true);
+  const [reportsError, setReportsError] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -72,24 +74,14 @@ function PublicProfileSession({ username }: { username: string }) {
         setProfile(found);
         setReputationTier(null);
         setReputationLoading(true);
-        // Reputation and the reports feed are both supplementary and both
-        // need found.id, so run them together instead of serializing.
-        const [reputationResult, feedResult] = await Promise.allSettled([
-          fetchReputationTier(found.id),
-          fetchFeed({ userId: found.id }),
-        ]);
-        if (!alive) return;
-        if (reputationResult.status === "fulfilled") {
-          setReputationTier(reputationResult.value);
-        } else {
-          setReputationTier(null);
-        }
-        setReputationLoading(false);
-        if (feedResult.status === "fulfilled") {
-          setReports(feedResult.value.items);
-          setNextCursor(feedResult.value.nextCursor ?? null);
-        }
-        // Both failures are non-fatal: the profile still renders.
+        void fetchReputationTier(found.id).then((tier) => {
+          if (alive) setReputationTier(tier);
+        }).catch(() => {
+          if (alive) setReputationTier(null);
+        }).finally(() => {
+          if (alive) setReputationLoading(false);
+        });
+        void loadReports(found.id);
       } catch {
         if (alive) setError("That profile could not be found.");
       } finally {
@@ -100,6 +92,21 @@ function PublicProfileSession({ username }: { username: string }) {
       alive = false;
     };
   }, [username]);
+
+  async function loadReports(userId: string) {
+    setReportsLoading(true);
+    setReportsError(false);
+    try {
+      const page = await fetchFeed({ userId });
+      if (!alive.current) return;
+      setReports(page.items);
+      setNextCursor(page.nextCursor ?? null);
+    } catch {
+      if (alive.current) setReportsError(true);
+    } finally {
+      if (alive.current) setReportsLoading(false);
+    }
+  }
 
   async function loadMoreReports() {
     if (!alive.current || !profile || !nextCursor || pageInFlight.current) return;
@@ -183,7 +190,15 @@ function PublicProfileSession({ username }: { username: string }) {
           )}
 
           <SettingsGroup title="Reports">
-            {reports.length === 0 ? (
+            {reportsLoading ? (
+              <p role="status" className="p-4 text-sm text-on-surface-variant">Loading reports…</p>
+            ) : reportsError ? (
+              <div className="flex flex-col gap-2 p-4">
+                <p role="alert" className="text-sm text-error">Could not load reports. Check your connection and try again.</p>
+                <button type="button" onClick={() => void loadReports(profile.id)}
+                  className="min-h-[44px] self-start px-2 text-sm font-medium underline">Retry</button>
+              </div>
+            ) : reports.length === 0 ? (
               <p className="p-4 text-sm text-on-surface-variant">No public reports yet.</p>
             ) : (
               reports.map((report) => (

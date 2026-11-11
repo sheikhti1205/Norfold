@@ -219,22 +219,6 @@ export interface ModerationTarget {
   reopen?: ModerationReopenRequest | null;
 }
 
-/** One outcome for the author ("your post was hidden"), never who or why. */
-export interface ModerationOutcome {
-  targetType: ReportTargetType;
-  targetId: string;
-  action: ModerationAction;
-  reason: ReportReason;
-  createdAt: string;
-}
-
-/** The author's own row state. A state reader, not a visibility predicate. */
-export interface MyPostModeration {
-  postId: string;
-  visibility: ModerationVisibility;
-  updatedAt: string;
-}
-
 /** The result of one moderated action: the audit row it appended. */
 export interface ModerationResult {
   auditId: string;
@@ -533,23 +517,6 @@ export async function fetchModerationQueue(limit = 50): Promise<ModerationQueueE
     .filter((row): row is ModerationQueueEntry => row !== null);
 }
 
-/**
- * How many open cases the queue would show, for an honest staff badge.
- *
- * One grouped case is one unit, exactly like the queue itself: five reports
- * about the same person are one case, not five. A caller without
- * `reports_review` is refused by the server with 42501.
- */
-export async function fetchModerationQueueCount(): Promise<number> {
-  const { data, error } = await getSupabase().rpc("findback_moderation_queue_count", {});
-  if (error) throw moderationError(error.message, error.code);
-  const value = typeof data === "number" ? data : Number(data);
-  if (!Number.isFinite(value) || value < 0) {
-    throw new ApiError("The server did not return a count.", 500, "UNEXPECTED_SHAPE");
-  }
-  return Math.trunc(value);
-}
-
 /** One case in full: the live target (or null), its reports, its decisions. */
 export async function fetchModerationTarget(
   targetType: ReportTargetType,
@@ -671,46 +638,6 @@ export async function applyModeration(input: ApplyModerationInput): Promise<Mode
   const auditId = text(data);
   if (!auditId) throw new ApiError("The server did not return an audit id.", 500, "UNEXPECTED_SHAPE");
   return { auditId };
-}
-
-/** The caller's own outcomes, five fields. A deleted target stops resolving. */
-export async function listMyModerationOutcomes(): Promise<ModerationOutcome[]> {
-  const { data, error } = await getSupabase().rpc("findback_my_moderation_outcomes", {});
-  if (error) throw moderationError(error.message, error.code);
-  return asRows(data)
-    .map((row) => {
-      const targetType = isTargetType(row.target_type) ? row.target_type : null;
-      const targetId = text(row.target_id);
-      const createdAt = text(row.created_at);
-      if (!targetType || !targetId || !createdAt) return null;
-      if (!isAction(row.action) || !isReason(row.reason)) return null;
-      return {
-        targetType,
-        targetId,
-        action: row.action,
-        reason: row.reason,
-        createdAt,
-      } satisfies ModerationOutcome;
-    })
-    .filter((row): row is ModerationOutcome => row !== null);
-}
-
-/** The state of the caller's own rows, in every state, and no one else's. */
-export async function fetchMyPostModeration(): Promise<MyPostModeration[]> {
-  const { data, error } = await getSupabase().rpc("findback_my_post_moderation", {});
-  if (error) throw moderationError(error.message, error.code);
-  return asRows(data)
-    .map((row) => {
-      const postId = text(row.post_id);
-      const updatedAt = text(row.updated_at);
-      if (!postId || !updatedAt || !isVisibility(row.moderation_visibility)) return null;
-      return {
-        postId,
-        visibility: row.moderation_visibility,
-        updatedAt,
-      } satisfies MyPostModeration;
-    })
-    .filter((row): row is MyPostModeration => row !== null);
 }
 
 /**

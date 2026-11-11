@@ -63,7 +63,9 @@ export function Terms({ publicView = false }: { publicView?: boolean }) {
           AI Chat is optional and works through the cloud provider you choose in Settings. The
           messages you send, and the conversation context needed to answer them, go to that
           provider. Possible Matches uses report text, category, date and location; its similarity
-          scores are not probabilities. This beta does not compare photos or generate report fields.
+          scores are not probabilities. Optional on-device helpers can suggest report fields such as
+          a title, description and date. You can review and edit suggestions; nothing is published
+          automatically. This beta does not compare or analyze photos.
         </Paragraph>
         <Paragraph>
           AI answers can be wrong, incomplete or out of date. Check anything important against the

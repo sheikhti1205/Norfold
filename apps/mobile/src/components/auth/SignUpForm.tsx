@@ -9,7 +9,7 @@ import { checkUsername } from "../../services/auth";
 import { getAuthReturnRoute } from "../../utils/authReturnTo";
 import { USERNAME_CHECK_DEBOUNCE_MS, normalizePhone } from "@norfold/shared";
 
-type UsernameState = "idle" | "loading" | "available" | "taken" | "invalid";
+type UsernameState = "idle" | "loading" | "available" | "taken" | "invalid" | "failed";
 
 /**
  * Stage C signup form. Backend behavior is byte-for-byte the pre-existing
@@ -36,6 +36,7 @@ export function SignUpForm({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const checkSeq = useRef(0);
+  const retryInFlight = useRef(false);
 
   // Live, debounced username availability against the Norfold database.
   useEffect(() => {
@@ -58,13 +59,13 @@ export function SignUpForm({
           }
         })
         .catch(() => {
-          if (checkSeq.current === seq) setUsernameState("idle");
+          if (checkSeq.current === seq) setUsernameState("failed");
         });
     }, USERNAME_CHECK_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [username]);
 
-  const usernameMessage: Record<Exclude<UsernameState, "idle" | "loading">, string> = {
+  const usernameMessage: Record<Exclude<UsernameState, "idle" | "loading" | "failed">, string> = {
     available: "Username available",
     taken: "Username is already taken",
     invalid: "3–20 letters, numbers or underscores",
@@ -72,6 +73,7 @@ export function SignUpForm({
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (retryInFlight.current) return;
     setError(null);
     const name = username.trim();
     if (!name) {
@@ -83,8 +85,20 @@ export function SignUpForm({
       setError("Username must be 3–20 letters, numbers or underscores.");
       return;
     }
-    // The live check must have actually answered before we let the account
-    // through; "loading" and a network-errored "idle" both mean unknown.
+    if (usernameState === "failed") {
+      retryInFlight.current = true;
+      const seq = ++checkSeq.current;
+      setUsernameState("loading");
+      try {
+        const result = await checkUsername(name);
+        if (checkSeq.current === seq) setUsernameState(result.available ? "available" : "taken");
+      } catch {
+        if (checkSeq.current === seq) setUsernameState("failed");
+      } finally {
+        retryInFlight.current = false;
+      }
+      return;
+    }
     if (usernameState === "loading" || usernameState === "idle") {
       setError("Still checking username availability — wait a moment and try again.");
       return;
@@ -179,6 +193,7 @@ export function SignUpForm({
             {usernameState === "taken" && "✗ Username already exists"}
             {usernameState === "invalid" && usernameMessage.invalid}
             {usernameState === "loading" && "Checking availability…"}
+            {usernameState === "failed" && "Could not check availability. Press Create account to retry."}
             {usernameState === "idle" && "Checked live while you type — no page reload."}
           </p>
         </div>

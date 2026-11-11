@@ -187,12 +187,13 @@ describe("register", () => {
     expect(getToken()).toBe("tok");
   });
 
-  it("treats an empty-identity user as a duplicate", async () => {
+  it("treats an empty-identity user as pending verification without revealing account existence", async () => {
     clientMock.auth.signUp.mockResolvedValue({
       data: { user: { id: "u1", email: "tester@example.com", identities: [] }, session: null },
       error: null,
     });
-    await expect(register(REGISTER_INPUT)).rejects.toThrow(/already exists/i);
+    await expect(register(REGISTER_INPUT)).resolves.toMatchObject({ emailVerificationRequired: true, email: REGISTER_INPUT.email });
+    expect(getToken()).toBeNull();
   });
 });
 

@@ -11,9 +11,8 @@ import { ApiError } from "../../services/session";
 
 /**
  * Stage B sign-in form. Backend behavior is the pre-existing `login()` call —
- * only the presentation is new. Every sign-in failure (unknown email, wrong
- * password, offline) surfaces the SAME generic wording so nothing leaks
- * account membership. The email is never cleared on failure.
+ * only the presentation is new. Unconfirmed email routes to verification;
+ * other sign-in failures use generic wording. The email is never cleared.
  *
  * The "Forgot password" link routes to /forgot, which always shows the same
  * check-your-inbox message (anti-enumeration, same rule as sign-in).

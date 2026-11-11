@@ -60,7 +60,7 @@ export function ProfileEdit() {
 
       <ProfileAvatarEditor />
 
-      <ProfileIdentityEditor />
+      <ProfileIdentityEditor key={user.id} />
 
       <ProfilePhoneEditor
         key={identity}

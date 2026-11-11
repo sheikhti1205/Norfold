@@ -139,11 +139,13 @@ describe("PublicProfile", () => {
     expect(screen.getByText("OW")).toBeTruthy();
   });
 
-  it("strips email and phone from the public surface", async () => {
+  it("shows verification flags from the public profile without contact fields", async () => {
     renderRoute();
     await screen.findByText("Owner Name");
-    expect(screen.queryByText(/@example\.com/)).toBeNull();
-    expect(screen.queryByText("+8801812345678")).toBeNull();
+    expect(screen.getByText("Email verified")).toBeTruthy();
+    expect(screen.getByText("Phone verified")).toBeTruthy();
+    expect(Object.keys(profile)).not.toContain("email");
+    expect(Object.keys(profile)).not.toContain("phone");
   });
 
   it("links that user's public reports through the existing feed API", async () => {
@@ -160,6 +162,27 @@ describe("PublicProfile", () => {
     renderRoute();
     expect(await screen.findByText("Owner Name")).toBeTruthy();
     expect(screen.queryByText("Found a wallet")).toBeNull();
+    expect((await screen.findByRole("alert")).textContent).toMatch(/could not load reports/i);
+    expect(screen.queryByText("No public reports yet.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("Found a wallet")).toBeTruthy();
+  });
+
+  it("renders the profile and reports while reputation remains pending", async () => {
+    fetchReputationTierMock.mockReturnValueOnce(new Promise(() => undefined));
+    renderRoute();
+    expect(await screen.findByText("Owner Name")).toBeTruthy();
+    expect(await screen.findByText("Found a wallet")).toBeTruthy();
+    expect(screen.queryByText("Loading profile…")).toBeNull();
+  });
+
+  it("renders the profile and reputation while reports remain pending", async () => {
+    fetchFeedMock.mockReturnValueOnce(new Promise(() => undefined));
+    renderRoute();
+    expect(await screen.findByText("Owner Name")).toBeTruthy();
+    expect(await screen.findByText(/Reputation: Established/i)).toBeTruthy();
+    expect(screen.getByText("Loading reports…")).toBeTruthy();
+    expect(screen.queryByText("No public reports yet.")).toBeNull();
   });
 
   it("still renders the profile and reports when reputation fetch fails", async () => {

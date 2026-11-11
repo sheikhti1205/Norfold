@@ -2,7 +2,8 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
-const { publishReportMock, publishReportWithPhotosMock, photo, nativeMedia } = vi.hoisted(() => ({
+const { publishReportMock, publishReportWithPhotosMock, photo, nativeMedia, announceMock } = vi.hoisted(() => ({
+  announceMock: vi.fn(),
   publishReportMock: vi.fn(),
   publishReportWithPhotosMock: vi.fn(),
   photo: {
@@ -52,6 +53,7 @@ vi.mock("../services/posts", async (importOriginal) => {
   };
 });
 vi.mock("../services/photo", () => photo);
+vi.mock("../components/LiveRegion", () => ({ announce: announceMock }));
 vi.mock("../services/media/nativeMedia", () => ({
   chooseNativeImage: nativeMedia.chooseNativeImage,
   chooseNativeImages: nativeMedia.chooseNativeImages,
@@ -100,6 +102,7 @@ function pickFile(file: File) {
 }
 
 beforeEach(() => {
+  announceMock.mockReset();
   publishReportMock.mockReset();
   publishReportWithPhotosMock.mockReset();
   clearDraft();
@@ -124,7 +127,7 @@ describe("CreateReport", () => {
     expect(screen.queryByText(/Safety tip: post about your own item/i)).toBeNull();
   });
 
-  it("does not offer the generic file picker on native, so all capture paths reach the VLM", async () => {
+  it("does not offer the generic file picker on native, keeping capture paths in the media pipeline", async () => {
     photo.isNativeCameraAvailable.mockReturnValue(true);
     try {
       render(<CreateReport />);
@@ -766,6 +769,38 @@ describe("CreateReport", () => {
     render(<CreateReport />);
     fireEvent.change(screen.getByLabelText(/youtube link/i), { target: { value: "https://example.com/video" } });
     expect(await screen.findByText(/doesn't look like a youtube link/i)).toBeTruthy();
+  });
+
+  it("focuses the validation summary and retains field errors on invalid publish", async () => {
+    seedDescription("a black phone lost near the library");
+    render(<CreateReport />);
+    fireEvent.change(screen.getByLabelText(/what did you lose/i), { target: { value: "Ab" } });
+    await chooseCategory("Electronics");
+    fireEvent.submit(screen.getByRole("button", { name: /publish/i }).closest("form")!);
+    const summary = await screen.findByText("Fix the highlighted fields before publishing.");
+    await waitFor(() => expect(document.activeElement).toBe(summary));
+    expect(announceMock).toHaveBeenCalledWith("Fix the highlighted fields before publishing.");
+    expect(screen.getByText(/title must be at least 3 characters/i)).toBeTruthy();
+    expect(publishReportMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["pending", "failed"])("autosaves text and preserves photo references while recovery is %s", async (state) => {
+    const refs = [{ id: "pending", nativeUri: "content://photo", webPath: "content://photo", format: "jpg" }];
+    const restore = vi.spyOn(photoStore, "restoreStashedPhotos").mockImplementation(() =>
+      state === "pending" ? new Promise<string[]>(() => {}) : Promise.reject(new Error("offline")),
+    );
+    try {
+      seedDescription("a black phone lost near the library");
+      saveDraft({ ...loadDraft("u1")!, photoId: "pending", photoIds: ["pending"], photoRefs: refs }, "u1");
+      render(<CreateReport />);
+      if (state === "failed") await screen.findByText(/saved photos could not be recovered/i);
+      fireEvent.change(screen.getByLabelText(/what did you lose/i), { target: { value: "Edited during recovery" } });
+      await waitFor(() => expect(loadDraft("u1")?.title).toBe("Edited during recovery"));
+      expect(loadDraft("u1")?.photoIds).toEqual(["pending"]);
+      expect(loadDraft("u1")?.photoRefs).toEqual(refs);
+    } finally {
+      restore.mockRestore();
+    }
   });
 
   // Validation alignment tests (W6 #17)

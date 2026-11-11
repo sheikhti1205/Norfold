@@ -241,6 +241,15 @@ describe("CompleteProfile seeds (W0.5)", () => {
     await waitFor(() => expect(complete).toHaveBeenCalledTimes(1));
   });
 
+  it("retries a failed username check without editing the username", async () => {
+    mockCheckUsername.mockRejectedValueOnce(new Error("offline"));
+    renderProfile();
+    expect(await screen.findByText(/could not check availability/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText(/username available/i)).toBeTruthy();
+    expect(mockCheckUsername).toHaveBeenCalledTimes(2);
+  });
+
   it("an unavailable username cannot finalize", async () => {
     const complete = vi.fn(async () => FAKE_USER);
     __setCompleteSocialProfile(complete);
@@ -324,7 +333,7 @@ describe("CompleteProfile seeds (W0.5)", () => {
     expect(alert.textContent).toMatch(/couldn't save your profile right now/i);
   });
 
-  it("keyboard path: labelled fields in focus order and form submit completes", async () => {
+  it("renders labelled fields and completes form submission", async () => {
     const complete = vi.fn(async () => FAKE_USER);
     __setCompleteSocialProfile(complete);
     const { container } = renderProfile();

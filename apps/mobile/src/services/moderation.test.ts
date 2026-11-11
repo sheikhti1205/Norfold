@@ -42,10 +42,7 @@ import {
   SANCTION_KINDS,
   applyModeration,
   fetchModerationQueue,
-  fetchModerationQueueCount,
   fetchModerationTarget,
-  fetchMyPostModeration,
-  listMyModerationOutcomes,
   listMyReports,
   submitAppeal,
   submitReport,
@@ -457,27 +454,6 @@ describe("the moderator queue", () => {
   });
 });
 
-describe("the staff queue count", () => {
-  it("asks the grouped-count reader and returns a whole number", async () => {
-    rpcMock.mockResolvedValue({ data: "3", error: null });
-
-    await expect(fetchModerationQueueCount()).resolves.toBe(3);
-    expect(rpcMock).toHaveBeenCalledWith("findback_moderation_queue_count", {});
-  });
-
-  it("refuses a count the client cannot trust", async () => {
-    rpcMock.mockResolvedValue({ data: -1, error: null });
-    await expect(fetchModerationQueueCount()).rejects.toMatchObject({ code: "UNEXPECTED_SHAPE" });
-    rpcMock.mockResolvedValue({ data: "many", error: null });
-    await expect(fetchModerationQueueCount()).rejects.toMatchObject({ code: "UNEXPECTED_SHAPE" });
-  });
-
-  it("keeps the server's permission refusal", async () => {
-    rpcMock.mockResolvedValue({ data: null, error: { code: "42501", message: "You may not read the moderation queue" } });
-    await expect(fetchModerationQueueCount()).rejects.toMatchObject({ status: 403 });
-  });
-});
-
 describe("the case detail", () => {
   it("returns the live target, its reports and its decisions", async () => {
     rpcMock.mockResolvedValue({
@@ -678,52 +654,6 @@ describe("applying one action", () => {
     await expect(
       applyModeration({ targetType: "USER", targetId: "u1", action: "BAN", reasonCode: "OTHER" }),
     ).rejects.toMatchObject({ status: 403, code: "42501" });
-  });
-});
-
-describe("the author's own view", () => {
-  it("lists the caller's outcomes, five fields, and drops an unknown action", async () => {
-    rpcMock.mockResolvedValue({
-      data: [
-        {
-          target_type: "POST",
-          target_id: "p1",
-          action: "HIDE",
-          reason: "HARASSMENT",
-          created_at: "2026-10-22T11:00:00.000Z",
-        },
-        { target_type: "POST", target_id: "p1", action: "MYSTERY", reason: "OTHER", created_at: "x" },
-      ],
-      error: null,
-    });
-
-    const outcomes = await listMyModerationOutcomes();
-
-    expect(outcomes).toEqual([
-      {
-        targetType: "POST",
-        targetId: "p1",
-        action: "HIDE",
-        reason: "HARASSMENT",
-        createdAt: "2026-10-22T11:00:00.000Z",
-      },
-    ]);
-    expect(Object.keys(outcomes[0]!)).toHaveLength(5);
-  });
-
-  it("lists the state of the caller's own rows and drops a state it cannot name", async () => {
-    rpcMock.mockResolvedValue({
-      data: [
-        { post_id: "p1", moderation_visibility: "PUBLISHED", updated_at: "2026-10-22T11:00:00.000Z" },
-        { post_id: "p2", moderation_visibility: "PUBLISHED" },
-        { post_id: "p3", moderation_visibility: "SOMETHING_NEW", updated_at: "x" },
-      ],
-      error: null,
-    });
-
-    await expect(fetchMyPostModeration()).resolves.toEqual([
-      { postId: "p1", visibility: "PUBLISHED", updatedAt: "2026-10-22T11:00:00.000Z" },
-    ]);
   });
 });
 

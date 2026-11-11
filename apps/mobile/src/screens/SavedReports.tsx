@@ -296,6 +296,17 @@ export function SavedReports() {
                       </span>
                     </span>
                   </PostLink>
+                  {note === "error" && (
+                    <button
+                      type="button"
+                      aria-label={`Retry loading ${title}`}
+                      onClick={() => setRetryToken((token) => token + 1)}
+                      disabled={contentLoading}
+                      className="min-h-[44px] px-2 text-sm font-medium underline"
+                    >
+                      Retry
+                    </button>
+                  )}
                   <button
                     type="button"
                     aria-label={`Remove ${title} from saved reports`}

@@ -130,6 +130,26 @@ describe("SavedReports", () => {
     expect(screen.getByRole("button", { name: /try again/i })).toBeTruthy();
   });
 
+  it("retries a failed row even when another saved report loaded", async () => {
+    writeSavedReport("u1", { postId: "p1", title: "Lost keys" });
+    writeSavedReport("u1", { postId: "p2", title: "Lost phone" });
+    let fail = true;
+    fetchPostMock.mockImplementation(async (id: string) => {
+      if (id === "p2" && fail) throw new ApiError("offline", 400);
+      return { id, title: id === "p1" ? "Loaded keys" : "Loaded phone" };
+    });
+    renderScreen();
+    await screen.findByRole("link", { name: /Loaded keys/ });
+    const retry = await screen.findByRole("button", { name: /Retry loading Lost phone/i });
+    const row = retry.closest("li")!;
+    expect(within(row).getByText(/Couldn't load/)).toBeTruthy();
+    expect(screen.queryByText("Couldn't load your saved reports.")).toBeNull();
+    fail = false;
+    fireEvent.click(retry);
+    expect(await screen.findByRole("link", { name: /Loaded phone/ })).toBeTruthy();
+    expect(fetchPostMock.mock.calls.filter(([id]) => id === "p2").length).toBeGreaterThanOrEqual(2);
+  });
+
   it("says the saves are on this device when the account does not hold them", async () => {
     writeSavedReport("u1", { postId: "p1", title: "Lost keys" });
     fetchPostMock.mockResolvedValue({ id: "p1", title: "Lost keys" });

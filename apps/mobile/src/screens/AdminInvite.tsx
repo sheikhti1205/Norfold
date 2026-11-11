@@ -80,7 +80,7 @@ export function AdminInvite() {
     [members, address],
   );
   const replacing = existing !== null || membershipUnknown;
-  const blocked = replacing && !replaceAcknowledged;
+  const blocked = members === null || (replacing && !replaceAcknowledged);
 
   function toggle(capability: string, checked: boolean) {
     setError(null);

@@ -16,7 +16,7 @@ import { requestPhoneChange } from "./profile";
 declare const __SUPABASE_URL__: string;
 declare const __SUPABASE_PUBLISHABLE_KEY__: string;
 
-/** Supabase signup with Confirm-email ON: account created, no session yet. */
+/** Signup may require email verification before a session is available. */
 export interface RegisterResult {
   user: PublicUser;
   emailVerificationRequired: boolean;
@@ -163,12 +163,6 @@ export async function register(input: {
   });
 
   if (error) throw mapAuthError(error);
-
-  // Supabase returns an empty-identity user instead of an error to avoid
-  // leaking which emails are registered.
-  if (data.user && (data.user.identities?.length ?? 0) === 0 && !data.session) {
-    throw new ApiError(DUPLICATE_ACCOUNT_MESSAGE, 409);
-  }
 
   if (data.session) {
     cacheSessionToken(data.session.access_token, tokenRevision);

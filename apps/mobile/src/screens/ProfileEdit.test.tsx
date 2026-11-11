@@ -130,6 +130,21 @@ describe("ProfileEdit rework", () => {
     expect(await screen.findByRole("status")).toBeTruthy();
   });
 
+  it("replaces the draft on account change and ignores an earlier save", async () => {
+    let resolveSave!: (value: PublicUser) => void;
+    mockUpdateProfile.mockReturnValueOnce(new Promise<PublicUser>((resolve) => { resolveSave = resolve; }));
+    const view = renderEdit();
+    fireEvent.change(screen.getByRole("textbox", { name: /display name/i }), { target: { value: "Old draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+    mockUser.value = { ...baseUser, id: "u2", displayName: "Second account" };
+    view.rerender(<MemoryRouter><ProfileEdit /></MemoryRouter>);
+    expect((screen.getByRole("textbox", { name: /display name/i }) as HTMLInputElement).value).toBe("Second account");
+    resolveSave({ ...baseUser, displayName: "Old draft" });
+    await waitFor(() => expect(mockUpdateProfile).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
+    expect(mockSetUser).not.toHaveBeenCalled();
+  });
+
   it("keeps the identity save disabled until something changes", () => {
     renderEdit();
     const save = screen.getByRole("button", { name: "Save profile" }) as HTMLButtonElement;

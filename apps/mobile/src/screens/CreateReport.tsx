@@ -425,6 +425,11 @@ function ReportForm() {
     locationLabel?: string;
     youtubeUrl?: string;
   }>({});
+  const validationSummaryRef = useRef<HTMLParagraphElement>(null);
+  const [validationAttempt, setValidationAttempt] = useState(0);
+  useEffect(() => {
+    if (validationAttempt > 0) validationSummaryRef.current?.focus();
+  }, [validationAttempt]);
   const submitting = useRef(false);
   // Mount/account lifetime. The form is keyed by account, so this is false as
   // soon as the screen is left or the account is replaced. Every continuation
@@ -795,7 +800,6 @@ function ReportForm() {
   // account), photo bytes via the separate photo effect below. Legacy
   // first-photo fields are still written for older readers.
   useEffect(() => {
-    if (!photoRecoveryReady) return;
     const first = photos[0] ?? null;
     saveDraft(
       {
@@ -814,12 +818,12 @@ function ReportForm() {
         // exactly what the form reads, nothing extra (round-3 review NIT-2 —
         // the loader's fix alone left this own-key in the in-memory draft).
         ...(aiSuggestInput.trim() ? { aiSuggestInput } : {}),
-        photoId: first?.id ?? null,
-        photoNativeUri: first?.picked?.nativeUri ?? null,
-        photoWebPath: first?.picked?.webPath ?? first?.previewUrl ?? null,
-        photoFormat: first?.picked?.format ?? null,
-        photoIds: photos.map((p) => p.id),
-        photoRefs: photos.map((p) => ({
+        photoId: photoRecoveryReady ? first?.id ?? null : initialDraft?.photoId ?? null,
+        photoNativeUri: photoRecoveryReady ? first?.picked?.nativeUri ?? null : initialDraft?.photoNativeUri ?? null,
+        photoWebPath: photoRecoveryReady ? first?.picked?.webPath ?? first?.previewUrl ?? null : initialDraft?.photoWebPath ?? null,
+        photoFormat: photoRecoveryReady ? first?.picked?.format ?? null : initialDraft?.photoFormat ?? null,
+        photoIds: photoRecoveryReady ? photos.map((p) => p.id) : draftPhotoIds(initialDraft),
+        photoRefs: photoRecoveryReady ? photos.map((p) => ({
           id: p.id,
           name: p.file.name,
           type: p.file.type,
@@ -828,7 +832,7 @@ function ReportForm() {
           webPath: p.picked?.webPath ?? null,
           format: p.picked?.format ?? null,
           motionPhoto: p.picked?.motionPhoto,
-        })),
+        })) : initialDraft?.photoRefs ?? [],
       },
       accountId,
       renderGeneration,
@@ -1383,7 +1387,11 @@ function ReportForm() {
     };
     setFieldErrors(errs);
     // `!category` also narrows the type for publishReport below.
-    if (errs.title || errs.description || errs.category || errs.eventDate || errs.locationLabel || errs.youtubeUrl || !category) return;
+    if (errs.title || errs.description || errs.category || errs.eventDate || errs.locationLabel || errs.youtubeUrl || !category) {
+      announce("Fix the highlighted fields before publishing.");
+      setValidationAttempt((attempt) => attempt + 1);
+      return;
+    }
     submitting.current = true;
     setBusy(true);
     // The account this submit belongs to. The create RPC runs under the live
@@ -1612,6 +1620,11 @@ function ReportForm() {
         noValidate
         style={formStyle}
       >
+      {validationAttempt > 0 && Object.values(fieldErrors).some(Boolean) && (
+        <p ref={validationSummaryRef} tabIndex={-1} className="text-sm text-error">
+          Fix the highlighted fields before publishing.
+        </p>
+      )}
       <p
         className="rounded-m3-sm border border-outline-variant px-3 py-2 text-xs text-on-surface-variant"
         role="note"
