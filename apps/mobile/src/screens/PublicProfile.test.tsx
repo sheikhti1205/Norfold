@@ -27,6 +27,7 @@ vi.mock("../services/trust", () => ({
 }));
 
 import { PublicProfile } from "./PublicProfile";
+import { ApiError } from "../services/session";
 
 const profile: PublicProfileShape = {
   id: "u2",
@@ -86,6 +87,20 @@ beforeEach(() => {
 });
 
 describe("PublicProfile", () => {
+  it("retries a transient profile failure", async () => {
+    fetchPublicProfileMock.mockRejectedValueOnce(new Error("network failure")).mockResolvedValueOnce(profile);
+    renderRoute();
+    expect(await screen.findByText("That profile could not be loaded. Please try again.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("region", { name: "Public profile" })).toBeTruthy();
+  });
+
+  it("does not offer retry for a missing profile", async () => {
+    fetchPublicProfileMock.mockRejectedValueOnce(new ApiError("private", 404));
+    renderRoute();
+    expect(await screen.findByText("That profile could not be found.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
   it("reports the loaded user through the profile overflow and canonical sheet", async () => {
     renderRoute();
     const header = within(await screen.findByRole("region", { name: "Public profile" }));
@@ -200,7 +215,7 @@ describe("PublicProfile", () => {
   });
 
   it("shows a human not-found message when the lookup fails", async () => {
-    fetchPublicProfileMock.mockRejectedValueOnce(Object.assign(new Error("nope"), { status: 404 }));
+    fetchPublicProfileMock.mockRejectedValueOnce(new ApiError("nope", 404));
     renderRoute("ghost");
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/could not be found/i);

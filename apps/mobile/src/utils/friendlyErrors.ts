@@ -23,43 +23,18 @@ export interface FriendlyError {
   message: string;
 }
 
-const JARGON = [/supabase/gi, /postgrest/gi, /postgres/gi, /\brpc\b/gi, /jwt/gi];
-
-/**
- * Text that comes from the database catalogue rather than from a person.
- *
- * Narrow on purpose: "This post violates our guidelines" is a sentence the
- * server wrote for the reader and must survive, while "violates not-null
- * constraint" is schema detail that must never reach one. Matching on `violates`
- * alone would eat the first, so every pattern names an SQL construct.
- */
-const CATALOGUE = [
-  /duplicate key value/i,
-  /violates (unique|not-null|foreign key|check|exclusion) constraint/i,
-  /null value in column/i,
-  /relation "[^"]*" does not exist/i,
-  /column "[^"]*" (does not exist|of relation)/i,
-  /syntax error at or near/i,
-  /\bsqlstate\b/i,
-  /_pkey\b/i,
-  // PostgREST's schema-cache errors name the schema object it could not find
-  // ("Could not find the function public.private_rpc(...) in the schema cache",
-  // PGRST202/PGRST205). They arrive as 400 as well as 500, so the pattern has to
-  // hold on every branch, not only where the status is already generic.
-  /could not find the (function|table|column)/i,
-  /\bschema cache\b/i,
-  /function [^()\s]+\([^)]*\) does not exist/i,
-];
-
-function isCatalogueError(message: string): boolean {
-  return CATALOGUE.some((re) => re.test(message));
-}
-
-function clean(message: string): string {
-  let out = message;
-  for (const re of JARGON) out = out.replace(re, "server");
-  return out.replace(/\s+/g, " ").trim();
-}
+const DOMAIN_MESSAGES: Record<string, FriendlyError> = {
+  "Invalid category": { code: "VALIDATION", message: "Invalid category" },
+  "Title is required": { code: "VALIDATION", message: "Title is required" },
+  "This post violates our guidelines": { code: "VALIDATION", message: "This post violates our guidelines" },
+  "You have already rated this recovery": { code: "CONFLICT", message: "You have already rated this recovery" },
+  "you have reached today's limit of 5": { code: "RATE_LIMIT", message: "you have reached today's limit of 5" },
+  "Devices could not load. Try again.": { code: "SERVER", message: "Devices could not load. Try again." },
+  "That device could not be renamed. Try again.": { code: "SERVER", message: "That device could not be renamed. Try again." },
+  "Reaction could not be saved": { code: "UNKNOWN", message: "Reaction could not be saved" },
+  "You cannot block yourself": { code: "VALIDATION", message: "You cannot block yourself." },
+  "You cannot unblock yourself": { code: "VALIDATION", message: "You cannot unblock yourself." },
+};
 
 export function friendlyError(err: unknown): FriendlyError {
   // A confirmed write stays confirmed even if connectivity drops before
@@ -106,6 +81,9 @@ export function friendlyError(err: unknown): FriendlyError {
       message: "You've reached today's feedback limit. Come back tomorrow.",
     };
   }
+  if (err instanceof Error && Object.hasOwn(DOMAIN_MESSAGES, err.message)) {
+    return DOMAIN_MESSAGES[err.message]!;
+  }
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     return { code: "OFFLINE", message: "You are offline. Check your connection and try again." };
   }
@@ -117,41 +95,16 @@ export function friendlyError(err: unknown): FriendlyError {
   if (status === 403)
     return { code: "PERMISSION", message: "You do not have permission to do that." };
   if (status === 404) return { code: "NOT_FOUND", message: "That item could not be found." };
-  // A refusal that names itself keeps its own words: "You have already rated
-  // this recovery" and "you have reached today's limit of 5" are the exact
-  // answers the reader needs — a generic "something conflicts" sentence hides
-  // the one fact the server volunteered.
-  //
-  // The same SQLSTATE can also carry a raw catalogue error (a genuine unique
-  // violation says "duplicate key value violates unique constraint ..."), and
-  // that IS developer-facing text. Only a deliberate sentence is kept; a
-  // catalogue error still gets the generic sentence.
-  if (err instanceof ApiError && (err.code === "23505" || err.code === "P0001")) {
-    const own = clean(raw);
-    if (own && !isCatalogueError(own))
-      return { code: err.code === "23505" ? "CONFLICT" : "RATE_LIMIT", message: own };
-  }
   if (status === 409)
     return { code: "CONFLICT", message: "That conflicts with something already saved. Refresh and try again." };
   if (status === 429)
     return { code: "RATE_LIMIT", message: "Too many attempts. Wait a moment and try again." };
   if (status != null && status >= 500)
     return { code: "SERVER", message: "The server is having trouble. Try again in a bit." };
-  if (status === 400 || /invalid|required|too long|malformed/.test(lower)) {
-    // A 400 can also carry a catalogue error (a not-null or check violation
-    // arrives with its own SQLSTATE), and that is developer-facing text: a
-    // reader gets the generic sentence instead, never the schema.
-    const own = clean(raw);
-    const message = own && !isCatalogueError(own) ? own : "Check the highlighted fields and try again.";
-    return { code: "VALIDATION", message };
-  }
+  if (status === 400) return { code: "VALIDATION", message: "Check the highlighted fields and try again." };
   if (/timeout|timed out|abort/i.test(lower))
     return { code: "TIMEOUT", message: "The request timed out. Try again." };
   if (/network|fetch|failed to fetch|load failed/i.test(lower))
     return { code: "OFFLINE", message: "Network problem. Check your connection and try again." };
-  const own = clean(raw);
-  return {
-    code: "UNKNOWN",
-    message: own && !isCatalogueError(own) ? own : "Something went wrong. Try again.",
-  };
+  return { code: "UNKNOWN", message: "Something went wrong. Try again." };
 }

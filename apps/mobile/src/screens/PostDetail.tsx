@@ -167,6 +167,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
   // Post shell state: the article renders as soon as the post resolves.
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [postNotFound, setPostNotFound] = useState(false);
   // Independent secondary states: comments/social hydrate on their own and
   // never block the post shell.
   const [commentsLoading, setCommentsLoading] = useState(true);
@@ -290,7 +291,9 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
       } catch (err) {
         recordLoadTiming("post", Date.now() - startedAt);
         if (loadGen.current !== gen) return;
-        setError(friendlyError(err).message);
+        const friendly = friendlyError(err);
+        setPostNotFound(friendly.code === "NOT_FOUND");
+        setError(friendly.message);
       } finally {
         if (loadGen.current === gen) setLoading(false);
       }
@@ -484,7 +487,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
         ++loadGen.current; ++commentsSeq.current; ++socialSeq.current;
         postPresentRef.current = false;
         setPost(null); setComments([]); setPostCountsOverride(null);
-        setLoading(false); setError("This post is no longer available.");
+        setLoading(false); setPostNotFound(true); setError("This post is no longer available.");
       }),
     ];
     return () => {
@@ -549,7 +552,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
   // Stable skeleton holds the hero/body shape so resolving content never
   // reflows; the sticky escape bar stays mounted underneath via the shell.
   if (loading) return <DetailSkeleton />;
-  if (error && !post) return <EmptyState title="Post unavailable" subtitle={error} />;
+  if (error && !post) return <EmptyState title={postNotFound ? "Post unavailable" : "Could not load post"} subtitle={error} action={postNotFound ? undefined : { label: "Try again", onPress: () => void load() }} />;
   if (!post) return null;
 
   const current = post;

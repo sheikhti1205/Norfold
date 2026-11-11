@@ -13,6 +13,7 @@ import { useSafetyLifetime } from "../utils/useSafetyLifetime";
 import { PeerIdentityActions } from "../components/PeerIdentityActions";
 import { ConversationInfo } from "../components/ConversationInfo";
 import { useMessaging } from "../services/messaging/useMessaging";
+import { friendlyError } from "../utils/friendlyErrors";
 
 /** "Joined January 2026" from an ISO timestamp; tolerant of bad input. */
 function formatJoined(createdAt: string): string {
@@ -56,6 +57,8 @@ function PublicProfileSession({ username }: { username: string }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreError, setMoreError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryable, setRetryable] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [reputationTier, setReputationTier] = useState<string | null>(null);
   const [reputationLoading, setReputationLoading] = useState(false);
 
@@ -82,8 +85,12 @@ function PublicProfileSession({ username }: { username: string }) {
           if (alive) setReputationLoading(false);
         });
         void loadReports(found.id);
-      } catch {
-        if (alive) setError("That profile could not be found.");
+      } catch (err) {
+        if (alive) {
+          const notFound = friendlyError(err).code === "NOT_FOUND";
+          setRetryable(!notFound);
+          setError(notFound ? "That profile could not be found." : "That profile could not be loaded. Please try again.");
+        }
       } finally {
         if (alive) setLoading(false);
       }
@@ -91,7 +98,7 @@ function PublicProfileSession({ username }: { username: string }) {
     return () => {
       alive = false;
     };
-  }, [username]);
+  }, [username, retry]);
 
   async function loadReports(userId: string) {
     setReportsLoading(true);
@@ -137,12 +144,12 @@ function PublicProfileSession({ username }: { username: string }) {
     <SettingsPage title="Profile" backTo="/" backLabel="Back">
       {loading && <p role="status">Loading profile…</p>}
       {error && (
-        <p
+        <div><p
           role="alert"
           className="rounded-m3-sm border border-error px-3 py-2 text-sm text-error"
         >
           {error}
-        </p>
+        </p>{retryable && <button type="button" className="min-h-[44px] text-sm text-on-surface" onClick={() => setRetry((value) => value + 1)}>Try again</button>}</div>
       )}
       {profile && (
         <>
