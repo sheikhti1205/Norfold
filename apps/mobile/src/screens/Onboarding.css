@@ -1,76 +1,81 @@
-/* Editorial composition, not a scaled device mock. Natural height preserves
-   short-window and large-text access; no fake cards, fixed canvas or autoplay. */
 .fb-onboarding {
-  display: flex;
-  flex-direction: column;
   width: 100%;
   min-width: 0;
-  min-height: 100vh;
   min-height: 100dvh;
-  padding: calc(1rem + env(safe-area-inset-top)) clamp(1.25rem, 4vw, 4rem) calc(1.25rem + env(safe-area-inset-bottom));
-  overflow-x: clip;
   background: var(--fb-surface);
   color: var(--fb-on-surface);
 }
-.fb-onboarding-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; min-height: 2.75rem; }
-.fb-onboarding-header > button { margin-inline-start: auto; }
+.fb-onboarding-inner, .fb-onboarding-header { width: min(100%, 80rem); margin-inline: auto; padding-inline: clamp(1.25rem, 4vw, 4rem); }
+.fb-onboarding-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; padding-top: max(1rem, env(safe-area-inset-top)); }
+.fb-onboarding-brand-link { display: inline-flex; align-items: center; min-height: 44px; color: inherit; text-decoration: none; border-radius: 8px; }
 .fb-onboarding-brand { display: flex; align-items: center; gap: .6rem; font-size: 1.25rem; font-weight: 700; letter-spacing: -.04em; }
-.fb-onboarding-pager { display: flex; flex: 1 1 auto; flex-direction: column; justify-content: center; min-width: 0; padding-block: clamp(2rem, 8vh, 5rem); }
-.fb-onboarding-index { margin: 0 0 1.25rem; font-size: .75rem; font-weight: 600; letter-spacing: .12em; color: var(--fb-on-surface-variant); }
-.fb-onboarding-drag { position: relative; min-width: 0; touch-action: pan-y; }
-.fb-onboarding-page { display: grid; min-width: 0; gap: 2rem; width: 100%; }
-.fb-onboarding-title { margin: 0; min-width: 0; font-size: clamp(2.25rem, 10vw, 5.5rem); font-weight: 700; letter-spacing: -.045em; line-height: 1.1; overflow-wrap: anywhere; }
-.fb-onboarding-mask { display: block; padding-block: .05em; }
+.fb-onboarding-intro { padding-block: clamp(3.5rem, 9vw, 7rem) clamp(3rem, 7vw, 5rem); }
+.fb-onboarding h1, .fb-onboarding h2, .fb-onboarding h3 { text-wrap: balance; overflow-wrap: break-word; scroll-margin-top: 2rem; }
+.fb-onboarding h1 { max-width: 22ch; margin: 0; font-size: clamp(2.25rem, 10vw, 7rem); line-height: 1.02; letter-spacing: -.055em; }
+.fb-onboarding-mask { display: block; overflow: hidden; padding-block-end: .14em; margin-block-end: -.14em; }
 .fb-onboarding-mask > span { display: block; }
-.fb-onboarding-secondary { color: var(--fb-on-surface-variant); }
-.fb-onboarding-page[data-scene="2"] .fb-onboarding-title { font-size: clamp(2rem, 10vw, 4.5rem); }
-.fb-onboarding-copy { min-width: 0; max-width: 32ch; align-self: end; }
-.fb-onboarding-body { margin: 0; font-size: 1.0625rem; line-height: 1.55; color: var(--fb-on-surface-variant); overflow-wrap: anywhere; }
-.fb-onboarding-detail { margin: 1rem 0 0; font-size: .8125rem; line-height: 1.6; color: var(--fb-on-surface-variant); overflow-wrap: anywhere; }
-.fb-onboarding-controls { display: flex; flex-direction: column; gap: 1rem; margin-top: auto; padding-top: 1.5rem; }
-.fb-onboarding-progress { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5rem; }
-.fb-onboarding-segment { height: 2px; background: var(--fb-outline-variant); }
-.fb-onboarding-segment[data-filled="true"] { background: var(--fb-on-surface); }
-.fb-onboarding-controls-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; min-width: 0; }
-.fb-onboarding-btn { display: inline-flex; align-items: center; justify-content: center; gap: 1rem; min-width: 44px; min-height: 44px; padding: .625rem 1rem; border: 0; border-radius: 999px; font: inherit; font-size: 1rem; font-weight: 600; cursor: pointer; }
-.fb-onboarding-btn--primary { background: var(--fb-on-surface); color: var(--fb-surface); gap: .5rem; padding-inline: clamp(.5rem, 3vw, 1rem); min-width: 6.25rem; max-width: 100%; margin-left: auto; text-align: center; }
-.fb-onboarding-btn--primary:active { opacity: .8; }
-.fb-onboarding-btn--quiet { padding-inline: .5rem; color: var(--fb-on-surface-variant); background: transparent; }
-.fb-onboarding-btn--quiet:hover { color: var(--fb-on-surface); }
-.fb-onboarding-btn-spacer { min-width: 44px; }
-.fb-onboarding-btn:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 3px; }
-.fb-onboarding:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: -4px; }
-
-/* Short landscape: explanation beside the type, controls on the same baseline
-   as the compact progress rail. At large text the page simply scrolls. */
-@media (min-width: 40rem) and (max-height: 32rem) {
-  .fb-onboarding { padding-top: calc(.5rem + env(safe-area-inset-top)); }
-  .fb-onboarding-pager { padding-block: 1rem; }
-  .fb-onboarding-page { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: center; gap: 2rem; }
-  .fb-onboarding-title { font-size: clamp(2.75rem, 7vw, 4.5rem); }
-  .fb-onboarding-page[data-scene="2"] .fb-onboarding-title { font-size: clamp(2rem, 5vw, 3.5rem); }
-  .fb-onboarding-index { margin-bottom: .5rem; }
-  .fb-onboarding-controls { flex-direction: row; align-items: center; gap: 2rem; padding-top: .5rem; }
-  .fb-onboarding-progress { flex: 1; }
-  .fb-onboarding-controls-row { flex: 1; }
+.fb-onboarding-mask--muted > span { color: var(--fb-on-surface-variant); }
+.fb-onboarding-rule { display: block; height: 1px; margin-top: clamp(3rem, 7vw, 5rem); background: var(--fb-outline-variant); transform-origin: left center; }
+.fb-onboarding h2 { max-width: 24ch; margin: 0; font-size: clamp(1.75rem, 4vw, 3rem); line-height: 1.14; letter-spacing: -.04em; }
+.fb-onboarding h3 { margin: 0; font-size: 1.25rem; line-height: 1.3; }
+.fb-onboarding p { max-width: 54ch; margin: 1rem 0 0; font-size: 1.0625rem; line-height: 1.6; color: var(--fb-on-surface-variant); overflow-wrap: break-word; }
+.fb-onboarding-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem 1.5rem; margin-top: 1.75rem; }
+.fb-onboarding :is(button, a) { cursor: pointer; }
+.fb-onboarding-brand-link:focus-visible, .fb-onboarding :is(button, a):focus-visible, .fb-onboarding :is(h1, h2):focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 3px; }
+.fb-onboarding-primary, .fb-onboarding-quiet { display: inline-flex; align-items: center; justify-content: center; max-width: 100%; border: 0; font: inherit; font-weight: 600; text-align: center; }
+.fb-onboarding-primary { min-height: 48px; padding: .75rem 1.25rem; border-radius: 999px; background: var(--fb-primary); color: var(--fb-on-primary); gap: .5rem; transition: opacity .18s var(--ease-fb); }
+.fb-onboarding-primary svg { transition: transform .18s var(--ease-fb); }
+.fb-onboarding-primary:hover svg, .fb-onboarding-primary:focus-visible svg { transform: translateX(4px); }
+.fb-onboarding-primary:active { opacity: .8; }
+.fb-onboarding-quiet { min-height: 44px; padding: .5rem 0; background: transparent; color: var(--fb-on-surface-variant); }
+.fb-onboarding-quiet:hover { color: var(--fb-on-surface); }
+.fb-onboarding .fb-onboarding-note { font-size: .875rem; }
+.fb-onboarding-section { padding-block: clamp(4rem, 9vw, 8rem); }
+/* The closing section owns the gap above the last CTA, so two padded sections cannot double it. */
+#about-norfold { padding-bottom: 0; }
+.fb-onboarding-route-wrap { position: relative; margin-top: 2.5rem; }
+.fb-onboarding-steps { list-style: none; padding: 0; margin: 0; }
+.fb-onboarding-route { position: absolute; background: var(--fb-outline-variant); pointer-events: none; }
+/* 2.5rem marker centre minus half the 1px line: 19px at 100%, still centred at any text scale. */
+.fb-onboarding-route--v { left: calc(1.25rem - 0.5px); top: 2.5rem; bottom: 2.5rem; width: 1px; transform-origin: left top; }
+.fb-onboarding-route--h { display: none; }
+.fb-onboarding-steps li { position: relative; display: flex; gap: 1.25rem; padding-bottom: 2.5rem; }
+.fb-onboarding-steps li > div { min-width: 0; }
+.fb-onboarding-steps h3, .fb-onboarding-steps p { overflow-wrap: anywhere; }
+.fb-onboarding-steps li > span { flex: 0 0 2.5rem; display: grid; place-items: center; height: 2.5rem; border: 1px solid var(--fb-outline-variant); border-radius: 50%; font-size: .75rem; font-weight: 600; }
+.fb-onboarding-steps li p { margin-top: .5rem; }
+.fb-onboarding-safety { position: relative; overflow: hidden; }
+.fb-onboarding-safety-wash { position: absolute; inset: 0; z-index: 0; background: var(--fb-surface-container-low); border-block: 1px solid var(--fb-outline-variant); transform-origin: left center; }
+.fb-onboarding-safety > .fb-onboarding-inner { position: relative; z-index: 1; }
+.fb-onboarding-safety ul { display: grid; gap: 1rem; list-style: none; padding: 0; margin: 2rem 0; }
+.fb-onboarding-safety li { display: flex; align-items: flex-start; gap: .75rem; font-size: 1rem; line-height: 1.6; overflow-wrap: break-word; }
+.fb-onboarding-safety li svg { flex: 0 0 auto; margin-top: .25rem; }
+.fb-onboarding-guidelines { display: inline-flex; align-items: center; gap: .4rem; min-height: 44px; margin-top: 1rem; color: var(--fb-primary); }
+.fb-onboarding-closing h2 { font-size: clamp(2rem, 6vw, 4rem); }
+.fb-onboarding-closing .fb-onboarding-primary { margin-top: 1.75rem; }
+.fb-onboarding-legal { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; padding-top: 3rem; padding-bottom: env(safe-area-inset-bottom); }
+.fb-onboarding-legal a { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; color: var(--fb-on-surface-variant); }
+@media (min-width: 48rem) {
+  .fb-onboarding-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2rem; }
+  .fb-onboarding-route--v { display: none; }
+  .fb-onboarding-route--h { display: block; left: 1.25rem; right: 1.25rem; top: 1.25rem; height: 1px; transform-origin: left center; }
+  .fb-onboarding-steps li { display: block; padding-bottom: 0; }
+  .fb-onboarding-steps li > span { width: 2.5rem; margin-bottom: 1.5rem; }
 }
-/* Tablet/unfolded: independent editorial regions rather than a wide phone. */
-@media (min-width: 48rem) and (min-height: 32.01rem) {
-  .fb-onboarding-page { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: center; gap: clamp(2rem, 5vw, 5rem); }
-  .fb-onboarding-title { font-size: clamp(3rem, 7vw, 6rem); }
-  .fb-onboarding-page[data-scene="2"] .fb-onboarding-title { font-size: clamp(2.5rem, 5vw, 4.5rem); }
-  .fb-onboarding-copy { padding-bottom: .4rem; }
-  .fb-onboarding-body { font-size: 1.1875rem; }
-  .fb-onboarding-detail { font-size: .875rem; }
-  .fb-onboarding-controls { padding-top: 3rem; }
+/* Phone display scale follows the viewport, not the root font: enlarged body copy must not inflate
+   a headline past the column, and the step marker must give the route copy its full width back. */
+@media (max-width: 30rem) {
+  .fb-onboarding h1 { font-size: clamp(1.5rem, 11vw, 3.25rem); letter-spacing: -.035em; }
+  .fb-onboarding h2 { font-size: clamp(1.375rem, 8vw, 2rem); letter-spacing: -.03em; }
+  /* The final statement keeps its own scale: the generic section scale inverts the hierarchy at 320px. */
+  .fb-onboarding-closing h2 { font-size: clamp(1.75rem, 9vw, 2.5rem); }
+  .fb-onboarding-steps li { display: block; }
+  .fb-onboarding-steps li > span { width: 2.5rem; margin-bottom: .875rem; }
 }
-@media (min-width: 75rem) {
-  .fb-onboarding { padding-inline: max(3rem, calc((100vw - 90rem) / 2)); }
-  .fb-onboarding-page { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 6vw; }
-  .fb-onboarding-title { font-size: clamp(4rem, 8vw, 8.5rem); }
-  .fb-onboarding-page[data-scene="2"] .fb-onboarding-title { font-size: clamp(3rem, 5.5vw, 6rem); }
-  .fb-onboarding-progress { max-width: 30rem; }
+/* A landscape phone has no room for the editorial top padding and the two-line hero above the CTA. */
+@media (max-height: 30rem) {
+  .fb-onboarding-intro { padding-block: 1.5rem 1.25rem; }
+  .fb-onboarding h1 { font-size: clamp(1.75rem, 5.5vw, 3rem); }
+  .fb-onboarding-rule { margin-top: 1.5rem; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .fb-onboarding *, .fb-onboarding *::before { scroll-behavior: auto; }
-}
+@media (prefers-reduced-motion: reduce) { .fb-onboarding-primary, .fb-onboarding-primary svg { transition: none; } .fb-onboarding-primary:hover svg, .fb-onboarding-primary:focus-visible svg { transform: none; } }

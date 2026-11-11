@@ -1,5 +1,11 @@
 # Public landing review
 
+Implementation status, 2026-11-11: the public hero pager was removed and its
+chapters consolidated into one onboarding page. Header Sign in remains a
+deliberate auth action that does not complete onboarding. The editorial motion
+system uses masked type, rules, a route line, a safety wash and staggered reveals
+that run once per view.
+
 Research brief, 11 November 2026. This is a recommendation, not an implementation.
 
 ## 1. Verdict

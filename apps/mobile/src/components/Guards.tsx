@@ -104,6 +104,7 @@ export function OnboardingRoute() {
   if (replay) {
     return (
       <Onboarding
+        replay={replay}
         onComplete={() => navigate(user ? "/settings" : "/auth", { replace: true })}
       />
     );

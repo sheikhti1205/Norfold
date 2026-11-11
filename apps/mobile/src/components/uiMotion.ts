@@ -21,7 +21,8 @@
  * Duration budget (seconds): instant ~80–120ms state acknowledgement,
  * fast ~120–180ms chip/icon toggle, standard ~180–240ms notice/subpanel,
  * sheet ~220–320ms entrance/exit with clean interruption, emphasized
- * ~240–350ms hero/notice emphasis. Nothing ordinary exceeds 350ms.
+ * ~240–350ms hero/notice emphasis. Interaction motion stays within 350ms;
+ * page-level editorial reveals may run 0.55–1.1s, transform/opacity only.
  *
  * All variants below animate transform/opacity only (never layout, color, or
  * box-shadow) so every animation stays on the compositor thread.
@@ -45,6 +46,10 @@ export const motionDurations = {
   sheet: 0.28,
   /** Hero/notice emphasis (still within the 350ms budget). */
   emphasized: 0.3,
+  /** Editorial page reveal (onboarding, public landing). Longer than the
+   *  interaction budget by design: this is page entrance, not state
+   *  acknowledgement. */
+  reveal: 0.7,
 } as const;
 
 export const motionEasings = {
@@ -52,6 +57,8 @@ export const motionEasings = {
   out: [0.2, 0, 0, 1] as [number, number, number, number],
   /** Gentle ease-in-out for fades. */
   inOut: [0.4, 0, 0.2, 1] as [number, number, number, number],
+  /** Long-tail ease-out for editorial reveals: fast departure, long settle. */
+  editorial: [0.16, 1, 0.3, 1] as [number, number, number, number],
 } as const;
 
 /** Sheet slide transition (enter + exit, tween for clean interruption). */
@@ -91,6 +98,9 @@ export const pressFeedback = {
 
 /** Per-item stagger step for short lists (kept tiny; never an endless cascade). */
 export const motionStagger = 0.03 as const;
+
+/** Editorial stagger between typographic lines and section children. */
+export const motionStaggerEditorial = 0.09 as const;
 
 /** Plain opacity fade (toasts, labels). */
 export const fadeVariants = {
