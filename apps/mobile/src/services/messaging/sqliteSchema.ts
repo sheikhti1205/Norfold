@@ -53,7 +53,8 @@
 // its exact current shape.
 // v13 adds the local hidden `unsent_holds` copy. It is a separate table so no
 // existing read can render it, and it is excluded from snapshots by construction.
-export const MESSAGING_SQLITE_SCHEMA_VERSION = 13;
+// v14 persists local enqueue order; legacy rows use their best available rowid.
+export const MESSAGING_SQLITE_SCHEMA_VERSION = 14;
 
 /**
  * The v5 `messages` body CHECK, recognised in `sqlite_master`.
@@ -145,6 +146,7 @@ export const MESSAGING_SQLITE_SCHEMA = [
     server_event_id text,
     server_sequence integer,
     created_at integer not null,
+    enqueue_order integer,
     unsent_at integer,
     check (author_id <> recipient_id),
     check (body is null or length(body) <= 100000),
@@ -347,7 +349,7 @@ export const MESSAGING_SQLITE_STATEMENTS = {
       and (m.server_sequence is null or m.server_sequence > coalesce(
         (select c.through_sequence from conversation_cleared c
           where c.conversation_id = m.conversation_id), 0))
-    order by (m.server_sequence is null), m.server_sequence, m.id`,
+    order by (m.server_sequence is null), m.server_sequence, m.enqueue_order, m.id`,
   listInboxMessages: `select ${MESSAGE_COLUMNS} from messages m
     where not exists (select 1 from deleted_for_me d where d.message_id = m.id)
       and (m.server_sequence is null or m.server_sequence > coalesce(
@@ -357,8 +359,8 @@ export const MESSAGING_SQLITE_STATEMENTS = {
     where m.server_event_id = ?`,
   insertMessage: `insert into messages
     (id, conversation_id, author_id, recipient_id, body, created_at, message_type,
-      context_report_id, reply_to_id, location_lat, location_lng, location_accuracy_m)
-    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      context_report_id, reply_to_id, location_lat, location_lng, location_accuracy_m, enqueue_order)
+    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (select coalesce(max(enqueue_order), 0) + 1 from messages))`,
   insertTombstonedMessage: `insert into messages
     (id, conversation_id, author_id, recipient_id, body, created_at, unsent_at, message_type)
     values (?, ?, ?, ?, null, ?, ?, ?)`,
@@ -366,6 +368,8 @@ export const MESSAGING_SQLITE_STATEMENTS = {
   addMessageType: `alter table messages add column message_type text check (message_type in ('TEXT','MEDIA'))`,
   // v12: SQLite has no `add column if not exists`, so `messageColumns` decides.
   addMessageReply: `alter table messages add column reply_to_id text`,
+  addMessageEnqueueOrder: `alter table messages add column enqueue_order integer`,
+  backfillMessageEnqueueOrder: `update messages set enqueue_order = rowid where enqueue_order is null`,
   backfillMediaType: `update messages set message_type='MEDIA' where message_type is null
     and exists (select 1 from media_attachments a where a.message_id=messages.id)`,
   bindMessageType: `update messages set message_type=? where id=? and message_type is null`,
@@ -409,7 +413,7 @@ export const MESSAGING_SQLITE_STATEMENTS = {
          and m.server_event_id is null
          and m.message_type is not null
       /*exclude*/
-      order by o.message_id
+       order by m.enqueue_order, m.id
       limit 1
     `,
   claimOutbox: `update outbox
@@ -696,6 +700,8 @@ export const MESSAGING_SQLITE_STATEMENTS = {
     order by last_access_at, id limit ?`,
   markMediaEvicted: `update media_attachments set state = 'EVICTED'
     where id = ? and state = 'READY'`,
+  restoreEvictedMedia: `update media_attachments set state = 'READY', last_access_at = ?
+    where id = ? and state = 'EVICTED'`,
   /** `EVICTED` is excluded, so the sweep also reclaims bytes it still holds. */
   listLiveMediaIds: `select id from media_attachments where state <> 'EVICTED'`,
   suppressedMedia: `select a.id as id from media_attachments a

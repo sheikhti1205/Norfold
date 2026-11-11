@@ -54,6 +54,15 @@ function renderScreen() {
 }
 
 describe("the backup settings surface", () => {
+  it("explains how to resolve the device backup limit", async () => {
+    mocks.backup.status.mockReturnValue({ kind: "attention", lastError: "device-limit", enabled: true });
+    mocks.backup.uploadNow.mockResolvedValue({ kind: "failed", reason: "device-limit" });
+    renderScreen();
+    const copy = "Remove an old device backup before adding another, then try again.";
+    expect(screen.getByText(copy)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Back up now" }));
+    expect((await screen.findByTestId("backup-error")).textContent).toBe(copy);
+  });
   it("names a Drive rejection without blaming the connection", async () => {
     mocks.backup.status.mockReturnValue(WAITING);
     mocks.backup.uploadNow.mockResolvedValue({ kind: "failed", reason: "provider" });

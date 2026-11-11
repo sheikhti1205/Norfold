@@ -48,7 +48,7 @@ export interface BackupState {
   nextAttemptAt: number | null;
   failures: number;
   generation: string | null;
-  lastError: "auth" | "account" | "throttled" | "offline" | "provider" | "integrity" | "snapshot" | "storage" | "other" | null;
+  lastError: "auth" | "account" | "throttled" | "offline" | "provider" | "integrity" | "snapshot" | "storage" | "device-limit" | "other" | null;
 }
 
 export const EMPTY_BACKUP_STATE: BackupState = Object.freeze({
@@ -87,7 +87,7 @@ export function parseBackupState(raw: unknown): BackupState {
     failures,
     generation: typeof value.generation === "string" ? value.generation : null,
     lastError: error === "auth" || error === "account" || error === "throttled" || error === "offline"
-      || error === "other" || error === "provider" || error === "integrity" || error === "snapshot" || error === "storage"
+      || error === "other" || error === "provider" || error === "integrity" || error === "snapshot" || error === "storage" || error === "device-limit"
       ? error : null,
   };
 }
@@ -147,7 +147,7 @@ export type BackupOperationResult =
   | { kind: "restored"; messages: number; manifest: BackupManifest }
   | { kind: "skipped"; reason: "off" | "not-ready" | "superseded" }
   | { kind: "needs-connection" }
-  | { kind: "failed"; reason: "offline" | "provider" | "throttled" | "integrity" | "snapshot" | "storage" | "account" | "other" };
+  | { kind: "failed"; reason: "offline" | "provider" | "throttled" | "integrity" | "snapshot" | "storage" | "device-limit" | "account" | "other" };
 
 export interface BackupDiagnostic {
   httpStatus?: number;
@@ -560,7 +560,8 @@ export class DriveBackup {
     } else if (error instanceof BackupDriveError) {
       // An unreadable local history is not a broken backup: name it separately
       // so the surface can say the existing backup was left untouched.
-      lastError = error.code === "backup: empty snapshot" || error.code === "backup: incomplete snapshot" ? "snapshot" : "integrity";
+      lastError = error.code === "backup: device limit reached; remove an old device backup before adding another" ? "device-limit"
+        : error.code === "backup: empty snapshot" || error.code === "backup: incomplete snapshot" ? "snapshot" : "integrity";
     } else if (error instanceof BackupError) {
       // A snapshot that contradicts local history (for example two different
       // records for one id) is an integrity failure, not a transient one.
