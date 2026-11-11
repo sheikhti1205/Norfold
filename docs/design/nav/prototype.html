@@ -1,0 +1,1605 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Norfold — navigation prototype</title>
+<!--
+  NORFOLD NAVIGATION PROTOTYPE — single file, no network, opens from file://.
+
+  What this is
+  ------------
+  A clickable prototype of the decided three-layer navigation:
+    1. in-flow icon rail from 600px (72px at 600-1199, 80px at >=1200);
+    2. hover / keyboard-focus intent flyout over the content (never reflows);
+    3. a pinned in-flow 224px panel, toggle only at >=840px, remembered;
+    4. below 600px the existing bottom pill is the entire navigation.
+
+  Prototype mechanics that are deliberately not production mechanics
+  ------------------------------------------------------------------
+  * Breakpoints are CSS container queries on the frame, not viewport media
+    queries. The frame is a real 320/411/768/1024/1280/1440px layout box, so
+    every band is genuinely active inside it while the host page stays wide.
+    A production implementation keeps the app's existing viewport rules.
+  * Text scale is a single `--fs` custom property (16px / 32px). The real app
+    changes the root font size; fixed navigation widths are identical here,
+    which is the case the spec asks to review.
+  * Photos are token-tinted abstract tiles with a category glyph: the file is
+    not allowed to make a network request, so no image loads. They are
+    placeholders in the shape the real feed reserves.
+  * Clipboard, share sheets and the media picker cannot be exercised from a
+    static file. Those three controls show an explicitly labelled prototype
+    note instead of pretending to succeed.
+  * Draft/report creation is session-only. Posting prepends a synthetic card
+    so the control has a real outcome; nothing persists beyond the page.
+  * All names, messages, reports and addresses are invented synthetic data.
+    There is no real personal data or secret in this file.
+-->
+<style>
+/* ==========================================================================
+   Host chrome — intentionally not Norfold product styling.
+   ========================================================================== */
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;overflow:hidden;display:flex;flex-direction:column;
+  background:#0b0c0e;color:#e8eaee;
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+[hidden]{display:none !important}
+svg.icon{display:block;width:1em;height:1em;flex:none}
+.sprite{position:absolute;width:0;height:0;overflow:hidden}
+
+.studio{
+  flex:none;padding:10px 18px 12px;background:#0e1013;
+  border-bottom:1px solid #23262c;
+}
+.studio-top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:9px}
+.studio-brand{display:flex;align-items:center;gap:10px;min-width:0}
+.studio-brand .mark{
+  display:grid;place-items:center;width:26px;height:26px;border-radius:8px;
+  background:#e8eaee;color:#101215;font-weight:800;font-size:13px;letter-spacing:-.04em;
+}
+.studio-brand strong{display:block;font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-weight:700}
+.studio-brand small{display:block;font-size:11px;color:#8e97a3;margin-top:1px}
+.studio-meta{display:flex;align-items:center;gap:8px;flex:none}
+.scale-chip{
+  font:600 11px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color:#a9b2be;background:#16191e;border:1px solid #262a31;border-radius:6px;padding:6px 8px;
+}
+.studio-reset{
+  font:600 11px/1 inherit;color:#dfe4ea;background:#1b1f25;border:1px solid #2c313a;
+  border-radius:6px;padding:7px 10px;cursor:pointer;
+}
+.studio-reset:hover{background:#232830}
+.studio-reset:focus-visible{outline:2px solid #7aa2ff;outline-offset:2px}
+
+.studio-controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 20px}
+.ctl{display:flex;flex-direction:column;gap:4px;border:0;margin:0;padding:0;min-width:0}
+.ctl > legend,.ctl > .ctl-label{
+  padding:0;font-size:9.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;
+  color:#89929e;
+}
+.seg{display:flex;align-items:center;background:#14171b;border:1px solid #252931;border-radius:7px;padding:2px;gap:2px}
+.seg-btn{
+  appearance:none;border:0;background:transparent;color:#b6bec9;cursor:pointer;
+  font:600 11px/1 inherit;padding:5px 7px;border-radius:5px;white-space:nowrap;
+  min-height:24px;
+}
+.seg-btn:hover{background:#1d2127;color:#eef1f5}
+.seg-btn[aria-pressed="true"]{background:#e8eaee;color:#101215}
+.seg-btn:focus-visible{outline:2px solid #7aa2ff;outline-offset:1px}
+.seg-btn:disabled{opacity:.38;cursor:not-allowed;background:transparent;color:#b6bec9}
+.seg-btn .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:10.5px}
+
+.stage{flex:1;min-height:0;display:flex;flex-direction:column;padding:0 18px 14px}
+.stage-bar{
+  flex:none;display:flex;align-items:center;justify-content:space-between;gap:18px;
+  padding:8px 2px 9px;min-height:33px;
+}
+.stage-caption{
+  margin:0;font:600 11px/1.35 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color:#cfd6df;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.stage-caption .dim{color:#7e8792;font-weight:400}
+.stage-note{margin:0;font-size:11px;line-height:1.35;color:#9aa3af;text-align:right;max-width:58ch}
+.stage-note:empty{display:none}
+.stage-canvas{
+  flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;
+}
+.fit{position:relative;flex:none;transform-origin:top left}
+
+/* ==========================================================================
+   Norfold product tokens — copied from design/colorSystem.ts (light, dark,
+   AMOLED) so the file renders standalone. Accent is the default Blue.
+   ========================================================================== */
+.frame{
+  --fs:16px;
+  --fb-surface:#f8f9fa;
+  --fb-surface-container-low:#ffffff;
+  --fb-surface-container:#e9ecef;
+  --fb-surface-container-high:#dee2e6;
+  --fb-on-surface:#212529;
+  --fb-on-surface-variant:#495057;
+  --fb-outline:#6c757d;
+  --fb-outline-variant:#ced4da;
+  --fb-primary:#3568d4;
+  --fb-on-primary:#ffffff;
+  --fb-primary-container:#e8eeff;
+  --fb-on-primary-container:#082b60;
+  --fb-focus:#3568d4;
+  --fb-error:#ba1a1a;
+  --fb-on-error:#ffffff;
+  --fb-lost-bg:#fbeed3;
+  --fb-lost-ink:#5c3200;
+  --fb-found-bg:#ddf0e1;
+  --fb-found-ink:#123f1f;
+  --fb-matched-bg:#e4e9fc;
+  --fb-matched-ink:#26328a;
+  --fb-recovered-bg:#d8f0e6;
+  --fb-recovered-ink:#093f2e;
+  --fb-warning:#755400;
+  --fb-link:#0b57d0;
+  --fb-on-media:#ffffff;
+  --scrim:rgba(0,0,0,.5);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.12);
+  --shadow-md:0 8px 24px rgba(0,0,0,.18);
+  --nav-w:72px;
+  --panel-w:224px;
+  position:relative;overflow:hidden;background:var(--fb-surface);color:var(--fb-on-surface);
+  border-radius:16px;border:1px solid #2a2e35;box-shadow:0 24px 60px rgba(0,0,0,.5);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Roboto",system-ui,sans-serif;
+  font-size:calc(var(--fs) * .9375);line-height:1.4;
+  text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;
+  overflow-wrap:break-word;
+  transition:background-color .12s linear,color .12s linear;
+}
+.frame.theme-dark{
+  --fb-surface:#18191b;
+  --fb-surface-container-low:#202124;
+  --fb-surface-container:#26272b;
+  --fb-surface-container-high:#2d2f34;
+  --fb-on-surface:#f1f3f5;
+  --fb-on-surface-variant:#b7bbc2;
+  --fb-outline:#8b9098;
+  --fb-outline-variant:#34363b;
+  --fb-primary:#adc7ff;
+  --fb-on-primary:#082b60;
+  --fb-primary-container:#1c355c;
+  --fb-on-primary-container:#adc7ff;
+  --fb-focus:#adc7ff;
+  --fb-error:#ffb4ab;
+  --fb-on-error:#690005;
+  --fb-lost-bg:#3a2c00;
+  --fb-lost-ink:#f5c04b;
+  --fb-found-bg:#12331f;
+  --fb-found-ink:#9bdcab;
+  --fb-matched-bg:#1c2a5c;
+  --fb-matched-ink:#bec8ff;
+  --fb-recovered-bg:#0e3b2c;
+  --fb-recovered-ink:#8fe3c3;
+  --fb-warning:#e9c46a;
+  --fb-link:#a8c7fa;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.5);
+  --shadow-md:0 8px 24px rgba(0,0,0,.6);
+  --scrim:rgba(0,0,0,.6);
+}
+.frame.theme-amoled{
+  --fb-surface:#000000;
+  --fb-surface-container-low:#202124;
+  --fb-surface-container:#26272b;
+  --fb-surface-container-high:#2d2f34;
+  --fb-on-surface:#f1f3f5;
+  --fb-on-surface-variant:#b7bbc2;
+  --fb-outline:#8b9098;
+  --fb-outline-variant:#34363b;
+  --fb-primary:#adc7ff;
+  --fb-on-primary:#082b60;
+  --fb-primary-container:#1c355c;
+  --fb-on-primary-container:#adc7ff;
+  --fb-focus:#adc7ff;
+  --fb-error:#ffb4ab;
+  --fb-on-error:#690005;
+  --fb-lost-bg:#3a2c00;
+  --fb-lost-ink:#f5c04b;
+  --fb-found-bg:#12331f;
+  --fb-found-ink:#9bdcab;
+  --fb-matched-bg:#1c2a5c;
+  --fb-matched-ink:#bec8ff;
+  --fb-recovered-bg:#0e3b2c;
+  --fb-recovered-ink:#8fe3c3;
+  --fb-warning:#e9c46a;
+  --fb-link:#a8c7fa;
+  --shadow-sm:none;
+  --shadow-md:none;
+  --scrim:rgba(0,0,0,.72);
+}
+.frame.text-200{--fs:32px}
+.frame.reduce *,
+.frame.reduce *::before,
+.frame.reduce *::after{
+  transition-duration:0s !important;animation-duration:0s !important;
+  animation-iteration-count:1 !important;scroll-behavior:auto !important;
+}
+.frame :focus-visible{outline:2px solid var(--fb-focus);outline-offset:2px}
+.frame a{color:inherit}
+.frame button{font:inherit;color:inherit}
+.frame button:focus-visible,.frame a:focus-visible{outline:2px solid var(--fb-focus);outline-offset:2px}
+.frame .rail a:focus-visible,.frame .rail button:focus-visible{outline-offset:-2px}
+.frame ::selection{background:var(--fb-primary-container);color:var(--fb-on-primary-container)}
+
+/* Text scale utilities: every product font size is derived from --fs. */
+.t-xs{font-size:calc(var(--fs) * .6875)}
+.t-sm{font-size:calc(var(--fs) * .8125)}
+.t-md{font-size:calc(var(--fs) * .875)}
+.t-base{font-size:calc(var(--fs) * .9375)}
+.t-lg{font-size:calc(var(--fs) * 1.0625)}
+.t-xl{font-size:calc(var(--fs) * 1.25)}
+.t-2xl{font-size:calc(var(--fs) * 1.5)}
+.muted{color:var(--fb-on-surface-variant)}
+.strong{font-weight:600}
+.kicker{
+  font-size:calc(var(--fs) * .6875);font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--fb-on-surface-variant);
+}
+.sr-only{
+  position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0 0 0 0);white-space:nowrap;border:0;
+}
+
+/* ==========================================================================
+   App shell. Container queries make each frame band real.
+   ========================================================================== */
+.app{display:flex;height:100%;min-height:0;background:var(--fb-surface);position:relative}
+.content{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.canvas{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.surface{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.surface[hidden]{display:none !important}
+
+/* ---- bottom pill (below 600px only) ------------------------------------- */
+.pill-slot{
+  flex:none;padding:8px 16px 12px;background:var(--fb-surface);
+  border-top:1px solid var(--fb-outline-variant);
+}
+.pill-row{display:flex;align-items:center;gap:8px;width:100%;min-width:0;container-type:inline-size;max-width:44rem;margin-inline:auto}
+.pill{
+  display:flex;flex:1 1 0;min-width:0;align-items:stretch;padding:4px;border-radius:999px;
+  background:var(--fb-surface-container-low);
+  border:1px solid var(--fb-outline-variant);
+  box-shadow:var(--shadow-sm),inset 0 1px 0 var(--fb-surface);
+}
+.pill-link{
+  position:relative;display:flex;flex:1 1 0;min-width:44px;min-height:48px;
+  align-items:center;justify-content:center;gap:4px;border-radius:999px;
+  text-decoration:none;padding:4px 2px;color:var(--fb-on-surface-variant);
+}
+.pill-link .icon{flex:none;font-size:22px;transition:transform .15s ease-out}
+.pill-link[aria-current="page"]{flex:2 1 0;font-weight:600;color:var(--fb-on-primary-container)}
+.pill-link[aria-current="page"] .icon{transform:scale(1.12)}
+.pill-active{position:absolute;inset:0;border-radius:inherit;background:var(--fb-primary-container);box-shadow:var(--shadow-sm)}
+.pill-link > :not(.pill-active){position:relative;z-index:1}
+.pill-label{min-width:0;text-align:center;font-size:calc(var(--fs) * .75);line-height:1.2;white-space:nowrap;overflow:hidden}
+@container (max-width:24rem){
+  .pill .pill-label{position:absolute;width:1px !important;height:1px;padding:0;margin:-1px;overflow:hidden !important;clip:rect(0 0 0 0)}
+  .pill .pill-link[aria-current="page"]{flex:1 1 0}
+}
+.pill-create{
+  display:flex;width:52px;min-height:52px;flex:none;align-items:center;justify-content:center;
+  border:0;border-radius:50%;background:var(--fb-primary);color:var(--fb-on-primary);
+  box-shadow:var(--shadow-md);cursor:pointer;
+}
+.pill-create .icon{font-size:26px}
+
+/* ---- rail (600px and up) ------------------------------------------------ */
+.rail{
+  display:none;flex-direction:column;flex:none;width:72px;min-height:0;
+  background:var(--fb-surface);border-inline-end:1px solid var(--fb-outline-variant);
+  overflow:hidden;
+}
+.rail-head{flex:none;display:flex;align-items:center;justify-content:center;padding:6px 0 2px;min-height:52px}
+.rail-title{display:none;min-width:0}
+.rail-toggle{
+  display:flex;align-items:center;justify-content:center;width:44px;height:44px;flex:none;
+  border:0;border-radius:12px;background:transparent;color:var(--fb-on-surface-variant);cursor:pointer;
+}
+.rail-toggle:hover{background:var(--fb-surface-container);color:var(--fb-on-surface)}
+.rail-toggle .icon{font-size:20px}
+.rail-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 8px 8px;scrollbar-width:thin;scrollbar-color:var(--fb-outline-variant) transparent}
+.rail-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.rail-link{
+  position:relative;display:flex;width:100%;min-height:48px;align-items:center;justify-content:center;
+  flex-direction:column;gap:2px;padding:8px 4px;border-radius:16px;text-decoration:none;
+  color:var(--fb-on-surface-variant);
+  transition:background-color .15s ease-out,color .15s ease-out;
+}
+@container app (min-width:600px){
+  .rail{display:flex}
+  .pill-slot{display:none}
+  .app{flex-direction:row}
+}
+@container app (min-width:1200px){ .rail{width:80px} }
+.rail-link:hover{background:var(--fb-surface-container)}
+.rail-link[aria-current="page"]{background:var(--fb-primary-container);color:var(--fb-on-primary-container);font-weight:600}
+.rail-link .icon{font-size:22px;flex:none;transition:transform .15s ease-out}
+.rail-link[aria-current="page"] .icon{transform:scale(1.12)}
+.rail-label{
+  position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0 0 0 0);white-space:nowrap;border:0;
+}
+.rail-foot{flex:none;padding:8px;display:flex;justify-content:center;border-top:1px solid transparent}
+.rail-create{
+  display:flex;align-items:center;justify-content:center;width:52px;height:52px;flex:none;
+  border:0;border-radius:50%;background:var(--fb-primary);color:var(--fb-on-primary);
+  box-shadow:var(--shadow-md);cursor:pointer;
+}
+.rail-create .icon{font-size:26px}
+.rail-create .create-label{display:none}
+.rail-section{display:none}
+
+/* Toggle only exists from 840px. */
+@container app (max-width:839px){ .rail-toggle{display:none} .rail-head{min-height:12px} }
+
+/* ---- pinned 224px panel ------------------------------------------------- */
+.rail[data-pinned="true"]{width:224px}
+.rail[data-pinned="true"] .rail-head{
+  justify-content:space-between;padding:10px 10px 6px;min-height:56px;gap:4px;
+}
+.rail[data-pinned="true"] .rail-title{display:block;font-size:calc(var(--fs) * .6875);letter-spacing:.09em;text-transform:uppercase;font-weight:700;color:var(--fb-on-surface-variant);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rail[data-pinned="true"] .rail-list{gap:2px}
+.rail[data-pinned="true"] .rail-link{
+  flex-direction:row;justify-content:flex-start;gap:12px;padding:10px 10px;min-height:44px;
+  border-radius:10px;text-align:start;
+}
+.rail[data-pinned="true"] .rail-link .icon{transform:none !important}
+.rail[data-pinned="true"] .rail-label{
+  position:static;width:auto;height:auto;margin:0;clip:auto;overflow:visible;
+  font-size:calc(var(--fs) * .9375);line-height:1.3;font-weight:inherit;
+  min-width:0;overflow-wrap:break-word;
+}
+.rail[data-pinned="true"] .rail-section{display:block}
+.rail[data-pinned="true"] .rail-foot{padding:8px;border-top:1px solid var(--fb-outline-variant)}
+.rail[data-pinned="true"] .rail-create{
+  width:100%;height:auto;min-height:44px;border-radius:999px;gap:8px;padding:10px 12px;
+}
+.rail[data-pinned="true"] .rail-create .icon{font-size:20px}
+.rail[data-pinned="true"] .rail-create .create-label{
+  display:block;font-size:calc(var(--fs) * .875);font-weight:600;line-height:1.2;
+}
+.rail[data-pinned="true"] .rail-body{padding:0 8px 10px}
+
+/* Group headers + panel rows, shared by the pinned panel and the flyout. */
+.group-head{padding:12px 10px 4px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.group-head:first-child{padding-top:6px}
+.nav-row{
+  display:flex;align-items:center;gap:8px;min-height:40px;padding:7px 10px;border-radius:9px;
+  text-decoration:none;color:var(--fb-on-surface);font-size:calc(var(--fs) * .875);
+  line-height:1.3;cursor:pointer;
+}
+.nav-row:hover{background:var(--fb-surface-container)}
+.nav-row[aria-current="true"]{background:var(--fb-primary-container);color:var(--fb-on-primary-container);font-weight:600}
+.nav-row .icon{font-size:17px;color:var(--fb-on-surface-variant);flex:none}
+.nav-row[aria-current="true"] .icon{color:inherit}
+.nav-row-label{flex:1;min-width:0;overflow-wrap:break-word}
+.nav-row-count{flex:none;font-size:calc(var(--fs) * .6875);font-weight:600;color:var(--fb-on-surface-variant)}
+.nav-row[aria-current="true"] .nav-row-count{color:inherit}
+.rail[data-pinned="true"] .nav-row{min-height:44px}
+.rail[data-pinned="true"] .group-head{padding:12px 10px 3px}
+
+/* ---- floating flyout + tooltip + badge --------------------------------- */
+.flyout{
+  position:absolute;z-index:60;width:min(264px,calc(100% - 88px));
+  max-height:calc(100% - 16px);overflow-y:auto;overscroll-behavior:contain;
+  background:var(--fb-surface-container-low);color:var(--fb-on-surface);
+  border:1px solid var(--fb-outline-variant);border-radius:16px;
+  box-shadow:var(--shadow-md);padding:6px;
+  scrollbar-width:thin;scrollbar-color:var(--fb-outline-variant) transparent;
+  opacity:0;transition:opacity .12s ease-out;
+}
+.flyout.is-open{opacity:1}
+.flyout-title{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:8px 10px 4px}
+.flyout-title strong{font-size:calc(var(--fs) * .9375);font-weight:650}
+.flyout-title span{font-size:calc(var(--fs) * .6875);color:var(--fb-on-surface-variant)}
+.flyout-hint{padding:6px 10px 8px;font-size:calc(var(--fs) * .6875);color:var(--fb-on-surface-variant);border-top:1px solid var(--fb-outline-variant);margin-top:4px}
+
+.tip{
+  position:absolute;z-index:70;max-width:240px;padding:6px 10px;border-radius:8px;
+  background:var(--fb-on-surface);color:var(--fb-surface);
+  font-size:calc(var(--fs) * .8125);line-height:1.3;font-weight:500;
+  box-shadow:var(--shadow-sm);pointer-events:none;white-space:normal;overflow-wrap:anywhere;
+  opacity:0;transition:opacity .15s ease-out;
+}
+.tip.is-open{opacity:1}
+
+.badge{
+  display:inline-flex;align-items:center;justify-content:center;flex:none;
+  min-width:18px;min-height:18px;padding:1px 4px;border-radius:999px;
+  background:var(--fb-error);color:var(--fb-on-error);
+  font-size:calc(var(--fs) * .6875);font-weight:700;line-height:1.2;
+}
+.rail-link .badge,.pill-link .badge{position:absolute;top:2px;right:2px;z-index:2}
+.rail[data-pinned="true"] .rail-link .badge{position:static;margin-inline-start:auto;top:auto;right:auto}
+.rail-link[aria-current="page"] .badge{box-shadow:0 0 0 2px var(--fb-primary-container)}
+.bell-wrap{position:relative;display:inline-flex}
+.bell-wrap .badge{position:absolute;top:-3px;right:-5px}
+
+/* ---- generic app bar ---------------------------------------------------- */
+.appbar{
+  flex:none;display:flex;align-items:center;gap:8px;min-height:52px;padding:4px 12px;
+  background:var(--fb-surface);border-bottom:1px solid var(--fb-outline-variant);
+  container-type:inline-size;
+}
+.appbar h1,.appbar h2{margin:0;min-width:0;font-size:calc(var(--fs) * 1.125);line-height:1.3;font-weight:650;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.appbar-title{display:flex;flex-direction:column;justify-content:center;min-width:0;flex:1}
+.appbar-actions{display:flex;align-items:center;gap:2px;flex:none;margin-inline-start:auto}
+.wordmark{font-size:calc(var(--fs) * 1.125);font-weight:700;letter-spacing:-.04em;flex:1;min-width:0}
+.iconbtn{
+  display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;
+  border:0;border-radius:12px;background:transparent;color:var(--fb-on-surface);cursor:pointer;flex:none;
+}
+.iconbtn:hover{background:var(--fb-surface-container)}
+.iconbtn .icon{font-size:20px}
+.iconbtn-sm{min-width:36px;min-height:36px;border-radius:9px}
+.avatar{
+  display:inline-flex;align-items:center;justify-content:center;flex:none;
+  width:32px;height:32px;border-radius:50%;background:var(--fb-surface-container-high);
+  color:var(--fb-on-surface);font-size:calc(var(--fs) * .75);font-weight:700;letter-spacing:.01em;
+}
+.avatar-lg{width:44px;height:44px;font-size:calc(var(--fs) * .875)}
+.avatar-sm{width:24px;height:24px;font-size:calc(var(--fs) * .625)}
+.avatar-tone-1{background:#e3e7ee;color:#2b3442}
+.avatar-tone-2{background:#e7e4dc;color:#3d3627}
+.avatar-tone-3{background:#e2e8e4;color:#26382e}
+.avatar-tone-4{background:#e9e2e6;color:#3a2a32}
+.theme-dark .avatar-tone-1,.theme-amoled .avatar-tone-1{background:#2c3644;color:#dbe4f2}
+.theme-dark .avatar-tone-2,.theme-amoled .avatar-tone-2{background:#3a352a;color:#ebe3d3}
+.theme-dark .avatar-tone-3,.theme-amoled .avatar-tone-3{background:#28382f;color:#d7e8de}
+.theme-dark .avatar-tone-4,.theme-amoled .avatar-tone-4{background:#3a2c33;color:#ecdde4}
+
+/* ---- scrolling page body ------------------------------------------------ */
+.scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:var(--fb-outline-variant) transparent}
+.page{width:100%;max-width:44rem;margin-inline:auto;padding:16px 20px 28px}
+.page.wide{max-width:none}
+.page.narrow{max-width:44rem}
+.page-head{margin:0 0 12px}
+.page-head h1{margin:0;font-size:calc(var(--fs) * 1.5);line-height:1.15;font-weight:700;letter-spacing:-.02em}
+.page-head p{margin:4px 0 0}
+.section-gap{margin-top:20px}
+.hairline{height:1px;background:var(--fb-outline-variant);border:0;margin:16px 0}
+/* ---- semantic status chips + tags --------------------------------------- */
+.status{
+  display:inline-flex;align-items:center;gap:4px;border-radius:999px;
+  padding:2px 8px;font-size:calc(var(--fs) * .75);font-weight:600;line-height:1.35;
+  white-space:nowrap;
+}
+.status .icon{font-size:13px}
+.status-lost{background:var(--fb-lost-bg);color:var(--fb-lost-ink)}
+.status-found{background:var(--fb-found-bg);color:var(--fb-found-ink)}
+.status-matched{background:var(--fb-matched-bg);color:var(--fb-matched-ink)}
+.status-recovered{background:var(--fb-recovered-bg);color:var(--fb-recovered-ink)}
+.status-closed{background:var(--fb-surface-container);color:var(--fb-on-surface-variant)}
+.tag{
+  display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 8px;
+  background:var(--fb-surface-container);color:var(--fb-on-surface-variant);
+  font-size:calc(var(--fs) * .6875);font-weight:500;line-height:1.35;max-width:100%;
+}
+.tag > span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.count-pill{
+  display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;
+  padding:0 6px;border-radius:999px;background:var(--fb-primary);color:var(--fb-on-primary);
+  font-size:calc(var(--fs) * .6875);font-weight:700;line-height:1;
+}
+
+/* ---- chips / tabs -------------------------------------------------------- */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 16px}
+.chip{
+  display:inline-flex;align-items:center;gap:4px;min-height:32px;padding:5px 11px;
+  border:1px solid var(--fb-outline-variant);border-radius:999px;background:transparent;
+  color:var(--fb-on-surface-variant);font-size:calc(var(--fs) * .8125);font-weight:500;
+  cursor:pointer;white-space:nowrap;
+}
+.chip:hover{background:var(--fb-surface-container)}
+.chip[aria-pressed="true"]{background:var(--fb-primary-container);border-color:transparent;color:var(--fb-on-primary-container);font-weight:600}
+.chip .icon{font-size:14px}
+.tabs{display:flex;align-items:center;gap:4px;margin:0 0 12px;border-bottom:1px solid var(--fb-outline-variant)}
+.tab{
+  position:relative;border:0;background:transparent;color:var(--fb-on-surface-variant);
+  padding:9px 10px 10px;font-size:calc(var(--fs) * .875);font-weight:600;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;min-height:44px;
+}
+.tab[aria-selected="true"]{color:var(--fb-on-surface)}
+.tab[aria-selected="true"]::after{
+  content:"";position:absolute;inset:auto 6px -1px;height:2px;border-radius:2px;background:var(--fb-primary);
+}
+.tab .tab-count{font-size:calc(var(--fs) * .6875);color:var(--fb-on-surface-variant);font-weight:600}
+.tabs .spacer{flex:1}
+
+/* ---- feed cards ---------------------------------------------------------- */
+.feed{display:grid;grid-template-columns:minmax(0,1fr);gap:26px;max-width:34rem;margin-inline:auto}
+.feed-divider{height:1px;background:var(--fb-outline-variant);border:0;margin:0}
+.card{min-width:0;display:flex;flex-direction:column;gap:9px}
+.card-media{
+  position:relative;display:block;width:100%;aspect-ratio:16/11;border-radius:12px;overflow:hidden;
+  border:0;padding:0;background:var(--fb-surface-container);cursor:pointer;
+}
+.photo{position:absolute;inset:0;display:grid;place-items:center}
+.photo .ph-glyph{font-size:64px;opacity:.5;color:#4a4f56}
+.photo-a{background:
+  radial-gradient(120% 90% at 22% 12%,#fdfdfd 0%,#eceef0 42%,#d7dade 100%)}
+.photo-b{background:
+  radial-gradient(100% 95% at 78% 18%,#f6f6f5 0%,#e6e5e1 46%,#cfcec8 100%)}
+.photo-c{background:
+  radial-gradient(110% 90% at 30% 80%,#f4f5f6 0%,#e2e4e6 48%,#c9ccd0 100%)}
+.photo-d{background:
+  radial-gradient(100% 100% at 70% 70%,#fafafa 0%,#e9e9e9 45%,#d2d2d2 100%)}
+.theme-dark .photo-a,.theme-amoled .photo-a{background:radial-gradient(120% 90% at 22% 12%,#3a3d42 0%,#2a2d31 44%,#202226 100%)}
+.theme-dark .photo-b,.theme-amoled .photo-b{background:radial-gradient(100% 95% at 78% 18%,#3b3a37 0%,#2b2a27 46%,#22211f 100%)}
+.theme-dark .photo-c,.theme-amoled .photo-c{background:radial-gradient(110% 90% at 30% 80%,#373a3d 0%,#27292c 48%,#1f2124 100%)}
+.theme-dark .photo-d,.theme-amoled .photo-d{background:radial-gradient(100% 100% at 70% 70%,#383838 0%,#282828 45%,#202020 100%)}
+.theme-dark .photo .ph-glyph,.theme-amoled .photo .ph-glyph{color:#6d737b;opacity:.45}
+.photo-badge{
+  position:absolute;left:8px;bottom:8px;z-index:1;border-radius:999px;padding:2px 7px;
+  background:rgba(0,0,0,.55);color:var(--fb-on-media);
+  font-size:calc(var(--fs) * .6875);font-weight:600;line-height:1.35;
+}
+.card-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.card-title{
+  margin:0;font-size:calc(var(--fs) * 1.0625);line-height:1.25;font-weight:650;letter-spacing:-.01em;
+}
+.card-title button{
+  border:0;background:none;padding:0;text-align:start;cursor:pointer;color:inherit;
+  font:inherit;letter-spacing:inherit;
+}
+.card-title button:hover{text-decoration:underline;text-underline-offset:2px}
+.card-facts{display:flex;flex-wrap:wrap;gap:3px 12px;margin:0;color:var(--fb-on-surface-variant);font-size:calc(var(--fs) * .75)}
+.card-facts span{display:inline-flex;align-items:center;gap:3px;min-width:0}
+.card-facts .icon{font-size:13px;flex:none}
+.card-identity{display:flex;align-items:center;gap:6px;min-width:0;font-size:calc(var(--fs) * .8125);color:var(--fb-on-surface-variant)}
+.card-identity .who{font-weight:600;color:var(--fb-on-surface);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card-identity .dot::before{content:"·";margin:0 2px}
+.card-actions{display:flex;align-items:center;gap:2px;padding-top:7px;border-top:1px solid var(--fb-outline-variant)}
+.card-action{
+  display:inline-flex;align-items:center;gap:5px;min-height:40px;padding:6px 9px;border:0;
+  border-radius:8px;background:transparent;color:var(--fb-on-surface-variant);
+  font-size:calc(var(--fs) * .75);font-weight:500;cursor:pointer;
+}
+.card-action:hover{background:var(--fb-surface-container);color:var(--fb-on-surface)}
+.card-action .icon{font-size:17px}
+.card-action[aria-pressed="true"]{background:var(--fb-primary-container);color:var(--fb-on-primary-container)}
+.card-action .spacer{flex:1}
+
+.feed-empty{
+  display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;
+  padding:44px 20px 32px;color:var(--fb-on-surface-variant);
+}
+.feed-empty .empty-ring{
+  display:grid;place-items:center;width:64px;height:64px;border-radius:50%;
+  background:var(--fb-surface-container);color:var(--fb-on-surface-variant);
+}
+.feed-empty .empty-ring .icon{font-size:28px}
+.feed-empty strong{color:var(--fb-on-surface);font-size:calc(var(--fs) * 1.0625)}
+.feed-end{text-align:center;padding:22px 0 4px;color:var(--fb-on-surface-variant)}
+
+/* Container-driven column counts: content width, not viewport. */
+@container content (min-width:880px){
+  .feed{grid-template-columns:repeat(2,minmax(0,1fr));max-width:60rem;gap:32px 22px}
+}
+@container content (min-width:1240px){
+  .feed{grid-template-columns:repeat(3,minmax(0,1fr));max-width:82rem}
+}
+@container content (min-width:880px){
+  .feed-page{max-width:none}
+}
+
+/* ---- offline banner ------------------------------------------------------ */
+.offline-banner{
+  display:flex;align-items:flex-start;gap:10px;margin:0 0 16px;padding:11px 12px;
+  border:1px solid var(--fb-outline-variant);border-radius:12px;
+  background:var(--fb-surface-container-low);color:var(--fb-on-surface);
+}
+.offline-banner .icon{font-size:20px;flex:none;color:var(--fb-warning);margin-top:1px}
+.offline-banner strong{display:block;font-size:calc(var(--fs) * .875)}
+.offline-banner p{margin:2px 0 0;font-size:calc(var(--fs) * .8125);color:var(--fb-on-surface-variant)}
+.offline-banner button{margin-inline-start:auto;flex:none}
+.retry-btn{
+  display:inline-flex;align-items:center;gap:5px;min-height:36px;padding:6px 10px;border-radius:9px;
+  border:1px solid var(--fb-outline-variant);background:transparent;color:var(--fb-on-surface-variant);
+  font-size:calc(var(--fs) * .8125);font-weight:600;cursor:pointer;
+}
+.retry-btn:hover{background:var(--fb-surface-container)}
+.retry-btn .icon{font-size:15px}
+
+/* ---- compact result rows (search, my reports, chats) -------------------- */
+.rows{display:flex;flex-direction:column}
+.row{
+  position:relative;display:flex;align-items:center;gap:12px;width:100%;
+  min-height:60px;padding:10px 2px;border:0;background:transparent;text-align:start;
+  color:var(--fb-on-surface);text-decoration:none;cursor:pointer;
+}
+.row + .row::before{content:"";position:absolute;inset:0 0 auto;border-top:1px solid var(--fb-outline-variant)}
+.row:hover{background:var(--fb-surface-container-low)}
+.row:focus-visible{outline-offset:-2px}
+.thumb{
+  position:relative;width:64px;height:64px;flex:none;border-radius:8px;overflow:hidden;
+  display:grid;place-items:center;background:var(--fb-surface-container);
+}
+.thumb .ph-glyph{font-size:26px;opacity:.55;color:#4a4f56}
+.theme-dark .thumb .ph-glyph,.theme-amoled .thumb .ph-glyph{color:#6d737b}
+.row-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.row-title{font-size:calc(var(--fs) * .9375);font-weight:550;line-height:1.3;overflow-wrap:break-word}
+.row-meta{font-size:calc(var(--fs) * .75);color:var(--fb-on-surface-variant);overflow-wrap:break-word}
+.row-right{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.row-time{font-size:calc(var(--fs) * .6875);color:var(--fb-on-surface-variant);white-space:nowrap}
+.row-empty{padding:44px 8px;text-align:center;color:var(--fb-on-surface-variant);font-size:calc(var(--fs) * .875)}
+
+/* ---- search -------------------------------------------------------------- */
+.search-field{
+  display:flex;align-items:center;gap:8px;flex:1;min-width:0;min-height:42px;padding:0 4px 0 12px;
+  border:1px solid var(--fb-outline-variant);border-radius:999px;background:var(--fb-surface-container-low);
+  color:var(--fb-on-surface-variant);
+}
+.search-field:focus-within{border-color:var(--fb-on-surface-variant)}
+.search-field .icon{font-size:18px;flex:none}
+.search-field input{
+  flex:1;min-width:0;border:0;background:transparent;color:var(--fb-on-surface);
+  font:inherit;font-size:calc(var(--fs) * .9375);min-height:38px;outline:none;
+}
+.search-field input::placeholder{color:var(--fb-on-surface-variant);opacity:1}
+.people-grid{display:flex;flex-direction:column}
+.person-row{display:flex;align-items:center;gap:12px;padding:12px 2px;position:relative}
+.person-row + .person-row::before{content:"";position:absolute;inset:0 0 auto;border-top:1px solid var(--fb-outline-variant)}
+.person-copy{flex:1;min-width:0}
+.person-name{font-size:calc(var(--fs) * .9375);font-weight:600}
+.person-meta{font-size:calc(var(--fs) * .75);color:var(--fb-on-surface-variant)}
+.btn-secondary{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:38px;
+  padding:7px 12px;border:1px solid var(--fb-outline-variant);border-radius:999px;
+  background:transparent;color:var(--fb-on-surface);font-size:calc(var(--fs) * .8125);
+  font-weight:600;cursor:pointer;white-space:nowrap;
+}
+.btn-secondary:hover{background:var(--fb-surface-container)}
+
+/* ---- chats --------------------------------------------------------------- */
+.chat-split{display:flex;flex:1;min-height:0;overflow:hidden}
+.chat-list-pane{display:flex;flex-direction:column;flex:none;width:100%;min-width:0;background:var(--fb-surface)}
+.chat-thread-pane{display:none;flex:1;min-width:0;flex-direction:column;background:var(--fb-surface)}
+.chat-split.split .chat-list-pane{width:320px;border-inline-end:1px solid var(--fb-outline-variant)}
+.chat-split.split .chat-thread-pane{display:flex}
+.chat-split:not(.split).show-thread .chat-list-pane{display:none}
+.chat-split:not(.split).show-thread .chat-thread-pane{display:flex}
+.chat-filters{display:flex;gap:6px;padding:10px 12px 8px;flex:none;overflow-x:auto;scrollbar-width:none}
+.chat-filters::-webkit-scrollbar{display:none}
+.chat-filters .chip{min-height:30px;font-size:calc(var(--fs) * .75);padding:4px 10px}
+.chat-list{list-style:none;margin:0;padding:0 10px 14px}
+.chat-item{
+  position:relative;display:flex;align-items:flex-start;gap:10px;width:100%;
+  padding:11px 10px;border:0;border-radius:12px;background:transparent;text-align:start;
+  color:var(--fb-on-surface);cursor:pointer;
+}
+.chat-item:hover{background:var(--fb-surface-container-low)}
+.chat-item[aria-current="true"]{background:var(--fb-primary-container);color:var(--fb-on-primary-container)}
+.chat-item-copy{flex:1;min-width:0}
+.chat-item-top{display:flex;align-items:baseline;gap:8px}
+.chat-item-name{font-size:calc(var(--fs) * .9375);font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-item-time{margin-inline-start:auto;flex:none;font-size:calc(var(--fs) * .6875);color:var(--fb-on-surface-variant)}
+.chat-item[aria-current="true"] .chat-item-time{color:inherit;opacity:.8}
+.chat-item-snip{margin-top:2px;font-size:calc(var(--fs) * .8125);color:var(--fb-on-surface-variant);line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-item[aria-current="true"] .chat-item-snip{color:inherit;opacity:.8}
+.chat-item-foot{display:flex;align-items:center;gap:6px;margin-top:5px}
+.avatar-wrap{position:relative;flex:none}
+.online-dot{
+  position:absolute;right:-1px;bottom:-1px;width:10px;height:10px;border-radius:50%;
+  background:var(--fb-found-ink);border:2px solid var(--fb-surface);
+}
+.theme-dark .online-dot,.theme-amoled .online-dot{border-color:var(--fb-surface)}
+.badge-dark{
+  display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;
+  padding:0 6px;border-radius:999px;background:var(--fb-primary);color:var(--fb-on-primary);
+  font-size:calc(var(--fs) * .6875);font-weight:700;line-height:1;
+}
+.chat-item[aria-current="true"] .badge-dark{background:var(--fb-on-primary-container);color:var(--fb-primary-container)}
+.request-tag{
+  display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:999px;
+  border:1px solid var(--fb-outline-variant);font-size:calc(var(--fs) * .625);
+  font-weight:600;color:var(--fb-on-surface-variant);
+}
+.thread-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:32px;text-align:center;color:var(--fb-on-surface-variant)}
+.thread-empty .icon{font-size:34px;opacity:.6}
+.thread-empty strong{color:var(--fb-on-surface);font-size:calc(var(--fs) * .9375)}
+.thread{flex:1;min-height:0;display:flex;flex-direction:column}
+.thread-head{min-height:60px;padding:5px 10px;gap:8px}
+.thread-head .avatar{width:36px;height:36px}
+.thread-id{min-width:0;flex:1;display:flex;flex-direction:column}
+.thread-name{font-size:calc(var(--fs) * .9375);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.thread-sub{font-size:calc(var(--fs) * .6875);color:var(--fb-on-surface-variant);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.messages{display:flex;flex-direction:column;gap:8px;padding:16px 16px 20px;max-width:46rem;margin-inline:auto;width:100%}
+.day-rule{display:flex;align-items:center;gap:10px;margin:10px 0 6px;color:var(--fb-on-surface-variant);font-size:calc(var(--fs) * .6875);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.day-rule::before,.day-rule::after{content:"";flex:1;height:1px;background:var(--fb-outline-variant)}
+.bubble{
+  max-width:78%;padding:8px 11px;border-radius:16px;font-size:calc(var(--fs) * .875);
+  line-height:1.4;background:var(--fb-surface-container);color:var(--fb-on-surface);
+  align-self:flex-start;border-end-start-radius:5px;
+}
+.bubble.out{align-self:flex-end;background:var(--fb-primary-container);color:var(--fb-on-primary-container);border-end-start-radius:16px;border-end-end-radius:5px}
+.bubble-time{display:block;margin-top:3px;font-size:calc(var(--fs) * .625);opacity:.75;text-align:end}
+.bubble-card{
+  display:flex;gap:10px;align-items:center;margin-top:7px;padding:8px;border-radius:10px;
+  background:var(--fb-surface-container-low);border:1px solid var(--fb-outline-variant);
+  color:var(--fb-on-surface);max-width:100%;
+}
+.bubble.out .bubble-card{background:var(--fb-surface);border-color:var(--fb-outline-variant);color:var(--fb-on-surface)}
+.bubble-card .thumb{width:40px;height:40px;border-radius:6px}
+.bubble-card-copy{min-width:0}
+.bubble-card-title{font-size:calc(var(--fs) * .75);font-weight:600;line-height:1.3}
+.bubble-card-meta{font-size:calc(var(--fs) * .6875);color:var(--fb-on-surface-variant)}
+.composer{
+  flex:none;display:flex;align-items:flex-end;gap:4px;padding:8px 10px 10px;
+  border-top:1px solid var(--fb-outline-variant);background:var(--fb-surface);
+}
+.composer-input{
+  flex:1;min-width:0;min-height:44px;max-height:120px;padding:10px 12px;border-radius:22px;
+  border:1px solid var(--fb-outline-variant);background:var(--fb-surface-container-low);
+  color:var(--fb-on-surface);font:inherit;font-size:calc(var(--fs) * .9375);resize:none;outline:none;
+}
+.composer-input:focus{border-color:var(--fb-on-surface-variant)}
+.send-btn{
+  display:grid;place-items:center;width:44px;height:44px;flex:none;border:0;border-radius:50%;
+  background:var(--fb-primary);color:var(--fb-on-primary);cursor:pointer;
+}
+.send-btn:disabled{background:var(--fb-surface-container);color:var(--fb-on-surface-variant);cursor:default}
+.send-btn .icon{font-size:19px}
+
+/* ---- notifications ------------------------------------------------------- */
+.notif-group-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:16px 0 6px}
+.notif-list{display:flex;flex-direction:column}
+.notif{
+  position:relative;display:flex;align-items:flex-start;gap:11px;width:100%;
+  padding:12px 8px;border:0;border-radius:10px;background:transparent;text-align:start;
+  color:var(--fb-on-surface);cursor:pointer;
+}
+.notif + .notif::before{content:"";position:absolute;inset:0 0 auto;border-top:1px solid var(--fb-outline-variant)}
+.notif:hover{background:var(--fb-surface-container-low)}
+.notif.unread{background:var(--fb-primary-container)}
+.notif.unread:hover{background:var(--fb-primary-container)}
+.notif-icon{
+  display:grid;place-items:center;width:34px;height:34px;flex:none;border-radius:10px;
+  background:var(--fb-surface-container);color:var(--fb-on-surface-variant);
+}
+.notif-icon .icon{font-size:17px}
+.notif-icon.tone-match{background:var(--fb-matched-bg);color:var(--fb-matched-ink)}
+.notif-icon.tone-message{background:var(--fb-primary-container);color:var(--fb-on-primary-container)}
+.notif-icon.tone-warn{background:var(--fb-lost-bg);color:var(--fb-lost-ink)}
+.notif-copy{flex:1;min-width:0}
+.notif-title{font-size:calc(var(--fs) * .875);font-weight:600;line-height:1.35}
+.notif-body{font-size:calc(var(--fs) * .8125);color:var(--fb-on-surface-variant);line-height:1.35;margin-top:1px}
+.notif.unread .notif-body{color:var(--fb-on-primary-container);opacity:.85}
+.notif-time{flex:none;font-size:calc(var(--fs) * .6875);color:var(--fb-on-surface-variant);white-space:nowrap;padding-top:2px}
+.unread-dot{width:8px;height:8px;border-radius:50%;background:var(--fb-primary);flex:none;margin-top:6px}
+.text-btn{
+  border:0;background:transparent;padding:6px 8px;border-radius:8px;cursor:pointer;
+  color:var(--fb-primary);font-size:calc(var(--fs) * .8125);font-weight:600;min-height:36px;
+}
+.text-btn:hover{background:var(--fb-surface-container)}
+.text-btn:disabled{color:var(--fb-on-surface-variant);opacity:.6;cursor:default;background:transparent}
+
+/* ---- settings ------------------------------------------------------------ */
+.settings-split{display:flex;flex:1;min-height:0;overflow:hidden}
+.settings-list-pane{display:flex;flex-direction:column;width:100%;min-width:0;flex:none}
+.settings-detail-pane{display:none;flex:1;min-width:0;flex-direction:column}
+.settings-split.split .settings-list-pane{width:320px;flex:none;border-inline-end:1px solid var(--fb-outline-variant)}
+.settings-split.split .settings-detail-pane{display:flex}
+.settings-split:not(.split).show-detail .settings-list-pane{display:none}
+.settings-split:not(.split).show-detail .settings-detail-pane{display:flex}
+.settings-search{padding:10px 14px 4px;flex:none}
+.settings-search .search-field{min-height:38px;border-radius:10px;background:var(--fb-surface-container)}
+.settings-nav{padding:4px 10px 22px}
+.settings-group{padding-top:10px}
+.settings-group:first-child{padding-top:0}
+.settings-group .group-head{padding:8px 6px 4px}
+.settings-link{
+  display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:8px 6px;
+  border:0;border-radius:9px;background:transparent;color:var(--fb-on-surface);
+  text-align:start;cursor:pointer;font-size:calc(var(--fs) * .9375);
+}
+.settings-link:hover{background:var(--fb-surface-container-low)}
+.settings-link[aria-current="page"]{background:var(--fb-surface-container);font-weight:600}
+.settings-link .icon{font-size:19px;color:var(--fb-on-surface-variant);flex:none}
+.settings-link .chev{margin-inline-start:auto;font-size:16px;color:var(--fb-on-surface-variant);opacity:.8}
+.settings-link .settings-value{font-size:calc(var(--fs) * .75);color:var(--fb-on-surface-variant);margin-inline-start:auto}
+.detail-head{
+  flex:none;position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:6px;
+  min-height:56px;padding:6px 14px;background:var(--fb-surface);
+  border-bottom:1px solid var(--fb-outline-variant);
+}
+.detail-head h2{margin:0;font-size:calc(var(--fs) * 1.125);font-weight:650;min-width:0;overflow-wrap:break-word;line-height:1.3}
+.detail-body{padding:16px 20px 32px;max-width:44rem}
+.detail-body > p.lede{margin:0 0 18px;color:var(--fb-on-surface-variant);font-size:calc(var(--fs) * .875);line-height:1.5}
+.set-group{margin:0 0 22px}
+.set-group > h3{margin:0 0 4px;padding:0 2px;font-size:calc(var(--fs) * .8125);font-weight:600;color:var(--fb-on-surface-variant)}
+.set-group-card{display:flex;flex-direction:column}
+.set-row{
+  position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:56px;
+  padding:10px 2px;border:0;background:transparent;color:var(--fb-on-surface);
+  text-align:start;font:inherit;cursor:default;
+}
+.set-row + .set-row::before{content:"";position:absolute;inset:0 0 auto;border-top:1px solid var(--fb-outline-variant)}
+.set-row.button{cursor:pointer}
+.set-row.button:hover{background:var(--fb-surface-container-low)}
+.set-copy{flex:1;min-width:0}
+.set-title{display:block;font-size:calc(var(--fs) * .9375);font-weight:500;line-height:1.4}
+.set-desc{display:block;margin-top:1px;font-size:calc(var(--fs) * .8125);color:var(--fb-on-surface-variant);line-height:1.4}
+.set-value{flex:none;font-size:calc(var(--fs) * .8125);color:var(--fb-on-surface-variant);text-align:end;max-width:40%}
+.set-row .chev{flex:none;font-size:16px;color:var(--fb-on-surface-variant)}
+.switch{
+  position:relative;width:44px;height:26px;flex:none;border-radius:999px;border:2px solid var(--fb-outline);
+  background:var(--fb-surface-container-high);cursor:pointer;
+}
+.switch::after{
+  content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
+  background:var(--fb-on-surface-variant);transition:transform .15s ease-out,background-color .15s;
+}
+.switch[aria-checked="true"]{background:var(--fb-primary);border-color:var(--fb-primary)}
+.switch[aria-checked="true"]::after{transform:translateX(18px);background:var(--fb-on-primary)}
+.set-row .switch{margin-inline-start:auto}
+.theme-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:4px 0 10px}
+.theme-opt{
+  display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:10px;
+  border:1px solid var(--fb-outline-variant);background:transparent;cursor:pointer;
+  color:var(--fb-on-surface);text-align:start;min-height:44px;
+}
+.theme-opt:hover{background:var(--fb-surface-container-low)}
+.theme-opt[aria-pressed="true"]{border-color:var(--fb-primary);box-shadow:inset 0 0 0 1px var(--fb-primary)}
+.theme-swatch{display:flex;flex-direction:column;justify-content:center;gap:3px;height:34px;padding:6px 7px;border-radius:6px;background:#f8f9fa;color:#212529;border:1px solid rgba(0,0,0,.08)}
+.theme-swatch.dark{background:#18191b;color:#f1f3f5;border-color:#34363b}
+.theme-swatch.amoled{background:#000;color:#f1f3f5;border-color:#34363b}
+.theme-swatch span{height:3px;width:72%;border-radius:999px;background:currentColor}
+.theme-swatch span + span{width:44%;opacity:.6}
+.theme-opt .opt-label{display:flex;align-items:center;gap:4px;font-size:calc(var(--fs) * .75);font-weight:600;line-height:1.3}
+.theme-opt .icon{font-size:14px}
+.seg-inline{display:flex;gap:2px;padding:2px;border-radius:8px;background:var(--fb-surface-container);flex:none;margin-inline-start:auto}
+.seg-inline button{
+  border:0;background:transparent;color:var(--fb-on-surface-variant);border-radius:6px;
+  padding:5px 8px;font-size:calc(var(--fs) * .75);font-weight:600;cursor:pointer;min-height:28px;
+}
+.seg-inline button[aria-pressed="true"]{background:var(--fb-surface);color:var(--fb-on-surface);box-shadow:var(--shadow-sm)}
+.nav-state-note{
+  margin:0;padding:10px 2px 0;font-size:calc(var(--fs) * .75);color:var(--fb-on-surface-variant);
+  line-height:1.45;
+}
+
+/* ---- post detail --------------------------------------------------------- */
+.post{display:flex;flex-direction:column;gap:14px}
+.post-hero{position:relative;width:100%;aspect-ratio:4/3;border-radius:14px;overflow:hidden;background:var(--fb-surface-container)}
+.post-hero .ph-glyph{font-size:88px}
+.post-badges{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.post h1{margin:0;font-size:calc(var(--fs) * 1.5);line-height:1.2;font-weight:700;letter-spacing:-.02em}
+.post-lede{margin:0;color:var(--fb-on-surface-variant);font-size:calc(var(--fs) * .875);line-height:1.5}
+.post-body{margin:0;color:var(--fb-on-surface);font-size:calc(var(--fs) * .9375);line-height:1.6;white-space:pre-line}
+.facts{margin:0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px 16px;padding:14px;border-radius:12px;background:var(--fb-surface-container-low);border:1px solid var(--fb-outline-variant)}
+.facts dt{font-size:calc(var(--fs) * .75);color:var(--fb-on-surface-variant)}
+.facts dd{margin:0;font-size:calc(var(--fs) * .8125);font-weight:500;overflow-wrap:break-word}
+.post-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn-primary{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:44px;
+  padding:10px 16px;border:0;border-radius:999px;background:var(--fb-primary);color:var(--fb-on-primary);
+  font-size:calc(var(--fs) * .875);font-weight:600;cursor:pointer;
+}
+.btn-primary:hover{box-shadow:var(--shadow-sm);filter:brightness(.97)}
+.btn-primary:disabled{opacity:.5;cursor:default;filter:none;box-shadow:none}
+.btn-primary .icon{font-size:18px}
+.btn-quiet{
+  display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:9px 14px;
+  border:1px solid var(--fb-outline-variant);border-radius:999px;background:transparent;
+  color:var(--fb-on-surface);font-size:calc(var(--fs) * .875);font-weight:600;cursor:pointer;
+}
+.btn-quiet:hover{background:var(--fb-surface-container)}
+.btn-quiet[aria-pressed="true"]{background:var(--fb-primary-container);border-color:transparent;color:var(--fb-on-primary-container)}
+.btn-quiet .icon{font-size:17px}
+.safety-note{
+  display:flex;gap:9px;padding:12px;border-radius:12px;background:var(--fb-surface-container);
+  color:var(--fb-on-surface-variant);font-size:calc(var(--fs) * .75);line-height:1.45;
+}
+.safety-note .icon{font-size:17px;flex:none;margin-top:1px}
+.author{display:flex;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--fb-outline-variant);border-bottom:1px solid var(--fb-outline-variant)}
+.author-copy{min-width:0;flex:1}
+.author-name{font-size:calc(var(--fs) * .875);font-weight:600}
+.author-meta{font-size:calc(var(--fs) * .75);color:var(--fb-on-surface-variant)}
+
+/* ---- empty / offline surfaces ------------------------------------------- */
+.empty-state{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;gap:10px;padding:44px 24px;min-height:0;
+}
+.empty-state .empty-art{
+  display:grid;place-items:center;width:76px;height:76px;border-radius:50%;
+  background:var(--fb-surface-container);color:var(--fb-on-surface-variant);margin-bottom:2px;
+}
+.empty-state .empty-art .icon{font-size:32px}
+.empty-state h2{margin:0;font-size:calc(var(--fs) * 1.25);font-weight:700;letter-spacing:-.01em}
+.empty-state p{margin:0;max-width:34ch;color:var(--fb-on-surface-variant);font-size:calc(var(--fs) * .875);line-height:1.5}
+.empty-state .btn-primary{margin-top:6px}
+
+/* ---- create sheet, scrim, toast ----------------------------------------- */
+.scrim{position:absolute;inset:0;z-index:80;background:var(--scrim);opacity:0;transition:opacity .15s ease-out}
+.scrim.is-open{opacity:1}
+.sheet{
+  position:absolute;z-index:81;left:0;right:0;bottom:0;max-height:88%;
+  display:flex;flex-direction:column;background:var(--fb-surface-container-low);
+  border-radius:20px 20px 0 0;box-shadow:var(--shadow-md);
+  border-top:1px solid var(--fb-outline-variant);
+  opacity:0;transform:translateY(10px);transition:opacity .16s ease-out,transform .16s ease-out;
+}
+.sheet.is-open{opacity:1;transform:none}
+.sheet-head{flex:none;display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--fb-outline-variant)}
+.sheet-head h2{margin:0;flex:1;font-size:calc(var(--fs) * 1.0625);font-weight:650}
+.sheet-body{flex:1;min-height:0;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:14px}
+.sheet-foot{flex:none;display:flex;align-items:center;gap:8px;padding:10px 14px 14px;border-top:1px solid var(--fb-outline-variant)}
+.sheet-foot .btn-primary{margin-inline-start:auto}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field > label{font-size:calc(var(--fs) * .75);font-weight:600;color:var(--fb-on-surface-variant)}
+.field input,.field select,.field textarea{
+  width:100%;min-height:44px;padding:9px 11px;border-radius:10px;
+  border:1px solid var(--fb-outline-variant);background:var(--fb-surface);
+  color:var(--fb-on-surface);font:inherit;font-size:calc(var(--fs) * .9375);outline:none;
+}
+.field textarea{min-height:76px;resize:vertical}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--fb-on-surface-variant)}
+.type-toggle{display:flex;gap:6px}
+.type-toggle button{
+  flex:1;min-height:44px;border:1px solid var(--fb-outline-variant);border-radius:10px;
+  background:transparent;color:var(--fb-on-surface);font-size:calc(var(--fs) * .875);
+  font-weight:600;cursor:pointer;
+}
+.type-toggle button[aria-pressed="true"]{border-color:var(--fb-primary);background:var(--fb-primary-container);color:var(--fb-on-primary-container)}
+.photo-slots{display:flex;gap:8px}
+.photo-slot{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  width:78px;height:78px;border-radius:10px;border:1px dashed var(--fb-outline);
+  background:transparent;color:var(--fb-on-surface-variant);font-size:calc(var(--fs) * .625);cursor:pointer;
+}
+.photo-slot:hover{background:var(--fb-surface-container)}
+.photo-slot .icon{font-size:20px}
+.toast{
+  position:absolute;left:50%;bottom:96px;transform:translateX(-50%) translateY(4px);
+  z-index:90;max-width:calc(100% - 32px);padding:9px 13px;border-radius:10px;
+  background:var(--fb-on-surface);color:var(--fb-surface);font-size:calc(var(--fs) * .8125);
+  box-shadow:var(--shadow-md);opacity:0;transition:opacity .15s ease-out,transform .15s ease-out;
+  display:flex;align-items:center;gap:8px;line-height:1.35;
+}
+.toast.is-open{opacity:1;transform:translateX(-50%)}
+.toast .icon{font-size:16px;flex:none}
+.toast .proto{
+  flex:none;font-size:calc(var(--fs) * .5625);font-weight:700;letter-spacing:.08em;
+  border:1px solid currentColor;border-radius:4px;padding:1px 4px;opacity:.8;
+}
+/* ---- container declarations used above and below ------------------------ */
+.app{container-type:inline-size;container-name:app}
+.content{container-type:inline-size;container-name:content}
+
+/* ---- responsive details inside the frame -------------------------------- */
+@container app (min-width:600px){
+  .page{padding:20px 24px 32px}
+  .appbar{padding-inline:16px}
+  .empty-state{padding:52px 28px}
+}
+@container app (min-width:840px){
+  .page{padding:24px 32px 36px}
+  .post-actions{gap:10px}
+  .sheet{
+    left:50%;right:auto;bottom:50%;transform:translate(-50%,50%) scale(.98);
+    width:min(460px,calc(100% - 48px));border-radius:18px;border:1px solid var(--fb-outline-variant);
+    max-height:84%;
+  }
+  .sheet.is-open{transform:translate(-50%,50%)}
+  .toast{bottom:32px}
+}
+@container content (max-width:359px){
+  .page{padding-inline:16px}
+  .chip{padding-inline:9px}
+  .facts{grid-template-columns:minmax(0,1fr);gap:3px}
+  .facts dd{margin-bottom:7px}
+  .post-actions .btn-quiet{padding-inline:11px}
+}
+@container content (min-width:720px){
+  .feed-page{max-width:60rem}
+}
+/* Pinned panel leaves 616px of content at 840: cards stay one column. */
+
+/* Reduced motion: the same final states, no interpolation. */
+.frame.reduce .rail-link,
+.frame.reduce .rail-link .icon,
+.frame.reduce .pill-link .icon,
+.frame.reduce .switch::after,
+.frame.reduce .flyout,
+.frame.reduce .tip,
+.frame.reduce .scrim,
+.frame.reduce .sheet,
+.frame.reduce .toast{transition:none !important}
+.frame.reduce .rail-link[aria-current="page"] .icon,
+.frame.reduce .pill-link[aria-current="page"] .icon{transform:none}
+.frame.reduce .sheet.is-open{transform:translate(-50%,50%)}
+@container app (max-width:839px){
+  .frame.reduce .sheet{transform:none}
+}
+
+/* Thin, product-toned scrollbars; the page itself never scrolls. */
+.frame ::-webkit-scrollbar{width:10px;height:10px}
+.frame ::-webkit-scrollbar-thumb{background:var(--fb-outline-variant);border-radius:999px;border:3px solid var(--fb-surface)}
+.frame ::-webkit-scrollbar-track{background:transparent}
+
+</style>
+</head>
+<body>
+<!-- Icon sprite: lucide-style strokes, inline so nothing is fetched. -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <defs>
+    <g id="stroke" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></g>
+  </defs>
+  <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-6h5v6"/></symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6"/><path d="M9 16h4"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.5 8.6 8.6 0 0 1-3.9-.9L3 21l1.9-5.6A8.5 8.5 0 1 1 21 11.5z"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.4.46.72.86.86H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
+  <symbol id="i-panel-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/></symbol>
+  <symbol id="i-panel-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m17 9-3 3 3 3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></symbol>
+  <symbol id="i-map-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-bookmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4"/><path d="m15.4 6.5-6.8 4"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M7 12h10"/><path d="M10 18h4"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+  <symbol id="i-paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-check-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8Z"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 0 0-16 0"/></symbol>
+  <symbol id="i-device" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M12 18h.01"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18h1.5a2.5 2.5 0 0 0 0-5H13a2 2 0 0 1 0-4h2a5 5 0 0 0 0-10Z"/><circle cx="8" cy="9" r="1"/><circle cx="8" cy="15" r="1"/><circle cx="12" cy="6" r="1"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m21 15-5-5L5 21"/></symbol>
+  <symbol id="i-umbrella" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12a10 10 0 0 0-20 0Z"/><path d="M12 12v7a2 2 0 0 0 4 0"/><path d="M12 2v2"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="3.5"/><path d="m10.1 12.9 9.9-9.9"/><path d="m18 5 2 2"/><path d="m15 8 2 2"/></symbol>
+  <symbol id="i-glasses" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="15" r="3"/><circle cx="18" cy="15" r="3"/><path d="M9 15h6"/><path d="M3 15V9a2 2 0 0 1 2-2h1"/><path d="M21 15V9a2 2 0 0 0-2-2h-1"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-wifi-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 20 20"/><path d="M16.7 11.1A11 11 0 0 1 19 12.6"/><path d="M5 12.6a11 11 0 0 1 5.2-2.4"/><path d="M10.7 5.1A16 16 0 0 1 22.6 9"/><path d="M1.4 9a15.9 15.9 0 0 1 4.7-2.9"/><path d="M8.5 16.1a6 6 0 0 1 7 0"/><path d="M12 20h.01"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 6 10-6"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></symbol>
+</svg>
+
+<header class="studio">
+  <div class="studio-top">
+    <div class="studio-brand">
+      <span class="mark" aria-hidden="true">N</span>
+      <span>
+        <strong>Norfold · navigation prototype</strong>
+        <small>Hover a rail icon · Tab and arrows inside the rail · click the expand toggle · Esc closes the flyout</small>
+      </span>
+    </div>
+    <div class="studio-meta">
+      <span class="scale-chip" id="scaleChip">fit 100%</span>
+      <button type="button" class="studio-reset" id="resetBtn">Reset</button>
+    </div>
+  </div>
+  <div class="studio-controls">
+    <fieldset class="ctl">
+      <legend>Viewport</legend>
+      <div class="seg" id="segViewport" role="group" aria-label="Viewport width">
+        <button type="button" class="seg-btn" data-set="viewport" data-value="320"><span class="mono">320</span></button>
+        <button type="button" class="seg-btn" data-set="viewport" data-value="411"><span class="mono">411</span></button>
+        <button type="button" class="seg-btn" data-set="viewport" data-value="768"><span class="mono">768</span></button>
+        <button type="button" class="seg-btn" data-set="viewport" data-value="1024"><span class="mono">1024</span></button>
+        <button type="button" class="seg-btn" data-set="viewport" data-value="1280" aria-pressed="true"><span class="mono">1280</span></button>
+        <button type="button" class="seg-btn" data-set="viewport" data-value="1440"><span class="mono">1440</span></button>
+      </div>
+    </fieldset>
+    <fieldset class="ctl">
+      <legend>Theme</legend>
+      <div class="seg" id="segTheme" role="group" aria-label="Theme">
+        <button type="button" class="seg-btn" data-set="theme" data-value="light" aria-pressed="true">Light</button>
+        <button type="button" class="seg-btn" data-set="theme" data-value="dark">Dark</button>
+        <button type="button" class="seg-btn" data-set="theme" data-value="amoled">AMOLED</button>
+      </div>
+    </fieldset>
+    <fieldset class="ctl">
+      <legend>Text</legend>
+      <div class="seg" id="segText" role="group" aria-label="Text scale">
+        <button type="button" class="seg-btn" data-set="text" data-value="100" aria-pressed="true">100%</button>
+        <button type="button" class="seg-btn" data-set="text" data-value="200">200%</button>
+      </div>
+    </fieldset>
+    <fieldset class="ctl">
+      <legend>Reduced motion</legend>
+      <div class="seg" id="segMotion" role="group" aria-label="Reduced motion">
+        <button type="button" class="seg-btn" data-set="motion" data-value="off" aria-pressed="true">Off</button>
+        <button type="button" class="seg-btn" data-set="motion" data-value="on">On</button>
+      </div>
+    </fieldset>
+    <fieldset class="ctl">
+      <legend>Surface</legend>
+      <div class="seg" id="segSurface" role="group" aria-label="Surface">
+        <button type="button" class="seg-btn" data-set="surface" data-value="home" aria-pressed="true">Home</button>
+        <button type="button" class="seg-btn" data-set="surface" data-value="search">Search</button>
+        <button type="button" class="seg-btn" data-set="surface" data-value="chats">Chats</button>
+        <button type="button" class="seg-btn" data-set="surface" data-value="notifications">Notifications</button>
+        <button type="button" class="seg-btn" data-set="surface" data-value="settings">Settings</button>
+        <button type="button" class="seg-btn" data-set="surface" data-value="post">Post detail</button>
+        <button type="button" class="seg-btn" data-set="surface" data-value="empty">Empty</button>
+        <button type="button" class="seg-btn" data-set="surface" data-value="offline">Offline</button>
+      </div>
+    </fieldset>
+    <fieldset class="ctl">
+      <legend>Panel</legend>
+      <div class="seg" id="segPanel" role="group" aria-label="Panel state">
+        <button type="button" class="seg-btn" data-set="panel" data-value="collapsed" aria-pressed="true">Collapsed</button>
+        <button type="button" class="seg-btn" data-set="panel" data-value="flyout">Flyout</button>
+        <button type="button" class="seg-btn" data-set="panel" data-value="pinned">Pinned</button>
+      </div>
+    </fieldset>
+    <fieldset class="ctl">
+      <legend>Unread</legend>
+      <div class="seg" id="segUnread" role="group" aria-label="Unread badge count">
+        <button type="button" class="seg-btn" data-set="unread" data-value="0">0</button>
+        <button type="button" class="seg-btn" data-set="unread" data-value="1">1</button>
+        <button type="button" class="seg-btn" data-set="unread" data-value="9" aria-pressed="true">9</button>
+        <button type="button" class="seg-btn" data-set="unread" data-value="120">99+</button>
+      </div>
+    </fieldset>
+  </div>
+</header>
+
+<main class="stage">
+  <div class="stage-bar">
+    <p class="stage-caption" id="caption">1280 px <span class="dim">· desktop · rail 80px · collapsed</span></p>
+    <p class="stage-note" id="stageNote"></p>
+  </div>
+  <div class="stage-canvas" id="stageCanvas">
+    <div class="fit" id="fit">
+      <div class="frame theme-light" id="frame">
+        <div class="app" id="app" data-panel="collapsed">
+
+          <nav class="rail" id="rail" aria-label="Primary" data-pinned="false">
+            <div class="rail-head">
+              <span class="rail-title" id="railTitle">Home</span>
+              <button type="button" class="rail-toggle" id="railToggle" aria-expanded="false" aria-controls="railNav" aria-label="Expand navigation" title="Expand navigation">
+                <svg class="icon" aria-hidden="true"><use href="#i-panel-open"></use></svg>
+              </button>
+            </div>
+            <div class="rail-body">
+              <ul class="rail-list" id="railNav">
+                <li>
+                  <a class="rail-link" href="#/" data-nav="home" aria-current="page" aria-label="Home">
+                    <svg class="icon" aria-hidden="true"><use href="#i-home"></use></svg>
+                    <span class="rail-label">Home</span>
+                  </a>
+                </li>
+                <li>
+                  <a class="rail-link" href="#/my" data-nav="my" aria-label="My Reports">
+                    <svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg>
+                    <span class="rail-label">My Reports</span>
+                  </a>
+                </li>
+                <li>
+                  <a class="rail-link" href="#/chats" data-nav="chats" aria-label="Chats">
+                    <svg class="icon" aria-hidden="true"><use href="#i-chat"></use></svg>
+                    <span class="rail-label">Chats</span>
+                    <span class="badge" data-badge="chats" hidden>9</span>
+                  </a>
+                </li>
+                <li>
+                  <a class="rail-link" href="#/settings" data-nav="settings" aria-label="Settings">
+                    <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
+                    <span class="rail-label">Settings</span>
+                  </a>
+                </li>
+              </ul>
+              <div class="rail-section" id="railSection"></div>
+            </div>
+            <div class="rail-foot">
+              <button type="button" class="rail-create" data-action="create" aria-label="Create report">
+                <svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg>
+                <span class="create-label">Create report</span>
+              </button>
+            </div>
+          </nav>
+
+          <main class="content" id="content">
+            <div class="canvas" id="canvas">
+
+              <!-- ============ HOME FEED ============ -->
+              <section class="surface" data-surface="home" id="surface-home">
+                <header class="appbar">
+                  <div class="wordmark">Norfold</div>
+                  <div class="appbar-actions">
+                    <button type="button" class="iconbtn" data-action="go" data-surface="search" aria-label="Search">
+                      <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
+                    </button>
+                    <button type="button" class="iconbtn" data-action="go" data-surface="notifications" aria-label="Notifications">
+                      <span class="bell-wrap">
+                        <svg class="icon" aria-hidden="true"><use href="#i-bell"></use></svg>
+                        <span class="badge" data-badge="bell" hidden>9</span>
+                      </span>
+                    </button>
+                    <button type="button" class="iconbtn" data-action="go" data-surface="settings" data-section="account" aria-label="Account and settings">
+                      <span class="avatar avatar-tone-1" aria-hidden="true">RE</span>
+                    </button>
+                  </div>
+                </header>
+                <div class="scroll" data-scroll>
+                  <div class="page feed-page">
+                    <div class="page-head">
+                      <h1 tabindex="-1" data-route-title>Lost &amp; found near you</h1>
+                      <p class="t-sm muted">Riverside · within 12 km · 6 open reports</p>
+                    </div>
+                    <div class="chips" role="group" aria-label="Filter the feed">
+                      <button type="button" class="chip" data-home-filter="all" aria-pressed="true">All</button>
+                      <button type="button" class="chip" data-home-filter="lost" aria-pressed="false">Lost</button>
+                      <button type="button" class="chip" data-home-filter="found" aria-pressed="false">Found</button>
+                      <button type="button" class="chip" data-home-filter="nearby" aria-pressed="false">Nearby</button>
+                      <button type="button" class="chip" data-home-filter="recent" aria-pressed="false">Recent</button>
+                    </div>
+                    <div class="feed" id="homeFeed"></div>
+                    <div class="feed-empty" id="homeEmpty" hidden>
+                      <span class="empty-ring" aria-hidden="true"><svg class="icon"><use href="#i-search"></use></svg></span>
+                      <strong>Nothing in this view yet</strong>
+                      <p class="t-sm">Try a wider radius or clear the filter. New reports appear here as people post them.</p>
+                      <button type="button" class="btn-quiet" data-home-filter="all">Clear filter</button>
+                    </div>
+                    <p class="feed-end t-xs">You're all caught up · Updated just now</p>
+                  </div>
+                </div>
+              </section>
+
+              <!-- ============ SEARCH (header utility route) ============ -->
+              <section class="surface" data-surface="search" id="surface-search" hidden>
+                <header class="appbar">
+                  <button type="button" class="iconbtn" data-action="go" data-surface="home" aria-label="Back to home">
+                    <svg class="icon" aria-hidden="true"><use href="#i-arrow-left"></use></svg>
+                  </button>
+                  <div class="search-field">
+                    <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
+                    <input id="searchInput" type="search" placeholder="Search reports and people" aria-label="Search reports and people" autocomplete="off">
+                    <button type="button" class="iconbtn iconbtn-sm" id="searchClear" aria-label="Clear search" hidden>
+                      <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+                    </button>
+                  </div>
+                </header>
+                <div class="scroll" data-scroll>
+                  <div class="page">
+                    <h1 class="sr-only" tabindex="-1" data-route-title>Search</h1>
+                    <div class="tabs" role="tablist" aria-label="Search results">
+                      <button type="button" class="tab" role="tab" id="tabReports" aria-selected="true" data-search-tab="reports">Reports <span class="tab-count" id="searchReportCount">6</span></button>
+                      <button type="button" class="tab" role="tab" id="tabPeople" aria-selected="false" data-search-tab="people">People <span class="tab-count" id="searchPeopleCount">4</span></button>
+                      <span class="spacer"></span>
+                      <button type="button" class="chip" id="searchFilterChip" aria-pressed="false" title="Filters are a visual fixture in this prototype">
+                        <svg class="icon" aria-hidden="true"><use href="#i-filter"></use></svg> Filters
+                      </button>
+                    </div>
+                    <div id="searchReportsPane">
+                      <div class="rows" id="searchReports"></div>
+                    </div>
+                    <div id="searchPeoplePane" hidden>
+                      <div class="people-grid" id="searchPeople"></div>
+                    </div>
+                    <p class="row-empty" id="searchNoResults" hidden></p>
+                  </div>
+                </div>
+              </section>
+
+              <!-- ============ CHATS ============ -->
+              <section class="surface" data-surface="chats" id="surface-chats" hidden>
+                <div class="chat-split" id="chatSplit">
+                  <div class="chat-list-pane">
+                    <header class="appbar">
+                      <h1 tabindex="-1" data-route-title>Chats</h1>
+                      <div class="appbar-actions">
+                        <button type="button" class="iconbtn" id="chatFilterBtn" aria-label="Filter chats" aria-haspopup="true" aria-expanded="false">
+                          <svg class="icon" aria-hidden="true"><use href="#i-filter"></use></svg>
+                        </button>
+                      </div>
+                    </header>
+                    <div class="chat-filters" role="group" aria-label="Show conversations" id="chatFilters">
+                      <button type="button" class="chip" data-chat-filter="all" aria-pressed="true">All</button>
+                      <button type="button" class="chip" data-chat-filter="unread" aria-pressed="false">Unread</button>
+                      <button type="button" class="chip" data-chat-filter="requests" aria-pressed="false">Requests</button>
+                      <button type="button" class="chip" data-chat-filter="archived" aria-pressed="false">Archived</button>
+                    </div>
+                    <div class="scroll" data-scroll>
+                      <ul class="chat-list" id="chatList"></ul>
+                      <p class="row-empty" id="chatListEmpty" hidden></p>
+                    </div>
+                  </div>
+                  <div class="chat-thread-pane" id="chatThreadPane">
+                    <div class="thread-empty" id="threadEmpty">
+                      <svg class="icon" aria-hidden="true"><use href="#i-chat"></use></svg>
+                      <strong>Select a conversation</strong>
+                      <span class="t-sm">Messages stay tied to the report they are about.</span>
+                    </div>
+                    <div class="thread" id="thread" hidden>
+                      <header class="appbar thread-head">
+                        <button type="button" class="iconbtn" data-action="thread-back" aria-label="Back to chats">
+                          <svg class="icon" aria-hidden="true"><use href="#i-arrow-left"></use></svg>
+                        </button>
+                        <span class="avatar avatar-tone-1" id="threadAvatar" aria-hidden="true">MO</span>
+                        <div class="thread-id">
+                          <span class="thread-name" id="threadName">Maya Okafor</span>
+                          <span class="thread-sub" id="threadSub">About the black umbrella</span>
+                        </div>
+                        <button type="button" class="iconbtn" data-action="thread-more" aria-label="Conversation options">
+                          <svg class="icon" aria-hidden="true"><use href="#i-more"></use></svg>
+                        </button>
+                      </header>
+                      <div class="scroll" id="threadScroll" data-scroll>
+                        <div class="messages" id="messages"></div>
+                      </div>
+                      <form class="composer" id="composer">
+                        <button type="button" class="iconbtn" data-action="attach" aria-label="Attach a photo">
+                          <svg class="icon" aria-hidden="true"><use href="#i-paperclip"></use></svg>
+                        </button>
+                        <textarea class="composer-input" id="composerInput" rows="1" placeholder="Message Maya" aria-label="Message"></textarea>
+                        <button type="submit" class="send-btn" id="sendBtn" disabled aria-label="Send message">
+                          <svg class="icon" aria-hidden="true"><use href="#i-send"></use></svg>
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- ============ NOTIFICATIONS ============ -->
+              <section class="surface" data-surface="notifications" id="surface-notifications" hidden>
+                <header class="appbar">
+                  <button type="button" class="iconbtn" data-action="go" data-surface="home" aria-label="Back to home">
+                    <svg class="icon" aria-hidden="true"><use href="#i-arrow-left"></use></svg>
+                  </button>
+                  <h1 tabindex="-1" data-route-title>Notifications</h1>
+                  <div class="appbar-actions">
+                    <button type="button" class="text-btn" id="markAllRead">Mark all read</button>
+                  </div>
+                </header>
+                <div class="scroll" data-scroll>
+                  <div class="page">
+                    <div id="notifList"></div>
+                    <p class="feed-end t-xs">Notifications older than 30 days are removed automatically.</p>
+                  </div>
+                </div>
+              </section>
+
+              <!-- ============ SETTINGS (split view) ============ -->
+              <section class="surface" data-surface="settings" id="surface-settings" hidden>
+                <div class="settings-split" id="settingsSplit">
+                  <div class="settings-list-pane">
+                    <header class="appbar">
+                      <h1 tabindex="-1" data-route-title>Settings</h1>
+                    </header>
+                    <div class="settings-search">
+                      <div class="search-field">
+                        <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
+                        <input id="settingsSearch" type="search" placeholder="Search settings" aria-label="Search settings" autocomplete="off">
+                      </div>
+                    </div>
+                    <div class="scroll" data-scroll>
+                      <nav class="settings-nav" id="settingsNav" aria-label="Settings sections"></nav>
+                      <p class="row-empty" id="settingsNoResults" hidden>No settings match that word.</p>
+                    </div>
+                  </div>
+                  <div class="settings-detail-pane" id="settingsDetailPane">
+                    <div class="detail-head">
+                      <button type="button" class="iconbtn" id="settingsBack" aria-label="Back to settings">
+                        <svg class="icon" aria-hidden="true"><use href="#i-arrow-left"></use></svg>
+                      </button>
+                      <h2 id="settingsTitle">Appearance</h2>
+                    </div>
+                    <div class="scroll" data-scroll>
+                      <div class="detail-body" id="settingsContent"></div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- ============ POST DETAIL ============ -->
+              <section class="surface" data-surface="post" id="surface-post" hidden>
+                <header class="appbar">
+                  <button type="button" class="iconbtn" data-action="go" data-surface="home" aria-label="Back to home">
+                    <svg class="icon" aria-hidden="true"><use href="#i-arrow-left"></use></svg>
+                  </button>
+                  <span class="appbar-title"><h1>Report</h1></span>
+                  <div class="appbar-actions">
+                    <button type="button" class="iconbtn" data-action="post-more" aria-label="Report options">
+                      <svg class="icon" aria-hidden="true"><use href="#i-more"></use></svg>
+                    </button>
+                  </div>
+                </header>
+                <div class="scroll" data-scroll>
+                  <article class="page narrow post">
+                    <h1 tabindex="-1" data-route-title>Black umbrella with a wooden hook handle</h1>
+                    <div class="post-hero">
+                      <span class="photo photo-a" aria-hidden="true">
+                        <svg class="icon ph-glyph"><use href="#i-umbrella"></use></svg>
+                      </span>
+                    </div>
+                    <div class="post-badges">
+                      <span class="status status-lost">Lost</span>
+                      <span class="tag"><span>Umbrella</span></span>
+                      <span class="tag"><span>Riverside</span></span>
+                    </div>
+                    <p class="post-lede">Posted 2 hours ago · 0.4 km away · 3 photos</p>
+                    <p class="post-body">Left it on the bench by the boathouse on Riverside Walk, just after the rain stopped. Black canopy, dark wooden hook handle, a small scuff on the ferrule. If you picked it up, please message me — I can describe the lining.</p>
+                    <dl class="facts">
+                      <dt>Category</dt><dd>Umbrella</dd>
+                      <dt>Last seen</dt><dd>Riverside Walk · bench near the boathouse</dd>
+                      <dt>Date</dt><dd>Today, around 08:40</dd>
+                      <dt>Report</dt><dd>#R-1042 · Lost</dd>
+                    </dl>
+                    <div class="author">
+                      <span class="avatar avatar-lg avatar-tone-1" aria-hidden="true">MO</span>
+                      <div class="author-copy">
+                        <div class="author-name">Maya Okafor</div>
+                        <div class="author-meta">Member since 2023 · 4 reports · replies in about an hour</div>
+                      </div>
+                    </div>
+                    <div class="post-actions">
+                      <button type="button" class="btn-primary" data-action="post-message">
+                        <svg class="icon" aria-hidden="true"><use href="#i-chat"></use></svg> Message Maya
+                      </button>
+                      <button type="button" class="btn-quiet" data-action="post-save" aria-pressed="false">
+                        <svg class="icon" aria-hidden="true"><use href="#i-bookmark"></use></svg> Save
+                      </button>
+                      <button type="button" class="btn-quiet" data-action="post-share">
+                        <svg class="icon" aria-hidden="true"><use href="#i-share"></use></svg> Share
+                      </button>
+                    </div>
+                    <div class="safety-note">
+                      <svg class="icon" aria-hidden="true"><use href="#i-shield"></use></svg>
+                      <span>Meet in a public place and check the item before handing it over. Never send money or codes to claim a report.</span>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
+              <!-- ============ MY REPORTS ============ -->
+              <section class="surface" data-surface="mine" id="surface-mine" hidden>
+                <header class="appbar">
+                  <h1 tabindex="-1" data-route-title>My Reports</h1>
+                  <div class="appbar-actions">
+                    <button type="button" class="iconbtn" data-action="create" aria-label="Create report">
+                      <svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg>
+                    </button>
+                  </div>
+                </header>
+                <div class="scroll" data-scroll>
+                  <div class="page">
+                    <div class="chips" role="group" aria-label="Filter your reports">
+                      <button type="button" class="chip" data-my-filter="all" aria-pressed="true">All <span class="tab-count">4</span></button>
+                      <button type="button" class="chip" data-my-filter="open" aria-pressed="false">Open</button>
+                      <button type="button" class="chip" data-my-filter="matched" aria-pressed="false">Matched</button>
+                      <button type="button" class="chip" data-my-filter="recovered" aria-pressed="false">Recovered</button>
+                      <button type="button" class="chip" data-my-filter="closed" aria-pressed="false">Closed</button>
+                    </div>
+                    <div class="rows" id="myList"></div>
+                    <div class="feed-empty" id="myEmpty" hidden>
+                      <span class="empty-ring" aria-hidden="true"><svg class="icon"><use href="#i-clipboard"></use></svg></span>
+                      <strong>Nothing in this view</strong>
+                      <p class="t-sm">You have no reports with this status.</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- ============ EMPTY STATE ============ -->
+              <section class="surface" data-surface="empty" id="surface-empty" hidden>
+                <header class="appbar">
+                  <h1 tabindex="-1" data-route-title>My Reports</h1>
+                  <div class="appbar-actions">
+                    <button type="button" class="iconbtn" data-action="create" aria-label="Create report">
+                      <svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg>
+                    </button>
+                  </div>
+                </header>
+                <div class="empty-state">
+                  <span class="empty-art" aria-hidden="true"><svg class="icon"><use href="#i-clipboard"></use></svg></span>
+                  <h2>No reports yet</h2>
+                  <p>When you post something lost or found, it lives here with its matches, messages and handover history.</p>
+                  <button type="button" class="btn-primary" data-action="create">
+                    <svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg> Create report
+                  </button>
+                </div>
+              </section>
+
+              <!-- ============ OFFLINE ============ -->
+              <section class="surface" data-surface="offline" id="surface-offline" hidden>
+                <header class="appbar">
+                  <div class="wordmark">Norfold</div>
+                  <div class="appbar-actions">
+                    <button type="button" class="iconbtn" data-action="go" data-surface="search" aria-label="Search">
+                      <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
+                    </button>
+                    <button type="button" class="iconbtn" data-action="go" data-surface="notifications" aria-label="Notifications">
+                      <span class="bell-wrap">
+                        <svg class="icon" aria-hidden="true"><use href="#i-bell"></use></svg>
+                        <span class="badge" data-badge="bell" hidden>9</span>
+                      </span>
+                    </button>
+                    <button type="button" class="iconbtn" data-action="go" data-surface="settings" data-section="account" aria-label="Account and settings">
+                      <span class="avatar avatar-tone-1" aria-hidden="true">RE</span>
+                    </button>
+                  </div>
+                </header>
+                <div class="scroll" data-scroll>
+                  <div class="page feed-page">
+                    <div class="offline-banner">
+                      <svg class="icon" aria-hidden="true"><use href="#i-wifi-off"></use></svg>
+                      <div>
+                        <strong>You're offline</strong>
+                        <p>Showing 4 saved reports from 12 minutes ago. Messages and matches will sync when you reconnect.</p>
+                      </div>
+                      <button type="button" class="retry-btn" data-action="offline-retry">
+                        <svg class="icon" aria-hidden="true"><use href="#i-refresh"></use></svg> Retry
+                      </button>
+                    </div>
+                    <div class="page-head">
+                      <h1 tabindex="-1" data-route-title>Lost &amp; found near you</h1>
+                      <p class="t-sm muted">Saved copy · 4 reports</p>
+                    </div>
+                    <div class="feed" id="offlineFeed"></div>
+                  </div>
+                </div>
+              </section>
+
+            </div>
+          </main>
+
+          <nav class="pill-slot" id="pillSlot" aria-label="Primary">
+            <div class="pill-row">
+              <div class="pill" id="pill">
+                <a class="pill-link" href="#/" data-nav="home" aria-current="page" aria-label="Home">
+                  <span class="pill-active" aria-hidden="true"></span>
+                  <svg class="icon" aria-hidden="true"><use href="#i-home"></use></svg>
+                  <span class="pill-label">Home</span>
+                </a>
+                <a class="pill-link" href="#/my" data-nav="my" aria-label="My Reports">
+                  <svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg>
+                  <span class="pill-label">My Reports</span>
+                </a>
+                <a class="pill-link" href="#/chats" data-nav="chats" aria-label="Chats">
+                  <svg class="icon" aria-hidden="true"><use href="#i-chat"></use></svg>
+                  <span class="pill-label">Chats</span>
+                  <span class="badge" data-badge="chats" hidden>9</span>
+                </a>
+                <a class="pill-link" href="#/settings" data-nav="settings" aria-label="Settings">
+                  <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
+                  <span class="pill-label">Settings</span>
+                </a>
+              </div>
+              <button type="button" class="pill-create" data-action="create" aria-label="Create report">
+                <svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg>
+              </button>
+            </div>
+          </nav>
+
+          <div class="flyout" id="flyout" hidden aria-label="Section menu"></div>
+          <div class="tip" id="tip" role="tooltip" hidden></div>
+          <div class="scrim" id="scrim" hidden></div>
+          <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<!--__SHEET__-->
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+<!--__SCRIPT__-->
+</body>
+</html>
