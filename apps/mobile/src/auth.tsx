@@ -86,6 +86,7 @@ interface AuthContextValue {
   retryBoot: () => void;
   /** Email awaiting pending-signup verification (Supabase Confirm-email ON). */
   pendingEmail: string | null;
+  pendingEmailDeadline: number;
   login: (email: string, password: string) => Promise<PublicUser>;
   register: (input: {
     username: string;
@@ -121,6 +122,14 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const DELETION_CLEANUP_KEY = "findback.auth.deletedAccountCleanup";
+const PENDING_DEADLINE_KEY = "findback.auth.pendingEmailDeadline";
+
+function readPendingDeadline(email: string | null): number {
+  try {
+    const value = JSON.parse(storage.getItem(PENDING_DEADLINE_KEY) ?? "null") as { email?: unknown; deadline?: unknown } | null;
+    return email && value?.email === email && typeof value.deadline === "number" && Number.isFinite(value.deadline) ? value.deadline : 0;
+  } catch { return 0; }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
@@ -163,6 +172,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [assertAccount]);
   const [deletionCompletion, setDeletionCompletion] = useState<AuthContextValue["deletionCompletion"]>(null);
   const [pendingEmail, setPendingEmailState] = useState<string | null>(() => getPendingEmail());
+  const [pendingEmailDeadline, setPendingEmailDeadline] = useState(() => readPendingDeadline(getPendingEmail()));
+  const savePendingDeadline = useCallback((email: string, deadline: number) => {
+    const next = Math.max(readPendingDeadline(email), deadline);
+    try { storage.setItem(PENDING_DEADLINE_KEY, JSON.stringify({ email, deadline: next })); } catch { /* Keep the deadline in memory. */ }
+    setPendingEmailDeadline(next);
+  }, []);
+  useEffect(() => {
+    if (!pendingEmail) {
+      try { storage.removeItem(PENDING_DEADLINE_KEY); } catch { /* Storage may be unavailable. */ }
+    }
+  }, [pendingEmail]);
   const [booting, setBooting] = useState(true);
   const [bootError, setBootError] = useState<string | null>(null);
   // W0-B (S2, additive): social profile-completion state. Independent of user;
@@ -389,6 +409,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error instanceof ApiError && error.code === "email_not_confirmed") {
         if (epoch !== authEpoch.current || sdkAccount.current !== null || currentUser.current !== null) throw new AuthAccountChangedError();
         persistPendingEmail(email.trim());
+        setPendingEmailDeadline(readPendingDeadline(email.trim()));
         setPendingEmailState(email.trim());
       }
       throw error;
@@ -411,6 +432,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (epoch !== authEpoch.current || sdkAccount.current !== null || currentUser.current !== null) throw new AuthAccountChangedError();
         const email = result.email ?? input.email;
         persistPendingEmail(email);
+        savePendingDeadline(email, Date.now() + 30_000);
         setPendingEmailState(email);
         return { status: "pending", email } as const;
       }
@@ -419,7 +441,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUserState(result.user);
       return { status: "authenticated", user: result.user } as const;
     },
-    [],
+    [savePendingDeadline],
   );
 
   const verifyPendingEmail = useCallback(
@@ -438,8 +460,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const resendPendingEmail = useCallback(async () => {
     if (!pendingEmail) throw new Error("No pending email verification");
-    await sendPendingEmailCode(pendingEmail);
-  }, [pendingEmail]);
+    try {
+      await sendPendingEmailCode(pendingEmail);
+      if (getPendingEmail() === pendingEmail) savePendingDeadline(pendingEmail, Date.now() + 30_000);
+    } catch (error) {
+      if (getPendingEmail() === pendingEmail && error instanceof ApiError && error.code === "EMAIL_SEND_LIMITED") {
+        const retry = "retryAfterSeconds" in error && typeof error.retryAfterSeconds === "number" && Number.isFinite(error.retryAfterSeconds) && error.retryAfterSeconds > 0 ? error.retryAfterSeconds : 60;
+        savePendingDeadline(pendingEmail, Date.now() + retry * 1000);
+      }
+      throw error;
+    }
+  }, [pendingEmail, savePendingDeadline]);
 
   const deviceSignedOut = useCallback(() => currentUser.current === null && sdkAccount.current === null, []);
 
@@ -716,6 +747,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       bootError,
       retryBoot: runBoot,
       pendingEmail,
+      pendingEmailDeadline,
       login,
       register,
       verifyPendingEmail,
@@ -744,6 +776,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       bootError,
       runBoot,
       pendingEmail,
+      pendingEmailDeadline,
       login,
       register,
       verifyPendingEmail,

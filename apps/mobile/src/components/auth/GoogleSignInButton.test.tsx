@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PublicUser } from "@norfold/shared";
 import {
@@ -37,6 +37,7 @@ function configureAvailable(seams?: {
   }>;
   signIn?: (idToken: string, nonce: string) => Promise<GoogleSignInOutcome>;
   fallback?: () => Promise<void>;
+  onBrowserFinished?: (callback: () => void) => Promise<() => void>;
 }) {
   __setGoogleSignInSeams({
     strategy: () => "android-native",
@@ -55,10 +56,46 @@ function configureAvailable(seams?: {
       (async () => {
         throw Object.assign(new Error("no browser fallback in this test"), { kind: "try_again" });
       }),
+    onBrowserFinished: seams?.onBrowserFinished ?? (async () => () => {}),
   });
 }
 
 describe("GoogleSignInButton (S3)", () => {
+  it("allows retry after the fallback browser is dismissed", async () => {
+    let finish!: () => void;
+    const remove = vi.fn();
+    const fallback = vi.fn(async () => {});
+    configureAvailable({
+      start: async () => { throw Object.assign(new Error(), { kind: "unavailable" }); },
+      fallback,
+      onBrowserFinished: async (callback) => { finish = callback; return remove; },
+    });
+    render(<GoogleSignInButton mode="signin" onDone={() => {}} />);
+    const button = screen.getByRole("button", { name: "Continue with Google" });
+    fireEvent.click(button);
+    await waitFor(() => expect(fallback).toHaveBeenCalledTimes(1));
+    expect(button.hasAttribute("disabled")).toBe(true);
+    act(() => finish());
+    await waitFor(() => expect(button.hasAttribute("disabled")).toBe(false));
+    expect(remove).toHaveBeenCalledTimes(1);
+    fireEvent.click(button);
+    await waitFor(() => expect(fallback).toHaveBeenCalledTimes(2));
+  });
+
+  it("removes the fallback listener when the callback flow unmounts the button", async () => {
+    const remove = vi.fn();
+    const fallback = vi.fn(async () => {});
+    configureAvailable({
+      start: async () => { throw Object.assign(new Error(), { kind: "unavailable" }); },
+      fallback,
+      onBrowserFinished: async () => remove,
+    });
+    const view = render(<GoogleSignInButton mode="signin" onDone={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Continue with Google" }));
+    await waitFor(() => expect(fallback).toHaveBeenCalledTimes(1));
+    view.unmount();
+    expect(remove).toHaveBeenCalledTimes(1);
+  });
   it("renders NOTHING when Google auth is unavailable (fail closed)", () => {
     __setGoogleSignInSeams({ strategy: () => "unavailable" });
     const { container } = render(<GoogleSignInButton mode="signin" onDone={() => {}} />);

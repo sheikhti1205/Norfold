@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Browser } from "@capacitor/browser";
 import { Button } from "../Button";
 // S1 (W0-A) + S2 (W0-B): READ-ONLY imports of the real modules. Availability
 // now resolves a strategy: Android Credential Manager (native), browser OAuth
@@ -61,6 +62,7 @@ export interface GoogleSignInSeams {
   /** Android only: complete the same provider in the system browser when
    * Credential Manager has no usable credential. */
   startBrowserFallback: () => Promise<void>;
+  onBrowserFinished: (callback: () => void) => Promise<() => void>;
 }
 
 const WIRED_SEAMS: GoogleSignInSeams = {
@@ -69,6 +71,10 @@ const WIRED_SEAMS: GoogleSignInSeams = {
   signInWithGoogleIdToken,
   startWebOAuth: signInWithGoogleWebOAuth,
   startBrowserFallback: signInWithGoogleBrowserFallback,
+  onBrowserFinished: async (callback) => {
+    const listener = await Browser.addListener("browserFinished", callback);
+    return () => { void listener.remove(); };
+  },
 };
 
 let activeSeams: GoogleSignInSeams = WIRED_SEAMS;
@@ -124,6 +130,17 @@ export function GoogleSignInButton({
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const browserCleanup = useRef<(() => void) | null>(null);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      browserCleanup.current?.();
+      browserCleanup.current = null;
+    };
+  }, []);
 
   let strategy: GoogleAuthStrategy = "unavailable";
   try {
@@ -179,11 +196,23 @@ export function GoogleSignInButton({
       // there instead of dead-ending a fully configured Google account.
       if (cls === "no_account" || cls === "device_unsupported" || cls === "setup_unavailable") {
         try {
+          const remove = await activeSeams.onBrowserFinished(() => {
+            browserCleanup.current?.();
+            browserCleanup.current = null;
+            if (mounted.current) setPending(false);
+          });
+          if (!mounted.current) {
+            remove();
+            return;
+          }
+          browserCleanup.current = remove;
           await activeSeams.startBrowserFallback();
           // Keep pending=true: the Custom Tab is now the active flow and the
           // App-Link callback will finish it.
           return;
         } catch (fallbackErr) {
+          browserCleanup.current?.();
+          browserCleanup.current = null;
           setError(humanMessageFor(fallbackErr));
           setPending(false);
           return;

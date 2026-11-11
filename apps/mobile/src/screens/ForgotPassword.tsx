@@ -35,7 +35,8 @@ export function ForgotPassword() {
       if (alive.current) navigate("/recovery", { state: { recoveryEmail: address } });
     } catch (err) {
       if (alive.current && err instanceof Error && "code" in err && err.code === "EMAIL_SEND_LIMITED") {
-        navigate("/recovery", { state: { recoveryEmail: email.trim(), emailSendLimitedMessage: err.message } });
+        const retry = "retryAfterSeconds" in err && typeof err.retryAfterSeconds === "number" && Number.isFinite(err.retryAfterSeconds) && err.retryAfterSeconds > 0 ? err.retryAfterSeconds : null;
+        navigate("/recovery", { state: { recoveryEmail: email.trim(), emailSendLimitedMessage: err.message, emailRetryDeadline: retry === null ? null : Date.now() + retry * 1000 } });
       } else if (alive.current) setError(err instanceof Error ? err.message : "Email recovery is temporarily unavailable. Please try again.");
     } finally {
       inFlight.current = false;

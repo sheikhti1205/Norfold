@@ -6,17 +6,10 @@ import { Button } from "../Button";
 import { TextField } from "../Fields";
 import { motionDurations, motionEasings } from "../uiMotion";
 import { getAuthReturnRoute } from "../../utils/authReturnTo";
-import { EMAIL_PATTERN, SIGNIN_GENERIC_ERROR } from "./authCopy";
+import { EMAIL_PATTERN, SIGNIN_GENERIC_ERROR, SIGNIN_CONNECTION_ERROR } from "./authCopy";
 import { ApiError } from "../../services/session";
 
-/**
- * Stage B sign-in form. Backend behavior is the pre-existing `login()` call —
- * only the presentation is new. Unconfirmed email routes to verification;
- * other sign-in failures use generic wording. The email is never cleared.
- *
- * The "Forgot password" link routes to /forgot, which always shows the same
- * check-your-inbox message (anti-enumeration, same rule as sign-in).
- */
+/** Sign-in failures never distinguish a missing account from a wrong password. */
 export function SignInForm({
   initialEmail,
   emailLocked,
@@ -24,11 +17,8 @@ export function SignInForm({
   onSwitchToSignup,
 }: {
   initialEmail: string;
-  /** True when the address arrived via the gateway email stage (chip shown). */
   emailLocked: boolean;
-  /** "Change" next to the identity chip — returns to the email stage. */
   onRequestChangeEmail: () => void;
-  /** "Create account with this email" — carries the current address. */
   onSwitchToSignup: (email: string) => void;
 }) {
   const { login } = useAuth();
@@ -61,9 +51,8 @@ export function SignInForm({
         navigate("/verify", { replace: true });
         return;
       }
-      // Deliberately generic: identical whether or not the email exists.
-      // Never log the address or password alongside the failure.
-      setError(SIGNIN_GENERIC_ERROR);
+      setError(error instanceof ApiError && error.code === "AUTH_UNAVAILABLE"
+        ? SIGNIN_CONNECTION_ERROR : SIGNIN_GENERIC_ERROR);
     } finally {
       setBusy(false);
     }
