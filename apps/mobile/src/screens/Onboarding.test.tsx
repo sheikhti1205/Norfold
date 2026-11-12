@@ -159,6 +159,7 @@ describe("Onboarding", () => {
     expect(phone).toMatch(/\.fb-onboarding h1 \{ font-size: clamp\(1\.5rem, 11vw, 3\.25rem\)[\s\S]*\.fb-onboarding h2 \{ font-size: clamp\(1\.375rem, 8vw, 2rem\)/);
     expect(phone).toMatch(/\.fb-onboarding-closing h2 \{ font-size: clamp\(1\.75rem, 9vw, 2\.5rem\); \}/);
     expect(phone).toMatch(/\.fb-onboarding-steps li \{ display: block; \}/);
+    expect(phone).toMatch(/\.fb-onboarding-route--v\s*\{\s*display:\s*none;\s*\}/);
     expect(css).not.toContain("1.1875rem");
   });
 });
