@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import type { FormEvent } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ReportDatePicker } from "./ReportDatePicker";
 import { todayInputValue } from "../utils/dates";
-import { resetLocalTimeZone, setLocalTimeZone } from "@internationalized/date";
+import { resetLocalTimeZone, setLocalTimeZone, today } from "@internationalized/date";
 
 afterEach(() => {
   cleanup();
@@ -703,5 +703,177 @@ describe("ReportDatePicker", () => {
     await waitFor(() => expect(discFor(/Sunday, September 27, 2026/i).style.opacity).toBe("1"));
     // The old day releases on the same node — no unmount/remount blink.
     await waitFor(() => expect(discFor(/Saturday, September 26, 2026/i).style.opacity).toBe("0"));
+  });
+
+  /*
+   * Month/year jump. The visible heading is a disclosure (react-aria hides the
+   * visible <h2> from assistive tech because it announces the same text through
+   * a visually hidden heading), so the control states its own name with the
+   * month and year it shows.
+   */
+  const MONTH_YEAR_LABEL = new Intl.DateTimeFormat(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+  const MONTH_LONG_LABEL = new Intl.DateTimeFormat(undefined, { month: "long" });
+
+  function escapeRegex(text: string): string {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  /** `September 2026, choose month and year` for the given month. */
+  function monthYearName(date: Date): RegExp {
+    return new RegExp(`^${escapeRegex(MONTH_YEAR_LABEL.format(date))}, choose month and year$`, "i");
+  }
+
+  function monthYearToggle(date = new Date(2026, 8, 15)): HTMLElement {
+    return screen.getByRole("button", { name: monthYearName(date) });
+  }
+
+  /** Exact accessible name of a jump-panel month button ("March 2025"). */
+  function monthButtonName(month: number, year: number): RegExp {
+    return new RegExp(`^${escapeRegex(MONTH_LONG_LABEL.format(new Date(2024, month - 1, 15)))} ${year}$`, "i");
+  }
+
+  it("exposes the month heading as a collapsed month-year disclosure", async () => {
+    await openSheet("2026-09-26");
+
+    const toggle = monthYearToggle();
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    const panelId = toggle.getAttribute("aria-controls");
+    expect(panelId).toBeTruthy();
+    // Collapsed by default: the labelled panel does not exist yet.
+    expect(document.getElementById(panelId!)).toBeNull();
+    // The visible label still reads the visible month and year.
+    expect(screen.getByRole("dialog").querySelector("header h2")?.textContent).toBe("September 2026");
+
+    fireEvent.click(toggle);
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    const panel = document.getElementById(panelId!);
+    expect(panel).toBeTruthy();
+    expect(panel!.getAttribute("role")).toBe("group");
+    expect(panel!.getAttribute("aria-label")).toBe("Jump to month and year");
+    // In place, not a second sheet: the day grid stays mounted and reachable.
+    expect(screen.getByRole("grid")).toBeTruthy();
+    expect(screen.getByTestId("calendar-swipe-zone")).toBeTruthy();
+  });
+
+  it("choosing a month from the panel moves the visible grid to that month", async () => {
+    await openSheet("2026-09-26");
+    fireEvent.click(monthYearToggle());
+
+    const panel = screen.getByTestId("calendar-jump-panel");
+    fireEvent.click(within(panel).getByRole("button", { name: monthButtonName(4, 2026) }));
+
+    expect(screen.queryByTestId("calendar-jump-panel")).toBeNull();
+    await waitFor(() => expect(screen.getByRole("heading", { name: /April 2026/i })).toBeTruthy());
+    // The calendar kept a real focused day in the new month.
+    expect(
+      screen.getByRole("button", { name: /April 1, 2026/i }).getAttribute("tabindex"),
+    ).toBe("0");
+    // A month jump is not a date selection.
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("moves eighteen months back in three clicks: open, year step, month pick", async () => {
+    await openSheet("2026-09-26");
+    // A 12-month grid covers one year, so crossing a year boundary costs one
+    // year step on top of the month pick: three clicks instead of 18 taps.
+    fireEvent.click(monthYearToggle());
+
+    const panel = screen.getByTestId("calendar-jump-panel");
+    fireEvent.click(within(panel).getByRole("button", { name: /previous year/i }));
+    fireEvent.click(within(panel).getByRole("button", { name: monthButtonName(3, 2025) }));
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: /March 2025/i })).toBeTruthy());
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("moves ten years per Shift+Arrow in the jump panel", async () => {
+    await openSheet("2026-09-26");
+    fireEvent.click(monthYearToggle());
+    const panel = screen.getByTestId("calendar-jump-panel");
+    expect(screen.getByTestId("calendar-jump-year").textContent).toBe("2026");
+
+    fireEvent.keyDown(panel, { key: "ArrowLeft", shiftKey: true });
+    await waitFor(() => expect(screen.getByTestId("calendar-jump-year").textContent).toBe("2016"));
+
+    fireEvent.keyDown(panel, { key: "ArrowRight", shiftKey: true });
+    await waitFor(() => expect(screen.getByTestId("calendar-jump-year").textContent).toBe("2026"));
+    // The decade jump only browses years; the visible month is untouched.
+    expect(screen.getByRole("heading", { name: /September 2026/i })).toBeTruthy();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("disables future months and years in the jump panel", async () => {
+    await openSheet("");
+    const now = today("UTC");
+    fireEvent.click(monthYearToggle(new Date(Date.UTC(now.year, now.month - 1, 15))));
+
+    const panel = screen.getByTestId("calendar-jump-panel");
+    // Years after the current UTC year are unreachable.
+    const nextYear = within(panel).getByRole("button", { name: /next year/i }) as HTMLButtonElement;
+    expect(nextYear.disabled).toBe(true);
+    // The current month is still a valid, past-only target.
+    const currentMonth = within(panel).getByRole("button", {
+      name: monthButtonName(now.month, now.year),
+    }) as HTMLButtonElement;
+    expect(currentMonth.disabled).toBe(false);
+
+    if (now.month < 12) {
+      const futureMonth = within(panel).getByRole("button", {
+        name: monthButtonName(now.month + 1, now.year),
+      }) as HTMLButtonElement;
+      expect(futureMonth.disabled).toBe(true);
+      // Inert: a disabled target never becomes a doomed selection.
+      fireEvent.click(futureMonth);
+      expect(screen.getByTestId("calendar-jump-panel")).toBeTruthy();
+      await waitFor(() =>
+        expect(screen.getByRole("heading", { name: monthButtonName(now.month, now.year) })).toBeTruthy(),
+      );
+    }
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("cancelling after a jump leaves the selected date untouched", async () => {
+    await openSheet("2026-09-26");
+    fireEvent.click(monthYearToggle());
+
+    const panel = screen.getByTestId("calendar-jump-panel");
+    fireEvent.click(within(panel).getByRole("button", { name: /previous year/i }));
+    fireEvent.click(within(panel).getByRole("button", { name: monthButtonName(3, 2025) }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: /March 2025/i })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    expect(onChange).not.toHaveBeenCalled();
+
+    // Reopening starts on the untouched value's month, not the jumped month.
+    fireEvent.click(screen.getByRole("button", { name: /date of event/i }));
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+    expect(screen.getByRole("heading", { name: /September 2026/i })).toBeTruthy();
+  });
+
+  it("Escape closes the jump panel first and restores focus to the month-year control", async () => {
+    await openSheet("2026-09-26");
+    const toggle = monthYearToggle();
+    fireEvent.click(toggle);
+
+    const panel = screen.getByTestId("calendar-jump-panel");
+    const march = within(panel).getByRole("button", { name: monthButtonName(3, 2026) });
+    march.focus();
+    expect(document.activeElement).toBe(march);
+
+    fireEvent.keyDown(march, { key: "Escape" });
+
+    expect(screen.queryByTestId("calendar-jump-panel")).toBeNull();
+    // The sheet is still open and focus went back to the disclosure.
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(document.activeElement).toBe(toggle);
+
+    // With no panel left, the next Escape closes the sheet as before.
+    fireEvent.keyDown(toggle, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 });

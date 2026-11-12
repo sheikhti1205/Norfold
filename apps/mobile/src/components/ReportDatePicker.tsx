@@ -10,7 +10,7 @@ import {
   Button as AriaButton,
 } from "react-aria-components";
 import { parseDate, CalendarDate, CalendarDateTime, ZonedDateTime, today, getLocalTimeZone } from "@internationalized/date";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Check } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronDown, ChevronLeft, ChevronRight, X, Check } from "lucide-react";
 import { motion, useAnimationControls } from "framer-motion";
 import { BottomSheet } from "./BottomSheet";
 import { Button } from "./Button";
@@ -32,6 +32,15 @@ const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
 });
 
+/** The visible month heading is also the jump control's accessible name. */
+const MONTH_YEAR_FORMAT = new Intl.DateTimeFormat(undefined, {
+  month: "long",
+  year: "numeric",
+});
+
+const MONTH_NAME_FORMAT = new Intl.DateTimeFormat(undefined, { month: "long" });
+const MONTH_SHORT_FORMAT = new Intl.DateTimeFormat(undefined, { month: "short" });
+
 function formatDisplay(date: CalendarDate): string {
   return DATE_FORMAT.format(date.toDate(getLocalTimeZone()));
 }
@@ -43,6 +52,25 @@ function parseISO(value: string): CalendarDate | null {
     return null;
   }
 }
+
+/**
+ * Month labels for the jump grid. Day 15 (not the 1st) keeps the label on the
+ * same month in every timezone once the date is formatted locally.
+ */
+const MONTHS = Array.from({ length: 12 }, (_, index) => {
+  const label = new Date(2024, index, 15);
+  return {
+    month: index + 1,
+    short: MONTH_SHORT_FORMAT.format(label),
+    long: MONTH_NAME_FORMAT.format(label),
+  };
+});
+
+/** Lowest year the jump panel offers, so the year stepper stays bounded. */
+const MIN_JUMP_YEAR = 1900;
+
+/** Years moved by Shift+Arrow inside the jump panel. */
+const DECADE_STEP = 10;
 
 /** Horizontal travel (px) that counts as a month swipe on the calendar grid. */
 const SWIPE_THRESHOLD_PX = 40;
@@ -73,9 +101,11 @@ export function ReportDatePicker({
   const calendarId = `${id}-calendar`;
   const errorId = `${id}-error`;
   const descriptionId = `${id}-description`;
+  const jumpPanelId = `${id}-jump-panel`;
 
   const [isOpen, setIsOpen] = useState(false);
-  useEffect(() => { if (disabled) setIsOpen(false); }, [disabled]);
+  const [isJumpOpen, setIsJumpOpen] = useState(false);
+  useEffect(() => { if (disabled) { setIsOpen(false); setIsJumpOpen(false); } }, [disabled]);
   const [displayedValue, setDisplayedValue] = useState<CalendarDate | null>(() =>
     value ? parseISO(value) : null
   );
@@ -89,10 +119,14 @@ export function ReportDatePicker({
     const now = today("UTC");
     return new CalendarDate(now.year, now.month, now.day);
   });
+  // Year shown by the jump panel. Kept apart from focusedDate so browsing
+  // years never touches the selected day or the committed value.
+  const [jumpYear, setJumpYear] = useState(() => focusedDate.year);
 
   const triggerRef = useRef<HTMLButtonElement>(null);
   const prevMonthRef = useRef<HTMLButtonElement>(null);
   const nextMonthRef = useRef<HTMLButtonElement>(null);
+  const monthYearRef = useRef<HTMLButtonElement>(null);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const suppressDaySelectUntilRef = useRef(0);
 
@@ -106,6 +140,11 @@ export function ReportDatePicker({
   };
 
   const maxDate = today("UTC");
+
+  // What the header already shows (react-aria clamps its focused date to
+  // maxValue, so the label must clamp the same way).
+  const headingDate = focusedDate.compare(maxDate) > 0 ? maxDate : focusedDate;
+  const monthYearText = MONTH_YEAR_FORMAT.format(headingDate.toDate(getLocalTimeZone()));
 
   /**
    * Horizontal month swipe on the calendar grid only. One confirmed gesture
@@ -150,12 +189,77 @@ export function ReportDatePicker({
     if (next) setFocusedDate(next);
   };
 
+  /** Past-only field: a month after the current UTC month is a dead target. */
+  const isMonthUnavailable = (year: number, month: number): boolean =>
+    year > maxDate.year || (year === maxDate.year && month > maxDate.month);
+
+  const clampJumpYear = (year: number): number =>
+    Math.min(Math.max(year, MIN_JUMP_YEAR), maxDate.year);
+
+  const stepJumpYear = (delta: number): void => {
+    setJumpYear((year) => clampJumpYear(year + delta));
+  };
+
+  const closeJumpPanel = (): void => {
+    setIsJumpOpen(false);
+  };
+
+  const openJumpPanel = (): void => {
+    setJumpYear(clampJumpYear(headingDate.year));
+    setIsJumpOpen(true);
+  };
+
+  const toggleJumpPanel = (): void => {
+    if (isJumpOpen) closeJumpPanel();
+    else openJumpPanel();
+  };
+
+  /**
+   * Moves the focused (visible) month only. displayedValue — and therefore the
+   * committed date — stays untouched until a day is picked, so jumping around
+   * and cancelling leaves value exactly as it was.
+   */
+  const chooseMonth = (month: number): void => {
+    if (isMonthUnavailable(jumpYear, month)) return;
+    setFocusedDate(new CalendarDate(jumpYear, month, 1));
+    setIsJumpOpen(false);
+    monthYearRef.current?.focus();
+  };
+
+  /**
+   * Escape belongs to the panel while it is open: close the panel and hand
+   * focus back to the month-year button instead of dismissing the sheet. The
+   * stopPropagation keeps the sheet's document-level Escape handler out of it.
+   */
+  const handleJumpPanelKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      setIsJumpOpen(false);
+      monthYearRef.current?.focus();
+      return;
+    }
+    if (event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+      event.preventDefault();
+      stepJumpYear(event.key === "ArrowLeft" ? -DECADE_STEP : DECADE_STEP);
+    }
+  };
+
+  /** Focus rests on the toggle right after opening, so Escape works there too. */
+  const handleMonthYearKeyDown = (event: KeyboardEvent<HTMLButtonElement>): void => {
+    if (event.key !== "Escape" || !isJumpOpen) return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeJumpPanel();
+  };
+
   const openSheet = () => {
     if (disabled) return;
     const parsed = value ? parseISO(value) : null;
     setDisplayedValue(parsed);
     // Reopen centered on the value's month, not a stale focused month.
     if (parsed) setFocusedDate(parsed);
+    setIsJumpOpen(false);
     setIsOpen(true);
   };
 
@@ -163,6 +267,7 @@ export function ReportDatePicker({
     if (!disabled && commit && displayedValue && !isFutureDate(displayedValue)) {
       onChange(displayedValue.toString());
     }
+    setIsJumpOpen(false);
     setIsOpen(false);
   };
 
@@ -237,7 +342,7 @@ export function ReportDatePicker({
         closeLabel="Close"
       >
         <div id={descriptionId} className="sr-only">
-          Calendar for selecting the date. Use arrow keys to navigate days, Page Up/Down to change months, Enter to select, Escape to cancel.
+          Calendar for selecting the date. Use arrow keys to navigate days, Page Up/Down to change months, Enter to select, Escape to cancel. Activate the month and year heading to jump to another month.
         </div>
 
         <motion.div
@@ -271,7 +376,29 @@ export function ReportDatePicker({
             >
               <ChevronLeft size={24} aria-hidden />
             </AriaButton>
-            <CalendarHeading className="flex-1 text-center text-base font-semibold text-on-surface" />
+            {/*
+              The visible month/year label is a real disclosure button. Its
+              accessible name is stated explicitly because react-aria hides the
+              visible heading from assistive tech (it announces the same text
+              through a visually hidden heading).
+            */}
+            <button
+              ref={monthYearRef}
+              type="button"
+              aria-expanded={isJumpOpen}
+              aria-controls={jumpPanelId}
+              aria-label={`${monthYearText}, choose month and year`}
+              onClick={toggleJumpPanel}
+              onKeyDown={handleMonthYearKeyDown}
+              className="flex min-h-[48px] min-w-0 flex-1 items-center justify-center gap-1 rounded-m3-sm px-1 text-on-surface transition-colors hover:bg-surface-container focus:outline-none focus:ring-2 focus:ring-on-surface"
+            >
+              <CalendarHeading className="min-w-0 truncate text-base font-semibold text-on-surface" />
+              <ChevronDown
+                size={16}
+                aria-hidden
+                className={`shrink-0 text-on-surface-variant transition-transform ${isJumpOpen ? "rotate-180" : ""}`}
+              />
+            </button>
             <AriaButton
               ref={nextMonthRef as Ref<HTMLButtonElement>}
               slot="next"
@@ -282,6 +409,66 @@ export function ReportDatePicker({
               <ChevronRight size={24} aria-hidden />
             </AriaButton>
           </header>
+
+          {/*
+            Inline jump panel: not a dialog, no focus trap, rendered directly
+            above the day grid so the calendar keeps its own focus state. Every
+            control here is a plain button, in DOM order.
+          */}
+          {isJumpOpen && (
+            <div
+              id={jumpPanelId}
+              data-testid="calendar-jump-panel"
+              role="group"
+              aria-label="Jump to month and year"
+              onKeyDown={handleJumpPanelKeyDown}
+              className="mb-3 rounded-m3-md border border-outline-variant bg-surface-container p-2"
+            >
+              <div className="flex items-center justify-between gap-1">
+                <button
+                  type="button"
+                  aria-label="Previous year"
+                  disabled={jumpYear <= MIN_JUMP_YEAR}
+                  onClick={() => stepJumpYear(-1)}
+                  className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-on-surface"
+                >
+                  <ChevronLeft size={20} aria-hidden />
+                </button>
+                <span data-testid="calendar-jump-year" className="text-sm font-semibold tabular-nums text-on-surface">
+                  {jumpYear}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Next year"
+                  disabled={jumpYear >= maxDate.year}
+                  onClick={() => stepJumpYear(1)}
+                  className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-on-surface"
+                >
+                  <ChevronRight size={20} aria-hidden />
+                </button>
+              </div>
+
+              <div className="mt-1 grid grid-cols-3 gap-1">
+                {MONTHS.map(({ month, short, long }) => {
+                  const isVisibleMonth = jumpYear === headingDate.year && month === headingDate.month;
+                  return (
+                    <button
+                      key={month}
+                      type="button"
+                      aria-label={`${long} ${jumpYear}`}
+                      disabled={isMonthUnavailable(jumpYear, month)}
+                      onClick={() => chooseMonth(month)}
+                      className={`min-h-[44px] min-w-0 rounded-m3-sm text-sm text-on-surface transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-on-surface ${
+                        isVisibleMonth ? "bg-surface-container-high font-medium" : ""
+                      }`}
+                    >
+                      {short}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div
             data-testid="calendar-swipe-zone"
