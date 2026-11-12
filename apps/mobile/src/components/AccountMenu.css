@@ -1,11 +1,75 @@
-.fb-account-rail { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+/*
+ * One identity control, one popover, and a panel that opens beside it.
+ *
+ * The footer row is the only thing in the rail footer (owner order 2026-11-12,
+ * R1). It is a full-width button, so the whole row is the target: avatar, name,
+ * handle and earned badge. There is no second settings glyph to aim at.
+ *
+ * The nested panel (R2) sits inside the same floating layer and is positioned
+ * against the dialog rather than portalled separately, so Escape, outside press
+ * and focus return stay with one layer instead of two overlapping traps. Below
+ * 900px there is no room beside the popover, so the panel stacks underneath it
+ * in normal flow rather than floating off-screen.
+ */
+.fb-account-rail { margin-top: auto; display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
 .fb-account-rail .fb-nav-link { cursor: pointer; }
+.fb-account-trigger {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px;
+  padding: 6px 10px; border: 0; border-radius: 12px; background: transparent;
+  color: var(--fb-on-surface); text-align: start; cursor: pointer;
+}
+.fb-account-trigger:hover, .fb-account-trigger[aria-expanded="true"] { background: var(--fb-surface-container); }
+.fb-account-trigger:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: -3px; }
+.fb-account-trigger-text { display: flex; flex: 1; min-width: 0; flex-direction: column; line-height: 1.25; }
+.fb-account-trigger-name { font-size: 0.9375rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-account-trigger-handle { font-size: 0.75rem; color: var(--fb-on-surface-variant); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .fb-account-menu { width: 320px; max-width: calc(100vw - 88px); padding: 8px; border-radius: 18px; background: var(--fb-surface); border: 1px solid var(--fb-outline-variant); box-shadow: var(--shadow-md); }
-.fb-account-dialog { outline: none; }
+.fb-account-dialog { position: relative; outline: none; }
 .fb-account-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--fb-on-surface); text-align: start; text-decoration: none; font-size: 15px; cursor: pointer; }
-.fb-account-row:hover, .fb-account-row:focus-visible { background: var(--fb-surface-container); }
+.fb-account-row:hover, .fb-account-row:focus-visible, .fb-account-row[aria-expanded="true"] { background: var(--fb-surface-container); }
 .fb-account-row:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: -3px; }
 .fb-account-row > span:not(.fb-account-identity-text) { flex: 1; }
 .fb-account-identity-text { display: flex; flex: 1; min-width: 0; flex-direction: column; overflow-wrap: anywhere; }
 .fb-account-identity-text span { color: var(--fb-on-surface-variant); }
 .fb-account-divider { height: 1px; margin: 4px 0; background: var(--fb-outline-variant); }
+
+.fb-account-preview {
+  position: absolute; inset-block-start: 0; inset-inline-start: calc(100% + 8px);
+  width: 20rem; max-height: min(70dvh, 32rem); overflow-y: auto;
+  padding: 14px; border: 1px solid var(--fb-outline-variant); border-radius: 18px;
+  background: var(--fb-surface); box-shadow: var(--shadow-md); z-index: 1;
+}
+@media (max-width: 900px) {
+  .fb-account-preview {
+    position: static; width: 100%; max-height: none; margin-top: 8px;
+    box-shadow: none; border-radius: 14px;
+  }
+}
+.fb-account-panel h3 { margin: 0 0 10px; font-size: 0.9375rem; font-weight: 650; letter-spacing: -0.01em; }
+.fb-account-panel .fb-choice-fieldset { margin: 12px 0 0; padding: 0; border: 0; min-width: 0; }
+.fb-account-panel legend { padding: 0; margin-bottom: 8px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fb-on-surface-variant); }
+.fb-account-accents { display: flex; flex-wrap: wrap; gap: 8px; }
+.fb-account-accent { width: 28px; height: 28px; border-radius: 999px; border: 2px solid transparent; cursor: pointer; }
+.fb-account-accent[data-selected="true"] { border-color: var(--fb-on-surface); box-shadow: 0 0 0 2px var(--fb-surface); }
+.fb-account-accent:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: 2px; }
+.fb-account-panel-links { display: flex; flex-direction: column; }
+.fb-account-panel-link {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
+  min-height: 44px; padding: 4px 0; border: 0; border-bottom: 1px solid var(--fb-outline-variant);
+  background: transparent; color: var(--fb-on-surface); font-size: 0.875rem; text-align: start; cursor: pointer;
+}
+.fb-account-panel-link:hover { color: var(--fb-primary); }
+.fb-account-panel-link:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: -3px; }
+.fb-account-rules { display: flex; flex-direction: column; gap: 12px; }
+.fb-account-rule { display: flex; flex-direction: column; gap: 4px; }
+.fb-account-rule-label { font-size: 0.8125rem; font-weight: 600; }
+.fb-account-rule select {
+  min-height: 40px; padding: 0 10px; border-radius: 10px;
+  border: 1px solid var(--fb-outline-variant); background: var(--fb-surface-container-low);
+  color: var(--fb-on-surface); font: inherit; font-size: 0.8125rem;
+}
+.fb-account-rule select:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: 2px; }
+.fb-account-rule-hint { font-size: 0.6875rem; line-height: 1.4; color: var(--fb-on-surface-variant); }
+.fb-account-panel-status { margin: 10px 0 0; font-size: 0.75rem; color: var(--fb-on-surface-variant); }
+.fb-account-panel-status[role="alert"] { color: var(--fb-error); }

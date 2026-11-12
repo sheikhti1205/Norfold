@@ -4,53 +4,101 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { MemoryRouter } from "react-router";
 import { AccountMenu } from "./AccountMenu";
 
-const state = vi.hoisted(() => ({ logout: vi.fn() }));
-vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "1", username: "riley", displayName: "Riley" }, logout: state.logout }) }));
+const state = vi.hoisted(() => ({ logout: vi.fn(), save: vi.fn() }));
+vi.mock("../auth", () => ({ useAuth: () => ({
+  user: { id: "1", username: "riley", displayName: "Riley", emailVerified: true },
+  logout: state.logout,
+}) }));
+vi.mock("../services/accountRules", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../services/accountRules")>();
+  return {
+    ...actual,
+    fetchContactRules: () => Promise.resolve({ messageFrom: "ANYONE", connectFrom: "CONNECTED", showContact: "CONNECTED" }),
+    saveContactRules: state.save,
+  };
+});
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 function renderMenu() { render(<MemoryRouter><AccountMenu /></MemoryRouter>); }
+async function openMenu() {
+  fireEvent.click(screen.getByRole("button", { name: "Account, Riley" }));
+  return screen.findByRole("dialog", { name: "Account" });
+}
 
 describe("account menu", () => {
-  it("renders the specified entries in order and omits unavailable entries", async () => {
+  it("is one control carrying the avatar, name, handle and badge", async () => {
     renderMenu();
-    fireEvent.click(screen.getByRole("button", { name: "Account" }));
-    const dialog = await screen.findByRole("dialog", { name: "Account" });
-    expect(within(dialog).getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/u/riley", "/settings/appearance", "/saved", "/settings/feedback", "/settings", "/settings/help"]);
-    expect(within(dialog).getByText("Riley")).toBeTruthy();
-    expect(within(dialog).getByText("@riley")).toBeTruthy();
-    expect(within(dialog).getByRole("button", { name: "Log out" })).toBeTruthy();
-    expect(within(dialog).queryByText("Activity preferences")).toBeNull();
-    expect(within(dialog).queryByText("Switch account")).toBeNull();
+    const trigger = screen.getByRole("button", { name: "Account, Riley" });
+    expect(trigger.textContent).toContain("Riley");
+    expect(trigger.textContent).toContain("@riley");
+    expect(within(trigger).getByRole("img", { name: "Email verified" })).toBeTruthy();
+    // The separate gear is gone: settings is reached from inside the popover.
+    expect(screen.queryByRole("button", { name: "Settings" })).toBeNull();
   });
 
-  it("exposes expanded state on both triggers and restores focus after Escape", async () => {
+  it("reaches settings, appearance and the account shortcuts from inside", async () => {
     renderMenu();
-    const account = screen.getByRole("button", { name: "Account" });
-    const gear = screen.getByRole("button", { name: "Settings" });
-    for (const button of [account, gear]) {
-      expect(button.hasAttribute("aria-expanded")).toBe(true);
-      expect(button.hasAttribute("aria-current")).toBe(false);
-    }
-    account.focus(); fireEvent.click(account);
-    await screen.findByRole("dialog", { name: "Account" });
-    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
-    await waitFor(() => expect(document.activeElement).toBe(account));
+    const dialog = await openMenu();
+    const labels = within(dialog).getAllByRole("button").map((node) => node.textContent?.trim());
+    expect(labels).toEqual(expect.arrayContaining(["Settings", "Appearance", "Log out"]));
+    expect(within(dialog).getByRole("link", { name: /Activity preferences/ }).getAttribute("href")).toBe("/settings/notifications");
+    expect(within(dialog).getByRole("link", { name: /Saved/ }).getAttribute("href")).toBe("/saved");
+  });
+
+  it("opens a floating appearance preview with the real tiles, not a route", async () => {
+    renderMenu();
+    const dialog = await openMenu();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Appearance/ }));
+    const panel = await within(dialog).findByRole("group", { name: "Appearance preview" });
+    expect(within(panel).getByRole("group", { name: "Accent" })).toBeTruthy();
+    expect(within(panel).getAllByRole("radio")).toHaveLength(2);
+    expect(within(panel).getByRole("button", { name: /Open Appearance/ })).toBeTruthy();
+  });
+
+  it("opens the account panel with contact rules that persist", async () => {
+    state.save.mockImplementation((next: unknown) => Promise.resolve(next));
+    renderMenu();
+    const dialog = await openMenu();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Settings/ }));
+    const panel = await within(dialog).findByRole("group", { name: "Settings preview" });
+    const message = await within(panel).findByLabelText("Who can message you");
+    await waitFor(() => expect((message as HTMLSelectElement).value).toBe("ANYONE"));
+    expect(within(panel).getByLabelText("Who can connect with you")).toBeTruthy();
+    expect(within(panel).getByLabelText("Who can see your contact details")).toBeTruthy();
+    fireEvent.change(message, { target: { value: "NOBODY" } });
+    await waitFor(() => expect(state.save).toHaveBeenCalledWith(expect.objectContaining({ messageFrom: "NOBODY" })));
+    expect((message as HTMLSelectElement).value).toBe("NOBODY");
+  });
+
+  it("Escape closes the preview first and hands focus back to its row", async () => {
+    renderMenu();
+    const dialog = await openMenu();
+    const row = within(dialog).getByRole("button", { name: /Appearance/ });
+    row.focus();
+    fireEvent.click(row);
+    await within(dialog).findByRole("group", { name: "Appearance preview" });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(within(dialog).queryByRole("group", { name: "Appearance preview" })).toBeNull());
+    expect(screen.getByRole("dialog", { name: "Account" })).toBeTruthy();
+    expect(document.activeElement).toBe(row);
   });
 
   it("confirms logout once even if confirmation is pressed twice", async () => {
     state.logout.mockImplementation(() => new Promise(() => {}));
-    renderMenu(); fireEvent.click(screen.getByRole("button", { name: "Account" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Log out" }));
-    const dialog = await screen.findByRole("alertdialog");
-    const confirm = within(dialog).getByRole("button", { name: "Log out" });
-    fireEvent.click(confirm); fireEvent.click(confirm);
+    renderMenu();
+    const dialog = await openMenu();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Log out/ }));
+    const confirm = await screen.findByRole("alertdialog");
+    const button = within(confirm).getByRole("button", { name: "Log out" });
+    fireEvent.click(button); fireEvent.click(button);
     expect(state.logout).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the confirmation open when logout fails", async () => {
     state.logout.mockRejectedValueOnce(new Error("failure"));
-    renderMenu(); fireEvent.click(screen.getByRole("button", { name: "Account" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Log out" }));
+    renderMenu();
+    const dialog = await openMenu();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Log out/ }));
     fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Log out" }));
     expect((await screen.findByRole("alert")).textContent).toBe("Could not log out. Please try again.");
     expect(screen.getByRole("alertdialog")).toBeTruthy();

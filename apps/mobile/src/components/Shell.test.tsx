@@ -479,11 +479,11 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     expect(
       links.map((link) => link.getAttribute("aria-label") ?? link.textContent?.trim()),
     ).toEqual(["Create report", "Home", "My Reports", "Chats", "Insights"]);
-    const settings = within(nav).getByRole("button", { name: "Settings" });
-    const account = within(nav).getByRole("button", { name: "Account" });
+    const account = within(nav).getByRole("button", { name: /^Account/ });
     expect(account.getAttribute("aria-expanded")).toBe("false");
     expect(account.hasAttribute("aria-current")).toBe(false);
-    expect([...nav.querySelectorAll("a, button")]).toEqual([...links, settings, account]);
+    // One identity control in the footer: no sibling settings glyph (R1).
+    expect([...nav.querySelectorAll("a, button")]).toEqual([...links, account]);
     expect(
       links
         .filter((link) => link.getAttribute("aria-current") === "page")
@@ -492,8 +492,6 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     // Same selected-pill treatment as the bar.
     expect(nav.querySelector(".fb-nav-active-bg")).toBeTruthy();
     expect(nav.querySelector(".fb-nav-label")).toBeTruthy();
-    fireEvent.click(settings);
-    expect(screen.getByText("Settings screen")).toBeTruthy();
   });
 
   it("takes layout space beside the content instead of overlaying it", () => {
@@ -562,9 +560,11 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     );
     const nav = screen.getByRole("navigation", { name: "Primary" });
     expect(nav.getAttribute("data-layout")).toBe("rail");
-    for (const label of ["Home", "My Reports", "Chats", "Settings"]) {
+    for (const label of ["Home", "My Reports", "Chats"]) {
       expect(within(nav).getByText(label)).toBeTruthy();
     }
+    // The footer is one identity control, so there is no Settings label to keep.
+    expect(within(nav).getByRole("button", { name: /^Account/ })).toBeTruthy();
   });
 
   it("pins the rail's geometry with computed styles, not source text", () => {
