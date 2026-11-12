@@ -23,6 +23,12 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("Telegram settings", () => {
+  it("explains that email verification is needed before connecting", async () => {
+    mocks.create.mockRejectedValueOnce(new Error("verify your email first"));
+    await start();
+    expect(screen.getByRole("status").textContent).toBe("Verify your email address in account settings, then try connecting Telegram again.");
+    expect(mocks.open).not.toHaveBeenCalled();
+  });
   it("keeps the action hidden while loading and shows an existing account", async () => {
     mocks.account.mockResolvedValue(linked);
     render(<TelegramSettings />);
