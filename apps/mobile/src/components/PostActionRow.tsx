@@ -5,8 +5,7 @@ import "./PostActionRow.css";
 
 /**
  * The compact flat action row (owner reference: a single row of icon-only
- * actions — reactions + counts, comment bubble + count, share arrow, bookmark at
- * the end — followed by nothing else).
+ * actions: comments, reactions, views when available, save and share.
  *
  * WHY SLOTS AND NOT PROPS: the reaction state owner differs per surface. The
  * home feed's reaction controls live in `HomeFeedReactionButtons` (feed reaction
@@ -25,6 +24,8 @@ import "./PostActionRow.css";
 export interface PostActionRowSlots {
   /** The caller's own Like control (its state owner stays with the caller). */
   like: ReactNode;
+  /** Optional view count supplied by the caller when available. */
+  views?: ReactNode;
   /** Optional Save/bookmark control — another lane owns that component and slots it in. */
   save?: ReactNode;
   /** Called when the comment affordance is activated. */
@@ -70,7 +71,6 @@ export function PostActionRow({ slots, commentCount, className, commentsHref }: 
         className ? ` ${className}` : ""
       }`}
     >
-      {slots.like}
       {commentsHref ? (
         <PostLink to={commentsHref} aria-label={commentLabel} className="fb-report-action">
           {commentControl}
@@ -86,8 +86,10 @@ export function PostActionRow({ slots, commentCount, className, commentsHref }: 
           {commentControl}
         </button>
       )}
-      {slots.share}
+      {slots.like}
+      {slots.views}
       {slots.save}
+      {slots.share}
     </div>
   );
 }

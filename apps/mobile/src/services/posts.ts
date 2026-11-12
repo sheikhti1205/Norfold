@@ -34,6 +34,7 @@ export type { CreatePostInput, CreatePostMultiInput } from "./postsCreate";
 export { removeStagedUpload, removeStagedUploads, uploadImage, uploadPhotos } from "./postsUpload";
 export type { StoredUpload, UploadProgress } from "./postsUpload";
 export { MAX_REPORT_PHOTOS } from "./media/prepareImages";
+export { recordReportView } from "./reportViews";
 
 export interface FeedFilters {
   type?: PostType | "";
@@ -169,6 +170,7 @@ interface ClientPostRow {
   author_avatar_url: string | null;
   author_created_at: string;
   like_count: number | null;
+  view_count?: number | null;
   dislike_count: number | null;
   rating_avg: number | string | null;
   rating_count: number | null;
@@ -253,6 +255,7 @@ function mapClientPost(row: ClientPostRow): PostItem {
     youtubeUrl: row.youtube_url ?? null,
     attachments: mapAttachments(row.attachments),
     likeCount: Number(row.like_count ?? 0),
+    ...(row.view_count == null ? {} : { viewCount: Number(row.view_count) }),
     dislikeCount: Number(row.dislike_count ?? 0),
     ratingAvg: row.rating_avg == null ? null : Math.round(Number(row.rating_avg) * 100) / 100,
     ratingCount: Number(row.rating_count ?? 0),
