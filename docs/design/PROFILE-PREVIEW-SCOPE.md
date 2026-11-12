@@ -5,6 +5,8 @@ The owner approved a profile hover preview *in the desktop lab*. This document
 answers only "on which surfaces", surface by surface. It changes no source and
 authorises no build beyond the first set named at the end.
 
+Owner reference for the card itself added 2026-11-12, see §8.
+
 Read with `docs/design/DESKTOP-INTERACTIONS.md` §1 ("Identity is currently a
 direct link, not a preview") and the "Pattern A reverses a documented product
 rule" section.
@@ -191,3 +193,102 @@ unchanged and gets no long-press preview.
 - Whether the two identity tests get a pointer-mocked variant or one
   parameterised test.
 - Whether the `.fb-quick-*` residue is adopted or deleted. Implementation choice.
+
+---
+
+## 8. Card contract (owner reference, 2026-11-12)
+
+The owner supplied a reference card: a hover popup under a person's handle, with
+the avatar on the right, the display name, the handle, a bio, a soft count line,
+and two actions side by side. Adopt the shape. Change the vocabulary to this
+product, because three of the reference's parts do not exist here.
+
+**What the reference has that we do not**
+
+| Reference | Norfold |
+| --- | --- |
+| `Follow` button | `Connect`. `PeerIdentityActions.tsx:130` already renders that exact label, and there is no follow graph. |
+| `70 followers` | No follower or following surface exists. Show the counts the public profile already owns, and nothing else. |
+| Free-form long bio | Real: `users.bio`, 280-character limit, edited in `ProfileEdit.tsx`. Clamp it, do not invent it. |
+
+### 8.1 Layout
+
+Merged from the two owner references on 2026-11-12. The X card wins where they
+disagree: avatar left, one action at the top right, one full-width action at the
+bottom. The first reference's "avatar right, two equal buttons" arrangement is
+dropped.
+
+1. Avatar, 64px, circular, left, centred against the name block.
+2. Action pill, filled, top right, 36px tall, 0.875rem label: `Connect`,
+   `Requested` or `Connected`.
+3. Display name, 1.125rem, weight 700, wraps to at most two lines, followed by
+   the verification badge when the person has one (see
+   `docs/design/VERIFICATION-BADGES.md`).
+4. Handle, `@username`, 0.875rem, muted. This is the identity link.
+5. Bio, 0.9375rem, line height 1.5, clamped to three lines with an ellipsis.
+   The whole block is omitted when `bio` is empty; no placeholder text.
+6. Location, muted, shown only when `locationLabel` exists.
+7. Count line, muted, one line: `Connected with 8 people`. Singular is
+   `Connected with 1 person`. The line is omitted when the count is zero.
+   No other count belongs on this line.
+8. One full-width outlined action, 44px tall: `Message`, or `View profile` when
+   messaging is not allowed.
+
+Card width 20rem on desktop, never wider than the viewport minus 1rem. Radius
+0.75rem, 1px `--fb-outline-variant` border, existing elevated surface token,
+no arrow, no shadow stack.
+
+### 8.2 Action rules
+
+| Viewer state | Top right | Full width |
+| --- | --- | --- |
+| Not connected, messaging allowed | `Connect` | `Message` |
+| Not connected, messaging not allowed | `Connect` | `View profile` |
+| Request sent, not accepted | `Requested`, disabled | `View profile` |
+| Connected | `Connected`, a status chip, not a control | `Message` |
+| Self | no card | none |
+| Blocked in either direction | no card | none |
+
+A control whose action the server would reject is not rendered. `PeerIdentityActions`
+already owns connect behaviour; the card calls it rather than reimplementing it.
+
+### 8.3 Behaviour
+
+- Fine pointer only, through `useFinePointer()`. The touch path stays tap
+  through, unchanged.
+- Opens after the 200ms rest delay. Closes on pointer leave, Escape, scroll,
+  route change and when the trigger unmounts.
+- Placed below the trigger, flipped above when there is no room, clamped to the
+  viewport with an 8px margin. It never covers the trigger it belongs to.
+- `role="dialog"`, `aria-labelledby` pointing at the display name. Tab moves
+  into the card. Escape closes and returns focus to the trigger.
+- The avatar and the name inside the card link to `/u/{username}`. The card
+  itself is not a link.
+- Portalled to a layer root, never rendered inside the feed card or the masonry
+  tile (`FeedMasonry.tsx:181-190`).
+
+### 8.4 Not in the card
+
+Follower or following counts, a `Follow` button, a join date, a verification
+badge, report or block actions, a preview of the person's reports, and any
+invented statistic. Reporting and blocking stay on the profile page.
+
+### 8.5 Copy
+
+`Connect`, `Requested`, `Message`, `View profile`, `Connected`. No em dashes, no
+sentences about "connecting with people", no filler above the bio.
+
+### 8.6 Open questions raised by this card
+
+1. What is the count vocabulary: `connections`, `reports`, `recovered`,
+   `ratings`? The public profile already shows some of these; the card should use
+   the same words and the same source, not a second query.
+2. Does `Message` work before a connection is accepted? `services/messaging/policy.ts`
+   decides. If it does not, the secondary action must not appear on an
+   unconnected card.
+3. Does `Connect` send a request or create the connection immediately? The card
+   reflects whichever `PeerIdentityActions` already does.
+4. Should `locationLabel` be free text? A long value must wrap or be clamped
+   rather than pushing the actions down.
+5. Does the card need a `Copy handle` affordance? Recommendation: no, the handle
+   is a link.

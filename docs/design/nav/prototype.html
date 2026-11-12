@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Norfold — navigation prototype</title>
+<title>Norfold: navigation prototype</title>
+<link rel="icon" href="data:,">
 <!--
   NORFOLD NAVIGATION PROTOTYPE — single file, no network, opens from file://.
 
@@ -427,6 +428,11 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
 .appbar h1,.appbar h2{margin:0;min-width:0;font-size:calc(var(--fs) * 1.125);line-height:1.3;font-weight:650;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .appbar-title{display:flex;flex-direction:column;justify-content:center;min-width:0;flex:1}
 .appbar-actions{display:flex;align-items:center;gap:2px;flex:none;margin-inline-start:auto}
+@container app (max-width:480px){
+  .activity-bar{flex-wrap:wrap}
+  .activity-bar h1{flex:1 1 calc(100% - 52px);white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+  .activity-bar .appbar-actions{flex:1 0 100%;justify-content:flex-end}
+}
 .wordmark{font-size:calc(var(--fs) * 1.125);font-weight:700;letter-spacing:-.04em;flex:1;min-width:0}
 .iconbtn{
   display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;
@@ -871,10 +877,10 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
 .notif-icon.tone-match{background:var(--fb-matched-bg);color:var(--fb-matched-ink)}
 .notif-icon.tone-message{background:var(--fb-primary-container);color:var(--fb-on-primary-container)}
 .notif-icon.tone-warn{background:var(--fb-lost-bg);color:var(--fb-lost-ink)}
-.notif-copy{flex:1;min-width:0}
+.notif-copy{flex:1;min-width:0;display:flex;flex-direction:column}
 .notif-title{font-size:calc(var(--fs) * .875);font-weight:600;line-height:1.35}
 .notif-body{font-size:calc(var(--fs) * .8125);color:var(--fb-on-surface-variant);line-height:1.35;margin-top:1px}
-.notif.unread .notif-body{color:var(--fb-on-primary-container);opacity:.85}
+.notif.unread .notif-body{color:var(--fb-on-primary-container)}
 .notif-time{flex:none;font-size:calc(var(--fs) * .6875);color:var(--fb-on-surface-variant);white-space:nowrap;padding-top:2px}
 .unread-dot{width:8px;height:8px;border-radius:50%;background:var(--fb-primary);flex:none;margin-top:6px}
 .text-btn{
@@ -957,6 +963,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
 .facts dt{font-size:calc(var(--fs) * .75);color:var(--fb-on-surface-variant)}
 .facts dd{margin:0;font-size:calc(var(--fs) * .8125);font-weight:500;overflow-wrap:break-word}
 .post-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.frame .post-actions .btn-primary{color:var(--fb-on-primary)}
 .btn-primary{
   display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:44px;
   padding:10px 16px;border:0;border-radius:999px;background:var(--fb-primary);color:var(--fb-on-primary);
@@ -1148,6 +1155,30 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
 .settings-popover button,.filter-row{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:8px;border:0;border-radius:9px;background:transparent;text-align:left;cursor:pointer}
 .settings-popover button:hover,.filter-row:hover{background:var(--fb-surface-container)}
 .settings-popover .logout{border-top:1px solid var(--fb-outline-variant);border-radius:0;margin-top:4px}
+.settings-child{position:absolute;z-index:76;width:min(300px,calc(100% - 16px));max-height:calc(100% - 16px)}
+.settings-child h2{font-size:calc(var(--fs) * 1);margin:8px}
+.settings-child h3{font-size:calc(var(--fs) * .875);margin:16px 8px 4px}
+.settings-child label{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 8px;overflow-wrap:anywhere}
+.settings-child select,.settings-child input:not([type=checkbox]),.settings-child textarea{max-width:100%;min-width:0}
+.settings-child select{font:inherit;color:var(--fb-on-surface);background:var(--fb-surface);border:1px solid var(--fb-outline-variant);border-radius:8px;padding:6px}
+.settings-child input[type=checkbox]{width:20px;height:20px;flex:none;accent-color:var(--fb-primary)}
+.settings-child .field{padding:8px}
+.settings-child .field label{padding:0 0 4px}
+.settings-child button{display:flex;align-items:center;gap:8px;min-height:44px;width:100%;padding:8px;border:0;border-radius:9px;background:transparent;color:inherit;text-align:start;cursor:pointer}
+.settings-child button:hover{background:var(--fb-surface-container)}
+.settings-child #accountForm button[type=submit]{width:auto;justify-content:center;margin:8px;background:var(--fb-primary);color:var(--fb-on-primary);padding-inline:16px}
+.settings-child #accountForm button[type=submit]:hover{background:var(--fb-primary);text-decoration:underline}
+.settings-child > h3{border-top:1px solid var(--fb-outline-variant);padding-top:16px;margin-top:20px}
+.settings-child [data-settings-activity]{font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.activity-skeleton{height:52px;margin:8px 0;background:var(--fb-surface-container);border-radius:8px}
+.settings-child .choice[aria-pressed=true]{background:var(--fb-primary-container);color:var(--fb-on-primary-container)}
+.settings-popover [data-menu]::after{content:'›';margin-inline-start:auto;font-size:1.3em}
+.activity-row{display:flex;align-items:center;border-bottom:1px solid var(--fb-outline-variant)}
+.activity-row .notif{flex:1;min-width:0}
+.activity-row .notif-time{white-space:normal}
+.activity-toggle{flex:none}
+.activity-filters{display:flex;flex-wrap:wrap;gap:6px;padding:12px 0}
+@container app (max-width:599px){.settings-child{left:8px!important;right:8px;bottom:68px;top:auto!important;width:auto;max-height:calc(100% - 84px)}.settings-popover.has-child{visibility:hidden}}
 /* Search is a floating overlay: centred on desktop, top-anchored below the
    appbar on a phone. The phone top offset is measured from the real appbar in
    JS so 200% text does not shift it under the bar. */
@@ -1401,7 +1432,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
       <div class="seg" id="segSurface" role="group" aria-label="Surface">
         <button type="button" class="seg-btn" data-set="surface" data-value="home" aria-pressed="true">Home</button>
         <button type="button" class="seg-btn" data-set="surface" data-value="chats">Messages</button>
-        <button type="button" class="seg-btn" data-set="surface" data-value="notifications">Notifications</button>
+        <button type="button" class="seg-btn" data-set="surface" data-value="notifications">Activity</button>
         <button type="button" class="seg-btn" data-set="surface" data-value="settings">Settings</button>
         <button type="button" class="seg-btn" data-set="surface" data-value="post">Post detail</button>
         <button type="button" class="seg-btn" data-set="surface" data-value="empty">Empty</button>
@@ -1413,6 +1444,14 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
       <div class="seg" id="segPanel" role="group" aria-label="Panel state">
         <button type="button" class="seg-btn" data-set="panel" data-value="collapsed" aria-pressed="true">Collapsed</button>
         <button type="button" class="seg-btn" data-set="panel" data-value="pinned">Pinned</button>
+      </div>
+    </fieldset>
+    <fieldset class="ctl">
+      <legend>Activity state</legend>
+      <div class="seg" role="group" aria-label="Activity state">
+        <button type="button" class="seg-btn" data-activity-state="ready" aria-pressed="true">Ready</button>
+        <button type="button" class="seg-btn" data-activity-state="loading" aria-pressed="false">Loading</button>
+        <button type="button" class="seg-btn" data-activity-state="error" aria-pressed="false">Error</button>
       </div>
     </fieldset>
     <fieldset class="ctl">
@@ -1462,12 +1501,13 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
             </div>
             <div class="rail-foot">
               <a class="rail-link account-link" href="#/profile" data-nav="profile" aria-label="Your account"><span class="avatar" aria-hidden="true">RE</span><span class="rail-label">Riley Ellis<br><small class="muted">Your account</small></span></a>
-              <button type="button" class="iconbtn settings-trigger" id="settingsTrigger" aria-label="Settings menu" aria-expanded="false" aria-controls="settingsPopover"><svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg></button>
+              <button type="button" class="iconbtn settings-trigger" id="settingsTrigger" aria-label="Settings menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="settingsPopover"><svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg></button>
             </div>
           </nav>
           <div class="utility-popover settings-popover" id="settingsPopover" role="dialog" aria-label="Settings menu" hidden>
-            <button type="button" data-menu="settings">Settings</button><button type="button" data-menu="appearance">Appearance</button><button type="button" data-menu="notifications">Your activity</button><button type="button" data-menu="saved">Saved</button><button type="button" data-menu="report">Report a problem</button><button type="button" data-menu="switch">Switch account</button><button type="button" class="logout" data-menu="logout">Log out</button>
+            <button type="button" data-menu="settings" aria-haspopup="dialog" aria-expanded="false">Settings</button><button type="button" data-menu="appearance" aria-haspopup="dialog" aria-expanded="false">Appearance</button><button type="button" data-menu="activity" aria-haspopup="dialog" aria-expanded="false">Activity preferences</button><button type="button" data-menu="saved" aria-haspopup="dialog" aria-expanded="false">Saved</button><button type="button" data-menu="report" aria-haspopup="dialog" aria-expanded="false">Report a problem</button><button type="button" data-menu="switch" aria-haspopup="dialog" aria-expanded="false">Switch account</button><button type="button" class="logout" data-menu="logout" aria-haspopup="dialog" aria-expanded="false">Log out</button>
           </div>
+          <div class="utility-popover settings-child" id="settingsChild" role="dialog" aria-labelledby="settingsChildTitle" hidden></div>
 
           <main class="content" id="content">
             <div class="canvas" id="canvas">
@@ -1480,14 +1520,14 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
                     <button type="button" class="iconbtn" data-action="search" aria-label="Search" aria-haspopup="dialog" aria-expanded="false" aria-controls="searchOverlay">
                       <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
                     </button>
-                    <button type="button" class="iconbtn" data-action="notifications" aria-label="Notifications" aria-haspopup="dialog" aria-expanded="false" aria-controls="notificationPopover">
+                    <button type="button" class="iconbtn" data-action="notifications" aria-label="Activity" aria-haspopup="dialog" aria-expanded="false" aria-controls="notificationPopover">
                       <span class="bell-wrap">
                         <svg class="icon" aria-hidden="true"><use href="#i-bell"></use></svg>
                         <span class="badge" data-badge="bell" hidden>9</span>
                       </span>
                     </button>
-                    <button type="button" class="iconbtn" data-action="go" data-surface="settings" data-section="account" aria-label="Account and settings">
-                      <span class="avatar avatar-tone-1" aria-hidden="true">RE</span>
+                    <button type="button" class="iconbtn" data-action="go" data-surface="settings" data-section="account" aria-label="Account and settings" aria-haspopup="dialog" aria-controls="settingsPopover" aria-expanded="false">
+                      <span class="avatar avatar-tone-1" data-account-avatar aria-hidden="true">RE</span>
                     </button>
                   </div>
                 </header>
@@ -1617,19 +1657,21 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
 
               <!-- ============ NOTIFICATIONS ============ -->
               <section class="surface" data-surface="notifications" id="surface-notifications" hidden>
-                <header class="appbar">
+                <header class="appbar activity-bar">
                   <button type="button" class="iconbtn" data-action="go" data-surface="home" aria-label="Back to home">
                     <svg class="icon" aria-hidden="true"><use href="#i-arrow-left"></use></svg>
                   </button>
                   <h1 tabindex="-1" data-route-title>Activity</h1>
                   <div class="appbar-actions">
                     <button type="button" class="text-btn" id="markAllRead">Mark all read</button>
+                    <button type="button" class="iconbtn" id="activitySettings" aria-label="Activity preferences" aria-haspopup="dialog" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg></button>
                   </div>
                 </header>
                 <div class="scroll" data-scroll>
                   <div class="page">
+                    <div class="activity-filters" role="group" aria-label="Filter activity"><button type="button" class="chip" data-activity-filter="all" aria-pressed="true">All</button><button type="button" class="chip" data-activity-filter="unread" aria-pressed="false">Unread</button><button type="button" class="chip" data-activity-filter="mention" aria-pressed="false">Mentions</button></div>
                     <div id="notifList"></div>
-                    <p class="feed-end t-xs">Notifications older than 30 days are removed automatically.</p>
+                    <p class="feed-end t-xs" id="activityRetention"></p>
                   </div>
                 </div>
               </section>
@@ -1661,7 +1703,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
                       <span class="tag"><span>Riverside</span></span>
                     </div>
                     <p class="post-lede">Posted 2 hours ago · 0.4 km away · 3 photos</p>
-                    <p class="post-body">Left it on the bench by the boathouse on Riverside Walk, just after the rain stopped. Black canopy, dark wooden hook handle, a small scuff on the ferrule. If you picked it up, please message me — I can describe the lining.</p>
+                    <p class="post-body">Left it on the bench by the boathouse on Riverside Walk, just after the rain stopped. Black canopy, dark wooden hook handle, a small scuff on the ferrule. If you picked it up, please message me. I can describe the lining.</p>
                     <dl class="facts">
                       <dt>Category</dt><dd>Umbrella</dd>
                       <dt>Last seen</dt><dd>Riverside Walk · bench near the boathouse</dd>
@@ -1695,6 +1737,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
               </section>
 
               <!-- ============ MY REPORTS ============ -->
+              <section class="surface" data-surface="signedout" id="surface-signedout" hidden><div class="scroll"><div class="extra-page"><h1 tabindex="-1" data-route-title>Signed out</h1><p>You are signed out of this prototype.</p><button type="button" class="btn-primary" data-action="go" data-surface="home">Return to the prototype</button></div></div></section>
               <section class="surface" data-surface="mine" id="surface-mine" hidden>
                 <header class="appbar">
                   <h1 tabindex="-1" data-route-title>My Reports</h1>
@@ -1724,7 +1767,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
               </section>
 
               <section class="surface" data-surface="create" id="surface-create" hidden><div class="scroll"><div class="extra-page"><h1>New Report</h1><p class="muted">Share a few details to help someone recognize the item.</p><form class="extra-form" id="inlineCreate"><div class="field"><label for="inlineTitle">What was lost or found?</label><input id="inlineTitle" required></div><div class="field"><label for="inlineType">Report type</label><select id="inlineType"><option>Lost</option><option>Found</option></select></div><div class="field"><label for="inlineDescription">Description</label><textarea id="inlineDescription"></textarea></div><div class="field"><span class="field-label">When was it lost/found?</span><div class="date-input"><button type="button" class="date-field" data-date-field="inlineReportDate" aria-haspopup="dialog" aria-expanded="false" aria-controls="datePopover"><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg><span class="date-value is-empty">Add a date</span></button><button type="button" class="date-clear" data-date-clear="inlineReportDate" aria-label="Clear date" hidden><svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button></div></div><button class="btn-primary" type="submit">Post report</button></form></div></div></section>
-              <section class="surface" data-surface="profile" id="surface-profile" hidden><div class="scroll"><div class="extra-page"><h1>Riley Ellis</h1><p class="muted">@riley · Riverside · Synthetic profile</p><p><strong>4</strong> reports &nbsp; <strong>2</strong> recovered &nbsp; <strong>8</strong> connections</p><h2>Your reports</h2><div class="extra-list" id="profileReports"></div><button type="button" class="btn-quiet" data-destination="mine">View all your reports</button></div></div></section>
+              <section class="surface" data-surface="profile" id="surface-profile" hidden><div class="scroll"><div class="extra-page"><h1 id="profileName">Riley Ellis</h1><p class="muted"><span id="profileHandle">@riley</span> · Riverside · Synthetic profile</p><p id="profileVisibility">Profile visibility: Everyone</p><p><strong>4</strong> reports &nbsp; <strong>2</strong> recovered &nbsp; <strong>8</strong> connections</p><div id="profileReportSection"><h2>Your reports</h2><div class="extra-list" id="profileReports"></div><button type="button" class="btn-quiet" data-destination="mine">View all your reports</button></div></div></div></section>
               <section class="surface" data-surface="insights" id="surface-insights" hidden><div class="scroll"><div class="extra-page"><h1>Insights</h1><p class="muted">Illustrative numbers for this synthetic account.</p><div class="extra-metrics"><div class="metric"><strong>4</strong>Reports</div><div class="metric"><strong>236</strong>Views</div><div class="metric"><strong>2 hours</strong>Time to first response</div><div class="metric"><strong>50%</strong>Recovery rate</div></div><h2>Report activity</h2><p>Your umbrella report received 84 views and two replies this week.</p></div></div></section>
               <section class="surface" data-surface="connect" id="surface-connect" hidden><div class="scroll"><div class="extra-page"><h1>Connect</h1><p class="muted">Suggestions from the Riverside community · Synthetic profiles</p><div class="extra-list"><div class="extra-item"><strong>Maya Okafor</strong><p>Helps around Riverside Walk</p><button type="button" class="btn-quiet" data-connect>Connect</button></div><div class="extra-item"><strong>Alex Chen</strong><p>Active near Market Square</p><button type="button" class="btn-quiet" data-connect>Connect</button></div><div class="extra-item"><strong>Sam Rivera</strong><p>Reports near the station</p><button type="button" class="btn-quiet" data-connect>Connect</button></div></div></div></div></section>
               <section class="surface" data-surface="reactions" id="surface-reactions" hidden><div class="scroll"><div class="extra-page"><h1>Liked / Disliked</h1><p class="muted">Reports you reacted to</p><div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="true" data-reaction="liked">Liked</button><button class="tab" role="tab" aria-selected="false" data-reaction="disliked">Disliked</button></div><div id="reactionList" class="rows"></div></div></div></section>
@@ -1760,14 +1803,14 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
                     <button type="button" class="iconbtn" data-action="search" aria-label="Search" aria-haspopup="dialog" aria-expanded="false" aria-controls="searchOverlay">
                       <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
                     </button>
-                    <button type="button" class="iconbtn" data-action="notifications" aria-label="Notifications" aria-haspopup="dialog" aria-expanded="false" aria-controls="notificationPopover">
+                    <button type="button" class="iconbtn" data-action="notifications" aria-label="Activity" aria-haspopup="dialog" aria-expanded="false" aria-controls="notificationPopover">
                       <span class="bell-wrap">
                         <svg class="icon" aria-hidden="true"><use href="#i-bell"></use></svg>
                         <span class="badge" data-badge="bell" hidden>9</span>
                       </span>
                     </button>
-                    <button type="button" class="iconbtn" data-action="go" data-surface="settings" data-section="account" aria-label="Account and settings">
-                      <span class="avatar avatar-tone-1" aria-hidden="true">RE</span>
+                    <button type="button" class="iconbtn" data-action="go" data-surface="settings" data-section="account" aria-label="Account and settings" aria-haspopup="dialog" aria-controls="settingsPopover" aria-expanded="false">
+                      <span class="avatar avatar-tone-1" data-account-avatar aria-hidden="true">RE</span>
                     </button>
                   </div>
                 </header>
@@ -1838,7 +1881,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
           </nav>
 
           <div class="flyout" id="flyout" hidden aria-label="Section menu"></div>
-          <div class="utility-popover" id="notificationPopover" role="dialog" aria-label="Notifications" hidden><strong id="notificationTitle">Notifications</strong><div id="notificationPreview"></div><button type="button" class="text-btn" id="allNotifications">View activity</button></div>
+          <div class="utility-popover" id="notificationPopover" role="dialog" aria-label="Activity" hidden><strong id="notificationTitle">Activity</strong><div id="notificationPreview"></div><button type="button" class="text-btn" id="allNotifications">View activity</button></div>
           <div class="date-popover" id="datePopover" role="dialog" aria-label="Choose a date" hidden>
             <div class="cal-head">
               <button type="button" class="cal-nav" id="calPrev" aria-label="Previous month">&#8249;</button>
@@ -1894,11 +1937,13 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
   let openTimer, closeTimer, toastTimer, activeThread = 0;
   let homeFilter = 'all', myFilter = 'all', chatFilter = 'all';
   const reports = [
-    {title:'Black umbrella with a wooden hook handle', type:'Lost', place:'Riverside Walk', icon:'umbrella', date:'2026-11-08'},
-    {title:'Set of keys on a blue ring', type:'Found', place:'Market Square', icon:'key', date:'2026-11-05'},
-    {title:'Reading glasses in a brown case', type:'Lost', place:'Library', icon:'glasses', date:'2026-10-24'},
-    {title:'Notebook with a green cover', type:'Found', place:'Station', icon:'book', date:'2026-09-30'}
+    {index:0, title:'Black umbrella with a wooden hook handle', type:'Lost', place:'Riverside Walk', icon:'umbrella', date:'2026-11-08', category:'Umbrella', ref:'R-1042', author:'Maya Okafor', initials:'MO', body:'Black umbrella with a wooden hook handle, lost at Riverside Walk.'},
+    {index:1, title:'Set of keys on a blue ring', type:'Found', place:'Market Square', icon:'key', date:'2026-11-05', category:'Keys', ref:'R-1043', author:'Alex Chen', initials:'AC', body:'Set of keys on a blue ring, found at Market Square.'},
+    {index:2, title:'Reading glasses in a brown case', type:'Lost', place:'Library', icon:'glasses', date:'2026-10-24', category:'Glasses', ref:'R-1044', author:'Sam Rivera', initials:'SR', body:'Reading glasses in a brown case, lost at the library.'},
+    {index:3, title:'Notebook with a green cover', type:'Found', place:'Station', icon:'book', date:'2026-09-30', category:'Notebook', ref:'R-1045', author:'Riley Ellis', initials:'RE', body:'Notebook with a green cover, found at the station.'}
   ];
+  const savedIds = new Set([1, 2, 3]);
+  function savedReports() { return reports.filter(report => savedIds.has(report.index)); }
   const people = ['Maya Okafor', 'Alex Chen', 'Sam Rivera', 'Riley Ellis'];
   const conversations = [
     {name:'Maya Okafor', subject:'About the black umbrella', filter:'unread', messages:['Hi, I think I saw your umbrella near the boathouse.']},
@@ -1906,12 +1951,91 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     {name:'Sam Rivera', subject:'About the notebook', filter:'archived', messages:['Thank you for your help.']}
   ];
   const destinations = {
-    home:[['Home','home'],['Search','search'],['Notifications','notifications']],
+    home:[['Home','home'],['Search','search'],['Activity','notifications']],
     my:[['My Reports','mine'],['Empty state','empty'],['Create report','create']],
     chats:[['Chats','chats']]
   };
   const esc = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const icon = name => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
+  const activity = [
+    {type:'comment', actor:'Maya', action:'commented on your report', target:reports[0].title, time:'12 min ago', read:false, age:0, surface:'post', reportIndex:0, icon:'chat'},
+    {type:'mention', actor:'Alex', action:'mentioned you', target:'Set of keys on a blue ring', time:'1 hour ago', read:false, age:0, surface:'post', reportIndex:1, icon:'user'},
+    {type:'reaction', actor:'Sam', action:'liked your report', target:'Notebook with a green cover', time:'Yesterday', read:false, age:1, surface:'post', reportIndex:3, icon:'heart'},
+    {type:'match', actor:'Norfold', action:'found a possible match', target:'Reading glasses in a brown case', time:'2 days ago', read:false, age:2, surface:'post', reportIndex:2, icon:'search'},
+    {type:'comment', actor:'Maya', action:'sent a message', target:'About the black umbrella', time:'3 days ago', read:true, age:3, surface:'chats', icon:'chat'},
+    {type:'system', actor:'Norfold', action:'updated your account', target:'Your profile', time:'5 days ago', read:true, age:5, surface:'profile', icon:'settings'},
+    {type:'mention', actor:'Alex', action:'mentioned you', target:'A report near the library', time:'9 days ago', read:true, age:9, surface:'post', reportIndex:2, icon:'user'}
+  ];
+  let retention = '7', activityFilter = 'all', markOnOpen = true, account = 'Riley Ellis', childOrigin = null;
+  let activityFromSettings = false;
+  const preferences = {name:account, username:'riley', visibility:'Everyone', reports:true, searchable:true, digest:false};
+  const accountDraft = {name:account, username:'riley', visibility:'Everyone'};
+  const accountProfiles = {
+    'Riley Ellis': {name:'Riley Ellis', username:'riley', visibility:'Everyone', initials:'RE'},
+    'Alex Chen': {name:'Alex Chen', username:'alex', visibility:'Connections only', initials:'AC'}
+  };
+  let activityState = 'ready';
+  function applyAccount(person) {
+    account = person;
+    const profile = accountProfiles[person];
+    Object.assign(accountDraft, profile); Object.assign(preferences, profile);
+    document.querySelector('.account-link .rail-label').innerHTML = `${esc(profile.name)}<br><small class="muted">Your account</small>`;
+    all('[data-account-avatar], .account-link .avatar').forEach(avatar => { avatar.textContent = profile.initials; });
+    $('profileName').textContent = profile.name; $('profileHandle').textContent = `@${profile.username}`;
+    $('profileVisibility').textContent = `Profile visibility: ${profile.visibility}`;
+  }
+  function settingsSummary() {
+    const summary = $('settingsSummary');
+    if (summary) summary.textContent = `Profile visibility: ${preferences.visibility}. Reports ${preferences.reports ? 'shown' : 'hidden'} on your profile. Username search ${preferences.searchable ? 'on' : 'off'}. Weekly email digest ${preferences.digest ? 'on' : 'off'}.`;
+  }
+  const enabledTypes = {match:true, comment:true, mention:true, reaction:true, system:true};
+  function visibleActivity() { return activity.filter(item => enabledTypes[item.type] && (!item.read || retention === 'never' || item.age <= Number(retention))); }
+  function activityRow(item, index, preview = false) {
+    return `<div class="activity-row"><button type="button" class="notif${item.read ? '' : ' unread'}" data-activity-open="${index}"${item.reportIndex === undefined ? '' : ` data-report-index="${item.reportIndex}"`}><span class="notif-icon">${icon(item.icon)}</span><span class="notif-copy"><span class="notif-title">${esc(item.actor)} ${esc(item.action)}</span><span class="notif-body">${esc(item.target)} · ${esc(item.time)}</span></span>${item.read ? '' : '<span class="unread-dot" aria-label="Unread"></span>'}</button>${preview ? '' : `<button type="button" class="iconbtn activity-toggle" data-activity-toggle="${index}" aria-pressed="${!item.read}" aria-label="Mark as ${item.read ? 'unread' : 'read'}">${icon('check')}</button>`}</div>`;
+  }
+  function renderActivity() {
+    const visible = visibleActivity(), filtered = visible.filter(item => activityFilter === 'all' || (activityFilter === 'unread' ? !item.read : item.type === 'mention'));
+    const loading = `<p role="status">Loading activity…</p>${'<div class="activity-skeleton" aria-hidden="true"></div>'.repeat(3)}`;
+    const error = `<p role="status">Activity didn't load.</p><button type="button" class="btn-quiet" data-activity-retry>Try again</button>`;
+    $('notifList').innerHTML = activityState === 'loading' ? loading : activityState === 'error' ? error : filtered.length ? filtered.map(item => activityRow(item, activity.indexOf(item))).join('') : `<p class="feed-end">${visible.length ? 'No activity in this view.' : 'No activity yet.'}</p>`;
+    $('notificationPreview').innerHTML = activityState === 'loading' ? '<p role="status">Loading activity…</p>' : activityState === 'error' ? error : visible.length ? visible.slice(0,3).map(item => activityRow(item, activity.indexOf(item), true)).join('') : '<p class="feed-end">No activity yet.</p>';
+    all('[data-activity-state]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.activityState === activityState)));
+    $('activityRetention').textContent = retention === 'never' ? 'Read activity is not hidden automatically.' : `Read activity older than ${retention} days is hidden.`;
+    const unread = activity.filter(item => !item.read && enabledTypes[item.type]).length;
+    setState('unread', String(unread));
+    const railActivity = document.querySelector('[data-nav="notifications"]');
+    railActivity.setAttribute('aria-label', unread ? `Activity, ${unread} unread` : 'Activity');
+    let dot = railActivity.querySelector('.unread-dot');
+    if (unread && !dot) { dot = document.createElement('span'); dot.className = 'unread-dot'; dot.setAttribute('aria-hidden','true'); railActivity.append(dot); }
+    if (!unread && dot) dot.remove();
+  }
+  function closeSettingsChild(restore = false) {
+    $('settingsChild').hidden = true; $('settingsPopover').classList.remove('has-child');
+    all('[data-menu]').forEach(button => button.setAttribute('aria-expanded','false'));
+    $('activitySettings').setAttribute('aria-expanded','false');
+    if (restore && childOrigin && childOrigin.isConnected) childOrigin.focus();
+  }
+  function openSettingsChild(name, origin) {
+    closeSettingsChild(); childOrigin = origin;
+    const titles = {settings:'Settings', appearance:'Appearance', activity:'Activity preferences', saved:'Saved', report:'Report a problem', switch:'Switch account', logout:'Log out'};
+    let body = '';
+    if (name === 'settings') body = `<form id="accountForm"><h3>Account</h3><div class="field"><label for="accountName">Display name</label><input id="accountName" required value="${esc(accountDraft.name)}"></div><div class="field"><label for="accountUsername">Username</label><input id="accountUsername" required value="${esc(accountDraft.username)}"></div><div class="field"><label for="accountVisibility">Profile visibility</label><select id="accountVisibility">${['Everyone','Connections only','Only me'].map(value => `<option${accountDraft.visibility === value ? ' selected' : ''}>${value}</option>`).join('')}</select></div><button type="submit">Save account</button><p id="accountStatus" role="status"></p></form><h3>Privacy</h3><label>Show my reports on my profile <input id="showProfileReports" type="checkbox"${preferences.reports ? ' checked' : ''}></label><label>Searchable by username <input id="searchableUsername" type="checkbox"${preferences.searchable ? ' checked' : ''}></label><h3>Notifications</h3><button type="button" data-settings-activity>Activity preferences</button><label>Weekly email digest <input id="weeklyDigest" type="checkbox"${preferences.digest ? ' checked' : ''}></label><p id="settingsSummary" role="status"></p>`;
+    if (name === 'appearance') body = `<p>Theme</p>${['light','dark','amoled'].map(value => `<button type="button" class="choice" data-set="theme" data-value="${value}" aria-pressed="${state.theme === value}">${value === 'amoled' ? 'AMOLED' : value[0].toUpperCase() + value.slice(1)}</button>`).join('')}<p>Text size</p>${['100','200'].map(value => `<button type="button" class="choice" data-set="text" data-value="${value}" aria-pressed="${state.text === value}">${value}%</button>`).join('')}<button type="button" class="choice" data-motion-toggle aria-pressed="${state.motion === 'on'}">Reduce motion</button>`;
+    if (name === 'activity') body = `<label>Retention <select id="activityRetentionSelect">${[['7','7 days'],['14','14 days'],['30','30 days'],['never','Never']].map(([value,label]) => `<option value="${value}"${retention === value ? ' selected' : ''}>${label}</option>`).join('')}</select></label><label>Mark read on open <input type="checkbox" id="markOnOpen"${markOnOpen ? ' checked' : ''}></label><h3>Activity types</h3>${Object.keys(enabledTypes).map(type => `<label>${type[0].toUpperCase() + type.slice(1)} <input type="checkbox" data-activity-type="${type}"${enabledTypes[type] ? ' checked' : ''}></label>`).join('')}`;
+    if (name === 'saved') body = `<div id="savedChildList">${savedChildRows()}</div><button type="button" data-saved-all>View all saved</button>`;
+    if (name === 'report') body = '<form id="problemForm"><div class="field"><label for="problemSubject">Subject</label><input id="problemSubject" required></div><div class="field"><label for="problemDetails">Details</label><textarea id="problemDetails" required></textarea></div><button type="submit">Send</button></form>';
+    if (name === 'switch') body = ['Riley Ellis','Alex Chen'].map(value => `<button type="button" data-account="${value}" aria-pressed="${account === value}">${value}${account === value ? ' ✓' : ''}</button>`).join('');
+    if (name === 'logout') body = '<p>Log out of this account?</p><button type="button" data-logout-confirm>Log out</button>';
+    const child = $('settingsChild'); child.innerHTML = `<button type="button" data-settings-back>‹ Back</button><h2 id="settingsChildTitle">${titles[name]}</h2>${body}`;
+    settingsSummary();
+    $('settingsPopover').classList.add('has-child'); origin.setAttribute('aria-expanded','true'); child.hidden = false;
+    if (Number(state.viewport) >= 600) {
+      const root = app.getBoundingClientRect(), rect = origin.getBoundingClientRect(), scale = root.width / app.offsetWidth || 1;
+      child.style.left = Math.min(app.clientWidth - child.offsetWidth - 8, (rect.right - root.left) / scale + 8) + 'px';
+      child.style.top = Math.max(8, Math.min((rect.top - root.top) / scale, app.clientHeight - child.offsetHeight - 8)) + 'px';
+    }
+    child.querySelector('button').focus();
+  }
 
   /* ---- sticker / GIF picker ----------------------------------------------
      Illustrative local placeholders only. Nothing here calls Klipy or any
@@ -2077,7 +2201,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
       : !$('searchOverlay').hidden ? searchOrigin
       : !$('notificationPopover').hidden ? notificationOrigin
       : !$('datePopover').hidden && dateOpen ? dateOpen.origin : null;
-    $('settingsPopover').hidden = true; $('settingsTrigger').setAttribute('aria-expanded','false');
+    closeSettingsChild(); activityFromSettings = false; $('settingsPopover').hidden = true; if (settingsOrigin) settingsOrigin.setAttribute('aria-expanded','false'); $('settingsTrigger').setAttribute('aria-expanded','false');
     $('searchOverlay').hidden = true; $('advancedSearch').hidden = true; $('overlayResults').hidden = false; $('overlaySearchInput').readOnly = false; $('advancedTrigger').setAttribute('aria-expanded','false');
     all('[data-action="search"]').forEach(trigger => trigger.setAttribute('aria-expanded','false'));
     $('notificationPopover').hidden = true; setBellExpanded(false);
@@ -2088,7 +2212,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
   function openSettings(origin) {
     const wasOpen = !$('settingsPopover').hidden; closeUtilities(); closeOverlay();
     if (wasOpen && settingsOrigin === origin) return;
-    settingsOrigin = origin; $('settingsPopover').hidden = false; $('settingsTrigger').setAttribute('aria-expanded','true');
+    settingsOrigin = origin; $('settingsPopover').hidden = false; origin.setAttribute('aria-expanded','true');
     syncBackdrop(); $('settingsPopover').querySelector('button').focus();
   }
   function placeSearchOverlay() {
@@ -2128,7 +2252,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     closeUtilities();
     if (wasOpen && sameTrigger) { if (origin && origin.isConnected) origin.focus(); return; }
     closeOverlay(); notificationOrigin = origin;
-    $('notificationPreview').innerHTML = $('notifList').innerHTML;
+    renderActivity();
     $('notificationPopover').hidden = false;
     if (origin && origin.setAttribute) origin.setAttribute('aria-expanded', 'true');
     placeNotificationPopover(origin); syncBackdrop(); $('allNotifications').focus();
@@ -2429,16 +2553,40 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     tip.style.top = ((box.top - root.top) / scale) + 'px'; tip.hidden = false; tip.classList.add('is-open');
   }
   function row(report) {
-    return `<button type="button" class="row" data-action="open-post">${icon(report.icon)}<span class="row-copy"><span class="row-title">${esc(report.title)}</span><span class="row-meta">${esc(report.type)} · ${esc(report.place)}</span></span></button>`;
+    return `<button type="button" class="row" data-action="open-post" data-report-index="${reports.indexOf(report)}">${icon(report.icon)}<span class="row-copy"><span class="row-title">${esc(report.title)}</span><span class="row-meta">${esc(report.type)} · ${esc(report.place)}</span></span></button>`;
+  }
+  function savedChildRows() { return savedReports().map(report => `<button type="button" data-saved-report data-report-index="${report.index}">${esc(report.title)}</button>`).join(''); }
+  function syncSaveButton() {
+    const post = $('surface-post'), button = post.querySelector('[data-action="post-save"]');
+    const saved = savedIds.has(Number(post.dataset.reportIndex));
+    button.setAttribute('aria-pressed', String(saved));
+    button.lastChild.textContent = saved ? ' Saved' : ' Save';
+  }
+  function openReport(index) {
+    const report = reports[index] || reports[0], post = $('surface-post');
+    post.dataset.reportIndex = report.index;
+    syncSaveButton();
+    post.querySelector('[data-route-title]').textContent = report.title;
+    post.querySelector('.post-hero use').setAttribute('href', `#i-${report.icon}`);
+    const status = post.querySelector('.post-badges .status');
+    status.className = `status status-${report.type.toLowerCase()}`; status.textContent = report.type;
+    const tags = post.querySelectorAll('.post-badges .tag span'); tags[0].textContent = report.category; tags[1].textContent = report.place;
+    post.querySelector('.post-lede').textContent = `${report.date} · ${report.place} · Synthetic example`;
+    post.querySelector('.post-body').textContent = report.body;
+    [report.category, report.place, report.date, `#${report.ref} · ${report.type}`].forEach((value, i) => post.querySelectorAll('.facts dd')[i].textContent = value);
+    post.querySelector('.author-name').textContent = report.author; post.querySelector('.author-meta').textContent = 'Synthetic profile';
+    post.querySelector('.author .avatar').textContent = report.initials;
+    post.querySelector('[data-action="post-message"]').lastChild.textContent = ` Message ${report.author.split(' ')[0]}`;
+    setSurface('post');
   }
   function renderReports() {
     const filtered = reports.filter(r => homeFilter === 'all' || homeFilter === 'nearby' || homeFilter === 'recent' || r.type.toLowerCase() === homeFilter);
-    $('homeFeed').innerHTML = filtered.map(r => `<article class="card"><div class="card-head"><span class="status ${r.type === 'Lost' ? 'status-lost' : 'status-found'}">${esc(r.type)}</span><span class="muted t-sm">${esc(r.place)}</span></div><h2 class="card-title"><button type="button" data-action="open-post">${esc(r.title)}</button></h2><p class="muted t-sm">Reported nearby · Synthetic example</p><button type="button" class="btn-quiet" data-action="open-post">View report</button></article>`).join(''); $('homeEmpty').hidden = filtered.length > 0;
+    $('homeFeed').innerHTML = filtered.map(r => `<article class="card" data-report-index="${r.index}"><div class="card-head"><span class="status ${r.type === 'Lost' ? 'status-lost' : 'status-found'}">${esc(r.type)}</span><span class="muted t-sm">${esc(r.place)}</span></div><h2 class="card-title"><button type="button" data-action="open-post" data-report-index="${r.index}">${esc(r.title)}</button></h2><p class="muted t-sm">Reported nearby · Synthetic example</p><button type="button" class="btn-quiet" data-action="open-post" data-report-index="${r.index}">View report</button></article>`).join(''); $('homeEmpty').hidden = filtered.length > 0;
     $('offlineFeed').innerHTML = reports.slice(0,4).map(row).join('');
     const mine = myFilter === 'all' || myFilter === 'open' ? reports.slice(0,2) : [];
     $('myList').innerHTML = mine.map(row).join(''); $('myEmpty').hidden = mine.length > 0;
     $('profileReports').innerHTML = reports.slice(0,2).map(row).join('');
-    $('savedList').innerHTML = reports.slice(1,3).map(row).join('');
+    $('savedList').innerHTML = savedReports().map(row).join('');
     $('reactionList').innerHTML = reports.slice(0,2).map(row).join('');
   }
   function renderChats() {
@@ -2477,7 +2625,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     const hitBell = event.target.closest('[data-action="notifications"]');
     const hitSearchTrigger = event.target.closest('[data-action="search"], [data-nav="search"]');
     const hitDateField = event.target.closest('[data-date-field]');
-    if (!$('settingsPopover').hidden && !$('settingsPopover').contains(event.target) && event.target !== settingsOrigin && !$('settingsTrigger').contains(event.target)) closeUtilities();
+    if (!$('settingsPopover').hidden && !$('settingsPopover').contains(event.target) && !$('settingsChild').contains(event.target) && !(settingsOrigin && settingsOrigin.contains(event.target)) && !$('settingsTrigger').contains(event.target)) closeUtilities(true);
     if (!$('searchOverlay').hidden && !$('searchOverlay').contains(event.target) && !hitSearchTrigger && !hitDateField && !$('datePopover').contains(event.target)) closeUtilities();
     if (!$('notificationPopover').hidden && !$('notificationPopover').contains(event.target) && !hitBell) closeUtilities();
     if (!$('datePopover').hidden && !$('datePopover').contains(event.target) && !hitDateField) closeDatePopover();
@@ -2486,7 +2634,19 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     if (!$('emojiPanel').hidden && !pickerHit && !$('emojiBtn').contains(event.target)) closePickers();
     const button = event.target.closest('button, a'); if (!button) return;
     if (button.id === 'settingsTrigger') { openSettings(button); return; }
-    if (button.dataset.menu) { const target = button.dataset.menu; closeUtilities(); if (target === 'appearance') { const themes = ['light','dark','amoled']; setState('theme', themes[(themes.indexOf(state.theme) + 1) % themes.length]); notify('Appearance changed to ' + state.theme + '.'); } else if (target === 'notifications' || target === 'saved') setSurface(target); else notify('This action is not available in the prototype.'); return; }
+    if (button.id === 'activitySettings') { openSettings(button); openSettingsChild('activity', $('settingsPopover').querySelector('[data-menu="activity"]')); button.setAttribute('aria-expanded','true'); return; }
+    if (button.dataset.menu) { activityFromSettings = false; openSettingsChild(button.dataset.menu, button); return; }
+    if (button.hasAttribute('data-settings-activity')) { activityFromSettings = true; openSettingsChild('activity', $('settingsPopover').querySelector('[data-menu="activity"]')); return; }
+    if (button.hasAttribute('data-settings-back')) { if (activityFromSettings) { activityFromSettings = false; openSettingsChild('settings', $('settingsPopover').querySelector('[data-menu="settings"]')); $('settingsChild').querySelector('[data-settings-activity]').focus(); } else closeSettingsChild(true); return; }
+    if (button.hasAttribute('data-motion-toggle')) { setState('motion', state.motion === 'on' ? 'off' : 'on'); button.setAttribute('aria-pressed', String(state.motion === 'on')); return; }
+    if (button.hasAttribute('data-saved-all')) { setSurface('saved'); return; }
+    if (button.hasAttribute('data-saved-report')) { openReport(Number(button.dataset.reportIndex)); return; }
+    if (button.dataset.account) { applyAccount(button.dataset.account); openSettingsChild('switch', childOrigin); return; }
+    if (button.hasAttribute('data-logout-confirm')) { closeUtilities(); setSurface('signedout'); $('surface-signedout').querySelector('h1').focus(); return; }
+    if (button.dataset.activityState || button.hasAttribute('data-activity-retry')) { activityState = button.dataset.activityState || 'ready'; renderActivity(); return; }
+    if (button.dataset.activityFilter) { activityFilter = button.dataset.activityFilter; setFilter(button,'data-activity-filter'); renderActivity(); return; }
+    if (button.dataset.activityToggle !== undefined) { const index = Number(button.dataset.activityToggle), item = activity[index]; item.read = !item.read; renderActivity(); const next = $('notifList').querySelector(`[data-activity-toggle="${index}"]`); (next || $('markAllRead')).focus(); return; }
+    if (button.dataset.activityOpen !== undefined) { const item = activity[Number(button.dataset.activityOpen)]; if (markOnOpen) item.read = true; renderActivity(); if (item.surface === 'post') openReport(item.reportIndex); else setSurface(item.surface); if (item.surface === 'chats') selectThread(0); return; }
     if (button.id === 'closeSearch') { closeUtilities(true); return; }
     if (button.id === 'advancedTrigger') { const opening = $('advancedSearch').hidden; $('advancedSearch').hidden = !opening; $('overlayResults').hidden = opening; $('overlaySearchInput').readOnly = opening; button.setAttribute('aria-expanded',String(opening)); if (opening) $('advancedSearch').querySelector('summary').focus(); else $('overlaySearchInput').focus(); return; }
     if (button.id === 'exactMatch') { const checked = button.getAttribute('aria-checked') !== 'true'; button.setAttribute('aria-checked',String(checked)); button.querySelector('.switch').setAttribute('aria-checked',String(checked)); return; }
@@ -2522,17 +2682,17 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     if (button.id === 'railToggle') { setState('panel', state.panel === 'pinned' ? 'collapsed' : 'pinned'); return; }
     if (button.id === 'resetBtn') { reset(); return; }
     if (button.id === 'chatFilterBtn') { if (button.getAttribute('aria-expanded') === 'true') closeOverlay(); else { const box = $('chatFilters').getBoundingClientRect(), root = app.getBoundingClientRect(), scale = root.width / app.offsetWidth, filters = $('chatFilters'); app.appendChild(filters); filters.style.position = 'absolute'; filters.style.zIndex = '81'; filters.style.top = (box.top - root.top) / scale + 'px'; filters.style.left = (box.left - root.left) / scale + 'px'; filters.style.background = 'var(--fb-surface)'; scrim.hidden = false; scrim.classList.add('is-open'); button.setAttribute('aria-expanded','true'); } return; }
-    if (button.id === 'markAllRead') { setState('unread','0'); notify('Notifications marked read in this prototype.'); return; }
+    if (button.id === 'markAllRead') { activity.forEach(item => item.read = true); renderActivity(); return; }
     const action = button.dataset.action;
     if (action === 'notifications') toggleNotifications(button);
     else if (action === 'search') openSearch(button);
     else if (action === 'go') setSurface(button.dataset.surface);
     else if (action === 'create') openSheet();
     else if (action === 'close-sheet') closeOverlay();
-    else if (action === 'open-post') setSurface('post');
+    else if (action === 'open-post') openReport(Number(button.dataset.reportIndex) || 0);
     else if (action === 'thread-back') $('chatSplit').classList.remove('show-thread');
-    else if (action === 'post-message') { setSurface('chats'); selectThread(0); }
-    else if (action === 'post-save') { const saved = button.getAttribute('aria-pressed') !== 'true'; button.setAttribute('aria-pressed', String(saved)); notify(saved ? 'Saved for this session.' : 'Removed from saved reports.'); }
+    else if (action === 'post-message') { const index = conversations.findIndex(chat => chat.name === reports[Number($('surface-post').dataset.reportIndex) || 0].author); if (index < 0) notify('Messaging is unavailable for this example.'); else { setSurface('chats'); selectThread(index); } }
+    else if (action === 'post-save') { const index = Number($('surface-post').dataset.reportIndex), saved = !savedIds.has(index); if (saved) savedIds.add(index); else savedIds.delete(index); syncSaveButton(); $('savedList').innerHTML = savedReports().map(row).join(''); const childList = $('savedChildList'); if (childList) childList.innerHTML = savedChildRows(); notify(saved ? 'Saved for this session.' : 'Removed from saved reports.'); }
     else if (action) notify(({attach:'Photo attachment is unavailable in this prototype.', 'post-share':'Sharing is unavailable in this prototype.', 'offline-retry':'Offline state is simulated.', person:'Profile is unavailable in this prototype.'})[action] || 'This action is not available in the prototype.');
   });
   all('.rail-link').forEach(link => {
@@ -2551,13 +2711,36 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     if (index < 0) return; event.preventDefault(); links[(index + (event.key === 'ArrowDown' ? 1 : -1) + links.length) % links.length].focus();
   });
   document.addEventListener('keydown', event => {
-    if (event.key === 'Tab' && !$('settingsPopover').hidden) { const items = all('button', $('settingsPopover')), first = items[0], last = items[items.length - 1]; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } }
+    if (event.key === 'Tab' && !$('settingsPopover').hidden) { const level = $('settingsChild').hidden ? $('settingsPopover') : $('settingsChild'); const items = all('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)', level), first = items[0], last = items[items.length - 1]; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } }
     if (event.key === 'Escape') {
+      if (!$('settingsChild').hidden) { if (activityFromSettings) { activityFromSettings = false; openSettingsChild('settings', $('settingsPopover').querySelector('[data-menu="settings"]')); $('settingsChild').querySelector('[data-settings-activity]').focus(); } else closeSettingsChild(true); return; }
       if (!$('stickerPicker').hidden || !$('emojiPanel').hidden) { closePickers(true); return; }
       if (!$('datePopover').hidden) { closeDatePopover(true); return; }
       if (!$('advancedSearch').hidden) { $('advancedSearch').hidden = true; $('overlayResults').hidden = false; $('overlaySearchInput').readOnly = false; $('advancedTrigger').setAttribute('aria-expanded','false'); $('advancedTrigger').focus(); } else closeUtilities(true);
       closeFlyout(); hideTip(); closeOverlay(); hideToast();
     }
+  });
+  $('settingsChild').addEventListener('change', event => {
+    if (event.target.id === 'activityRetentionSelect') retention = event.target.value;
+    if (event.target.id === 'markOnOpen') markOnOpen = event.target.checked;
+    if (event.target.dataset.activityType) enabledTypes[event.target.dataset.activityType] = event.target.checked;
+    if (event.target.id === 'accountVisibility') accountDraft.visibility = event.target.value;
+    if (event.target.id === 'showProfileReports') { preferences.reports = event.target.checked; $('profileReportSection').hidden = !preferences.reports; }
+    if (event.target.id === 'searchableUsername') preferences.searchable = event.target.checked;
+    if (event.target.id === 'weeklyDigest') preferences.digest = event.target.checked;
+    settingsSummary();
+    renderActivity();
+  });
+  $('settingsChild').addEventListener('input', event => { if (event.target.id === 'accountName') accountDraft.name = event.target.value; if (event.target.id === 'accountUsername') accountDraft.username = event.target.value; });
+  $('settingsChild').addEventListener('submit', event => {
+    if (event.target.id === 'accountForm') {
+      event.preventDefault();
+      const name = accountDraft.name.trim(), username = accountDraft.username.trim().replace(/^@+/, '');
+      if (!name || !username) { $('accountStatus').textContent = 'Enter a display name and username.'; return; }
+      Object.assign(accountProfiles[account], {name, username, visibility:accountDraft.visibility, initials:initials(name)}); applyAccount(account);
+      $('accountStatus').textContent = 'Account updated.'; settingsSummary(); return;
+    }
+    if (event.target.id !== 'problemForm') return; event.preventDefault(); closeUtilities(true); notify('Report saved in this prototype.');
   });
   $('overlaySearchInput').addEventListener('input', renderOverlaySearch);
   $('pickerQuery').addEventListener('input', runPickerSearch);
@@ -2614,19 +2797,22 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
   });
   $('createForm').addEventListener('submit', event => {
     event.preventDefault(); const title = $('reportTitle').value.trim(); if (!title) return;
-    reports.unshift({title, type:$('reportType').value, place:'This session', icon:'clipboard', date:dateValues.reportDate || null});
+    reports.push({index:reports.length, title, type:$('reportType').value, place:'This session', icon:'clipboard', date:dateValues.reportDate || 'No date', category:'Report', ref:'Session', author:preferences.name, initials:initials(preferences.name), body:$('reportDescription').value.trim() || title});
     $('createForm').reset(); dateValues.reportDate = ''; renderDateField('reportDate');
     closeOverlay(); renderReports(); setSurface('home'); notify('Report added for this session only.');
   });
   $('inlineCreate').addEventListener('submit', event => {
     event.preventDefault(); const title = $('inlineTitle').value.trim(); if (!title) return;
-    reports.unshift({title, type:$('inlineType').value, place:'This session', icon:'clipboard', date:dateValues.inlineReportDate || null});
+    reports.push({index:reports.length, title, type:$('inlineType').value, place:'This session', icon:'clipboard', date:dateValues.inlineReportDate || 'No date', category:'Report', ref:'Session', author:preferences.name, initials:initials(preferences.name), body:$('inlineDescription').value.trim() || title});
     event.target.reset(); dateValues.inlineReportDate = ''; renderDateField('inlineReportDate');
     if (!$('datePopover').hidden) closeDatePopover(false);
     renderReports(); setSurface('home'); notify('Report added for this session only.');
   });
   function reset() {
     closeFlyout(); closeOverlay(); closePickers(); hideToast(); homeFilter = 'all'; myFilter = 'all'; chatFilter = 'all';
+    activity.forEach((item, index) => { item.read = index >= 4; }); retention = '7'; activityFilter = 'all'; activityState = 'ready'; markOnOpen = true;
+    Object.keys(enabledTypes).forEach(type => { enabledTypes[type] = true; });
+    all('[data-activity-filter]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.activityFilter === 'all')));
     filters = {type:'', exact:false, from:'', to:'', profile:'', community:''};
     Object.keys(dateValues).forEach(field => { dateValues[field] = ''; renderDateField(field); });
     $('overlaySearchInput').value = ''; $('filterType').value = ''; $('filterProfile').value = ''; $('filterCommunity').value = '';
@@ -2634,11 +2820,10 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     $('composerInput').value = ''; $('sendBtn').disabled = true;
     $('pickerQuery').value = ''; PICKER_STATE.tab = 'stickers'; PICKER_STATE.chip = 'All'; PICKER_STATE.query = ''; $('pickerClear').hidden = true;
     all('[data-home-filter], [data-my-filter], [data-chat-filter]').forEach(button => button.setAttribute('aria-pressed', String((button.dataset.homeFilter || button.dataset.myFilter || button.dataset.chatFilter) === 'all')));
-    Object.entries(defaults).forEach(([key,value]) => setState(key,value)); renderReports(); renderChats();
+    Object.entries(defaults).forEach(([key,value]) => setState(key,value)); applyAccount(account); renderReports(); renderChats(); renderActivity();
   }
-  $('notifList').innerHTML = '<div class="extra-item"><strong>Maya commented on your umbrella report</strong><p>I saw one near the boathouse. · 12 min ago</p></div><div class="extra-item"><strong>Alex mentioned you</strong><p>Could this be the item @riley described? · 1 hour ago</p></div><div class="extra-item"><strong>Sam liked your report</strong><p>Notebook with a green cover · Yesterday</p></div><div class="extra-item"><strong>Someone asked about your report</strong><p>Is the blue bicycle helmet still available? · Yesterday</p></div>';
   window.addEventListener('resize', fit);
-  reset(); selectThread(0); $('chatSplit').classList.remove('show-thread');
+  reset(); renderActivity(); selectThread(0); $('chatSplit').classList.remove('show-thread');
 })();
 </script>
 </body>

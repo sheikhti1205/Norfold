@@ -30,6 +30,7 @@ Nothing in this document is a completion claim beyond the status it states.
 | 8 | Calendar with month/year jump, past-only | implemented in `ReportDatePicker` (unit-tested), rendered review unverified |
 | 9 | Klipy is device-side only | decided; contract in `KLIPY-CLIENT.md` |
 | 10 | Profile preview | approved for comments and feed cards; scope in `PROFILE-PREVIEW-SCOPE.md` |
+| 11 | Nested settings and activity flow | implemented in prototype; rendered review pending |
 
 ---
 
@@ -206,6 +207,26 @@ dead `.fb-quick-*` styles.
 **Status:** approved-for-design. Nothing implemented.
 
 ---
+
+## 11. Nested settings and activity
+
+Settings opens nested panels for account settings, appearance, activity
+preferences, saved reports, reporting a problem, switching account and log out.
+Activity supports read and unread, filtering, configurable retention defaulting
+to seven days, and an activity-preferences entry. The bell preview shares the
+activity data and read state. These examples are local prototype data.
+
+On desktop, settings children appear beside the menu; on phones they replace its
+contents and offer Back. Escape returns through the open levels. Retention offers
+7, 14, 30 days and Never; read items older than the chosen period are hidden in
+the prototype, not deleted from a server. Account and privacy preferences update
+the synthetic profile, and notification preferences share the activity panel.
+The prototype also models Activity loading and retry, report-specific detail,
+account switching and a signed-out surface. These remain synthetic interactions,
+not authentication or network requests.
+
+**Status:** implemented in prototype; rendered review pending.
+Product implementation and persistence are not claimed.
 
 ## What is deliberately absent
 

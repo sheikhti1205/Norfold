@@ -51,14 +51,41 @@ error states distinct from empty states.
 | Gear | Opens settings popover; no route change. | Button exposes `aria-expanded`; never `aria-current`. | Static entries; disabled unavailable actions explain why. | Existing settings and role-gated leaves are related functionality, not the new popover. Popover and non-navigating actions require product work. |
 | Bell | Opens the notifications panel in place; no route change. | Button exposes `aria-expanded`; never `aria-current`. | Panel with no events shows `No activity yet`; `View activity` remains available. | Panel and its `View activity` action are new product work. The existing `/notifications` route is reachable only through `View activity`, never through the bell itself. |
 
-The popover entries, in order, are Settings, Appearance, Your activity, Saved,
+The popover entries, in order, are Settings, Appearance, Activity preferences, Saved,
 Report a problem, Switch account, and Log out. A rule separates Log out from the
-other six. Entries act within the popover or invoke an in-place action; none
-navigates or opens a settings surface. Do not enable an entry until its action is
+other six. Each opens a child panel; Saved also offers the Saved surface. Do not enable an entry until its action is
 real. Existing direct routes, including `/settings` and `/search`, remain
 compatible but are not destinations of these controls. For unrelated authenticated
 routes select no row rather than assert a false current destination. Route back
 controls remain owned by the canvas.
+
+### Settings and activity prototype contract
+
+Settings contains Account, Privacy and Notifications; Appearance contains theme,
+text size and reduced motion. Activity preferences contains retention (7, 14,
+30 days or Never), mark read on open and per-type switches. Saved lists the same
+reports and links to the Saved surface. Report a problem presents a local-only
+form, Switch account presents synthetic accounts, and Log out requires confirmation.
+
+In the prototype, Account edits the display name, username and profile visibility.
+Saving updates the rail and profile heading, handle and visibility line, with an
+in-panel status. Privacy controls profile report visibility and username search;
+the latter is recorded for future Connect work, not yet applied to search. The
+weekly email digest choice is recorded but sends no email. The summary reflects
+these choices, and Activity preferences opens the shared activity panel. These
+preferences and unsaved field edits survive closing the panel during the page
+session, not a reload. The prototype uses synthetic profile and activity data.
+
+Activity offers All, Unread and Mentions filters, individual read/unread controls
+and Mark all read. Read items older than the selected retention period are hidden;
+the default is seven days. The bell preview shows the first three eligible items
+from the same data and read state, with View activity opening the full surface.
+The prototype's examples and settings are session-only; product persistence,
+server-side deletion and authorized event data require separate implementation.
+The studio simulates Activity ready, loading and error states in both the full
+surface and bell preview. Retry returns to ready; empty remains distinct. Report
+links open their matching synthetic detail. Account switches update the profile
+and its saved form values; logout displays a signed-out prototype surface.
 
 ### Insights data contract
 
@@ -246,14 +273,16 @@ touches Klipy.
 
 ## 5. Keyboard
 
-Use native links for routes and native buttons for actions; no roving tabindex or
-focus trap. At `≥1024px`, tab order is skip link, collapse control, primary rows,
+Use native links for routes and native buttons for actions; no roving tabindex.
+The active settings level contains Tab and Shift+Tab. At `≥1024px`, tab order is skip link, collapse control, primary rows,
 Others rows, account, gear, then main content. At `600–1023px` omit toggle; below
 `600px`, preserve content-then-pill order after the skip link. Arrow keys retain
 normal browser behaviour.
 
 Opening the gear moves focus to the first enabled popover item; Tab and Shift+Tab
-follow item order and can leave the nonmodal popover, closing it on focus leaving.
+are contained in the active settings level. Escape closes the child before the
+parent. At 600px and wider the child floats beside its parent row; below 600px it
+replaces the parent contents and provides Back.
 Escape or outside click closes it and returns focus to gear. Opening search moves
 focus to its input; Tab follows input, advanced trigger, close control, then
 available results. Closing search returns focus to its trigger. Opening the
@@ -358,10 +387,10 @@ keep their own chrome. Public legal pages do not gain search/bell utilities.
 | Group | `Others` |
 | Others | `Connect`, `Liked / Disliked`, `Saved`, `Recovered`, `Achievements` |
 | Bottom cluster | `Your account`, `Settings` |
-| Popover | `Settings`, `Appearance`, `Your activity`, `Saved`, `Report a problem`, `Switch account`, `Log out` |
+| Popover | `Settings`, `Appearance`, `Activity preferences`, `Saved`, `Report a problem`, `Switch account`, `Log out` |
 | Search | `Search reports, messages and people…`, `Advanced search`, `Close search`, `Recent searches`, `No recent searches`, `No results found`, `Clear filters` |
 | Advanced card | `Advanced search`, `Date posted`, `Exact match`, `Post type`, `From profile`, `Community or tag`, `Apply` |
-| Notifications panel | `Notifications`, `View activity` |
+| Activity panel | `Activity`, `View activity` |
 | Date field | `Any date`, `Add a date`, `Clear from date`, `Clear to date`, `Clear date`, `Choose a date`, `Previous month`, `Next month`, `Choose month and year`, `Days in {Month} {Year}`, `{Day} {Month} {Year}` |
 | Date status | `{Field} set to {date}`, `{Field} cleared` |
 | Toggle | `Collapse navigation`, `Expand navigation` |
@@ -397,8 +426,8 @@ has passed them. Check light, dark and true-black where applicable.
 | 16 | Public | `/auth`, `/shared/:id`, `/privacy`, `/terms`, `/community-guidelines` contain no authenticated primary nav at `1440px`. |
 | 17 | Rendered review | Inspect `320`, `600`, `1024`, `1280`, `1440px`, `100%` and `200%` text, light/dark/true-black, keyboard, empty/error/loading and short-height scrolling. |
 | 18 | Profile entry | No Profile row; the bottom account row is the only navigation entry to the signed-in profile. |
-| 19 | Settings action | Gear opens the seven-entry popover; each enabled item acts in place, with no route navigation or settings surface. Log out is separated by a rule. |
-| 20 | Popover focus | Opening focuses first enabled item; Escape and outside click close and return focus to gear; replacement by another overlay focuses the new overlay. |
+| 19 | Settings action | Gear opens the seven-entry popover; each entry opens its child panel. Saved offers a route to Saved; Log out opens a confirmation. |
+| 20 | Popover focus | Opening focuses the first item; Escape closes the deepest level first, and outside click closes both and restores focus. Tab stays inside the active level. |
 | 21 | Search dismissal | Open search separately and dismiss with Escape, `Close search`, and outside click; each restores focus to Search. With advanced open, first Escape closes the card. |
 | 22 | Advanced card | Five named rows each have icon and label; four value rows have chevrons, Exact match has a working switch, and `Apply` applies and returns focus to the trigger. |
 | 23 | Overlay geometry | Measure `#fb-main` per §8 before, during and after search and settings independently; rect values differ by at most `1px`, client dimensions exactly match. |
