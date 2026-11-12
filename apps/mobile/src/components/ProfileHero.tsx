@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import type { PublicUser } from "@norfold/shared";
 import { StatusPill } from "./settings";
 import { UserAvatar } from "./UserAvatar";
+import { VerifiedBadge } from "./VerifiedBadge";
 
 /** Re-exported from the canonical avatar module (single home, no import cycle). */
 export { initialsFor } from "./UserAvatar";
@@ -19,7 +20,7 @@ export function ProfileHero({ user }: { user: PublicUser }) {
     >
       <UserAvatar avatarUrl={user.avatarUrl} username={user.username} size={64} />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="truncate text-lg font-semibold">@{user.username}</p>
+        <p className="flex min-w-0 items-baseline gap-1 text-lg font-semibold"><span className="truncate">@{user.username}</span><VerifiedBadge emailVerified={user.emailVerified} phoneVerified={user.phoneVerified} telegramPhoneVerified={(user as { telegramPhoneVerified?: boolean }).telegramPhoneVerified} /></p>
         {user.emailVerified ? (
           <p>
             <StatusPill tone="success">Email verified</StatusPill>

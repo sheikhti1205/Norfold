@@ -183,6 +183,17 @@ describe("PublicProfile", () => {
     expect(await screen.findByText("Found a wallet")).toBeTruthy();
   });
 
+  it("shows the canonical badge only for verified profiles", async () => {
+    const view = renderRoute();
+    const hero = await screen.findByRole("region", { name: "Public profile" });
+    expect(within(hero).getByRole("img", { name: "Email and phone verified" })).toBeTruthy();
+    view.unmount();
+    fetchPublicProfileMock.mockResolvedValue({ ...profile, emailVerified: false, phoneVerified: false });
+    renderRoute();
+    const unverifiedHero = await screen.findByRole("region", { name: "Public profile" });
+    expect(within(unverifiedHero).queryByRole("img", { name: /verified/i })).toBeNull();
+  });
+
   it("renders the profile and reports while reputation remains pending", async () => {
     fetchReputationTierMock.mockReturnValueOnce(new Promise(() => undefined));
     renderRoute();
