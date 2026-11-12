@@ -9,11 +9,8 @@
 
   What this is
   ------------
-  A clickable prototype of the decided three-layer navigation:
-    1. in-flow icon rail from 600px (72px at 600-1199, 80px at >=1200);
-    2. hover / keyboard-focus intent flyout over the content (never reflows);
-    3. a pinned in-flow 224px panel, toggle only at >=840px, remembered;
-    4. below 600px the existing bottom pill is the entire navigation.
+  A clickable prototype: a 260px desktop sidebar, a 76px rail at tablet widths,
+  and the existing bottom pill on phones. The desktop choice is session-scoped.
 
   Prototype mechanics that are deliberately not production mechanics
   ------------------------------------------------------------------
@@ -1025,6 +1022,40 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
 .frame ::-webkit-scrollbar-track{background:transparent}
 
 </style>
+<style>
+/* Desktop navigation is in flow; the rail tooltip starts beyond a 16px gutter. */
+.rail{width:76px!important;overflow:visible;position:relative}
+.frame{border:0}
+.rail[data-pinned="true"]{width:260px!important}
+.rail-body{overflow-y:auto;overflow-x:hidden}
+.rail[data-pinned="true"] .rail-title{font-size:calc(var(--fs)*1.1);letter-spacing:-.04em;text-transform:none;color:var(--fb-on-surface)}
+.rail[data-pinned="true"] .rail-link{gap:12px}
+.rail[data-pinned="true"] .rail-label{font-size:calc(var(--fs)*.875);white-space:normal}
+.rail-foot{display:block;border-top:1px solid var(--fb-outline-variant);padding:8px}
+.rail-foot .rail-link{min-height:44px}
+.rail-section-label{display:none;padding:18px 10px 4px;font-size:calc(var(--fs)*.6875);font-weight:700;text-transform:uppercase;color:var(--fb-on-surface-variant)}
+.rail[data-pinned="true"] .rail-section-label{display:block}
+.rail-count{display:none;margin-left:auto;font-size:calc(var(--fs)*.6875);color:var(--fb-on-surface-variant)}
+.rail[data-pinned="true"] .rail-count{display:block}
+.flyout{display:none!important}
+.tip{max-width:min(240px,calc(100% - 100px))}
+.extra-page{max-width:44rem;margin:auto;padding:24px;min-width:0}
+.extra-page h1{margin:0 0 8px;font-size:calc(var(--fs)*1.5)}
+.extra-page h2{font-size:calc(var(--fs)*1.05);margin:24px 0 8px}
+.extra-page p{overflow-wrap:anywhere}
+.extra-list{display:grid;gap:0}
+.extra-item{padding:14px 0;border-bottom:1px solid var(--fb-outline-variant);min-width:0}
+.extra-item p{margin:4px 0;color:var(--fb-on-surface-variant)}
+.extra-metrics,.achievement-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:12px}
+.metric,.achievement{padding:14px;background:var(--fb-surface-container-low);border:1px solid var(--fb-outline-variant);border-radius:10px;min-width:0}
+.metric strong{display:block;font-size:calc(var(--fs)*1.3)}
+.achievement small{display:block;color:var(--fb-on-surface-variant)}
+.extra-form{display:grid;gap:14px}.extra-form button{justify-self:start}
+.studio-controls{max-height:150px;overflow:auto}.seg{flex-wrap:wrap}
+@container app (max-width:1023px){.rail[data-pinned="true"]{width:76px!important}.rail[data-pinned="true"] .rail-title,.rail[data-pinned="true"] .rail-label,.rail[data-pinned="true"] .rail-section-label,.rail[data-pinned="true"] .rail-count{display:none}.rail[data-pinned="true"] .rail-link{justify-content:center;padding:8px 4px}.rail[data-pinned="true"] .rail-head{justify-content:center}.rail-toggle{display:none}}
+@container app (max-width:599px){.rail{display:none!important}.extra-page{padding:16px}.chat-split.split .chat-list-pane{width:100%}}
+@media (prefers-reduced-motion:reduce){.frame *{transition:none!important;animation:none!important}}
+</style>
 </head>
 <body>
 <!-- Icon sprite: lucide-style strokes, inline so nothing is fetched. -->
@@ -1083,7 +1114,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
       <span class="mark" aria-hidden="true">N</span>
       <span>
         <strong>Norfold · navigation prototype</strong>
-        <small>Hover a rail icon · Tab and arrows inside the rail · click the expand toggle · Esc closes the flyout</small>
+        <small>Synthetic content · choose a viewport and appearance to inspect</small>
       </span>
     </div>
     <div class="studio-meta">
@@ -1130,7 +1161,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
       <div class="seg" id="segSurface" role="group" aria-label="Surface">
         <button type="button" class="seg-btn" data-set="surface" data-value="home" aria-pressed="true">Home</button>
         <button type="button" class="seg-btn" data-set="surface" data-value="search">Search</button>
-        <button type="button" class="seg-btn" data-set="surface" data-value="chats">Chats</button>
+        <button type="button" class="seg-btn" data-set="surface" data-value="chats">Messages</button>
         <button type="button" class="seg-btn" data-set="surface" data-value="notifications">Notifications</button>
         <button type="button" class="seg-btn" data-set="surface" data-value="settings">Settings</button>
         <button type="button" class="seg-btn" data-set="surface" data-value="post">Post detail</button>
@@ -1142,7 +1173,6 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
       <legend>Panel</legend>
       <div class="seg" id="segPanel" role="group" aria-label="Panel state">
         <button type="button" class="seg-btn" data-set="panel" data-value="collapsed" aria-pressed="true">Collapsed</button>
-        <button type="button" class="seg-btn" data-set="panel" data-value="flyout">Flyout</button>
         <button type="button" class="seg-btn" data-set="panel" data-value="pinned">Pinned</button>
       </div>
     </fieldset>
@@ -1170,47 +1200,31 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
 
           <nav class="rail" id="rail" aria-label="Primary" data-pinned="false">
             <div class="rail-head">
-              <span class="rail-title" id="railTitle">Home</span>
+              <span class="rail-title" id="railTitle">Norfold</span>
               <button type="button" class="rail-toggle" id="railToggle" aria-expanded="false" aria-controls="railNav" aria-label="Expand navigation" title="Expand navigation">
                 <svg class="icon" aria-hidden="true"><use href="#i-panel-open"></use></svg>
               </button>
             </div>
             <div class="rail-body">
               <ul class="rail-list" id="railNav">
-                <li>
-                  <a class="rail-link" href="#/" data-nav="home" aria-current="page" aria-label="Home">
-                    <svg class="icon" aria-hidden="true"><use href="#i-home"></use></svg>
-                    <span class="rail-label">Home</span>
-                  </a>
-                </li>
-                <li>
-                  <a class="rail-link" href="#/my" data-nav="my" aria-label="My Reports">
-                    <svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg>
-                    <span class="rail-label">My Reports</span>
-                  </a>
-                </li>
-                <li>
-                  <!-- Destination rows carry no unread counts; only the notification bell has a badge.
-                       The prototype must not imply per-destination counts. -->
-                  <a class="rail-link" href="#/chats" data-nav="chats" aria-label="Chats">
-                    <svg class="icon" aria-hidden="true"><use href="#i-chat"></use></svg>
-                    <span class="rail-label">Chats</span>
-                  </a>
-                </li>
-                <li>
-                  <a class="rail-link" href="#/settings" data-nav="settings" aria-label="Settings">
-                    <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
-                    <span class="rail-label">Settings</span>
-                  </a>
-                </li>
+                <li><a class="rail-link" href="#/home" data-nav="home" aria-label="Feed"><svg class="icon"><use href="#i-home"></use></svg><span class="rail-label">Feed</span></a></li>
+                <li><a class="rail-link" href="#/create" data-nav="create" aria-label="New Report"><svg class="icon"><use href="#i-plus"></use></svg><span class="rail-label">New Report</span></a></li>
+                <li><a class="rail-link" href="#/search" data-nav="search" aria-label="Search"><svg class="icon"><use href="#i-search"></use></svg><span class="rail-label">Search</span></a></li>
+                <li><a class="rail-link" href="#/messages" data-nav="chats" aria-label="Messages"><svg class="icon"><use href="#i-chat"></use></svg><span class="rail-label">Messages</span></a></li>
+                <li><a class="rail-link" href="#/activity" data-nav="notifications" aria-label="Activity"><svg class="icon"><use href="#i-bell"></use></svg><span class="rail-label">Activity</span></a></li>
+                <li><a class="rail-link" href="#/profile" data-nav="profile" aria-label="Profile"><svg class="icon"><use href="#i-user"></use></svg><span class="rail-label">Profile</span></a></li>
+                <li><a class="rail-link" href="#/insights" data-nav="insights" aria-label="Insights"><svg class="icon"><use href="#i-filter"></use></svg><span class="rail-label">Insights</span></a></li>
+                <li class="rail-section-label">Others</li>
+                <li><a class="rail-link" href="#/connect" data-nav="connect" aria-label="Connect"><svg class="icon"><use href="#i-user"></use></svg><span class="rail-label">Connect</span><span class="rail-count">3 suggestions</span></a></li>
+                <li><a class="rail-link" href="#/reactions" data-nav="reactions" aria-label="Liked / Disliked"><svg class="icon"><use href="#i-heart"></use></svg><span class="rail-label">Liked / Disliked</span></a></li>
+                <li><a class="rail-link" href="#/saved" data-nav="saved" aria-label="Saved"><svg class="icon"><use href="#i-bookmark"></use></svg><span class="rail-label">Saved</span></a></li>
+                <li><a class="rail-link" href="#/recovered" data-nav="recovered" aria-label="Recovered"><svg class="icon"><use href="#i-archive"></use></svg><span class="rail-label">Recovered</span></a></li>
+                <li><a class="rail-link" href="#/achievements" data-nav="achievements" aria-label="Achievements"><svg class="icon"><use href="#i-check"></use></svg><span class="rail-label">Achievements</span><span class="rail-count">3 of 12</span></a></li>
               </ul>
-              <div class="rail-section" id="railSection"></div>
             </div>
             <div class="rail-foot">
-              <button type="button" class="rail-create" data-action="create" aria-label="Create report">
-                <svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg>
-                <span class="create-label">Create report</span>
-              </button>
+              <a class="rail-link" href="#/settings" data-nav="settings" aria-label="Settings"><svg class="icon"><use href="#i-settings"></use></svg><span class="rail-label">Settings</span></a>
+              <a class="rail-link" href="#/profile" data-nav="profile" aria-label="Your account"><span class="avatar" aria-hidden="true">RE</span><span class="rail-label">Riley Ellis<br><small class="muted">Your account</small></span></a>
             </div>
           </nav>
 
@@ -1282,8 +1296,8 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
                       <button type="button" class="tab" role="tab" id="tabReports" aria-selected="true" data-search-tab="reports">Reports <span class="tab-count" id="searchReportCount">6</span></button>
                       <button type="button" class="tab" role="tab" id="tabPeople" aria-selected="false" data-search-tab="people">People <span class="tab-count" id="searchPeopleCount">4</span></button>
                       <span class="spacer"></span>
-                      <button type="button" class="chip" id="searchFilterChip" aria-pressed="false" title="Filters are a visual fixture in this prototype">
-                        <svg class="icon" aria-hidden="true"><use href="#i-filter"></use></svg> Filters
+                      <button type="button" class="chip" id="searchFilterChip" aria-pressed="false">
+                        <svg class="icon" aria-hidden="true"><use href="#i-filter"></use></svg> Lost only
                       </button>
                     </div>
                     <div id="searchReportsPane">
@@ -1302,9 +1316,9 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
                 <div class="chat-split" id="chatSplit">
                   <div class="chat-list-pane">
                     <header class="appbar">
-                      <h1 tabindex="-1" data-route-title>Chats</h1>
+                      <h1 tabindex="-1" data-route-title>Messages</h1>
                       <div class="appbar-actions">
-                        <button type="button" class="iconbtn" id="chatFilterBtn" aria-label="Filter chats" aria-haspopup="true" aria-expanded="false">
+                        <button type="button" class="iconbtn" id="chatFilterBtn" aria-label="Filter messages" aria-haspopup="true" aria-expanded="false">
                           <svg class="icon" aria-hidden="true"><use href="#i-filter"></use></svg>
                         </button>
                       </div>
@@ -1328,7 +1342,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
                     </div>
                     <div class="thread" id="thread" hidden>
                       <header class="appbar thread-head">
-                        <button type="button" class="iconbtn" data-action="thread-back" aria-label="Back to chats">
+                        <button type="button" class="iconbtn" data-action="thread-back" aria-label="Back to messages">
                           <svg class="icon" aria-hidden="true"><use href="#i-arrow-left"></use></svg>
                         </button>
                         <span class="avatar avatar-tone-1" id="threadAvatar" aria-hidden="true">MO</span>
@@ -1363,7 +1377,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
                   <button type="button" class="iconbtn" data-action="go" data-surface="home" aria-label="Back to home">
                     <svg class="icon" aria-hidden="true"><use href="#i-arrow-left"></use></svg>
                   </button>
-                  <h1 tabindex="-1" data-route-title>Notifications</h1>
+                  <h1 tabindex="-1" data-route-title>Activity</h1>
                   <div class="appbar-actions">
                     <button type="button" class="text-btn" id="markAllRead">Mark all read</button>
                   </div>
@@ -1497,6 +1511,15 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
                 </div>
               </section>
 
+              <section class="surface" data-surface="create" id="surface-create" hidden><div class="scroll"><div class="extra-page"><h1>New Report</h1><p class="muted">Share a few details to help someone recognize the item.</p><form class="extra-form" id="inlineCreate"><div class="field"><label for="inlineTitle">What was lost or found?</label><input id="inlineTitle" required></div><div class="field"><label for="inlineType">Report type</label><select id="inlineType"><option>Lost</option><option>Found</option></select></div><div class="field"><label for="inlineDescription">Description</label><textarea id="inlineDescription"></textarea></div><button class="btn-primary" type="submit">Post report</button></form></div></div></section>
+              <section class="surface" data-surface="profile" id="surface-profile" hidden><div class="scroll"><div class="extra-page"><h1>Riley Ellis</h1><p class="muted">@riley · Riverside · Synthetic profile</p><p><strong>4</strong> reports &nbsp; <strong>2</strong> recovered &nbsp; <strong>8</strong> connections</p><h2>Your reports</h2><div class="extra-list" id="profileReports"></div><button type="button" class="btn-quiet" data-destination="mine">View all your reports</button></div></div></section>
+              <section class="surface" data-surface="insights" id="surface-insights" hidden><div class="scroll"><div class="extra-page"><h1>Insights</h1><p class="muted">Illustrative numbers for this synthetic account.</p><div class="extra-metrics"><div class="metric"><strong>4</strong>Reports</div><div class="metric"><strong>236</strong>Views</div><div class="metric"><strong>2 hours</strong>Time to first response</div><div class="metric"><strong>50%</strong>Recovery rate</div></div><h2>Report activity</h2><p>Your umbrella report received 84 views and two replies this week.</p></div></div></section>
+              <section class="surface" data-surface="connect" id="surface-connect" hidden><div class="scroll"><div class="extra-page"><h1>Connect</h1><p class="muted">Suggestions from the Riverside community · Synthetic profiles</p><div class="extra-list"><div class="extra-item"><strong>Maya Okafor</strong><p>Helps around Riverside Walk</p><button type="button" class="btn-quiet" data-connect>Connect</button></div><div class="extra-item"><strong>Alex Chen</strong><p>Active near Market Square</p><button type="button" class="btn-quiet" data-connect>Connect</button></div><div class="extra-item"><strong>Sam Rivera</strong><p>Reports near the station</p><button type="button" class="btn-quiet" data-connect>Connect</button></div></div></div></div></section>
+              <section class="surface" data-surface="reactions" id="surface-reactions" hidden><div class="scroll"><div class="extra-page"><h1>Liked / Disliked</h1><p class="muted">Reports you reacted to</p><div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="true" data-reaction="liked">Liked</button><button class="tab" role="tab" aria-selected="false" data-reaction="disliked">Disliked</button></div><div id="reactionList" class="rows"></div></div></div></section>
+              <section class="surface" data-surface="saved" id="surface-saved" hidden><div class="scroll"><div class="extra-page"><h1>Saved</h1><p class="muted">Reports you want to return to.</p><div id="savedList" class="rows"></div></div></div></section>
+              <section class="surface" data-surface="recovered" id="surface-recovered" hidden><div class="scroll"><div class="extra-page"><h1>Recovered</h1><p class="muted">Completed returns</p><div class="extra-item"><strong>Blue bicycle helmet</strong><p>Returned at Market Square · 12 October</p></div><div class="extra-item"><strong>Canvas tote bag</strong><p>Returned at the library · 3 September</p></div></div></div></section>
+              <section class="surface" data-surface="achievements" id="surface-achievements" hidden><div class="scroll"><div class="extra-page"><h1>Achievements</h1><p class="muted">3 of 12 earned · Illustrative progress</p><div class="achievement-grid"><div class="achievement"><strong>First report</strong><small>Earned · Posted your first report</small></div><div class="achievement"><strong>Helpful neighbour</strong><small>Earned · Responded to a report</small></div><div class="achievement"><strong>Back together</strong><small>Earned · Completed a return</small></div><div class="achievement"><strong>Community regular</strong><small>Locked · Complete five returns</small></div><div class="achievement"><strong>Good eye</strong><small>Locked · Help with ten reports</small></div></div></div></div></section>
+
               <!-- ============ EMPTY STATE ============ -->
               <section class="surface" data-surface="empty" id="surface-empty" hidden>
                 <header class="appbar">
@@ -1572,9 +1595,9 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
                   <svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg>
                   <span class="pill-label">My Reports</span>
                 </a>
-                <a class="pill-link" href="#/chats" data-nav="chats" aria-label="Chats">
+                <a class="pill-link" href="#/chats" data-nav="chats" aria-label="Messages">
                   <svg class="icon" aria-hidden="true"><use href="#i-chat"></use></svg>
-                  <span class="pill-label">Chats</span>
+                  <span class="pill-label">Messages</span>
                 </a>
                 <a class="pill-link" href="#/settings" data-nav="settings" aria-label="Settings">
                   <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
@@ -1613,7 +1636,9 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
   const frame = $('frame'), app = $('app'), rail = $('rail'), flyout = $('flyout');
   const tip = $('tip'), scrim = $('scrim'), sheet = $('createSheet'), toast = $('toast');
   const filterHome = $('chatFilters').parentNode, filterNext = $('chatFilters').nextSibling;
-  const defaults = {viewport:'1280', theme:'light', text:'100', motion:'off', panel:'collapsed', surface:'home', unread:'9'};
+  let rememberedPanel = 'pinned';
+  try { rememberedPanel = sessionStorage.getItem('norfold-nav-panel') || 'pinned'; } catch (_) {}
+  const defaults = {viewport:'1280', theme:'light', text:'100', motion:'off', panel:rememberedPanel, surface:'home', unread:'9'};
   const state = {...defaults};
   let openTimer, closeTimer, toastTimer, activeThread = 0, searchTab = 'reports';
   let homeFilter = 'all', myFilter = 'all', chatFilter = 'all', settingsSection = 'appearance';
@@ -1668,6 +1693,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     all('button[data-set]').forEach(button => button.setAttribute('aria-pressed', String(state[button.dataset.set] === button.dataset.value)));
   }
   function fit() {
+    hideTip();
     const width = Number(state.viewport), canvas = $('stageCanvas');
     const height = width < 600 ? 800 : 760;
     frame.style.width = width + 'px'; frame.style.height = height + 'px';
@@ -1679,12 +1705,12 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     $('scaleChip').textContent = `fit ${Math.round(scale * 100)}%`;
     $('caption').textContent = `${width} px · ${width < 600 ? 'phone' : width < 840 ? 'tablet' : 'desktop'} · ${state.panel}`;
     $('stageNote').textContent = `${state.theme} · ${state.text}% text · ${width}px`;
-    const contentWidth = width - (width < 600 ? 0 : state.panel === 'pinned' ? 224 : width >= 1200 ? 80 : 72);
+    const contentWidth = width - (width < 600 ? 0 : width >= 1024 && state.panel === 'pinned' ? 260 : 76);
     $('chatSplit').classList.toggle('split', contentWidth >= 720);
     $('settingsSplit').classList.toggle('split', contentWidth >= 720);
   }
   function navForSurface(surface) {
-    return surface === 'mine' || surface === 'empty' ? 'my' : surface === 'chats' || surface === 'settings' ? surface : 'home';
+    return surface === 'mine' || surface === 'empty' ? 'my' : surface === 'post' || surface === 'offline' ? 'home' : surface;
   }
   function renderNav() {
     const active = navForSurface(state.surface);
@@ -1697,8 +1723,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
         if (!selected && old) old.remove();
       }
     });
-    $('railTitle').textContent = active === 'my' ? 'My Reports' : active[0].toUpperCase() + active.slice(1);
-    $('railSection').innerHTML = navRows(active);
+    $('railTitle').textContent = 'Norfold';
   }
   function navRows(key) {
     return (destinations[key] || destinations.home).map(([label, target]) => `<button type="button" class="nav-row" data-destination="${target}" data-section="${esc(label.toLowerCase())}"><span class="nav-row-label">${esc(label)}</span></button>`).join('');
@@ -1715,8 +1740,10 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     state[key] = value;
     if (key === 'theme') { frame.classList.remove('theme-light','theme-dark','theme-amoled'); frame.classList.add('theme-' + value); app.dataset.theme = value; }
     if (key === 'text') frame.classList.toggle('text-200', value === '200');
-    if (key === 'motion') { frame.classList.toggle('reduce', value === 'off'); frame.style.transition = value === 'off' ? 'none' : ''; }
+    if (key === 'motion') { frame.classList.toggle('reduce', value === 'on'); frame.style.transition = value === 'on' ? 'none' : ''; }
     if (key === 'panel') {
+      hideTip();
+      try { sessionStorage.setItem('norfold-nav-panel', value); } catch (_) {}
       app.dataset.panel = value; rail.dataset.pinned = String(value === 'pinned');
       $('railToggle').setAttribute('aria-expanded', String(value === 'pinned'));
       const label = value === 'pinned' ? 'Collapse navigation' : 'Expand navigation';
@@ -1725,7 +1752,6 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     }
     if (key === 'unread') all('[data-badge="bell"]').forEach(badge => { badge.hidden = value === '0'; badge.textContent = Number(value) > 99 ? '99+' : value; });
     syncControls(); fit();
-    if (key === 'panel' && value === 'flyout') showFlyout(rail.querySelector(`[data-nav="${navForSurface(state.surface)}"]`));
   }
   function showFlyout(link) {
     if (!link || state.panel === 'pinned' || Number(state.viewport) < 600) return;
@@ -1738,9 +1764,9 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     state.panel = 'flyout'; app.dataset.panel = 'flyout'; syncControls();
   }
   function showTip(link) {
-    if (state.panel === 'pinned') return;
+    if (state.panel === 'pinned' && Number(state.viewport) >= 1024) return;
     const box = link.getBoundingClientRect(), root = app.getBoundingClientRect(), scale = root.width / app.offsetWidth;
-    tip.textContent = link.getAttribute('aria-label'); tip.style.left = ((box.right - root.left) / scale + 8) + 'px';
+    tip.textContent = link.getAttribute('aria-label'); tip.style.left = ((rail.getBoundingClientRect().right - root.left) / scale + 16) + 'px';
     tip.style.top = ((box.top - root.top) / scale) + 'px'; tip.hidden = false; tip.classList.add('is-open');
   }
   function row(report) {
@@ -1748,15 +1774,18 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
   }
   function renderReports() {
     const filtered = reports.filter(r => homeFilter === 'all' || homeFilter === 'nearby' || homeFilter === 'recent' || r.type.toLowerCase() === homeFilter);
-    $('homeFeed').innerHTML = filtered.map(row).join(''); $('homeEmpty').hidden = filtered.length > 0;
+    $('homeFeed').innerHTML = filtered.map(r => `<article class="card"><div class="card-head"><span class="status ${r.type === 'Lost' ? 'status-lost' : 'status-found'}">${esc(r.type)}</span><span class="muted t-sm">${esc(r.place)}</span></div><h2 class="card-title"><button type="button" data-action="open-post">${esc(r.title)}</button></h2><p class="muted t-sm">Reported nearby · Synthetic example</p><button type="button" class="btn-quiet" data-action="open-post">View report</button></article>`).join(''); $('homeEmpty').hidden = filtered.length > 0;
     $('offlineFeed').innerHTML = reports.slice(0,4).map(row).join('');
     const mine = myFilter === 'all' || myFilter === 'open' ? reports.slice(0,2) : [];
     $('myList').innerHTML = mine.map(row).join(''); $('myEmpty').hidden = mine.length > 0;
+    $('profileReports').innerHTML = reports.slice(0,2).map(row).join('');
+    $('savedList').innerHTML = reports.slice(1,3).map(row).join('');
+    $('reactionList').innerHTML = reports.slice(0,2).map(row).join('');
     renderSearch();
   }
   function renderSearch() {
     const q = $('searchInput').value.trim().toLowerCase();
-    const matches = reports.filter(r => `${r.title} ${r.type} ${r.place}`.toLowerCase().includes(q));
+    const matches = reports.filter(r => `${r.title} ${r.type} ${r.place}`.toLowerCase().includes(q) && ($('searchFilterChip').getAttribute('aria-pressed') !== 'true' || r.type === 'Lost'));
     const matchingPeople = people.filter(name => name.toLowerCase().includes(q));
     $('searchReports').innerHTML = matches.map(row).join('');
     $('searchPeople').innerHTML = matchingPeople.map(name => `<button type="button" class="person" data-action="person"><span class="avatar">${esc(name.split(' ').map(x => x[0]).join(''))}</span><span class="person-name">${esc(name)}</span></button>`).join('');
@@ -1796,6 +1825,8 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     if (button.dataset.set) { setState(button.dataset.set, button.dataset.value); return; }
     if (button.dataset.nav) { event.preventDefault(); setSurface(button.dataset.nav === 'my' ? 'mine' : button.dataset.nav); return; }
     if (button.dataset.destination) { const target = button.dataset.destination; if (target === 'create') openSheet(); else { if (target === 'settings' && sections[button.dataset.section]) settingsSection = button.dataset.section; setSurface(target); renderSettings(); } return; }
+    if (button.hasAttribute('data-connect')) { const connected = button.textContent === 'Connected'; button.textContent = connected ? 'Connect' : 'Connected'; button.setAttribute('aria-pressed', String(!connected)); return; }
+    if (button.dataset.reaction) { all('[data-reaction]').forEach(item => item.setAttribute('aria-selected', String(item === button))); $('reactionList').innerHTML = (button.dataset.reaction === 'liked' ? reports.slice(0,2) : reports.slice(2,4)).map(row).join(''); return; }
     if (button.dataset.homeFilter) { homeFilter = button.dataset.homeFilter; setFilter(button,'data-home-filter'); renderReports(); return; }
     if (button.dataset.myFilter) { myFilter = button.dataset.myFilter; setFilter(button,'data-my-filter'); renderReports(); return; }
     if (button.dataset.chatFilter) { chatFilter = button.dataset.chatFilter; setFilter(button,'data-chat-filter'); renderChats(); closeOverlay(); return; }
@@ -1805,7 +1836,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     if (button.id === 'railToggle') { setState('panel', state.panel === 'pinned' ? 'collapsed' : 'pinned'); return; }
     if (button.id === 'resetBtn') { reset(); return; }
     if (button.id === 'searchClear') { $('searchInput').value = ''; renderSearch(); $('searchInput').focus(); return; }
-    if (button.id === 'searchFilterChip') { const pressed = button.getAttribute('aria-pressed') !== 'true'; button.setAttribute('aria-pressed', String(pressed)); notify('Search filters are a visual fixture.'); return; }
+    if (button.id === 'searchFilterChip') { const pressed = button.getAttribute('aria-pressed') !== 'true'; button.setAttribute('aria-pressed', String(pressed)); renderSearch(); return; }
     if (button.id === 'chatFilterBtn') { if (button.getAttribute('aria-expanded') === 'true') closeOverlay(); else { const box = $('chatFilters').getBoundingClientRect(), root = app.getBoundingClientRect(), scale = root.width / app.offsetWidth, filters = $('chatFilters'); app.appendChild(filters); filters.style.position = 'absolute'; filters.style.zIndex = '81'; filters.style.top = (box.top - root.top) / scale + 'px'; filters.style.left = (box.left - root.left) / scale + 'px'; filters.style.background = 'var(--fb-surface)'; scrim.hidden = false; scrim.classList.add('is-open'); button.setAttribute('aria-expanded','true'); } return; }
     if (button.id === 'markAllRead') { setState('unread','0'); notify('Notifications marked read in this prototype.'); return; }
     if (button.id === 'settingsBack') { $('settingsSplit').classList.remove('show-detail'); return; }
@@ -1820,9 +1851,9 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     else if (action) notify(({attach:'Photo attachment is unavailable in this prototype.', 'post-share':'Sharing is unavailable in this prototype.', 'offline-retry':'Offline state is simulated.', person:'Profile is unavailable in this prototype.'})[action] || 'This action is not available in the prototype.');
   });
   all('.rail-link').forEach(link => {
-    link.addEventListener('mouseenter', () => { clearTimeout(closeTimer); showTip(link); clearTimeout(openTimer); openTimer = setTimeout(() => showFlyout(link), 120); });
+    link.addEventListener('mouseenter', () => showTip(link));
     link.addEventListener('mouseleave', hideTip);
-    link.addEventListener('focus', () => { showTip(link); showFlyout(link); });
+    link.addEventListener('focus', () => showTip(link));
     link.addEventListener('blur', hideTip);
   });
   [rail, flyout].forEach(element => {
@@ -1850,15 +1881,20 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     reports.unshift({title, type:$('reportType').value, place:'This session', icon:'clipboard'});
     $('createForm').reset(); closeOverlay(); renderReports(); setSurface('home'); notify('Report added for this session only.');
   });
+  $('inlineCreate').addEventListener('submit', event => {
+    event.preventDefault(); const title = $('inlineTitle').value.trim(); if (!title) return;
+    reports.unshift({title, type:$('inlineType').value, place:'This session', icon:'clipboard'});
+    event.target.reset(); renderReports(); setSurface('home'); notify('Report added for this session only.');
+  });
   function reset() {
     closeFlyout(); closeOverlay(); hideToast(); homeFilter = 'all'; myFilter = 'all'; chatFilter = 'all'; searchTab = 'reports'; settingsSection = 'appearance';
     $('searchInput').value = ''; $('settingsSearch').value = ''; $('composerInput').value = ''; $('sendBtn').disabled = true;
     all('[data-home-filter], [data-my-filter], [data-chat-filter]').forEach(button => button.setAttribute('aria-pressed', String((button.dataset.homeFilter || button.dataset.myFilter || button.dataset.chatFilter) === 'all')));
     Object.entries(defaults).forEach(([key,value]) => setState(key,value)); renderReports(); renderChats(); renderSettings();
   }
-  $('notifList').innerHTML = '<p class="row-empty">Notifications are simulated in this prototype.</p>';
+  $('notifList').innerHTML = '<div class="extra-item"><strong>Maya commented on your umbrella report</strong><p>I saw one near the boathouse. · 12 min ago</p></div><div class="extra-item"><strong>Alex mentioned you</strong><p>Could this be the item @riley described? · 1 hour ago</p></div><div class="extra-item"><strong>Sam liked your report</strong><p>Notebook with a green cover · Yesterday</p></div><div class="extra-item"><strong>Someone asked about your report</strong><p>Is the blue bicycle helmet still available? · Yesterday</p></div>';
   window.addEventListener('resize', fit);
-  reset();
+  reset(); selectThread(0); $('chatSplit').classList.remove('show-thread');
 })();
 </script>
 </body>
