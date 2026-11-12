@@ -1,5 +1,6 @@
 /* Peer composer: independent floating controls, no enclosing capsule. */
 .fb-peer-composer {
+  position: relative;
   display: flex; flex-direction: column; min-width: 0; width: 100%;
   /* Width queries below measure this composer, not the window. */
   container-type: inline-size; container-name: composer;

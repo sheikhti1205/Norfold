@@ -10,6 +10,8 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 import { Camera, ChevronDown, FileUp, ImagePlus, MapPin, Maximize2, Mic, Minimize2, SendHorizonal, X } from "lucide-react";
 import { hasFinePointer } from "./inputCapabilities";
+import { EmojiPickerButton } from "./EmojiPickerButton";
+import { insertEmoji } from "./EmojiPicker";
 import { speechInput } from "../services/speechInput";
 import {
   fadeUpVariants,
@@ -182,6 +184,21 @@ export function ChatComposer({
   function setMic(next: MicState) {
     micStateRef.current = next;
     setMicState(next);
+  }
+
+  /** Insert at the caret and put the caret back after React commits. */
+  function pickEmoji(glyph: string) {
+    const element = fieldRef.current;
+    const start = element?.selectionStart ?? value.length;
+    const end = element?.selectionEnd ?? start;
+    const inserted = insertEmoji(value, start, end, glyph);
+    onChange(inserted.text);
+    requestAnimationFrame(() => {
+      const field = fieldRef.current;
+      if (!field) return;
+      field.focus();
+      try { field.setSelectionRange(inserted.caret, inserted.caret); } catch { /* best effort */ }
+    });
   }
 
   // Auto-grow from 1 line up to a 5-line cap (then internal scroll), or a
@@ -728,6 +745,10 @@ export function ChatComposer({
             </AnimatePresence>
           </>
         )}
+        {/* Emoji stays in the control row whether or not attachments exist:
+            the owner asked for it while composing, not only before typing. */}
+        <EmojiPickerButton onPick={pickEmoji} disabled={disabled || busy}
+          className="flex min-h-[48px] min-w-[48px] shrink-0 items-center justify-center rounded-full border border-outline-variant text-on-surface-variant hover:bg-surface-container disabled:opacity-60" />
         {/* Trailing element keeps the control row width stable across states. */}
         <div className="flex shrink-0 items-center gap-2" data-mic-state={micState}>
           {listening ? (

@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { FileText, Film, ImageOff, ImagePlus, Plus, Search, Sticker, X } from "lucide-react";
+import { FileText, Film, ImagePlus, Plus, Sticker, X } from "lucide-react";
 import { ActionMenu, type MenuAction } from "./ActionMenu";
 import { ComposerShell } from "./ComposerShell";
 import { CommentReportPicker } from "./CommentReportPicker";
+import { EmojiPickerButton } from "./EmojiPickerButton";
+import { insertEmoji } from "./EmojiPicker";
+import { KlipyPicker } from "./KlipyPicker";
 import { UserAvatar } from "./UserAvatar";
 import { MentionAutocomplete, type MentionCandidate } from "./MentionAutocomplete";
 import {
@@ -18,21 +21,7 @@ import {
   validateAttachableFile,
   type CommentAttachment,
 } from "../services/commentAttachments";
-import {
-  KLIPY_ATTRIBUTION,
-  KLIPY_ATTRIBUTION_URL,
-  KLIPY_SEARCH_PLACEHOLDER,
-  createKlipySearchController,
-  isKlipyEnabled,
-  klipyCustomerId,
-  searchKlipyGifs,
-  searchKlipyStickers,
-  trackKlipyShare,
-  type KlipyItem,
-  type KlipyKind,
-  type KlipySearchController,
-  type KlipySearchState,
-} from "../services/klipy";
+import { isKlipyEnabled, klipyCustomerId, trackKlipyShare, type KlipyItem, type KlipyKind } from "../services/klipy";
 import {
   appendBodyMedia,
   bodyHasInlineData,
@@ -50,10 +39,9 @@ import { interactionRefusalCopy } from "../utils/interactionRefusal";
  * - `@` mentions through the shared `MentionAutocomplete` (ranked
  *   participants > owner > server fallback, keyboard nav, caret insertion),
  *   anchored to the composer, keyboard/touch safe.
- * - No emoji affordance (packet `08` §5): the custom catalogue and its native
- *   bottom-sheet bridge were removed outright rather than reimplemented — the
- *   platform keyboard's own emoji entry in the text field is the remaining
- *   path, and the composer owns no emoji set.
+ * - Emoji through the shared `EmojiPicker` inside `EmojiPickerButton` (owner
+ *   order 2026-11-12, R5), inserted at the caret. The panel is the same one
+ *   the conversation and assistant composers mount.
  * - Photo attach only (packet `08` §7): new video intake is stopped at the
  *   picker's accept list and the client gate, while every stored video row
  *   keeps rendering. On Android photos come through the canonical native
@@ -63,14 +51,12 @@ import { interactionRefusalCopy } from "../utils/interactionRefusal";
  *   own folder (same RLS path as report photos) with progress / retry /
  *   remove and the shared `COMMENT_ATTACH_MAX` cap. The comment body carries
  *   only `https://` remote URLs — never base64.
- * - GIF/Sticker through the Klipy adapter behind the `VITE_KLIPY_API_KEY`
- *   config flag: the search controller owns debounce, latest-request-wins,
- *   stale-request cancellation, trending-on-empty, pagination, and
- *   loading/empty/error states; stable customer_id, high content filter,
+ * - GIF/Sticker through the shared `KlipyPicker` behind the
+ *   `VITE_KLIPY_API_KEY` config flag: stable customer_id, high content filter,
  *   "Search KLIPY" placeholder, provider URLs/data preserved and loaded
  *   directly, share-tracking only after the comment posts, "Powered by
  *   KLIPY" attribution. The control is hidden entirely when the key is
- *   absent. Only live-key verification stays deferred (FBX-015).
+ *   absent.
  */
 
 /**
@@ -182,25 +168,6 @@ export function toCommentAttachmentDescriptors(
     });
 }
 
-type GifTab = KlipyKind;
-
-// Waterfall tile heights for the loading skeleton (varied, like real results).
-const GIF_SKELETON_HEIGHTS = [112, 84, 96, 72, 104, 88];
-
-/**
- * CSS aspect-ratio for a picker tile, derived from the provider's media
- * dimensions so the collage waterfalls naturally. Clamped so a malformed
- * payload can never create an absurdly tall or wide tile; stickers (often
- * square transparent PNG/WebP) fall back to 1:1.
- */
-function klipyTileAspect(item: KlipyItem): string {
-  const w = item.width ?? 0;
-  const h = item.height ?? 0;
-  if (w <= 0 || h <= 0) return "1 / 1";
-  const ratio = Math.min(2, Math.max(0.5, w / h));
-  return `${ratio} / 1`;
-}
-
 export function CommentComposer({
   postId,
   replyToUsername = null,
@@ -220,43 +187,14 @@ export function CommentComposer({
   const [preparingPhotos, setPreparingPhotos] = useState(false);
   const photoIntakeRef = useRef(false);
   const [gifOpen, setGifOpen] = useState(false);
-  const [gifTab, setGifTab] = useState<GifTab>("gifs");
-  const [gifQuery, setGifQuery] = useState("");
-  const [gifState, setGifState] = useState<KlipySearchState>({
-    status: "idle",
-    tab: "gifs",
-    query: "",
-    items: [],
-    page: 1,
-    error: null,
-  });
-  const gifResults: KlipyItem[] = gifState.items;
-  const gifLoading = gifState.status === "loading";
+  const [gifTab, setGifTab] = useState<KlipyKind>("gifs");
   const [attachNotice, setAttachNotice] = useState<string | null>(null);
   const fieldRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const filesRef = useRef(new Map<string, File>());
   const attachmentsRef = useRef<ComposerAttachment[]>([]);
   const submittedRef = useRef(false);
-  const klipyCtl = useRef<KlipySearchController | null>(null);
   const gifEnabled = isKlipyEnabled();
-
-  function klipyController(): KlipySearchController {
-    if (!klipyCtl.current) {
-      klipyCtl.current = createKlipySearchController({
-        customerId: () => klipyCustomerId(currentUser?.id),
-        // Passed explicitly (not via the adapter default) so the picker's
-        // search seam stays mockable in tests and swappable in product.
-        searchGifs: (...args) => searchKlipyGifs(...args),
-        searchStickers: (...args) => searchKlipyStickers(...args),
-        onState: (next) => setGifState(next),
-      });
-    }
-    return klipyCtl.current;
-  }
-
-  // The controller outlives the panel: cancel in-flight work on unmount.
-  useEffect(() => () => klipyCtl.current?.dispose(), []);
 
   // Mirror staged entries for the abandon sweep below (an unmount cleanup
   // closure cannot read state at unmount time).
@@ -270,8 +208,7 @@ export function CommentComposer({
   // reusing the same helper explicit Remove uses (`removeCommentAttachment`
   // only deletes local-upload keys and never throws). Row-referenced keys
   // after a successful submit are never swept: success sets the submitted
-  // flag and clears the strip, so the sweep sees nothing to delete. No new
-  // endpoint surface; submit/success-path semantics unchanged.
+  // flag and clears the strip, so the sweep sees nothing to delete.
   useEffect(
     () => () => {
       if (submittedRef.current) return;
@@ -279,32 +216,11 @@ export function CommentComposer({
         (a): a is CommentAttachment => a.kind !== "report" && a.status === "uploaded" && Boolean(a.objectKey && a.remoteUrl),
       );
       for (const entry of staged) {
-        // Fire-and-forget: never blocks unmount, never logs at error level
-        // (nothing is logged at all); the rejection sink keeps even a
-        // future thrower of the helper silent.
         void removeCommentAttachment(entry).then(undefined, () => undefined);
       }
     },
     [],
   );
-
-  // Klipy picker search, owned by the adapter controller: debounced,
-  // latest-request-wins, stale requests cancelled, trending while the query
-  // is empty. Fires on open, tab, and keystrokes; cancels on close.
-  useEffect(() => {
-    if (!gifOpen || !gifEnabled) {
-      klipyCtl.current?.cancel();
-      return;
-    }
-    klipyController().search(gifQuery, gifTab);
-    // The controller instance is stable for the component lifetime; the
-    // signed-in user id is read through the creation thunk, so it is not a
-    // dependency here.
-  }, [gifOpen, gifEnabled, gifTab, gifQuery]);
-
-  function retryGifSearch() {
-    klipyController().search(gifQuery, gifTab);
-  }
 
   function focusAt(caret: number) {
     requestAnimationFrame(() => {
@@ -322,6 +238,15 @@ export function CommentComposer({
   function handleMentionInsert(next: string, caret: number) {
     setText(next);
     focusAt(caret);
+  }
+
+  function handleEmojiPick(glyph: string) {
+    const field = fieldRef.current;
+    const start = field?.selectionStart ?? text.length;
+    const end = field?.selectionEnd ?? start;
+    const inserted = insertEmoji(text, start, end, glyph);
+    setText(inserted.text);
+    focusAt(inserted.caret);
   }
 
   function patchAttachment(id: string, patch: Partial<CommentAttachment>) {
@@ -592,7 +517,7 @@ export function CommentComposer({
   return (
     <div data-testid="comment-composer" className="flex items-start gap-2">
       <UserAvatar avatarUrl={currentUser?.avatarUrl} username={currentUser?.username} size={32} />
-      <div className="min-w-0 flex-1">
+      <div className="relative min-w-0 flex-1">
           <input
             ref={fileInputRef}
             data-testid="comment-file-input"
@@ -640,8 +565,11 @@ export function CommentComposer({
           disabled={disabled} busy={sending} canSend={!sendDisabled}
           sendLabel={replyToUsername ? "Send reply" : "Send comment"} sendTestId="comment-send"
           inputOverlay={<MentionAutocomplete inputRef={fieldRef} value={text} participants={participants} owner={owner} onInsert={handleMentionInsert} />}
-          actions={<div ref={attachmentActionsRef}><ActionMenu label="Add attachment" icon={<Plus size={20} aria-hidden />}
-            disabled={disabled || sending || preparingPhotos} items={attachmentActions} /></div>}
+          actions={<div ref={attachmentActionsRef} className="flex items-center">
+            <ActionMenu label="Add attachment" icon={<Plus size={20} aria-hidden />}
+              disabled={disabled || sending || preparingPhotos} items={attachmentActions} />
+            <EmojiPickerButton onPick={handleEmojiPick} disabled={disabled || sending} />
+          </div>}
           attachments={attachments.length > 0 && (
           <div
             data-testid="comment-attachments"
@@ -755,140 +683,15 @@ export function CommentComposer({
         )} />
 
         {gifEnabled && gifOpen && (
-          <div
-            data-testid="comment-gif-panel"
-            role="dialog"
-            aria-label="GIF and sticker picker"
-            className="mt-1 overflow-hidden rounded-m3-lg border border-outline-variant bg-surface shadow-lg"
-          >
-            {/* Search first, the way messaging GIF pickers open. */}
-            <div className="px-2 pt-2">
-              <div className="relative">
-                <Search
-                  size={16}
-                  aria-hidden
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant"
-                />
-                <input
-                  data-testid="comment-gif-search"
-                  value={gifQuery}
-                  onChange={(e) => setGifQuery(e.target.value)}
-                  placeholder={KLIPY_SEARCH_PLACEHOLDER}
-                  aria-label="Search GIFs and stickers"
-                  enterKeyHint="search"
-                  className="min-h-[44px] w-full rounded-full border border-outline-variant bg-surface-container-low py-2 pl-9 pr-11 text-sm placeholder:text-on-surface-variant focus:border-on-surface focus:outline-none"
-                />
-                {gifQuery !== "" && (
-                  <button
-                    type="button"
-                    data-testid="comment-gif-search-clear"
-                    onClick={() => setGifQuery("")}
-                    aria-label="Clear search"
-                    className="absolute right-0.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-high"
-                  >
-                    <X size={14} aria-hidden />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Compact segmented tabs. */}
-            <div role="tablist" aria-label="GIF or stickers" className="flex gap-1 px-2 pt-2">
-              {(["gifs", "stickers"] as const).map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  role="tab"
-                  aria-selected={gifTab === tab}
-                  data-testid={`comment-gif-tab-${tab}`}
-                  onClick={() => setGifTab(tab)}
-                  className={`flex min-h-[44px] items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors ${
-                    gifTab === tab
-                      ? "bg-primary-container text-on-primary-container"
-                      : "text-on-surface-variant hover:bg-surface-container"
-                  }`}
-                >
-                  {tab === "gifs" ? <Film size={14} aria-hidden /> : <Sticker size={14} aria-hidden />}
-                  {tab === "gifs" ? "GIFs" : "Stickers"}
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-2 max-h-72 overflow-y-auto px-2 pb-2">
-              {gifState.status === "error" ? (
-                <div role="alert" className="flex flex-col items-center gap-2 px-2 py-6 text-center">
-                  <ImageOff size={20} aria-hidden className="text-on-surface-variant" />
-                  <p className="text-xs text-error">{gifState.error ?? "Couldn't load GIFs."}</p>
-                  <button
-                    type="button"
-                    data-testid="comment-gif-retry"
-                    onClick={retryGifSearch}
-                    className="mt-1 min-h-[44px] rounded-full bg-surface-container-high px-4 text-xs font-semibold text-on-surface"
-                  >
-                    Try again
-                  </button>
-                </div>
-              ) : gifLoading ? (
-                <div>
-                  <p role="status" className="sr-only">
-                    Searching GIFs
-                  </p>
-                  <div className="columns-2 gap-1.5" aria-hidden>
-                    {GIF_SKELETON_HEIGHTS.map((height, i) => (
-                      <span
-                        key={i}
-                        className="mb-1.5 block w-full animate-pulse break-inside-avoid rounded-m3-sm bg-surface-container-high"
-                        style={{ height }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ) : gifResults.length === 0 ? (
-                <div role="status" className="flex flex-col items-center gap-2 px-2 py-8 text-center">
-                  <ImageOff size={20} aria-hidden className="text-on-surface-variant" />
-                  <p className="text-xs text-on-surface-variant">No results. Try another search.</p>
-                </div>
-              ) : (
-                <div>
-                  {gifQuery.trim() === "" && (
-                    <p
-                      data-testid="comment-gif-trending"
-                      className="px-1 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant"
-                    >
-                      Trending now
-                    </p>
-                  )}
-                  {/* Two-column waterfall: natural aspect ratios, seamless
-                      tiles, tap inserts immediately (no confirm step). */}
-                  <div className="columns-2 gap-1.5">
-                    {gifResults.map((item) => (
-                      <button
-                        key={`${item.kind}:${item.slug}`}
-                        type="button"
-                        data-testid={`comment-gif-result-${item.slug}`}
-                        onClick={() => pickGif(item)}
-                        aria-label={`Add ${item.title}`}
-                        className="group relative mb-1.5 block w-full break-inside-avoid overflow-hidden rounded-m3-sm bg-surface-container-low focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-on-surface"
-                        style={{ aspectRatio: klipyTileAspect(item) }}
-                      >
-                        <img
-                          src={item.previewUrl}
-                          alt=""
-                          loading="lazy"
-                          className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03] group-active:scale-[0.98] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
-                        />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <p className="border-t border-outline-variant px-3 py-1.5 text-[10px] text-on-surface-variant">
-              <a href={KLIPY_ATTRIBUTION_URL} target="_blank" rel="noreferrer" className="underline">
-                {KLIPY_ATTRIBUTION}
-              </a>
-            </p>
+          <div className="fb-picker-layer">
+            <KlipyPicker
+              userId={currentUser?.id}
+              initialTab={gifTab}
+              testIdPrefix="comment-gif"
+              onPick={pickGif}
+              onClose={() => setGifOpen(false)}
+              onDismiss={() => { setGifOpen(false); attachmentActionsRef.current?.querySelector("button")?.focus(); }}
+            />
           </div>
         )}
       </div>
