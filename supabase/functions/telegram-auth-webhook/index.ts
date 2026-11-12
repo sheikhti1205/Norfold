@@ -60,6 +60,8 @@ export default {
         });
         reply = !error && data?.ok === true
           ? "Your phone number has been added to your Norfold connection."
+          : error?.code === "54000" && (error.message === "phone claim account limit" || error.message === "phone claim number limit")
+          ? "This number has been verified too many times recently. Please try again later."
           : "Could not save your number. Connect Norfold first and try again.";
       }
     } else {

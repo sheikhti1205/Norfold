@@ -233,6 +233,7 @@ export interface PostItem {
   ratingAvg: number | null;
   ratingCount: number;
   commentCount: number;
+  viewCount?: number;
   createdAt: string;
   updatedAt: string;
   /**

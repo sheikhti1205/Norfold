@@ -81,7 +81,11 @@ export function TelegramSettings() {
       if (Date.parse(link.expiresAt) <= Date.now()) { setMessage("This connection expired. Please try again."); return; }
       await Browser.open({ url: link.deepLink });
       if (mounted.current) { setNow(Date.now()); setView({ kind: "waiting", token: link.token, deadline: Date.parse(link.expiresAt) }); }
-    } catch { if (mounted.current) setMessage("Could not open Telegram. Please try again."); }
+    } catch (error) {
+      if (mounted.current) setMessage(error instanceof Error && error.message === "verify your email first"
+        ? "Verify your email address in account settings, then try connecting Telegram again."
+        : "Could not open Telegram. Please try again.");
+    }
     finally { if (mounted.current) setBusy(false); }
   }
 
@@ -98,7 +102,7 @@ export function TelegramSettings() {
     <div className="fb-account-password">
       {view.kind === "loading" && <span aria-hidden="true">…</span>}
       {view.kind === "error" && <><p>Could not check your Telegram connection.</p><Button onClick={reload}>Retry Telegram</Button></>}
-      {view.kind === "unlinked" && <><p>Connect Telegram for signing in, verifying a phone number, and unlinking without needing the device.</p><Button loading={busy} onClick={() => { void connect(); }}>Connect Telegram</Button></>}
+      {view.kind === "unlinked" && <><p>Connect Telegram to link your account, verify your phone number, and unlink through the bot.</p><Button loading={busy} onClick={() => { void connect(); }}>Connect Telegram</Button></>}
       {view.kind === "waiting" && <><p>Open Telegram and press Start.</p><p>Expires in {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}</p><Button variant="text" onClick={() => { setMessage(""); setView({ kind: "unlinked" }); }}>Cancel</Button></>}
       {view.kind === "linked" && <>
         {view.account.username && <p>Connected as @{view.account.username}</p>}
