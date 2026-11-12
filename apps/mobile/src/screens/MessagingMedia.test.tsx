@@ -92,7 +92,8 @@ it("replaces the composer with recording/review, resumes, and sends only the fin
   fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Keep my text draft" } });
   // Attachments are collapsed while typing: reveal them through the real composer.
   fireEvent.click(screen.getByRole("button", { name: "Show attachments" }));
-  fireEvent.click(screen.getByRole("button", { name: "Voice message" }));
+  fireEvent.click(screen.getByRole("button", { name: "More attachments" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Voice message" }));
   await screen.findByRole("button", { name: "Pause recording" });
   expect(screen.queryByRole("textbox", { name: "Message" })).toBeNull();
   now += 3_000;

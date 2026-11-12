@@ -19,6 +19,20 @@
 /* The layer sits above the field but must not cover the control that opened
    it: a right-aligned trigger opens the panel to the right edge. */
 .fb-picker-layer[data-align="end"] { left: auto; right: 0; }
+.fb-picker-layer[data-size="menu"] { width: auto; min-width: 12rem; }
+
+/* The peer composer's overflow menu: File, Voice, Stickers and GIFs live here
+   so the row keeps room for the field at 320dp. */
+.fb-peer-more { display: flex; flex-direction: column; padding: 6px; }
+.fb-peer-more button {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 44px; padding: 0 12px; border-radius: 10px;
+  font-size: 0.875rem; text-align: left; color: var(--fb-on-surface);
+}
+.fb-peer-more button:hover { background: var(--fb-surface-container); }
+.fb-peer-more button:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: -2px; }
+.fb-peer-more svg { flex: none; color: var(--fb-on-surface-variant); }
+.fb-peer-more button:disabled { opacity: 0.45; }
 
 .fb-emoji-picker { display: flex; flex-direction: column; max-height: 18rem; }
 .fb-emoji-search {
