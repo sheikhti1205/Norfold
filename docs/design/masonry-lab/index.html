@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Norfold masonry lab — columns, tile shape, full image</title>
+<style>
+/* Tokens. Light is the app's default surface family; dark mirrors its true
+   dark surface. The studio bar keeps the darker chrome in both so the preview
+   is unmistakably a preview. */
+:root{
+  --page:#e8e9eb; --panel:#ffffff; --ink:#212529; --muted:#5b6067;
+  --line:#d3d7dd; --soft:#f1f2f4; --photo-bg:#d8dbe0;
+  --studio:#17191d; --studio-ink:#f1f3f5; --studio-muted:#b7bbc2;
+  --ctl-bg:#25282d; --ctl-line:#4a4e56; --ctl-ink:#ffffff;
+  --sel-bg:#f1f3f5; --sel-ink:#17191d;
+  --ok:#2f6b4f; --warn:#8a5a12; --bad:#a33327;
+  --focus:#6aa7ff;
+  --gap:12px; --radius:12px;
+}
+html[data-theme="dark"]{
+  --page:#101113; --panel:#18191b; --ink:#f1f3f5; --muted:#b7bbc2;
+  --line:#34363b; --soft:#202124; --photo-bg:#0d0f12;
+  --studio:#0b0c0e; --studio-ink:#f1f3f5; --studio-muted:#9ea3aa;
+  --ok:#7fcaa4; --warn:#e0b062; --bad:#f0938a;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;cursor:pointer}
+h1,h2,h3,p{margin:0}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* Studio ---------------------------------------------------------------- */
+.studio{background:var(--studio);color:var(--studio-ink);padding:14px clamp(14px,3vw,28px) 16px;display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 22px}
+.studio-title{margin-inline-end:auto;min-width:200px;max-width:34ch}
+.studio-title strong{display:block;font-size:15px;letter-spacing:-.01em}
+.studio-title span{display:block;margin-top:4px;font-size:12px;line-height:1.45;color:var(--studio-muted)}
+.controls{display:flex;flex-wrap:wrap;gap:10px 20px;min-width:0}
+.ctl{display:grid;gap:5px;min-width:0}
+.ctl > legend,.ctl > .lbl{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--studio-muted);padding:0}
+fieldset.ctl{border:0;margin:0;padding:0}
+.seg{position:relative;display:flex;flex-wrap:wrap;gap:6px}
+.seg input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.seg label{display:inline-flex;align-items:center;justify-content:center;min-height:34px;min-width:42px;padding:0 11px;border:1px solid var(--ctl-line);border-radius:9px;background:var(--ctl-bg);color:var(--ctl-ink);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;cursor:pointer;white-space:nowrap}
+.seg label:hover{border-color:#767b84}
+.seg input:checked + label{background:var(--sel-bg);color:var(--sel-ink);border-color:var(--sel-bg)}
+.seg input:focus-visible + label{outline:2px solid var(--focus);outline-offset:2px}
+.seg input:disabled + label{opacity:.45;cursor:not-allowed}
+.ghost{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 13px;border:1px solid var(--ctl-line);border-radius:9px;background:transparent;color:var(--ctl-ink);font-size:13px;font-weight:600}
+.ghost:hover{background:#ffffff14}
+
+/* Stage ----------------------------------------------------------------- */
+main{padding:18px clamp(0px,1.5vw,24px) 40px;min-width:0}
+.stage{overflow-x:auto;overflow-y:hidden;padding:6px 0 22px;min-width:0}
+.frame{width:var(--frame-w,411px);max-width:none;height:min(76vh,880px);min-height:340px;margin-inline:auto;background:var(--panel);overflow-y:auto;overflow-x:hidden;border-radius:14px;box-shadow:0 14px 40px #0002,0 0 0 1px #0001;scrollbar-width:none;overscroll-behavior:contain}
+.frame::-webkit-scrollbar{width:0;height:0}
+html[data-theme="dark"] .frame{box-shadow:0 14px 40px #0006,0 0 0 1px #ffffff12}
+.frame:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+
+/* Feed — mirrors the app: 1rem list padding that scales with text, a fixed
+   12px gutter, ragged cards, no card chrome. */
+.feed{font-size:calc(16px * var(--scale,1));color:var(--ink);padding-block:1em}
+.canvas{width:100%;max-width:1152px;margin-inline:auto;min-width:0}
+.grid{position:relative;padding-inline:1em;min-width:0;--cw:260px}
+.card{position:absolute;left:0;top:0;width:var(--cw);min-width:0;display:flex;flex-direction:column;gap:.375em;will-change:transform}
+.who{display:flex;align-items:center;gap:.5em;min-width:0;flex-wrap:wrap}
+.av{flex:none;width:28px;height:28px;border-radius:999px;display:grid;place-items:center;background:var(--soft);color:var(--ink);font-size:.6875em;font-weight:700;letter-spacing:.02em;border:1px solid var(--line)}
+.name{min-width:0;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.875em;font-weight:600}
+.who time{flex:none;font-size:.75em;color:var(--muted);white-space:nowrap;order:1}
+.save{flex:none;width:44px;height:44px;margin-inline-start:auto;display:grid;place-items:center;color:var(--muted);order:2}
+.save svg{width:16px;height:16px}
+.head{display:flex;flex-direction:column;gap:.25em;min-width:0}
+.status{display:flex;align-items:center;gap:.375em;font-size:.75em;color:var(--muted);min-width:0;flex-wrap:wrap}
+.dot{width:.5em;height:.5em;border-radius:999px;flex:none;background:var(--muted)}
+.dot[data-k="open"]{background:var(--ok)}
+.dot[data-k="matched"]{background:var(--warn)}
+.title{font-size:.9375em;font-weight:600;line-height:1.25;letter-spacing:-.005em;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.media{display:block;position:relative;width:100%;margin:0;padding:0;border:0;background:var(--photo-bg);border-radius:var(--radius);overflow:hidden;aspect-ratio:var(--r,1.3333)}
+.grid.uniform .media{aspect-ratio:4 / 3}
+.media svg{display:block;width:100%;height:100%}
+.more{position:absolute;right:.5em;bottom:.5em;padding:.0625em .4375em;border-radius:999px;background:#000000a0;color:#fff;font-size:.6875em;font-weight:600;line-height:1.45}
+.facts{display:flex;flex-wrap:wrap;gap:.25em .75em;color:var(--muted);font-size:.75em;min-width:0}
+.fact{display:flex;align-items:center;gap:.25em;min-width:0;line-height:1.35}
+.fact svg{flex:none;width:13px;height:13px;stroke-width:2}
+.fact span{overflow-wrap:anywhere}
+.acts{display:flex;flex-wrap:nowrap;align-items:center;gap:2px;color:var(--muted);font-size:.75em;min-width:0;overflow:hidden}
+.act{display:inline-flex;align-items:center;gap:.25em;flex:none;min-width:44px;min-height:44px;justify-content:center;font-variant-numeric:tabular-nums}
+.act svg{width:15px;height:15px;flex:none}
+.blank{position:relative;border:1px dashed var(--line);border-radius:var(--radius);aspect-ratio:4 / 3;display:grid;place-items:center;color:var(--muted);font-size:.6875em;text-align:center;padding:.5em}
+
+/* Readout --------------------------------------------------------------- */
+.readout{max-width:1180px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px clamp(14px,2vw,22px)}
+.readout-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 14px;margin-bottom:12px}
+.readout-head h2{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.verdict{display:inline-flex;align-items:center;gap:7px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid currentColor}
+.verdict[data-v="ok"]{color:var(--ok)} .verdict[data-v="tight"]{color:var(--warn)} .verdict[data-v="bad"]{color:var(--bad)}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px 16px;margin:0 0 14px}
+.metric{min-width:0}
+.metric dt{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.metric dd{margin:2px 0 0;font-size:19px;font-weight:650;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.metric dd small{font-size:12px;font-weight:500;color:var(--muted);letter-spacing:0}
+.notes{display:grid;gap:6px;margin:0;padding:0;list-style:none;font-size:13px;line-height:1.55;color:var(--muted);min-width:0}
+.notes strong{color:var(--ink);font-weight:650}
+.notes code{font:inherit;font-variant-numeric:tabular-nums;color:var(--ink)}
+.split{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px 26px}
+
+/* Full image view ------------------------------------------------------- */
+.viewer[hidden]{display:none}
+.viewer{position:fixed;inset:0;z-index:40;background:#000000d9;display:grid;place-items:center;padding:18px;backdrop-filter:blur(3px)}
+.vpanel{width:min(100%,1080px);max-height:calc(100vh - 36px);overflow:auto;background:var(--panel);color:var(--ink);border-radius:16px;padding:14px;display:grid;gap:12px;justify-items:center}
+.vbar{width:100%;display:flex;align-items:center;gap:10px;justify-content:space-between}
+.vbar strong{font-size:14px;letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vbar .count{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.vclose,.vnav{display:inline-flex;align-items:center;justify-content:center;min-height:40px;min-width:44px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--ink);font-size:13px;font-weight:600}
+.vclose:hover,.vnav:hover{background:var(--soft)}
+.vmedia{width:min(100%,calc(62vh * var(--r,1.3333)));aspect-ratio:var(--r,1.3333);background:#0d0f12;border-radius:12px;overflow:hidden}
+.vmedia svg{display:block;width:100%;height:100%}
+.vmeta{width:100%;display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted)}
+.vmeta b{color:var(--ink);font-weight:600}
+.vfoot{width:100%;display:flex;align-items:center;gap:10px;justify-content:space-between}
+
+@media (max-width:720px){
+  .studio{padding-bottom:14px}
+  .studio-title{max-width:none}
+  .frame{height:min(70vh,720px)}
+}
+</style>
+</head>
+<body>
+
+<header class="studio" aria-label="Lab controls">
+  <div class="studio-title">
+    <strong>Masonry lab</strong>
+    <span>One feed, 2–6 columns, at the width you pick. Everything below the preview is measured in this browser, not assumed.</span>
+  </div>
+
+  <fieldset class="ctl">
+    <legend>Columns</legend>
+    <div class="seg" role="radiogroup" aria-label="Column count">
+      <input type="radio" name="columns" id="col2" value="2"><label for="col2">2</label>
+      <input type="radio" name="columns" id="col3" value="3"><label for="col3">3</label>
+      <input type="radio" name="columns" id="col4" value="4" checked><label for="col4">4</label>
+      <input type="radio" name="columns" id="col5" value="5"><label for="col5">5</label>
+      <input type="radio" name="columns" id="col6" value="6"><label for="col6">6</label>
+    </div>
+  </fieldset>
+
+  <fieldset class="ctl">
+    <legend>Canvas width</legend>
+    <div class="seg" role="radiogroup" aria-label="Canvas width">
+      <input type="radio" name="width" id="w320" value="320"><label for="w320">320</label>
+      <input type="radio" name="width" id="w411" value="411"><label for="w411">411</label>
+      <input type="radio" name="width" id="w768" value="768"><label for="w768">768</label>
+      <input type="radio" name="width" id="w1024" value="1024"><label for="w1024">1024</label>
+      <input type="radio" name="width" id="w1280" value="1280"><label for="w1280">1280</label>
+      <input type="radio" name="width" id="w1440" value="1440"><label for="w1440">1440</label>
+    </div>
+  </fieldset>
+
+  <fieldset class="ctl">
+    <legend>Tile shape</legend>
+    <div class="seg" role="radiogroup" aria-label="Tile shape">
+      <input type="radio" name="tiles" id="tRatio" value="ratio" checked><label for="tRatio">Preserved ratio</label>
+      <input type="radio" name="tiles" id="tUniform" value="uniform"><label for="tUniform">Uniform 4:3</label>
+    </div>
+  </fieldset>
+
+  <fieldset class="ctl">
+    <legend>Photo fit</legend>
+    <div class="seg" role="radiogroup" aria-label="Photo fit">
+      <input type="radio" name="fit" id="fCrop" value="crop" checked><label for="fCrop">Crop</label>
+      <input type="radio" name="fit" id="fContain" value="contain"><label for="fContain">Contain</label>
+    </div>
+  </fieldset>
+
+  <fieldset class="ctl">
+    <legend>Text</legend>
+    <div class="seg" role="radiogroup" aria-label="Text scale">
+      <input type="radio" name="scale" id="s100" value="1" checked><label for="s100">100%</label>
+      <input type="radio" name="scale" id="s200" value="2"><label for="s200">200%</label>
+    </div>
+  </fieldset>
+
+  <fieldset class="ctl">
+    <legend>Theme</legend>
+    <div class="seg" role="radiogroup" aria-label="Theme">
+      <input type="radio" name="theme" id="thL" value="light" checked><label for="thL">Light</label>
+      <input type="radio" name="theme" id="thD" value="dark"><label for="thD">Dark</label>
+    </div>
+  </fieldset>
+
+  <div class="ctl">
+    <span class="lbl">Full image</span>
+    <button type="button" class="ghost" id="openFirst">Open a card</button>
+  </div>
+</header>
+
+<main>
+  <div class="stage" id="stage">
+    <div class="frame" id="frame" tabindex="0" role="region" aria-label="Feed preview">
+      <div class="feed" id="feed">
+        <div class="canvas" id="canvas">
+          <div class="grid" id="grid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="readout" aria-live="polite">
+    <div class="readout-head">
+      <h2>This setting</h2>
+      <span class="verdict" id="verdict" data-v="ok">—</span>
+      <span id="fitNote" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+
+    <dl class="metrics">
+      <div class="metric"><dt>Column width</dt><dd id="mCol">—<small> px</small></dd></div>
+      <div class="metric"><dt>Canvas</dt><dd id="mCanvas">—<small> px</small></dd></div>
+      <div class="metric"><dt>Feed container</dt><dd id="mCont">—<small> px</small></dd></div>
+      <div class="metric"><dt>Titles clamped</dt><dd id="mTitles">—</dd></div>
+      <div class="metric"><dt>Place on 2+ lines</dt><dd id="mPlaces">—</dd></div>
+      <div class="metric"><dt>Card heights</dt><dd id="mHeights">—</dd></div>
+    </dl>
+
+    <div class="split">
+      <ul class="notes">
+        <li><strong>Readable floor 200px</strong>, structural floor 182px (four 44px action targets and 2px gaps). Below 200px the author name is gone and the place label wraps; below 182px the action row itself overflows.</li>
+        <li>Arithmetic is the app's: <code>container = canvas − 2 × 16px × text%</code>, <code>column = (container − (n−1) × 12) / n</code>.</li>
+        <li><strong>Needs</strong> <span id="mBoundary">—</span> canvas for this count at the app's 260px card floor (boundary = <code>272n + 28</code>, from the app's 40px inset budget).</li>
+      </ul>
+      <ul class="notes">
+        <li>Product canvas cap is 1152px, so 1280 and 1440 render identically here — that is the real behaviour, not a lab bug.</li>
+        <li>Text 200% is a stress view: the app's own maximum is 125%.</li>
+        <li>The preview scrolls with the wheel, trackpad or arrow keys; its scrollbar is hidden so the frame width is exactly the number you picked.</li>
+        <li>Titles clamped and place wraps are read from the rendered DOM in this browser and font — expect a character or two of drift on another device.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<div class="viewer" id="viewer" hidden>
+  <div class="vpanel" role="dialog" aria-modal="true" aria-labelledby="vTitle">
+    <div class="vbar">
+      <strong id="vTitle">—</strong>
+      <span class="count" id="vCount"></span>
+    </div>
+    <div class="vmedia" id="vMedia"></div>
+    <div class="vmeta" id="vMeta"></div>
+    <div class="vfoot">
+      <button type="button" class="vnav" id="vPrev">Previous</button>
+      <button type="button" class="vclose" id="vClose">Close</button>
+      <button type="button" class="vnav" id="vNext">Next</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------ data */
+
+const PHOTOS = [
+  { w: 1200, h: 1600 }, // 3:4
+  { w: 1600, h: 1200 }, // 4:3
+  { w: 1400, h: 1400 }, // 1:1
+  { w: 1080, h: 1920 }, // 9:16
+  { w: 1920, h: 1080 }, // 16:9
+  { w: 1500, h: 1200 }, // 5:4
+  { w: 1000, h: 1500 }  // 2:3
+];
+
+const CARDS = [
+  { author: "Ade R.", initials: "AR", time: "2 d ago", status: "Open", kind: "Lost", category: "Bags",
+    title: "Navy backpack with a broken left zip and a physics textbook inside",
+    place: "Ikeja GRA, Lagos", hue: 205, shape: 0, photos: 1 },
+  { author: "Tunde O.", initials: "TO", time: "6 h ago", status: "Open", kind: "Found", category: "Electronics",
+    title: "Black phone, cracked corner, blue case",
+    place: "Yaba, Lagos", hue: 22, shape: 1, photos: 3 },
+  { author: "Chidi N.", initials: "CN", time: "3 w ago", status: "Matched", kind: "Lost", category: "Keys",
+    title: "Keys on a Toyota fob",
+    place: "Surulere", hue: 152, shape: 2, photos: 1 },
+  { author: "Ifeoma A.", initials: "IA", time: "1 d ago", status: "Open", kind: "Found", category: "Eyewear",
+    title: "Prescription glasses in a brown case",
+    place: "Lekki Phase 1, Lagos", hue: 268, shape: 3, photos: 1 },
+  { author: "Bala M.", initials: "BM", time: "5 d ago", status: "Open", kind: "Lost", category: "Documents",
+    title: "Student ID and a bank card in a clear sleeve",
+    place: "Wuse 2, Abuja", hue: 36, shape: 4, photos: 2 },
+  { author: "Grace E.", initials: "GE", time: "9 h ago", status: "Open", kind: "Found", category: "Clothing",
+    title: "Blue varsity jacket, name tag inside the collar",
+    place: "Victoria Island", hue: 196, shape: 5, photos: 1 },
+  { author: "Musa K.", initials: "MK", time: "4 d ago", status: "Recovered", kind: "Lost", category: "Bags",
+    title: "Small brown satchel",
+    place: "Garki, Abuja", hue: 28, shape: 6, photos: 1 },
+  { author: "Ngozi U.", initials: "NU", time: "12 h ago", status: "Open", kind: "Lost", category: "Electronics",
+    title: "Earbuds case, white, scuffed lid",
+    place: null, hue: 168, shape: 1, photos: 1 },
+  { author: "Femi D.", initials: "FD", time: "2 w ago", status: "Open", kind: "Found", category: "Clothing",
+    title: "One grey glove, left hand",
+    place: "Oshodi, Lagos", hue: 320, shape: 0, photos: 1 },
+  { author: "Zainab I.", initials: "ZI", time: "3 d ago", status: "Matched", kind: "Found", category: "Documents",
+    title: "Passport photograph envelope",
+    place: "Maitama, Abuja", hue: 96, shape: 3, photos: 1 },
+  { author: "Kola B.", initials: "KB", time: "1 h ago", status: "Open", kind: "Lost", category: "Keys",
+    title: "Bunch of keys with a red bottle opener",
+    place: "Ikoyi, Lagos", hue: 14, shape: 2, photos: 1 },
+  { author: "Amaka C.", initials: "AC", time: "6 d ago", status: "Open", kind: "Found", category: "Other",
+    title: "Report with no photo", place: "Festac, Lagos", hue: 220, shape: -1, photos: 0 },
+  { author: "Segun A.", initials: "SA", time: "8 h ago", status: "Open", kind: "Lost", category: "Bags",
+    title: "Laptop sleeve, charcoal, coffee stain on the front",
+    place: "Agege, Lagos", hue: 214, shape: 5, photos: 1 },
+  { author: "Halima S.", initials: "HS", time: "5 d ago", status: "Open", kind: "Found", category: "Electronics",
+    title: "Power bank",
+    place: "Kubwa, Abuja", hue: 44, shape: 4, photos: 1 }
+];
+
+const ICON = {
+  bookmark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+  tag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M3 11V4h7l10 10-7 7z"/><circle cx="7.5" cy="7.5" r="1.4"/></svg>',
+  thumbUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M7 21V10l5-7 1 1v6h6a2 2 0 0 1 2 2l-2 8a2 2 0 0 1-2 1z"/><path d="M7 10H3v11h4"/></svg>',
+  thumbDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M17 3v11l-5 7-1-1v-6H5a2 2 0 0 1-2-2l2-8a2 2 0 0 1 2-1z"/><path d="M17 14h4V3h-4"/></svg>',
+  comment: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 12a8 8 0 0 1-8 8H8l-5 3 1.6-4.4A8 8 0 1 1 21 12Z"/></svg>',
+  share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 12v7h16v-7"/><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/></svg>'
+};
+
+/* ---------------------------------------------------------------- photos */
+
+/**
+ * A synthetic photo. The subject and the four corner ticks are the point: when
+ * a tile crops, the ticks and part of the subject leave the frame, which is
+ * exactly the cost the study is about. The tick inset is proportional to the
+ * photo, so the same drawing reads the same at every ratio.
+ */
+function photoSvg(card, index, fit, idSuffix) {
+  const p = PHOTOS[card.shape % PHOTOS.length];
+  const { w, h } = p;
+  const hue = card.hue;
+  const gid = "g" + (idSuffix || "") + index;
+  const short = Math.min(w, h);
+  const s = short * 0.4;
+  const cx = w * 0.5;
+  const cy = h * 0.46;
+  const tick = Math.round(short * 0.13);
+  const sw = Math.max(2, Math.round(short * 0.008));
+  const subject = (() => {
+    switch (card.shape % 5) {
+      case 0: // bag: body + handle
+        return `<rect x="${cx - s * 0.42}" y="${cy - s * 0.12}" width="${s * 0.84}" height="${s * 0.72}" rx="${s * 0.12}" fill="hsl(${hue} 26% 26%)" opacity=".82"/>
+                <path d="M${cx - s * 0.2} ${cy - s * 0.1} v${-s * 0.16} a${s * 0.2} ${s * 0.2} 0 0 1 ${s * 0.4} 0 v${s * 0.16}" fill="none" stroke="hsl(${hue} 26% 22%)" stroke-width="${sw * 3}" opacity=".8"/>`;
+      case 1: // device: body + lens
+        return `<rect x="${cx - s * 0.28}" y="${cy - s * 0.5}" width="${s * 0.56}" height="${s * 1.0}" rx="${s * 0.09}" fill="hsl(${hue} 22% 20%)" opacity=".85"/>
+                <circle cx="${cx}" cy="${cy - s * 0.3}" r="${s * 0.09}" fill="hsl(${hue} 30% 74%)" opacity=".75"/>`;
+      case 2: // keys: ring + stems
+        return `<circle cx="${cx - s * 0.18}" cy="${cy - s * 0.2}" r="${s * 0.22}" fill="none" stroke="hsl(${hue} 24% 30%)" stroke-width="${sw * 4}" opacity=".85"/>
+                <rect x="${cx - s * 0.02}" y="${cy - s * 0.06}" width="${s * 0.5}" height="${s * 0.09}" rx="${s * 0.04}" fill="hsl(${hue} 24% 28%)" opacity=".85"/>
+                <rect x="${cx + s * 0.34}" y="${cy - s * 0.06}" width="${s * 0.07}" height="${s * 0.2}" fill="hsl(${hue} 24% 28%)" opacity=".85"/>`;
+      case 3: // eyewear: two lenses + bridge
+        return `<g fill="none" stroke="hsl(${hue} 20% 26%)" stroke-width="${sw * 3}" opacity=".85">
+                  <circle cx="${cx - s * 0.26}" cy="${cy}" r="${s * 0.19}"/>
+                  <circle cx="${cx + s * 0.26}" cy="${cy}" r="${s * 0.19}"/>
+                  <path d="M${cx - s * 0.07} ${cy} h${s * 0.14}"/>
+                </g>`;
+      default: // document: sheet + lines
+        return `<rect x="${cx - s * 0.3}" y="${cy - s * 0.42}" width="${s * 0.6}" height="${s * 0.84}" rx="${s * 0.04}" fill="hsl(${hue} 14% 88%)" opacity=".9"/>
+                <g stroke="hsl(${hue} 12% 46%)" stroke-width="${sw * 2}" opacity=".7">
+                  <path d="M${cx - s * 0.2} ${cy - s * 0.2} h${s * 0.4}"/>
+                  <path d="M${cx - s * 0.2} ${cy - s * 0.04} h${s * 0.4}"/>
+                  <path d="M${cx - s * 0.2} ${cy + s * 0.12} h${s * 0.26}"/>
+                </g>`;
+    }
+  })();
+  const corner = (x, y, dx, dy) => `<path d="M${x} ${y} h${dx * tick} M${x} ${y} v${dy * tick}" fill="none" stroke="rgba(255,255,255,.62)" stroke-width="${sw * 2}" stroke-linecap="square"/>`;
+  const pad = 0.055;
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid ${fit}" role="img" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="${gid}" x1="0" y1="0" x2="0.35" y2="1">
+        <stop offset="0" stop-color="hsl(${hue} 17% 76%)"/>
+        <stop offset="1" stop-color="hsl(${hue} 15% 48%)"/>
+      </linearGradient>
+    </defs>
+    <rect width="${w}" height="${h}" fill="url(#${gid})"/>
+    <rect y="${h * 0.68}" width="${w}" height="${h * 0.32}" fill="hsl(${hue} 13% 36%)" opacity=".5"/>
+    <ellipse cx="${cx}" cy="${cy + s * 0.62}" rx="${s * 0.62}" ry="${s * 0.12}" fill="hsl(${hue} 12% 24%)" opacity=".28"/>
+    ${subject}
+    <rect x="${w * pad}" y="${h * pad}" width="${w * (1 - pad * 2)}" height="${h * (1 - pad * 2)}" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="${sw}"/>
+    ${corner(w * pad, h * pad, 1, 1)}
+    ${corner(w * (1 - pad), h * pad, -1, 1)}
+    ${corner(w * pad, h * (1 - pad), 1, -1)}
+    ${corner(w * (1 - pad), h * (1 - pad), -1, -1)}
+  </svg>`;
+}
+
+/* ----------------------------------------------------------------- markup */
+
+function cardMarkup(card, index, fit) {
+  const hasPhoto = card.shape >= 0 && card.photos > 0;
+  const p = hasPhoto ? PHOTOS[card.shape % PHOTOS.length] : null;
+  const r = p ? (p.w / p.h) : null;
+  const media = hasPhoto
+    ? `<button type="button" class="media" style="--r:${r.toFixed(4)}" data-open="${index}"
+         aria-label="Photo for ${esc(card.title)}: open the full image">
+         ${photoSvg(card, index, fit)}
+         ${card.photos > 1 ? `<span class="more">+${card.photos - 1}</span>` : ""}
+       </button>`
+    : `<div class="blank" aria-hidden="true">No photo on this report</div>`;
+  return `<article class="card" data-i="${index}">
+    <div class="who">
+      <span class="av" aria-hidden="true">${card.initials}</span>
+      <span class="name">${esc(card.author)}</span>
+      <time>${esc(card.time)}</time>
+      <span class="save" aria-hidden="true">${ICON.bookmark}</span>
+    </div>
+    <div class="head">
+      <p class="status"><span class="dot" data-k="${card.status.toLowerCase()}"></span>${esc(card.status)} · ${esc(card.kind)}</p>
+      <h3 class="title" title="${esc(card.title)}">${esc(card.title)}</h3>
+    </div>
+    ${media}
+    <p class="facts">
+      ${card.place ? `<span class="fact">${ICON.pin}<span>${esc(card.place)}</span></span>` : ""}
+      <span class="fact">${ICON.tag}<span>${esc(card.category)}</span></span>
+    </p>
+    <div class="acts">
+      <span class="act">${ICON.thumbUp}12</span>
+      <span class="act">${ICON.thumbDown}1</span>
+      <span class="act">${ICON.comment}3</span>
+      <span class="act">${ICON.share}</span>
+    </div>
+  </article>`;
+}
+
+function esc(value) {
+  return String(value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+
+/* ------------------------------------------------------------------ state */
+
+const CANVAS_CAP = 1152;   // MASONRY_CANVAS_MAX_PX in responsive.ts
+const MIN_CARD = 260;      // MASONRY_MIN_CARD_PX
+const GAP = 12;            // MASONRY_GUTTER_PX
+const INSET = 40;          // MASONRY_CONTAINER_INSET_PX
+const READABLE_FLOOR = 200;  // study threshold: identity row + facts still fit
+const STRUCTURAL_FLOOR = 182; // four 44px action targets + three 2px gaps
+
+const state = { columns: 4, width: 1024, tiles: "ratio", fit: "crop", scale: 1, theme: "light" };
+
+const frame = document.getElementById("frame");
+const feed = document.getElementById("feed");
+const grid = document.getElementById("grid");
+
+function readRadio(name) {
+  const el = document.querySelector(`input[name="${name}"]:checked`);
+  return el ? el.value : null;
+}
+
+function syncFitControl() {
+  const preserved = state.tiles === "ratio";
+  for (const id of ["fCrop", "fContain"]) document.getElementById(id).disabled = preserved;
+  document.getElementById("fitNote").textContent = preserved
+    ? "Preserved ratio: the box already matches the photo, so crop and contain are the same picture."
+    : "Uniform tile: crop shows the middle and hides the edges; contain letterboxes the whole photo.";
+}
+
+/* ----------------------------------------------------------------- layout */
+
+function baseFontPx() {
+  return 16 * state.scale;
+}
+
+/** The box the feed actually gets: the viewport, capped at the product's canvas cap. */
+function canvasPx() {
+  return Math.min(state.width, CANVAS_CAP);
+}
+
+function bootstrap() {
+  const preserved = state.tiles === "ratio";
+  frame.style.setProperty("--frame-w", state.width + "px");
+  document.documentElement.dataset.theme = state.theme;
+  feed.style.setProperty("--scale", String(state.scale));
+  grid.classList.toggle("uniform", !preserved);
+
+  const scrollTop = frame.scrollTop;
+  grid.innerHTML = CARDS.map((card, i) => cardMarkup(card, i, preserved ? "meet" : (state.fit === "crop" ? "slice" : "meet"))).join("");
+  frame.scrollTop = scrollTop;
+
+  layout();
+  syncFitControl();
+  updateReadout();
+}
+
+function columnWidth() {
+  const container = canvasPx() - 2 * baseFontPx();
+  return Math.max(0, (container - GAP * (state.columns - 1)) / state.columns);
+}
+
+function estimateHeight(card, cw) {
+  const hasPhoto = card.shape >= 0 && card.photos > 0;
+  const media = !hasPhoto
+    ? cw * 0.75            // the placeholder keeps the same 4:3 box
+    : state.tiles === "ratio"
+      ? cw * (PHOTOS[card.shape % PHOTOS.length].h / PHOTOS[card.shape % PHOTOS.length].w)
+      : cw * 0.75;
+  return media + 112 * state.scale;
+}
+
+/** Shortest column, ties to the leftmost — the app's own rule. */
+function place(heights) {
+  const n = state.columns;
+  const cw = columnWidth();
+  grid.style.setProperty("--cw", cw + "px");
+  const cards = [...grid.querySelectorAll(".card")];
+  const columns = new Array(n).fill(0);
+  let tallest = 0;
+  cards.forEach((el, i) => {
+    let column = 0;
+    for (let c = 1; c < n; c += 1) if (columns[c] < columns[column]) column = c;
+    const top = columns[column];
+    el.style.transform = `translate3d(${(column * (cw + GAP)).toFixed(2)}px, ${top.toFixed(2)}px, 0)`;
+    columns[column] = top + heights[i] + GAP;
+    tallest = Math.max(tallest, columns[column]);
+  });
+  grid.style.height = Math.max(0, tallest - GAP) + "px";
+}
+
+/**
+ * Two passes, like the product: place from estimates so the first frame already
+ * reserves space, then measure the real cards and place again. Reads and writes
+ * are separated so the measurement never interleaves with a transform.
+ */
+function layout() {
+  const cards = [...grid.querySelectorAll(".card")];
+  const cw = columnWidth();
+  place(CARDS.map((card) => estimateHeight(card, cw)));
+  const measured = cards.map((el) => el.offsetHeight);
+  place(measured);
+  return measured;
+}
+
+/* ---------------------------------------------------------------- readout */
+
+function isClamped(el) {
+  return el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1;
+}
+
+function wrappedLines(el) {
+  const line = parseFloat(getComputedStyle(el).lineHeight) || 18;
+  return Math.round(el.getBoundingClientRect().height / line);
+}
+
+function updateReadout() {
+  const cw = columnWidth();
+  const container = canvasPx() - 2 * baseFontPx();
+  const cards = [...grid.querySelectorAll(".card")];
+
+  const titles = cards.map((el) => el.querySelector(".title")).filter(Boolean);
+  const clamped = titles.filter(isClamped).length;
+
+  const places = cards.map((el) => el.querySelector(".fact > span")).filter(Boolean);
+  const wrapped = places.filter((el) => wrappedLines(el) >= 2).length;
+
+  const heights = cards.map((el) => el.offsetHeight).filter((h) => h > 0);
+  const minH = Math.min(...heights);
+  const maxH = Math.max(...heights);
+
+  document.getElementById("mCol").innerHTML = cw.toFixed(2) + "<small> px</small>";
+  document.getElementById("mCanvas").innerHTML = canvasPx() + "<small> px" + (canvasPx() < state.width ? " · capped" : "") + "</small>";
+  document.getElementById("mCont").innerHTML = container.toFixed(0) + "<small> px</small>";
+  document.getElementById("mTitles").innerHTML = `${clamped}<small> / ${titles.length}</small>`;
+  document.getElementById("mPlaces").innerHTML = `${wrapped}<small> / ${places.length}</small>`;
+  document.getElementById("mHeights").innerHTML = `${minH}–${maxH}<small> px</small>`;
+
+  const verdict = document.getElementById("verdict");
+  const label = cw >= READABLE_FLOOR ? "ok" : cw >= STRUCTURAL_FLOOR ? "tight" : "bad";
+  verdict.dataset.v = label;
+  verdict.textContent = cw >= READABLE_FLOOR
+    ? `Readable at ${cw.toFixed(0)}px`
+    : cw >= STRUCTURAL_FLOOR
+      ? `Tight at ${cw.toFixed(0)}px`
+      : `Too narrow at ${cw.toFixed(0)}px`;
+
+  const boundary = 272 * state.columns + 28;
+  document.getElementById("mBoundary").textContent = boundary > CANVAS_CAP
+    ? `${boundary}px — beyond the 1152px canvas cap, so this count cannot hold a 260px card today`
+    : `${boundary}px`;
+}
+
+/* ------------------------------------------------------------ full image */
+
+let viewerIndex = -1;
+let viewerReturnFocus = null;
+
+const viewer = document.getElementById("viewer");
+
+function openViewer(index, keepReturnFocus) {
+  const card = CARDS[index];
+  if (!card || card.shape < 0 || card.photos === 0) return;
+  viewerIndex = index;
+  if (!keepReturnFocus) viewerReturnFocus = document.activeElement;
+  const p = PHOTOS[card.shape % PHOTOS.length];
+  const r = (p.w / p.h);
+  document.getElementById("vTitle").textContent = card.title;
+  document.getElementById("vCount").textContent = `Photo 1 of ${card.photos}`;
+  const media = document.getElementById("vMedia");
+  media.style.setProperty("--r", r.toFixed(4));
+  media.innerHTML = photoSvg(card, index, "meet", "v");
+  document.getElementById("vMeta").innerHTML =
+    `<span><b>${esc(card.category)}</b> · ${esc(card.status)} ${esc(card.kind)}</span>` +
+    (card.place ? `<span>${esc(card.place)}</span>` : "") +
+    `<span>${esc(card.time)}</span><span>by ${esc(card.author)}</span>`;
+  viewer.hidden = false;
+  document.body.style.overflow = "hidden";
+  document.getElementById("vClose").focus();
+}
+
+function closeViewer() {
+  viewer.hidden = true;
+  document.body.style.overflow = "";
+  viewerIndex = -1;
+  if (viewerReturnFocus && typeof viewerReturnFocus.focus === "function") viewerReturnFocus.focus();
+  viewerReturnFocus = null;
+}
+
+function stepViewer(delta) {
+  if (viewerIndex < 0) return;
+  const withPhotos = CARDS.map((c, i) => (c.shape >= 0 && c.photos > 0 ? i : -1)).filter((i) => i >= 0);
+  const at = withPhotos.indexOf(viewerIndex);
+  const next = withPhotos[(at + delta + withPhotos.length) % withPhotos.length];
+  openViewer(next, true);
+}
+
+viewer.addEventListener("click", (event) => {
+  if (event.target === viewer) closeViewer();
+});
+document.getElementById("vClose").addEventListener("click", closeViewer);
+document.getElementById("vPrev").addEventListener("click", () => stepViewer(-1));
+document.getElementById("vNext").addEventListener("click", () => stepViewer(1));
+document.getElementById("openFirst").addEventListener("click", () => openViewer(0));
+
+grid.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-open]");
+  if (button) openViewer(Number(button.dataset.open));
+});
+
+document.addEventListener("keydown", (event) => {
+  if (viewer.hidden) return;
+  if (event.key === "Escape") { event.preventDefault(); closeViewer(); }
+  if (event.key === "ArrowRight") { event.preventDefault(); stepViewer(1); }
+  if (event.key === "ArrowLeft") { event.preventDefault(); stepViewer(-1); }
+});
+
+/* --------------------------------------------------------------- controls */
+
+document.querySelectorAll('input[name="columns"]').forEach((input) => {
+  input.addEventListener("change", () => { state.columns = Number(readRadio("columns")); bootstrap(); });
+});
+document.querySelectorAll('input[name="width"]').forEach((input) => {
+  input.addEventListener("change", () => { state.width = Number(readRadio("width")); bootstrap(); });
+});
+document.querySelectorAll('input[name="tiles"]').forEach((input) => {
+  input.addEventListener("change", () => { state.tiles = readRadio("tiles"); bootstrap(); });
+});
+document.querySelectorAll('input[name="fit"]').forEach((input) => {
+  input.addEventListener("change", () => { state.fit = readRadio("fit"); bootstrap(); });
+});
+document.querySelectorAll('input[name="scale"]').forEach((input) => {
+  input.addEventListener("change", () => { state.scale = Number(readRadio("scale")); bootstrap(); });
+});
+document.querySelectorAll('input[name="theme"]').forEach((input) => {
+  input.addEventListener("change", () => { state.theme = readRadio("theme"); bootstrap(); });
+});
+
+/* Fonts and the first layout: measure once more after the font settles, so the
+   truncation count is not taken against a fallback face. */
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(() => { layout(); updateReadout(); });
+}
+
+bootstrap();
+</script>
+</body>
+</html>
