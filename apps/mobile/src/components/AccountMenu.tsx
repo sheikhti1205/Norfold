@@ -98,7 +98,10 @@ export function AccountMenu() {
 
   return <div className="fb-account-rail">
     <DialogTrigger isOpen={open} onOpenChange={(next) => { setOpen(next); if (!next) setPreview(null); }}>
-      <Button aria-label={`Account, ${name}`} aria-expanded={pathname === "/settings" || pathname.startsWith("/settings/")}
+      {/* A signed-out rail has no name to add; "Account, Account" is not a
+          name, so the label is just "Account" rather than repeating the word. */}
+      <Button aria-label={name === "Account" ? "Account" : `Account, ${name}`}
+        aria-expanded={pathname === "/settings" || pathname.startsWith("/settings/")}
         className="fb-nav-link fb-account-trigger">
         <UserAvatar avatarUrl={user?.avatarUrl} username={name} size={32} />
         <span className="fb-account-trigger-text">

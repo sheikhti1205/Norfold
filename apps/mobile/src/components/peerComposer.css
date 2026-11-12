@@ -10,7 +10,14 @@
   min-width: 0; padding: 4px;
 }
 .fb-peer-attachments { display: flex; align-items: center; flex: none; }
-.fb-peer-controls { display: flex; align-items: center; gap: 2px; overflow: hidden; }
+/* The reader typed: the cluster is gone from the DOM and `>` takes its place,
+   at any width. */
+.fb-peer-attachments[data-reveal="off"] .fb-peer-reveal { display: inline-flex; }
+/* Not clipped: the overflow menu opens from inside this group, and an
+   `overflow: hidden` here would cut the panel off at the row's top edge. A
+   composer too narrow to hold the group collapses it instead (see
+   PeerChatComposer's width rule), so there is nothing to scroll away. */
+.fb-peer-controls { display: flex; align-items: center; gap: 2px; overflow: visible; }
 .fb-peer-icon {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 44px; min-height: 44px; flex: none;
@@ -19,7 +26,22 @@
 .fb-peer-icon:hover { background: var(--fb-surface-container); }
 .fb-peer-icon:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; }
 .fb-peer-icon:disabled { opacity: .4; }
-.fb-peer-reveal { color: var(--fb-on-surface); }
+.fb-peer-reveal { color: var(--fb-on-surface); display: none; }
+/* The width rule, and only the width rule: below 400px of the composer's own
+   width, five 44px controls leave the field narrower than its own placeholder
+   (66px at 320dp, clipping "Message" to "Mes"). There `>` stands in until the
+   reader asks for the cluster. Decided in CSS against the composer container
+   so it can never disagree with the layout it is reacting to. */
+@container composer (max-width: 399px) {
+  .fb-peer-attachments[data-reveal="auto"] .fb-peer-controls { display: none; }
+  .fb-peer-attachments[data-reveal="auto"] .fb-peer-reveal { display: inline-flex; }
+  /* Narrow and revealed: the field is momentarily too small for its own
+     placeholder. An empty pill reads better than a word cut to "Mes"; the
+     hint returns the moment typing collapses the cluster again. */
+  .fb-peer-attachments[data-reveal="on"] ~ .fb-peer-field textarea::placeholder {
+    color: transparent;
+  }
+}
 .fb-peer-field {
   flex: 1; min-width: 0;
   border: 1px solid var(--fb-outline-variant);

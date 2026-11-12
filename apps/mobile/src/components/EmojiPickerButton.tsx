@@ -46,7 +46,11 @@ export function EmojiPickerButton({
   }, [open]);
 
   return (
-    <div className="relative" ref={root}>
+    // Deliberately not `position: relative`: the panel resolves against the
+    // composer that owns the field, so a right-aligned palette on a 320dp
+    // phone ends at the composer's edge instead of hanging off the trigger's
+    // 44px box and being clipped.
+    <div ref={root}>
       <button
         ref={trigger}
         type="button"
