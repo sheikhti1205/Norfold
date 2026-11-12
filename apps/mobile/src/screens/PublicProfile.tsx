@@ -5,6 +5,7 @@ import { fetchPublicProfile, appendReportPage, hasMoreReports } from "../service
 import { fetchFeed } from "../services/posts";
 import { fetchReputationTier, REPUTATION_TIER_LABELS } from "../services/trust";
 import { UserAvatar } from "../components/UserAvatar";
+import { VerifiedBadge } from "../components/VerifiedBadge";
 import { BlockedByViewerShield } from "../components/BlockedByViewerShield";
 import { SafetyActions } from "../components/SafetyActions";
 import { SettingsGroup, SettingsPage, SettingsRow, StatusPill } from "../components/settings";
@@ -162,7 +163,7 @@ function PublicProfileSession({ username }: { username: string }) {
               <SafetyActions reportPerson person={{ userId: profile.id, name: profile.displayName || profile.username }} />
             </div>
             <div className="flex w-full min-w-0 flex-col gap-0.5 text-start">
-            {profile.displayName && <p className="break-words text-base font-semibold">{profile.displayName}</p>}
+            {profile.displayName && <p className="break-words text-base font-semibold">{profile.displayName}<VerifiedBadge emailVerified={profile.emailVerified} phoneVerified={profile.phoneVerified} telegramPhoneVerified={(profile as { telegramPhoneVerified?: boolean }).telegramPhoneVerified} /></p>}
             <p className="break-all text-sm text-on-surface-variant">@{profile.username}</p>
             <p className="text-xs text-on-surface-variant">{formatJoined(profile.createdAt)}</p>
             {(profile.emailVerified || profile.phoneVerified) && (

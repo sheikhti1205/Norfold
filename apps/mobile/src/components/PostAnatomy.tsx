@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { MapPin, Tag } from "lucide-react";
 import { timeAgo } from "../utils/dates";
 import { UserIdentityTrigger } from "./UserIdentityTrigger";
+import { VerifiedBadge } from "./VerifiedBadge";
 import { StatusChip } from "./StatusChip";
 import { PostLink } from "./PostNavigation";
 import { motionDurations, motionEasings, motionSprings } from "./uiMotion";
@@ -18,9 +19,11 @@ export const sharedElementTransition = {
 /** Public presentation only; overflow and relationship state stay with features. */
 export function PostIdentityHeader({ post, overflow, contextReportId }: { post: PostItem; overflow?: ReactNode; contextReportId?: string }) {
   return <header className="fb-post-identity">
-    <UserIdentityTrigger person={contextReportId ? { ...post.author, contextReportId } : post.author} />
-    <span data-testid="post-author" className="sr-only">@{post.author.username}</span>
-    <time data-testid="post-time" dateTime={post.createdAt} title={new Date(post.createdAt).toLocaleString()} className="fb-post-time">{timeAgo(post.createdAt)}</time>
+    <div className="fb-post-identity-line">
+      <span className="fb-post-name-badge"><UserIdentityTrigger person={contextReportId ? { ...post.author, contextReportId } : post.author} /><VerifiedBadge emailVerified={post.author.emailVerified} phoneVerified={post.author.phoneVerified} telegramPhoneVerified={(post.author as { telegramPhoneVerified?: boolean }).telegramPhoneVerified} /></span>
+      <span data-testid="post-author" className="fb-post-handle">@{post.author.username}</span>
+      <span className="fb-post-time"><span aria-hidden="true">· </span><time data-testid="post-time" dateTime={post.createdAt} title={new Date(post.createdAt).toLocaleString()}>{timeAgo(post.createdAt)}</time></span>
+    </div>
     {overflow && <div className="fb-post-overflow">{overflow}</div>}
   </header>;
 }

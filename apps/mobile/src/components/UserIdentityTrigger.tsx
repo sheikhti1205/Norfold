@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import type { SearchedProfile } from "@norfold/shared";
 import { UserAvatar } from "./UserAvatar";
+import "./UserIdentityTrigger.css";
 
 export type PublicIdentity = Pick<SearchedProfile, "id" | "username"> & Partial<Pick<SearchedProfile, "displayName" | "avatarUrl">> & {
   /** Present when this identity was opened from a report: the first message may
