@@ -70,6 +70,7 @@
   .fb-onboarding h2 { font-size: clamp(1.375rem, 8vw, 2rem); letter-spacing: -.03em; }
   /* The final statement keeps its own scale: the generic section scale inverts the hierarchy at 320px. */
   .fb-onboarding-closing h2 { font-size: clamp(1.75rem, 9vw, 2.5rem); }
+  .fb-onboarding-route--v { display: none; }
   .fb-onboarding-steps li { display: block; }
   .fb-onboarding-steps li > span { width: 2.5rem; margin-bottom: .875rem; }
 }
