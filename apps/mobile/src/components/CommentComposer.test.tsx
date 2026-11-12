@@ -232,15 +232,19 @@ describe("CommentComposer mentions", () => {
   });
 });
 
-describe("CommentComposer has no emoji affordance (packet `08` §5)", () => {
-  it("renders no emoji control and no panel — the platform keyboard is the remaining path", () => {
+describe("CommentComposer emoji affordance (owner order 2026-11-12, R5)", () => {
+  it("opens the shared emoji palette and inserts at the caret", () => {
     globalThis.localStorage?.clear();
     render(<CommentComposer {...baseProps()} />);
-    fireEvent.change(screen.getByTestId("comment-input"), { target: { value: "Wow " } });
-    expect(screen.queryByTestId("comment-emoji")).toBeNull();
-    expect(screen.queryByTestId("comment-emoji-panel")).toBeNull();
-    expect(screen.queryByRole("button", { name: /emoji/i })).toBeNull();
-    expect(screen.queryByRole("dialog", { name: /emoji/i })).toBeNull();
+    fireEvent.change(screen.getByTestId("comment-input"), { target: { value: "Wow" } });
+    const field = screen.getByTestId("comment-input") as HTMLTextAreaElement;
+    field.setSelectionRange(3, 3);
+    const trigger = screen.getByRole("button", { name: /emoji/i });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog", { name: /emoji picker/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "party popper" }));
+    expect((screen.getByTestId("comment-input") as HTMLTextAreaElement).value).toBe("Wow🎉");
   });
 
   it("never truncates an over-limit draft (validation blocks send, content untouched)", () => {

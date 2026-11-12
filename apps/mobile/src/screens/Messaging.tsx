@@ -15,6 +15,7 @@ import { StatusChip } from "../components/StatusChip";
 import { formatChatDay, formatEventDate, timeAgo } from "../utils/dates";
 import { haptic } from "../utils/haptics";
 import { convertEmoticons, isEmojiOnly } from "../utils/emoji";
+import { isKlipyMediaUrl, type KlipyItem } from "../services/klipy";
 import { SplitView, type SplitPaneState } from "../components/SplitView";
 import { CHAT_PANE } from "../components/panePreference";
 import { ChatDetailsLayout } from "../components/ChatDetailsLayout";
@@ -1454,6 +1455,30 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     }
   }
   /**
+   * A Klipy sticker or GIF travels as the message body: the provider URL is
+   * the media, and the transcript renders an allowlisted Klipy URL as the
+   * picture rather than as text. No bytes are copied into Storage, so a
+   * sticker costs no upload and keeps its animation; the chat media lane only
+   * accepts still JPEG/PNG/WebP.
+   */
+  function sendKlipy(item: KlipyItem) {
+    if (!runtimeOpen || !row) return;
+    const replyTargetId = replyTo?.id;
+    setError(null); setSendStatus(null);
+    void (async () => {
+      try {
+        await sendMessagingText(accountId, conversationId, row.peerId, item.mediaUrl, undefined, replyTargetId);
+        if (!alive.current) return;
+        nearBottom.current = true;
+        setReplyTo(null);
+        setAdmissionFailed(false);
+      } catch {
+        if (alive.current) setError("Your sticker was not sent. Try again.");
+      }
+    })();
+  }
+
+  /**
    * Open the report sheet for one message. An unsent message has no body in the
    * transcript, so its hidden retained copy is read here — the single place the
    * body is allowed to leave the hold.
@@ -1690,7 +1715,10 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             {message.messageType === "VOICE" && attachment && !photoAllowed && <p>Voice messages are available when connected.</p>}
             {message.contextReportId && <ChatReportContext reportId={message.contextReportId} safetyKey={view?.ownBlocked ? "blocked" : "clear"} />}
             {message.location && <ChatLocation location={message.location} />}
-            {message.body ? <p dir="auto" className={emojiOnly ? "fb-chat-emoji-only" : undefined}>{message.body}</p>
+            {message.body && message.unsentAt === undefined && isKlipyMediaUrl(message.body.trim())
+              ? <img className="fb-chat-klipy" src={message.body.trim()} alt="Sticker or GIF"
+                  loading="lazy" referrerPolicy="no-referrer" />
+              : message.body ? <p dir="auto" className={emojiOnly ? "fb-chat-emoji-only" : undefined}>{message.body}</p>
               : message.messageType === "LOCATION" ? (!message.location && <p>Location unavailable</p>)
               : !attachment && <p>{missingAttachmentCopy(message)}</p>}
             {!attachment && !message.body && missingAttachmentStale(message) && <button type="button" onClick={() => {
@@ -1825,6 +1853,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         photoAllowed={view?.mode === "CONNECTED"}
         onCamera={() => void choosePhoto("camera")} onPhotos={() => void choosePhoto("photos")}
         voiceAvailable={voiceAllowed} onVoice={toggleVoiceCapture}
+        onPickKlipy={sendKlipy}
         context={<>
           {replyTo && <div className="fb-chat-reply-chip" role="status" data-chat-reply-to={replyTo.id}>
             <span className="fb-chat-reply-copy">

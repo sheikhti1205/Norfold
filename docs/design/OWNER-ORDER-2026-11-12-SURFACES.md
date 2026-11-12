@@ -141,7 +141,7 @@ at 1280; reopening restores the exact previous widths; state survives a reload.
 | R2 | Nested preview popovers | done |
 | R3 | Floating account settings panel | done, enforcement pending |
 | R4 | All-type attachments, safely | pending |
-| R5 | Emoji, stickers, GIFs everywhere | pending |
+| R5 | Emoji, stickers, GIFs everywhere | done |
 | R6 | Composer focus and Enter | done |
 | R7 | Collapsible sidebars | done |
 

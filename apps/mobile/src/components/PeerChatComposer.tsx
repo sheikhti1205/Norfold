@@ -1,7 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { Camera, ChevronRight, ImagePlus, Mic, SendHorizontal, Square } from "lucide-react";
+import { Camera, ChevronRight, ImagePlus, Mic, SendHorizontal, Square, Sticker } from "lucide-react";
 import { hasFinePointer } from "./inputCapabilities";
 import { convertEmoticonsLive } from "../utils/emoji";
+import { EmojiPickerButton } from "./EmojiPickerButton";
+import { KlipyPicker } from "./KlipyPicker";
+import { insertEmoji } from "./EmojiPicker";
+import { isKlipyEnabled, type KlipyItem } from "../services/klipy";
 import "./peerComposer.css";
 
 export interface PeerChatComposerProps {
@@ -24,16 +28,20 @@ export interface PeerChatComposerProps {
   /** True while the microphone is actually open; the control then stops it. */
   voiceActive?: boolean;
   onVoice?: () => void;
+  /** A picked sticker/GIF. The screen sends it; the composer never guesses
+   * how a conversation carries media. */
+  onPickKlipy?: (item: KlipyItem) => void;
   context?: ReactNode;
 }
 
 /**
  * Human-to-human composer.
  *
- * Exactly three attachment controls sit on the LEFT (Camera, Photos, Voice);
- * the text field follows; Send stays on the far right. There is no plus menu,
- * no file/emoji button and no outer capsule: the field keeps its own rounded
- * surface and every other control floats independently.
+ * The LEFT group holds the attachment controls (Camera, Photos, Voice, and the
+ * sticker/GIF picker when the provider key is present); the text field
+ * follows; the emoji trigger and Send stay on the far right. There is no plus
+ * menu and no outer capsule: the field keeps its own rounded surface and every
+ * other control floats independently.
  *
  * Attachment expansion is explicit state, not `document.activeElement`:
  *   - opening an idle conversation shows the controls;
@@ -42,18 +50,24 @@ export interface PeerChatComposerProps {
  *   - returning to the field collapses them again;
  *   - a successful send or clearing the whole draft restores them even while
  *     the keyboard is still open.
+ *
+ * Emoji is the exception: it stays reachable on the right because the owner
+ * asked for it while composing, not only before typing (R5).
  */
 export function PeerChatComposer({
   value, onChange, onSend, inputRef, busy, locked, canSend, attachmentsLocked = false,
-  photoAllowed, onCamera, onPhotos, voiceAvailable = false, voiceActive = false, onVoice, context,
+  photoAllowed, onCamera, onPhotos, voiceAvailable = false, voiceActive = false, onVoice,
+  onPickKlipy, context,
 }: PeerChatComposerProps) {
   const [expanded, setExpanded] = useState(true);
   const [focused, setFocused] = useState(false);
+  const [gifOpen, setGifOpen] = useState(false);
   const field = inputRef;
   const composing = useRef(false);
   // Live conversion changes the value, so the caret it produced is restored
   // after React commits instead of being left wherever the browser guessed.
   const caret = useRef<number | null>(null);
+  const klipy = isKlipyEnabled() && onPickKlipy !== undefined;
 
   useLayoutEffect(() => {
     const next = caret.current;
@@ -87,6 +101,21 @@ export function PeerChatComposer({
 
   const send = () => { if (available && !composing.current) onSend(); };
 
+  function pickEmoji(glyph: string) {
+    const element = field.current;
+    const start = element?.selectionStart ?? value.length;
+    const end = element?.selectionEnd ?? start;
+    const inserted = insertEmoji(value, start, end, glyph);
+    caret.current = inserted.caret;
+    onChange(inserted.text);
+    element?.focus();
+  }
+
+  function pickKlipy(item: KlipyItem) {
+    setGifOpen(false);
+    onPickKlipy?.(item);
+  }
+
   const button = (label: string, icon: ReactNode, action: () => void, disabled = false) => (
     <button type="button" className="fb-peer-icon" aria-label={label} title={label}
       disabled={disabled} onClick={action}>
@@ -111,6 +140,9 @@ export function PeerChatComposer({
             {voiceAvailable && onVoice
               ? button(voiceActive ? "Stop recording" : "Voice message",
                 voiceActive ? <Square size={19} aria-hidden="true" /> : <Mic size={21} aria-hidden="true" />, onVoice, busy || locked || attachmentsLocked)
+              : null}
+            {klipy
+              ? button("Stickers and GIFs", <Sticker size={21} aria-hidden="true" />, () => setGifOpen((open) => !open), !photoAllowed || busy || locked)
               : null}
           </div>
         ) : (
@@ -164,6 +196,8 @@ export function PeerChatComposer({
             if (hasFinePointer()) { event.preventDefault(); if (!event.repeat) send(); }
           }} />
       </div>
+      <EmojiPickerButton onPick={pickEmoji} disabled={busy || locked} align="end"
+        className="fb-peer-icon" label="Emoji" />
       <button type="submit" className="fb-peer-icon fb-peer-send" aria-label="Send message" disabled={!available}
         onMouseDown={(event) => {
           // Keep the IME open: tapping Send must not blur the field before the
@@ -173,5 +207,15 @@ export function PeerChatComposer({
         <SendHorizontal size={20} aria-hidden="true" />
       </button>
     </div>
+    {klipy && gifOpen && (
+      <div className="fb-picker-layer" style={{ left: 4 }}>
+        <KlipyPicker
+          testIdPrefix="chat-klipy"
+          onPick={pickKlipy}
+          onClose={() => setGifOpen(false)}
+          onDismiss={() => setGifOpen(false)}
+        />
+      </div>
+    )}
   </form>;
 }
