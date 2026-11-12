@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { Bookmark, ChevronRight, CircleHelp, LogOut, MessageSquareWarning, Palette, Settings as SettingsIcon } from "lucide-react";
+import { ChevronRight, LogOut } from "lucide-react";
 import { NavLayoutCard, SettingsGroup, SettingsPage, SettingsRow, SettingsSearch, ThemeCard } from "../../components/settings";
+import { AccountMenu } from "../../components/AccountMenu";
 import { UserAvatar } from "../../components/UserAvatar";
 import { settingsDestinations, settingsSectionFor, type SettingsSection } from "../../services/destinations";
 import { accountSummary, accessibilitySummary, appearanceSummary, mediaSummary, ROW_PRESENTATION } from "../../screens/Settings";
@@ -61,21 +62,6 @@ function SettingsIndex() {
   </SettingsPage>;
 }
 
-function AccountPopover() {
-  return <div className="fb-account-menu"><div className="fb-account-dialog" role="dialog" aria-label="Account">
-    <Link to="/profile" className="fb-account-row fb-account-identity"><UserAvatar avatarUrl={null} username="Account" size={40} /><span className="fb-account-identity-text"><strong>Account</strong></span><ChevronRight size={20} aria-hidden="true" /></Link>
-    <div className="fb-account-divider" />
-    <Link to="/settings/appearance" className="fb-account-row"><Palette size={24} aria-hidden="true" />Appearance</Link>
-    <Link to="/saved" className="fb-account-row"><Bookmark size={24} aria-hidden="true" />Saved</Link>
-    <Link to="/settings/feedback" className="fb-account-row"><MessageSquareWarning size={24} aria-hidden="true" />Report a problem</Link>
-    <div className="fb-account-divider" />
-    <Link to="/settings" className="fb-account-row"><SettingsIcon size={24} aria-hidden="true" />Settings</Link>
-    <div className="fb-account-divider" />
-    <Link to="/settings/help" className="fb-account-row"><CircleHelp size={24} aria-hidden="true" /><span>Help</span><ChevronRight size={20} aria-hidden="true" /></Link>
-    <div className="fb-account-row"><LogOut size={24} aria-hidden="true" /><span>Log out</span><ChevronRight size={20} aria-hidden="true" /></div>
-  </div></div>;
-}
-
 function Choices({ variant, theme, layout }: { variant: FixtureVariant; theme: "system" | "light" | "dark"; layout: "bottom" | "rail" }) {
   return <SettingsPage title="Appearance" backTo="/settings" utilities={false} autoFocus={false}>
     <SettingsGroup title="Theme"><fieldset className="fb-choice-fieldset"><legend className="sr-only">Theme</legend><div className="fb-preview-grid fb-preview-grid-theme">
@@ -87,10 +73,25 @@ function Choices({ variant, theme, layout }: { variant: FixtureVariant; theme: "
   </SettingsPage>;
 }
 
+/**
+ * The account menu is the production component, not a copy of it.
+ *
+ * The previous fixture re-declared the popover's rows as static links, so it kept
+ * rendering the shape R1 replaced (a gear beside an avatar, rows that navigate)
+ * and reviewed a menu the product no longer had. Mounting `AccountMenu` means
+ * this section cannot drift again: it is the same trigger, the same rows and the
+ * same nested panels the rail shows. A signed-out fixture shows the structure
+ * without a name or badge; a signed-in account fills those in.
+ */
 export function SettingsSurfaceFixtures() {
-  return <FixtureSection id="settings-surface" title="Settings surface" description="Settings index, account menu, and appearance choices.">
+  return <FixtureSection id="settings-surface" title="Settings surface" description="Settings index, the production account menu, and appearance choices.">
     <FixtureFrame section="settings-surface" variant="normal"><SettingsIndex /></FixtureFrame>
-    <FixtureFrame section="settings-surface" variant="loading"><AccountPopover /></FixtureFrame>
+    {/* The menu belongs to the rail's footer, so the frame gives it a rail-width
+        column. Dropped into a full-width card it would be a 1000px "trigger" and
+        the popover would be measured against a geometry production never has. */}
+    <FixtureFrame section="settings-surface" variant="loading">
+      <div style={{ width: "224px" }}><AccountMenu /></div>
+    </FixtureFrame>
     {([
       ["empty", "system", "bottom"], ["error", "light", "rail"], ["long-content", "dark", "bottom"],
       ["large-text", "system", "rail"], ["dark", "dark", "rail"], ["amoled", "dark", "bottom"], ["small-width", "light", "rail"],

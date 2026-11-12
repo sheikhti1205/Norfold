@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router";
 import { Button, Dialog, DialogTrigger } from "react-aria-components";
 import { Bookmark, ChevronRight, CircleHelp, LogOut, MessageSquareWarning, Palette, Settings, SlidersHorizontal } from "lucide-react";
 import { useAuth } from "../auth";
+import { useWideViewport } from "./responsive";
 import { ConfirmDialog } from "./AdaptiveTaskSurface";
 import { LayeredPopover } from "./overlayFoundation";
 import { UserAvatar } from "./UserAvatar";
@@ -31,6 +32,7 @@ export function AccountMenu() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const wide = useWideViewport();
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState<PreviewId>(null);
   const [confirming, setConfirming] = useState(false);
@@ -111,7 +113,13 @@ export function AccountMenu() {
         <VerifiedBadge emailVerified={verification?.emailVerified} phoneVerified={verification?.phoneVerified}
           telegramPhoneVerified={verification?.telegramPhoneVerified} />
       </Button>
-      <LayeredPopover placement="right bottom" shouldFlip={false} offset={8} className="fb-account-menu">
+      {/* Rail: the trigger sits in a 72/224px left column, so the menu opens to
+          its right. Compact: the trigger is a wide row near the bottom, and a
+          right-side placement put a 287px popover at x=347 on a 390px phone -
+          entirely off-screen. Above and end-aligned keeps it inside the
+          viewport; React Aria still flips it when the edge it chose has no
+          room. */}
+      <LayeredPopover placement={wide ? "right bottom" : "top end"} offset={8} className="fb-account-menu">
         <Dialog aria-label="Account" className="fb-account-dialog">
           {/* The panel's Escape handling is a native capture listener on this
               wrapper (see the effect above): it has to run before the popover's
