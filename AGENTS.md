@@ -78,6 +78,14 @@
 - Physical/device acceptance: `findback-device-audit`
 - Bounded independent milestone audit, when used: `findback-adversarial-review` (not a per-slice completion dependency)
 
+## Anti-slop gate (owner order 2026-11-12)
+
+Every UI, visual design, prototype, or user-facing copy change loads `antislop` plus `antislop-ui` (and `antislop-copywriting` when prose or labels change) **before** implementation, and applies the rules while building. After implementation, re-run the core Delivery Gate and the UI and copy checklists, then report the PASS/FAIL evidence.
+
+This is `during` plus a mandatory after-pass. It is not a choice and not a question: do not ask which mode to use, and do not treat one pass as satisfying both. A UI change without the after-pass is not accepted.
+
+The gate is additive to the mandatory skills above and to the rendered-review rule; it replaces neither. Any FAIL is fixed before completion. Anything that cannot be verified is reported as unverified, never as PASS.
+
 ## Rendered-review rule
 
 For visible changes, unit tests are necessary but not sufficient. Review at representative phone widths (including 320dp), light/dark/true-black, large text, loading/empty/error/success, keyboard/IME where relevant, and touch/gesture states. Compare against the owner-provided references when supplied. If the result looks generic, bulky, or mechanically generated, it is not done.
