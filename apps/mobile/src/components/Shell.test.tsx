@@ -331,9 +331,9 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
   it("first wide navigation choice closes setup, updates the one nav and preserves keyboard focus", async () => {
     localStorage.clear(); setWidth(1200); stubMatchMedia(true);
     renderShell("/");
-    const choice = screen.getByRole("button", { name: "Side rail" });
+    const choice = screen.getByRole("radio", { name: "Side rail" });
     choice.focus(); fireEvent.click(choice);
-    expect(screen.queryByRole("region", { name: "Choose your navigation" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Choose your navigation" })).toBeNull();
     const nav = screen.getByRole("navigation", { name: "Primary" });
     expect(nav.getAttribute("data-layout")).toBe("rail");
     await waitFor(() => expect(document.activeElement).toBe(within(nav).getByRole("link", { name: "Home" })));
@@ -474,11 +474,16 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     const links = within(nav).getAllByRole("link");
     // Top-to-bottom DOM order is also the visual and keyboard order.
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
-      "/report", "/", "/my", "/chats", "/settings",
+      "/report", "/", "/my", "/chats", "/insights",
     ]);
     expect(
       links.map((link) => link.getAttribute("aria-label") ?? link.textContent?.trim()),
-    ).toEqual(["Create report", "Home", "My Reports", "Chats", "Settings"]);
+    ).toEqual(["Create report", "Home", "My Reports", "Chats", "Insights"]);
+    const settings = within(nav).getByRole("button", { name: "Settings" });
+    const account = within(nav).getByRole("button", { name: "Account" });
+    expect(account.getAttribute("aria-expanded")).toBe("false");
+    expect(account.hasAttribute("aria-current")).toBe(false);
+    expect([...nav.querySelectorAll("a, button")]).toEqual([...links, settings, account]);
     expect(
       links
         .filter((link) => link.getAttribute("aria-current") === "page")
@@ -487,6 +492,8 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     // Same selected-pill treatment as the bar.
     expect(nav.querySelector(".fb-nav-active-bg")).toBeTruthy();
     expect(nav.querySelector(".fb-nav-label")).toBeTruthy();
+    fireEvent.click(settings);
+    expect(screen.getByText("Settings screen")).toBeTruthy();
   });
 
   it("takes layout space beside the content instead of overlaying it", () => {
@@ -511,7 +518,10 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     renderShell("/");
     expect(document.querySelector('[class*="drawer"]')).toBeNull();
     expect(screen.queryByRole("button", { name: /menu|drawer/i })).toBeNull();
-    expect(screen.queryByRole("dialog")).toBeNull();
+    // The first-use navigation chooser is a non-modal popover, so "no dialog"
+    // would be the wrong proxy for "no drawer": what a drawer would be is a
+    // modal sheet. The two assertions above already rule out a drawer control.
+    expect(document.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
     const nav = screen.getByRole("navigation", { name: "Primary" });
     expect(nav.className).not.toMatch(/fixed|absolute/);
   });

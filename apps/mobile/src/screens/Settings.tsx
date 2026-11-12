@@ -13,7 +13,6 @@ import {
   Image,
   Info,
   LayoutGrid,
-  LifeBuoy,
   LogOut,
   MessageSquare,
   MonitorSmartphone,
@@ -22,7 +21,6 @@ import {
   RotateCcw,
   Scale,
   ShieldCheck,
-  SlidersHorizontal,
   Sparkles,
   UserCog,
   UserRound,
@@ -53,7 +51,7 @@ import { Capacitor } from "@capacitor/core";
 import { settingsDestinations, settingsSectionFor, type SettingsSection } from "../services/destinations";
 import type { LucideIcon } from "lucide-react";
 import { SettingsProfileHeader } from "./settings/SettingsProfileHeader";
-import { SettingsNestedGroup } from "./settings/SettingsNestedGroup";
+import { SettingsNestedPages } from "./settings/SettingsNestedGroup";
 import { searchSettings } from "../services/settingsIndex";
 import { useFeedLayoutPreference } from "../services/feedLayoutPreference";
 import { resolveFeedLayout, useViewportWidth } from "../components/responsive";
@@ -73,7 +71,7 @@ import "./Settings.css";
  * aliases come from the catalogue, so nothing about *where* a row goes is
  * written twice.
  */
-const ROW_PRESENTATION: Record<string, { title: string; icon: LucideIcon; iconTone: SettingIconTone; detail?: boolean }> = {
+export const ROW_PRESENTATION: Record<string, { title: string; icon: LucideIcon; iconTone: SettingIconTone; detail?: boolean }> = {
   "recovered-items": { title: "Recovered items", icon: RotateCcw, iconTone: "success", detail: true },
   account: { title: "Account & verification", icon: UserRound, iconTone: "account" },
   devices: { title: "Devices", icon: MonitorSmartphone, iconTone: "teal", detail: true },
@@ -163,11 +161,8 @@ export function notificationSummary(
 /**
  * Settings root: profile header, search, packet groups, sign-out.
  *
- * IA (W4): Account / Preferences / Intelligence / Privacy / More. Moved rows
- * stay one tap away with unchanged routes — Cloud connections lives inside
- * AI & models (`/settings/ai`), Media & uploads inside Advanced, Diagnostics
- * inside Advanced → Troubleshooting, Replay introduction and About inside Help & about —
- * so no destination is orphaned and every row targets a real route.
+ * Account / Preferences / Intelligence / Privacy / More group the index.
+ * Advanced, Legal and Help & about label their directly navigable rows.
  * Live summaries degrade to honest fallback text when a source is unreadable.
  */
 export function Settings() {
@@ -323,6 +318,7 @@ function SettingsNavigation({ detailSelected }: { detailSelected: boolean }) {
 
   return (
     <SettingsPage title="Settings" className="fb-settings-root" headingLevel={detailSelected ? 2 : 1} autoFocus={!detailSelected}>
+      <SettingsNestedPages>
       <SettingsProfileHeader user={user} />
       <SettingsSearch
         query={query}
@@ -381,33 +377,22 @@ function SettingsNavigation({ detailSelected }: { detailSelected: boolean }) {
           )}
           <SettingsGroup title="More">
             {inSection("more")}
-            <SettingsNestedGroup
-              title="Advanced"
-              description="Uploads and troubleshooting."
-              icon={SlidersHorizontal}
-              iconTone="neutral"
-            >
+            <section className="fb-settings-index-group" aria-labelledby="settings-advanced-heading">
+              <h3 id="settings-advanced-heading">Advanced</h3>
               {inSection("advanced")}
-              <SettingsNestedGroup title="Troubleshooting" icon={Activity} iconTone="privacy">
+              <section className="fb-settings-index-group" aria-labelledby="settings-troubleshooting-heading">
+                <h4 id="settings-troubleshooting-heading">Troubleshooting</h4>
                 {inSection("troubleshooting")}
-              </SettingsNestedGroup>
-            </SettingsNestedGroup>
-            <SettingsNestedGroup
-              title="Legal"
-              description="Terms, privacy and rules."
-              icon={Scale}
-              iconTone="about"
-            >
+              </section>
+            </section>
+            <section className="fb-settings-index-group" aria-labelledby="settings-legal-heading">
+              <h3 id="settings-legal-heading">Legal</h3>
               {inSection("legal")}
-            </SettingsNestedGroup>
-            <SettingsNestedGroup
-              title="Help & about"
-              description="Guides and app info."
-              icon={LifeBuoy}
-              iconTone="help"
-            >
+            </section>
+            <section className="fb-settings-index-group" aria-labelledby="settings-help-heading">
+              <h3 id="settings-help-heading">Help & about</h3>
               {inSection("helpAbout")}
-            </SettingsNestedGroup>
+            </section>
           </SettingsGroup>
           <div className="fb-settings-signout">
           <SettingsGroup>
@@ -444,6 +429,7 @@ function SettingsNavigation({ detailSelected }: { detailSelected: boolean }) {
           </div>
         </>
       )}
+      </SettingsNestedPages>
     </SettingsPage>
   );
 }

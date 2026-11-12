@@ -53,7 +53,6 @@
 }
 .fb-modal-panel { display: flex; flex-direction: column; width: 100%; min-width: 0; max-height: 100%; border-radius: 20px; background: var(--fb-surface); color: var(--fb-on-surface); box-shadow: var(--shadow-md); }
 .fb-task-panel { max-width: 44rem; }
-.fb-report-panel { max-width: 960px; }
 .fb-confirm-panel { max-width: 26rem; }
 .fb-surface-dialog { display: flex; flex-direction: column; min-height: 0; max-height: inherit; outline: none; }
 .fb-surface-dialog:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: -2px; border-radius: inherit; }

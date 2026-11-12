@@ -2,7 +2,7 @@ import { ACCENT_OPTIONS, useAppearance, useSystemColorsSupported } from "../appe
 import { useTheme, type Theme } from "../theme";
 import {
   AccentSwatch,
-  PreferenceRadioRow,
+  NavLayoutCard,
   PreferenceSwitchRow,
   SettingsGroup,
   SettingsPage,
@@ -49,7 +49,7 @@ export function AppearanceSettings() {
       >
         <fieldset className="fb-choice-fieldset">
           <legend className="sr-only">Theme</legend>
-          <div className="fb-choice-list">
+          <div className="fb-preview-grid fb-preview-grid-theme">
             {THEMES.map((value) => (
               <ThemeCard
                 key={value}
@@ -113,20 +113,16 @@ export function AppearanceSettings() {
           {/* The group already announces "Navigation" from the section title;
               naming the fieldset "Layout" avoids announcing it twice. */}
           <legend className="sr-only">Layout</legend>
-          <div className="fb-choice-list">
-            <PreferenceRadioRow
+          <div className="fb-preview-grid fb-preview-grid-nav">
+            <NavLayoutCard
               name="appearance-nav-layout"
               value="bottom"
-              title="Bottom bar"
-              description="Along the bottom edge, within thumb reach."
               checked={settings.navLayout === "bottom"}
               onChange={() => update({ navLayout: "bottom", navLayoutChosen: true })}
             />
-            <PreferenceRadioRow
+            <NavLayoutCard
               name="appearance-nav-layout"
               value="rail"
-              title="Side rail"
-              description="Down the left edge, on wider screens."
               checked={settings.navLayout === "rail"}
               onChange={() => update({ navLayout: "rail", navLayoutChosen: true })}
             />

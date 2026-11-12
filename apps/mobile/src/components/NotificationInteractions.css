@@ -1,0 +1,12 @@
+.fb-notification-row { position:relative; }
+.fb-notification-hover-actions { display:none; }
+@media (hover:hover) and (pointer:fine) {
+  .fb-notification-row:hover .fb-notification-time { visibility:hidden; }
+  .fb-notification-row:hover .fb-notification-hover-actions,
+  .fb-notification-hover-actions:focus-within { display:flex; }
+  .fb-notification-hover-actions { position:absolute; right:3rem; bottom:.15rem; gap:.5rem; background:var(--fb-surface); font-size:.75rem; }
+  .fb-notification-hover-actions button { min-height:32px; text-decoration:underline; }
+}
+.fb-notification-card { position:fixed; z-index:90; display:flex; gap:.75rem; width:320px; max-width:calc(100vw - 16px); max-height:140px; overflow:hidden; padding:.75rem; background:var(--fb-surface); color:var(--fb-on-surface); border:1px solid var(--fb-outline-variant); border-radius:.6rem; box-shadow:0 4px 16px #0003; pointer-events:none; }
+.fb-notification-card img { width:72px; height:72px; object-fit:cover; flex:none; }
+.fb-notification-card p { margin-top:.35rem; overflow-wrap:anywhere; }

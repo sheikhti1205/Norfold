@@ -350,15 +350,14 @@ describe("QA L: W4 root groups moved rows without orphaning destinations", () =>
     }
   });
 
-  it("nests moved rows under the Advanced, Legal and Help & about disclosures", () => {
+  it("groups moved rows under the Advanced, Legal and Help & about headings", () => {
     renderSettingsRoot();
     const more = screen.getByRole("region", { name: "More" });
-    // Three top-level disclosures; Troubleshooting is nested within Advanced.
-    const topLevel = [...more.querySelectorAll("details.fb-settings-nested")]
-      .filter((group) => !group.parentElement?.closest("details"));
-    expect(topLevel).toHaveLength(3);
-    const diagnostics = within(more).getByRole("link", { name: "Diagnostics", hidden: true });
-    expect(diagnostics.closest("details")?.querySelector("summary")?.textContent).toBe("Troubleshooting");
+    const advanced = within(more).getByRole("region", { name: "Advanced" });
+    const troubleshooting = within(advanced).getByRole("region", { name: "Troubleshooting" });
+    expect(within(troubleshooting).getByRole("link", { name: /Diagnostics/ }).getAttribute("href")).toBe("/settings/diagnostics");
+    expect(within(within(more).getByRole("region", { name: "Legal" })).getByRole("link", { name: /Terms of use/ }).getAttribute("href")).toBe("/settings/terms");
+    expect(within(within(more).getByRole("region", { name: "Help & about" })).getByRole("link", { name: /Help & guide/ }).getAttribute("href")).toBe("/settings/help");
     const hrefs = Array.from(document.querySelectorAll("a[href]")).map((a) =>
       (a as HTMLAnchorElement).getAttribute("href"),
     );
