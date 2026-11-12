@@ -137,9 +137,9 @@ at 1280; reopening restores the exact previous widths; state survives a reload.
 
 | ID | Item | Status |
 | --- | --- | --- |
-| R1 | One account control | pending |
-| R2 | Nested preview popovers | pending |
-| R3 | Floating account settings panel | pending |
+| R1 | One account control | done |
+| R2 | Nested preview popovers | done |
+| R3 | Floating account settings panel | done, enforcement pending |
 | R4 | All-type attachments, safely | pending |
 | R5 | Emoji, stickers, GIFs everywhere | pending |
 | R6 | Composer focus and Enter | done |
