@@ -2,6 +2,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
+import { readFileSync } from "node:fs";
 import { FixtureRoute } from "./FixtureRoute";
 import { cardWidthAt, rootPxFor } from "./sections/FeedLayoutFixtures";
 import { masonryListPaddingRem } from "../test-utils/masonryListClass";
@@ -29,6 +30,8 @@ const SECTIONS = [
   "feed-layouts",
   "navigation",
   "detail",
+  "report-viewer",
+  "badges",
   "create",
   "comments",
   "notifications",
@@ -36,9 +39,11 @@ const SECTIONS = [
   "my-reports",
   "profile",
   "settings",
+  "settings-surface",
   "assistant",
   "map-unavailable",
   "messaging",
+  "messaging-pill",
 ] as const;
 
 beforeAll(() => {
@@ -171,6 +176,58 @@ describe("visual fixture route (static preflight)", () => {
     const frame = screen.getByTestId("fixture-map-unavailable-normal");
     // The keyless placeholder renders; no tile grid implies no coordinates.
     expect(frame.textContent?.trim().length).toBeGreaterThan(0);
+  });
+
+  it("distinguishes verification tiers and omits an unverified badge", () => {
+    useSharedRoute();
+    const frame = screen.getByTestId("fixture-badges-normal");
+    for (const [tier, name] of [["email", "Email verified"], ["phone", "Phone verified"], ["both", "Email and phone verified"]] as const) {
+      expect(within(within(frame).getByTestId(`fixture-badge-tier-${tier}`)).getByRole("img", { name })).toBeTruthy();
+    }
+    expect(within(frame).getByTestId("fixture-badge-tier-none").querySelector(".fb-verified-badge")).toBeNull();
+  });
+
+  it("omits media for a report without photos and puts actions before the composer", () => {
+    useSharedRoute();
+    const frame = screen.getByTestId("fixture-report-viewer-empty");
+    expect(within(frame).queryByTestId("report-viewer-media")).toBeNull();
+    const footer = within(frame).getByTestId("report-viewer-footer");
+    const actions = footer.querySelector(".fb-rv-actions");
+    const composer = footer.querySelector(".fb-rv-composer");
+    expect(actions).toBeTruthy();
+    expect(composer).toBeTruthy();
+    expect(actions!.compareDocumentPosition(composer!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("renders one message pill with a dismiss control", () => {
+    useSharedRoute();
+    const frame = screen.getByTestId("fixture-messaging-pill-normal");
+    expect(frame.querySelectorAll(".fb-message-pill")).toHaveLength(1);
+    expect(within(frame).getByRole("button", { name: "Dismiss message from Person 1" })).toBeTruthy();
+  });
+
+  it("marks only the selected appearance tiles for the accent ring", () => {
+    useSharedRoute();
+    const frame = screen.getByTestId("fixture-settings-surface-empty");
+    const style = document.createElement("style");
+    style.textContent = readFileSync("src/components/settings/settings.css", "utf8");
+    document.head.appendChild(style);
+    try {
+      for (const group of ["Theme", "Layout"]) {
+        const choices = within(within(frame).getByRole("group", { name: group })).getAllByRole("radio");
+        expect(choices.filter((choice) => (choice as HTMLInputElement).checked)).toHaveLength(1);
+        for (const choice of choices) {
+          const selected = (choice as HTMLInputElement).checked;
+          const tile = choice.closest(".fb-preview-choice");
+          expect(tile?.getAttribute("data-checked")).toBe(String(selected));
+          const preview = tile?.querySelector(".fb-preview-frame");
+          expect(preview).toBeTruthy();
+          expect(getComputedStyle(preview!).boxShadow.includes("2px")).toBe(selected);
+        }
+      }
+    } finally {
+      style.remove();
+    }
   });
 
   it("feed-layouts covers every masonry width band plus the compact capsule", () => {

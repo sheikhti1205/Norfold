@@ -34,6 +34,8 @@ import { NativeUpdateLifecycle } from "./services/updates/nativeRuntime";
 import { MyPosts } from "./screens/MyPosts";
 import { EditReport } from "./screens/EditReport";
 import { SavedReports } from "./screens/SavedReports";
+import { Insights } from "./screens/Insights";
+import { Reactions } from "./screens/Reactions";
 import { Help } from "./screens/Help";
 import { AiConnection } from "./screens/AiConnection";
 import { CloudModels } from "./screens/CloudModels";
@@ -80,6 +82,7 @@ import { SavedReportsProvider } from "./hooks/useSavedReports";
 import { Connections, LegacyChatsRedirect, MessagingThread } from "./screens/Messaging";
 import { MessagingPrivacy } from "./screens/MessagingPrivacy";
 import { MessagingLifecycle } from "./components/MessagingLifecycle";
+import { MessagePillHost } from "./components/MessagePillHost";
 import { postBackgroundLocation, PostNavigationProvider } from "./components/PostNavigation";
 import { PostModal } from "./components/PostModal";
 import { SignedOutEntry } from "./screens/RememberedAccounts";
@@ -167,6 +170,7 @@ function AppRouteTree() {
           <BackButtonHandler />
           <NativeUpdateLifecycle />
           <DesktopNotifications />
+          <MessagePillHost />
           {user && !booting && !needsProfile ? <UpdatePrompt /> : null}
           <ErrorBoundary>
             <AccountDeletionFeedback />
@@ -234,6 +238,8 @@ function AppRouteTree() {
               <Route path="/my" element={<MyPosts />} />
               <Route path="/my/:id/edit" element={<EditReport />} />
               <Route path="/saved" element={<SavedReports />} />
+              <Route path="/insights" element={<Insights />} />
+              <Route path="/reactions" element={<Reactions />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/profile/edit" element={<ProfileEdit />} />
               <Route path="/u/:username" element={<PublicProfile />} />

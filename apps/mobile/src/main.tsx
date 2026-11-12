@@ -33,6 +33,19 @@ async function boot(){
     section.append(title,message,retry);root.replaceChildren(section);
     return;
   }
+  // L-FIXTURE: the static visual-preflight route is login-free by contract
+  // (src/fixture/README.md), so it mounts outside the app shell instead of
+  // waiting on a session restore it does not need.
+  if(window.location.hash.startsWith('#/__fixture')){
+    const root=document.getElementById('root');
+    if(root){
+      const {mountFixturePreview}=await import('./fixture/preview');
+      // The hash carries the route, including any reviewer flag such as
+      // `?chooser=1`, so a MemoryRouter mount can still be deep-linked.
+      mountFixturePreview(root, window.location.hash.slice(1) || '/__fixture');
+      return;
+    }
+  }
   // A static App import would start account owners before preparation settles.
   await import('./startApp');
 }

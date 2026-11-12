@@ -1,14 +1,18 @@
 import { FixtureLargeTextToggle } from "./FixtureSection";
 import { AdminFixtures } from "./sections/AdminFixtures";
+import { BadgesFixtures } from "./sections/BadgesFixtures";
 import { BlockedShieldFixtures } from "./sections/BlockedShieldFixtures";
 import { CreateFixtures } from "./sections/CreateFixtures";
 import { DetailFixtures } from "./sections/DetailFixtures";
 import { FeedLayoutFixtures } from "./sections/FeedLayoutFixtures";
 import { HomeFixtures } from "./sections/HomeFixtures";
 import { MessagingFixtures } from "./sections/MessagingFixtures";
+import { MessagingPillFixtures } from "./sections/MessagingPillFixtures";
 import { NavigationFixtures } from "./sections/NavigationFixtures";
 import { FoundationFixtures } from "./sections/FoundationFixtures";
 import { SocialFixtures } from "./sections/SocialFixtures";
+import { ReportViewerFixtures } from "./sections/ReportViewerFixtures";
+import { SettingsSurfaceFixtures } from "./sections/SettingsSurfaceFixtures";
 import { SystemFixtures } from "./sections/SystemFixtures";
 
 const SECTION_LINKS = [
@@ -17,6 +21,8 @@ const SECTION_LINKS = [
   { id: "navigation", label: "Navigation" },
   { id: "adaptive-foundation", label: "Adaptive foundation" },
   { id: "detail", label: "Post detail" },
+  { id: "report-viewer", label: "Report viewer" },
+  { id: "badges", label: "Verification badges" },
   { id: "create", label: "Create report" },
   { id: "comments", label: "Comments & composer" },
   { id: "notifications", label: "Notifications" },
@@ -24,10 +30,12 @@ const SECTION_LINKS = [
   { id: "my-reports", label: "My Reports" },
   { id: "profile", label: "Profile" },
   { id: "settings", label: "Settings" },
+  { id: "settings-surface", label: "Settings surface" },
   { id: "admin", label: "Staff console" },
   { id: "assistant", label: "Assistant" },
   { id: "map-unavailable", label: "Map unavailable" },
   { id: "messaging", label: "Messaging thread" },
+  { id: "messaging-pill", label: "Messaging strip and pill" },
 ] as const;
 
 /**
@@ -89,6 +97,8 @@ export function FixtureRoute() {
       </div>
       <div>
         <DetailFixtures />
+        <ReportViewerFixtures />
+        <BadgesFixtures />
       </div>
       <div>
         <CreateFixtures />
@@ -98,9 +108,11 @@ export function FixtureRoute() {
       </div>
       <div>
         <MessagingFixtures />
+        <MessagingPillFixtures />
       </div>
       <div>
         <SystemFixtures />
+        <SettingsSurfaceFixtures />
       </div>
       <div>
         <AdminFixtures />
