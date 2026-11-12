@@ -14,7 +14,7 @@ import "./AccountMenu.css";
  * Owner order 2026-11-12 (R2): a row does not walk the reader to a page, it
  * shows what is inside the row. So these panels are the real controls, not a
  * screenshot of them: the accent and navigation tiles write the same appearance
- * store the Appearance page writes, and the contact rules write the account row
+ * store the Appearance page writes, and the contact rule writes the account row
  * `findback_set_contact_rules` stores. Every panel also carries one explicit way
  * to the full page for the reader who wants the roomier version.
  */
@@ -46,11 +46,19 @@ export function AppearancePreview({ onOpenPage }: { onOpenPage: () => void }) {
   </div>;
 }
 
-const RULES: readonly { key: keyof AccountContactRules; label: string; hint: string }[] = [
-  { key: "messageFrom", label: "Who can message you", hint: "Applies when someone starts a new conversation." },
-  { key: "connectFrom", label: "Who can connect with you", hint: "Connection requests from people you have not met." },
-  { key: "showContact", label: "Who can see your contact details", hint: "Your phone and email on your profile." },
-];
+/**
+ * One question, because the product has one gate.
+ *
+ * A first message in this schema *is* the connection request: nothing else can
+ * reach an account before a conversation connects. Two dropdowns over that one
+ * event would let a reader set answers that contradict each other and promise a
+ * distinction the admission path cannot honour, so the panel asks the question
+ * that is actually enforced and writes both stored columns from that answer.
+ * Contact details are not offered here because no surface shows them yet.
+ */
+const CONTACT_RULE_QUESTION = "Who can start a conversation with you";
+const CONTACT_RULE_HINT =
+  "Applies to new conversations. People you have connected with can always reach you.";
 
 export function SettingsPreview({ onOpenPage }: { onOpenPage: (path: string) => void }) {
   const [rules, setRules] = useState<AccountContactRules>(DEFAULT_CONTACT_RULES);
@@ -66,9 +74,9 @@ export function SettingsPreview({ onOpenPage }: { onOpenPage: (path: string) => 
     return () => { alive = false; };
   }, []);
 
-  const change = (key: keyof AccountContactRules) => (value: ContactRule) => {
+  const chooseContactRule = (value: ContactRule) => {
     const previous = rules;
-    const next = { ...rules, [key]: value };
+    const next = { ...rules, messageFrom: value, connectFrom: value };
     setRules(next);
     setFailed(false);
     setStatus(null);
@@ -95,16 +103,15 @@ export function SettingsPreview({ onOpenPage }: { onOpenPage: (path: string) => 
     </div>
     <fieldset className="fb-choice-fieldset fb-account-rules" disabled={loading}>
       <legend>Contact rules</legend>
-      {RULES.map((rule) => (
-        <label key={rule.key} className="fb-account-rule">
-          <span className="fb-account-rule-label">{rule.label}</span>
-          <select value={rules[rule.key]} disabled={loading} aria-label={rule.label} aria-describedby={`${rule.key}-hint`}
-            onChange={(event) => change(rule.key)(event.target.value as ContactRule)}>
-            {CONTACT_RULE_VALUES.map((value) => <option key={value} value={value}>{CONTACT_RULE_LABELS[value]}</option>)}
-          </select>
-          <span id={`${rule.key}-hint`} className="fb-account-rule-hint">{rule.hint}</span>
-        </label>
-      ))}
+      <label className="fb-account-rule">
+        <span className="fb-account-rule-label">{CONTACT_RULE_QUESTION}</span>
+        <select value={rules.messageFrom} disabled={loading} aria-label={CONTACT_RULE_QUESTION}
+          aria-describedby="contact-rule-hint"
+          onChange={(event) => chooseContactRule(event.target.value as ContactRule)}>
+          {CONTACT_RULE_VALUES.map((value) => <option key={value} value={value}>{CONTACT_RULE_LABELS[value]}</option>)}
+        </select>
+        <span id="contact-rule-hint" className="fb-account-rule-hint">{CONTACT_RULE_HINT}</span>
+      </label>
     </fieldset>
     {status && <p role={failed ? "alert" : "status"} className="fb-account-panel-status">{status}</p>}
   </div>;

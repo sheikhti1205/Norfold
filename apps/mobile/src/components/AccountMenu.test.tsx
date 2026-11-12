@@ -55,19 +55,22 @@ describe("account menu", () => {
     expect(within(panel).getByRole("button", { name: /Open Appearance/ })).toBeTruthy();
   });
 
-  it("opens the account panel with contact rules that persist", async () => {
+  // One gate, one question: a first message in this schema is the connection
+  // request, so two dropdowns would offer a distinction admission cannot honour.
+  // The single answer writes both admission columns.
+  it("opens the account panel with a contact rule that persists", async () => {
     state.save.mockImplementation((next: unknown) => Promise.resolve(next));
     renderMenu();
     const dialog = await openMenu();
     fireEvent.click(within(dialog).getByRole("button", { name: /Settings/ }));
     const panel = await within(dialog).findByRole("group", { name: "Settings preview" });
-    const message = await within(panel).findByLabelText("Who can message you");
-    await waitFor(() => expect((message as HTMLSelectElement).value).toBe("ANYONE"));
-    expect(within(panel).getByLabelText("Who can connect with you")).toBeTruthy();
-    expect(within(panel).getByLabelText("Who can see your contact details")).toBeTruthy();
-    fireEvent.change(message, { target: { value: "NOBODY" } });
-    await waitFor(() => expect(state.save).toHaveBeenCalledWith(expect.objectContaining({ messageFrom: "NOBODY" })));
-    expect((message as HTMLSelectElement).value).toBe("NOBODY");
+    const rule = await within(panel).findByLabelText("Who can start a conversation with you");
+    await waitFor(() => expect((rule as HTMLSelectElement).value).toBe("ANYONE"));
+    expect(within(panel).queryByLabelText("Who can see your contact details")).toBeNull();
+    fireEvent.change(rule, { target: { value: "NOBODY" } });
+    await waitFor(() => expect(state.save).toHaveBeenCalledWith(
+      expect.objectContaining({ messageFrom: "NOBODY", connectFrom: "NOBODY" })));
+    expect((rule as HTMLSelectElement).value).toBe("NOBODY");
   });
 
   it("Escape closes the preview first and hands focus back to its row", async () => {

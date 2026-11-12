@@ -4,12 +4,17 @@ import { ApiError } from "./session";
 /**
  * The account's contact rules, owner order 2026-11-12 (R3).
  *
- * Three closed sets, stored on the account rather than on the device, because
- * "who may message me" is a fact every admission has to be able to read:
+ * Closed sets, stored on the account rather than on the device, because "who
+ * may start a conversation with me" is a fact messaging admission has to read:
  *
  *   message_from  who may start a conversation
  *   connect_from  who may send a connection request
  *   show_contact  who may see the contact details on the profile
+ *
+ * `message_from` and `connect_from` gate the same event (a first message is the
+ * connection request in this schema) and the panel writes both from one answer.
+ * `show_contact` has no reader yet: no client path exposes email or phone, so it
+ * is stored and round-tripped but nothing offers it as a control.
  *
  * The server owns the vocabulary. This module never invents a fourth value; it
  * narrows whatever comes back and falls back to the permissive default the
