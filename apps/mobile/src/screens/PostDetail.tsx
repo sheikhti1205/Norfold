@@ -660,9 +660,11 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
   async function postCommentBody(body: string, attachments?: readonly CommentAttachmentDescriptor[]) {
     if ((!body.trim() && !attachments?.length) || body.length > 1000) return;
     const snap = { postId: current.id, viewer: user?.id };
-    if (attachments && attachments.length > 0) await addComment(current.id, body, replyTo?.id ?? null, attachments);
-    else await addComment(current.id, body, replyTo?.id ?? null);
+    const created = attachments && attachments.length > 0
+      ? await addComment(current.id, body, replyTo?.id ?? null, attachments)
+      : await addComment(current.id, body, replyTo?.id ?? null);
     if (isStaleMutation(snap)) return;
+    setComments(prev => prev.some(comment => comment.id === created.id) ? prev : [...prev, created]);
     // A writer's response is not the list/topology/media authority. A concurrent
     // report/hide may have changed eligibility before the write completed.
     void reconcileComments(false);
