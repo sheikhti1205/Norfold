@@ -8,7 +8,10 @@
   z-index: 40;
   bottom: calc(100% + 8px);
   left: 0;
-  width: min(20rem, calc(100vw - 1.5rem));
+  /* Measured against the composer that owns the field, never the window: at a
+     125% text scale a 20rem panel anchored in a 292px column overflowed the
+     right edge by 48px. */
+  width: min(20rem, 100%);
   border: 1px solid var(--fb-outline-variant);
   border-radius: 16px;
   background: var(--fb-surface);
