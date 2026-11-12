@@ -146,8 +146,8 @@ at 1280; reopening restores the exact previous widths; state survives a reload.
 | ID | Item | Status |
 | --- | --- | --- |
 | R1 | One account control | done |
-| R2 | Nested preview popovers | done |
-| R3 | Floating account settings panel | done, enforcement pending |
+| R2 | Nested preview popovers | done, placement repaired from rendered review (2026-11-13) |
+| R3 | Floating account settings panel | done in source; one enforcement migration unapplied |
 | R4 | All-type attachments, safely | blocked, live acceptance pending |
 | R5 | Emoji, stickers, GIFs everywhere | done |
 | R6 | Composer focus and Enter | done |
@@ -156,3 +156,21 @@ at 1280; reopening restores the exact previous widths; state survives a reload.
 A row moves to `done` only with the acceptance check above observed. A row that
 cannot complete moves to `blocked` with the blocker named, and the pass carries
 on with the next row.
+
+### 2026-11-13 rendered pass
+
+- The account popover opened off-screen on a phone: it was hard-placed to the
+  right of its trigger with flipping disabled, so a 287px panel sat at x=347 on a
+  390px viewport. Placement now follows the layout and may flip.
+- The nested panel sat outside the popover's box while `.fb-popover` scrolls, so
+  an open panel turned the menu into a horizontally scrolling card. Wide sizes
+  now carry both panes inside one card; a phone opens the panel first in the
+  scroll area.
+- The conversation composer at 320dp collapsed its field to 66px and clipped its
+  own placeholder ("Mes"). Under 400px of the composer's own width the attachment
+  cluster now hides behind `>`, decided by a container query, and the field keeps
+  146-161px.
+- The emoji palette measured itself against the window; it now measures against
+  the composer, so a 390px phone gets a 261-273px palette with no sideways
+  overflow.
+
