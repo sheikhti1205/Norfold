@@ -111,8 +111,8 @@ describe("Notifications inbox", () => {
       postId: null, postTitle: null, preview: "Your account cannot publish new reports right now." })]);
     renderNotifications();
     expect(await screen.findByText("Your account cannot publish new reports right now.")).toBeTruthy();
-    expect(screen.getByText("review update")).toBeTruthy();
-    expect(screen.getByText("Norfold")).toBeTruthy();
+    expect(screen.getByText("Review update")).toBeTruthy();
+    expect(screen.queryByText("Norfold")).toBeNull();
     expect(screen.queryByText("MODERATION")).toBeNull();
     expect(screen.queryByRole("link", { name: /your report/i })).toBeNull();
   });
@@ -133,6 +133,16 @@ describe("Notifications inbox", () => {
     expect(screen.getByText("account B actor")).toBeTruthy();
     expect(screen.queryByText("late account A actor")).toBeNull();
   });
+  it("resets the unread filter when the account changes", async () => {
+    fetchMock.mockResolvedValue([item({ read: false })]);
+    const page = renderNotifications();
+    await screen.findByText("bob");
+    fireEvent.click(screen.getByRole("button", { name: "Unread" }));
+    expect(screen.getByRole("button", { name: "Unread" }).getAttribute("aria-pressed")).toBe("true");
+    authState.user = { id: "owner-b" };
+    page.rerender(notificationsTree());
+    expect(screen.getByRole("button", { name: "All" }).getAttribute("aria-pressed")).toBe("true");
+  });
 
   it("does not restore old inbox rows when a deletion fails after switching views", async () => {
     const deletion = deferred<number>();
@@ -140,7 +150,7 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValueOnce([item()]).mockResolvedValueOnce([item({ actorUsername: "deleted actor" })]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^delete$/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: "Deleted" }));
     // StateSwap keeps the outgoing inbox alive briefly for its exit motion.
@@ -158,7 +168,7 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValueOnce([item()]).mockResolvedValueOnce([item({ actorUsername: "account B actor" })]);
     const page = renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^delete$/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: /undo/i }));
     authState.user = { id: "owner-b" };
@@ -175,7 +185,7 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValue([item()]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^delete$/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: /undo/i }));
     await act(async () => { deletion.reject(new Error("network down")); });
@@ -189,10 +199,10 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValue([item()]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark read/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /mark as read/i }));
     await waitFor(() => expect(markReadMock).toHaveBeenCalledTimes(1));
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark unread/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /mark as unread/i }));
     expect(screen.getByLabelText(/unread/i)).toBeTruthy();
     // A later choice must reach the server after the earlier choice settles.
     expect(markUnreadMock).not.toHaveBeenCalled();
@@ -209,10 +219,10 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValue([item()]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark read/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /mark as read/i }));
     await waitFor(() => expect(markReadMock).toHaveBeenCalledTimes(1));
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark unread/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /mark as unread/i }));
     await act(async () => { reading.reject(new Error("network down")); });
     await waitFor(() => expect(markUnreadMock).toHaveBeenCalledTimes(1));
     await act(async () => { unreading.reject(new Error("network still down")); });
@@ -227,9 +237,9 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValue([item()]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark read/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /mark as read/i }));
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark unread/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /mark as unread/i }));
     await act(async () => { reading.resolve(1); });
     await waitFor(() => expect(markUnreadMock).toHaveBeenCalledTimes(1));
     await act(async () => { unreading.reject(new Error("network down")); });
@@ -244,9 +254,9 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValue([item()]);
     const page = renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark read/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /mark as read/i }));
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^delete$/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
     expect(deleteMock).not.toHaveBeenCalled();
     authState.user = { id: "owner-b" };
     fetchMock.mockResolvedValue([item({ actorUsername: "account B actor" })]);
@@ -263,7 +273,7 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValueOnce([item()]).mockResolvedValueOnce([]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^delete$/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: /undo/i }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
@@ -279,7 +289,7 @@ describe("Notifications inbox", () => {
     fireEvent.click(await screen.findByRole("button", { name: /mark all read/i }));
     await waitFor(() => expect(markReadMock).toHaveBeenCalledTimes(1));
     await openRowActions("cara");
-    fireEvent.click(screen.getByRole("menuitem", { name: /^delete$/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
     await waitFor(() => expect(screen.queryByText("cara")).toBeNull());
     await act(async () => { reading.reject(new Error("network down")); });
     await waitFor(() => expect(deleteMock).toHaveBeenCalledWith(["n2"]));
@@ -293,10 +303,10 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValue([item(), item({ id: "n2", actorUsername: "cara" })]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^delete$/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledTimes(1));
     await openRowActions("cara");
-    fireEvent.click(screen.getByRole("menuitem", { name: /^delete$/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
     await waitFor(() => expect(screen.queryByText("cara")).toBeNull());
     await act(async () => { deletion.reject(new Error("network down")); });
     await waitFor(() => expect(deleteMock).toHaveBeenCalledTimes(2));
@@ -311,7 +321,7 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValueOnce([item()]).mockResolvedValue([item({ read: true })]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark read/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /mark as read/i }));
     await waitFor(() => expect(markReadMock).toHaveBeenCalledTimes(1));
     fireEvent(window, new Event("focus"));
     // Otherwise the pre-write server snapshot can overwrite optimism.
@@ -327,10 +337,10 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValueOnce([item()]).mockResolvedValue([item({ actorUsername: "fresh actor" })]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark read/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /mark as read/i }));
     fireEvent(window, new Event("focus"));
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark unread/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /mark as unread/i }));
     await act(async () => { reading.resolve(1); });
     await waitFor(() => expect(markUnreadMock).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("fresh actor")).toBeTruthy();
@@ -346,7 +356,7 @@ describe("Notifications inbox", () => {
     fireEvent(window, new Event("focus"));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark read/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /mark as read/i }));
     await waitFor(() => expect(markReadMock).toHaveBeenCalledTimes(1));
     await act(async () => { stale.resolve([item({ actorUsername: "stale actor" })]); });
     expect(await screen.findByText("fresh actor")).toBeTruthy();
@@ -381,7 +391,7 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValue([item()]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^delete$/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: /undo/i }));
     // Otherwise restore can commit first and the late delete wins on server.
@@ -397,7 +407,7 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValue([item()]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^delete$/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: /undo/i }));
     await waitFor(() => expect(restoreMock).toHaveBeenCalledTimes(1));
@@ -463,7 +473,7 @@ describe("Notifications inbox", () => {
     renderNotifications();
 
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^delete$/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledWith(["n1"]));
     expect(await screen.findByText(/notification deleted/i)).toBeTruthy();
 
@@ -478,7 +488,7 @@ describe("Notifications inbox", () => {
     renderNotifications();
 
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark unread/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /mark as unread/i }));
     await waitFor(() => expect(markUnreadMock).toHaveBeenCalledWith(["n1"]));
     expect(await screen.findByLabelText(/unread/i)).toBeTruthy();
   });
@@ -503,7 +513,7 @@ describe("Notifications inbox", () => {
     await screen.findByText("bob");
 
     // §17: no permanent bottom bar — nothing to delete/mark until the menu opens.
-    expect(screen.queryByRole("menuitem", { name: /^delete$/i })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /^remove from activity$/i })).toBeNull();
     const trigger = screen.getByRole("button", { name: /more actions for bob/i });
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
 
@@ -511,8 +521,8 @@ describe("Notifications inbox", () => {
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     const menu = await screen.findByRole("menu");
-    const mark = within(menu).getByRole("menuitem", { name: /mark read/i });
-    const del = within(menu).getByRole("menuitem", { name: /^delete$/i });
+    const mark = within(menu).getByRole("menuitem", { name: /mark as read/i });
+    const del = within(menu).getByRole("menuitem", { name: /^remove from activity$/i });
     // Focus enters the menu, arrows rove, Escape leaves and hands focus back.
     await waitFor(() => expect(document.activeElement).toBe(mark));
     fireEvent.keyDown(mark, { key: "ArrowDown" });
@@ -576,7 +586,7 @@ describe("Notifications REACTION kind (W1-A FBX-009)", () => {
     fetchMock.mockResolvedValue([item({ id: "n8", type: "REACTION", reactionKind: "LOVE" })]);
     renderNotifications();
 
-    expect(await screen.findByText(/reacted to your report with Love/i)).toBeTruthy();
+    expect(await screen.findByText(/reacted with Love/i)).toBeTruthy();
   });
 
   it("renders an UNKNOWN row with generic copy and a generic route (fail-safe)", async () => {

@@ -22,7 +22,7 @@
  * fast ~120–180ms chip/icon toggle, standard ~180–240ms notice/subpanel,
  * sheet ~220–320ms entrance/exit with clean interruption, emphasized
  * ~240–350ms hero/notice emphasis. Interaction motion stays within 350ms;
- * page-level editorial reveals may run 0.55–1.1s, transform/opacity only.
+ * page-level editorial reveals also stay within 350ms, transform/opacity only.
  *
  * All variants below animate transform/opacity only (never layout, color, or
  * box-shadow) so every animation stays on the compositor thread.
@@ -46,10 +46,8 @@ export const motionDurations = {
   sheet: 0.28,
   /** Hero/notice emphasis (still within the 350ms budget). */
   emphasized: 0.3,
-  /** Editorial page reveal (onboarding, public landing). Longer than the
-   *  interaction budget by design: this is page entrance, not state
-   *  acknowledgement. */
-  reveal: 0.7,
+  /** Editorial page reveal (onboarding, public landing). */
+  reveal: 0.35,
 } as const;
 
 export const motionEasings = {

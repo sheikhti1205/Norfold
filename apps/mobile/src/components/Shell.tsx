@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { Link, useLocation } from "react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { ClipboardList, Home, MessageCircle, Plus, Settings } from "lucide-react";
+import { BarChart3, ClipboardList, Home, MessageCircle, Plus, Settings } from "lucide-react";
 import { Focusable, Tooltip, TooltipTrigger } from "react-aria-components";
 import { TabTapProvider, useTabTap } from "./TabTap";
 import { LiveRegion } from "./LiveRegion";
@@ -13,6 +13,7 @@ import { RouteTransition } from "./RouteTransition";
 import { requestHistorySuppression } from "./backNavigation";
 import { NavigationSetup } from "./NavigationSetup";
 import { RoleOfferNotice } from "./RoleOfferNotice";
+import { AccountMenu } from "./AccountMenu";
 import {
   fadeUpVariants,
   fadeVariants,
@@ -30,6 +31,7 @@ const NAV = [
   { to: "/", label: "Home", icon: Home },
   { to: "/my", label: "My Reports", icon: ClipboardList },
   { to: "/chats", label: "Chats", icon: MessageCircle },
+  { to: "/insights", label: "Insights", icon: BarChart3 },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
@@ -210,7 +212,7 @@ export function PrimaryNav({
   const belongsTo = (root: string) => pathname === root || pathname.startsWith(`${root}/`);
   const selectedPath = activePath ?? (belongsTo("/chats") || belongsTo("/connections") ? "/chats"
     : belongsTo("/settings") || belongsTo("/profile") ? "/settings"
-    : belongsTo("/my") ? "/my" : pathname === "/search" ? "/" : pathname);
+    : belongsTo("/my") ? "/my" : belongsTo("/insights") ? "/insights" : belongsTo("/reactions") ? "/reactions" : pathname === "/search" ? "/" : pathname);
 
   const createAction = (
     <Link to="/report" aria-label="Create report" className="fb-nav-create bg-primary text-on-primary">
@@ -218,7 +220,7 @@ export function PrimaryNav({
     </Link>
   );
 
-  const items = NAV.map(({ to, label, icon: Icon }) => {
+  const items = NAV.filter(({ to }) => rail || to !== "/insights").map(({ to, label, icon: Icon }) => {
     const selected = selectedPath === to;
     const link = (
       <MotionLink
@@ -294,7 +296,8 @@ export function PrimaryNav({
         <motion.div className="fb-nav-create-wrap" whileTap={pressFeedback.iconButton}>
           {createAction}
         </motion.div>
-        <div className="fb-nav-rail-list">{items}</div>
+        <div className="fb-nav-rail-list">{items.slice(0, -1)}</div>
+        <AccountMenu />
       </motion.nav>
     );
   }

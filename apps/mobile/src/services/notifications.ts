@@ -17,6 +17,10 @@ export interface NotificationItem {
   actorUsername: string | null;
   postId: string | null;
   postTitle: string | null;
+  thumbnailUrl?: string;
+  moderationCaseId?: string;
+  actorNames?: string[];
+  actorCount?: number;
   commentId: string | null;
   /**
    * Canonical reaction kind carried by REACTION rows (W1-A). Null on every
@@ -55,6 +59,10 @@ interface NotificationRow {
   post_title: string | null;
   comment_id: string | null;
   reaction_kind?: unknown;
+  thumbnail_url?: unknown;
+  moderation_case_id?: unknown;
+  actor_names?: unknown;
+  actor_count?: unknown;
   /** O5 signal; absent on a backend older than the column. */
   blocked_actor?: unknown;
 }
@@ -95,6 +103,10 @@ function mapNotification(row: NotificationRow): NotificationItem {
     actorUsername: row.actor_username ?? null,
     postId: row.post_id ?? null,
     postTitle: row.post_title ?? null,
+    ...(typeof row.thumbnail_url === "string" && row.thumbnail_url ? { thumbnailUrl: row.thumbnail_url } : {}),
+    ...(typeof row.moderation_case_id === "string" && row.moderation_case_id ? { moderationCaseId: row.moderation_case_id } : {}),
+    ...(Array.isArray(row.actor_names) && row.actor_names.every((name) => typeof name === "string" && name.trim()) ? { actorNames: row.actor_names } : {}),
+    ...(typeof row.actor_count === "number" && Number.isSafeInteger(row.actor_count) && row.actor_count > 0 ? { actorCount: row.actor_count } : {}),
     commentId: row.comment_id ?? null,
     reactionKind: isReactionKind(row.reaction_kind) ? row.reaction_kind : null,
     // Only a real boolean counts: a stringly-typed value must never be read

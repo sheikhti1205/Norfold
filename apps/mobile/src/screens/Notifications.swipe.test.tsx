@@ -106,7 +106,7 @@ describe("inbox change signal", () => {
     renderNotifications();
 
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^delete$/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledWith(["n1"]));
     await waitFor(() => expect(signalMock).toHaveBeenCalled());
   });
@@ -119,7 +119,7 @@ describe("undo window", () => {
     renderNotifications();
 
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^delete$/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
     expect(await screen.findByText(/notification deleted/i)).toBeTruthy();
 
     act(() => {

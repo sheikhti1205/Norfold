@@ -4,6 +4,7 @@ import { Check, ChevronRight, Search, X, type LucideIcon } from "lucide-react";
 import { ACCENT_OPTIONS, type AccentId } from "../../appearance";
 import type { Theme } from "../../theme";
 import { density } from "../../design/density";
+import { colorTokensFor } from "../../design/colorSystem";
 import { BackButton } from "../BackButton";
 import { TopUtilities } from "../TopUtilities";
 import "./settings.css";
@@ -175,7 +176,6 @@ export function SettingsSearch({ query, onQueryChange, results, label = "Search 
 }
 
 const THEME_LABELS: Record<Theme, string> = { system: "System", light: "Light", dark: "Dark" };
-const THEME_HINTS: Record<Theme, string> = { system: "Follows your device", light: "Bright and soft", dark: "Comfortably dim" };
 export interface ThemeCardProps {
   name: string;
   value: Theme;
@@ -185,13 +185,39 @@ export interface ThemeCardProps {
   description?: string;
 }
 /** Use inside a fieldset+legend; shared name supplies native arrow-key behavior. */
-export function ThemeCard({ name, value, checked, onChange, disabled = false, description = THEME_HINTS[value] }: ThemeCardProps) {
+export function ThemeCard({ name, value, checked, onChange, disabled = false }: ThemeCardProps) {
   const id = useId();
-  return <label className="fb-choice fb-theme-card" data-checked={checked} data-disabled={disabled}>
-    <input className="fb-choice-input" type="radio" name={name} value={value} checked={checked} disabled={disabled} onChange={() => onChange(value)} aria-labelledby={`${id}-label`} aria-describedby={`${id}-description`} />
-    <span className="fb-theme-preview" data-theme={value} aria-hidden="true"><span /><span /></span>
-    <span className="fb-choice-title" id={`${id}-label`}>{THEME_LABELS[value]}{checked && <Check size={16} aria-hidden="true" />}</span>
-    <span className="fb-choice-description" id={`${id}-description`}>{description}</span>
+  const modes = value === "system" ? ["light", "dark"] as const : [value];
+  return <label className="fb-preview-choice" data-checked={checked} data-disabled={disabled}>
+    <input className="fb-choice-input" type="radio" name={name} value={value} checked={checked} disabled={disabled} onChange={() => onChange(value)} aria-labelledby={`${id}-label`} />
+    <span className="fb-preview-frame fb-theme-window" aria-hidden="true">{modes.map(mode => <span className="fb-theme-window-half" key={mode} style={colorTokensFor(mode) as CSSProperties}><span /><span /><span /></span>)}</span>
+    <span className="fb-preview-label" id={`${id}-label`}>{THEME_LABELS[value]}</span>
+  </label>;
+}
+
+/**
+ * One navigation choice as a picture, never as a row with a tick.
+ *
+ * Owner direction `docs/design/APPEARANCE-CHOOSERS.md` §4: two tiles side by
+ * side at 4 by 3, the bottom bar holding five destinations and the rail holding
+ * four, so the two pictures differ in shape as well as orientation. Selection is
+ * the shared ring state (§D-A2), and the label under the tile is the tile's only
+ * text.
+ *
+ * The content pane carries three bars rather than a flat block: a blank
+ * rectangle read as an unfinished placeholder next to the theme tiles, which
+ * already use bars (§3).
+ */
+const NAV_TILE_DOTS = { bottom: 5, rail: 4 } as const;
+
+export function NavLayoutCard({ name, value, checked, onChange }: { name: string; value: "bottom" | "rail"; checked: boolean; onChange: (value: "bottom" | "rail") => void }) {
+  return <label className="fb-preview-choice" data-checked={checked}>
+    <input className="fb-choice-input" type="radio" name={name} value={value} checked={checked} onChange={() => onChange(value)} />
+    <span className="fb-preview-frame fb-nav-preview" data-layout={value} aria-hidden="true">
+      <span className="fb-nav-preview-content"><i /><i /><i /></span>
+      <span className="fb-nav-preview-bar">{Array.from({ length: NAV_TILE_DOTS[value] }, (_, index) => <i key={index} />)}</span>
+    </span>
+    <span className="fb-preview-label">{value === "bottom" ? "Bottom bar" : "Side rail"}</span>
   </label>;
 }
 

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { MemoryRouter } from "react-router";
 import { Image } from "lucide-react";
 import { SettingsRow } from "../../components/settings";
-import { SettingsNestedGroup } from "./SettingsNestedGroup";
+import { SettingsNestedGroup, SettingsNestedPages } from "./SettingsNestedGroup";
 
 afterEach(cleanup);
 
@@ -26,6 +26,14 @@ function renderGroup(open = false) {
 }
 
 describe("SettingsNestedGroup", () => {
+  it("opens a child page and returns to its index", () => {
+    render(<MemoryRouter><SettingsNestedPages><SettingsNestedGroup title="Advanced"><SettingsRow title="Diagnostics" route="/settings/diagnostics" /></SettingsNestedGroup></SettingsNestedPages></MemoryRouter>);
+    act(() => { screen.getByRole("button", { name: "Advanced" }).click(); });
+    expect(screen.getByRole("heading", { name: "Advanced" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Diagnostics" })).toBeTruthy();
+    act(() => { screen.getByRole("button", { name: "Back to settings" }).click(); });
+    expect(screen.getByRole("button", { name: "Advanced" })).toBeTruthy();
+  });
   it("renders a keyboard-focusable summary with the group title", () => {
     renderGroup();
     const summary = document.querySelector("summary");

@@ -299,7 +299,9 @@ describe("AccountSettings", () => {
       target: { value: "tester@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: /permanently delete/i }));
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/storage list failed/i));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Something went wrong. Try again."));
+    expect(mockRequestDeletion).toHaveBeenCalledWith("u1");
+    expect(mockFinishDeletion).not.toHaveBeenCalled();
     expect(mockLogout).not.toHaveBeenCalled();
     expect(screen.queryByRole("status")).toBeNull();
   });

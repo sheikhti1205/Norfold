@@ -273,13 +273,11 @@ describe("Settings home", () => {
     expect(within(group).queryByRole("link", { name: /Local tools/ })).toBeNull();
   });
 
-  it("keeps Diagnostics behind a second, closed troubleshooting disclosure", () => {
+  it("places Diagnostics under Troubleshooting in Advanced", () => {
     renderSettings();
-    const diagnostics=document.querySelector('a[href="/settings/diagnostics"]')!;
-    const subgroup=diagnostics.closest("details")!;
-    expect(subgroup.querySelector("summary")?.textContent).toContain("Troubleshooting");
-    expect(subgroup.open).toBe(false);
-    expect(subgroup.parentElement?.closest("details")?.querySelector("summary")?.textContent).toContain("Advanced");
+    const advanced = screen.getByRole("region", { name: "Advanced" });
+    const troubleshooting = within(advanced).getByRole("region", { name: "Troubleshooting" });
+    expect(within(troubleshooting).getByRole("link", { name: /Diagnostics/ }).getAttribute("href")).toBe("/settings/diagnostics");
   });
 
   it("links every row to its real route_map.csv target (nested disclosures included)", () => {
@@ -331,15 +329,15 @@ describe("Settings home", () => {
     expect(screen.getByRole("link", { name: /Feed layout/ }).textContent).toMatch(/Compact/);
   });
 
-  it("groups moved rows under the Advanced, Legal and Help & about disclosures", () => {
+  it("groups moved rows under the Advanced, Legal and Help & about headings", () => {
     renderSettings();
     const more = screen.getByRole("region", { name: "More" });
     expect(within(more).getByText("Advanced")).toBeTruthy();
     expect(within(more).getByText("Legal")).toBeTruthy();
     expect(within(more).getByText("Help & about")).toBeTruthy();
-    const topLevel = [...more.querySelectorAll("details.fb-settings-nested")]
-      .filter((group) => !group.parentElement?.closest("details"));
-    expect(topLevel).toHaveLength(3);
+    for (const [group, href] of [["Advanced", "/settings/media"], ["Legal", "/settings/terms"], ["Help & about", "/settings/help"]]) {
+      expect(within(within(more).getByRole("region", { name: group })).getByRole("link", { name: group === "Advanced" ? /Media & uploads/ : group === "Legal" ? /Terms of use/ : /Help & guide/ }).getAttribute("href")).toBe(href);
+    }
   });
 
   it("keeps every root row keyboard-focusable with a real target", () => {
