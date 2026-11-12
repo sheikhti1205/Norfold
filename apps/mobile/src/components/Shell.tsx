@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { Link, useLocation } from "react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { BarChart3, ClipboardList, Home, MessageCircle, Plus, Settings } from "lucide-react";
+import { BarChart3, ClipboardList, Home, MessageCircle, PanelLeftClose, PanelLeftOpen, Plus, Settings } from "lucide-react";
 import { Focusable, Tooltip, TooltipTrigger } from "react-aria-components";
 import { TabTapProvider, useTabTap } from "./TabTap";
 import { LiveRegion } from "./LiveRegion";
 import { MEDIUM_MAX_PX, READABLE_COLUMN_CLASS, useViewportWidth, WIDE_CANVAS_CLASS } from "./responsive";
 import { useNavLayout } from "./navLayout";
-import type { NavLayout } from "../appearance";
+import { loadAppearance, saveAppearance, type NavLayout } from "../appearance";
 import { RouteTransition } from "./RouteTransition";
 import { requestHistorySuppression } from "./backNavigation";
 import { NavigationSetup } from "./NavigationSetup";
@@ -164,6 +164,15 @@ export function PrimaryNav({
 }) {
   const { notifyTabTap } = useTabTap();
   const { pathname } = useLocation();
+  // The pin is read once and written on press rather than through
+  // `useAppearance`: that hook re-applies the whole stored appearance on every
+  // appearance event, which would fight the fixture's page-wide text scale.
+  const [railPinnedState, setRailPinnedState] = useState(() => loadAppearance().railPinned);
+  const toggleRailPin = () => {
+    const next = !railPinnedState;
+    setRailPinnedState(next);
+    saveAppearance({ ...loadAppearance(), railPinned: next });
+  };
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
 
@@ -220,6 +229,7 @@ export function PrimaryNav({
     </Link>
   );
 
+  const railPinned = rail && railPinnedState;
   const items = NAV.filter(({ to }) => rail || to !== "/insights").map(({ to, label, icon: Icon }) => {
     const selected = selectedPath === to;
     const link = (
@@ -255,10 +265,13 @@ export function PrimaryNav({
           className="fb-nav-icon"
           aria-hidden="true"
         />
-        {rail ? (
+        {rail && !railPinned ? (
           // Compact icon rail: accessible name always present; React Aria
           // exposes the same name visually on hover AND keyboard focus.
           <span className="fb-nav-label sr-only">{label}</span>
+        ) : railPinned ? (
+          // Pinned panel: every destination is named in place, selected or not.
+          <span className="fb-nav-label">{label}</span>
         ) : (
           <AnimatePresence initial={false}>
             {selected && (
@@ -276,6 +289,9 @@ export function PrimaryNav({
         )}
       </MotionLink>
     );
+    // A pinned panel names every row in place, so a hover tooltip would repeat
+    // what is already on screen.
+    if (railPinned) return link;
     return <TooltipTrigger key={to} delay={350}>
       <Focusable>{link}</Focusable><Tooltip placement={rail ? "right" : "top"} className="fb-nav-tooltip">{label}</Tooltip>
     </TooltipTrigger>;
@@ -286,6 +302,7 @@ export function PrimaryNav({
       <motion.nav
         aria-label="Primary"
         data-layout="rail"
+        data-pinned={railPinned ? "true" : "false"}
         className="fb-nav-rail shrink-0"
         variants={fadeVariants}
         initial="hidden"
@@ -293,6 +310,14 @@ export function PrimaryNav({
         exit="exit"
         transition={{ duration: motionDurations.fast, ease: motionEasings.out }}
       >
+        <div className="fb-nav-rail-head">
+          {railPinned && <span className="fb-nav-wordmark">Norfold</span>}
+          <button type="button" className="fb-nav-pin" aria-pressed={railPinned}
+            aria-label={railPinned ? "Collapse navigation" : "Expand navigation"}
+            onClick={toggleRailPin}>
+            {railPinned ? <PanelLeftClose size={20} aria-hidden="true" /> : <PanelLeftOpen size={20} aria-hidden="true" />}
+          </button>
+        </div>
         <motion.div className="fb-nav-create-wrap" whileTap={pressFeedback.iconButton}>
           {createAction}
         </motion.div>

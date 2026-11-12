@@ -127,6 +127,13 @@ export interface AppearanceSettings {
   navLayout: NavLayout;
   /** Device-local acknowledgement, never an account preference. */
   navLayoutChosen: boolean;
+  /**
+   * The wide navigation rail, pinned open as a labelled 224px panel instead of
+   * the icon column (owner order 2026-11-12, R7; `docs/design/NAVIGATION-STUDY.md`
+   * §"Width": 72/80px collapsed, 224px pinned). Local layout habit, not account
+   * data, so it lives here beside `navLayout` and never syncs.
+   */
+  railPinned: boolean;
 }
 
 export const DEFAULT_APPEARANCE: AppearanceSettings = {
@@ -137,6 +144,7 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
   highQualityPhoto: false,
   navLayout: "bottom",
   navLayoutChosen: false,
+  railPinned: false,
 };
 
 function isAccentId(value: unknown): value is AccentId {
@@ -171,6 +179,7 @@ export function migrateAppearance(value: unknown): AppearanceSettings {
     // false until the reader chooses; unrelated accent edits cannot dismiss setup.
     navLayoutChosen: typeof parsed.navLayoutChosen === "boolean" ? parsed.navLayoutChosen
       : parsed.navLayoutChosen === undefined && isNavLayout(parsed.navLayout),
+    railPinned: typeof parsed.railPinned === "boolean" ? parsed.railPinned : DEFAULT_APPEARANCE.railPinned,
   };
 }
 
