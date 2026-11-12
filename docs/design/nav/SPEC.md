@@ -49,6 +49,7 @@ error states distinct from empty states.
 | Achievements | `/achievements` (proposed) | `/achievements` and descendants. | `No achievements yet`. | **New product surface**. Needs approved catalogue, earning criteria, eligible events and durable progress. Rules require a product decision; no badges or denominator until decided. `3 of 12` is illustrative, not real data. |
 | Account row | `/profile` | Select account row for `/profile`, `/profile/edit`, `/my` and `/my/:id/edit`; phone pill selects My Reports for `/my*`. | Missing avatar uses canonical initial-based avatar; missing name uses existing account fallback. | Exists: authenticated account/profile data; reuse canonical avatar renderer. |
 | Gear | Opens settings popover; no route change. | Button exposes `aria-expanded`; never `aria-current`. | Static entries; disabled unavailable actions explain why. | Existing settings and role-gated leaves are related functionality, not the new popover. Popover and non-navigating actions require product work. |
+| Bell | Opens the notifications panel in place; no route change. | Button exposes `aria-expanded`; never `aria-current`. | Panel with no events shows `No activity yet`; `View activity` remains available. | Panel and its `View activity` action are new product work. The existing `/notifications` route is reachable only through `View activity`, never through the bell itself. |
 
 The popover entries, in order, are Settings, Appearance, Your activity, Saved,
 Report a problem, Switch account, and Log out. A rule separates Log out from the
@@ -122,13 +123,16 @@ native scroll semantics and keyboard access.
 | --- | --- |
 | Default | Transparent background, `--fb-on-surface` text and icon. |
 | Hover | `--fb-surface-container` background only; no label layer while expanded. |
-| Focus | `:focus-visible` uses `2px solid var(--fb-focus)` with `2px` offset; never remove the focus indicator. |
+| Focus | `:focus-visible` uses `2px solid var(--fb-focus)` with `2px` offset; never remove the focus indicator. Text entry is the exception defined below: it keeps a visible focus state without colour. |
+| Text entry | `input`, `textarea` and `select` never show the accent in any theme: no accent ring, fill, glow, shadow or border. Focus changes only the border to `--fb-on-surface` and removes the `:focus-visible` outline, so keyboard focus stays visible without colour. A control drawn as a text box takes the same treatment even when its element is a button — `.date-field` and the `.search-field` wrapper — so it reads as a text input and carries no accent ring. Real buttons, chips, tabs, nav rows, picker tiles, links and badges keep their accent treatment unchanged. |
+| Text selection | `::selection` paints a neutral on-surface tint, `color-mix(in oklab, var(--fb-on-surface) 20%, transparent)`, with inherited text colour in every theme. No accent, brand or focus token fills a text selection. |
+| Calendar day | Default transparent; hover `--fb-surface-container`; today `1px` inset `--fb-outline`; selected `--fb-primary` with `--fb-on-primary`; outside-month days use `--fb-on-surface-variant` at reduced opacity; days after today are disabled and never receive focus. |
 | Current | `aria-current="page"`, `--fb-primary-container` background, `--fb-on-primary-container` foreground, weight `600`; also distinguish in forced colors. |
 | Attention | Messages and Activity may show a dot only for known unread data; include its meaning in the accessible name. Unknown or `0` means no dot. Connect count and Achievements progress require real eligible data. |
 | Disabled | Unbuilt destinations are omitted until usable; temporarily unavailable actions use native disabled semantics and an explanation. |
 | Gear default / hover / focus / open | Icon button named `Settings`, transparent at rest; hover uses `--fb-surface-container`; focus uses the focus rule above; open uses `--fb-primary-container` and `aria-expanded="true"`. |
 | Popover items | Seven native buttons in §1 order; default transparent, hover `--fb-surface-container`, focus uses the focus rule; disabled items use native disabled semantics and an explanation. A `1px` rule precedes Log out. |
-| Search rest / focused | Search trigger opens a floating bar with search icon, input placeholder `Search reports, messages and people…`, `Advanced search` button inside the bar and `Close search` button. Input focus uses the focus rule. |
+| Search rest / focused | Search is the only search entry: the appbar button and every `Search` nav row open the same floating overlay, and no search surface exists. The overlay holds a search icon, the input placeholder `Search reports, messages and people…`, `Advanced search`, and `Close search`. Input focus follows the text-entry exception above. |
 | Search with query / no results | Results update live beneath the bar. Empty query shows recent searches or `No recent searches`; a query with no matches shows `No results found` and `Clear filters`. Loading and error states are distinct and never fabricate results. |
 | Advanced card | `Advanced search` contains rows `Date posted`, `Exact match`, `Post type`, `From profile`, `Community or tag`. Each row has a leading icon and label; the four value rows have a trailing chevron and open their corresponding selector or input. `Exact match` has a trailing switch with `aria-checked`, not a chevron. `Apply` applies current choices and returns focus to the bar trigger. |
 
@@ -152,22 +156,93 @@ Hide it if it cannot fit without violating the gutter.
 
 ### Overlays
 
-Layer order, bottom to top: content and navigation, notification pill, search
-overlay, advanced card, settings popover; use a fixed overlay layer above the
-shell and below modal dialogs. Search, settings popover and notification pill are
-mutually exclusive: opening one closes either other one before it opens. The
-advanced card is nested within search, not a competing overlay.
+One shared blurred backdrop sits under search, the notifications panel, the
+settings popover and the date popover whenever any of them is open. It covers the
+content pane, paints a `12px` blur over it, and must not move layout. Clicking it
+closes the topmost open layer and returns focus to that layer's trigger. The
+appbar paints above the backdrop so a bell, search or gear button stays visible
+and operable while its own panel is open.
 
-Anchor settings above the gear with `8px` separation, clamped to an `8px` viewport
-margin; mirror inline alignment in RTL. Anchor search near the top of the content
-at `16px` from its top edge; place results beneath the bar and the advanced card
-adjacent to the bar, clamped to `8px` viewport margins. Neither affects layout.
-Escape or outside click closes settings and returns focus to the gear. Escape,
-outside click or `Close search` closes search and returns focus to its trigger.
-When advanced is open, Escape first closes the card and returns focus to its
-trigger; a subsequent Escape closes search. A pointer outside both card and bar
-closes search. On mutual-exclusion replacement, focus the newly opened overlay
-rather than returning focus to the previous trigger.
+Layer order, bottom to top: content and navigation, shared backdrop, appbar,
+search overlay, notifications panel, settings popover, advanced card, modal
+scrim, modal sheet, date popover. Search, notifications panel, settings popover
+and date popover are mutually exclusive: opening one closes the others before it
+opens, and the advanced card stays nested inside search.
+
+Search geometry: at `≥600px` the overlay is centred on the whole shell, not on the
+content column beside the sidebar, so an expanded sidebar never shifts it; it is
+`640px` wide or `100% - 48px`, whichever is smaller, with `48px` of breathing room
+above and below. It is a sibling of the content pane, sharing the shell's
+positioning context, so `50%` means the shell's centre. At `<600px` it is anchored below the appbar: `8px` under the measured
+appbar height, `100% - 16px` wide, clamped to an `8px` margin, with its height
+running to `12px` above the bottom edge. The offset is measured, not assumed, so
+`200%` text and a taller appbar never push the overlay under the bar. Results
+render beneath the field and the advanced card sits in the same column.
+
+Anchor the notifications panel `8px` below the bell and align it to the bell's
+inline-end edge, clamped to an `8px` margin, `360px` wide at most and `100% - 16px`
+at most, scrolling inside the frame when short. Every bell instance shares one
+`aria-expanded` value and one `aria-controls` target. Anchor settings above the
+gear with `8px` separation, clamped to an `8px` margin; mirror inline alignment in
+RTL. No layer affects layout.
+
+Escape, a click outside the layer, or the layer's own toggle closes settings,
+notifications and the date popover, returning focus to the control that opened
+it. Escape, an outside click or `Close search` closes search and returns focus to
+its trigger. When the advanced card is open, Escape first closes the card and
+returns focus to `Advanced search`; a subsequent Escape closes search. On
+mutual-exclusion replacement, focus the newly opened overlay rather than
+returning focus to the previous trigger.
+
+### Date fields and calendar
+
+One reusable date field and one shared calendar popover serve every date in the
+product. Current uses: `From` and `To` in the advanced search card, where they
+filter reports by an inclusive stored-date range, and the report-date field on
+both report-creation routes — the `New Report` surface and the modal create
+sheet. No route may offer a date entry without opening this same popover.
+
+A date field is a button, not a text input, but it is drawn as a text box and
+therefore takes the neutral text-entry focus treatment from §3: no accent ring,
+and focus changes only its border to `--fb-on-surface`.
+It shows its label, the chosen date as `15 Nov 2026`, or the placeholder `Any date`
+(`Add a date` in the create sheet); it exposes `aria-haspopup="dialog"`,
+`aria-expanded`, and `aria-controls` pointing at the shared popover. A chosen
+value reveals a `Clear {field} date` control. The popover opens `6px` below its
+field, flips above when there is no room below, clamps to an `8px` margin, and
+scrolls internally inside short frames.
+
+The calendar shows a fixed six-week grid of seven Monday-first columns, with
+outside-month days dimmed and selectable. The maximum selectable date is today:
+later days are disabled and excluded from the tab order, so no field can express a
+future date.
+
+The month title is a jump control exposing `aria-haspopup="grid"` with
+`aria-expanded` and `aria-controls` kept in step. It opens a single-year panel with
+the year label, previous and next year buttons, and twelve month buttons; the next
+year is
+disabled at the current year, months after the current month are disabled within
+it, and the previous year stops at 80 years before today. Choosing a month sets
+the grid to that month and returns focus to the highlighted day in it. Reaching a
+distant month therefore costs three interactions: open the jump, step the year,
+choose the month.
+
+Calendar keys: `ArrowLeft`/`ArrowRight` move a day, `ArrowUp`/`ArrowDown` a week,
+`PageUp`/`PageDown` a month, `Home`/`End` to the Monday and Sunday of the week, and
+`Shift` with `ArrowLeft`/`ArrowRight` in the jump panel steps ten years. Month
+buttons move with the arrow keys inside the panel. `Escape` closes the jump panel
+first and the popover second, returning focus to the field; choosing a day closes
+the popover and returns focus to the field. A polite live region announces
+`{Field} set to {date}` and `{Field} cleared`.
+
+### Media in the composer
+
+The composer's sticker and GIF picker is device-only: Klipy content is fetched by
+the user's device, from Klipy, and is never loaded, proxied, transformed, cached,
+re-hosted or stored by our servers. A sent Klipy message carries a provider
+reference, never the media bytes. The full rule and its evidence live in
+[`KLIPY-CLIENT.md`](../KLIPY-CLIENT.md); that file is normative for anything that
+touches Klipy.
 
 ## 5. Keyboard
 
@@ -184,7 +259,10 @@ focus to its input; Tab follows input, advanced trigger, close control, then
 available results. Closing search returns focus to its trigger. Opening the
 advanced card moves focus to its first row; Tab follows the five rows then Apply;
 Escape closes the card and returns focus to `Advanced search`. Switching the
-Exact match control uses Space or Enter. All focus indicators follow §3.
+Exact match control uses Space or Enter. Opening the notifications panel moves
+focus to its `View activity` action and closing it returns focus to the bell.
+Opening a date field moves focus to the chosen day, or to today when the field is
+empty; its key map is in §4. All focus indicators follow §3.
 
 `<nav aria-label="Primary">` contains the rows. At most one visible nav link has
 `aria-current="page"`, according to §1. The toggle references the persistent
@@ -209,7 +287,8 @@ Popover entrance uses `popoverVariants` from `uiMotion`: opacity `0 → 1`, scal
 `0.96 → 1`, y `4px → 0`, with `motionDurations.standard` (`220ms`) and
 `motionEasings.out` (`cubic-bezier(0.2, 0, 0, 1)`). Search overlay and advanced
 card use `fadeUpVariants`: opacity `0 → 1`, y `12px → 0`, with the same duration
-and easing. Animate only transform and opacity; never animate layout. Under
+and easing. The shared backdrop fades opacity `0 → 1` in `140ms` and never moves.
+Animate only transform and opacity; never animate layout. Under
 `prefers-reduced-motion: reduce` or the app's reduced-motion setting, optional
 transitions resolve to `0ms`, immediately showing opacity `1`, scale `1`, y `0`;
 focus and current indicators are immediate.
@@ -239,8 +318,9 @@ sidebar to shrink or introduces document horizontal scrolling. Feed columns use
 actual content width. Messages uses its own split fallback. Collapsing or
 expanding does not reset scroll.
 
-Search, its advanced card and settings popover overlay the canvas and never alter
-content geometry. At a fixed viewport, zoom, scroll position and nav state, record
+Search, its advanced card, the notifications panel, the settings popover and the
+date popover overlay the canvas and never alter content geometry. At a fixed
+viewport, zoom, scroll position and nav state, record
 `#fb-main.getBoundingClientRect()` (`x`, `y`, `width`, `height`) before opening,
 while each overlay is open, and after closing; every value must match within `1px`.
 Also compare `clientWidth` and `clientHeight` exactly to detect scrollbar gutters.
@@ -281,6 +361,9 @@ keep their own chrome. Public legal pages do not gain search/bell utilities.
 | Popover | `Settings`, `Appearance`, `Your activity`, `Saved`, `Report a problem`, `Switch account`, `Log out` |
 | Search | `Search reports, messages and people…`, `Advanced search`, `Close search`, `Recent searches`, `No recent searches`, `No results found`, `Clear filters` |
 | Advanced card | `Advanced search`, `Date posted`, `Exact match`, `Post type`, `From profile`, `Community or tag`, `Apply` |
+| Notifications panel | `Notifications`, `View activity` |
+| Date field | `Any date`, `Add a date`, `Clear from date`, `Clear to date`, `Clear date`, `Choose a date`, `Previous month`, `Next month`, `Choose month and year`, `Days in {Month} {Year}`, `{Day} {Month} {Year}` |
+| Date status | `{Field} set to {date}`, `{Field} cleared` |
 | Toggle | `Collapse navigation`, `Expand navigation` |
 | Accessibility | `Primary`, `Skip to content` |
 | Count formats | `{N} suggestions`, `{earned} of {total}`; render only actual data. |
@@ -320,4 +403,12 @@ has passed them. Check light, dark and true-black where applicable.
 | 22 | Advanced card | Five named rows each have icon and label; four value rows have chevrons, Exact match has a working switch, and `Apply` applies and returns focus to the trigger. |
 | 23 | Overlay geometry | Measure `#fb-main` per §8 before, during and after search and settings independently; rect values differ by at most `1px`, client dimensions exactly match. |
 | 24 | Scrollbars | In every scroll container, no bar or reserved gutter is visible at rest; hover or scroll reveals a `4px` overlay thumb, which fades after `900ms` without hover. Wheel, trackpad, keyboard and touch still scroll. |
-| 25 | Overlay exclusivity | Opening search, settings or notification pill closes either other one; advanced card remains nested in search. |
+| 25 | Overlay exclusivity | Opening search, settings, notifications or a date field closes the others; advanced card remains nested in search. |
+| 26 | Shared backdrop | Open search, notifications, settings and a date field in turn: one blurred backdrop is visible each time, it dims the content pane without moving layout, its layer order sits above content and below every panel, the appbar stays above it, and clicking it closes the topmost layer and returns focus to its trigger. |
+| 27 | Search entry | At `1280` and `411`, the appbar button and the `Search` nav row open the same overlay without changing the current surface or route; no search surface or second search field exists anywhere in the shell. |
+| 28 | Search geometry | At `1280` the overlay is centred on the shell — within `2px` of the frame centre with the sidebar both expanded and collapsed — at `640px`; at `411` and `320` it starts `8px` below the measured appbar, is `16px` narrower than the shell, and never overlaps the appbar at `100%` or `200%` text; no horizontal overflow at `320`. |
+| 29 | Notification toggle | Every bell toggles one anchored panel, reports `aria-expanded` in step, and closes on second press, Escape, outside click and the backdrop, returning focus to the bell each time. The panel never overlaps its trigger and stays inside the frame. `View activity` is the only path to the activity surface. |
+| 30 | Neutral text entry | In light, dark and true-black, focus each `input`, `textarea` and `select` — composer, overlay search, profile, community, post type, picker search — and each text-box-shaped control (all four date fields), and confirm no accent ring, fill, shadow or border appears, the border turns `--fb-on-surface`, and the selection tint is neutral. `.btn-primary`, chips, tabs, rows, tiles, nav rows and badges still show the accent ring or fill. |
+| 31 | Date field | From/To, the `New Report` surface field and the create-sheet field all open one shared popover that stays inside the frame, including above the modal sheet, anchored to the field that opened it; there is exactly one date popover in the document. The grid is `42` cells Monday-first, no day after today can be focused or chosen, and the jump panel offers twelve months for one year with the current year's future months and the next year disabled. |
+| 32 | Calendar range | With `From` set to the first of the month, the advanced results contain only reports on or after that date; setting `To` to a past date removes every later report; clearing both returns to recent searches. |
+| 33 | Calendar keys | `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown`, `PageUp`, `PageDown`, `Home` and `End` move focus as specified; `Escape` closes the jump panel before the popover; choosing a day updates the field, announces it and returns focus to the field. |

@@ -224,7 +224,8 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
 .frame button{font:inherit;color:inherit}
 .frame button:focus-visible,.frame a:focus-visible{outline:2px solid var(--fb-focus);outline-offset:2px}
 .frame .rail a:focus-visible,.frame .rail button:focus-visible{outline-offset:-2px}
-.frame ::selection{background:var(--fb-primary-container);color:var(--fb-on-primary-container)}
+/* Selection is a neutral ink tint, never the accent: text entry must not go blue. */
+.frame ::selection{background:color-mix(in oklab,var(--fb-on-surface) 20%,transparent);color:inherit}
 
 /* Text scale utilities: every product font size is derived from --fs. */
 .t-xs{font-size:calc(var(--fs) * .6875)}
@@ -1147,7 +1148,13 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
 .settings-popover button,.filter-row{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:8px;border:0;border-radius:9px;background:transparent;text-align:left;cursor:pointer}
 .settings-popover button:hover,.filter-row:hover{background:var(--fb-surface-container)}
 .settings-popover .logout{border-top:1px solid var(--fb-outline-variant);border-radius:0;margin-top:4px}
-.search-overlay{position:absolute;z-index:74;top:12px;left:50%;transform:translateX(-50%);width:min(560px,calc(100% - 24px));max-height:calc(100% - 24px);display:flex;flex-direction:column;gap:8px}
+/* Search is a floating overlay: centred on desktop, top-anchored below the
+   appbar on a phone. The phone top offset is measured from the real appbar in
+   JS so 200% text does not shift it under the bar. */
+.search-overlay{position:absolute;z-index:74;top:50%;left:50%;transform:translate(-50%,-50%);width:min(640px,calc(100% - 48px));max-height:calc(100% - 48px);display:flex;flex-direction:column;gap:8px}
+@container app (max-width:599px){
+  .search-overlay{top:60px;transform:translateX(-50%);width:calc(100% - 16px);max-height:calc(100% - 76px)}
+}
 .content{position:relative}
 .search-overlay .search-field{flex:none;box-shadow:var(--shadow-md);padding-right:2px}
 .search-results,.advanced-search{background:var(--fb-surface-container-low);border:1px solid var(--fb-outline-variant);border-radius:16px;box-shadow:var(--shadow-md);padding:8px;overflow:auto;min-height:0}
@@ -1168,6 +1175,124 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
 .frame :hover::-webkit-scrollbar-thumb,.frame .scrolling::-webkit-scrollbar-thumb,.studio-controls:hover::-webkit-scrollbar-thumb,.studio-controls.scrolling::-webkit-scrollbar-thumb{background:var(--fb-outline, #89929e)}
 @container app (max-width:1023px){.rail-foot{flex-direction:column}.settings-popover{left:8px}}
 @container app (min-width:600px) and (max-width:1023px){.settings-popover{bottom:110px}}
+
+/* ---- text entry is never accented ----------------------------------------
+   No accent fill, ring, glow, outline or selection inside any text control in
+   any theme. A neutral border change keeps keyboard focus visible. Controls
+   drawn as text boxes are included even when their element is a button, so a
+   date field reads as a text input and carries no accent ring. Non-text
+   controls (chips, tabs, rows, send button, picker tiles, nav rows) keep their
+   accent treatment. */
+.frame :is(input,textarea,select):focus-visible,
+.frame .search-field input:focus-visible,
+.frame .composer-input:focus-visible,
+.frame .picker-search input:focus-visible,
+.frame .date-field:focus-visible{
+  outline:none;outline-offset:0;box-shadow:none;
+}
+.frame :is(input,textarea,select):focus,
+.frame .search-field input:focus,
+.frame .composer-input:focus,
+.frame .picker-search input:focus,
+.frame .date-field:focus{border-color:var(--fb-on-surface)}
+.frame .search-field:focus-within{border-color:var(--fb-on-surface);outline:none}
+
+/* ---- one shared blurred backdrop for every floating layer ----------------
+   Sits above page content and below whichever panel is open. The appbar is
+   raised above it so a bell or the gear stays visible and pressable while its
+   own panel is open; clicking the blurred area closes the layer. */
+.layer-backdrop{
+  position:absolute;inset:0;z-index:72;
+  background:color-mix(in srgb,var(--fb-surface) 52%,transparent);
+  -webkit-backdrop-filter:blur(12px) saturate(.9);
+  backdrop-filter:blur(12px) saturate(.9);
+  animation:layerIn .14s ease-out;
+}
+.layer-backdrop[hidden]{display:none}
+@keyframes layerIn{from{opacity:0}to{opacity:1}}
+.frame.reduce .layer-backdrop{animation:none}
+.appbar{position:relative;z-index:73;background:var(--fb-surface)}
+
+/* ---- reusable date field + calendar popover ------------------------------ */
+.field-label{font-size:calc(var(--fs) * .75);font-weight:600;color:var(--fb-on-surface-variant)}
+.date-input{display:flex;align-items:center;gap:4px;min-width:0}
+.date-field{
+  display:flex;align-items:center;gap:8px;flex:1;min-width:0;min-height:44px;
+  padding:8px 10px;border:1px solid var(--fb-outline-variant);border-radius:10px;
+  background:var(--fb-surface);color:var(--fb-on-surface);font:inherit;
+  font-size:calc(var(--fs) * .875);text-align:start;cursor:pointer;
+}
+.date-field:hover{background:var(--fb-surface-container-low)}
+.date-field[aria-expanded="true"]{border-color:var(--fb-on-surface)}
+.date-field .icon{font-size:16px;flex:none;color:var(--fb-on-surface-variant)}
+.date-field .date-value{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.date-field .date-value.is-empty{color:var(--fb-on-surface-variant)}
+.date-clear{
+  display:grid;place-items:center;width:44px;height:44px;flex:none;
+  border:1px solid var(--fb-outline-variant);border-radius:10px;background:transparent;
+  color:var(--fb-on-surface-variant);cursor:pointer;
+}
+.date-clear:hover{background:var(--fb-surface-container)}
+.date-clear[hidden]{display:none}
+.date-clear .icon{font-size:15px}
+.date-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:4px 8px 8px}
+.date-fields .field{padding:0}
+@container content (max-width:359px){ .date-fields{grid-template-columns:minmax(0,1fr)} }
+
+.date-popover{
+  position:absolute;z-index:86;width:min(344px,calc(100% - 16px));
+  max-height:calc(100% - 12px);overflow:auto;overscroll-behavior:contain;
+  background:var(--fb-surface-container-low);color:var(--fb-on-surface);
+  border:1px solid var(--fb-outline-variant);border-radius:16px;
+  box-shadow:var(--shadow-md);padding:8px;scrollbar-width:thin;
+}
+.date-popover[hidden]{display:none}
+@container app (max-width:359px){ .date-popover{width:calc(100% - 16px);padding:6px;border-radius:14px} }
+.cal-head{display:flex;align-items:center;gap:2px;margin-bottom:2px}
+.cal-nav{
+  display:grid;place-items:center;width:44px;height:44px;flex:none;border:0;border-radius:10px;
+  background:transparent;color:var(--fb-on-surface);font:inherit;font-size:20px;line-height:1;cursor:pointer;
+}
+.cal-nav:hover:not(:disabled){background:var(--fb-surface-container)}
+.cal-nav:disabled{opacity:.3;cursor:not-allowed;background:transparent}
+.cal-title{
+  flex:1;min-width:0;min-height:44px;padding:0 6px;border:0;border-radius:10px;
+  background:transparent;color:var(--fb-on-surface);font:inherit;
+  font-size:calc(var(--fs) * .875);font-weight:650;cursor:pointer;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.cal-title:hover{background:var(--fb-surface-container)}
+.cal-title[aria-expanded="true"]{background:var(--fb-surface-container)}
+.cal-weekdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.cal-weekdays span{
+  padding:4px 0;text-align:center;font-size:calc(var(--fs) * .625);font-weight:700;
+  letter-spacing:.04em;color:var(--fb-on-surface-variant);
+}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.cal-day{
+  display:grid;place-items:center;min-width:0;min-height:44px;border:0;border-radius:9px;
+  background:transparent;color:var(--fb-on-surface);font:inherit;
+  font-size:calc(var(--fs) * .8125);font-variant-numeric:tabular-nums;cursor:pointer;
+}
+.cal-day:hover:not(:disabled){background:var(--fb-surface-container)}
+.cal-day.is-outside{color:var(--fb-on-surface-variant);opacity:.55}
+.cal-day.is-today{box-shadow:inset 0 0 0 1px var(--fb-outline)}
+.cal-day[aria-pressed="true"]{background:var(--fb-primary);color:var(--fb-on-primary);font-weight:700;box-shadow:none}
+.cal-day:disabled{opacity:.32;cursor:not-allowed}
+.cal-jump{display:flex;flex-direction:column;gap:6px}
+.cal-jump[hidden]{display:none}
+.cal-year{display:flex;align-items:center;gap:2px}
+.cal-year-label{flex:1;min-width:0;text-align:center;font-size:calc(var(--fs) * .9375);font-weight:650}
+.cal-months{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+.cal-month{
+  min-height:44px;padding:0 2px;border:0;border-radius:10px;background:transparent;
+  color:var(--fb-on-surface);font:inherit;font-size:calc(var(--fs) * .8125);
+  font-weight:600;cursor:pointer;
+}
+.cal-month:hover:not(:disabled){background:var(--fb-surface-container)}
+.cal-month[aria-pressed="true"]{background:var(--fb-primary-container);color:var(--fb-on-primary-container)}
+.cal-month:disabled{opacity:.32;cursor:not-allowed}
+.cal-hint{margin:2px 0 0;font-size:calc(var(--fs) * .625);line-height:1.35;color:var(--fb-on-surface-variant)}
 </style>
 </head>
 <body>
@@ -1275,7 +1400,6 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
       <legend>Surface</legend>
       <div class="seg" id="segSurface" role="group" aria-label="Surface">
         <button type="button" class="seg-btn" data-set="surface" data-value="home" aria-pressed="true">Home</button>
-        <button type="button" class="seg-btn" data-set="surface" data-value="search">Search</button>
         <button type="button" class="seg-btn" data-set="surface" data-value="chats">Messages</button>
         <button type="button" class="seg-btn" data-set="surface" data-value="notifications">Notifications</button>
         <button type="button" class="seg-btn" data-set="surface" data-value="settings">Settings</button>
@@ -1346,19 +1470,6 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
           </div>
 
           <main class="content" id="content">
-            <div class="search-overlay" id="searchOverlay" hidden>
-              <div class="search-field"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg><input id="overlaySearchInput" type="search" placeholder="Search reports, messages and people…" aria-label="Search reports, messages and people" autocomplete="off"><button class="iconbtn" type="button" id="advancedTrigger" aria-label="Advanced search" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="#i-filter"></use></svg></button><button class="iconbtn" type="button" id="closeSearch" aria-label="Close search"><svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button></div>
-              <div class="search-results" id="overlayResults" aria-live="polite"></div>
-              <div class="advanced-search" id="advancedSearch" aria-label="Advanced search" hidden>
-                <h2>Advanced search</h2>
-                <details><summary class="filter-row"><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg><span class="filter-label">Date posted</span><svg class="icon chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg></summary><div class="field"><label for="filterDate">Date posted</label><select id="filterDate"><option value="">Any time</option><option value="recent">Recent</option></select></div></details>
-                <button class="filter-row" type="button" id="exactMatch" role="switch" aria-checked="false"><svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg><span class="filter-label">Exact match</span><span class="switch" aria-hidden="true"></span></button>
-                <details><summary class="filter-row"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg><span class="filter-label">Post type</span><svg class="icon chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg></summary><div class="field"><label for="filterType">Post type</label><select id="filterType"><option value="">All types</option><option>Lost</option><option>Found</option></select></div></details>
-                <details><summary class="filter-row"><svg class="icon" aria-hidden="true"><use href="#i-user"></use></svg><span class="filter-label">From profile</span><svg class="icon chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg></summary><div class="field"><label for="filterProfile">From profile</label><input id="filterProfile" placeholder="Profile name"></div></details>
-                <details><summary class="filter-row"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg><span class="filter-label">Community or tag</span><svg class="icon chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg></summary><div class="field"><label for="filterCommunity">Community or tag</label><input id="filterCommunity" placeholder="Community or tag"></div></details>
-                <button class="btn-primary" type="button" id="applyFilters">Apply</button>
-              </div>
-            </div>
             <div class="canvas" id="canvas">
 
               <!-- ============ HOME FEED ============ -->
@@ -1366,10 +1477,10 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
                 <header class="appbar">
                   <div class="wordmark">Norfold</div>
                   <div class="appbar-actions">
-                    <button type="button" class="iconbtn" data-action="go" data-surface="search" aria-label="Search">
+                    <button type="button" class="iconbtn" data-action="search" aria-label="Search" aria-haspopup="dialog" aria-expanded="false" aria-controls="searchOverlay">
                       <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
                     </button>
-                    <button type="button" class="iconbtn" data-action="go" data-surface="notifications" aria-label="Notifications">
+                    <button type="button" class="iconbtn" data-action="notifications" aria-label="Notifications" aria-haspopup="dialog" aria-expanded="false" aria-controls="notificationPopover">
                       <span class="bell-wrap">
                         <svg class="icon" aria-hidden="true"><use href="#i-bell"></use></svg>
                         <span class="badge" data-badge="bell" hidden>9</span>
@@ -1405,41 +1516,8 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
                 </div>
               </section>
 
-              <!-- ============ SEARCH (header utility route) ============ -->
-              <section class="surface" data-surface="search" id="surface-search" hidden>
-                <header class="appbar">
-                  <button type="button" class="iconbtn" data-action="go" data-surface="home" aria-label="Back to home">
-                    <svg class="icon" aria-hidden="true"><use href="#i-arrow-left"></use></svg>
-                  </button>
-                  <div class="search-field">
-                    <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
-                    <input id="searchInput" type="search" placeholder="Search reports and people" aria-label="Search reports and people" autocomplete="off">
-                    <button type="button" class="iconbtn iconbtn-sm" id="searchClear" aria-label="Clear search" hidden>
-                      <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
-                    </button>
-                  </div>
-                </header>
-                <div class="scroll" data-scroll>
-                  <div class="page">
-                    <h1 class="sr-only" tabindex="-1" data-route-title>Search</h1>
-                    <div class="tabs" role="tablist" aria-label="Search results">
-                      <button type="button" class="tab" role="tab" id="tabReports" aria-selected="true" data-search-tab="reports">Reports <span class="tab-count" id="searchReportCount">6</span></button>
-                      <button type="button" class="tab" role="tab" id="tabPeople" aria-selected="false" data-search-tab="people">People <span class="tab-count" id="searchPeopleCount">4</span></button>
-                      <span class="spacer"></span>
-                      <button type="button" class="chip" id="searchFilterChip" aria-pressed="false">
-                        <svg class="icon" aria-hidden="true"><use href="#i-filter"></use></svg> Lost only
-                      </button>
-                    </div>
-                    <div id="searchReportsPane">
-                      <div class="rows" id="searchReports"></div>
-                    </div>
-                    <div id="searchPeoplePane" hidden>
-                      <div class="people-grid" id="searchPeople"></div>
-                    </div>
-                    <p class="row-empty" id="searchNoResults" hidden></p>
-                  </div>
-                </div>
-              </section>
+              <!-- Search has no surface: the appbar icon and the rail row open the
+                   floating overlay. Nothing here navigates. -->
 
               <!-- ============ CHATS ============ -->
               <section class="surface" data-surface="chats" id="surface-chats" hidden>
@@ -1645,7 +1723,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
                 </div>
               </section>
 
-              <section class="surface" data-surface="create" id="surface-create" hidden><div class="scroll"><div class="extra-page"><h1>New Report</h1><p class="muted">Share a few details to help someone recognize the item.</p><form class="extra-form" id="inlineCreate"><div class="field"><label for="inlineTitle">What was lost or found?</label><input id="inlineTitle" required></div><div class="field"><label for="inlineType">Report type</label><select id="inlineType"><option>Lost</option><option>Found</option></select></div><div class="field"><label for="inlineDescription">Description</label><textarea id="inlineDescription"></textarea></div><button class="btn-primary" type="submit">Post report</button></form></div></div></section>
+              <section class="surface" data-surface="create" id="surface-create" hidden><div class="scroll"><div class="extra-page"><h1>New Report</h1><p class="muted">Share a few details to help someone recognize the item.</p><form class="extra-form" id="inlineCreate"><div class="field"><label for="inlineTitle">What was lost or found?</label><input id="inlineTitle" required></div><div class="field"><label for="inlineType">Report type</label><select id="inlineType"><option>Lost</option><option>Found</option></select></div><div class="field"><label for="inlineDescription">Description</label><textarea id="inlineDescription"></textarea></div><div class="field"><span class="field-label">When was it lost/found?</span><div class="date-input"><button type="button" class="date-field" data-date-field="inlineReportDate" aria-haspopup="dialog" aria-expanded="false" aria-controls="datePopover"><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg><span class="date-value is-empty">Add a date</span></button><button type="button" class="date-clear" data-date-clear="inlineReportDate" aria-label="Clear date" hidden><svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button></div></div><button class="btn-primary" type="submit">Post report</button></form></div></div></section>
               <section class="surface" data-surface="profile" id="surface-profile" hidden><div class="scroll"><div class="extra-page"><h1>Riley Ellis</h1><p class="muted">@riley · Riverside · Synthetic profile</p><p><strong>4</strong> reports &nbsp; <strong>2</strong> recovered &nbsp; <strong>8</strong> connections</p><h2>Your reports</h2><div class="extra-list" id="profileReports"></div><button type="button" class="btn-quiet" data-destination="mine">View all your reports</button></div></div></section>
               <section class="surface" data-surface="insights" id="surface-insights" hidden><div class="scroll"><div class="extra-page"><h1>Insights</h1><p class="muted">Illustrative numbers for this synthetic account.</p><div class="extra-metrics"><div class="metric"><strong>4</strong>Reports</div><div class="metric"><strong>236</strong>Views</div><div class="metric"><strong>2 hours</strong>Time to first response</div><div class="metric"><strong>50%</strong>Recovery rate</div></div><h2>Report activity</h2><p>Your umbrella report received 84 views and two replies this week.</p></div></div></section>
               <section class="surface" data-surface="connect" id="surface-connect" hidden><div class="scroll"><div class="extra-page"><h1>Connect</h1><p class="muted">Suggestions from the Riverside community · Synthetic profiles</p><div class="extra-list"><div class="extra-item"><strong>Maya Okafor</strong><p>Helps around Riverside Walk</p><button type="button" class="btn-quiet" data-connect>Connect</button></div><div class="extra-item"><strong>Alex Chen</strong><p>Active near Market Square</p><button type="button" class="btn-quiet" data-connect>Connect</button></div><div class="extra-item"><strong>Sam Rivera</strong><p>Reports near the station</p><button type="button" class="btn-quiet" data-connect>Connect</button></div></div></div></div></section>
@@ -1679,10 +1757,10 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
                 <header class="appbar">
                   <div class="wordmark">Norfold</div>
                   <div class="appbar-actions">
-                    <button type="button" class="iconbtn" data-action="go" data-surface="search" aria-label="Search">
+                    <button type="button" class="iconbtn" data-action="search" aria-label="Search" aria-haspopup="dialog" aria-expanded="false" aria-controls="searchOverlay">
                       <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
                     </button>
-                    <button type="button" class="iconbtn" data-action="go" data-surface="notifications" aria-label="Notifications">
+                    <button type="button" class="iconbtn" data-action="notifications" aria-label="Notifications" aria-haspopup="dialog" aria-expanded="false" aria-controls="notificationPopover">
                       <span class="bell-wrap">
                         <svg class="icon" aria-hidden="true"><use href="#i-bell"></use></svg>
                         <span class="badge" data-badge="bell" hidden>9</span>
@@ -1715,7 +1793,22 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
               </section>
 
             </div>
+            <div class="layer-backdrop" id="layerBackdrop" hidden></div>
           </main>
+
+          <div class="search-overlay" id="searchOverlay" hidden>
+            <div class="search-field"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg><input id="overlaySearchInput" type="search" placeholder="Search reports, messages and people…" aria-label="Search reports, messages and people" autocomplete="off"><button class="iconbtn" type="button" id="advancedTrigger" aria-label="Advanced search" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="#i-filter"></use></svg></button><button class="iconbtn" type="button" id="closeSearch" aria-label="Close search"><svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button></div>
+            <div class="search-results" id="overlayResults" aria-live="polite"></div>
+            <div class="advanced-search" id="advancedSearch" aria-label="Advanced search" hidden>
+              <h2>Advanced search</h2>
+              <details><summary class="filter-row"><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg><span class="filter-label">Date posted</span><svg class="icon chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg></summary><div class="date-fields"><div class="field"><span class="field-label">From</span><div class="date-input"><button type="button" class="date-field" data-date-field="dateFrom" aria-haspopup="dialog" aria-expanded="false" aria-controls="datePopover"><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg><span class="date-value is-empty">Any date</span></button><button type="button" class="date-clear" data-date-clear="dateFrom" aria-label="Clear from date" hidden><svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button></div></div><div class="field"><span class="field-label">To</span><div class="date-input"><button type="button" class="date-field" data-date-field="dateTo" aria-haspopup="dialog" aria-expanded="false" aria-controls="datePopover"><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg><span class="date-value is-empty">Any date</span></button><button type="button" class="date-clear" data-date-clear="dateTo" aria-label="Clear to date" hidden><svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button></div></div></div></details>
+              <button class="filter-row" type="button" id="exactMatch" role="switch" aria-checked="false"><svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg><span class="filter-label">Exact match</span><span class="switch" aria-hidden="true"></span></button>
+              <details><summary class="filter-row"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg><span class="filter-label">Post type</span><svg class="icon chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg></summary><div class="field"><label for="filterType">Post type</label><select id="filterType"><option value="">All types</option><option>Lost</option><option>Found</option></select></div></details>
+              <details><summary class="filter-row"><svg class="icon" aria-hidden="true"><use href="#i-user"></use></svg><span class="filter-label">From profile</span><svg class="icon chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg></summary><div class="field"><label for="filterProfile">From profile</label><input id="filterProfile" placeholder="Profile name"></div></details>
+              <details><summary class="filter-row"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg><span class="filter-label">Community or tag</span><svg class="icon chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg></summary><div class="field"><label for="filterCommunity">Community or tag</label><input id="filterCommunity" placeholder="Community or tag"></div></details>
+              <button class="btn-primary" type="button" id="applyFilters">Apply</button>
+            </div>
+          </div>
 
           <nav class="pill-slot" id="pillSlot" aria-label="Primary">
             <div class="pill-row">
@@ -1745,7 +1838,28 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
           </nav>
 
           <div class="flyout" id="flyout" hidden aria-label="Section menu"></div>
-          <div class="utility-popover" id="notificationPopover" style="top:12px;right:12px;width:min(360px,calc(100% - 24px))" hidden><strong>Notifications</strong><div id="notificationPreview"></div><button type="button" class="text-btn" id="allNotifications">View activity</button></div>
+          <div class="utility-popover" id="notificationPopover" role="dialog" aria-label="Notifications" hidden><strong id="notificationTitle">Notifications</strong><div id="notificationPreview"></div><button type="button" class="text-btn" id="allNotifications">View activity</button></div>
+          <div class="date-popover" id="datePopover" role="dialog" aria-label="Choose a date" hidden>
+            <div class="cal-head">
+              <button type="button" class="cal-nav" id="calPrev" aria-label="Previous month">&#8249;</button>
+              <button type="button" class="cal-title" id="calMonthBtn" aria-haspopup="grid" aria-expanded="false" aria-controls="calJump">November 2026</button>
+              <button type="button" class="cal-nav" id="calNext" aria-label="Next month">&#8250;</button>
+            </div>
+            <div id="calDays">
+              <div class="cal-weekdays" aria-hidden="true"><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span></div>
+              <div class="cal-grid" id="calGrid" role="group" aria-label="Days"></div>
+            </div>
+            <div class="cal-jump" id="calJump" hidden>
+              <div class="cal-year">
+                <button type="button" class="cal-nav" id="calYearPrev" aria-label="Previous year">&#8249;</button>
+                <span class="cal-year-label" id="calYearLabel" aria-live="polite">2026</span>
+                <button type="button" class="cal-nav" id="calYearNext" aria-label="Next year">&#8250;</button>
+              </div>
+              <div class="cal-months" id="calMonths" role="group" aria-label="Months"></div>
+              <p class="cal-hint">Shift + Left/Right moves ten years.</p>
+            </div>
+            <p class="sr-only" id="dateStatus" role="status" aria-live="polite"></p>
+          </div>
           <div class="tip" id="tip" role="tooltip" hidden></div>
           <div class="scrim" id="scrim" hidden></div>
           <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
@@ -1755,6 +1869,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
               <div class="field"><label for="reportTitle">What was lost or found?</label><input id="reportTitle" required></div>
               <div class="field"><label for="reportType">Type</label><select id="reportType"><option>Lost</option><option>Found</option></select></div>
               <div class="field"><label for="reportDescription">Description</label><textarea id="reportDescription"></textarea></div>
+              <div class="field"><span class="field-label">When was it lost/found?</span><div class="date-input"><button type="button" class="date-field" data-date-field="reportDate" aria-haspopup="dialog" aria-expanded="false" aria-controls="datePopover"><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg><span class="date-value is-empty">Add a date</span></button><button type="button" class="date-clear" data-date-clear="reportDate" aria-label="Clear date" hidden><svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button></div></div>
               <button type="submit" class="btn-primary">Post report</button>
             </form>
           </div>
@@ -1770,18 +1885,19 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
   const all = (selector, root = document) => Array.from(root.querySelectorAll(selector));
   const frame = $('frame'), app = $('app'), rail = $('rail'), flyout = $('flyout');
   const tip = $('tip'), scrim = $('scrim'), sheet = $('createSheet'), toast = $('toast');
+  const backdrop = $('layerBackdrop');
   const filterHome = $('chatFilters').parentNode, filterNext = $('chatFilters').nextSibling;
   let rememberedPanel = 'pinned';
   try { rememberedPanel = sessionStorage.getItem('norfold-nav-panel') || 'pinned'; } catch (_) {}
   const defaults = {viewport:'1280', theme:'light', text:'100', motion:'off', panel:rememberedPanel, surface:'home', unread:'9'};
   const state = {...defaults};
-  let openTimer, closeTimer, toastTimer, activeThread = 0, searchTab = 'reports';
+  let openTimer, closeTimer, toastTimer, activeThread = 0;
   let homeFilter = 'all', myFilter = 'all', chatFilter = 'all';
   const reports = [
-    {title:'Black umbrella with a wooden hook handle', type:'Lost', place:'Riverside Walk', icon:'umbrella'},
-    {title:'Set of keys on a blue ring', type:'Found', place:'Market Square', icon:'key'},
-    {title:'Reading glasses in a brown case', type:'Lost', place:'Library', icon:'glasses'},
-    {title:'Notebook with a green cover', type:'Found', place:'Station', icon:'book'}
+    {title:'Black umbrella with a wooden hook handle', type:'Lost', place:'Riverside Walk', icon:'umbrella', date:'2026-11-08'},
+    {title:'Set of keys on a blue ring', type:'Found', place:'Market Square', icon:'key', date:'2026-11-05'},
+    {title:'Reading glasses in a brown case', type:'Lost', place:'Library', icon:'glasses', date:'2026-10-24'},
+    {title:'Notebook with a green cover', type:'Found', place:'Station', icon:'book', date:'2026-09-30'}
   ];
   const people = ['Maya Okafor', 'Alex Chen', 'Sam Rivera', 'Riley Ellis'];
   const conversations = [
@@ -1944,33 +2060,262 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     notify('Sticker added to this prototype only.');
   }
   let searchOrigin = null, settingsOrigin = null, notificationOrigin = null;
-  let filters = {type:'', exact:false, date:'', profile:'', community:''};
+  let filters = {type:'', exact:false, from:'', to:'', profile:'', community:''};
+
+  /* ---- floating layers ----------------------------------------------------
+     One shared backdrop is visible whenever search, notifications, settings or
+     the date popover is open, and it always paints below all of them. */
+  function syncBackdrop() {
+    backdrop.hidden = $('searchOverlay').hidden && $('notificationPopover').hidden &&
+      $('settingsPopover').hidden && $('datePopover').hidden;
+  }
+  function setBellExpanded(expanded) {
+    all('[data-action="notifications"]').forEach(bell => bell.setAttribute('aria-expanded', String(expanded)));
+  }
   function closeUtilities(restore = false) {
-    const focus = !$('settingsPopover').hidden ? settingsOrigin : !$('searchOverlay').hidden ? searchOrigin : notificationOrigin;
+    const focus = !$('settingsPopover').hidden ? settingsOrigin
+      : !$('searchOverlay').hidden ? searchOrigin
+      : !$('notificationPopover').hidden ? notificationOrigin
+      : !$('datePopover').hidden && dateOpen ? dateOpen.origin : null;
     $('settingsPopover').hidden = true; $('settingsTrigger').setAttribute('aria-expanded','false');
     $('searchOverlay').hidden = true; $('advancedSearch').hidden = true; $('overlayResults').hidden = false; $('overlaySearchInput').readOnly = false; $('advancedTrigger').setAttribute('aria-expanded','false');
-    $('notificationPopover').hidden = true;
+    all('[data-action="search"]').forEach(trigger => trigger.setAttribute('aria-expanded','false'));
+    $('notificationPopover').hidden = true; setBellExpanded(false);
+    if (!$('datePopover').hidden) closeDatePopover(false);
+    syncBackdrop();
     if (restore && focus && focus.isConnected) focus.focus();
   }
   function openSettings(origin) {
     const wasOpen = !$('settingsPopover').hidden; closeUtilities(); closeOverlay();
     if (wasOpen && settingsOrigin === origin) return;
-    settingsOrigin = origin; $('settingsPopover').hidden = false; $('settingsTrigger').setAttribute('aria-expanded','true'); $('settingsPopover').querySelector('button').focus();
+    settingsOrigin = origin; $('settingsPopover').hidden = false; $('settingsTrigger').setAttribute('aria-expanded','true');
+    syncBackdrop(); $('settingsPopover').querySelector('button').focus();
+  }
+  function placeSearchOverlay() {
+    const overlay = $('searchOverlay');
+    if (Number(state.viewport) >= 600) { overlay.style.top = ''; overlay.style.maxHeight = ''; return; }
+    const surface = app.querySelector('.surface:not([hidden])');
+    const bar = surface ? surface.querySelector('.appbar') : null;
+    const appRect = app.getBoundingClientRect(), scale = appRect.width / app.offsetWidth || 1;
+    const barRect = bar ? bar.getBoundingClientRect() : null;
+    const barBottom = barRect ? (barRect.bottom - appRect.top) / scale : 52;
+    const top = Math.round(barBottom + 8);
+    overlay.style.top = top + 'px';
+    overlay.style.maxHeight = Math.max(220, app.clientHeight - top - 12) + 'px';
   }
   function openSearch(origin) {
-    closeUtilities(); closeOverlay(); searchOrigin = origin; $('searchOverlay').hidden = false; renderOverlaySearch(); $('overlaySearchInput').focus();
+    closeUtilities(); closeOverlay();
+    if (origin && origin.isConnected) searchOrigin = origin;
+    $('searchOverlay').hidden = false;
+    all('[data-action="search"]').forEach(trigger => trigger.setAttribute('aria-expanded','true'));
+    placeSearchOverlay(); renderOverlaySearch(); syncBackdrop(); $('overlaySearchInput').focus();
   }
-  function openNotifications(origin) {
-    closeUtilities(); closeOverlay(); notificationOrigin = origin;
-    $('notificationPreview').innerHTML = $('notifList').innerHTML; $('notificationPopover').hidden = false; $('allNotifications').focus();
+  function placeNotificationPopover(trigger) {
+    const pop = $('notificationPopover'), clamp = 8;
+    const appRect = app.getBoundingClientRect(), scale = appRect.width / app.offsetWidth || 1;
+    const rect = trigger.getBoundingClientRect();
+    pop.style.width = Math.min(360, app.clientWidth - 16) + 'px';
+    const width = pop.offsetWidth;
+    let left = (rect.right - appRect.left) / scale - width;
+    left = Math.min(Math.max(clamp, left), Math.max(clamp, app.clientWidth - width - clamp));
+    const top = Math.round((rect.bottom - appRect.top) / scale + clamp);
+    pop.style.left = Math.round(left) + 'px'; pop.style.right = 'auto';
+    pop.style.top = top + 'px';
+    pop.style.maxHeight = Math.max(160, app.clientHeight - top - clamp) + 'px';
+  }
+  function toggleNotifications(origin) {
+    const wasOpen = !$('notificationPopover').hidden, sameTrigger = notificationOrigin === origin;
+    closeUtilities();
+    if (wasOpen && sameTrigger) { if (origin && origin.isConnected) origin.focus(); return; }
+    closeOverlay(); notificationOrigin = origin;
+    $('notificationPreview').innerHTML = $('notifList').innerHTML;
+    $('notificationPopover').hidden = false;
+    if (origin && origin.setAttribute) origin.setAttribute('aria-expanded', 'true');
+    placeNotificationPopover(origin); syncBackdrop(); $('allNotifications').focus();
+  }
+  /* ---- date fields and one calendar popover -------------------------------
+     Report date and both search bounds are past-only. The popover is anchored
+     to its field, flips above when there is no room below, and scrolls inside
+     the frame when the frame is short. */
+  const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const WEEKDAY_LONG = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  const DATE_FIELDS = {
+    dateFrom:{label:'From', empty:'Any date'},
+    dateTo:{label:'To', empty:'Any date'},
+    reportDate:{label:'When was it lost or found?', empty:'Add a date'},
+    inlineReportDate:{label:'When was it lost or found?', empty:'Add a date'}
+  };
+  const dateValues = {dateFrom:'', dateTo:'', reportDate:'', inlineReportDate:''};
+  const pad2 = value => String(value).padStart(2, '0');
+  const todayDate = () => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), now.getDate()); };
+  const isoOf = date => `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+  const dateOf = iso => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
+  const shiftDays = (date, days) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+  const shiftMonths = (date, months) => {
+    const year = date.getFullYear(), month = date.getMonth() + months;
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    return new Date(year, month, Math.min(date.getDate(), lastDay));
+  };
+  const readDate = iso => { const d = dateOf(iso); return `${d.getDate()} ${MONTH_SHORT[d.getMonth()]} ${d.getFullYear()}`; };
+  const longDate = date => `${WEEKDAY_LONG[(date.getDay() + 6) % 7]} ${date.getDate()} ${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`;
+  const MIN_YEAR = todayDate().getFullYear() - 80;
+  let dateOpen = null, dateJumpOpen = false, dateFocus = '';
+  let dateCursor = new Date(todayDate().getFullYear(), todayDate().getMonth(), 1);
+
+  function renderDateField(field) {
+    const button = document.querySelector(`[data-date-field="${field}"]`);
+    if (!button) return;
+    const iso = dateValues[field], value = button.querySelector('.date-value');
+    if (value) {
+      value.textContent = iso ? readDate(iso) : DATE_FIELDS[field].empty;
+      value.classList.toggle('is-empty', !iso);
+    }
+    button.setAttribute('aria-label', `${DATE_FIELDS[field].label}: ${iso ? readDate(iso) : 'no date chosen'}`);
+    const clear = document.querySelector(`[data-date-clear="${field}"]`);
+    if (clear) clear.hidden = !iso;
+  }
+  function placeDatePopover(anchor) {
+    if (!anchor) return;
+    const pop = $('datePopover'), clamp = 8;
+    pop.style.maxHeight = Math.max(220, app.clientHeight - clamp * 2) + 'px';
+    const appRect = app.getBoundingClientRect(), scale = appRect.width / app.offsetWidth || 1;
+    const rect = anchor.getBoundingClientRect();
+    const width = pop.offsetWidth || 320, height = pop.offsetHeight || 320;
+    let left = (rect.left - appRect.left) / scale;
+    left = Math.min(Math.max(clamp, left), Math.max(clamp, app.clientWidth - width - clamp));
+    const below = (rect.bottom - appRect.top) / scale + 6;
+    const top = below + height <= app.clientHeight - clamp
+      ? below
+      : Math.max(clamp, (rect.top - appRect.top) / scale - height - 6);
+    pop.style.left = Math.round(left) + 'px';
+    pop.style.top = Math.round(top) + 'px';
+  }
+  function openDate(field, origin) {
+    closePickers();
+    const already = !$('datePopover').hidden && dateOpen && dateOpen.field === field;
+    if (!$('datePopover').hidden) closeDatePopover(false);
+    if (already) return;
+    dateOpen = {field, origin};
+    const chosen = dateValues[field] ? dateOf(dateValues[field]) : todayDate();
+    dateCursor = new Date(chosen.getFullYear(), chosen.getMonth(), 1);
+    dateFocus = isoOf(chosen); dateJumpOpen = false;
+    $('calDays').hidden = false; $('calJump').hidden = true;
+    $('calMonthBtn').setAttribute('aria-expanded', 'false');
+    $('datePopover').hidden = false;
+    origin.setAttribute('aria-expanded', 'true');
+    renderCalendar(); placeDatePopover(origin); syncBackdrop();
+    const target = $('calGrid').querySelector(`[data-day="${dateFocus}"]`) || $('calGrid').querySelector('button');
+    if (target) target.focus();
+  }
+  function closeDatePopover(restore = false) {
+    const origin = dateOpen ? dateOpen.origin : null;
+    $('datePopover').hidden = true;
+    $('calJump').hidden = true; $('calDays').hidden = false; dateJumpOpen = false;
+    $('calMonthBtn').setAttribute('aria-expanded', 'false');
+    if (origin && origin.isConnected) origin.setAttribute('aria-expanded', 'false');
+    dateOpen = null; syncBackdrop();
+    if (restore && origin && origin.isConnected) origin.focus();
+  }
+  function renderCalendar() {
+    if (!dateOpen) return;
+    const year = dateCursor.getFullYear(), month = dateCursor.getMonth();
+    const todayIso = isoOf(todayDate()), selectedIso = dateValues[dateOpen.field];
+    $('calMonthBtn').textContent = `${MONTH_NAMES[month]} ${year}`;
+    $('calMonthBtn').setAttribute('aria-label', `Choose month and year, showing ${MONTH_NAMES[month]} ${year}`);
+    $('calGrid').setAttribute('aria-label', `Days in ${MONTH_NAMES[month]} ${year}`);
+    const first = new Date(year, month, 1);
+    const start = new Date(year, month, 1 - ((first.getDay() + 6) % 7));
+    let html = '';
+    for (let i = 0; i < 42; i += 1) {
+      const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      const iso = isoOf(date), outside = date.getMonth() !== month, disabled = iso > todayIso;
+      const classes = ['cal-day'];
+      if (outside) classes.push('is-outside');
+      if (iso === todayIso) classes.push('is-today');
+      html += `<button type="button" class="${classes.join(' ')}" data-day="${iso}" aria-pressed="${String(iso === selectedIso)}" tabindex="${iso === dateFocus ? '0' : '-1'}" aria-label="${longDate(date)}"${disabled ? ' disabled' : ''}>${date.getDate()}</button>`;
+    }
+    $('calGrid').innerHTML = html;
+    $('calNext').disabled = new Date(year, month + 1, 1) > todayDate();
+    $('calPrev').disabled = year <= MIN_YEAR && month === 0;
+  }
+  function renderJump() {
+    if (!dateOpen) return;
+    const year = dateCursor.getFullYear(), now = todayDate();
+    $('calYearLabel').textContent = String(year);
+    $('calYearPrev').disabled = year <= MIN_YEAR;
+    $('calYearNext').disabled = year >= now.getFullYear();
+    $('calMonths').innerHTML = MONTH_SHORT.map((label, index) => {
+      const disabled = year > now.getFullYear() || (year === now.getFullYear() && index > now.getMonth());
+      const selected = index === dateCursor.getMonth();
+      return `<button type="button" class="cal-month" data-month="${index}" aria-pressed="${String(selected)}" aria-label="${MONTH_NAMES[index]} ${year}"${disabled ? ' disabled' : ''}>${label}</button>`;
+    }).join('');
+  }
+  function showJump(show) {
+    if (!dateOpen) return;
+    dateJumpOpen = show;
+    $('calDays').hidden = show; $('calJump').hidden = !show;
+    $('calMonthBtn').setAttribute('aria-expanded', String(show));
+    if (show) {
+      renderJump();
+      const first = $('calMonths').querySelector('button:not(:disabled)');
+      if (first) first.focus();
+    } else {
+      renderCalendar();
+      const target = $('calGrid').querySelector(`[data-day="${dateFocus}"]`) || $('calGrid').querySelector('button');
+      if (target) target.focus();
+    }
+    placeDatePopover(dateOpen.origin);
+  }
+  function chooseDate(iso) {
+    if (!dateOpen) return;
+    const field = dateOpen.field;
+    dateValues[field] = iso;
+    renderDateField(field);
+    $('dateStatus').textContent = `${DATE_FIELDS[field].label} set to ${readDate(iso)}`;
+    closeDatePopover(true);
+  }
+  function focusDay(next) {
+    if (!dateOpen) return;
+    const limit = todayDate();
+    if (next > limit) next = limit;
+    if (next.getMonth() !== dateCursor.getMonth() || next.getFullYear() !== dateCursor.getFullYear()) {
+      dateCursor = new Date(next.getFullYear(), next.getMonth(), 1);
+    }
+    dateFocus = isoOf(next);
+    renderCalendar(); placeDatePopover(dateOpen.origin);
+    const target = $('calGrid').querySelector(`[data-day="${dateFocus}"]`);
+    if (target) target.focus();
+  }
+  function stepCursor(delta) {
+    if (!dateOpen) return;
+    dateCursor = new Date(dateCursor.getFullYear(), dateCursor.getMonth() + delta, 1);
+    dateFocus = isoOf(dateCursor);
+    renderCalendar(); placeDatePopover(dateOpen.origin);
+    const target = $('calGrid').querySelector(`[data-day="${dateFocus}"]`) || $('calGrid').querySelector('button:not(:disabled)');
+    if (target) target.focus();
+  }
+  function stepYear(delta) {
+    if (!dateOpen) return;
+    const now = todayDate(), year = dateCursor.getFullYear();
+    const next = Math.min(now.getFullYear(), Math.max(MIN_YEAR, year + delta));
+    const month = next === now.getFullYear() ? Math.min(dateCursor.getMonth(), now.getMonth()) : dateCursor.getMonth();
+    dateCursor = new Date(next, month, 1);
+    renderJump(); placeDatePopover(dateOpen.origin);
+    const marker = $('calMonths').querySelector('[aria-pressed="true"]:not(:disabled)') || $('calMonths').querySelector('button:not(:disabled)');
+    if (marker) marker.focus();
+  }
+  function filtersActive() {
+    return Boolean(filters.type || filters.from || filters.to || filters.profile || filters.community);
   }
   function renderOverlaySearch() {
     const q = $('overlaySearchInput').value.trim().toLowerCase(), results = $('overlayResults');
-    if (!q) { results.innerHTML = '<strong class="t-sm">Recent searches</strong><button type="button" class="row" data-recent="umbrella">umbrella</button><button type="button" class="row" data-recent="keys">keys</button>'; return; }
-    const matches = value => filters.exact ? value.toLowerCase() === q : value.toLowerCase().includes(q);
-    const foundReports = reports.filter(r => (!filters.type || r.type === filters.type) && (!filters.community || r.place.toLowerCase().includes(filters.community)) && !filters.profile && matches(`${r.title} ${r.type} ${r.place}`));
-    const foundPeople = filters.type || filters.community ? [] : people.filter(name => (!filters.profile || name.toLowerCase().includes(filters.profile)) && matches(name));
-    const foundChats = filters.type || filters.community ? [] : conversations.filter(chat => (!filters.profile || chat.name.toLowerCase().includes(filters.profile)) && matches(`${chat.name} ${chat.subject} ${chat.messages.map(message => typeof message === 'string' ? message : message.gif.t).join(' ')}`));
+    if (!q && !filtersActive()) { results.innerHTML = '<strong class="t-sm">Recent searches</strong><button type="button" class="row" data-recent="umbrella">umbrella</button><button type="button" class="row" data-recent="keys">keys</button>'; return; }
+    const matches = value => !q || (filters.exact ? value.toLowerCase() === q : value.toLowerCase().includes(q));
+    const inRange = report => (!filters.from || (report.date && report.date >= filters.from)) && (!filters.to || (report.date && report.date <= filters.to));
+    const foundReports = reports.filter(r => inRange(r) && (!filters.type || r.type === filters.type) && (!filters.community || r.place.toLowerCase().includes(filters.community)) && !filters.profile && matches(`${r.title} ${r.type} ${r.place}`));
+    const foundPeople = filters.type || filters.from || filters.to || filters.community ? [] : people.filter(name => (!filters.profile || name.toLowerCase().includes(filters.profile)) && matches(name));
+    const foundChats = filters.type || filters.from || filters.to || filters.community ? [] : conversations.filter(chat => (!filters.profile || chat.name.toLowerCase().includes(filters.profile)) && matches(`${chat.name} ${chat.subject} ${chat.messages.map(message => typeof message === 'string' ? message : message.gif.t).join(' ')}`));
     results.innerHTML = foundReports.map(row).join('') + foundPeople.map(name => `<button type="button" class="row" data-action="person">${icon('user')}<span>${esc(name)}</span></button>`).join('') + foundChats.map(chat => `<button type="button" class="row" data-search-thread="${conversations.indexOf(chat)}">${icon('chat')}<span>${esc(chat.name)} · ${esc(chat.subject)}</span></button>`).join('') || '<p class="row-empty">No results found. Try another search.</p>';
   }
   function notify(message) {
@@ -2017,6 +2362,9 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     $('stageNote').textContent = `${state.theme} · ${state.text}% text · ${width}px`;
     const contentWidth = width - (width < 600 ? 0 : width >= 1024 && state.panel === 'pinned' ? 260 : 76);
     $('chatSplit').classList.toggle('split', contentWidth >= 720);
+    if (!$('searchOverlay').hidden) placeSearchOverlay();
+    if (!$('notificationPopover').hidden && notificationOrigin) placeNotificationPopover(notificationOrigin);
+    if (!$('datePopover').hidden && dateOpen) placeDatePopover(dateOpen.origin);
   }
   function navForSurface(surface) {
     return surface === 'mine' || surface === 'empty' ? 'my' : surface === 'post' || surface === 'offline' ? 'home' : surface;
@@ -2092,20 +2440,6 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     $('profileReports').innerHTML = reports.slice(0,2).map(row).join('');
     $('savedList').innerHTML = reports.slice(1,3).map(row).join('');
     $('reactionList').innerHTML = reports.slice(0,2).map(row).join('');
-    renderSearch();
-  }
-  function renderSearch() {
-    const q = $('searchInput').value.trim().toLowerCase();
-    const matches = reports.filter(r => `${r.title} ${r.type} ${r.place}`.toLowerCase().includes(q) && ($('searchFilterChip').getAttribute('aria-pressed') !== 'true' || r.type === 'Lost'));
-    const matchingPeople = people.filter(name => name.toLowerCase().includes(q));
-    $('searchReports').innerHTML = matches.map(row).join('');
-    $('searchPeople').innerHTML = matchingPeople.map(name => `<button type="button" class="person" data-action="person"><span class="avatar">${esc(name.split(' ').map(x => x[0]).join(''))}</span><span class="person-name">${esc(name)}</span></button>`).join('');
-    $('searchReportCount').textContent = matches.length; $('searchPeopleCount').textContent = matchingPeople.length;
-    $('searchClear').hidden = !q;
-    $('searchReportsPane').hidden = searchTab !== 'reports'; $('searchPeoplePane').hidden = searchTab !== 'people';
-    all('[data-search-tab]').forEach(button => button.setAttribute('aria-selected', String(button.dataset.searchTab === searchTab)));
-    $('searchNoResults').hidden = (searchTab === 'reports' ? matches : matchingPeople).length > 0;
-    $('searchNoResults').textContent = 'No results found.';
   }
   function renderChats() {
     const visible = conversations.map((chat, index) => ({...chat, index})).filter(chat => chatFilter === 'all' || chat.filter === chatFilter);
@@ -2140,9 +2474,13 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     all(`[${attr}]`).forEach(item => item.setAttribute('aria-pressed', String(item.getAttribute(attr) === button.getAttribute(attr))));
   }
   document.addEventListener('click', event => {
+    const hitBell = event.target.closest('[data-action="notifications"]');
+    const hitSearchTrigger = event.target.closest('[data-action="search"], [data-nav="search"]');
+    const hitDateField = event.target.closest('[data-date-field]');
     if (!$('settingsPopover').hidden && !$('settingsPopover').contains(event.target) && event.target !== settingsOrigin && !$('settingsTrigger').contains(event.target)) closeUtilities();
-    if (!$('searchOverlay').hidden && !$('searchOverlay').contains(event.target)) closeUtilities();
-    if (!$('notificationPopover').hidden && !$('notificationPopover').contains(event.target)) closeUtilities();
+    if (!$('searchOverlay').hidden && !$('searchOverlay').contains(event.target) && !hitSearchTrigger && !hitDateField && !$('datePopover').contains(event.target)) closeUtilities();
+    if (!$('notificationPopover').hidden && !$('notificationPopover').contains(event.target) && !hitBell) closeUtilities();
+    if (!$('datePopover').hidden && !$('datePopover').contains(event.target) && !hitDateField) closeDatePopover();
     const pickerHit = $('stickerPicker').contains(event.target) || $('emojiPanel').contains(event.target);
     if (!$('stickerPicker').hidden && !pickerHit && !$('stickerBtn').contains(event.target)) closePickers();
     if (!$('emojiPanel').hidden && !pickerHit && !$('emojiBtn').contains(event.target)) closePickers();
@@ -2152,20 +2490,28 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     if (button.id === 'closeSearch') { closeUtilities(true); return; }
     if (button.id === 'advancedTrigger') { const opening = $('advancedSearch').hidden; $('advancedSearch').hidden = !opening; $('overlayResults').hidden = opening; $('overlaySearchInput').readOnly = opening; button.setAttribute('aria-expanded',String(opening)); if (opening) $('advancedSearch').querySelector('summary').focus(); else $('overlaySearchInput').focus(); return; }
     if (button.id === 'exactMatch') { const checked = button.getAttribute('aria-checked') !== 'true'; button.setAttribute('aria-checked',String(checked)); button.querySelector('.switch').setAttribute('aria-checked',String(checked)); return; }
-    if (button.id === 'applyFilters') { filters = {type:$('filterType').value, exact:$('exactMatch').getAttribute('aria-checked') === 'true', date:$('filterDate').value, profile:$('filterProfile').value.trim().toLowerCase(), community:$('filterCommunity').value.trim().toLowerCase()}; $('advancedSearch').hidden = true; $('overlayResults').hidden = false; $('overlaySearchInput').readOnly = false; $('advancedTrigger').setAttribute('aria-expanded','false'); renderOverlaySearch(); $('overlaySearchInput').focus(); if (filters.date) notify('Date filtering is unavailable for synthetic reports.'); return; }
+    if (button.id === 'applyFilters') { filters = {type:$('filterType').value, exact:$('exactMatch').getAttribute('aria-checked') === 'true', from:dateValues.dateFrom, to:dateValues.dateTo, profile:$('filterProfile').value.trim().toLowerCase(), community:$('filterCommunity').value.trim().toLowerCase()}; $('advancedSearch').hidden = true; $('overlayResults').hidden = false; $('overlaySearchInput').readOnly = false; $('advancedTrigger').setAttribute('aria-expanded','false'); renderOverlaySearch(); $('overlaySearchInput').focus(); return; }
     if (button.dataset.recent) { $('overlaySearchInput').value = button.dataset.recent; renderOverlaySearch(); $('overlaySearchInput').focus(); return; }
     if (button.dataset.searchThread !== undefined) { setSurface('chats'); selectThread(Number(button.dataset.searchThread)); return; }
     if (button.id === 'allNotifications') { setSurface('notifications'); return; }
     if (button.dataset.set) { setState(button.dataset.set, button.dataset.value); return; }
-    if (button.dataset.nav) { event.preventDefault(); setSurface(button.dataset.nav === 'my' ? 'mine' : button.dataset.nav); return; }
+    if (button.dataset.nav) { event.preventDefault(); const target = button.dataset.nav === 'my' ? 'mine' : button.dataset.nav; if (target === 'search') { openSearch(button); return; } setSurface(target); return; }
     if (button.dataset.destination) { const target = button.dataset.destination; if (target === 'create') openSheet(); else setSurface(target); return; }
     if (button.hasAttribute('data-connect')) { const connected = button.textContent === 'Connected'; button.textContent = connected ? 'Connect' : 'Connected'; button.setAttribute('aria-pressed', String(!connected)); return; }
     if (button.dataset.reaction) { all('[data-reaction]').forEach(item => item.setAttribute('aria-selected', String(item === button))); $('reactionList').innerHTML = (button.dataset.reaction === 'liked' ? reports.slice(0,2) : reports.slice(2,4)).map(row).join(''); return; }
     if (button.dataset.homeFilter) { homeFilter = button.dataset.homeFilter; setFilter(button,'data-home-filter'); renderReports(); return; }
     if (button.dataset.myFilter) { myFilter = button.dataset.myFilter; setFilter(button,'data-my-filter'); renderReports(); return; }
     if (button.dataset.chatFilter) { chatFilter = button.dataset.chatFilter; setFilter(button,'data-chat-filter'); renderChats(); closeOverlay(); return; }
-    if (button.dataset.searchTab) { searchTab = button.dataset.searchTab; renderSearch(); return; }
     if (button.dataset.thread !== undefined) { selectThread(Number(button.dataset.thread)); return; }
+    if (button.dataset.dateField) { openDate(button.dataset.dateField, button); return; }
+    if (button.dataset.dateClear) { const field = button.dataset.dateClear; dateValues[field] = ''; renderDateField(field); $('dateStatus').textContent = `${DATE_FIELDS[field].label} cleared`; return; }
+    if (button.dataset.day) { chooseDate(button.dataset.day); return; }
+    if (button.id === 'calPrev') { stepCursor(-1); return; }
+    if (button.id === 'calNext') { stepCursor(1); return; }
+    if (button.id === 'calMonthBtn') { showJump(!dateJumpOpen); return; }
+    if (button.id === 'calYearPrev') { stepYear(-1); return; }
+    if (button.id === 'calYearNext') { stepYear(1); return; }
+    if (button.dataset.month !== undefined) { dateCursor = new Date(dateCursor.getFullYear(), Number(button.dataset.month), 1); showJump(false); return; }
     if (button.id === 'stickerBtn') { openPicker(button); return; }
     if (button.id === 'emojiBtn') { openEmoji(button); return; }
     if (button.id === 'pickerClear') { $('pickerQuery').value = ''; runPickerSearch(); $('pickerQuery').focus(); return; }
@@ -2175,12 +2521,12 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     if (button.dataset.emoji) { insertEmoji(button.dataset.emoji); return; }
     if (button.id === 'railToggle') { setState('panel', state.panel === 'pinned' ? 'collapsed' : 'pinned'); return; }
     if (button.id === 'resetBtn') { reset(); return; }
-    if (button.id === 'searchClear') { $('searchInput').value = ''; renderSearch(); $('searchInput').focus(); return; }
-    if (button.id === 'searchFilterChip') { const pressed = button.getAttribute('aria-pressed') !== 'true'; button.setAttribute('aria-pressed', String(pressed)); renderSearch(); return; }
     if (button.id === 'chatFilterBtn') { if (button.getAttribute('aria-expanded') === 'true') closeOverlay(); else { const box = $('chatFilters').getBoundingClientRect(), root = app.getBoundingClientRect(), scale = root.width / app.offsetWidth, filters = $('chatFilters'); app.appendChild(filters); filters.style.position = 'absolute'; filters.style.zIndex = '81'; filters.style.top = (box.top - root.top) / scale + 'px'; filters.style.left = (box.left - root.left) / scale + 'px'; filters.style.background = 'var(--fb-surface)'; scrim.hidden = false; scrim.classList.add('is-open'); button.setAttribute('aria-expanded','true'); } return; }
     if (button.id === 'markAllRead') { setState('unread','0'); notify('Notifications marked read in this prototype.'); return; }
     const action = button.dataset.action;
-    if (action === 'go') { if (button.dataset.surface === 'notifications') openNotifications(button); else setSurface(button.dataset.surface); }
+    if (action === 'notifications') toggleNotifications(button);
+    else if (action === 'search') openSearch(button);
+    else if (action === 'go') setSurface(button.dataset.surface);
     else if (action === 'create') openSheet();
     else if (action === 'close-sheet') closeOverlay();
     else if (action === 'open-post') setSurface('post');
@@ -2208,6 +2554,7 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
     if (event.key === 'Tab' && !$('settingsPopover').hidden) { const items = all('button', $('settingsPopover')), first = items[0], last = items[items.length - 1]; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } }
     if (event.key === 'Escape') {
       if (!$('stickerPicker').hidden || !$('emojiPanel').hidden) { closePickers(true); return; }
+      if (!$('datePopover').hidden) { closeDatePopover(true); return; }
       if (!$('advancedSearch').hidden) { $('advancedSearch').hidden = true; $('overlayResults').hidden = false; $('overlaySearchInput').readOnly = false; $('advancedTrigger').setAttribute('aria-expanded','false'); $('advancedTrigger').focus(); } else closeUtilities(true);
       closeFlyout(); hideTip(); closeOverlay(); hideToast();
     }
@@ -2221,7 +2568,44 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
   });
   document.addEventListener('scroll', event => { const element = event.target; if (!(element instanceof Element)) return; if (element.hasAttribute('data-scroll')) closeFlyout(); element.classList.add('scrolling'); clearTimeout(element._scrollTimer); element._scrollTimer = setTimeout(() => element.classList.remove('scrolling'), 900); }, true);
   scrim.addEventListener('click', closeOverlay);
-  $('searchInput').addEventListener('input', renderSearch);
+  backdrop.addEventListener('click', () => {
+    if (!$('datePopover').hidden) { closeDatePopover(true); return; }
+    closeUtilities(true);
+  });
+  // The calendar owns two panels: Escape closes the jump panel first, then the popover.
+  $('datePopover').addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      event.preventDefault(); event.stopPropagation();
+      if (dateJumpOpen) showJump(false); else closeDatePopover(true);
+      return;
+    }
+    if (dateJumpOpen) {
+      if (event.shiftKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        event.preventDefault(); stepYear(event.key === 'ArrowLeft' ? -10 : 10); return;
+      }
+      const monthButton = event.target.closest('[data-month]');
+      if (!monthButton || !['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) return;
+      const months = all('[data-month]', $('calMonths')), index = months.indexOf(monthButton);
+      const step = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : event.key === 'ArrowUp' ? -3 : 3;
+      const next = months[(index + step + months.length) % months.length];
+      if (next && !next.disabled) { event.preventDefault(); next.focus(); }
+      return;
+    }
+    const dayButton = event.target.closest('[data-day]');
+    if (!dayButton) return;
+    const current = dateOf(dayButton.dataset.day);
+    let next = null;
+    if (event.key === 'ArrowLeft') next = shiftDays(current, -1);
+    else if (event.key === 'ArrowRight') next = shiftDays(current, 1);
+    else if (event.key === 'ArrowUp') next = shiftDays(current, -7);
+    else if (event.key === 'ArrowDown') next = shiftDays(current, 7);
+    else if (event.key === 'PageUp') next = shiftMonths(current, -1);
+    else if (event.key === 'PageDown') next = shiftMonths(current, 1);
+    else if (event.key === 'Home') next = shiftDays(current, -((current.getDay() + 6) % 7));
+    else if (event.key === 'End') next = shiftDays(current, 6 - ((current.getDay() + 6) % 7));
+    if (!next) return;
+    event.preventDefault(); focusDay(next);
+  });
   $('composerInput').addEventListener('input', () => { $('sendBtn').disabled = !$('composerInput').value.trim(); });
   $('composer').addEventListener('submit', event => {
     event.preventDefault(); const input = $('composerInput'), message = input.value.trim(); if (!message) return;
@@ -2230,17 +2614,24 @@ svg.icon{display:block;width:1em;height:1em;flex:none}
   });
   $('createForm').addEventListener('submit', event => {
     event.preventDefault(); const title = $('reportTitle').value.trim(); if (!title) return;
-    reports.unshift({title, type:$('reportType').value, place:'This session', icon:'clipboard'});
-    $('createForm').reset(); closeOverlay(); renderReports(); setSurface('home'); notify('Report added for this session only.');
+    reports.unshift({title, type:$('reportType').value, place:'This session', icon:'clipboard', date:dateValues.reportDate || null});
+    $('createForm').reset(); dateValues.reportDate = ''; renderDateField('reportDate');
+    closeOverlay(); renderReports(); setSurface('home'); notify('Report added for this session only.');
   });
   $('inlineCreate').addEventListener('submit', event => {
     event.preventDefault(); const title = $('inlineTitle').value.trim(); if (!title) return;
-    reports.unshift({title, type:$('inlineType').value, place:'This session', icon:'clipboard'});
-    event.target.reset(); renderReports(); setSurface('home'); notify('Report added for this session only.');
+    reports.unshift({title, type:$('inlineType').value, place:'This session', icon:'clipboard', date:dateValues.inlineReportDate || null});
+    event.target.reset(); dateValues.inlineReportDate = ''; renderDateField('inlineReportDate');
+    if (!$('datePopover').hidden) closeDatePopover(false);
+    renderReports(); setSurface('home'); notify('Report added for this session only.');
   });
   function reset() {
-    closeFlyout(); closeOverlay(); closePickers(); hideToast(); homeFilter = 'all'; myFilter = 'all'; chatFilter = 'all'; searchTab = 'reports';
-    $('searchInput').value = ''; $('composerInput').value = ''; $('sendBtn').disabled = true;
+    closeFlyout(); closeOverlay(); closePickers(); hideToast(); homeFilter = 'all'; myFilter = 'all'; chatFilter = 'all';
+    filters = {type:'', exact:false, from:'', to:'', profile:'', community:''};
+    Object.keys(dateValues).forEach(field => { dateValues[field] = ''; renderDateField(field); });
+    $('overlaySearchInput').value = ''; $('filterType').value = ''; $('filterProfile').value = ''; $('filterCommunity').value = '';
+    $('exactMatch').setAttribute('aria-checked','false'); $('exactMatch').querySelector('.switch').setAttribute('aria-checked','false');
+    $('composerInput').value = ''; $('sendBtn').disabled = true;
     $('pickerQuery').value = ''; PICKER_STATE.tab = 'stickers'; PICKER_STATE.chip = 'All'; PICKER_STATE.query = ''; $('pickerClear').hidden = true;
     all('[data-home-filter], [data-my-filter], [data-chat-filter]').forEach(button => button.setAttribute('aria-pressed', String((button.dataset.homeFilter || button.dataset.myFilter || button.dataset.chatFilter) === 'all')));
     Object.entries(defaults).forEach(([key,value]) => setState(key,value)); renderReports(); renderChats();
