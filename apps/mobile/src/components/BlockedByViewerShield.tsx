@@ -29,6 +29,9 @@ interface BlockedByViewerShieldProps {
    * never changes the surrounding spacing.
    */
   contentClassName?: string;
+  revealed?: boolean;
+  onReveal?: () => void;
+  showWarning?: boolean;
 }
 
 /**
@@ -60,6 +63,9 @@ export function BlockedByViewerShield({
   mode = "overlay",
   className,
   contentClassName,
+  revealed,
+  onReveal,
+  showWarning = true,
 }: BlockedByViewerShieldProps) {
   // Keying the state by row identity (not an effect) means a row-id change is
   // handled in the same render, so a newly mounted/replaced row is never
@@ -67,7 +73,7 @@ export function BlockedByViewerShield({
   const [state, setState] = useState<{ rowId: string; revealed: boolean }>({ rowId, revealed: false });
   if (state.rowId !== rowId) setState({ rowId, revealed: false });
 
-  const locked = blocked === true && !(state.rowId === rowId && state.revealed);
+  const locked = blocked === true && !(revealed ?? (state.rowId === rowId && state.revealed));
   const contentRef = useRef<HTMLDivElement>(null);
   const focusAfterReveal = useRef(false);
 
@@ -80,7 +86,8 @@ export function BlockedByViewerShield({
 
   const reveal = () => {
     focusAfterReveal.current = true;
-    setState({ rowId, revealed: true });
+    if (revealed !== undefined) onReveal?.();
+    else setState({ rowId, revealed: true });
   };
 
   // Absent/false is the pre-R10 rendering: no wrapper, no layout change, no
@@ -112,7 +119,7 @@ export function BlockedByViewerShield({
       >
         {children}
       </div>
-      {mode === "row" ? (
+      {showWarning && (mode === "row" ? (
         // Kept mounted after reveal (invisible, inert) so the grid cell keeps
         // `max(content, warning)` in both states: no reveal jump, and the
         // warning can never paint outside its own row.
@@ -157,7 +164,7 @@ export function BlockedByViewerShield({
             </div>
           </div>
         )
-      )}
+      ))}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { motion } from "framer-motion";
-import { CalendarDays, CircleCheck, CornerDownRight, ExternalLink, MapPin, Pencil, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { BarChart3, CalendarDays, CircleCheck, CornerDownRight, ExternalLink, MapPin, Pencil, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import type { CommentItem, PostItem, PostStatus, ReactionCounts, ReactionKind, ReactionSummary } from "@norfold/shared";
 import { OWNER_SELECTABLE_STATUSES } from "@norfold/shared";
 import { useAuth } from "../auth";
@@ -31,6 +31,7 @@ import { CommentSafetyMenu } from "../components/CommentSafetyMenu";
 import { RecoverySheet } from "../components/RecoverySheet";
 import { ConfirmDialog } from "../components/AdaptiveTaskSurface";
 import { PostActionRow } from "../components/PostActionRow";
+import { ReportViewerLayout } from "../components/ReportViewerLayout";
 import { ReportMatches } from "../components/ReportMatches";
 import { announce, announceQuietly } from "../components/LiveRegion";
 import { listItemVariants, motionDurations, shouldReduceMotion } from "../components/uiMotion";
@@ -49,6 +50,7 @@ import {
   type CommentAttachmentDescriptor,
 } from "../services/posts";
 import { seedSummaryFromItem } from "../services/feedReactions";
+import { recordReportView } from "../services/reportViews";
 import {
   applyCountDeltas,
   likeState,
@@ -130,6 +132,12 @@ function CommentLikeButton({
 
 export function PostDetail({ contextual = false }: { contextual?: boolean } = {}) {
   const { id = "" } = useParams();
+  const recordedViewId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!id || recordedViewId.current === id) return;
+    recordedViewId.current = id;
+    void recordReportView(id).catch(() => {});
+  }, [id]);
   const { hash, search, key: locationKey } = useLocation();
   const navigate = useNavigate();
   const requestedComment = new URLSearchParams(search).get("comment");
@@ -137,6 +145,9 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
   const focusedLink = useRef<string | null>(null);
   const { user } = useAuth();
   const [post, setPost] = useState<PostItem | null>(null);
+  const viewerRevealKey = `${user?.id ?? "guest"}:${id}`;
+  const [viewerReveal, setViewerReveal] = useState<{ key: string; revealed: boolean }>({ key: viewerRevealKey, revealed: false });
+  if (viewerReveal.key !== viewerRevealKey) setViewerReveal({ key: viewerRevealKey, revealed: false });
   const [comments, setComments] = useState<CommentItem[]>([]);
   // W3.3: the caller's reaction is any valid kind (LIKE/DISLIKE-era wire plus
   // canonical LOVE/HELPFUL/SUPPORT/WOW). LIKE reads as LOVE for display.
@@ -1066,33 +1077,10 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
     );
   };
 
-  return (
-    <div className="flex flex-col gap-5">
-      {!contextual && <header className="flex items-center px-4 pt-3"><BackButton fallbackTo="/" label="Back to feed" /></header>}
-
-      {error && (
-        <p className="mx-4 rounded-m3-sm border border-error px-3 py-2 text-sm text-error">{error}</p>
-      )}
-
-      <article className="flex flex-col gap-4 px-4">
-        {/* O5 mount (CF-060 R10): the report-content region only — summary
-            through the matches section, ending BEFORE detail-comments. The
-            comment thread stays a sibling: wrapping the <article> would blur
-            every comment (the bit is per row) and put their reveal controls
-            inside an inert subtree. */}
-        <BlockedByViewerShield
-          rowId={post.id}
-          blocked={post.blockedAuthor}
-          contentClassName="flex flex-col gap-4"
-        >
-        {/* Same public identity/content sequence as the feed; business owners
-            below remain detail-owned. No description control panel. */}
-        <section aria-label="Report summary" className="flex flex-col gap-2">
-          <PostIdentityHeader post={post} overflow={<ReportOverflow post={post} />} contextReportId={post.id} />
-          <PostStatusTitle post={post} detail enableSharedMedia titleClassName="text-2xl font-semibold leading-tight tracking-tight" />
-          <PostDescription text={post.description} lines={5} />
-        </section>
-
+  const identityBlock = <PostIdentityHeader post={post} overflow={<ReportOverflow post={post} />} contextReportId={post.id} />;
+  const titleBlock = <PostStatusTitle post={post} detail enableSharedMedia titleClassName="text-2xl font-semibold leading-tight tracking-tight" />;
+  const descriptionBlock = <PostDescription text={post.description} lines={5} />;
+  const mediaBlock = images.length > 0 ? (
         <DetailHeroGallery
           key={post.id}
           postId={post.id}
@@ -1100,12 +1088,10 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
           images={images}
           onOpenLightbox={setLightbox}
         />
+  ) : null;
+  const metaBlock = <PostFacts post={post} />;
 
-        <PostFacts post={post} />
-
-        {/* Primary actions keep this screen's reaction owner. Save and safety
-            actions share the identity overflow, not the primary row. */}
-        <div id="detail-activity" tabIndex={-1} className="scroll-mt-4 border-t border-outline-variant pt-1">
+  const actionsBlock = <div id="detail-activity" tabIndex={-1} className="scroll-mt-4 border-t border-outline-variant pt-1">
         <PostActionRow
           commentCount={comments.length}
           slots={{
@@ -1141,12 +1127,19 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
                 </button>
               </span>
             ),
+            views: typeof post.viewCount === "number" && post.viewCount > 0 ? (
+              <span aria-label={`Views, ${post.viewCount} views`} className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1 px-1.5 text-on-surface-variant">
+                <BarChart3 size={20} aria-hidden />
+                <span className="tabular-nums">{post.viewCount}</span>
+              </span>
+            ) : undefined,
             share: <ReportShareButton postId={post.id} title={post.title} />,
           }}
         />
-        </div>
+        </div>;
 
-        {actionError && (
+  const topErrorBlock = error && <p className="mx-4 rounded-m3-sm border border-error px-3 py-2 text-sm text-error">{error}</p>;
+  const actionErrorBlock = actionError && (
           <div className="flex items-center justify-between gap-2 rounded-m3-sm border border-error px-3 py-2 text-sm text-error">
             <span role="alert">{actionError}</span>
             <button
@@ -1157,8 +1150,10 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
               Dismiss
             </button>
           </div>
-        )}
+        );
+  const feedbackBlock = <>{topErrorBlock}{actionErrorBlock}</>;
 
+  const extraBlock = <>
         {/* Owner management sits early, right after summary/actions. */}
         {isOwner && (
           <section id="detail-manage" tabIndex={-1} aria-label="Manage report" className="scroll-mt-4 rounded-m3-md bg-surface-container-low p-3">
@@ -1315,10 +1310,19 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
           </p>
            <ReportMatches accountId={user?.id ?? null} post={post} onChanged={() => { void loadPost(loadGen.current); }} />
         </section>
-        </BlockedByViewerShield>
-
-        {/* Comments */}
-        <section data-testid="detail-comments" id="detail-comments" tabIndex={-1} aria-label="Comments" className="fb-comment-thread flex scroll-mt-4 flex-col gap-3">
+  </>;
+  const composerBlock = <div ref={composerAnchorRef} className={contextual ? "bg-surface pt-2" : "sticky bottom-0 z-10 bg-surface pt-2"}>
+    {replyTo ? (
+      <div role="status" className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-on-surface-variant">
+        <span className="min-w-0 flex-1 basis-[160px] [overflow-wrap:anywhere]">Replying to <span className="font-semibold text-on-surface">@{replyTo.author.username}</span></span>
+        <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply" className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-full px-2 font-medium"><X size={13} aria-hidden /> Cancel</button>
+      </div>
+    ) : null}
+    <CommentComposer postId={current.id} replyToUsername={replyTo?.author.username ?? null} currentUser={user} participants={mentionParticipants}
+      owner={{ username: current.author.username, displayName: current.author.displayName ?? null, avatarUrl: current.author.avatarUrl ?? null }}
+      onSubmit={(body, attachments) => postCommentBody(body, attachments)} onError={commentFailed} onSent={() => setReplyTo(null)} />
+  </div>;
+  const commentsBlock = <section data-testid="detail-comments" id="detail-comments" tabIndex={-1} aria-label="Comments" className="fb-comment-thread flex scroll-mt-4 flex-col gap-3">
           <h2 className="text-base font-semibold">
             Comments <span className="text-on-surface-variant">({comments.length})</span>
           </h2>
@@ -1369,45 +1373,30 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
             </>
           )}
 
-          {/* The composer sits at the END of the thread (owner reference: the
-              write bar is the last thing in a comment section) and stays put
-              at the bottom of the scroller while the thread is in view. The
-              screen's scroll container is the shell's `main`, and the bottom
-              nav is an in-flow sibling of it, so this bar rests directly above
-              the nav instead of under it. */}
-          <div ref={composerAnchorRef} className="sticky bottom-0 z-10 bg-surface pt-2">
-            {replyTo ? (
-              <div role="status" className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-on-surface-variant">
-                <span className="min-w-0 flex-1 basis-[160px] [overflow-wrap:anywhere]">
-                  Replying to <span className="font-semibold text-on-surface">@{replyTo.author.username}</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setReplyTo(null)}
-                  aria-label="Cancel reply"
-                  className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-full px-2 font-medium"
-                >
-                  <X size={13} aria-hidden /> Cancel
-                </button>
-              </div>
-            ) : null}
-            <CommentComposer
-              postId={current.id}
-              replyToUsername={replyTo?.author.username ?? null}
-              currentUser={user}
-              participants={mentionParticipants}
-              owner={{
-                username: current.author.username,
-                displayName: current.author.displayName ?? null,
-                avatarUrl: current.author.avatarUrl ?? null,
-              }}
-              onSubmit={(body, attachments) => postCommentBody(body, attachments)}
-              onError={commentFailed}
-              onSent={() => setReplyTo(null)}
-            />
-          </div>
-        </section>
-      </article>
+          {!contextual && composerBlock}
+        </section>;
+
+  const viewerRevealed = viewerReveal.key === viewerRevealKey && post.id === id && viewerReveal.revealed;
+  const revealViewer = () => setViewerReveal({ key: viewerRevealKey, revealed: true });
+  return (
+    <div className={contextual ? "flex min-h-0 min-w-0 flex-1 flex-col" : "flex flex-col gap-5"}>
+      {!contextual && <header className="flex items-center px-4 pt-3"><BackButton fallbackTo="/" label="Back to feed" /></header>}
+      {contextual ? <ReportViewerLayout
+        media={mediaBlock} identity={identityBlock} title={titleBlock} description={descriptionBlock} meta={metaBlock}
+        reportExtra={extraBlock} feedback={feedbackBlock} comments={commentsBlock}
+        shield={(content) => <BlockedByViewerShield rowId={post.id} blocked={post.blockedAuthor} revealed={viewerRevealed} onReveal={revealViewer}>{content}</BlockedByViewerShield>}
+        actions={<BlockedByViewerShield rowId={post.id} blocked={post.blockedAuthor} revealed={viewerRevealed} onReveal={revealViewer} showWarning={false}>{actionsBlock}</BlockedByViewerShield>}
+        composer={composerBlock}
+      /> : <>
+        {topErrorBlock}
+        <article className="flex flex-col gap-4 px-4">
+          <BlockedByViewerShield rowId={post.id} blocked={post.blockedAuthor} contentClassName="flex flex-col gap-4">
+            <section aria-label="Report summary" className="flex flex-col gap-2">{identityBlock}{titleBlock}{descriptionBlock}</section>
+            {mediaBlock}{metaBlock}{actionsBlock}{actionErrorBlock}{extraBlock}
+          </BlockedByViewerShield>
+          {commentsBlock}
+        </article>
+      </>}
 
       <RecoverySheet
         open={recoveryPost !== null}

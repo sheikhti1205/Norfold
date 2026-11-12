@@ -13,9 +13,10 @@ interface SurfaceProps {
   footer?: ReactNode;
   busy?: boolean;
   width?: "standard" | "report";
+  bodyClassName?: string;
 }
 
-function DialogSurface({ open, onClose, title, description, children, footer, busy = false, confirmation = false, width = "standard" }: SurfaceProps & { confirmation?: boolean }) {
+function DialogSurface({ open, onClose, title, description, children, footer, busy = false, confirmation = false, width = "standard", bodyClassName }: SurfaceProps & { confirmation?: boolean }) {
   const depth = useOverlayDepth();
   const descriptionId = useId();
   const viewport = useKeyboardInset();
@@ -40,7 +41,7 @@ function DialogSurface({ open, onClose, title, description, children, footer, bu
               <X size={20} aria-hidden="true" />
             </Button>}
           </header>
-          <div className="fb-surface-body" onFocus={(event) => {
+          <div className={bodyClassName ? `fb-surface-body ${bodyClassName}` : "fb-surface-body"} onFocus={(event) => {
             const target = event.target;
             if (target instanceof HTMLElement && target.matches("input, textarea, select, [contenteditable='true']")) target.scrollIntoView?.({ block: "nearest" });
           }}>

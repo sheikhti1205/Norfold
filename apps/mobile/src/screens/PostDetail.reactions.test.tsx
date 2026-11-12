@@ -346,10 +346,10 @@ describe("PostDetail comment Like (packet 08 §2 — Like-only)", () => {
 
     fireEvent.click(control);
 
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Comment reaction failed"));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Something went wrong. Try again."));
     await waitFor(() =>
       expect(screen.getByTestId("live-region-announcement").textContent).toBe(
-        "Comment reaction failed",
+        "Something went wrong. Try again.",
       ),
     );
     expect(control.getAttribute("aria-pressed")).toBe("false");

@@ -926,6 +926,13 @@ describe("fetchFeed canonical reaction truth (W1-A FBX-010)", () => {
     expect(post.dislikeCount).toBe(1);
     expect(post.reactionSummary).toBeUndefined();
   });
+
+  it("maps real view counts while preserving absence on older backends", async () => {
+    clientMock.rpc.mockResolvedValueOnce({ data: [row({ view_count: 7 })], error: null });
+    expect((await fetchFeed({})).items[0]!.viewCount).toBe(7);
+    clientMock.rpc.mockResolvedValueOnce({ data: [row()], error: null });
+    expect((await fetchFeed({})).items[0]!.viewCount).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
