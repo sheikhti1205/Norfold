@@ -29,11 +29,18 @@ export function withTimeout<T>(
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new BootTimeoutError(message)), ms);
   });
+  // The loser of the race must not surface as an unhandled rejection: when the
+  // task settles first, this timer still fires and rejects with nobody
+  // attached, which reports a BootTimeoutError for a boot that already
+  // succeeded. The caller sees the timeout through `raced` when it wins.
+  timeout.catch(() => undefined);
   const aborted = new Promise<never>((_, reject) => {
     if (!signal) return;
     onAbort = () => reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
     signal.addEventListener("abort", onAbort, { once: true });
   });
+  // Same rule as the timer: an abort after the race settled is not an error.
+  aborted.catch(() => undefined);
   const raced = signal
     ? Promise.race([task(), timeout, aborted])
     : Promise.race([task(), timeout]);

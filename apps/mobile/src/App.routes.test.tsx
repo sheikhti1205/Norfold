@@ -75,9 +75,15 @@ vi.mock("./screens/Notifications", () => ({ Notifications: () => <p>Notification
 vi.mock("./screens/SharedReport", () => ({ SharedReport: () => <p>SharedReport screen</p> }));
 // Settings is the route-backed split view: its detail routes render inside
 // it, so the stand-in must keep the outlet like the real screen does.
-vi.mock("./screens/Settings", () => ({
-  Settings: () => <><p>Settings screen</p><Outlet /></>,
-}));
+// The visual fixtures share this module for their row summaries, so the
+// stand-in keeps the real exports and only swaps the screen component.
+vi.mock("./screens/Settings", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./screens/Settings")>();
+  return {
+    ...actual,
+    Settings: () => <><p>Settings screen</p><Outlet /></>,
+  };
+});
 vi.mock("./screens/AdminBootstrap", () => ({ AdminBootstrap: marker("AdminBootstrap") }));
 vi.mock("./screens/BlockedUsers", () => ({ BlockedUsers: marker("BlockedUsers") }));
 vi.mock("./screens/SafetyReports", () => ({ SafetyReports: marker("SafetyReports") }));

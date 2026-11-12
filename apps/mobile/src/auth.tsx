@@ -131,9 +131,12 @@ function readPendingDeadline(email: string | null): number {
   } catch { return 0; }
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({ children, boot = true }: { children: ReactNode; boot?: boolean }) {
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
-  const [passwordSetupSettled, setPasswordSetupSettled] = useState(false);
+  // `boot={false}` is the static visual-fixture mount: it renders real
+  // components with no session, no SDK and no network, so the state is settled
+  // from the first paint instead of waiting on a restore that will never run.
+  const [passwordSetupSettled, setPasswordSetupSettled] = useState(!boot);
   const passwordGate = useRef<{ account: string | null; required: boolean }>({ account: null, required: false });
   const [authSessionId,setAuthSessionId]=useState<string|null>(null);
   const sdkSessionId=useRef<string|null>(null);
@@ -183,7 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try { storage.removeItem(PENDING_DEADLINE_KEY); } catch { /* Storage may be unavailable. */ }
     }
   }, [pendingEmail]);
-  const [booting, setBooting] = useState(true);
+  const [booting, setBooting] = useState(boot);
   const [bootError, setBootError] = useState<string | null>(null);
   // W0-B (S2, additive): social profile-completion state. Independent of user;
   // a valid session with no profile row sets this WITHOUT signing out.
@@ -244,10 +247,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Boot: restore a stored Supabase session.
-  useEffect(() => runBoot(), [runBoot]);
+  useEffect(() => { if (boot) runBoot(); }, [boot, runBoot]);
 
   // Keep the token cache and user state in sync with Supabase Auth.
   useEffect(() => {
+    if (!boot) return;
     let unsubscribe: (() => void) | undefined;
     try {
       const { data } = getSupabase().auth.onAuthStateChange((event, session) => {
@@ -330,7 +334,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /* Supabase not configured; boot handling already cleared state */
     }
     return () => unsubscribe?.();
-  }, []);
+  }, [boot]);
 
   // A failed mid-session refresh signs the user out in place.
   useEffect(

@@ -16,7 +16,8 @@ describe("availability-aware update changes", () => {
   it("keeps unavailable changes informational without a false Try action", () => {
     render(<MemoryRouter><UpdateChanges features={[feature]} context={{ ...context, buildGitSha: "" }} /></MemoryRouter>);
     expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
     expect(screen.getByText("Clearer local search tools.")).toBeTruthy();
-    expect(screen.getByText(/Not available in this build/)).toBeTruthy();
+    expect(screen.getByText("We couldn't determine if this is available to you.")).toBeTruthy();
   });
 });

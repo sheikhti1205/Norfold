@@ -189,13 +189,18 @@ function useLargeTextScale(percent: number | null): void {
 }
 
 function frameStyle(variant: FixtureVariant, width?: number): CSSProperties {
+  // `contain: paint` makes the frame the containing block for fixed-position
+  // descendants (the message pill is `position: fixed` in production). Without
+  // it that pill escapes to the page viewport and floats over every other
+  // section, which invalidates the review of the frames underneath it.
+  const contained: CSSProperties = { contain: "paint" };
   switch (variant) {
     case "small-width":
-      return { maxWidth: 320, marginInline: "auto", width: "100%" };
+      return { ...contained, maxWidth: 320, marginInline: "auto", width: "100%" };
     default:
       // A band frame carries the width the band claims; the grid inside it is
       // then the geometry production would actually produce at that width.
-      return width ? { width, flex: "none" } : {};
+      return width ? { ...contained, width, flex: "none" } : contained;
   }
 }
 
