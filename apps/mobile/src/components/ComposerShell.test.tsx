@@ -63,3 +63,24 @@ it("keeps the focused editor through pointer Send without cancelling click or ke
   fireEvent.submit(input.closest("form")!);
   expect(send).toHaveBeenCalledTimes(2);
 });
+
+it("never disables the field, so a locked account keeps its caret", () => {
+  const { input } = renderComposer({ disabled: true });
+  expect((input as HTMLTextAreaElement).disabled).toBe(false);
+  expect(input.getAttribute("aria-disabled")).toBe("true");
+});
+
+it("puts the caret back when a send that started in the field settles", () => {
+  const send = vi.fn();
+  const view = render(<ComposerShell value="hi" onChange={vi.fn()} onSend={send} inputLabel="Message" enterSends />);
+  const input = screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement;
+  input.focus();
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(send).toHaveBeenCalledTimes(1);
+  // Something else claims focus while the admission is in flight.
+  view.rerender(<ComposerShell value="hi" onChange={vi.fn()} onSend={send} inputLabel="Message" enterSends busy />);
+  input.blur();
+  expect(document.activeElement).not.toBe(input);
+  view.rerender(<ComposerShell value="" onChange={vi.fn()} onSend={send} inputLabel="Message" enterSends />);
+  expect(document.activeElement).toBe(input);
+});

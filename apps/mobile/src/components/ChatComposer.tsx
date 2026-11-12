@@ -9,6 +9,7 @@ import {
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Camera, ChevronDown, FileUp, ImagePlus, MapPin, Maximize2, Mic, Minimize2, SendHorizonal, X } from "lucide-react";
+import { hasFinePointer } from "./inputCapabilities";
 import { speechInput } from "../services/speechInput";
 import {
   fadeUpVariants,
@@ -579,9 +580,24 @@ export function ChatComposer({
           id={inputId}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(event) => {
+            // Owner order 2026-11-12: on a desktop pointer, Enter sends and
+            // Shift+Enter breaks the line. Touch keeps Enter as a newline and
+            // the Android keyboard path is untouched.
+            if (event.key !== "Enter" || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
+            if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+            if (!hasFinePointer()) return;
+            event.preventDefault();
+            if (event.repeat || sendDisabled) return;
+            onSend();
+          }}
           placeholder={placeholder}
           aria-label={inputLabel}
-          disabled={disabled || busy}
+          // Never `disabled`: a disabled textarea drops focus and closes the
+          // phone keyboard mid-conversation. `readOnly` carries the locked
+          // state, and `busy` only gates the send controls.
+          readOnly={disabled}
+          aria-disabled={disabled || undefined}
           enterKeyHint="enter"
           autoComplete="off"
           rows={1}

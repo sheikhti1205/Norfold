@@ -637,7 +637,7 @@ export function CommentComposer({
           inputRef={fieldRef} placeholder={placeholder}
           inputLabel={replyToUsername ? `Reply to ${replyToUsername}` : "Comment"}
           inputProps={{ "data-testid": "comment-input" } as React.TextareaHTMLAttributes<HTMLTextAreaElement>}
-          disabled={disabled || sending} busy={sending} canSend={!sendDisabled}
+          disabled={disabled} busy={sending} canSend={!sendDisabled}
           sendLabel={replyToUsername ? "Send reply" : "Send comment"} sendTestId="comment-send"
           inputOverlay={<MentionAutocomplete inputRef={fieldRef} value={text} participants={participants} owner={owner} onInsert={handleMentionInsert} />}
           actions={<div ref={attachmentActionsRef}><ActionMenu label="Add attachment" icon={<Plus size={20} aria-hidden />}

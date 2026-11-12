@@ -123,7 +123,10 @@ export function PeerChatComposer({
       </div>
       <div className="fb-peer-field">
         <textarea ref={field} value={value} aria-label="Message" placeholder="Message" rows={1}
-          disabled={locked}
+          // `readOnly`, never `disabled`: a disabled field blurs, and the owner's
+          // complaint is precisely that the caret leaves the box on send.
+          readOnly={locked}
+          aria-disabled={locked || undefined}
           // Merely reaching the field does not hide the attachments: only text
           // in the field does that, and emptying it or leaving the field brings
           // them back.
