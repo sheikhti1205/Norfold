@@ -105,5 +105,37 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
 /* The unread badge stays next to the bell icon rather than the far edge. */
 /* Fullscreen editor is a body-level portal: never leave shell chrome behind it
    as an extra tab stop, even though the editor itself lives outside Shell. */
+/* Pinned rail (owner order 2026-11-12, R7): the same in-flow column, 224px,
+   with every destination named. `NAVIGATION-STUDY.md` fixes both widths, so the
+   panel is a width change on the existing column rather than a drawer or an
+   overlay: nothing covers the page and <main> reflows in the same frame. */
+.fb-nav-rail-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; min-height: 40px;
+}
+.fb-nav-rail[data-pinned="false"] .fb-nav-rail-head { justify-content: center; }
+.fb-nav-wordmark { font-weight: 700; font-size: 1rem; letter-spacing: -0.02em; color: var(--fb-on-surface); }
+.fb-nav-pin {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; flex: none; border: 0; border-radius: 12px;
+  background: transparent; color: var(--fb-on-surface-variant); cursor: pointer;
+}
+.fb-nav-pin:hover { background: var(--fb-surface-container); }
+.fb-nav-pin:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: 2px; }
+.fb-nav-rail[data-pinned="true"] { width: 224px; padding: 12px; }
+.fb-nav-rail[data-pinned="true"] .fb-nav-link {
+  flex-direction: row; justify-content: flex-start; gap: 12px;
+  padding: 8px 12px;
+}
+.fb-nav-rail[data-pinned="true"] .fb-nav-create-wrap { width: 100%; margin-inline: 0; }
+.fb-nav-rail[data-pinned="true"] .fb-nav-create {
+  width: 100%; justify-content: flex-start; gap: 12px; padding-inline: 16px;
+  border-radius: 16px; box-shadow: none;
+}
+/* The name and handle are worth showing only when the column has room for them;
+   the avatar alone remains the control in the icon rail. */
+.fb-nav-rail[data-pinned="false"] .fb-account-trigger { justify-content: center; padding-inline: 0; }
+.fb-nav-rail[data-pinned="false"] .fb-account-trigger-text,
+.fb-nav-rail[data-pinned="false"] .fb-account-trigger .fb-verified-badge { display: none; }
 body:has(#report-editor-overlay) .fb-nav-slot,
 body:has(#report-editor-overlay) .fb-nav-rail { display: none; }

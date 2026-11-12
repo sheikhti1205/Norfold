@@ -6,7 +6,7 @@ import { MotionConfig } from "framer-motion";
 import { PrimaryNav, Shell } from "./Shell";
 import { TabTapProvider } from "./TabTap";
 import { resetBackInterceptors } from "./backNavigation";
-import { APPEARANCE_STORAGE_KEY, DEFAULT_APPEARANCE } from "../appearance";
+import { APPEARANCE_STORAGE_KEY, DEFAULT_APPEARANCE, loadAppearance } from "../appearance";
 import { COMPACT_MAX_PX } from "./responsive";
 import { readFileSync } from "node:fs";
 
@@ -483,7 +483,8 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     expect(account.getAttribute("aria-expanded")).toBe("false");
     expect(account.hasAttribute("aria-current")).toBe(false);
     // One identity control in the footer: no sibling settings glyph (R1).
-    expect([...nav.querySelectorAll("a, button")]).toEqual([...links, account]);
+    const pin = within(nav).getByRole("button", { name: "Expand navigation" });
+    expect([...nav.querySelectorAll("a, button")]).toEqual([pin, ...links, account]);
     expect(
       links
         .filter((link) => link.getAttribute("aria-current") === "page")
@@ -492,6 +493,25 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     // Same selected-pill treatment as the bar.
     expect(nav.querySelector(".fb-nav-active-bg")).toBeTruthy();
     expect(nav.querySelector(".fb-nav-label")).toBeTruthy();
+  });
+
+  it("pins the rail into a labelled panel and remembers the choice", () => {
+    setWidth(800);
+    storeNavLayout("rail");
+    renderShell("/");
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(nav.getAttribute("data-pinned")).toBe("false");
+    fireEvent.click(within(nav).getByRole("button", { name: "Expand navigation" }));
+    const pinned = screen.getByRole("navigation", { name: "Primary" });
+    expect(pinned.getAttribute("data-pinned")).toBe("true");
+    expect(loadAppearance().railPinned).toBe(true);
+    // Every destination is named in place, and the pin now collapses it again.
+    for (const label of ["Home", "My Reports", "Chats", "Insights"]) {
+      expect(within(pinned).getByText(label)).toBeTruthy();
+    }
+    fireEvent.click(within(pinned).getByRole("button", { name: "Collapse navigation" }));
+    expect(screen.getByRole("navigation", { name: "Primary" }).getAttribute("data-pinned")).toBe("false");
+    expect(loadAppearance().railPinned).toBe(false);
   });
 
   it("takes layout space beside the content instead of overlaying it", () => {

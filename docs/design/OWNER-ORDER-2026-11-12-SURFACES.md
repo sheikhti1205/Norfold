@@ -143,7 +143,7 @@ at 1280; reopening restores the exact previous widths; state survives a reload.
 | R4 | All-type attachments, safely | pending |
 | R5 | Emoji, stickers, GIFs everywhere | pending |
 | R6 | Composer focus and Enter | done |
-| R7 | Collapsible sidebars | pending |
+| R7 | Collapsible sidebars | done |
 
 A row moves to `done` only with the acceptance check above observed. A row that
 cannot complete moves to `blocked` with the blocker named, and the pass carries
