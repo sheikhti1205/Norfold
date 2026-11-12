@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type ReactNode, type RefObject, type TextareaHTMLAttributes } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject, type TextareaHTMLAttributes } from "react";
 import { SendHorizonal } from "lucide-react";
 import { hasFinePointer } from "./inputCapabilities";
 import "./adaptiveFoundation.css";
@@ -25,13 +25,25 @@ export interface ComposerShellProps {
   inputProps?: Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "onChange" | "disabled" | "aria-label" | "placeholder">;
 }
 
-/** Layout/editing only. Uploads, account fencing, drafts and transport stay with callers. */
+/**
+ * Layout and editing only. Uploads, account fencing, drafts and transport stay
+ * with callers.
+ *
+ * The field is never `disabled`. A disabled textarea loses focus and, on a
+ * phone, tears down the keyboard, which is exactly what the owner reported: you
+ * send a comment and the place you were typing stops taking input. `readOnly`
+ * carries the "this account cannot write" state instead, and Send is the only
+ * control that ever goes unavailable. On top of that, a send started from the
+ * focused field puts focus back when the send settles, so a slow admission
+ * cannot leave the caret somewhere else.
+ */
 export function ComposerShell({ value, onChange, onSend, inputLabel, placeholder, disabled = false, busy = false,
   canSend = Boolean(value.trim()), enterSends, context, attachments, actions, inputProps,
   inputRef, inputOverlay, sendLabel = "Send", sendTestId }: ComposerShellProps) {
   const localInput = useRef<HTMLTextAreaElement>(null);
   const input = inputRef ?? localInput;
   const composing = useRef(false);
+  const hadFocus = useRef(false);
   const available = canSend && !disabled && !busy;
   useLayoutEffect(() => {
     if (!input.current) return;
@@ -42,7 +54,17 @@ export function ComposerShell({ value, onChange, onSend, inputLabel, placeholder
     if (input.current.scrollHeight > 0) input.current.style.height = `${Math.min(cap, input.current.scrollHeight)}px`;
     input.current.style.overflowY = input.current.scrollHeight > cap ? "auto" : "hidden";
   }, [value, input]);
-  const send = () => { if (available && !composing.current) onSend(); };
+  useEffect(() => {
+    if (busy || !hadFocus.current) return;
+    hadFocus.current = false;
+    const element = input.current;
+    if (element && document.activeElement !== element) element.focus();
+  }, [busy, input]);
+  const send = () => {
+    if (!available || composing.current) return;
+    hadFocus.current = document.activeElement === input.current;
+    onSend();
+  };
   return <form className="fb-composer-shell" onSubmit={(event) => { event.preventDefault(); send(); }} aria-busy={busy || undefined}>
     {context && <div className="fb-composer-context">{context}</div>}
     {attachments && <div className="fb-composer-attachments">{attachments}</div>}
@@ -50,7 +72,8 @@ export function ComposerShell({ value, onChange, onSend, inputLabel, placeholder
       {actions && <div className="fb-composer-actions">{actions}</div>}
       <div className="fb-composer-field">
       <textarea {...inputProps} ref={input} value={value} aria-label={inputLabel} placeholder={placeholder}
-        disabled={disabled} rows={1} onChange={(event) => onChange(event.target.value)}
+        readOnly={disabled} aria-disabled={disabled || undefined} rows={1}
+        onChange={(event) => onChange(event.target.value)}
         onCompositionStart={(event) => { composing.current = true; inputProps?.onCompositionStart?.(event); }}
         onCompositionEnd={(event) => { composing.current = false; inputProps?.onCompositionEnd?.(event); }}
         onKeyDown={(event) => {
