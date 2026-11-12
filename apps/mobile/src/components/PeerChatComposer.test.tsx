@@ -45,14 +45,18 @@ it("shows exactly camera and photos on the left while voice is unavailable", () 
 it("keeps the attachments on focus, collapses them once text exists, and reopens on request", async () => {
   render(<Harness />);
   const field = screen.getByRole("textbox", { name: "Message" });
+  const attachments = () => document.querySelector(".fb-peer-attachments")?.getAttribute("data-reveal");
   fireEvent.focus(field);
+  // Focus never hides the cluster; it stays on the width default.
+  expect(attachments()).toBe("auto");
   expect(screen.getByRole("button", { name: "Take photo" })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "Show attachments" })).toBeNull();
   fireEvent.change(field, { target: { value: "and more" } });
   const reveal = await screen.findByRole("button", { name: "Show attachments" });
   await waitFor(() => expect(screen.queryByRole("button", { name: "Take photo" })).toBeNull());
+  expect(attachments()).toBe("off");
   fireEvent.click(reveal);
   await waitFor(() => expect(screen.getByRole("button", { name: "Take photo" })).toBeTruthy());
+  expect(attachments()).toBe("on");
 });
 
 it("collapses again when typing and restores after the draft is cleared or sent", async () => {
@@ -107,4 +111,28 @@ it("offers the shared sticker/GIF picker only with a provider key", () => {
   fireEvent.click(screen.getByRole("button", { name: "More attachments" }));
   expect(screen.getByRole("menuitem", { name: "Stickers and GIFs" })).toBeTruthy();
   vi.unstubAllEnvs();
+});
+
+// The width decision itself is a container query in `peerComposer.css` (it
+// cannot race layout, which a measured state could). What is testable here is
+// the state it reads: the cluster and `>` coexist on "auto", so either can be
+// displayed without the other being unmounted on a guess.
+it("renders both attachment states while the width decides which one shows", () => {
+  render(<Harness />);
+  const attachments = document.querySelector(".fb-peer-attachments");
+  expect(attachments?.getAttribute("data-reveal")).toBe("auto");
+  expect(screen.getByRole("button", { name: "Take photo" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Show attachments" })).toBeTruthy();
+});
+
+it("a deliberate reveal outranks the width and survives leaving the field", () => {
+  render(<Harness />);
+  const field = screen.getByRole("textbox", { name: "Message" });
+  fireEvent.change(field, { target: { value: "Hello" } });
+  fireEvent.click(screen.getByRole("button", { name: "Show attachments" }));
+  expect(document.querySelector(".fb-peer-attachments")?.getAttribute("data-reveal")).toBe("on");
+  fireEvent.blur(field);
+  // Blur returns to the width default, not to a hidden cluster.
+  expect(document.querySelector(".fb-peer-attachments")?.getAttribute("data-reveal")).toBe("auto");
+  expect(screen.getByRole("button", { name: "Take photo" })).toBeTruthy();
 });

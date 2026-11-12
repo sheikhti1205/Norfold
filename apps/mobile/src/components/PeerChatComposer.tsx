@@ -44,9 +44,7 @@ export interface PeerChatComposerProps {
  * The row at rest is Camera, Photos, and an overflow menu; the text field
  * follows; the emoji trigger and Send stay on the far right. The overflow
  * menu holds the less frequent controls (File, Voice, Stickers and GIFs) so
- * five 44px controls never squeeze the field at 320dp. There is no outer
- * capsule: the field keeps its own rounded surface and every other control
- * floats independently.
+ * five 44px controls never squeeze the field.
  *
  * Attachment expansion is explicit state, not `document.activeElement`:
  *   - opening an idle conversation shows the controls;
@@ -55,6 +53,14 @@ export interface PeerChatComposerProps {
  *   - returning to the field collapses them again;
  *   - a successful send or clearing the whole draft restores them even while
  *     the keyboard is still open.
+ *
+ * Narrow composers (under 400px of their own width) start collapsed: five
+ * 44px controls plus the field at 320dp left the field 66px wide and clipped
+ * its own placeholder mid-word. That decision is a container query in
+ * `peerComposer.css`, not a measurement in JavaScript, so it cannot race
+ * layout; `data-reveal` here only records what the reader asked for. There is
+ * no outer capsule: the field keeps its own rounded surface and every other
+ * control floats independently.
  *
  * Emoji is the exception: it stays reachable on the right because the owner
  * asked for it while composing, not only before typing (R5).
@@ -65,7 +71,9 @@ export function PeerChatComposer({
   voiceAvailable = false, voiceActive = false, onVoice,
   onPickKlipy, context,
 }: PeerChatComposerProps) {
-  const [expanded, setExpanded] = useState(true);
+  // `null` means "follow the width" (CSS decides); true/false is what the
+  // reader asked for and outranks the width until the draft is cleared.
+  const [reveal, setReveal] = useState<boolean | null>(null);
   const [focused, setFocused] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [gifOpen, setGifOpen] = useState(false);
@@ -92,7 +100,7 @@ export function PeerChatComposer({
   // is still open. It collapses again only on a deliberate return to the field
   // or on typing new content.
   useEffect(() => {
-    if (value === "") setExpanded(true);
+    if (value === "") setReveal(null);
   }, [value]);
 
   useEffect(() => {
@@ -152,69 +160,71 @@ export function PeerChatComposer({
   );
 
   const hasMore = onFiles !== undefined || voiceAvailable || klipy;
+  const revealState = reveal === null ? "auto" : reveal ? "on" : "off";
+  // Typing removes the cluster from the DOM; the width default is left to the
+  // container query, so the two states can coexist without guessing.
+  const showControls = reveal !== false;
+  const showReveal = reveal !== true;
 
   return <form className="fb-peer-composer" aria-busy={busy || fileSending || undefined}
     onSubmit={(event) => { event.preventDefault(); send(); }}>
     {context}
     <div className="fb-peer-composer-row">
-      <div className="fb-peer-attachments">
-        {/* A plain swap. Two tiny affordances do not need an exit animation,
-            and a swap keeps both states in normal flow instead of relying on
-            Framer's popLayout to place a leaving group absolutely. */}
-        {expanded ? (
-          <div className="fb-peer-controls">
-            {button("Take photo", <Camera size={21} aria-hidden="true" />, onCamera, !photoAllowed || attachmentBusy)}
-            {button("Choose photo", <ImagePlus size={21} aria-hidden="true" />, onPhotos, !photoAllowed || attachmentBusy)}
-            {hasMore && (
-              <div className="relative" ref={moreRoot}>
-                <button type="button" className="fb-peer-icon" aria-label="More attachments"
-                  title="More attachments" aria-haspopup="menu" aria-expanded={moreOpen}
-                  disabled={attachmentBusy && !voiceActive}
-                  onClick={() => setMoreOpen((open) => !open)}>
-                  <Ellipsis size={21} aria-hidden="true" />
-                </button>
-                {moreOpen && (
-                  <div className="fb-picker-layer fb-peer-more" role="menu" aria-label="More attachments">
-                    {onFiles && (
-                      <button type="button" role="menuitem" disabled={attachmentBusy}
-                        onClick={() => { setMoreOpen(false); fileInput.current?.click(); }}>
-                        <FileUp size={20} aria-hidden="true" /> File
-                      </button>
-                    )}
-                    {voiceAvailable && onVoice && (
-                      <button type="button" role="menuitem" disabled={busy || locked || attachmentsLocked}
-                        onClick={() => { setMoreOpen(false); onVoice(); }}>
-                        {voiceActive ? <Square size={18} aria-hidden="true" /> : <Mic size={20} aria-hidden="true" />}
-                        {voiceActive ? "Stop recording" : "Voice message"}
-                      </button>
-                    )}
-                    {klipy && (
-                      <button type="button" role="menuitem" disabled={!photoAllowed || attachmentBusy}
-                        onClick={() => { setMoreOpen(false); setGifOpen(true); }}>
-                        <Sticker size={20} aria-hidden="true" /> Stickers and GIFs
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-            {onFiles && (
-              <input ref={fileInput} type="file" multiple className="sr-only" tabIndex={-1}
-                aria-label="Choose files"
-                onChange={(event) => {
-                  const files = [...(event.target.files ?? [])];
-                  event.target.value = "";
-                  if (files.length > 0) onFiles(files);
-                }} />
-            )}
-          </div>
-        ) : (
-          <button type="button" className="fb-peer-icon fb-peer-reveal"
-            aria-label="Show attachments" aria-expanded={false}
-            onClick={() => setExpanded(true)}>
-            <ChevronRight size={20} aria-hidden="true" />
-          </button>
-        )}
+      {/* Both states are always rendered; the container query in
+          `peerComposer.css` decides which one is visible, and `data-reveal`
+          records a deliberate choice that outranks the width. */}
+      <div className="fb-peer-attachments" data-reveal={revealState}>
+        {showControls && <div className="fb-peer-controls">
+          {button("Take photo", <Camera size={21} aria-hidden="true" />, onCamera, !photoAllowed || attachmentBusy)}
+          {button("Choose photo", <ImagePlus size={21} aria-hidden="true" />, onPhotos, !photoAllowed || attachmentBusy)}
+          {hasMore && (
+            <div className="relative" ref={moreRoot}>
+              <button type="button" className="fb-peer-icon" aria-label="More attachments"
+                title="More attachments" aria-haspopup="menu" aria-expanded={moreOpen}
+                disabled={attachmentBusy && !voiceActive}
+                onClick={() => setMoreOpen((open) => !open)}>
+                <Ellipsis size={21} aria-hidden="true" />
+              </button>
+              {moreOpen && (
+                <div className="fb-picker-layer fb-peer-more" data-size="menu" role="menu" aria-label="More attachments">
+                  {onFiles && (
+                    <button type="button" role="menuitem" disabled={attachmentBusy}
+                      onClick={() => { setMoreOpen(false); fileInput.current?.click(); }}>
+                      <FileUp size={20} aria-hidden="true" /> File
+                    </button>
+                  )}
+                  {voiceAvailable && onVoice && (
+                    <button type="button" role="menuitem" disabled={busy || locked || attachmentsLocked}
+                      onClick={() => { setMoreOpen(false); onVoice(); }}>
+                      {voiceActive ? <Square size={18} aria-hidden="true" /> : <Mic size={20} aria-hidden="true" />}
+                      {voiceActive ? "Stop recording" : "Voice message"}
+                    </button>
+                  )}
+                  {klipy && (
+                    <button type="button" role="menuitem" disabled={!photoAllowed || attachmentBusy}
+                      onClick={() => { setMoreOpen(false); setGifOpen(true); }}>
+                      <Sticker size={20} aria-hidden="true" /> Stickers and GIFs
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          {onFiles && (
+            <input ref={fileInput} type="file" multiple className="sr-only" tabIndex={-1}
+              aria-label="Choose files"
+              onChange={(event) => {
+                const files = [...(event.target.files ?? [])];
+                event.target.value = "";
+                if (files.length > 0) onFiles(files);
+              }} />
+          )}
+        </div>}
+        {showReveal && <button type="button" className="fb-peer-icon fb-peer-reveal"
+          aria-label="Show attachments" aria-expanded={false}
+          onClick={() => setReveal(true)}>
+          <ChevronRight size={20} aria-hidden="true" />
+        </button>}
       </div>
       <div className="fb-peer-field">
         <textarea ref={field} value={value} aria-label="Message" placeholder="Message" rows={1}
@@ -226,10 +236,12 @@ export function PeerChatComposer({
           // in the field does that, and emptying it or leaving the field brings
           // them back.
           onFocus={() => setFocused(true)}
-          onBlur={() => { setFocused(false); setExpanded(true); }}
+          onBlur={() => { setFocused(false); setReveal(null); }}
           onChange={(event) => {
             const next = event.target.value;
-            setExpanded(next === "");
+            // Text collapses the cluster; an empty draft follows the width
+            // again, which is what restores it on a phone after a send.
+            setReveal(next === "" ? null : false);
             const start = event.target.selectionStart ?? next.length;
             // Never rewrite under a selection or an active IME: the browser
             // owns that value until composition finishes.

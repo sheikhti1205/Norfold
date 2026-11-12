@@ -90,6 +90,7 @@ function Thread({ variant }: { variant: FixtureVariant }) {
         photoAllowed
         onCamera={() => undefined}
         onPhotos={() => undefined}
+        onFiles={() => undefined}
         voiceAvailable
         voiceActive={voiceActive}
         onVoice={() => setVoiceActive((active) => !active)}
