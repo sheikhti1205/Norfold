@@ -1,0 +1,50 @@
+/* One ordinary file inside a conversation bubble. */
+.fb-chat-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 320px;
+  padding: 10px 12px;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 14px;
+  background: var(--fb-surface-container-low);
+}
+.fb-chat-file-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--fb-surface-container-high);
+  color: var(--fb-on-surface-variant);
+}
+.fb-chat-file-copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.fb-chat-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--fb-on-surface);
+}
+.fb-chat-file-size { font-size: 0.75rem; color: var(--fb-on-surface-variant); }
+.fb-chat-file-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  min-height: 40px;
+  padding-inline: 10px;
+  border-radius: 999px;
+  background: var(--fb-surface-container-high);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--fb-on-surface);
+}
+.fb-chat-file-action:hover { background: var(--fb-surface-container); }
+.fb-chat-file-action:disabled { opacity: 0.6; }
+.fb-chat-file-error { flex-basis: 100%; margin: 0; font-size: 0.75rem; color: var(--fb-error, #b3261e); }
+.fb-chat-file-video, .fb-chat-file-audio { display: block; max-width: min(320px, 100%); border-radius: 14px; }

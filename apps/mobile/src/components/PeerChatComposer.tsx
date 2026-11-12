@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { Camera, ChevronRight, ImagePlus, Mic, SendHorizontal, Square, Sticker } from "lucide-react";
+import { Camera, ChevronRight, Ellipsis, FileUp, ImagePlus, Mic, SendHorizontal, Square, Sticker } from "lucide-react";
 import { hasFinePointer } from "./inputCapabilities";
 import { convertEmoticonsLive } from "../utils/emoji";
 import { EmojiPickerButton } from "./EmojiPickerButton";
@@ -22,6 +22,10 @@ export interface PeerChatComposerProps {
   photoAllowed: boolean;
   onCamera: () => void;
   onPhotos: () => void;
+  /** Any non-photo file (document, video, audio file, archive). Classification
+   * and refusal live in the screen's file owner, never here. */
+  onFiles?: (files: File[]) => void;
+  fileSending?: boolean;
   /** Voice is a real capability flag: when false the control explains the
    * limitation instead of pretending to record. */
   voiceAvailable?: boolean;
@@ -37,11 +41,12 @@ export interface PeerChatComposerProps {
 /**
  * Human-to-human composer.
  *
- * The LEFT group holds the attachment controls (Camera, Photos, Voice, and the
- * sticker/GIF picker when the provider key is present); the text field
- * follows; the emoji trigger and Send stay on the far right. There is no plus
- * menu and no outer capsule: the field keeps its own rounded surface and every
- * other control floats independently.
+ * The row at rest is Camera, Photos, and an overflow menu; the text field
+ * follows; the emoji trigger and Send stay on the far right. The overflow
+ * menu holds the less frequent controls (File, Voice, Stickers and GIFs) so
+ * five 44px controls never squeeze the field at 320dp. There is no outer
+ * capsule: the field keeps its own rounded surface and every other control
+ * floats independently.
  *
  * Attachment expansion is explicit state, not `document.activeElement`:
  *   - opening an idle conversation shows the controls;
@@ -56,18 +61,23 @@ export interface PeerChatComposerProps {
  */
 export function PeerChatComposer({
   value, onChange, onSend, inputRef, busy, locked, canSend, attachmentsLocked = false,
-  photoAllowed, onCamera, onPhotos, voiceAvailable = false, voiceActive = false, onVoice,
+  photoAllowed, onCamera, onPhotos, onFiles, fileSending = false,
+  voiceAvailable = false, voiceActive = false, onVoice,
   onPickKlipy, context,
 }: PeerChatComposerProps) {
   const [expanded, setExpanded] = useState(true);
   const [focused, setFocused] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [gifOpen, setGifOpen] = useState(false);
   const field = inputRef;
+  const fileInput = useRef<HTMLInputElement>(null);
+  const moreRoot = useRef<HTMLDivElement>(null);
   const composing = useRef(false);
   // Live conversion changes the value, so the caret it produced is restored
   // after React commits instead of being left wherever the browser guessed.
   const caret = useRef<number | null>(null);
   const klipy = isKlipyEnabled() && onPickKlipy !== undefined;
+  const attachmentBusy = busy || locked || attachmentsLocked || fileSending;
 
   useLayoutEffect(() => {
     const next = caret.current;
@@ -99,6 +109,24 @@ export function PeerChatComposer({
     element.style.overflowY = focused && element.scrollHeight > cap ? "auto" : "hidden";
   }, [value, field, focused]);
 
+  // Close the overflow menu on an outside press or Escape.
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (moreRoot.current && !moreRoot.current.contains(event.target as Node)) setMoreOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMoreOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [moreOpen]);
+
   const send = () => { if (available && !composing.current) onSend(); };
 
   function pickEmoji(glyph: string) {
@@ -123,7 +151,9 @@ export function PeerChatComposer({
     </button>
   );
 
-  return <form className="fb-peer-composer" aria-busy={busy || undefined}
+  const hasMore = onFiles !== undefined || voiceAvailable || klipy;
+
+  return <form className="fb-peer-composer" aria-busy={busy || fileSending || undefined}
     onSubmit={(event) => { event.preventDefault(); send(); }}>
     {context}
     <div className="fb-peer-composer-row">
@@ -133,17 +163,50 @@ export function PeerChatComposer({
             Framer's popLayout to place a leaving group absolutely. */}
         {expanded ? (
           <div className="fb-peer-controls">
-            {button("Take photo", <Camera size={21} aria-hidden="true" />, onCamera, !photoAllowed || busy || locked || attachmentsLocked)}
-            {button("Choose photo", <ImagePlus size={21} aria-hidden="true" />, onPhotos, !photoAllowed || busy || locked || attachmentsLocked)}
-            {/* Voice exists only when a real recording/playback path exists.
-                The handoff forbids a microphone that cannot record. */}
-            {voiceAvailable && onVoice
-              ? button(voiceActive ? "Stop recording" : "Voice message",
-                voiceActive ? <Square size={19} aria-hidden="true" /> : <Mic size={21} aria-hidden="true" />, onVoice, busy || locked || attachmentsLocked)
-              : null}
-            {klipy
-              ? button("Stickers and GIFs", <Sticker size={21} aria-hidden="true" />, () => setGifOpen((open) => !open), !photoAllowed || busy || locked)
-              : null}
+            {button("Take photo", <Camera size={21} aria-hidden="true" />, onCamera, !photoAllowed || attachmentBusy)}
+            {button("Choose photo", <ImagePlus size={21} aria-hidden="true" />, onPhotos, !photoAllowed || attachmentBusy)}
+            {hasMore && (
+              <div className="relative" ref={moreRoot}>
+                <button type="button" className="fb-peer-icon" aria-label="More attachments"
+                  title="More attachments" aria-haspopup="menu" aria-expanded={moreOpen}
+                  disabled={attachmentBusy && !voiceActive}
+                  onClick={() => setMoreOpen((open) => !open)}>
+                  <Ellipsis size={21} aria-hidden="true" />
+                </button>
+                {moreOpen && (
+                  <div className="fb-picker-layer fb-peer-more" role="menu" aria-label="More attachments">
+                    {onFiles && (
+                      <button type="button" role="menuitem" disabled={attachmentBusy}
+                        onClick={() => { setMoreOpen(false); fileInput.current?.click(); }}>
+                        <FileUp size={20} aria-hidden="true" /> File
+                      </button>
+                    )}
+                    {voiceAvailable && onVoice && (
+                      <button type="button" role="menuitem" disabled={busy || locked || attachmentsLocked}
+                        onClick={() => { setMoreOpen(false); onVoice(); }}>
+                        {voiceActive ? <Square size={18} aria-hidden="true" /> : <Mic size={20} aria-hidden="true" />}
+                        {voiceActive ? "Stop recording" : "Voice message"}
+                      </button>
+                    )}
+                    {klipy && (
+                      <button type="button" role="menuitem" disabled={!photoAllowed || attachmentBusy}
+                        onClick={() => { setMoreOpen(false); setGifOpen(true); }}>
+                        <Sticker size={20} aria-hidden="true" /> Stickers and GIFs
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {onFiles && (
+              <input ref={fileInput} type="file" multiple className="sr-only" tabIndex={-1}
+                aria-label="Choose files"
+                onChange={(event) => {
+                  const files = [...(event.target.files ?? [])];
+                  event.target.value = "";
+                  if (files.length > 0) onFiles(files);
+                }} />
+            )}
           </div>
         ) : (
           <button type="button" className="fb-peer-icon fb-peer-reveal"

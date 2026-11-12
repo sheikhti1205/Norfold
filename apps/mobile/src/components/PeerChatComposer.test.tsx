@@ -37,7 +37,7 @@ it("shows exactly camera and photos on the left while voice is unavailable", () 
   // Owner order 2026-11-12 (R5): emoji is reachable while composing; there is
   // still no general "attach" or "add to message" plus-menu.
   expect(screen.getByRole("button", { name: "Emoji" })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: /add to message|attach/i })).toBeNull();
+  expect(screen.queryByRole("button", { name: /add to message/i })).toBeNull();
 });
 
 // Owner rule 2026-11-08: reaching the field is not a reason to hide the
@@ -75,7 +75,8 @@ it("offers voice only when a real recording path is present", () => {
   first.unmount();
   const onVoice = vi.fn();
   render(<Harness voiceAvailable onVoice={onVoice} />);
-  fireEvent.click(screen.getByRole("button", { name: "Voice message" }));
+  fireEvent.click(screen.getByRole("button", { name: "More attachments" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Voice message" }));
   expect(onVoice).toHaveBeenCalledTimes(1);
   expect(unavailable).not.toHaveBeenCalled();
 });
@@ -99,10 +100,11 @@ it("inserts a picked emoji at the caret (owner order 2026-11-12, R5)", () => {
 it("offers the shared sticker/GIF picker only with a provider key", () => {
   vi.stubEnv("VITE_KLIPY_API_KEY", "");
   const withoutKey = render(<Harness onPickKlipy={() => undefined} />);
-  expect(screen.queryByRole("button", { name: "Stickers and GIFs" })).toBeNull();
+  expect(screen.queryByRole("menuitem", { name: "Stickers and GIFs" })).toBeNull();
   withoutKey.unmount();
   vi.stubEnv("VITE_KLIPY_API_KEY", "testing-key");
   render(<Harness onPickKlipy={() => undefined} />);
-  expect(screen.getByRole("button", { name: "Stickers and GIFs" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "More attachments" }));
+  expect(screen.getByRole("menuitem", { name: "Stickers and GIFs" })).toBeTruthy();
   vi.unstubAllEnvs();
 });

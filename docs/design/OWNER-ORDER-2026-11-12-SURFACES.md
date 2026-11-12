@@ -91,6 +91,14 @@ Acceptance: a `.pdf`, a `.mp4`, a `.zip` and a `.bat` are attempted; the first
 three upload and render in their own card, the fourth is refused with a plain
 sentence before any byte leaves the device.
 
+Implementation state (2026-11-13): the client lane, the private bucket
+migration (`20261112170000_chat_file_transport.sql`) and the refusal list are
+written and tested at the unit level. The migration is **not applied**, so no
+live upload can succeed yet; live acceptance also needs a signed-in session,
+which this session does not have consent to use. Blocked on owner approval to
+apply the migration, then one signed-in attempt. Retention sweep for transport
+objects is a named follow-up, not part of this row.
+
 ## R5. Emoji, stickers and GIFs in every composer
 
 - The report comment composer and both chat composers carry the same three
@@ -140,7 +148,7 @@ at 1280; reopening restores the exact previous widths; state survives a reload.
 | R1 | One account control | done |
 | R2 | Nested preview popovers | done |
 | R3 | Floating account settings panel | done, enforcement pending |
-| R4 | All-type attachments, safely | pending |
+| R4 | All-type attachments, safely | blocked, live acceptance pending |
 | R5 | Emoji, stickers, GIFs everywhere | done |
 | R6 | Composer focus and Enter | done |
 | R7 | Collapsible sidebars | done |

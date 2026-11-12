@@ -16,6 +16,10 @@ import { formatChatDay, formatEventDate, timeAgo } from "../utils/dates";
 import { haptic } from "../utils/haptics";
 import { convertEmoticons, isEmojiOnly } from "../utils/emoji";
 import { isKlipyMediaUrl, type KlipyItem } from "../services/klipy";
+import {
+  chatFileBody, chatFileCaption, chatFilePreview, parseChatFileMarker, removeChatFile, uploadChatFile, validateChatFile,
+} from "../services/messaging/files";
+import { ChatFile } from "../components/ChatFile";
 import { SplitView, type SplitPaneState } from "../components/SplitView";
 import { CHAT_PANE } from "../components/panePreference";
 import { ChatDetailsLayout } from "../components/ChatDetailsLayout";
@@ -225,7 +229,8 @@ export function replyPreview(message: StoredHumanMessage): string {
   if (message.messageType === "MEDIA") return "Photo";
   if (message.messageType === "VOICE") return "Voice message";
   if (message.messageType === "LOCATION") return "Location";
-  return message.body;
+  // A file message is a marker in the body; quote its name, never the payload.
+  return chatFilePreview(message.body) ?? message.body;
 }
 
 function RetrySync({ accountId, labelled = false }: { accountId: string; labelled?: boolean }) {
@@ -746,6 +751,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   // item is reviewed, removed and sent on its own terms.
   const [photos, setPhotos] = useState<StagedChatPhoto[]>([]);
   const [photoSending, setPhotoSending] = useState(false);
+  const [filesSending, setFilesSending] = useState(false);
   const [draftViewer, setDraftViewer] = useState<{ key: string } | null>(null);
   // Voice is a real capability: one recorder and one transcript player per
   // conversation. Nothing opens the microphone until the user taps Voice.
@@ -1479,6 +1485,50 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   }
 
   /**
+   * A document, video, audio file or archive. Uploaded to the private file
+   * bucket first, then sent as a text message carrying the marker. A failed
+   * send removes the object it uploaded, so a refusal never leaves bytes the
+   * transcript cannot name.
+   */
+  async function sendFiles(picked: File[]) {
+    if (!runtimeOpen || !row || filesSending || photoSending) return;
+    if (view?.mode !== "CONNECTED" || view.ownBlocked) {
+      setError("Files send once you are connected.");
+      return;
+    }
+    const sendingRevision = draftRevision.current;
+    const replyTargetId = replyTo?.id;
+    let caption = draft.trim();
+    let leaving = false;
+    setError(null); setSendStatus(null); setFilesSending(true);
+    try {
+      for (const file of picked) {
+        const problem = validateChatFile(file);
+        if (problem) { setError(problem); continue; }
+        const meta = await uploadChatFile(file, { userId: accountId, conversationId });
+        try {
+          await sendMessagingText(accountId, conversationId, row.peerId, chatFileBody(meta, caption), undefined, replyTargetId);
+        } catch (error) {
+          await removeChatFile(meta.key);
+          throw error;
+        }
+        leaving = true;
+        caption = "";
+      }
+      if (leaving && alive.current) {
+        nearBottom.current = true;
+        if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+        setReplyTo(null);
+        setAdmissionFailed(false);
+      }
+    } catch {
+      if (alive.current) setError("That file was not sent. Try again.");
+    } finally {
+      if (alive.current) setFilesSending(false);
+    }
+  }
+
+  /**
    * Open the report sheet for one message. An unsent message has no body in the
    * transcript, so its hidden retained copy is read here — the single place the
    * body is allowed to leave the hold.
@@ -1673,6 +1723,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
           const emojiOnly = message.unsentAt === undefined && message.messageType === "TEXT"
             && !attachment && !message.replyToId && !message.contextReportId && !message.location
             && isEmojiOnly(message.body);
+          const file = message.unsentAt === undefined ? parseChatFileMarker(message.body) : null;
           const flashClass = flash?.id === message.id ? ` fb-chat-flash-${flash.nonce % 2 ? "a" : "b"}` : "";
           return <Fragment key={message.id}>
             {opensDay && <li className="fb-chat-day" role="presentation"><span>{day}</span></li>}
@@ -1715,7 +1766,10 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             {message.messageType === "VOICE" && attachment && !photoAllowed && <p>Voice messages are available when connected.</p>}
             {message.contextReportId && <ChatReportContext reportId={message.contextReportId} safetyKey={view?.ownBlocked ? "blocked" : "clear"} />}
             {message.location && <ChatLocation location={message.location} />}
-            {message.body && message.unsentAt === undefined && isKlipyMediaUrl(message.body.trim())
+            {file ? <>
+              <ChatFile meta={file} />
+              {chatFileCaption(message.body) !== "" && <p dir="auto">{chatFileCaption(message.body)}</p>}
+            </> : message.body && message.unsentAt === undefined && isKlipyMediaUrl(message.body.trim())
               ? <img className="fb-chat-klipy" src={message.body.trim()} alt="Sticker or GIF"
                   loading="lazy" referrerPolicy="no-referrer" />
               : message.body ? <p dir="auto" className={emojiOnly ? "fb-chat-emoji-only" : undefined}>{message.body}</p>
@@ -1852,6 +1906,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         canSend={runtimeOpen && (photos.length > 0 ? photoAllowed && photos.every(item => !!item.prepared) : !!draft.trim())}
         photoAllowed={view?.mode === "CONNECTED"}
         onCamera={() => void choosePhoto("camera")} onPhotos={() => void choosePhoto("photos")}
+        onFiles={(files) => void sendFiles(files)} fileSending={filesSending}
         voiceAvailable={voiceAllowed} onVoice={toggleVoiceCapture}
         onPickKlipy={sendKlipy}
         context={<>
