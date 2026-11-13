@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { Link, useLocation } from "react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { BarChart3, ClipboardList, Home, MessageCircle, PanelLeftClose, PanelLeftOpen, Plus, Settings } from "lucide-react";
+import { Archive, BarChart3, Bell, Bookmark, ClipboardList, Heart, Home, MessageCircle, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings as SettingsIcon, UserRound, type LucideIcon } from "lucide-react";
 import { Focusable, Tooltip, TooltipTrigger } from "react-aria-components";
 import { TabTapProvider, useTabTap } from "./TabTap";
 import { LiveRegion } from "./LiveRegion";
@@ -27,12 +27,39 @@ import "./Shell.nav.css";
 /** Router link with framer press gestures (motion pass: always animated). */
 const MotionLink = motion.create(Link);
 
+/**
+ * The rail's destinations, in the order `docs/design/nav/prototype.html` puts
+ * them: the work you came to do first, then the secondary shelves under a
+ * named group. The phone bar keeps its own four-destination list below; a
+ * nine-item pill on a 320px screen would be a row of glyphs.
+ */
 const NAV = [
   { to: "/", label: "Home", icon: Home },
   { to: "/my", label: "My Reports", icon: ClipboardList },
+  { to: "/search", label: "Search", icon: Search },
   { to: "/chats", label: "Chats", icon: MessageCircle },
+  { to: "/notifications", label: "Activity", icon: Bell },
   { to: "/insights", label: "Insights", icon: BarChart3 },
-  { to: "/settings", label: "Settings", icon: Settings },
+] as const;
+
+/** The prototype's `Others` group. Every row lands on a surface that exists. */
+const NAV_OTHERS = [
+  { to: "/search?scope=people", label: "Connect", icon: UserRound },
+  { to: "/reactions", label: "Liked / Disliked", icon: Heart },
+  { to: "/saved", label: "Saved", icon: Bookmark },
+  { to: "/settings/returns", label: "Recovered", icon: Archive },
+] as const;
+
+/**
+ * The bottom bar stays four destinations plus the create action, which is what
+ * the same prototype draws for a phone. Send and Settings both open from the
+ * account control or the route header, so the bar stays scannable.
+ */
+const BAR_NAV = [
+  { to: "/", label: "Home", icon: Home },
+  { to: "/my", label: "My Reports", icon: ClipboardList },
+  { to: "/chats", label: "Chats", icon: MessageCircle },
+  { to: "/settings", label: "Settings", icon: SettingsIcon },
 ] as const;
 
 const HIDE_NAV = ["/help", "/posts/", "/ai-connection", "/connections/", "/chats/"];
@@ -163,7 +190,7 @@ export function PrimaryNav({
   layoutScope?: string;
 }) {
   const { notifyTabTap } = useTabTap();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   // The pin is read once and written on press rather than through
   // `useAppearance`: that hook re-applies the whole stored appearance on every
   // appearance event, which would fight the fixture's page-wide text scale.
@@ -219,9 +246,16 @@ export function PrimaryNav({
   if (fullscreen || (keyboardOpen && !rail)) return null;
 
   const belongsTo = (root: string) => pathname === root || pathname.startsWith(`${root}/`);
+  // Search and Connect share one route and differ by scope, so the selection
+  // cannot be read from the pathname alone. Recovered is a Settings child but a
+  // first-class rail destination, so it is claimed before the Settings fallback.
+  const peopleScope = new URLSearchParams(search).get("scope") === "people";
   const selectedPath = activePath ?? (belongsTo("/chats") || belongsTo("/connections") ? "/chats"
+    : pathname === "/settings/returns" ? "/settings/returns"
     : belongsTo("/settings") || belongsTo("/profile") ? "/settings"
-    : belongsTo("/my") ? "/my" : belongsTo("/insights") ? "/insights" : belongsTo("/reactions") ? "/reactions" : pathname === "/search" ? "/" : pathname);
+    : belongsTo("/my") ? "/my" : belongsTo("/insights") ? "/insights" : belongsTo("/reactions") ? "/reactions"
+    : belongsTo("/saved") ? "/saved" : belongsTo("/notifications") ? "/notifications"
+    : pathname === "/search" ? (peopleScope ? "/search?scope=people" : "/search") : pathname);
 
   const createAction = (
     <Link to="/report" aria-label="Create report" className="fb-nav-create bg-primary text-on-primary">
@@ -230,7 +264,7 @@ export function PrimaryNav({
   );
 
   const railPinned = rail && railPinnedState;
-  const items = NAV.filter(({ to }) => rail || to !== "/insights").map(({ to, label, icon: Icon }) => {
+  const renderDestination = ({ to, label, icon: Icon }: { to: string; label: string; icon: LucideIcon }) => {
     const selected = selectedPath === to;
     const link = (
       <MotionLink
@@ -295,7 +329,11 @@ export function PrimaryNav({
     return <TooltipTrigger key={to} delay={350}>
       <Focusable>{link}</Focusable><Tooltip placement={rail ? "right" : "top"} className="fb-nav-tooltip">{label}</Tooltip>
     </TooltipTrigger>;
-  });
+  };
+
+  const railPrimary = NAV.map(renderDestination);
+  const railOthers = NAV_OTHERS.map(renderDestination);
+  const barItems = BAR_NAV.map(renderDestination);
 
   if (rail) {
     return (
@@ -321,7 +359,16 @@ export function PrimaryNav({
         <motion.div className="fb-nav-create-wrap" whileTap={pressFeedback.iconButton}>
           {createAction}
         </motion.div>
-        <div className="fb-nav-rail-list">{items.slice(0, -1)}</div>
+        {/* The rail scrolls, the identity control never does: Settings lives
+            inside that control (R1), so it has to stay reachable however many
+            destinations the rail carries. */}
+        <div className="fb-nav-rail-scroll">
+          <div className="fb-nav-rail-list">{railPrimary}</div>
+          <div className="fb-nav-rail-group">
+            {railPinned && <span className="fb-nav-rail-section">Others</span>}
+            <div className="fb-nav-rail-list">{railOthers}</div>
+          </div>
+        </div>
         <AccountMenu />
       </motion.nav>
     );
@@ -339,7 +386,7 @@ export function PrimaryNav({
       transition={{ duration: motionDurations.fast, ease: motionEasings.out }}
     >
       <div className="fb-nav-row">
-        <div className="fb-nav-pill">{items}</div>
+        <div className="fb-nav-pill">{barItems}</div>
         <motion.div className="fb-nav-create-wrap" whileTap={pressFeedback.iconButton}>
           {createAction}
         </motion.div>

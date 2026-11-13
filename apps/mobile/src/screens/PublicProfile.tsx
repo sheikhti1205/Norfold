@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { MapPin } from "lucide-react";
 import { useParams, useSearchParams } from "react-router";
 import type { PostItem, PublicProfile as PublicProfileShape } from "@norfold/shared";
 import { fetchPublicProfile, appendReportPage, hasMoreReports } from "../services/profile";
@@ -7,7 +8,6 @@ import { fetchReputationTier, REPUTATION_TIER_LABELS } from "../services/trust";
 import { UserAvatar } from "../components/UserAvatar";
 import { VerifiedBadge } from "../components/VerifiedBadge";
 import { BlockedByViewerShield } from "../components/BlockedByViewerShield";
-import { SafetyActions } from "../components/SafetyActions";
 import { SettingsGroup, SettingsPage, SettingsRow, StatusPill } from "../components/settings";
 import { useAuth } from "../auth";
 import { useSafetyLifetime } from "../utils/useSafetyLifetime";
@@ -158,34 +158,40 @@ function PublicProfileSession({ username }: { username: string }) {
             aria-label="Public profile"
             className="flex min-w-0 flex-col gap-3 py-2"
           >
-            <div className="flex w-full items-start justify-between gap-3">
-              <UserAvatar avatarUrl={profile.avatarUrl} username={profile.username} size={48} />
-              <SafetyActions reportPerson person={{ userId: profile.id, name: profile.displayName || profile.username }} />
+            {/* Reference anatomy: 64px avatar left, identity block beside it,
+                bio and location below, one meta line last. Verification is the
+                badge at the name, not a second row of pills; the overflow menu
+                lives once, in PeerIdentityActions, instead of twice. */}
+            <div className="flex min-w-0 items-start gap-4">
+              <UserAvatar avatarUrl={profile.avatarUrl} username={profile.username} size={64} />
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <h2 className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-lg font-bold leading-snug">
+                  <span className="min-w-0 break-words">{profile.displayName || profile.username}</span>
+                  <VerifiedBadge emailVerified={profile.emailVerified} phoneVerified={profile.phoneVerified}
+                    telegramPhoneVerified={(profile as { telegramPhoneVerified?: boolean }).telegramPhoneVerified} />
+                </h2>
+                <p className="break-all text-sm text-on-surface-variant">@{profile.username}</p>
+                {profile.locationLabel && (
+                  <p className="flex min-w-0 items-center gap-1 text-sm text-on-surface-variant">
+                    <MapPin size={14} aria-hidden="true" className="shrink-0" />
+                    <span className="min-w-0 break-words">{profile.locationLabel}</span>
+                  </p>
+                )}
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-on-surface-variant">
+                  <span>{formatJoined(profile.createdAt)}</span>
+                  {reputationLoading && <span role="status">Checking reputation…</span>}
+                  {reputationTier && (
+                    <StatusPill tone={reputationTier === "TRUSTED" ? "success" : reputationTier === "NORMAL" ? "accent" : "neutral"}>
+                      Reputation: {REPUTATION_TIER_LABELS[reputationTier as keyof typeof REPUTATION_TIER_LABELS] ?? reputationTier}
+                    </StatusPill>
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="flex w-full min-w-0 flex-col gap-0.5 text-start">
-            {profile.displayName && <p className="break-words text-base font-semibold">{profile.displayName}<VerifiedBadge emailVerified={profile.emailVerified} phoneVerified={profile.phoneVerified} telegramPhoneVerified={(profile as { telegramPhoneVerified?: boolean }).telegramPhoneVerified} /></p>}
-            <p className="break-all text-sm text-on-surface-variant">@{profile.username}</p>
-            <p className="text-xs text-on-surface-variant">{formatJoined(profile.createdAt)}</p>
-            {(profile.emailVerified || profile.phoneVerified) && (
-              <p className="flex flex-wrap gap-2">
-                {profile.emailVerified && <StatusPill tone="success">Email verified</StatusPill>}
-                {profile.phoneVerified && <StatusPill tone="neutral">Phone verified</StatusPill>}
-              </p>
+            {profile.bio && (
+              <p className="whitespace-pre-line break-words text-[0.9375rem] leading-relaxed text-on-surface">{profile.bio}</p>
             )}
-            {reputationLoading && (
-              <p className="text-xs text-on-surface-variant" role="status">Loading reputation…</p>
-            )}
-            {reputationTier && (
-              <p className="text-xs text-on-surface-variant">
-                Reputation: {REPUTATION_TIER_LABELS[reputationTier as keyof typeof REPUTATION_TIER_LABELS] ?? reputationTier}
-              </p>
-            )}
-            {profile.bio && <p className="break-words text-sm text-on-surface">{profile.bio}</p>}
-            {profile.locationLabel && (
-              <p className="break-words text-sm text-on-surface-variant">{profile.locationLabel}</p>
-            )}
-             {user && <PeerIdentityActions person={{ ...profile, contextReportId }} />}
-            </div>
+            {user && <PeerIdentityActions person={{ ...profile, contextReportId }} />}
           </section>
 
           {/* Conversation context is sensitive: it is shown only when this

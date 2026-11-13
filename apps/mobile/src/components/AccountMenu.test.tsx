@@ -42,7 +42,10 @@ describe("account menu", () => {
     const labels = within(dialog).getAllByRole("button").map((node) => node.textContent?.trim());
     expect(labels).toEqual(expect.arrayContaining(["Settings", "Appearance", "Log out"]));
     expect(within(dialog).getByRole("link", { name: /Activity preferences/ }).getAttribute("href")).toBe("/settings/notifications");
-    expect(within(dialog).getByRole("link", { name: /Saved/ }).getAttribute("href")).toBe("/saved");
+    expect(within(dialog).getByRole("link", { name: /Report a problem/ }).getAttribute("href")).toBe("/settings/feedback");
+    expect(within(dialog).getByRole("link", { name: /Help/ }).getAttribute("href")).toBe("/settings/help");
+    // Saved is a rail destination now; repeating it here was the extra row.
+    expect(within(dialog).queryByRole("link", { name: /Saved/ })).toBeNull();
   });
 
   it("opens a floating appearance preview with the real tiles, not a route", async () => {

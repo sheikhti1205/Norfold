@@ -60,12 +60,13 @@ export function Profile() {
     <SettingsPage title="Profile" backTo="/settings" backLabel="Back to Settings">
       <section
         aria-label="Account"
-        className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 py-2 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+        className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-2 py-2 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
       >
-        <UserAvatar avatarUrl={user.avatarUrl} username={user.username} size={48} />
+        <UserAvatar avatarUrl={user.avatarUrl} username={user.username} size={64} />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          {user.displayName && <p className="truncate text-lg font-semibold">{user.displayName}</p>}
+          <p className="truncate text-lg font-bold leading-snug">{user.displayName || `@${user.username}`}</p>
           <p className="truncate text-sm text-on-surface-variant">@{user.username}</p>
+          <p className="truncate text-sm text-on-surface-variant">{user.email}</p>
           {user.emailVerified ? (
             <p>
               <StatusPill tone="success">Email verified</StatusPill>
@@ -75,7 +76,6 @@ export function Profile() {
               Verify email
             </Link>
           )}
-          <p className="truncate text-sm text-on-surface-variant">{user.email}</p>
         </div>
         <Link
           to="/profile/edit"
