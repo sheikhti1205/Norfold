@@ -30,6 +30,23 @@ const person = {
   avatarUrl: null,
 } as SearchedProfile;
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+] as const;
+
+/** Today's month, so the tests do not depend on the wall clock's month. */
+function thisMonth(day: number) {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  return {
+    year,
+    iso: `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+    label: `${MONTH_NAMES[month]} ${day}, ${year}`,
+  };
+}
+
 function RouteProbe() {
   const location = useLocation();
   return <output data-testid="route">{location.pathname + location.search}</output>;
@@ -50,6 +67,14 @@ async function openSearch() {
   fireEvent.click(trigger);
   const overlay = await screen.findByRole("search");
   return { overlay, trigger };
+}
+
+async function openFilters() {
+  const { overlay } = await openSearch();
+  const toggle = within(overlay).getByRole("button", { name: "Advanced search" });
+  fireEvent.click(toggle);
+  const bar = within(overlay).getByRole("group", { name: "Advanced search" });
+  return { overlay, toggle, bar };
 }
 
 beforeEach(() => {
@@ -91,13 +116,13 @@ describe("app-wide search", () => {
     expect(io.searchPeople).toHaveBeenCalledWith("wallet", expect.objectContaining({ limit: 5 }));
   });
 
-  it("says so and offers to clear the filters when nothing matches", async () => {
+  it("says so and offers to start over when nothing matches", async () => {
     render(<Harness />);
     const { overlay } = await openSearch();
     const field = within(overlay).getByRole("searchbox");
     fireEvent.change(field, { target: { value: "zzzz" } });
     expect(await within(overlay).findByText("No results found")).toBeTruthy();
-    fireEvent.click(within(overlay).getByRole("button", { name: "Clear filters" }));
+    fireEvent.click(within(overlay).getByRole("button", { name: "Clear search" }));
     expect((field as HTMLInputElement).value).toBe("");
     expect(await within(overlay).findByText("Recent searches")).toBeTruthy();
   });
@@ -125,19 +150,202 @@ describe("app-wide search", () => {
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("opens the advanced card, keeps focus in the bar and applies without leaving", async () => {
+  it("opens compact filter pills and applies a type without leaving the search", async () => {
     render(<Harness />);
     const { overlay } = await openSearch();
-    const advanced = within(overlay).getByRole("button", { name: "Advanced search" });
-    fireEvent.click(advanced);
-    const card = within(overlay).getByRole("group", { name: "Advanced search" });
-    fireEvent.change(within(card).getByLabelText("Post type"), { target: { value: "LOST" } });
-    fireEvent.click(within(card).getByRole("button", { name: "Apply" }));
-    expect(within(overlay).queryByRole("group", { name: "Advanced search" })).toBeNull();
-    expect(document.activeElement).toBe(advanced);
+    const toggle = within(overlay).getByRole("button", { name: "Advanced search" });
+    fireEvent.click(toggle);
+    const bar = within(overlay).getByRole("group", { name: "Advanced search" });
+    // The old form used native selects; every filter is now a pill + panel.
+    expect(within(bar).queryByRole("combobox")).toBeNull();
+
+    fireEvent.click(within(bar).getByRole("button", { name: "Type" }));
+    const menu = within(bar).getByRole("group", { name: "Type" });
+    fireEvent.click(within(menu).getByRole("button", { name: "Lost" }));
+
+    expect(within(bar).queryByRole("group", { name: "Type" })).toBeNull();
+    const activePill = within(bar).getByRole("button", { name: "Type: Lost" });
+    expect(document.activeElement).toBe(activePill);
     expect(screen.getByTestId("route").textContent).toBe("/");
     // A filter with no words still searches: it is a real query state.
     await waitFor(() => expect(io.fetchFeed).toHaveBeenCalledWith(expect.objectContaining({ type: "LOST" })));
+  });
+
+  it("opens a designed calendar and lets the month and year drill down", async () => {
+    render(<Harness />);
+    const { overlay, bar } = await openFilters();
+
+    fireEvent.click(within(bar).getByRole("button", { name: "Date" }));
+    const menu = within(bar).getByRole("group", { name: "Date lost or found" });
+    expect(within(menu).getByRole("button", { name: "Last 7 days" })).toBeTruthy();
+    expect(within(menu).getByRole("button", { name: "Last 30 days" })).toBeTruthy();
+    expect(within(menu).getByRole("button", { name: "This year" })).toBeTruthy();
+    // No native date inputs survive the redesign.
+    expect(within(menu).queryByRole("textbox")).toBeNull();
+
+    fireEvent.click(within(menu).getByRole("button", { name: /^From date/ }));
+    expect(within(bar).getByRole("group", { name: "Start date" })).toBeTruthy();
+    // The pills stay mounted (so their scroll position survives) while the
+    // results card yields the room to the calendar.
+    expect(within(bar).getByRole("button", { name: /^Date/ })).toBeTruthy();
+    expect(within(overlay).queryByText("Recent searches")).toBeNull();
+
+    // Month opens the month list; choosing one returns to that month's days.
+    fireEvent.click(within(menu).getByRole("button", { name: "Choose month" }));
+    fireEvent.click(within(menu).getByRole("button", { name: "March" }));
+    expect(within(menu).getByRole("button", { name: "Choose month" }).textContent).toBe("March");
+
+    // Year opens the year list; choosing one shows that year's months.
+    const pageStart = Math.floor(thisMonth(1).year / 12) * 12;
+    fireEvent.click(within(menu).getByRole("button", { name: "Choose year" }));
+    fireEvent.click(within(menu).getByRole("button", { name: String(pageStart + 1) }));
+    fireEvent.click(within(menu).getByRole("button", { name: "June" }));
+
+    const chosenYear = pageStart + 1;
+    fireEvent.click(within(menu).getByRole("button", { name: `June 15, ${chosenYear}` }));
+    await waitFor(() => expect(io.fetchFeed).toHaveBeenCalledWith(expect.objectContaining({
+      dateFrom: `${chosenYear}-06-15`,
+    })));
+
+    // The date options return, the trigger shows the day, and focus is on it.
+    const fromTrigger = within(menu).getByRole("button", { name: /^From date/ });
+    expect(fromTrigger.textContent).toContain("Jun 15");
+    expect(document.activeElement).toBe(fromTrigger);
+  });
+
+  it("scrolls the open pill back into view when a chosen value widens it", async () => {
+    render(<Harness />);
+    const { bar } = await openFilters();
+
+    const datePill = within(bar).getByRole("button", { name: "Date" });
+    fireEvent.click(datePill);
+    const menu = within(bar).getByRole("group", { name: "Date lost or found" });
+    fireEvent.click(within(menu).getByRole("button", { name: /^From date/ }));
+
+    // A phone cannot fit every pill. Choosing a day widens "Date" into
+    // "From Nov 15"; the row must follow the label instead of leaving half
+    // the value scrolled out of sight.
+    const scroll = vi.fn();
+    datePill.scrollIntoView = scroll;
+    fireEvent.click(within(menu).getByRole("button", { name: thisMonth(15).label }));
+
+    await waitFor(() => expect(scroll).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" }));
+    expect(within(bar).getByRole("button", { name: /^Date/ })).toBe(datePill);
+  });
+
+  it("disables days outside the other bound and clears one bound", async () => {
+    render(<Harness />);
+    const { bar } = await openFilters();
+    fireEvent.click(within(bar).getByRole("button", { name: "Date" }));
+    const menu = within(bar).getByRole("group", { name: "Date lost or found" });
+
+    const from = thisMonth(15);
+    const early = thisMonth(10);
+    const late = thisMonth(20);
+
+    // Set From first.
+    fireEvent.click(within(menu).getByRole("button", { name: /^From date/ }));
+    fireEvent.click(within(menu).getByRole("button", { name: from.label }));
+    await waitFor(() => expect(io.fetchFeed).toHaveBeenCalledWith(expect.objectContaining({
+      dateFrom: from.iso,
+    })));
+
+    // To cannot precede From: the calendar disables day 10 and allows day 20.
+    fireEvent.click(within(menu).getByRole("button", { name: /^To date/ }));
+    const disabledDay = within(menu).getByRole("button", { name: early.label }) as HTMLButtonElement;
+    const allowedDay = within(menu).getByRole("button", { name: late.label }) as HTMLButtonElement;
+    expect(disabledDay.disabled).toBe(true);
+    expect(allowedDay.disabled).toBe(false);
+
+    fireEvent.click(allowedDay);
+    await waitFor(() => expect(io.fetchFeed).toHaveBeenCalledWith(expect.objectContaining({
+      dateFrom: from.iso,
+      dateTo: late.iso,
+    })));
+
+    // Clear one bound without touching the other.
+    fireEvent.click(within(menu).getByRole("button", { name: /^From date/ }));
+    fireEvent.click(within(menu).getByRole("button", { name: "Clear" }));
+    await waitFor(() => {
+      const last = io.fetchFeed.mock.calls.at(-1)?.[0] as Record<string, unknown> | undefined;
+      expect(last?.dateFrom).toBeUndefined();
+      expect(last?.dateTo).toBe(late.iso);
+    });
+    expect(within(menu).getByRole("button", { name: "From date, any date" })).toBeTruthy();
+  });
+
+  it("searches the category list and keeps the chosen category in the pill", async () => {
+    render(<Harness />);
+    const { bar } = await openFilters();
+    fireEvent.click(within(bar).getByRole("button", { name: "Category" }));
+    const menu = within(bar).getByRole("group", { name: "Category" });
+    const field = within(menu).getByRole("searchbox", { name: "Find a category" });
+    expect(document.activeElement).toBe(field);
+
+    fireEvent.change(field, { target: { value: "wallet" } });
+    expect(within(menu).getByRole("button", { name: "Bags & Wallets" })).toBeTruthy();
+    expect(within(menu).queryByRole("button", { name: "Electronics" })).toBeNull();
+    fireEvent.click(within(menu).getByRole("button", { name: "Bags & Wallets" }));
+
+    expect(within(bar).getByRole("button", { name: "Category: Bags & Wallets" })).toBeTruthy();
+    await waitFor(() => expect(io.fetchFeed).toHaveBeenCalledWith(expect.objectContaining({ category: "Bags & Wallets" })));
+  });
+
+  it("counts active filters, clears them from the bar, and keeps the query", async () => {
+    render(<Harness />);
+    const { overlay, bar } = await openFilters();
+    fireEvent.click(within(overlay).getByRole("searchbox"));
+    fireEvent.change(within(overlay).getByRole("searchbox"), { target: { value: "wallet" } });
+
+    fireEvent.click(within(bar).getByRole("button", { name: "Type" }));
+    fireEvent.click(within(within(bar).getByRole("group", { name: "Type" })).getByRole("button", { name: "Lost" }));
+    fireEvent.click(within(bar).getByRole("button", { name: "Status" }));
+    fireEvent.click(within(within(bar).getByRole("group", { name: "Status" })).getByRole("button", { name: "Open" }));
+
+    const toggle = within(overlay).getByRole("button", { name: "Advanced search, 2 active" });
+    expect(within(toggle).getByText("2")).toBeTruthy();
+
+    // Clear is a real button beside the filter icon, not an underlined link
+    // hiding at the end of the pill row.
+    const clear = within(overlay).getByRole("button", { name: "Clear filters" });
+    expect(clear.nextElementSibling).toBe(toggle);
+    expect(within(bar).queryByRole("button", { name: "Clear filters" })).toBeNull();
+
+    fireEvent.click(clear);
+    expect(document.activeElement).toBe(toggle);
+    expect(within(bar).getByRole("button", { name: "Type" })).toBeTruthy();
+    expect(within(bar).getByRole("button", { name: "Status" })).toBeTruthy();
+    expect(within(overlay).getByRole("searchbox")).toHaveProperty("value", "wallet");
+    expect(within(overlay).queryByRole("button", { name: "Clear filters" })).toBeNull();
+  });
+
+  it("closes the calendar, the filter panel, the filter row and the search one Escape at a time", async () => {
+    render(<Harness />);
+    const { overlay, toggle, bar } = await openFilters();
+
+    fireEvent.click(within(bar).getByRole("button", { name: "Date" }));
+    fireEvent.click(within(bar).getByRole("button", { name: /^From date/ }));
+    expect(within(bar).getByRole("group", { name: "Start date" })).toBeTruthy();
+
+    // One: the calendar returns to the date options, focus on its trigger.
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(within(bar).queryByRole("group", { name: "Start date" })).toBeNull();
+    expect(within(bar).getByRole("button", { name: "Last 7 days" })).toBeTruthy();
+    expect(document.activeElement).toBe(within(bar).getByRole("button", { name: /^From date/ }));
+
+    // Two: the date panel closes and the Date pill takes focus.
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(within(bar).queryByRole("group", { name: "Date lost or found" })).toBeNull();
+    expect(document.activeElement).toBe(within(bar).getByRole("button", { name: "Date" }));
+
+    // Three: the filter row closes.
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(within(overlay).queryByRole("group", { name: "Advanced search" })).toBeNull();
+    expect(document.activeElement).toBe(toggle);
+
+    // Four: the search closes.
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("search")).toBeNull());
   });
 
   it("closes on an outside press", async () => {
