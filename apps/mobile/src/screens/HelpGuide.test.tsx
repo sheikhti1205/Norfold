@@ -83,8 +83,8 @@ describe("HelpGuide", () => {
     fireEvent.change(screen.getByRole("searchbox", { name: /search help topics/i }), {
       target: { value: "notif" },
     });
-    // Scope to the local results list: the shared chrome also carries a
-    // "Notifications" utility link.
+    // Scope to the local results list so the check cannot pass on another
+    // surface's matching link.
     const results = screen.getByRole("list", { name: /settings search results/i });
     expect(within(results).getByRole("link", { name: "Notifications" })).toBeTruthy();
     expect(within(results).queryByRole("link", { name: /replay introduction/i })).toBeNull();

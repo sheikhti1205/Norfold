@@ -18,15 +18,22 @@ export function OverlayDepthProvider({ depth, children }: { depth: number; child
  * React Aria alone owns focus, outside interaction and scroll containment.
  * Mount INSIDE the portal so a closed/collection-only popover registers nothing.
  */
-export function OverlayStackBridge({ onClose, onBack, dismissible = true }: {
+export function OverlayStackBridge({ onClose, onBack, onEscape, dismissible = true }: {
   onClose: () => void;
   /** A surface with its own history can walk back before it dismisses. */
   onBack?: () => void;
+  /**
+   * First refusal on Escape for a child layer that opens over this one (the
+   * settings window's search field). Returning true consumes the key so the
+   * parent stays open; the bridge owns the one document listener, because a
+   * second capture listener would never run after `stopImmediatePropagation`.
+   */
+  onEscape?: () => boolean;
   dismissible?: boolean;
 }) {
   const layer = useModalLayer(true);
-  const latest = useRef({ onClose, onBack, dismissible });
-  latest.current = { onClose, onBack, dismissible };
+  const latest = useRef({ onClose, onBack, onEscape, dismissible });
+  latest.current = { onClose, onBack, onEscape, dismissible };
   useEffect(() => {
     const close = () => { if (latest.current.dismissible) latest.current.onClose(); };
     const back = () => {
@@ -40,6 +47,7 @@ export function OverlayStackBridge({ onClose, onBack, dismissible = true }: {
       // exactly one layer, including a submenu, and cannot close its parent.
       event.preventDefault();
       event.stopImmediatePropagation();
+      if (latest.current.onEscape?.()) return;
       close();
     };
     document.addEventListener("keydown", escape, true);

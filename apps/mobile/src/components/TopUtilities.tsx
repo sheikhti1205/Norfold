@@ -4,6 +4,7 @@ import { Bell, Search } from "lucide-react";
 import { useAuth } from "../auth";
 import { NotificationPopover } from "./NotificationPopover";
 import { COMPACT_MAX_PX, useViewportWidth } from "./responsive";
+import { toggleGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
 import { fetchUnreadCount } from "../services/notifications";
 import { INBOX_CHANGED_EVENT } from "../services/notificationSignals";
 import { onRealtime } from "../services/realtime";
@@ -27,6 +28,7 @@ export function TopUtilities({ liveBadge = true, ...props }: TopUtilitiesProps) 
 function AccountTopUtilities({ showSearch = true, liveBadge, unreadCount, account, allowPreview }: TopUtilitiesProps & { allowPreview: boolean }) {
   const width = useViewportWidth();
   const location = useLocation();
+  const searchOpen = useGlobalSearchOpen();
   const [unread, setUnread] = useState<number | null>(null);
   useEffect(() => {
     if (!liveBadge) return;
@@ -61,7 +63,10 @@ function AccountTopUtilities({ showSearch = true, liveBadge, unreadCount, accoun
     {count !== null && count > 0 && <span aria-hidden="true" data-testid="notifications-unread-badge" className="fb-notification-badge bg-error text-on-error">{count > 99 ? "99+" : count}</span>}
   </>;
   return <nav aria-label="App utilities" className="fb-top-utilities">
-    {showSearch && <Link to="/search" aria-label="Search" className="fb-icon-control"><Search size={20} aria-hidden="true" /></Link>}
+    {showSearch && <button type="button" aria-label="Search" aria-expanded={searchOpen}
+      className="fb-icon-control" onClick={(event) => toggleGlobalSearch(event.currentTarget)}>
+      <Search size={20} aria-hidden="true" />
+    </button>}
     {allowPreview && width >= COMPACT_MAX_PX && location.pathname !== "/notifications"
       ? <NotificationPopover key={location.key} trigger={bell} />
       : <Link to="/notifications" aria-label="Notifications" className="fb-icon-control relative">{bell}</Link>}

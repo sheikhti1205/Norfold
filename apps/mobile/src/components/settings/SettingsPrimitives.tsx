@@ -6,7 +6,6 @@ import type { Theme } from "../../theme";
 import { density } from "../../design/density";
 import { colorTokensFor } from "../../design/colorSystem";
 import { BackButton } from "../BackButton";
-import { TopUtilities } from "../TopUtilities";
 import "./settings.css";
 
 // Legacy category/tone names are accepted at the boundary but render neutral.
@@ -37,11 +36,16 @@ export interface SettingsPageProps {
   className?: string;
   headingLevel?: 1 | 2;
   autoFocus?: boolean;
-  /** Global search/notification utilities share this one row (default true). */
-  utilities?: boolean;
 }
-/** Content only: Shell remains the sole viewport/safe-area/scroll owner. */
-export function SettingsPage({ title, description, children, backTo, backState, backLabel = "Back to Settings", className = "", headingLevel = 1, autoFocus = true, utilities = true }: SettingsPageProps) {
+/**
+ * Content only: Shell remains the sole viewport/safe-area/scroll owner.
+ *
+ * The bar holds the escape control and the title, nothing else. Settings search
+ * is owned by the surface that presents the tree - the floating window's top
+ * search, or the standalone page's own field - so a second global search icon
+ * and a notification bell never appear here (owner order 2026-11-13).
+ */
+export function SettingsPage({ title, description, children, backTo, backState, backLabel = "Back to Settings", className = "", headingLevel = 1, autoFocus = true }: SettingsPageProps) {
   const heading = useRef<HTMLHeadingElement>(null);
   const Heading = headingLevel === 1 ? "h1" : "h2";
   useEffect(() => {
@@ -58,7 +62,6 @@ export function SettingsPage({ title, description, children, backTo, backState, 
     <div className="fb-settings-sticky">
       {backTo && <BackButton fallbackTo={backTo} fallbackState={backState} label={backLabel} />}
       <Heading ref={heading} tabIndex={-1}>{title}</Heading>
-      {utilities && <TopUtilities />}
     </div>
     {description && <p className="fb-settings-page-description">{description}</p>}
     <div className="fb-settings-page-content">{children}</div>

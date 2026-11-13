@@ -1,9 +1,10 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "../auth";
 import { ThemeProvider } from "../theme";
 import { FixtureRoute } from "./FixtureRoute";
+import { ChromeFixtureRoute } from "./ChromeFixtureRoute";
 
 /**
  * L-FIXTURE static preflight mount (see ./README.md).
@@ -14,6 +15,11 @@ import { FixtureRoute } from "./FixtureRoute";
  * Supabase config — the reviewer would get a blank page. This mount keeps the
  * two providers the components genuinely read (theme tokens, auth shape) and
  * starts auth in its no-session state, so nothing touches the network.
+ *
+ * `main.tsx` sends every `#/__fixture*` hash here, so the route table mirrors
+ * the fixture surfaces: the section catalogue at `/__fixture`, and the
+ * full-viewport chrome stage at `/__fixture/chrome` for surfaces that are
+ * `position: fixed` and cannot be reviewed inside a frame.
  */
 export function mountFixturePreview(host: HTMLElement, initialEntry = "/"): void {
   createRoot(host).render(
@@ -21,7 +27,12 @@ export function mountFixturePreview(host: HTMLElement, initialEntry = "/"): void
       <ThemeProvider>
         <AuthProvider boot={false}>
           <MemoryRouter initialEntries={[initialEntry]}>
-            <FixtureRoute />
+            <Routes>
+              <Route path="/__fixture" element={<FixtureRoute />} />
+              <Route path="/__fixture/chrome" element={<ChromeFixtureRoute />} />
+              {/* Any other reviewer flag keeps the catalogue, as before. */}
+              <Route path="*" element={<FixtureRoute />} />
+            </Routes>
           </MemoryRouter>
         </AuthProvider>
       </ThemeProvider>

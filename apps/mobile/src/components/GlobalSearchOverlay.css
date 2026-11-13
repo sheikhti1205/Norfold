@@ -1,0 +1,244 @@
+/* The one search surface. Geometry and copy follow
+   docs/design/nav/prototype.html: a floating pill bar over a blurred page,
+   centred on wide screens and anchored 8px under the measured app bar on a
+   phone. The layer order is explicit because the rail is positioned: backdrop
+   (70) < app bar (72, kept crisp and operable) < search (74) < settings window
+   (80). Nothing here moves layout. */
+
+.fb-search-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: color-mix(in srgb, var(--scrim) 42%, transparent);
+  -webkit-backdrop-filter: blur(12px) saturate(1.05);
+  backdrop-filter: blur(12px) saturate(1.05);
+}
+
+/* The app bar paints above the backdrop so its own search button stays
+   readable while the overlay it opened is up. */
+[data-global-search="true"] :is(.fb-app-bar, [data-testid="home-search-row"]) {
+  position: relative;
+  z-index: 72;
+}
+
+.fb-search-overlay {
+  position: fixed;
+  z-index: 74;
+  top: 50%;
+  left: 50%;
+  /* Center with the individual `translate` property, not `transform`: Motion
+     writes its scale animation into the inline `transform`, which would wipe a
+     CSS translate and leave the overlay anchored at the screen's centre rather
+     than centred on it (measured: right edge at 1280 on a 1280 viewport). */
+  translate: -50% -50%;
+  width: min(640px, calc(100% - 48px));
+  max-height: calc(100% - 48px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--fb-on-surface);
+}
+
+.fb-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  min-height: 48px;
+  padding: 0 4px 0 12px;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 999px;
+  background: var(--fb-surface-container-low);
+  box-shadow: var(--shadow-md);
+  color: var(--fb-on-surface-variant);
+}
+/* The text-entry exception: no accent ring anywhere in the pill. Focus moves
+   only the border to on-surface, exactly as the design contract requires. */
+.fb-search-bar:focus-within { border-color: var(--fb-on-surface); }
+.fb-search-magnifier { flex: none; }
+.fb-search-field {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+/* The visible prompt is a real element because Chrome ignores text-overflow on
+   ::placeholder; this one elides at any width instead of clipping mid-word. */
+.fb-search-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--fb-on-surface-variant);
+  font-size: 0.9375rem;
+}
+.fb-search-placeholder > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fb-search-bar input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--fb-on-surface);
+  font: inherit;
+  font-size: 0.9375rem;
+}
+.fb-search-bar input::-webkit-search-cancel-button { display: none; }
+
+.fb-search-iconbtn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: var(--fb-on-surface-variant);
+  cursor: pointer;
+}
+.fb-search-iconbtn:hover { background: var(--fb-surface-container); color: var(--fb-on-surface); }
+.fb-search-iconbtn:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; }
+.fb-search-iconbtn[data-active] { color: var(--fb-on-surface); background: var(--fb-surface-container-high); }
+
+.fb-search-card,
+.fb-search-filters {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 16px;
+  background: var(--fb-surface-container-low);
+  box-shadow: var(--shadow-md);
+}
+.fb-search-card { display: flex; flex-direction: column; gap: 2px; }
+
+.fb-search-card-title {
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--fb-on-surface-variant);
+}
+
+.fb-search-list { list-style: none; margin: 0; padding: 0; }
+
+.fb-search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  color: var(--fb-on-surface);
+  text-align: start;
+  cursor: pointer;
+}
+.fb-search-row:hover { background: var(--fb-surface-container); }
+.fb-search-row:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; }
+.fb-search-row-icon { flex: none; color: var(--fb-on-surface-variant); }
+.fb-search-row-copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.fb-search-row-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fb-search-row-meta {
+  font-size: 0.75rem;
+  color: var(--fb-on-surface-variant);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fb-search-note {
+  margin: 0;
+  padding: 20px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--fb-on-surface-variant);
+}
+.fb-search-note p { margin: 0; }
+.fb-search-note strong { color: var(--fb-on-surface); font-size: 0.9375rem; font-weight: 600; }
+
+.fb-search-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 10px;
+}
+.fb-search-filter-row label { flex: 1; min-width: 0; font-size: 0.875rem; }
+.fb-search-filter-row select {
+  min-height: 36px;
+  max-width: 55%;
+  padding: 0 8px;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 10px;
+  background: var(--fb-surface);
+  color: var(--fb-on-surface);
+  font: inherit;
+  font-size: 0.8125rem;
+  outline: none;
+}
+.fb-search-filter-row select:focus { border-color: var(--fb-on-surface); }
+
+.fb-search-filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 8px 2px;
+}
+.fb-search-reset,
+.fb-search-apply {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fb-search-reset {
+  border: 1px solid var(--fb-outline-variant);
+  color: var(--fb-on-surface);
+  background: transparent;
+}
+.fb-search-reset:hover { background: var(--fb-surface-container); }
+.fb-search-apply {
+  border: 0;
+  background: var(--fb-primary);
+  color: var(--fb-on-primary);
+}
+.fb-search-reset:focus-visible,
+.fb-search-apply:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; }
+
+/* Phone: anchored below the app bar, 8px margin either side, and the height
+   runs to 12px above the bottom edge. The inline `top` is measured from the
+   real bar, so a taller bar at 200% text never hides the field. */
+@media (max-width: 599px) {
+  .fb-search-overlay {
+    translate: -50% 0;
+    width: calc(100% - 16px);
+  }
+  .fb-search-bar { min-height: 52px; }
+}

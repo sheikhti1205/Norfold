@@ -52,6 +52,7 @@ import { settingsDestinations, settingsSectionFor, type SettingsSection } from "
 import type { LucideIcon } from "lucide-react";
 import { SettingsProfileHeader } from "./settings/SettingsProfileHeader";
 import { SettingsNestedPages } from "./settings/SettingsNestedGroup";
+import { useSettingsWindowHosted } from "../components/settingsWindowHost";
 import { searchSettings } from "../services/settingsIndex";
 import { useFeedLayoutPreference } from "../services/feedLayoutPreference";
 import { resolveFeedLayout, useViewportWidth } from "../components/responsive";
@@ -181,6 +182,9 @@ function SettingsNavigation({ detailSelected }: { detailSelected: boolean }) {
   const { settings } = useAppearance();
   const { layout: feedLayout } = useFeedLayoutPreference();
   const viewportWidth = useViewportWidth();
+  // The floating window owns settings search in its top bar; the standalone
+  // page keeps the in-page field. Never both on one surface.
+  const windowHosted = useSettingsWindowHosted();
   const [query, setQuery] = useState("");
   const [notifValue, setNotifValue] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
@@ -320,11 +324,11 @@ function SettingsNavigation({ detailSelected }: { detailSelected: boolean }) {
     <SettingsPage title="Settings" className="fb-settings-root" headingLevel={detailSelected ? 2 : 1} autoFocus={!detailSelected}>
       <SettingsNestedPages>
       <SettingsProfileHeader user={user} />
-      <SettingsSearch
+      {!windowHosted && <SettingsSearch
         query={query}
         onQueryChange={setQuery}
         results={matches && matches.length > 0 ? matches : undefined}
-      />
+      />}
       {matches ? (
         matches.length === 0 && (
           <div className="fb-settings-empty">

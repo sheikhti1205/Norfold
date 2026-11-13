@@ -26,7 +26,6 @@ export function Terms({ publicView = false }: { publicView?: boolean }) {
       description="What Norfold is, and what each of us is responsible for."
       backTo={publicView ? "/" : "/settings"}
       backState={publicView ? { showPublic: true } : undefined}
-      utilities={!publicView}
       backLabel={publicView ? "Back to Norfold" : "Back to Settings"}
     >
       <Paragraph>Revised 3 November 2026. Norfold was previously known as FindBack; findbackapp.social remains the current service address.</Paragraph>
@@ -106,7 +105,6 @@ export function PrivacyPolicy({ publicView = false }: { publicView?: boolean }) 
       description="What Norfold keeps, where it keeps it, and what you can remove."
       backTo={publicView ? "/" : "/settings"}
       backState={publicView ? { showPublic: true } : undefined}
-      utilities={!publicView}
       backLabel={publicView ? "Back to Norfold" : "Back to Settings"}
     >
       <Paragraph>Revised 3 November 2026. Norfold was previously known as FindBack; findbackapp.social remains the current service address.</Paragraph>
@@ -217,7 +215,6 @@ export function CommunityGuidelines({ publicView = false }: { publicView?: boole
       description="How to post so that Norfold stays useful for everyone."
       backTo={publicView ? "/" : "/settings"}
       backState={publicView ? { showPublic: true } : undefined}
-      utilities={!publicView}
       backLabel={publicView ? "Back to Norfold" : "Back to Settings"}
     >
       <Paragraph>Revised 3 November 2026. Norfold was previously known as FindBack; findbackapp.social remains the current service address.</Paragraph>

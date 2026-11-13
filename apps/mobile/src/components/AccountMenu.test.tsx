@@ -61,9 +61,9 @@ describe("account menu", () => {
       "Help",
       "Log out",
     ]);
-    expect(within(dialog).getByRole("link", { name: /Activity preferences/ }).getAttribute("href")).toBe("/settings/notifications");
-    expect(within(dialog).getByRole("link", { name: /Report a problem/ }).getAttribute("href")).toBe("/settings/feedback");
-    expect(within(dialog).getByRole("link", { name: /Help/ }).getAttribute("href")).toBe("/settings/help");
+    expect(within(dialog).getByRole("button", { name: /Activity preferences/ })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: /Report a problem/ })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: /^Help$/ })).toBeTruthy();
     // Saved is a rail destination; Saved/Appearance are no longer menu rows.
     expect(within(dialog).queryByRole("link", { name: /Saved/ })).toBeNull();
     expect(within(dialog).queryByRole("button", { name: /^Appearance$/ })).toBeNull();
@@ -80,13 +80,27 @@ describe("account menu", () => {
     expect(within(panel).getByRole("button", { name: /Open Personalization/ })).toBeTruthy();
     // The rows are replaced, not painted beside: no Settings row while the panel is open.
     expect(within(dialog).queryByRole("button", { name: /^Settings$/ })).toBeNull();
+    fireEvent.click(within(panel).getByRole("button", { name: /Open Personalization/ }));
+    expect(onOpenSettings).toHaveBeenCalledWith("/settings/appearance");
   });
 
   it("opens the floating settings window from the Settings row instead of a nested option list", async () => {
     renderMenu();
     const dialog = await openMenu();
     fireEvent.click(within(dialog).getByRole("button", { name: /^Settings$/ }));
-    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    expect(onOpenSettings).toHaveBeenCalledWith("/settings");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Account" })).toBeNull());
+  });
+
+  it.each([
+    ["Activity preferences", "/settings/notifications"],
+    ["Report a problem", "/settings/feedback"],
+    ["Help", "/settings/help"],
+  ])("opens %s inside the settings window at %s", async (label, path) => {
+    renderMenu();
+    const dialog = await openMenu();
+    fireEvent.click(within(dialog).getByRole("button", { name: new RegExp(`^${label}$`) }));
+    expect(onOpenSettings).toHaveBeenCalledWith(path);
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Account" })).toBeNull());
   });
 
