@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import { Capacitor } from "@capacitor/core";
 import { Link, useLocation, useNavigate } from "react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { Archive, BarChart3, Bell, Bookmark, ClipboardList, Heart, Home, MessageCircle, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings as SettingsIcon, UserRound, type LucideIcon } from "lucide-react";
+import { Archive, BarChart3, Bell, Bookmark, ClipboardList, Heart, Home, MessageCircle, Plus, Search, Settings as SettingsIcon, UserRound, type LucideIcon } from "lucide-react";
 import { Focusable, Tooltip, TooltipTrigger } from "react-aria-components";
 import { TabTapProvider, useTabTap } from "./TabTap";
 import { LiveRegion } from "./LiveRegion";
@@ -14,6 +14,7 @@ import { requestHistorySuppression } from "./backNavigation";
 import { NavigationSetup } from "./NavigationSetup";
 import { RoleOfferNotice } from "./RoleOfferNotice";
 import { AccountMenu } from "./AccountMenu";
+import { BrandMark } from "./BrandMark";
 import { SettingsWindow } from "./SettingsWindow";
 import { GlobalSearchOverlay } from "./GlobalSearchOverlay";
 import { toggleGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
@@ -240,9 +241,11 @@ export function Shell() {
 /**
  * The one primary navigation, rendered as a bottom bar or a side rail.
  *
- * Both layouts share destinations, selection and create action. Notifications
- * belong to TopUtilities, never this list. `activePath` allows a deterministic
- * visual fixture; normal navigation is router-owned.
+ * Both layouts share destinations and selection. The rail no longer carries the
+ * large create button: it moved beside the bell in TopUtilities, so the phone
+ * bar keeps its floating + and the rail head is the app mark that pins the
+ * column. Notifications belong to TopUtilities, never this list. `activePath`
+ * allows a deterministic visual fixture; normal navigation is router-owned.
  */
 export function PrimaryNav({
   layout = "bottom",
@@ -458,9 +461,11 @@ export function PrimaryNav({
         {body}
       </MotionLink>
     );
-    // A pinned panel names every row in place, so a hover tooltip would repeat
-    // what is already on screen.
-    if (railPinned) return trigger;
+    // The rail names its destinations in place on hover/focus (and always when
+    // pinned), so a tooltip would repeat a label that is already on screen.
+    // The bottom bar keeps its tooltip: the selected label there is the only
+    // one painted.
+    if (rail) return trigger;
     return <TooltipTrigger key={label} delay={350}>
       <Focusable>{trigger}</Focusable><Tooltip placement={rail ? "right" : "top"} className="fb-nav-tooltip">{label}</Tooltip>
     </TooltipTrigger>;
@@ -485,23 +490,28 @@ export function PrimaryNav({
         transition={{ duration: motionDurations.fast, ease: motionEasings.out }}
       >
         <div className="fb-nav-rail-head">
-          {railPinned && <span className="fb-nav-wordmark">Norfold</span>}
-          <button type="button" className="fb-nav-pin" aria-pressed={railPinned}
+          {/* The app mark is the expand/collapse control (owner order 2026-11-13):
+              the name sits beside it whenever the column has room, and the mark
+              alone identifies the app in the icon rail. aria-pressed keeps the
+              control a stateful toggle for assistive tech and existing tests. */}
+          <button
+            type="button"
+            className="fb-nav-brand"
+            aria-pressed={railPinned}
             aria-label={railPinned ? "Collapse navigation" : "Expand navigation"}
-            onClick={toggleRailPin}>
-            {railPinned ? <PanelLeftClose size={20} aria-hidden="true" /> : <PanelLeftOpen size={20} aria-hidden="true" />}
+            onClick={toggleRailPin}
+          >
+            <BrandMark size={28} shape="tile" alt="" className="fb-nav-brand-mark" />
+            <span className="fb-nav-wordmark">Norfold</span>
           </button>
         </div>
-        <motion.div className="fb-nav-create-wrap" whileTap={pressFeedback.iconButton}>
-          {createAction}
-        </motion.div>
         {/* The rail scrolls, the identity control never does: Settings lives
             inside that control (R1), so it has to stay reachable however many
             destinations the rail carries. */}
         <div className="fb-nav-rail-scroll">
           <div className="fb-nav-rail-list">{railPrimary}</div>
           <div className="fb-nav-rail-group">
-            {railPinned && <span className="fb-nav-rail-section">Others</span>}
+            <span className="fb-nav-rail-section">Others</span>
             <div className="fb-nav-rail-list">{railOthers}</div>
           </div>
         </div>

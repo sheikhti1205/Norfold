@@ -1,6 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import type { PostType } from "@norfold/shared";
-import { HomeFilterChips, HomeScopeChips } from "./HomeFilterChips";
 import { HomeTopBar } from "./HomeTopBar";
 import { toggleGlobalSearch } from "../components/globalSearch";
 import { TopUtilities } from "../components/TopUtilities";
@@ -9,42 +7,17 @@ import { MASONRY_CANVAS_CLASS, READABLE_COLUMN_CLASS, feedDensity, masonryColumn
 import { useFeedLayoutPreference } from "../services/feedLayoutPreference";
 import { PullToRefresh, type PullToRefreshHandle } from "../components/PullToRefresh";
 import { NewPostsPill } from "../components/NewPostsPill";
-import { BottomSheet } from "../components/BottomSheet";
-import { MapPickerSheet } from "../components/MapPickerSheet";
-import type { LocationValue } from "../components/LocationPicker";
 import { useFeed } from "../hooks/useFeed";
 import { FeedLoveProvider } from "../hooks/useFeedLove";
 import { useUrlParam } from "../hooks/useUrlParam";
 import { onRealtime } from "../services/realtime";
 import { reactionCountsFromJson } from "../services/reactions";
-import {
-  FIX_MICROCOPY,
-  createProductionLocationAdapter,
-  requestFixWithGeneration,
-} from "../services/locationAdapter";
-import {
-  DEFAULT_NEARBY_RADIUS_KM,
-  NEARBY_RADIUS_OPTIONS_KM,
-  NEARBY_SHEET_NOTICE,
-  clearNearbySession,
-  getNearbySession,
-  kmToMeters,
-  parseNearbyRadiusParam,
-  recentCutoffDate,
-  roundNearbyCenter,
-  setNearbySession,
-  type NearbyCenter,
-  type NearbyRadiusKm,
-} from "../services/nearby";
-import { useAuth } from "../auth";
 import { useTabTap } from "../components/TabTap";
 import { buildFeedCacheKey, clearNewPostCount, getNewPostCount, incrementNewPostCount } from "../hooks/feedCache";
 import { AdvancedSearchFilters, useAdvancedSearchFilters } from "./AdvancedSearchFilters";
 import type { FeedFilters } from "../services/posts";
 import { useShouldReduceMotion } from "../components/uiMotion";
 import { registerBackInterceptor } from "../components/backNavigation";
-
-type TypeFilter = PostType | "ALL";
 
 const HOME_CACHE_KEY = "home:feed";
 
@@ -56,7 +29,6 @@ const HOME_CACHE_KEY = "home:feed";
 const CHROME_TOP_ZONE = 24;
 
 export function Home() {
-  const { user } = useAuth();
   const { tapCount } = useTabTap();
   // Imperative travel (scroll-to-top) cannot see MotionConfig — collapse to
   // instant when the app's effective preference says so. The hook (not the
@@ -80,11 +52,10 @@ export function Home() {
   // (not computed from a rail constant) so it stays right at every text scale.
   const feedRef = useRef<HTMLDivElement | null>(null);
   const feedWidth = useContentWidth(feedRef, viewportWidth);
-  // Type + search survive in the URL so back-nav, deep-links, and copied
-  // links restore the feed the reader was looking at.
-  const [typeParam, setTypeParam] = useUrlParam("type");
-  const type: TypeFilter = typeParam === "LOST" || typeParam === "FOUND" ? typeParam : "ALL";
-  const setType = (next: TypeFilter) => setTypeParam(next === "ALL" ? "" : next);
+  // Search and scope survive in the URL so back-nav, deep-links, and copied
+  // links restore the feed the reader was looking at. Post type is no longer a
+  // Home dimension: search owns typed filtering, and the old All/Lost/Found
+  // chips duplicated it (owner order 2026-11-13).
   const [qParam, setQParam] = useUrlParam("q");
   const [query, setQuery] = useState(qParam);
   const [appliedQuery, setAppliedQuery] = useState(qParam.trim());
@@ -104,157 +75,15 @@ export function Home() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchActive = searchFocused || query.length > 0;
   const advanced = useAdvancedSearchFilters();
-  // Combinable scope row (UXN-1): Nearby | Open | Recent combine freely with
-  // the exclusive All/Lost/Found type above. Only the radius travels in the
-  // URL (`near=<km>`); the search center stays in private in-memory session
-  // state and is never requested until the user taps Nearby.
-  const [nearParam, setNearParam] = useUrlParam("near");
-  const [recentParam, setRecentParam] = useUrlParam("recent");
-  const recentOn = recentParam === "1";
-  const [nearbyCenter, setNearbyCenter] = useState<NearbyCenter | null>(
-    () => getNearbySession().center,
-  );
-  const [nearbyActive, setNearbyActive] = useState(
-    () => getNearbySession().active && getNearbySession().center !== null,
-  );
-  const [nearbyRadiusKm, setNearbyRadiusKm] = useState<NearbyRadiusKm>(() => {
-    const session = getNearbySession();
-    return parseNearbyRadiusParam(nearParam) ?? session.radiusKm;
-  });
-  const [locating, setLocating] = useState(false);
-  const [snack, setSnack] = useState<{ message: string; action?: "map" } | null>(null);
-  const [nearbySheetOpen, setNearbySheetOpen] = useState(false);
-  const [mapPickerOpen, setMapPickerOpen] = useState(false);
-
-  // Account switch/logout drops the private session center so the next
-  // account starts with Nearby off and must tap to grant location again.
-  const userId = user?.id;
-  const prevUserIdRef = useRef(userId);
-  useEffect(() => {
-    if (prevUserIdRef.current === userId) return;
-    prevUserIdRef.current = userId;
-    clearNearbySession();
-    setNearbyCenter(null);
-    setNearbyActive(false);
-    setNearbyRadiusKm(DEFAULT_NEARBY_RADIUS_KM);
-    setNearParam("");
-    setNearbySheetOpen(false);
-    setMapPickerOpen(false);
-    setSnack(null);
-  }, [userId, setNearParam]);
-
-  function activateNearby(center: NearbyCenter, radiusKm: NearbyRadiusKm) {
-    setNearbySession({ center, radiusKm, active: true });
-    setNearbyCenter(center);
-    setNearbyRadiusKm(radiusKm);
-    setNearbyActive(true);
-    setNearParam(String(radiusKm));
-    setSnack(null);
-    setMapPickerOpen(false);
-    setNearbySheetOpen(false);
-  }
-
-  async function enableNearby() {
-    if (locating) return;
-    // A cached session center reactivates without re-prompting; a fresh
-    // activation always goes through the one-time coarse location request.
-    const cached = getNearbySession();
-    if (cached.center && !nearbyActive) {
-      activateNearby(cached.center, parseNearbyRadiusParam(nearParam) ?? cached.radiusKm);
-      return;
-    }
-    setLocating(true);
-    try {
-      const state = await requestFixWithGeneration(createProductionLocationAdapter());
-      if (state.kind === "fix") {
-        activateNearby(
-          roundNearbyCenter(state.lat, state.lng),
-          parseNearbyRadiusParam(nearParam) ?? DEFAULT_NEARBY_RADIUS_KM,
-        );
-      } else if (state.kind === "denied") {
-        setSnack({ message: FIX_MICROCOPY.denied, action: "map" });
-      } else if (state.kind === "services-off") {
-        setSnack({ message: FIX_MICROCOPY["services-off"], action: "map" });
-      } else if (
-        state.kind === "timeout" ||
-        state.kind === "unavailable" ||
-        state.kind === "unsupported"
-      ) {
-        setSnack({ message: state.message, action: "map" });
-      }
-      // Intermediate (requesting-permission/locating) and stale-generation
-      // (idle) states never surface here — nothing to show.
-    } finally {
-      setLocating(false);
-    }
-  }
-
-  function disableNearby() {
-    setNearbySession({ active: false });
-    setNearbyActive(false);
-    setNearParam("");
-    setNearbySheetOpen(false);
-  }
-
-  function onNearbyTap() {
-    if (nearbyActive) setNearbySheetOpen(true);
-    else void enableNearby();
-  }
-
-  /** Quick Open maps to status OPEN, replacing an advanced status selection. */
-  const openActive = advanced.status === "OPEN";
-  function onOpenTap() {
-    if (advanced.status === "OPEN") advanced.setStatus("");
-    else advanced.setStatus("OPEN");
-  }
-
-  function onRecentTap() {
-    setRecentParam(recentOn ? "" : "1");
-  }
-
-  function onRadiusChange(next: NearbyRadiusKm) {
-    setNearbyRadiusKm(next);
-    setNearbySession({ radiusKm: next });
-    setNearParam(String(next));
-  }
-
-  /** Manual "Choose area on map" fallback: only a real map pin can activate. */
-  function onMapConfirm(value: LocationValue) {
-    if (typeof value.latitude === "number" && typeof value.longitude === "number") {
-      activateNearby(
-        roundNearbyCenter(value.latitude, value.longitude),
-        parseNearbyRadiusParam(nearParam) ?? nearbyRadiusKm,
-      );
-    } else {
-      setMapPickerOpen(false);
-      setSnack({
-        message: "Nearby needs a map pin. Typed place names alone are not included.",
-        action: "map",
-      });
-    }
-  }
-
-  const mapPickerValue: LocationValue = {
-    label: "",
-    latitude: nearbyCenter?.lat ?? null,
-    longitude: nearbyCenter?.lng ?? null,
-    precision: "APPROXIMATE",
-  };
+  // Discovery scope (Nearby, Open, Recent) belongs to search now. Home keeps
+  // only the filters a shared URL can restore; it has no second scope row
+  // (owner order 2026-11-13).
 
   const feedFilters: FeedFilters = {
-    type: type === "ALL" ? "" : type,
     q: appliedQuery || undefined,
     category: advanced.category || undefined,
     status: advanced.status || undefined,
     sort: advanced.sort,
-    dateFrom: recentOn ? recentCutoffDate() : undefined,
-    ...(nearbyActive && nearbyCenter
-      ? {
-          nearLat: nearbyCenter.lat,
-          nearLng: nearbyCenter.lng,
-          radiusM: kmToMeters(nearbyRadiusKm),
-        }
-      : {}),
   };
   const scopedCacheKey = buildFeedCacheKey(HOME_CACHE_KEY, feedFilters);
   const [newPostCount, setNewPostCount] = useState(() => getNewPostCount(scopedCacheKey));
@@ -298,7 +127,7 @@ export function Home() {
   // starts at the count this mount saw, and only a *higher* count acts) is what
   // stops the tap from being replayed by everything else that re-runs this
   // effect: a remount (Post Detail → Back, which must keep the restored scroll
-  // position) and a scope change (type chip, category, status, sort, debounced
+  // position) and a scope change (scope chip, category, status, sort, debounced
   // query — `refresh`/`scopedCacheKey` change identity on all of them).
   const handledTapRef = useRef(tapCount);
   useEffect(() => {
@@ -328,30 +157,16 @@ export function Home() {
       // broadcast feed:changed with a non-INSERT change kind.
       const isInsert = change === "INSERT" || p.isNew === true;
       const scrolled = (scrollRef.current?.scrollTop ?? 0) > 40;
-      // Nearby scope: the broadcast cannot prove whether an inserted post
-      // lies inside the radius, so never claim "N new posts" — refresh at
-      // the top, generic Updates while scrolled.
-      if (nearbyActive) {
-        if (!scrolled) void refresh();
-        else setHasUpdates(true);
-        return;
-      }
       if (!isInsert) {
         if (!scrolled) void refresh();
         else setHasUpdates(true);
         return;
       }
 
-      // Prove filter membership from the broadcast metadata. A provable
-      // non-member (e.g. FOUND while filtered to LOST) is ignored — it can
-      // never appear in this view, so it must not raise a pill. When an active
-      // search query makes membership unprovable, show generic Updates.
-      const postType = typeof p.postType === "string" ? p.postType.toUpperCase() : null;
-      const typeOk = type === "ALL" || postType === type;
-      const canProveNonMember = postType !== null && !typeOk;
-      if (canProveNonMember) return;
-
-      const matchesFilter = typeOk && !appliedQuery && !advanced.category && !advanced.status;
+      // Prove filter membership from the broadcast metadata. When an active
+      // search query or advanced filter makes membership unprovable, show
+      // generic Updates.
+      const matchesFilter = !appliedQuery && !advanced.category && !advanced.status;
       if (scrolled) {
         if (matchesFilter) {
           incrementNewPostCount(scopedCacheKey, 1);
@@ -364,7 +179,7 @@ export function Home() {
       }
     });
     return off;
-  }, [refresh, scopedCacheKey, type, appliedQuery, advanced.category, advanced.status, nearbyActive]);
+  }, [refresh, scopedCacheKey, appliedQuery, advanced.category, advanced.status]);
 
   // A post was deleted: reconcile it in place. Never refetch here — a full
   // refresh would rerender/reorder the list underneath a scrolled reader.
@@ -475,8 +290,8 @@ export function Home() {
           It leaves at exactly the speed the reader scrolls and comes back the
           moment they reverse — no timer, no height animation, so the feed's
           geometry never changes under the finger. That is the whole fix for
-          the reported drag/yank. The sheets and the new-posts pill stay outside
-          the scroller (they are viewport chrome, not feed content). */}
+          the reported drag/yank. The new-posts pill stays outside the scroller
+          (it is viewport chrome, not feed content). */}
       <PullToRefresh ref={scrollRef} onRefresh={refresh} disabled={loading || refreshing} className="fb-home-feed flex-1">
         <div className="flex flex-col gap-4">
           <header data-testid="home-toolbar" className="pt-5">
@@ -506,50 +321,6 @@ export function Home() {
             </div>
           </header>
 
-          <div className={`${canvasClass} flex flex-col gap-3 px-4`}>
-            <div className="fb-scroll-fade">
-              <div className="fb-scroll-row flex items-center gap-3" aria-label="Feed filters">
-                <HomeFilterChips value={type} onChange={setType} />
-                <span aria-hidden className="h-6 shrink-0 border-l border-outline-variant" />
-                <HomeScopeChips
-                  nearbyActive={nearbyActive}
-                  nearbyRadiusKm={nearbyRadiusKm}
-                  locating={locating}
-                  openActive={openActive}
-                  recentActive={recentOn}
-                  onNearbyTap={onNearbyTap}
-                  onOpenTap={onOpenTap}
-                  onRecentTap={onRecentTap}
-                />
-              </div>
-            </div>
-        {snack && (
-          <div
-            role="status"
-            className="flex items-center gap-2 rounded-m3-sm bg-surface-container px-4 py-3 text-sm text-on-surface"
-          >
-            <p className="flex-1">{snack.message}</p>
-            {snack.action === "map" && (
-              <button
-                type="button"
-                onClick={() => setMapPickerOpen(true)}
-                className="min-h-[44px] shrink-0 rounded-full px-3 text-sm font-medium underline"
-              >
-                Choose area on map
-              </button>
-            )}
-            <button
-              type="button"
-              aria-label="Dismiss"
-              onClick={() => setSnack(null)}
-              className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-          </div>
-
           {/* UXN-2: batch-hydrated Love state + optimistic feed-cache patching.
               PostList itself is untouched — the provider flows state to each
               home-feed card's Love toggle via context. */}
@@ -566,15 +337,13 @@ export function Home() {
                 failedOperation={failedOperation}
                 density={feedDensity(resolvedLayout)}
                 masonryColumns={masonryColumns(feedWidth)}
-                emptyTitle={appliedQuery || advanced.category || advanced.status || nearbyActive ? "No matches" : "Nothing here yet"}
+                emptyTitle={appliedQuery || advanced.category || advanced.status ? "No matches" : "Nothing here yet"}
                 emptySubtitle={
-                  nearbyActive
-                    ? "Try a wider radius or different filters. Nearby uses reports with a map pin."
-                    : advanced.category || advanced.status
-                      ? "Try different filters or a broader search."
-                      : appliedQuery
-                        ? `No posts match “${appliedQuery}”.`
-                        : "Tap Create report to post a lost or found item."
+                  advanced.category || advanced.status
+                    ? "Try different filters or a broader search."
+                    : appliedQuery
+                      ? `No posts match “${appliedQuery}”.`
+                      : "Tap Create report to post a lost or found item."
                 }
               />
             </div>
@@ -586,58 +355,6 @@ export function Home() {
         filters={advanced}
         hideTrigger
         hideSheet
-      />
-      <BottomSheet
-        open={nearbySheetOpen}
-        onClose={() => setNearbySheetOpen(false)}
-        title="Nearby"
-        description="Search radius around your area."
-        height="medium"
-      >
-        <div className="flex flex-col gap-3 pb-2">
-          <p className="text-sm text-on-surface-variant">{NEARBY_SHEET_NOTICE}</p>
-          <div role="radiogroup" aria-label="Radius" className="flex flex-wrap gap-2">
-            {NEARBY_RADIUS_OPTIONS_KM.map((km) => (
-              <button
-                key={km}
-                type="button"
-                role="radio"
-                aria-checked={km === nearbyRadiusKm}
-                onClick={() => onRadiusChange(km)}
-                className={`min-h-[44px] rounded-full border px-4 text-sm font-medium ${
-                  km === nearbyRadiusKm
-                    ? "border-transparent bg-primary-container text-on-primary-container"
-                    : "border-outline-variant text-on-surface-variant"
-                }`}
-              >
-                {km} km
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setNearbySheetOpen(false);
-              setMapPickerOpen(true);
-            }}
-            className="inline-flex min-h-[48px] items-center justify-center rounded-m3-sm border border-outline-variant px-4 text-sm font-medium"
-          >
-            Choose area on map
-          </button>
-          <button
-            type="button"
-            onClick={disableNearby}
-            className="inline-flex min-h-[48px] items-center justify-center rounded-m3-sm px-4 text-sm font-medium underline"
-          >
-            Turn off Nearby
-          </button>
-        </div>
-      </BottomSheet>
-      <MapPickerSheet
-        open={mapPickerOpen}
-        onClose={() => setMapPickerOpen(false)}
-        value={mapPickerValue}
-        onConfirm={onMapConfirm}
       />
 
       <NewPostsPill count={newPostCount} hasUpdates={hasUpdates || updatesAvailable} onTap={onNewPostsTap} overlay />

@@ -85,23 +85,31 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
    Safe-area insets belong to `.fb-app-viewport` alone (index.css): the rail is
    inside that box, so it pads by its own 12px and never repeats env(). */
 .fb-nav-rail {
+  /* Collapsed rail names nothing but its icons; hovering or keyboard focus
+     widens it to name every destination, then it contracts (owner order
+     2026-11-13). The negative inline-end margin cancels the extra width, so
+     <main> never reflows while the panel is open - it paints over the page. */
+  --fb-rail-collapsed: 72px;
+  --fb-rail-expanded: 208px;
   display: flex; flex-direction: column; flex: none;
-  width: 72px; gap: 8px;
-  padding: 12px 8px;
+  width: var(--fb-rail-collapsed); gap: 6px;
+  padding: 8px 6px;
   background: var(--fb-surface);
   border-inline-end: 1px solid var(--fb-outline-variant);
   overflow: hidden; overscroll-behavior: contain;
+  position: relative; z-index: 30;
+  transition: width 140ms ease, margin-inline-end 140ms ease, box-shadow 140ms ease;
 }
 /* Destinations scroll; the identity control below them does not. Settings is
    reached from inside that control (R1), so it must stay on screen however
    many rows the rail carries. */
 .fb-nav-rail-scroll {
-  display: flex; flex-direction: column; gap: 8px;
+  display: flex; flex-direction: column; gap: 6px;
   flex: 1 1 auto; min-height: 0;
   overflow-y: auto; overscroll-behavior: contain;
 }
 .fb-nav-rail-list {
-  display: flex; flex-direction: column; gap: 4px; min-height: 0;
+  display: flex; flex-direction: column; gap: 2px; min-height: 0;
   /* The scroll container is the scroller. If these lists are allowed to
      shrink, flexbox hands the group a box above its own content and the
      rows paint over Insights instead of extending the scroll range. */
@@ -109,29 +117,77 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
 }
 /* The prototype's "Others" shelf. A hairline plus a small label is the whole
    device: secondary destinations stay distinguishable without a second card,
-   and the label only appears in the pinned panel where there is room for it. */
+   and the label appears whenever the rail has room to name it (pinned or
+   hovered), not in the icon-only state. */
 .fb-nav-rail-group {
-  display: flex; flex-direction: column; gap: 4px; flex: none;
-  padding-block-start: 10px;
+  display: flex; flex-direction: column; gap: 2px; flex: none;
+  padding-block-start: 6px;
   border-block-start: 1px solid var(--fb-outline-variant);
 }
 .fb-nav-rail-section {
-  padding-inline: 12px; font-size: 0.6875rem; font-weight: 600;
+  padding-inline: 10px; font-size: 0.6875rem; font-weight: 600;
   letter-spacing: 0.02em; color: var(--fb-on-surface-variant);
 }
-/* Vertical items keep the bar's geometry (56px tall, 16px corners) and turn
-   the icon-over-label layout into a readable column instead of a strip. */
+/* Vertical items keep the bar's grammar (rounded row, active pill) but are
+   compact: 38px rows and 20px glyphs let all ten destinations plus the
+   identity control fit a 640px-tall window without scrolling. */
 .fb-nav-rail .fb-nav-link {
-  flex: none; width: 100%; min-height: 48px;
+  flex: none; width: 100%; min-height: 38px;
   flex-direction: column; gap: 2px;
-  padding: 8px 4px; border-radius: 16px;
+  padding: 6px 4px; border-radius: 12px;
 }
+.fb-nav-rail .fb-nav-icon { width: 20px; height: 20px; }
 .fb-nav-rail .fb-nav-link-active { flex: none; }
 /* Every destination is named in the rail, selected or not. The label wraps
    rather than truncating, so "My Reports" stays readable at large text. */
 .fb-nav-tooltip { z-index: 120; max-width: 16rem; padding: 6px 10px; border-radius: 8px; background: var(--fb-on-surface); color: var(--fb-surface); font-size: .875rem; overflow-wrap: anywhere; }
-@media (min-width: 1200px) { .fb-nav-rail { width: 80px; } }
-.fb-nav-rail .fb-nav-create-wrap { width: fit-content; margin-inline: auto; }
+@media (min-width: 1200px) { .fb-nav-rail { --fb-rail-collapsed: 80px; } }
+
+/* Hover / keyboard-focus expansion. Scoped to the unpinned rail: a pinned
+   panel is already named and user-sized. */
+.fb-nav-rail[data-pinned="false"]:is(:hover, :has(:focus-visible)) {
+  width: var(--fb-rail-expanded);
+  margin-inline-end: calc(var(--fb-rail-collapsed) - var(--fb-rail-expanded));
+  box-shadow: var(--shadow-md);
+}
+.fb-nav-rail[data-pinned="false"]:is(:hover, :has(:focus-visible)) .fb-nav-link {
+  flex-direction: row; justify-content: flex-start; gap: 10px; padding-inline: 10px;
+}
+/* Undo Tailwind's sr-only clipping only while the panel has room for the
+   text; the label is still the row's accessible name in both states. */
+.fb-nav-rail[data-pinned="false"]:is(:hover, :has(:focus-visible)) .fb-nav-label {
+  position: static; width: auto; height: auto; margin: 0; padding: 0;
+  overflow: visible; clip: auto; clip-path: none; border: 0;
+  text-align: start; white-space: nowrap;
+  font-size: 0.8125rem; font-weight: 500;
+}
+.fb-nav-rail[data-pinned="false"] .fb-nav-rail-section { display: none; }
+.fb-nav-rail[data-pinned="false"]:is(:hover, :has(:focus-visible)) .fb-nav-rail-section { display: block; }
+@media (prefers-reduced-motion: reduce) {
+  .fb-nav-rail { transition: none; }
+}
+html.fb-reduce-motion .fb-nav-rail { transition: none; }
+/* Very short windows (landscape phone, or a laptop with a shallow viewport):
+   tighten the same geometry rather than introducing a scroller. */
+@media (max-height: 600px) {
+  .fb-nav-rail { gap: 4px; padding-block: 6px; }
+  .fb-nav-rail[data-pinned="true"] { padding-block: 6px; }
+  .fb-nav-rail .fb-nav-link { min-height: 34px; padding-block: 4px; }
+  .fb-nav-rail-scroll { gap: 4px; }
+  .fb-nav-rail .fb-account-trigger { min-height: 44px; }
+}
+/* A shallow desktop window (or a split-screen pane) still shows every
+   destination: the rows tighten once more instead of turning the rail into
+   a scroller (owner order 2026-11-13). */
+@media (max-height: 520px) {
+  .fb-nav-rail { gap: 2px; padding-block: 4px; }
+  .fb-nav-rail[data-pinned="true"] { padding-block: 4px; }
+  .fb-nav-rail .fb-nav-link { min-height: 30px; padding-block: 2px; }
+  .fb-nav-rail .fb-nav-icon { width: 18px; height: 18px; }
+  .fb-nav-rail-scroll { gap: 2px; }
+  .fb-nav-rail-group { padding-block-start: 4px; }
+  .fb-nav-rail .fb-account-trigger { min-height: 40px; }
+}
 /* The unread badge stays next to the bell icon rather than the far edge. */
 /* Fullscreen editor is a body-level portal: never leave shell chrome behind it
    as an extra tab stop, even though the editor itself lives outside Shell. */
@@ -140,24 +196,34 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
    panel is a width change on the existing column rather than a drawer or an
    overlay: nothing covers the page and <main> reflows in the same frame. */
 .fb-nav-rail-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  width: 100%; min-height: 40px;
+  display: flex; align-items: center; width: 100%; min-height: 40px;
 }
+/* Icon rail: the 48px brand button centres its mark on the same axis as the
+   destination glyphs. Any state that names rows (pinned, hover, keyboard focus)
+   left-aligns the brand with those rows instead (owner order 2026-11-13). */
 .fb-nav-rail[data-pinned="false"] .fb-nav-rail-head { justify-content: center; }
-.fb-nav-wordmark { font-weight: 700; font-size: 1rem; letter-spacing: -0.02em; color: var(--fb-on-surface); }
-.fb-nav-pin {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 40px; height: 40px; flex: none; border: 0; border-radius: 12px;
-  background: transparent; color: var(--fb-on-surface-variant); cursor: pointer;
+.fb-nav-rail[data-pinned="false"]:is(:hover, :has(:focus-visible)) .fb-nav-rail-head { justify-content: flex-start; }
+.fb-nav-brand {
+  display: inline-flex; align-items: center; gap: 10px;
+  max-width: 100%; min-height: 40px; padding: 0 10px;
+  border: 0; border-radius: 12px; background: transparent;
+  color: var(--fb-on-surface); cursor: pointer;
 }
-.fb-nav-pin:hover { background: var(--fb-surface-container); }
-.fb-nav-pin:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: 2px; }
+.fb-nav-rail[data-pinned="true"] .fb-nav-brand { gap: 12px; padding-inline: 12px; }
+.fb-nav-brand:hover { background: var(--fb-surface-container); }
+.fb-nav-brand:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: 2px; }
+.fb-nav-brand-mark { flex: none; }
+.fb-nav-wordmark {
+  font-weight: 700; font-size: 1rem; letter-spacing: -0.02em;
+  color: var(--fb-on-surface); white-space: nowrap;
+}
+.fb-nav-rail[data-pinned="false"] .fb-nav-wordmark { display: none; }
+.fb-nav-rail[data-pinned="false"]:is(:hover, :has(:focus-visible)) .fb-nav-wordmark { display: inline; }
 .fb-nav-rail[data-pinned="true"] { width: 224px; padding: 12px; }
 /* Owner order 2026-11-13: the pinned sidebar is resizable. The handle sits on
    the rail's inner edge (the rail clips at `overflow: hidden`), reads as a
    separator to assistive tech, and drags horizontally; arrows move it in 16px
    steps, Shift doubles the step, Home/End jump to the bounds. */
-.fb-nav-rail { position: relative; }
 .fb-nav-rail-resize {
   position: absolute; inset-block: 0; inset-inline-end: 0; width: 10px;
   z-index: 2; cursor: col-resize; touch-action: none; background: transparent;
@@ -170,17 +236,21 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
 .fb-nav-rail-resize:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: -3px; }
 .fb-nav-rail[data-pinned="true"] .fb-nav-link {
   flex-direction: row; justify-content: flex-start; gap: 12px;
-  padding: 8px 12px;
-}
-.fb-nav-rail[data-pinned="true"] .fb-nav-create-wrap { width: 100%; margin-inline: 0; }
-.fb-nav-rail[data-pinned="true"] .fb-nav-create {
-  width: 100%; justify-content: flex-start; gap: 12px; padding-inline: 16px;
-  border-radius: 16px; box-shadow: none;
+  /* Horizontal inset only: the vertical padding belongs to the base rule and
+     the shallow-window tiers, which is what keeps the pinned column inside its
+     height budget instead of forcing the destination list to scroll. */
+  padding-inline: 12px;
 }
 /* The name and handle are worth showing only when the column has room for them;
-   the avatar alone remains the control in the icon rail. */
+   the avatar alone remains the control in the icon rail. Hover/focus expansion
+   gives that room, so the identity control names itself too. */
 .fb-nav-rail[data-pinned="false"] .fb-account-trigger { justify-content: center; padding-inline: 0; }
 .fb-nav-rail[data-pinned="false"] .fb-account-trigger-text,
 .fb-nav-rail[data-pinned="false"] .fb-account-trigger .fb-verified-badge { display: none; }
+.fb-nav-rail[data-pinned="false"]:is(:hover, :has(:focus-visible)) .fb-account-trigger {
+  justify-content: flex-start; gap: 10px; padding-inline: 8px;
+}
+.fb-nav-rail[data-pinned="false"]:is(:hover, :has(:focus-visible)) .fb-account-trigger-text { display: flex; }
+.fb-nav-rail[data-pinned="false"]:is(:hover, :has(:focus-visible)) .fb-account-trigger .fb-verified-badge { display: inline-flex; }
 body:has(#report-editor-overlay) .fb-nav-slot,
 body:has(#report-editor-overlay) .fb-nav-rail { display: none; }

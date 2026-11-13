@@ -1,0 +1,164 @@
+/* Profile hub (owner direction 2026-11-13): identity is one compact band, the
+   trust label is a single strip, and every destination is a tight row. This is
+   navigation, not a dashboard - no card per group, no marketing paragraphs. */
+
+.fb-profile {
+  max-width: 40rem;
+}
+
+/* ── Identity band ─────────────────────────────────────────────────────── */
+.fb-profile-identity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.25rem 0.25rem 0.75rem;
+  border-bottom: 1px solid var(--fb-outline-variant);
+}
+
+.fb-profile-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.0625rem;
+  min-width: 0;
+}
+
+.fb-profile-name {
+  margin: 0;
+  font-size: 1.0625rem;
+  line-height: 1.3;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fb-profile-handle {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.3;
+  color: var(--fb-on-surface-variant);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fb-profile-mail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  min-width: 0;
+  margin: 0.125rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--fb-on-surface-variant);
+}
+
+.fb-profile-email {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fb-profile-verified,
+.fb-profile-verify {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.fb-profile-verified {
+  color: var(--fb-found-ink);
+  font-weight: 500;
+}
+
+.fb-profile-verify {
+  color: var(--fb-link);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.fb-profile-edit {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.125rem;
+  min-height: 2.75rem;
+  padding: 0 0.375rem 0 0.75rem;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 999px;
+  color: var(--fb-on-surface);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.fb-profile-edit:hover {
+  background: var(--fb-surface-container-low);
+}
+
+.fb-profile-edit:focus-visible,
+.fb-profile-verify:focus-visible {
+  outline: 2px solid var(--fb-focus);
+  outline-offset: 2px;
+}
+
+/* ── Trust strip ───────────────────────────────────────────────────────── */
+.fb-profile-reputation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem 0.5rem;
+  min-height: 2.25rem;
+  padding: 0.375rem 0.25rem;
+  border-bottom: 1px solid var(--fb-outline-variant);
+}
+
+.fb-profile-reputation-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.fb-profile-reputation-note {
+  font-size: 0.75rem;
+  color: var(--fb-on-surface-variant);
+}
+
+/* ── Destinations ──────────────────────────────────────────────────────── */
+.fb-profile-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* 44px rows: still a comfortable touch target, without the 60px settings-row
+   height that turned seven links into a screen of bars. */
+.fb-profile .fb-settings-row {
+  min-height: 2.75rem;
+  padding: 0.375rem 0.25rem;
+}
+
+.fb-profile .fb-setting-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 0.4375rem;
+}
+
+.fb-profile .fb-settings-row-title {
+  font-size: 0.9375rem;
+}
+
+@media (max-width: 360px) {
+  .fb-profile-identity {
+    gap: 0.625rem;
+  }
+
+  .fb-profile-name {
+    font-size: 1rem;
+  }
+}

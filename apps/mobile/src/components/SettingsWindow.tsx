@@ -9,13 +9,13 @@ import {
   Routes,
   useLocation,
 } from "react-router";
-import { Search, X } from "lucide-react";
+import { Search, ArrowLeft, X } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { useAuth } from "../auth";
 import { Settings } from "../screens/Settings";
 import { settingsRouteElements } from "../screens/settingsRoutes";
 import { SettingsRow } from "./settings";
-import { SettingsWindowHost } from "./settingsWindowHost";
+import { SettingsWindowHost, SettingsWindowTitle } from "./settingsWindowHost";
 import { OverlayStackBridge } from "./overlayFoundation";
 import { RouterDepthProvider } from "./routerHistory";
 import { searchSettings } from "../services/settingsIndex";
@@ -102,6 +102,14 @@ function SettingsWindowSurface({ initialPath, onClose, onExit }: {
   const depth = useCallback(() => history.index, [history]);
 
   const [searchOpen, setSearchOpen] = useState(false);
+  // The window chrome carries the ONE visible page title. A hosted page reports
+  // its own title here (the same string it would have shown as its H1), so the
+  // window never says "Settings" while the reader is inside Notifications, and
+  // the page never paints a second giant heading underneath it.
+  const [pageTitle, setPageTitle] = useState<string | null>(null);
+  const atSettingsRoot = state.location.pathname.replace(/\/+$/, "") === "/settings";
+  const windowTitle = atSettingsRoot ? "Settings" : pageTitle ?? "Settings";
+  const canGoBack = history.index > 0;
   const searchToggle = useRef<HTMLButtonElement>(null);
   // Closing the field returns focus to the icon that opened it. Picking a
   // result is different: the destination's heading takes focus, so the toggle
@@ -131,7 +139,12 @@ function SettingsWindowSurface({ initialPath, onClose, onExit }: {
           <UNSAFE_RouteContext.Provider value={route}>
             <Dialog aria-label="Settings" className="fb-settings-dialog">
               <header className="fb-settings-window-head">
-                <Heading slot="title" className="fb-settings-window-title">Settings</Heading>
+                {canGoBack && (
+                  <Button aria-label="Back" className="fb-icon-control fb-settings-window-back" onPress={goBack}>
+                    <ArrowLeft size={18} aria-hidden="true" />
+                  </Button>
+                )}
+                <Heading slot="title" className="fb-settings-window-title">{windowTitle}</Heading>
                 <div className="fb-settings-window-actions">
                   <Button ref={searchToggle} aria-label="Search settings" aria-expanded={searchOpen}
                     className="fb-icon-control" data-active={searchOpen || undefined}
@@ -148,12 +161,14 @@ function SettingsWindowSurface({ initialPath, onClose, onExit }: {
               />}
               <div className="fb-settings-window-body">
                 <SettingsWindowHost.Provider value>
-                  <RouterDepthProvider depth={depth}>
-                    <Routes>
-                      <Route path="/settings" element={<Settings />}>{settingsRouteElements()}</Route>
-                      <Route path="*" element={<ExitToApp onExit={onExit} />} />
-                    </Routes>
-                  </RouterDepthProvider>
+                  <SettingsWindowTitle.Provider value={setPageTitle}>
+                    <RouterDepthProvider depth={depth}>
+                      <Routes>
+                        <Route path="/settings" element={<Settings />}>{settingsRouteElements()}</Route>
+                        <Route path="*" element={<ExitToApp onExit={onExit} />} />
+                      </Routes>
+                    </RouterDepthProvider>
+                  </SettingsWindowTitle.Provider>
                 </SettingsWindowHost.Provider>
               </div>
             </Dialog>

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NotificationItem } from "../services/notifications";
 import { consumeBackIntercept, resetBackInterceptors } from "./backNavigation";
 import { resetModalLayers } from "../hooks/modalLayers";
+import { APPEARANCE_STORAGE_KEY, DEFAULT_APPEARANCE } from "../appearance";
 
 const io = vi.hoisted(() => ({
   unread: vi.fn(), rows: vi.fn(), read: vi.fn(), unreadRows: vi.fn(), remove: vi.fn(), restore: vi.fn(),
@@ -53,7 +54,13 @@ beforeEach(() => {
   io.remove.mockResolvedValue(1);
   io.restore.mockResolvedValue(1);
 });
-afterEach(() => { cleanup(); window.innerWidth = previousWidth; resetBackInterceptors(); resetModalLayers(); });
+afterEach(() => {
+  cleanup();
+  window.innerWidth = previousWidth;
+  localStorage.removeItem(APPEARANCE_STORAGE_KEY);
+  resetBackInterceptors();
+  resetModalLayers();
+});
 
 describe("notification utility quick view", () => {
   it.each([600, 1000])("opens recent activity at %spx without navigating or marking anything read", async width => {
@@ -80,6 +87,20 @@ describe("notification utility quick view", () => {
     expect(screen.getByRole("link", { name: "Notifications" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Notifications" })).toBeNull();
     expect(io.rows).not.toHaveBeenCalled();
+  });
+
+  it("offers Create report beside the bell on the rail layout only", () => {
+    // The rail no longer carries the large +, so the utility cluster owns it.
+    // Phones keep the bottom bar's floating + and must not show a second one.
+    window.innerWidth = 320;
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout: "rail" }));
+    const phone = render(tree());
+    expect(screen.queryByRole("link", { name: "Create report" })).toBeNull();
+    phone.unmount();
+
+    window.innerWidth = 1000;
+    render(tree());
+    expect(screen.getByRole("link", { name: "Create report" }).getAttribute("href")).toBe("/report");
   });
 
   it("shows eight recent rows and filters all fetched rows before taking the unread preview", async () => {

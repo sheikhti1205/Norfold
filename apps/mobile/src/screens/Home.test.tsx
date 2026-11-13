@@ -107,13 +107,11 @@ describe("Home realtime", () => {
     expect(fetchFeedMock).not.toHaveBeenCalled();
   });
 
-  it("refreshes an invalidated type-filtered feed at the top", async () => {
-    renderHome();
+  it("refreshes an invalidated scope-filtered feed at the top", async () => {
+    renderHome("/?status=OPEN");
     await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
-
-    fireEvent.click(screen.getByRole("radio", { name: "Lost" }));
     await waitFor(() =>
-      expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ type: "LOST" }), undefined),
+      expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ status: "OPEN" }), undefined),
     );
     fetchFeedMock.mockClear();
 
@@ -217,12 +215,18 @@ describe("Home realtime", () => {
     expect(scroller.scrollTop).toBe(40);
   });
 
-  it("restores the type filter from the URL on mount", async () => {
+  it("ignores a legacy type parameter instead of stranding a filtered feed", async () => {
+    // The All/Lost/Found chips are gone (owner order 2026-11-13). A copied or
+    // bookmarked `?type=LOST` link must not leave the reader on a filtered feed
+    // with no control to clear it.
     renderHome("/?type=LOST");
-    await waitFor(() =>
-      expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ type: "LOST" }), undefined),
-    );
-    expect(screen.getByRole("radio", { name: "Lost" }).getAttribute("aria-checked")).toBe("true");
+    await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
+    for (const [filters] of fetchFeedMock.mock.calls) {
+      expect(filters).not.toHaveProperty("type");
+    }
+    expect(screen.queryByRole("radio", { name: "Lost" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "All" })).toBeNull();
+    expect(screen.getByText("b")).toBeTruthy();
   });
 
   it("restores the search query from the URL on mount", async () => {
@@ -233,32 +237,30 @@ describe("Home realtime", () => {
     );
   });
 
-  it("writes filter edits back to the URL without turning search into a page filter", async () => {
-    renderHome();
+  it("keeps Home's URL and feed untouched while the search overlay is used", async () => {
+    renderHome("/?status=OPEN");
     await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
-
-    fireEvent.click(screen.getByRole("radio", { name: "Lost" }));
-    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/?type=LOST"));
+    expect(screen.getByTestId("location").textContent).toBe("/?status=OPEN");
 
     // The magnifier opens the shared overlay; typing there never rewrites the
     // Home URL or the feed underneath.
     fireEvent.click(screen.getByTestId("home-search-open"));
     const overlay = await screen.findByRole("search");
     fireEvent.change(within(overlay).getByRole("searchbox"), { target: { value: "wallet" } });
-    expect(screen.getByTestId("location").textContent).toBe("/?type=LOST");
+    expect(screen.getByTestId("location").textContent).toBe("/?status=OPEN");
   });
 
-  it("restores Home advanced filters and clears them without dropping q or type", async () => {
-    renderHome("/?type=FOUND&q=phone&category=Electronics&status=OPEN&sort=oldest");
+  it("restores Home advanced filters and clears them without dropping q", async () => {
+    renderHome("/?q=phone&category=Electronics&status=OPEN&sort=oldest");
     await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "FOUND", q: "phone", category: "Electronics", status: "OPEN", sort: "oldest" }), undefined,
+      expect.objectContaining({ q: "phone", category: "Electronics", status: "OPEN", sort: "oldest" }), undefined,
     ));
     fireEvent.click(screen.getByRole("button", { name: "Remove category filter: Electronics" }));
     fireEvent.click(screen.getByRole("button", { name: "Remove status filter: Open" }));
     fireEvent.click(screen.getByRole("button", { name: "Remove sort filter: Oldest first" }));
-    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/?type=FOUND&q=phone"));
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/?q=phone"));
     await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "FOUND", q: "phone", category: undefined, status: undefined, sort: "newest" }), undefined,
+      expect.objectContaining({ q: "phone", category: undefined, status: undefined, sort: "newest" }), undefined,
     ));
   });
 
@@ -283,9 +285,9 @@ describe("Home realtime", () => {
   });
 
   it("restores filtered results from the detail-to-Home session cache", async () => {
-    const entry = "/?type=LOST&category=Electronics&status=OPEN&sort=oldest&q=wallet";
+    const entry = "/?category=Electronics&status=OPEN&sort=oldest&q=wallet";
     saveFeedCache(buildFeedCacheKey("home:feed", {
-      type: "LOST", category: "Electronics", status: "OPEN", sort: "oldest", q: "wallet",
+      category: "Electronics", status: "OPEN", sort: "oldest", q: "wallet",
     }), { items: [{ id: "cached", title: "Cached result" }] as never, total: 1, cursor: null, scrollTop: 0 });
     renderHome(entry);
     expect(await screen.findByText("cached")).toBeTruthy();
@@ -568,11 +570,12 @@ describe("Home brand and search affordances", () => {
     const originalScrollTo = HTMLElement.prototype.scrollTo;
     HTMLElement.prototype.scrollTo = scrollTo as unknown as typeof HTMLElement.prototype.scrollTo;
     try {
-      const { rerender } = await renderAndWait();
+      const { rerender } = renderHome("/?status=OPEN");
+      await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
 
       tabTapState.tapCount = 1;
       rerender(
-        <MemoryRouter initialEntries={["/"]}>
+        <MemoryRouter initialEntries={["/?status=OPEN"]}>
           <Home />
           <LocationProbe />
         </MemoryRouter>,
@@ -581,12 +584,11 @@ describe("Home brand and search affordances", () => {
       scrollTo.mockClear();
       fetchFeedMock.mockClear();
 
-      fireEvent.click(screen.getByRole("radio", { name: "Lost" }));
+      fireEvent.click(screen.getByRole("button", { name: "Remove status filter: Open" }));
 
-      // The scope change refetches exactly once, from its own effect — and must
+      // The filter change refetches exactly once, from its own effect, and must
       // not be mistaken for a tab tap, which both rewound the feed under the
-      // reader and added a second `fetchFeed` on top of the scope's own one
-      // (the reviewer's probe measured two `fetchFeed({type:"LOST"})` calls).
+      // reader and added a second `fetchFeed` on top of the filter's own one.
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledTimes(1));
       expect(scrollTo).not.toHaveBeenCalled();
     } finally {
@@ -615,14 +617,17 @@ describe("Home feed redesign (reference-inspired)", () => {
     resetBackInterceptors();
   });
 
-  it("offers All/Lost/Found quick chips and no dead Nearby/Recent chip", async () => {
+  it("offers no discovery scope chips and no post-type radios", async () => {
     renderHome();
     await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
-    expect(screen.getByRole("radio", { name: "All" })).toBeTruthy();
-    expect(screen.getByRole("radio", { name: "Lost" })).toBeTruthy();
-    expect(screen.getByRole("radio", { name: "Found" })).toBeTruthy();
-    expect(screen.queryByRole("radio", { name: "Nearby" })).toBeNull();
-    expect(screen.queryByRole("radio", { name: "Recent" })).toBeNull();
+    // Scope belongs to search now (owner order 2026-11-13): Home must not keep
+    // a second row of Nearby/Open/Recent buttons.
+    for (const name of ["Nearby", "Open", "Recent"]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+    expect(screen.queryByRole("radio", { name: "All" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Lost" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Found" })).toBeNull();
   });
 
   it("keeps one compact row: brand and wordmark, with the actions trailing", async () => {
