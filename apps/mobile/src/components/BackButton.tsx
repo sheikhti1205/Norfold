@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router";
 import { ArrowLeft } from "lucide-react";
-import { historyDepth } from "./backNavigation";
+import { useRouterHistoryDepth } from "./routerHistory";
 
 interface BackButtonProps {
   /** Fallback destination when there is no history to go back to. */
@@ -18,9 +18,10 @@ interface BackButtonProps {
  */
 export function BackButton({ fallbackTo, fallbackState, label }: BackButtonProps) {
   const navigate = useNavigate();
+  const depth = useRouterHistoryDepth();
 
   const goBack = () => {
-    if (historyDepth() > 0) {
+    if (depth > 0) {
       navigate(-1);
     } else {
       navigate(fallbackTo, { replace: true, state: fallbackState });
@@ -30,9 +31,9 @@ export function BackButton({ fallbackTo, fallbackState, label }: BackButtonProps
   // The label must describe where this button actually goes. `label` names a
   // *destination*, which is only what happens when the app stack is empty; with
   // history to walk, the destination is "wherever you came from". A static
-  // destination label therefore lied in the common case — on "My reports" it
+  // destination label therefore lied in the common case - on "My reports" it
   // announced "Back to profile" while landing on the feed.
-  const goBackLabel = historyDepth() > 0 ? "Back" : label;
+  const goBackLabel = depth > 0 ? "Back" : label;
 
   return (
     <button

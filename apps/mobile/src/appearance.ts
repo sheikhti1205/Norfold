@@ -134,6 +134,22 @@ export interface AppearanceSettings {
    * data, so it lives here beside `navLayout` and never syncs.
    */
   railPinned: boolean;
+  /**
+   * Width of the pinned rail in CSS pixels (owner order 2026-11-13: the sidebar
+   * is resizable). Local layout habit like `railPinned`; never account data.
+   */
+  railWidth: number;
+}
+
+/** Pinned-rail width bounds. The account menu follows the same width. */
+export const RAIL_WIDTH_MIN = 200;
+export const RAIL_WIDTH_MAX = 360;
+export const RAIL_WIDTH_DEFAULT = 224;
+export const RAIL_WIDTH_STEP = 16;
+
+export function clampRailWidth(value: number): number {
+  if (!Number.isFinite(value)) return RAIL_WIDTH_DEFAULT;
+  return Math.min(RAIL_WIDTH_MAX, Math.max(RAIL_WIDTH_MIN, Math.round(value)));
 }
 
 export const DEFAULT_APPEARANCE: AppearanceSettings = {
@@ -145,6 +161,7 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
   navLayout: "bottom",
   navLayoutChosen: false,
   railPinned: false,
+  railWidth: RAIL_WIDTH_DEFAULT,
 };
 
 function isAccentId(value: unknown): value is AccentId {
@@ -180,6 +197,7 @@ export function migrateAppearance(value: unknown): AppearanceSettings {
     navLayoutChosen: typeof parsed.navLayoutChosen === "boolean" ? parsed.navLayoutChosen
       : parsed.navLayoutChosen === undefined && isNavLayout(parsed.navLayout),
     railPinned: typeof parsed.railPinned === "boolean" ? parsed.railPinned : DEFAULT_APPEARANCE.railPinned,
+    railWidth: typeof parsed.railWidth === "number" ? clampRailWidth(parsed.railWidth) : DEFAULT_APPEARANCE.railWidth,
   };
 }
 

@@ -1,0 +1,40 @@
+/* A settings window, not a settings page: large enough for the real tree and
+   detail pane, floating over the app with the page still visible behind it.
+   The backdrop blurs what is behind the window instead of hiding it (owner
+   order 2026-11-13), and owns an explicit layer because the rail is a
+   positioned element that would otherwise paint over a z-auto portal.
+   Phones get the full canvas because a 94vw card with a two-column tree has
+   nothing to show. */
+.fb-settings-backdrop {
+  z-index: 80;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-top));
+  background: color-mix(in srgb, var(--scrim) 62%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px) saturate(1.15);
+}
+.fb-settings-window {
+  width: min(1080px, 94vw); height: min(760px, 90dvh); max-height: 90dvh;
+  padding: 0; border: 1px solid var(--fb-outline-variant); border-radius: 16px;
+  /* The page stays visible through the window, blurred: the surface is a
+     frosted pane, not an opaque wall (owner order 2026-11-13). */
+  background: color-mix(in srgb, var(--fb-surface) 84%, transparent);
+  -webkit-backdrop-filter: blur(30px) saturate(1.2);
+  backdrop-filter: blur(30px) saturate(1.2);
+  overflow: hidden; box-shadow: var(--shadow-lg);
+}
+.fb-settings-dialog { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; outline: none; }
+.fb-settings-window-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  flex: none; padding: 10px 12px 10px 16px;
+  border-bottom: 1px solid var(--fb-outline-variant);
+}
+.fb-settings-window-title { font-size: 1rem; font-weight: 650; letter-spacing: -0.01em; }
+.fb-settings-window-body { flex: 1; min-height: 0; overflow: hidden; }
+/* The settings split view fills the window; its own panes keep their scroll. */
+.fb-settings-window-body > * { height: 100%; }
+
+@media (max-width: 900px) {
+  .fb-settings-backdrop { padding: 0; }
+  .fb-settings-window { width: 100%; height: 100%; max-height: 100%; border: 0; border-radius: 0; }
+  .fb-settings-window-head { padding-top: max(10px, env(safe-area-inset-top)); }
+}

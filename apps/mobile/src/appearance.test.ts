@@ -37,6 +37,7 @@ describe("appearance settings module (AI-011 Quick Appearance)", () => {
       navLayout: "bottom",
       navLayoutChosen: false,
       railPinned: false,
+      railWidth: 224,
     });
   });
 
@@ -84,6 +85,7 @@ describe("appearance settings module (AI-011 Quick Appearance)", () => {
         navLayout: "rail",
         navLayoutChosen: true,
         railPinned: true,
+        railWidth: 224,
       };
       saveAppearance(next);
       expect(loadAppearance()).toEqual(next);
@@ -121,6 +123,7 @@ describe("appearance settings module (AI-011 Quick Appearance)", () => {
       navLayout: "bottom",
       navLayoutChosen: false,
       railPinned: false,
+      railWidth: 224,
     });
     const root = document.documentElement;
     const swatch = ACCENT_OPTIONS.find((a) => a.id === "blue")!.swatch;

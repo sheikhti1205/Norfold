@@ -4,7 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import { AuthProvider } from "./auth";
 import { ThemeProvider } from "./theme";
 import { motionConfigValueFor, useAppearance } from "./appearance";
-import { GuestOnly, NativeOnly, OnboardingRoute, RequireAdmin, RequireAuth } from "./components/Guards";
+import { GuestOnly, NativeOnly, OnboardingRoute, RequireAuth } from "./components/Guards";
 import { Shell } from "./components/Shell";
 import { BackButtonHandler } from "./components/BackButtonHandler";
 import { AccountDeletionFeedback } from "./components/AccountDeletionFeedback";
@@ -27,7 +27,6 @@ import { Profile } from "./screens/Profile";
 import { ProfileEdit } from "./screens/ProfileEdit";
 import { PublicProfile } from "./screens/PublicProfile";
 import { About } from "./screens/About";
-import { Updates } from "./screens/Updates";
 import { UpdatePrompt } from "./components/UpdatePrompt";
 import { DesktopNotifications } from "./components/DesktopNotifications";
 import { NativeUpdateLifecycle } from "./services/updates/nativeRuntime";
@@ -38,38 +37,10 @@ import { Insights } from "./screens/Insights";
 import { Reactions } from "./screens/Reactions";
 import { Help } from "./screens/Help";
 import { AiConnection } from "./screens/AiConnection";
-import { CloudModels } from "./screens/CloudModels";
-import { LocalIntelligence } from "./screens/LocalIntelligence";
-import { DownloadedModels } from "./screens/DownloadedModels";
 import { Notifications } from "./screens/Notifications";
 import { Settings } from "./screens/Settings";
-import { AccountSettings } from "./screens/AccountSettings";
-import { Devices } from "./screens/Devices";
-import { BackupSettings } from "./screens/BackupSettings";
-import { AppearanceSettings } from "./screens/AppearanceSettings";
-import { AccessibilitySettings } from "./screens/AccessibilitySettings";
-import { FeedLayoutSettings } from "./screens/FeedLayoutSettings";
-import { MediaSettings } from "./screens/MediaSettings";
-import { NotificationPreferences } from "./screens/NotificationPreferences";
-import { PrivacySettings } from "./screens/PrivacySettings";
-import { AiSettings } from "./screens/AiSettings";
-import { AiPrivacy } from "./screens/AiPrivacy";
-import { HelpGuide } from "./screens/HelpGuide";
-import { AdminTeam } from "./screens/AdminTeam";
-import { AdminBootstrap } from "./screens/AdminBootstrap";
-import { BlockedUsers } from "./screens/BlockedUsers";
-import { SafetyReports } from "./screens/SafetyReports";
-import { FeedbackForm } from "./screens/FeedbackForm";
-import { MyAppeals } from "./screens/MyAppeals";
-import { StaffAppeals, StaffAppeal } from "./screens/StaffAppeals";
-import { StaffFeedback, StaffFeedbackDetail } from "./screens/StaffFeedback";
-import { Returns } from "./screens/Returns";
-import { ModerationQueue } from "./screens/ModerationQueue";
-import { RequireCapability } from "./components/RequireCapability";
-import { AdminInvite } from "./screens/AdminInvite";
-import { AdminAuditLog } from "./screens/AdminAuditLog";
+import { settingsRouteElements } from "./screens/settingsRoutes";
 import { CommunityGuidelines, PrivacyPolicy, Terms } from "./screens/Legal";
-import { Diagnostics } from "./screens/Diagnostics";
 import { ReportLinkHandler } from "./components/ReportLinkHandler";
 import { ChatPushLinkHandler } from "./components/ChatPushLinkHandler";
 import { AuthLinkBootstrap } from "./components/AuthLinkBootstrap";
@@ -80,7 +51,6 @@ import { FixtureRoute } from "./fixture/FixtureRoute";
 import { useAuth } from "./auth";
 import { SavedReportsProvider } from "./hooks/useSavedReports";
 import { Connections, LegacyChatsRedirect, MessagingThread } from "./screens/Messaging";
-import { MessagingPrivacy } from "./screens/MessagingPrivacy";
 import { MessagingLifecycle } from "./components/MessagingLifecycle";
 import { MessagePillHost } from "./components/MessagePillHost";
 import { postBackgroundLocation, PostNavigationProvider } from "./components/PostNavigation";
@@ -255,48 +225,7 @@ function AppRouteTree() {
                 <Route path="/ai-models" element={<NativeOnly><Navigate to="/settings/local-intelligence" replace /></NativeOnly>} />
                <Route path="/offline-ai" element={<NativeOnly><Navigate to="/settings/local-intelligence" replace /></NativeOnly>} />
               <Route path="/settings" element={<Settings />}>
-              {/* Eligibility and the claim itself are server-controlled. An
-                  existing admin role must not be required to reach setup. */}
-              <Route path="/settings/administrator" element={<AdminBootstrap />} />
-              <Route path="/settings/account" element={<AccountSettings />} />
-              <Route path="/settings/devices" element={<Devices />} />
-              <Route path="/settings/backup" element={<BackupSettings />} />
-              <Route path="/settings/appearance" element={<AppearanceSettings />} />
-              <Route path="/settings/accessibility" element={<AccessibilitySettings />} />
-              <Route path="/settings/feed-layout" element={<FeedLayoutSettings />} />
-              <Route path="/settings/media" element={<MediaSettings />} />
-              <Route path="/settings/notifications" element={<NotificationPreferences />} />
-              <Route path="/settings/privacy" element={<PrivacySettings />} />
-              <Route path="/settings/privacy/messages" element={<MessagingPrivacy />} />
-              <Route path="/settings/privacy/blocked" element={<BlockedUsers />} />
-              <Route path="/settings/privacy/reports" element={<SafetyReports />} />
-              <Route path="/settings/privacy/appeals" element={<MyAppeals />} />
-              <Route path="/settings/feedback" element={<FeedbackForm />} />
-              <Route path="/settings/returns" element={<Returns />} />
-              <Route path="/settings/moderation/queue" element={<RequireCapability capability="reports_review"><ModerationQueue /></RequireCapability>} />
-              <Route path="/settings/moderation/appeals" element={<StaffAppeals />} />
-              <Route path="/settings/moderation/appeals/:appealId" element={<StaffAppeal />} />
-              <Route path="/settings/moderation/feedback" element={<StaffFeedback />} />
-              <Route path="/settings/moderation/feedback/:feedbackId" element={<StaffFeedbackDetail />} />
-              <Route path="/settings/ai" element={<AiSettings />} />
-              <Route path="/settings/ai/connections" element={<AiConnection />} />
-              <Route path="/settings/ai/chat-models" element={<CloudModels />} />
-              <Route path="/settings/ai/privacy" element={<AiPrivacy />} />
-               <Route path="/settings/ai/models" element={<NativeOnly><Navigate to="/settings/local-intelligence" replace /></NativeOnly>} />
-              <Route path="/settings/local-intelligence" element={<NativeOnly><LocalIntelligence /></NativeOnly>} />
-              <Route path="/settings/local-intelligence/downloads" element={<NativeOnly><DownloadedModels /></NativeOnly>} />
-              <Route path="/settings/help" element={<HelpGuide />} />
-              {/* Staff console. The Settings row is role-gated and these routes
-                  are guarded too, so a typed URL never reaches the console. */}
-              <Route path="/settings/team" element={<RequireAdmin><AdminTeam /></RequireAdmin>} />
-              <Route path="/settings/team/invite" element={<RequireAdmin><AdminInvite /></RequireAdmin>} />
-              <Route path="/settings/team/audit" element={<RequireAdmin><AdminAuditLog /></RequireAdmin>} />
-              <Route path="/settings/updates" element={<Updates />} />
-              <Route path="/settings/about" element={<About />} />
-              <Route path="/settings/terms" element={<Terms />} />
-              <Route path="/settings/privacy-policy" element={<PrivacyPolicy />} />
-              <Route path="/settings/community-guidelines" element={<CommunityGuidelines />} />
-              <Route path="/settings/diagnostics" element={<Diagnostics />} />
+                {settingsRouteElements()}
               </Route>
             </Route>
             <Route path="*" element={<Navigate to="/splash" replace />} />

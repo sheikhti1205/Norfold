@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { Capacitor } from "@capacitor/core";
-import { Link, useLocation } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { Archive, BarChart3, Bell, Bookmark, ClipboardList, Heart, Home, MessageCircle, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings as SettingsIcon, UserRound, type LucideIcon } from "lucide-react";
 import { Focusable, Tooltip, TooltipTrigger } from "react-aria-components";
@@ -8,12 +8,13 @@ import { TabTapProvider, useTabTap } from "./TabTap";
 import { LiveRegion } from "./LiveRegion";
 import { MEDIUM_MAX_PX, READABLE_COLUMN_CLASS, useViewportWidth, WIDE_CANVAS_CLASS } from "./responsive";
 import { useNavLayout } from "./navLayout";
-import { loadAppearance, saveAppearance, type NavLayout } from "../appearance";
+import { clampRailWidth, loadAppearance, RAIL_WIDTH_MAX, RAIL_WIDTH_MIN, RAIL_WIDTH_STEP, saveAppearance, type NavLayout } from "../appearance";
 import { RouteTransition } from "./RouteTransition";
 import { requestHistorySuppression } from "./backNavigation";
 import { NavigationSetup } from "./NavigationSetup";
 import { RoleOfferNotice } from "./RoleOfferNotice";
 import { AccountMenu } from "./AccountMenu";
+import { SettingsWindow } from "./SettingsWindow";
 import {
   fadeUpVariants,
   fadeVariants,
@@ -91,6 +92,8 @@ export function Shell() {
   const navLayout = useNavLayout();
   const rail = navLayout === "rail";
   const column = wideCanvas ? WIDE_CANVAS_CLASS : READABLE_COLUMN_CLASS;
+  const navigate = useNavigate();
+  const [settingsWindowOpen, setSettingsWindowOpen] = useState(false);
 
   // A breakpoint flip replaces the whole navigation. The element that had focus
   // unmounts, so focus would otherwise fall to <body> and the next Tab would
@@ -141,7 +144,7 @@ export function Shell() {
             hide/show inside a layout still animates because that key is
             stable. */}
         <AnimatePresence key={`fb-rail-boundary-${navLayout}`} initial={false}>
-          {showNav && rail && <PrimaryNav key="fb-rail-nav" layout="rail" />}
+          {showNav && rail && <PrimaryNav key="fb-rail-nav" layout="rail" onOpenSettings={() => setSettingsWindowOpen(true)} />}
         </AnimatePresence>
         <main
           className={`relative min-h-0 flex-1 ${rail ? `min-w-0 ${column}` : ""} ${
@@ -161,6 +164,8 @@ export function Shell() {
           {showNav && !rail && <PrimaryNav key="fb-bottom-nav" layout="bottom" />}
         </AnimatePresence>
         <LiveRegion />
+        <SettingsWindow open={settingsWindowOpen} onClose={() => setSettingsWindowOpen(false)}
+          onExit={(path) => { setSettingsWindowOpen(false); navigate(path); }} />
       </div>
     </TabTapProvider>
   );
@@ -177,6 +182,7 @@ export function PrimaryNav({
   layout = "bottom",
   activePath,
   layoutScope = "shell",
+  onOpenSettings,
 }: {
   layout?: NavLayout;
   activePath?: string;
@@ -188,6 +194,8 @@ export function PrimaryNav({
    * gives each demo its own.
    */
   layoutScope?: string;
+  /** Opens the floating settings window from the account menu. */
+  onOpenSettings?: () => void;
 }) {
   const { notifyTabTap } = useTabTap();
   const { pathname, search } = useLocation();
@@ -199,6 +207,46 @@ export function PrimaryNav({
     const next = !railPinnedState;
     setRailPinnedState(next);
     saveAppearance({ ...loadAppearance(), railPinned: next });
+  };
+  // Owner order 2026-11-13: the pinned sidebar is resizable. The width lives in
+  // the same device-local appearance store as the pin, so it survives reloads
+  // and never syncs to the account. The account menu reads it from the root CSS
+  // variable because its popover is portalled out of the rail's subtree.
+  const [railWidthState, setRailWidthState] = useState(() => loadAppearance().railWidth);
+  const railWidthRef = useRef(railWidthState);
+  railWidthRef.current = railWidthState;
+  const railDrag = useRef<{ startX: number; startWidth: number } | null>(null);
+  const commitRailWidth = (next: number) => {
+    const clamped = clampRailWidth(next);
+    setRailWidthState(clamped);
+    saveAppearance({ ...loadAppearance(), railWidth: clamped });
+  };
+  useEffect(() => {
+    document.documentElement.style.setProperty("--fb-rail-w", `${railWidthState}px`);
+  }, [railWidthState]);
+  const onResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    railDrag.current = { startX: event.clientX, startWidth: railWidthRef.current };
+  };
+  const onResizeMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = railDrag.current;
+    if (!start) return;
+    setRailWidthState(clampRailWidth(start.startWidth + event.clientX - start.startX));
+  };
+  const onResizeEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = railDrag.current;
+    if (!start) return;
+    railDrag.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    commitRailWidth(start.startWidth + event.clientX - start.startX);
+  };
+  const onResizeKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const step = event.shiftKey ? RAIL_WIDTH_STEP * 2 : RAIL_WIDTH_STEP;
+    if (event.key === "ArrowLeft") { event.preventDefault(); commitRailWidth(railWidthRef.current - step); }
+    else if (event.key === "ArrowRight") { event.preventDefault(); commitRailWidth(railWidthRef.current + step); }
+    else if (event.key === "Home") { event.preventDefault(); commitRailWidth(RAIL_WIDTH_MIN); }
+    else if (event.key === "End") { event.preventDefault(); commitRailWidth(RAIL_WIDTH_MAX); }
   };
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -342,6 +390,7 @@ export function PrimaryNav({
         data-layout="rail"
         data-pinned={railPinned ? "true" : "false"}
         className="fb-nav-rail shrink-0"
+        style={railPinned ? { width: railWidthState } : undefined}
         variants={fadeVariants}
         initial="hidden"
         animate="visible"
@@ -369,7 +418,12 @@ export function PrimaryNav({
             <div className="fb-nav-rail-list">{railOthers}</div>
           </div>
         </div>
-        <AccountMenu />
+        <AccountMenu onOpenSettings={onOpenSettings} />
+        {railPinned && <div role="separator" aria-orientation="vertical" aria-label="Resize navigation"
+          aria-valuenow={railWidthState} aria-valuemin={RAIL_WIDTH_MIN} aria-valuemax={RAIL_WIDTH_MAX}
+          aria-valuetext={`${railWidthState} pixels`} tabIndex={0} className="fb-nav-rail-resize"
+          onPointerDown={onResizeStart} onPointerMove={onResizeMove} onPointerUp={onResizeEnd}
+          onPointerCancel={onResizeEnd} onKeyDown={onResizeKey} />}
       </motion.nav>
     );
   }

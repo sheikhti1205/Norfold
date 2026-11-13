@@ -1,31 +1,26 @@
-import { useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
 import { useAppearance, ACCENT_OPTIONS, type AccentId, type NavLayout } from "../appearance";
 import { useTheme, type Theme } from "../theme";
 import { NavLayoutCard, ThemeCard } from "./settings";
-import {
-  CONTACT_RULE_LABELS, CONTACT_RULE_VALUES, DEFAULT_CONTACT_RULES, fetchContactRules,
-  saveContactRules, type AccountContactRules, type ContactRule,
-} from "../services/accountRules";
+import { UserAvatar } from "./UserAvatar";
+import type { RememberedAccount } from "../services/rememberedAccounts";
 import "./AccountMenu.css";
 
 /**
- * The nested floating panels opened from the account popover.
+ * The sub-panels that replace the account rows inside the same card.
  *
- * Owner order 2026-11-12 (R2): a row does not walk the reader to a page, it
- * shows what is inside the row. So these panels are the real controls, not a
- * screenshot of them: the accent and navigation tiles write the same appearance
- * store the Appearance page writes, and the contact rule writes the account row
- * `findback_set_contact_rules` stores. Every panel also carries one explicit way
- * to the full page for the reader who wants the roomier version.
+ * They are the real controls, not a picture of them: the accent and navigation
+ * tiles write the appearance store the Personalization page writes, and the
+ * account switcher uses the same remembered-account list the sign-in chooser
+ * reads. Nothing here paints beside the popover - a panel owns the card while
+ * it is open, and Back returns to the rows.
  */
-export function AppearancePreview({ onOpenPage }: { onOpenPage: () => void }) {
+export function PersonalizationPanel({ onOpenPage }: { onOpenPage: () => void }) {
   const { settings, update } = useAppearance();
   const { theme, setTheme } = useTheme();
   const chooseAccent = (accent: AccentId) => update({ accent, accentSource: "preset" });
   const chooseLayout = (navLayout: NavLayout) => update({ navLayout, navLayoutChosen: true });
-  return <div className="fb-account-panel">
-    <h3>Appearance</h3>
+  return <div className="fb-account-panel-body" role="group" aria-label="Personalization">
     <fieldset className="fb-choice-fieldset">
       <legend>Theme</legend>
       <div className="fb-preview-grid fb-preview-grid-theme">
@@ -55,78 +50,46 @@ export function AppearancePreview({ onOpenPage }: { onOpenPage: () => void }) {
       </div>
     </fieldset>
     <button type="button" className="fb-account-panel-link" onClick={onOpenPage}>
-      Open Appearance<ChevronRight size={16} aria-hidden="true" />
+      Open Personalization<ChevronRight size={16} aria-hidden="true" />
     </button>
   </div>;
 }
 
-/**
- * One question, because the product has one gate.
- *
- * A first message in this schema *is* the connection request: nothing else can
- * reach an account before a conversation connects. Two dropdowns over that one
- * event would let a reader set answers that contradict each other and promise a
- * distinction the admission path cannot honour, so the panel asks the question
- * that is actually enforced and writes both stored columns from that answer.
- * Contact details are not offered here because no surface shows them yet.
- */
-const CONTACT_RULE_QUESTION = "Who can start a conversation with you";
-const CONTACT_RULE_HINT =
-  "Applies to new conversations. People you have connected with can always reach you.";
-
-export function SettingsPreview({ onOpenPage }: { onOpenPage: (path: string) => void }) {
-  const [rules, setRules] = useState<AccountContactRules>(DEFAULT_CONTACT_RULES);
-  const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    void fetchContactRules().then((next) => { if (alive) setRules(next); },
-      () => { if (alive) { setFailed(true); setStatus("Could not load your contact rules. Pull them up again in a moment."); } })
-      .finally(() => { if (alive) setLoading(false); });
-    return () => { alive = false; };
-  }, []);
-
-  const chooseContactRule = (value: ContactRule) => {
-    const previous = rules;
-    const next = { ...rules, messageFrom: value, connectFrom: value };
-    setRules(next);
-    setFailed(false);
-    setStatus(null);
-    void saveContactRules(next).then((saved) => setRules(saved), () => {
-      setRules(previous);
-      setFailed(true);
-      setStatus("That rule was not saved. Try again.");
-    });
-  };
-
-  return <div className="fb-account-panel">
-    <h3>Your account</h3>
-    <div className="fb-account-panel-links">
-      {[
-        { label: "Edit profile", path: "/profile/edit" },
-        { label: "Account settings", path: "/settings/account" },
-        { label: "Devices", path: "/settings/devices" },
-        { label: "Backup", path: "/settings/backup" },
-      ].map((row) => (
-        <button key={row.path} type="button" className="fb-account-panel-link" onClick={() => onOpenPage(row.path)}>
-          {row.label}<ChevronRight size={16} aria-hidden="true" />
-        </button>
-      ))}
+export function SwitchAccountPanel({ current, accounts, switching, error, onSwitch, onAdd }: {
+  current: { id: string; name: string; username: string };
+  accounts: RememberedAccount[];
+  switching: string | null;
+  error: string | null;
+  onSwitch: (account: RememberedAccount) => void;
+  onAdd: () => void;
+}) {
+  return <div className="fb-account-panel-body" role="group" aria-label="Switch account">
+    <div className="fb-account-current">
+      <UserAvatar username={current.name} size={32} />
+      <span className="fb-account-switch-copy">
+        <span className="fb-account-switch-name">{current.name}</span>
+        {current.username && <span className="fb-account-switch-handle">@{current.username}</span>}
+      </span>
+      <span className="fb-account-current-tag">Current</span>
     </div>
-    <fieldset className="fb-choice-fieldset fb-account-rules" disabled={loading}>
-      <legend>Contact rules</legend>
-      <label className="fb-account-rule">
-        <span className="fb-account-rule-label">{CONTACT_RULE_QUESTION}</span>
-        <select value={rules.messageFrom} disabled={loading} aria-label={CONTACT_RULE_QUESTION}
-          aria-describedby="contact-rule-hint"
-          onChange={(event) => chooseContactRule(event.target.value as ContactRule)}>
-          {CONTACT_RULE_VALUES.map((value) => <option key={value} value={value}>{CONTACT_RULE_LABELS[value]}</option>)}
-        </select>
-        <span id="contact-rule-hint" className="fb-account-rule-hint">{CONTACT_RULE_HINT}</span>
-      </label>
-    </fieldset>
-    {status && <p role={failed ? "alert" : "status"} className="fb-account-panel-status">{status}</p>}
+    <div className="fb-account-divider" />
+    {accounts.length > 0 ? <ul className="fb-account-switch-list" aria-label="Other accounts on this device">
+      {accounts.map((account) => <li key={account.id}>
+        <button type="button" className="fb-account-switch-row" disabled={switching !== null}
+          aria-label={`Switch to ${account.displayName}, @${account.username}`}
+          onClick={() => onSwitch(account)}>
+          <UserAvatar username={account.displayName} size={28} />
+          <span className="fb-account-switch-copy">
+            <span className="fb-account-switch-name">{account.displayName}</span>
+            <span className="fb-account-switch-handle">@{account.username}</span>
+          </span>
+          {switching === account.id && <span className="fb-account-switch-busy">Switching</span>}
+        </button>
+      </li>)}
+    </ul> : <p className="fb-account-switch-empty">No other accounts on this device.</p>}
+    <button type="button" className="fb-account-panel-link" onClick={onAdd}>
+      <Plus size={16} aria-hidden="true" />Add another account
+    </button>
+    {error && <p role="alert" className="fb-account-panel-status">{error}</p>}
   </div>;
 }

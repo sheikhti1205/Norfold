@@ -638,7 +638,10 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
       expect(rail.flexGrow).toBe("0");
       expect(rail.flexShrink).toBe("0");
       expect(rail.width).toBe("72px");
-      expect(rail.position).toBe("static");
+      // Positioned only so the resize handle can anchor to the rail's inner
+      // edge. It stays an in-flow flex column (never fixed/absolute), which is
+      // what keeps it from covering the content.
+      expect(rail.position).toBe("relative");
       const item = getComputedStyle(
         within(nav).getByRole("link", { name: "My Reports" }),
       );

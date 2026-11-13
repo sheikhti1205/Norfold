@@ -18,12 +18,22 @@ export function OverlayDepthProvider({ depth, children }: { depth: number; child
  * React Aria alone owns focus, outside interaction and scroll containment.
  * Mount INSIDE the portal so a closed/collection-only popover registers nothing.
  */
-export function OverlayStackBridge({ onClose, dismissible = true }: { onClose: () => void; dismissible?: boolean }) {
+export function OverlayStackBridge({ onClose, onBack, dismissible = true }: {
+  onClose: () => void;
+  /** A surface with its own history can walk back before it dismisses. */
+  onBack?: () => void;
+  dismissible?: boolean;
+}) {
   const layer = useModalLayer(true);
-  const latest = useRef({ onClose, dismissible });
-  latest.current = { onClose, dismissible };
+  const latest = useRef({ onClose, onBack, dismissible });
+  latest.current = { onClose, onBack, dismissible };
   useEffect(() => {
     const close = () => { if (latest.current.dismissible) latest.current.onClose(); };
+    const back = () => {
+      if (!latest.current.dismissible) return;
+      if (latest.current.onBack) latest.current.onBack();
+      else latest.current.onClose();
+    };
     const escape = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.isComposing || !isTopModalLayer(layer)) return;
       // Capture before old document-level focus traps. One key/Back consumes
@@ -35,7 +45,7 @@ export function OverlayStackBridge({ onClose, dismissible = true }: { onClose: (
     document.addEventListener("keydown", escape, true);
     const offBack = registerBackInterceptor(() => {
       if (!isTopModalLayer(layer)) return false;
-      close();
+      back();
       return true;
     });
     return () => { document.removeEventListener("keydown", escape, true); offBack(); };
