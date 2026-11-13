@@ -84,10 +84,34 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
   padding: 12px 8px;
   background: var(--fb-surface);
   border-inline-end: 1px solid var(--fb-outline-variant);
+  overflow: hidden; overscroll-behavior: contain;
+}
+/* Destinations scroll; the identity control below them does not. Settings is
+   reached from inside that control (R1), so it must stay on screen however
+   many rows the rail carries. */
+.fb-nav-rail-scroll {
+  display: flex; flex-direction: column; gap: 8px;
+  flex: 1 1 auto; min-height: 0;
   overflow-y: auto; overscroll-behavior: contain;
 }
 .fb-nav-rail-list {
   display: flex; flex-direction: column; gap: 4px; min-height: 0;
+  /* The scroll container is the scroller. If these lists are allowed to
+     shrink, flexbox hands the group a box above its own content and the
+     rows paint over Insights instead of extending the scroll range. */
+  flex: none;
+}
+/* The prototype's "Others" shelf. A hairline plus a small label is the whole
+   device: secondary destinations stay distinguishable without a second card,
+   and the label only appears in the pinned panel where there is room for it. */
+.fb-nav-rail-group {
+  display: flex; flex-direction: column; gap: 4px; flex: none;
+  padding-block-start: 10px;
+  border-block-start: 1px solid var(--fb-outline-variant);
+}
+.fb-nav-rail-section {
+  padding-inline: 12px; font-size: 0.6875rem; font-weight: 600;
+  letter-spacing: 0.02em; color: var(--fb-on-surface-variant);
 }
 /* Vertical items keep the bar's geometry (56px tall, 16px corners) and turn
    the icon-over-label layout into a readable column instead of a strip. */

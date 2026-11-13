@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Button, Dialog, DialogTrigger } from "react-aria-components";
-import { Bookmark, ChevronRight, CircleHelp, LogOut, MessageSquareWarning, Palette, Settings, SlidersHorizontal } from "lucide-react";
+import { ChevronRight, CircleHelp, LogOut, MessageSquareWarning, Palette, Settings, SlidersHorizontal } from "lucide-react";
 import { useAuth } from "../auth";
 import { useWideViewport } from "./responsive";
 import { ConfirmDialog } from "./AdaptiveTaskSurface";
@@ -94,7 +94,7 @@ export function AccountMenu() {
       onMouseLeave={() => { if (closeTimer.current !== null) window.clearTimeout(closeTimer.current); closeTimer.current = window.setTimeout(closePreview, 140); }}
       onFocus={() => openPreview(id)}
       onClick={() => openPreview(id)}>
-      {icon}<span>{label}</span><ChevronRight size={20} aria-hidden="true" />
+      {icon}<span className="fb-account-row-label">{label}</span><ChevronRight size={20} aria-hidden="true" />
     </button>
   );
 
@@ -136,19 +136,16 @@ export function AccountMenu() {
             {previewRow("settings", "Settings", <Settings size={24} aria-hidden="true" />)}
             {previewRow("appearance", "Appearance", <Palette size={24} aria-hidden="true" />)}
             <a href="/settings/notifications" className="fb-account-row" onClick={(event) => { event.preventDefault(); closeAll(); navigate("/settings/notifications"); }}>
-              <SlidersHorizontal size={24} aria-hidden="true" /><span>Activity preferences</span><ChevronRight size={20} aria-hidden="true" />
-            </a>
-            <a href="/saved" className="fb-account-row" onClick={(event) => { event.preventDefault(); closeAll(); navigate("/saved"); }}>
-              <Bookmark size={24} aria-hidden="true" /><span>Saved</span><ChevronRight size={20} aria-hidden="true" />
+              <SlidersHorizontal size={24} aria-hidden="true" /><span className="fb-account-row-label">Activity preferences</span><ChevronRight size={20} aria-hidden="true" />
             </a>
             <a href="/settings/feedback" className="fb-account-row" onClick={(event) => { event.preventDefault(); closeAll(); navigate("/settings/feedback"); }}>
-              <MessageSquareWarning size={24} aria-hidden="true" /><span>Report a problem</span><ChevronRight size={20} aria-hidden="true" />
+              <MessageSquareWarning size={24} aria-hidden="true" /><span className="fb-account-row-label">Report a problem</span><ChevronRight size={20} aria-hidden="true" />
             </a>
             <a href="/settings/help" className="fb-account-row" onClick={(event) => { event.preventDefault(); closeAll(); navigate("/settings/help"); }}>
-              <CircleHelp size={24} aria-hidden="true" /><span>Help</span><ChevronRight size={20} aria-hidden="true" />
+              <CircleHelp size={24} aria-hidden="true" /><span className="fb-account-row-label">Help</span><ChevronRight size={20} aria-hidden="true" />
             </a>
             <Button className="fb-account-row" onPress={() => { closeAll(); setError(false); setConfirming(true); }}>
-              <LogOut size={24} aria-hidden="true" /><span>Log out</span><ChevronRight size={20} aria-hidden="true" />
+              <LogOut size={24} aria-hidden="true" /><span className="fb-account-row-label">Log out</span><ChevronRight size={20} aria-hidden="true" />
             </Button>
           </div>
           {preview && <div className="fb-account-preview" role="group" aria-label={preview === "appearance" ? "Appearance preview" : "Settings preview"}

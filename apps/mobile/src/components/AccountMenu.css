@@ -29,7 +29,11 @@
 .fb-account-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--fb-on-surface); text-align: start; text-decoration: none; font-size: 15px; cursor: pointer; }
 .fb-account-row:hover, .fb-account-row:focus-visible, .fb-account-row[aria-expanded="true"] { background: var(--fb-surface-container); }
 .fb-account-row:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: -3px; }
-.fb-account-row > span:not(.fb-account-identity-text) { flex: 1; }
+/* The label is the row that stretches. Spans in this list are not all labels:
+   the avatar is a span too, and a blanket `> span` rule gave it flex: 1, which
+   pulled the 40px avatar across the whole row and cropped the photo into a
+   band. Keep growth on the text and let the canonical avatar keep its box. */
+.fb-account-row-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .fb-account-identity-text { display: flex; flex: 1; min-width: 0; flex-direction: column; overflow-wrap: anywhere; }
 .fb-account-identity-text span { color: var(--fb-on-surface-variant); }
 .fb-account-divider { height: 1px; margin: 4px 0; background: var(--fb-outline-variant); }

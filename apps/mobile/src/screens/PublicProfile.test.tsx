@@ -144,8 +144,9 @@ describe("PublicProfile", () => {
 
   it("shows verification badges for the flags the profile reports", async () => {
     renderRoute();
-    expect(await screen.findByText("Email verified")).toBeTruthy();
-    expect(screen.getByText("Phone verified")).toBeTruthy();
+    // One canonical badge next to the name; the old pair of status pills was
+    // duplicate identity chrome.
+    expect(await screen.findByRole("img", { name: "Email and phone verified" })).toBeTruthy();
   });
 
   it("renders the canonical avatar fallback and never a broken image", async () => {
@@ -157,8 +158,7 @@ describe("PublicProfile", () => {
   it("shows verification flags from the public profile without contact fields", async () => {
     renderRoute();
     await screen.findByText("Owner Name");
-    expect(screen.getByText("Email verified")).toBeTruthy();
-    expect(screen.getByText("Phone verified")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Email and phone verified" })).toBeTruthy();
     expect(Object.keys(profile)).not.toContain("email");
     expect(Object.keys(profile)).not.toContain("phone");
   });

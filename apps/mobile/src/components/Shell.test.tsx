@@ -34,6 +34,9 @@ function renderShell(entry = "/") {
         <Route path="/chats/:id" element={<p>Chat thread</p>} />
         <Route path="/connections/:id" element={<p>Legacy chat thread</p>} />
         <Route path="/settings/appearance" element={<p>Appearance screen</p>} />
+        <Route path="/settings/returns" element={<p>Recovered screen</p>} />
+        <Route path="/saved" element={<p>Saved screen</p>} />
+        <Route path="/reactions" element={<p>Reactions screen</p>} />
         <Route path="/my/:id/edit" element={<p>Edit report screen</p>} />
         <Route path="/notifications" element={<p>Notifications screen</p>} />
         <Route path="/report" element={<p>Report screen</p>} />
@@ -56,7 +59,8 @@ describe("Shell floating primary navigation", () => {
   });
 
   it.each([
-    ["/", "Home"], ["/search", "Home"], ["/my", "My Reports"],
+    ["/", "Home"],
+    ["/my", "My Reports"],
     ["/chats", "Chats"], ["/settings", "Settings"], ["/profile", "Settings"],
     ["/profile/edit", "Settings"],
     ["/settings/appearance", "Settings"], ["/my/report/edit", "My Reports"],
@@ -466,19 +470,47 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     expect((document.activeElement as HTMLElement).getAttribute("href")).toBe("/chats");
   });
 
+  // The rail carries destinations the phone bar deliberately does not. Search
+  // and Connect share a route, and Recovered is a Settings child, so these
+  // selections cannot be inferred from the pathname alone.
+  it.each([
+    ["/search", "Search"],
+    ["/search?scope=people", "Connect"],
+    ["/saved", "Saved"],
+    ["/settings/returns", "Recovered"],
+    ["/reactions", "Liked / Disliked"],
+    ["/notifications", "Activity"],
+  ])("selects only the rail destination for %s", (path, label) => {
+    setWidth(800);
+    storeNavLayout("rail");
+    renderShell(path);
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(
+      within(nav)
+        .getAllByRole("link")
+        .filter((link) => link.getAttribute("aria-current") === "page")
+        .map((link) => link.getAttribute("aria-label") ?? link.textContent),
+    ).toEqual([label]);
+  });
+
   it("keeps the rail's destinations, order, targets, names and active treatment", () => {
     setWidth(800);
     storeNavLayout("rail");
     renderShell("/my");
     const nav = screen.getByRole("navigation", { name: "Primary" });
     const links = within(nav).getAllByRole("link");
-    // Top-to-bottom DOM order is also the visual and keyboard order.
+    // Top-to-bottom DOM order is also the visual and keyboard order. The
+    // primary six come first, then the prototype's "Others" shelf.
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
-      "/report", "/", "/my", "/chats", "/insights",
+      "/report", "/", "/my", "/search", "/chats", "/notifications", "/insights",
+      "/search?scope=people", "/reactions", "/saved", "/settings/returns",
     ]);
     expect(
       links.map((link) => link.getAttribute("aria-label") ?? link.textContent?.trim()),
-    ).toEqual(["Create report", "Home", "My Reports", "Chats", "Insights"]);
+    ).toEqual([
+      "Create report", "Home", "My Reports", "Search", "Chats", "Activity", "Insights",
+      "Connect", "Liked / Disliked", "Saved", "Recovered",
+    ]);
     const account = within(nav).getByRole("button", { name: /^Account/ });
     expect(account.getAttribute("aria-expanded")).toBe("false");
     expect(account.hasAttribute("aria-current")).toBe(false);
@@ -506,7 +538,7 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     expect(pinned.getAttribute("data-pinned")).toBe("true");
     expect(loadAppearance().railPinned).toBe(true);
     // Every destination is named in place, and the pin now collapses it again.
-    for (const label of ["Home", "My Reports", "Chats", "Insights"]) {
+    for (const label of ["Home", "My Reports", "Search", "Chats", "Activity", "Insights", "Others", "Connect", "Liked / Disliked", "Saved", "Recovered"]) {
       expect(within(pinned).getByText(label)).toBeTruthy();
     }
     fireEvent.click(within(pinned).getByRole("button", { name: "Collapse navigation" }));
