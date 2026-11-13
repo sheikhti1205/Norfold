@@ -281,3 +281,73 @@ Captures: 1280x800, 390x844 and 320x720, in light, dark, AMOLED and xlarge text.
   is empty by design and signed-in destinations are filtered out of settings
   search. Device acceptance still needs owner consent.
 
+### 2026-11-13 pass: compact filters, custom calendar, app-bar trim
+
+Owner direction in this session: remove the app bar's sliders control as
+redundant with the search filters, make Clear a real button beside the filter
+icon, and make the phone layout meaningfully more compact. "Apply closes the
+filter card" from the pass above no longer exists: choosing an option applies it
+live and returns focus to its pill.
+
+- **App bar.** Home renders the brand, notifications and the magnifier only.
+  `HomeTopBar` lost its `filterButton` prop, and Home's old advanced-filter sheet
+  is gone. `AdvancedSearchFilters` gained `hideSheet` so Home keeps the
+  active-filter chips: a URL such as `/?category=…` can never become invisible
+  just because its only control moved into search.
+- **Clear.** `Clear filters` is a 30px outlined pill inside the search bar,
+  immediately left of the 44px filter control; the underlined `Clear` link is
+  removed. It appears only while a filter is active and returns focus to the
+  filter control. The empty-state action is now `Clear search`, because it also
+  clears the query.
+- **Filter tray.** One horizontal row of five pills (Type, Category, Status,
+  Date, Sort) with one inline panel open at a time. No native `<select>` and no
+  native date input remain. The opened pill scrolls itself into view, including
+  after a value widens its label ("Date" becomes "From Nov 20"); at 320dp the
+  measured scrollLeft is 55 and the pill's right edge lands exactly on the row's
+  right edge (312).
+- **Date.** The panel is a 2x2 preset grid (Any date, Last 7 days, Last 30
+  days, This year) over From and To triggers; both triggers stay visible at
+  320dp in a 290px column. The calendar is app-styled: six fixed week rows,
+  accent-filled selected day (rgb(53, 104, 212) with white text), outlined today,
+  and out-of-range days disabled from the other bound. The month header opens a
+  month list; the year opens a year list, then a month list for that year; each
+  choice returns to the day grid. Clear and Today actions sit in a footer row.
+- **Compaction (rendered, 320dp unless noted).** Search bar 52 to 46px; pills
+  44 to 36px; menu options 44 to 40px, 38px on phone; calendar nav 36px; day
+  cells 35px at 320 and 41px at 390; date-options panel 434 to 290px; menu 434
+  to 386px. Desktop keeps the roomier sizes: 46px bar, 40px pills, 360px
+  calendar, two side-by-side date triggers.
+- **Rendered evidence.** Live dev app inside the 320x640 and 390x640 review
+  frame, plus 992x644 desktop: light, dark, AMOLED, and xlarge text (20px root).
+  Calendar boxes measured 264x376 at 320, 300x407 at 390 and 360x458 on desktop;
+  no panel overlapped the overlay bounds and no horizontal overflow appeared.
+  A fresh reload followed by a full click-through (open search, filters, Date,
+  From, month list, pick March, year list, pick a year, pick a day, Clear bound,
+  then Escape through the layers) produced zero console errors.
+- **Antislop after-pass.** R-02 found four pre-existing em dashes; all were
+  replaced in the files this change owns: the brand button's accessible name is
+  now "Norfold, scroll the feed to the top", the Nearby notice uses a period, and
+  the two Search place validation strings use a period and a comma. No decorative
+  glow, gradient, invented data or dead control was added, and the accent stays
+  on the selected day and active count only.
+- **Access trade-off.** The compact phone pill row is 36px tall and the 320dp
+  calendar day is 35px; both clear WCAG 2.2's 24px minimum but sit below the
+  44px iOS guidance. That is the owner-directed compaction limit for a 7-column
+  grid inside a 304px overlay. Revisit if a device pass shows mis-taps.
+- **Verification.** `npm run typecheck -w apps/mobile` exits 0; ESLint reports
+  no errors on the changed TypeScript files (the CSS file is outside the ESLint
+  config). Full mobile suite at this state: 8419 passed, 4 failed, in 2 files
+  this change does not touch. `auth.recoveryOtp` stops at the environment guard
+  `Public share origin must be a bare public HTTPS origin`; `sqliteHistory`
+  hits Windows `EPERM` removing its temp directory. Both fail in isolation and
+  are recorded as environment-bound, not regressions. Two stale tests left by
+  earlier work were repaired here: the accent-migration expectation now matches
+  the stored preferences instead of the exact appearance shape (so a new
+  setting cannot break it), and the account-deletion suite mocks the
+  contact-rules load so its alert query sees exactly one alert. Focused runs:
+  138 tests across overlay, Home, AdvancedSearchFilters and SearchScreen; 140
+  token-contrast and motion tests.
+- **Still unverified.** Signed-in settings pixels, live search loading/error
+  states, and physical-device touch all remain unverified; device acceptance
+  needs owner consent.
+

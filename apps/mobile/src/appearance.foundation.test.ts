@@ -27,7 +27,10 @@ describe("consumer appearance migration", () => {
     localStorage.setItem(appearance.APPEARANCE_STORAGE_KEY, JSON.stringify({
       accent: old, textScale: "xlarge", reduceMotion: "reduce", highQualityPhoto: true,
     }));
-    expect(appearance.loadAppearance()).toEqual({
+    // Every stored preference survives the accent rename. `toMatchObject`
+    // rather than `toEqual`: unrelated settings added later (rail width,
+    // pinned state) must not make an accent-migration test fail.
+    expect(appearance.loadAppearance()).toMatchObject({
       accent: next, accentSource: "preset", textScale: "xlarge", reduceMotion: "reduce", highQualityPhoto: true,
       navLayout: "bottom",
       navLayoutChosen: false,

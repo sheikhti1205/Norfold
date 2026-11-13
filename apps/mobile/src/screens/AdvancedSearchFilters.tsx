@@ -36,9 +36,9 @@ function firstPresent(...values: (string | undefined)[]): string {
  * three different mistakes, and the reader is told which one they made.
  */
 export const PLACE_REJECTION_COPY: Record<PlaceRejection, string> = {
-  coordinate: "A map coordinate is not a place — type the place's name.",
+  coordinate: "A map coordinate is not a place. Type the place's name.",
   number: "Type the name of a place, not a number.",
-  "too-long": `That place name is too long — keep it under ${MAX_PLACE_CHARS} characters.`,
+  "too-long": `That place name is too long, keep it under ${MAX_PLACE_CHARS} characters.`,
 };
 
 /** Keep the legacy /search and Home filter URL contract identical. */
@@ -142,6 +142,7 @@ export function AdvancedSearchFilters({
   open: controlledOpen,
   onOpenChange,
   hideTrigger = false,
+  hideSheet = false,
   compactTrigger = false,
   additionalControls,
   additionalFilters = [],
@@ -155,6 +156,9 @@ export function AdvancedSearchFilters({
   onOpenChange?: (open: boolean) => void;
   /** Hide the default full-width trigger when the caller renders its own. */
   hideTrigger?: boolean;
+  /** Render only the active-filter chips. Home has no second filter sheet:
+   *  its app-bar filter icon was removed as redundant with search filters. */
+  hideSheet?: boolean;
   compactTrigger?: boolean;
   additionalControls?: ReactNode;
   additionalFilters?: readonly { key: string; label: string; clear: () => void }[];
@@ -244,7 +248,7 @@ export function AdvancedSearchFilters({
 
   return (
     <>
-      {!hideTrigger && <DialogTrigger isOpen={sheetOpen} onOpenChange={setSheetOpen}>
+      {!hideSheet && !hideTrigger && <DialogTrigger isOpen={sheetOpen} onOpenChange={setSheetOpen}>
         <Button aria-label={compactTrigger ? activeCount > 0 ? `Filters, ${activeCount} active` : "Filters" : undefined}
           className={compactTrigger ? "fb-icon-control fb-filter-trigger" : "fb-surface-button gap-2"}>
           <SlidersHorizontal size={18} aria-hidden />
@@ -261,7 +265,7 @@ export function AdvancedSearchFilters({
           </Dialog>
         </LayeredPopover> : task}
       </DialogTrigger>}
-      {hideTrigger && task}
+      {!hideSheet && hideTrigger && task}
 
       {/* The chips row.
           The TYPE chip lives OUTSIDE the animated group, and the group is

@@ -39,7 +39,7 @@ import {
 import { useAuth } from "../auth";
 import { useTabTap } from "../components/TabTap";
 import { buildFeedCacheKey, clearNewPostCount, getNewPostCount, incrementNewPostCount } from "../hooks/feedCache";
-import { AdvancedSearchFilters, FiltersIconButton, getActiveFilterCount, useAdvancedSearchFilters } from "./AdvancedSearchFilters";
+import { AdvancedSearchFilters, useAdvancedSearchFilters } from "./AdvancedSearchFilters";
 import type { FeedFilters } from "../services/posts";
 import { useShouldReduceMotion } from "../components/uiMotion";
 import { registerBackInterceptor } from "../components/backNavigation";
@@ -228,7 +228,7 @@ export function Home() {
     } else {
       setMapPickerOpen(false);
       setSnack({
-        message: "Nearby needs a map pin — typed place names alone are not included.",
+        message: "Nearby needs a map pin. Typed place names alone are not included.",
         action: "map",
       });
     }
@@ -259,7 +259,6 @@ export function Home() {
   const scopedCacheKey = buildFeedCacheKey(HOME_CACHE_KEY, feedFilters);
   const [newPostCount, setNewPostCount] = useState(() => getNewPostCount(scopedCacheKey));
   const [hasUpdates, setHasUpdates] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const scrollRef = useRef<PullToRefreshHandle>(null);
 
   // Owner feedback 2026-11-06: the app bar is part of the feed's own scroll.
@@ -503,13 +502,6 @@ export function Home() {
               }}
               onBrandTap={onBrandTap}
               inputRef={searchInputRef}
-              filterButton={
-                <FiltersIconButton
-                  activeCount={getActiveFilterCount(advanced)}
-                  open={filtersOpen}
-                  onClick={() => setFiltersOpen(true)}
-                />
-              }
             />
             </div>
           </header>
@@ -592,9 +584,8 @@ export function Home() {
 
       <AdvancedSearchFilters
         filters={advanced}
-        open={filtersOpen}
-        onOpenChange={setFiltersOpen}
         hideTrigger
+        hideSheet
       />
       <BottomSheet
         open={nearbySheetOpen}

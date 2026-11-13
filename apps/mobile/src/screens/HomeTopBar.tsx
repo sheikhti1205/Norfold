@@ -47,7 +47,6 @@ export function HomeTopBar({
   onBlur,
   onBrandTap,
   inputRef,
-  filterButton,
   utilities,
 }: {
   expanded: boolean;
@@ -68,8 +67,6 @@ export function HomeTopBar({
   onBlur: () => void;
   onBrandTap: () => void;
   inputRef: RefObject<HTMLInputElement | null>;
-  /** The advanced-filter trigger; stays mounted in both states so it never moves. */
-  filterButton: ReactNode;
   utilities?: ReactNode;
 }) {
   // Closing unmounts the control that held focus, so focus is handed back to the
@@ -191,7 +188,7 @@ export function HomeTopBar({
               <button
                 type="button"
                 data-testid="home-brand"
-                aria-label="Norfold — scroll the feed to the top"
+                aria-label="Norfold, scroll the feed to the top"
                 onClick={onBrandTap}
                 className="-ml-1 flex min-h-[48px] min-w-0 items-center gap-2 rounded-m3-sm px-1"
               >
@@ -214,20 +211,15 @@ export function HomeTopBar({
           the brand tile instead of reading inset-left / padded-right. */}
       <div className="fb-home-search-actions -mr-2.5 flex shrink-0 items-center">
         {utilities}
-        {filterButton}
         {/* `popLayout` is load-bearing: the trigger and the field share one flex
             slot. Without it the outgoing trigger keeps its 48px in flow for the
             whole 150ms exit, so the entering pill renders ~48px narrower than it
             settles and snaps wider on the last frame. Popped out, the field owns
-            the slot from its first frame.
-
-            Popping alone would put two controls in one place: the filter button
-            slides right into the 48px slot the trigger vacates, and the popped
-            ghost keeps that same box for its whole exit, later in DOM order. The
-            ghost therefore neither paints nor accepts pointer events while it is
-            popped (`.fb-home-search-actions [data-motion-pop-id]` in index.css)
-            — it hands the slot over at the first frame instead of crossfading on
-            top of a live target. `Home.test` samples a tap through the whole
+            the slot from its first frame. The popped ghost therefore neither
+            paints nor accepts pointer events while it is out
+            (`.fb-home-search-actions [data-motion-pop-id]` in index.css), so it
+            hands the slot over at the first frame instead of crossfading on top
+            of a live target. `Home.test` samples a tap through the whole
             transition. */}
         <AnimatePresence initial={false} mode="popLayout">
           {!expanded && (

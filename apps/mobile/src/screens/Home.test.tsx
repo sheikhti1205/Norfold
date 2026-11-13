@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { categoryValue, chooseCategory } from "../test-utils/reportCategory";
 
 const { fetchFeedMock, handlers, onRealtimeMock, tabTapState } = vi.hoisted(() => {
   const handlers = new Map<string, Set<(payload: unknown) => void>>();
@@ -74,40 +73,6 @@ afterEach(() => resetGlobalSearch());
  * app-wide search overlay (owner order 2026-11-13), so typing tests either
  * start from `/?q=…` or drive the overlay's own field.
  */
-
-/**
- * jsdom has no layout: framer's `PopChild` measures `0x0` and skips the pop, so
- * the real `popLayout` path never runs. Supply the trigger's measured box (and
- * a `getComputedStyle` scoped to that one element) and return the restore. The
- * numbers are deliberately NOT the trigger's class size, so an assertion about
- * "48px" cannot be satisfied by a constant.
- */
-function stubTriggerBox(
-  trigger: HTMLElement,
-  row: HTMLElement,
-  measured: { width: number; height: number; left: number; top: number; parentWidth: number },
-): () => void {
-  Object.defineProperty(trigger, "offsetLeft", { configurable: true, value: measured.left });
-  Object.defineProperty(trigger, "offsetTop", { configurable: true, value: measured.top });
-  Object.defineProperty(trigger, "offsetParent", { configurable: true, value: row });
-  Object.defineProperty(row, "offsetWidth", { configurable: true, value: measured.parentWidth });
-
-  const origGetComputedStyle = window.getComputedStyle.bind(window);
-  const spy = vi.spyOn(window, "getComputedStyle").mockImplementation(((el, pseudo) => {
-    const styles = origGetComputedStyle(el, pseudo);
-    if (el !== trigger) return styles;
-    return new Proxy(styles, {
-      get: (target, prop, receiver) => {
-        if (prop === "width") return `${measured.width}px`;
-        if (prop === "height") return `${measured.height}px`;
-        if (prop === "direction") return "ltr";
-        const value = Reflect.get(target, prop, receiver);
-        return typeof value === "function" ? value.bind(target) : value;
-      },
-    });
-  }) as typeof window.getComputedStyle);
-  return () => spy.mockRestore();
-}
 
 describe("Home realtime", () => {
   beforeEach(() => {
@@ -283,31 +248,14 @@ describe("Home realtime", () => {
     expect(screen.getByTestId("location").textContent).toBe("/?type=LOST");
   });
 
-  it("exposes category, status and sort in Home filters and applies them to the feed and URL", async () => {
-    renderHome();
-    fireEvent.click(screen.getByRole("button", { name: /^filters/i }));
-    await chooseCategory("Electronics");
-    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "OPEN" } });
-    fireEvent.change(screen.getByLabelText("Sort"), { target: { value: "oldest" } });
-
-    await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledWith(
-      expect.objectContaining({ category: "Electronics", status: "OPEN", sort: "oldest" }), undefined,
-    ));
-    await waitFor(() => {
-      const params = new URLSearchParams(screen.getByTestId("location").textContent?.split("?")[1]);
-      expect(params.get("category")).toBe("Electronics");
-      expect(params.get("status")).toBe("OPEN");
-      expect(params.get("sort")).toBe("oldest");
-    });
-    expect(categoryValue()).toBe("Electronics");
-  });
-
   it("restores Home advanced filters and clears them without dropping q or type", async () => {
     renderHome("/?type=FOUND&q=phone&category=Electronics&status=OPEN&sort=oldest");
     await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledWith(
       expect.objectContaining({ type: "FOUND", q: "phone", category: "Electronics", status: "OPEN", sort: "oldest" }), undefined,
     ));
-    fireEvent.click(screen.getByRole("button", { name: /clear all filters/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove category filter: Electronics" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove status filter: Open" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove sort filter: Oldest first" }));
     await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/?type=FOUND&q=phone"));
     await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledWith(
       expect.objectContaining({ type: "FOUND", q: "phone", category: undefined, status: undefined, sort: "newest" }), undefined,
@@ -342,15 +290,6 @@ describe("Home realtime", () => {
     renderHome(entry);
     expect(await screen.findByText("cached")).toBeTruthy();
     expect(fetchFeedMock).not.toHaveBeenCalled();
-  });
-
-  it("lets Android Back dismiss the Filters sheet without navigating away from Home", async () => {
-    renderHome("/?q=wallet");
-    fireEvent.click(screen.getByRole("button", { name: /^filters/i }));
-    expect(screen.getByRole("dialog", { name: "Filters" })).toBeTruthy();
-    act(() => expect(consumeBackIntercept()).toBe(true));
-    await waitFor(() => expect(screen.getByRole("button", { name: /^filters/i }).getAttribute("aria-expanded")).toBe("false"));
-    expect(screen.getByTestId("location").textContent).toBe("/?q=wallet");
   });
 
   it("clears a URL-restored query from the inline filter field", async () => {
@@ -696,8 +635,9 @@ describe("Home feed redesign (reference-inspired)", () => {
     expect(screen.getByTestId("home-toolbar").textContent).not.toMatch(/signed in as/);
     expect(screen.getByTestId("home-brand").textContent).toContain("Norfold");
 
-    // The actions trail the title unit; the magnifier is the one search entry.
-    expect(screen.getByRole("button", { name: /^filters/i })).toBeTruthy();
+    // The actions trail the title unit; the magnifier is the one search entry,
+    // and no separate sliders control duplicates the search filters.
+    expect(screen.queryByRole("button", { name: /^filters/i })).toBeNull();
     expect(screen.getByTestId("home-search-open").getAttribute("aria-label")).toBe("Open search");
   });
 
@@ -761,15 +701,15 @@ describe("Home feed redesign (reference-inspired)", () => {
     expect(consumeBackIntercept()).toBe(false);
   });
 
-  it("keeps Back as navigation when focus moves from the field to Filters", async () => {
-    // Close, Clear and Filters live inside the search row, so the row keeps
-    // focus when the field loses it. Back must disarm on the *field's* focus,
-    // not the row's, or one Back press silently discards a typed query
+  it("keeps Back as navigation when focus moves from the field to another search control", async () => {
+    // Close and Clear live inside the search row, so the row keeps focus when
+    // the field loses it. Back must disarm on the *field's* focus, not the
+    // row's, or one Back press silently discards a typed query
     // (review HOME-SCROLL-FIXFORWARD-R2 MINOR-1).
     renderHome("/?q=wallet");
     const input = screen.getByLabelText("Search posts");
     fireEvent.focus(input);
-    fireEvent.blur(input, { relatedTarget: screen.getByRole("button", { name: "Filters" }) });
+    fireEvent.blur(input, { relatedTarget: screen.getByRole("button", { name: "Close search" }) });
 
     expect(consumeBackIntercept()).toBe(false);
     expect(screen.getByLabelText("Search posts")).toBeTruthy();
