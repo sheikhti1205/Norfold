@@ -38,12 +38,13 @@
 .fb-account-identity-text span { color: var(--fb-on-surface-variant); }
 .fb-account-divider { height: 1px; margin: 4px 0; background: var(--fb-outline-variant); }
 
-/* Two panes inside one popover card at wide sizes.
-   The panel used to sit absolutely at `calc(100% + 8px)`, outside the popover's
-   box. `.fb-popover` scrolls (`overflow: auto`), so an open panel turned the
-   account menu into a horizontally scrolling card - a scrollbar under the rows,
-   which is exactly the kind of control nobody can read. The card now widens and
-   carries both panes side by side, so nothing overflows and nothing is clipped. */
+/* The preview floats beside the card at wide sizes instead of widening it.
+   Widening the card also changed its height, and because the popover is
+   bottom-anchored the whole list moved up under the pointer: the hovered row
+   left the pointer, the preview closed, the row moved back, and the panel
+   flickered in a loop. An absolute panel keeps the card's box (and every row)
+   fixed; `overflow: visible` lets it paint outside without the popover growing
+   a horizontal scrollbar. Below 901px it stacks in flow instead. */
 .fb-account-preview {
   position: static; flex: none; width: 20rem; max-height: min(70dvh, 32rem);
   overflow-y: auto; margin-inline-start: 8px;
@@ -51,9 +52,16 @@
   background: var(--fb-surface);
 }
 @media (min-width: 901px) {
-  .fb-account-menu { width: max-content; }
-  .fb-account-body { display: flex; align-items: flex-start; gap: 0; }
-  .fb-account-list { flex: none; width: 320px; }
+  .fb-account-menu { width: max-content; overflow: visible; }
+  .fb-account-body { display: block; }
+  .fb-account-list { width: 320px; }
+  /* 17px = the card's 8px padding + 1px border + the 8px gap. The dialog is
+     the containing block, and its border box sits 9px inside the card's, so
+     measuring from `100%` alone leaves the panel touching the card edge. */
+  .fb-account-preview {
+    position: absolute; inset-block-end: 0; inset-inline-start: calc(100% + 17px);
+    width: 20rem; max-height: min(34rem, calc(100dvh - 5rem)); margin-inline-start: 0;
+  }
 }
 @media (max-width: 900px) {
   .fb-account-preview {
