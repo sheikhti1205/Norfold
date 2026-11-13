@@ -10,6 +10,8 @@ import { SettingsWindow } from "./SettingsWindow";
  * MemoryRouter on purpose: that is the constraint the window's own history
  * shim exists for.
  */
+vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "window-reader" } }) }));
+
 vi.mock("../screens/Settings", async () => {
   const { Link, Outlet } = await import("react-router");
   return {
@@ -31,11 +33,11 @@ vi.mock("../screens/settingsRoutes", async () => {
 
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
-function renderWindow() {
+function renderWindow(initialPath?: string) {
   const onClose = vi.fn();
   const onExit = vi.fn();
   render(<MemoryRouter initialEntries={["/"]}>
-    <SettingsWindow open onClose={onClose} onExit={onExit} />
+    <SettingsWindow open initialPath={initialPath} onClose={onClose} onExit={onExit} />
   </MemoryRouter>);
   return { onClose, onExit };
 }
@@ -46,6 +48,14 @@ describe("settings window", () => {
     expect(await screen.findByRole("dialog", { name: "Settings" })).toBeTruthy();
     expect(screen.getByText("Settings root")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Close settings" })).toBeTruthy();
+  });
+
+  it("opens at the requested section, so a menu row lands inside the window", async () => {
+    renderWindow("/settings/account");
+    expect(await screen.findByRole("dialog", { name: "Settings" })).toBeTruthy();
+    // The section renders inside the window's own tree, over its parent.
+    expect(screen.getByText("Account page")).toBeTruthy();
+    expect(screen.getByText("Settings root")).toBeTruthy();
   });
 
   it("follows a settings link inside the window instead of navigating the app", async () => {
@@ -71,6 +81,45 @@ describe("settings window", () => {
     const { onClose } = renderWindow();
     fireEvent.keyDown(document, { key: "Escape" });
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it("offers exactly one search control at the top and no notification bell", async () => {
+    renderWindow();
+    await screen.findByRole("dialog", { name: "Settings" });
+    expect(screen.getAllByRole("button", { name: "Search settings" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /notifications/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /notifications/i })).toBeNull();
+  });
+
+  it("opens a top-attached search field whose results pick a section inside the window", async () => {
+    renderWindow();
+    await screen.findByRole("dialog", { name: "Settings" });
+    fireEvent.click(screen.getByRole("button", { name: "Search settings" }));
+    const field = screen.getByRole("searchbox", { name: "Search settings" });
+    // The field takes focus when it opens, and the whole settings catalogue is
+    // searchable - not just the current section.
+    expect(document.activeElement).toBe(field);
+    fireEvent.change(field, { target: { value: "account" } });
+    expect(screen.getByRole("status").textContent).toContain("setting");
+    const account = screen.getAllByRole("link")
+      .find((link) => link.getAttribute("href") === "/settings/account");
+    expect(account).toBeTruthy();
+    fireEvent.click(account!);
+    // Picking navigates the window's own history; the app behind never moves,
+    // and the field puts itself away.
+    await waitFor(() => expect(screen.getByText("Account page")).toBeTruthy());
+    expect(screen.queryByRole("searchbox", { name: "Search settings" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Settings" })).toBeTruthy();
+  });
+
+  it("closes only the search field on Escape, not the window", async () => {
+    const { onClose } = renderWindow();
+    await screen.findByRole("dialog", { name: "Settings" });
+    fireEvent.click(screen.getByRole("button", { name: "Search settings" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("searchbox", { name: "Search settings" })).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Search settings" }));
   });
 
   it("hands a non-settings destination back to the real app", async () => {

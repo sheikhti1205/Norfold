@@ -585,7 +585,7 @@ function ReportSearch(props: SearchScreenProps) {
               onBlur={() => setSearchFocused(false)}
               placeholder="Search title or description…"
               aria-label="Search posts"
-               className="w-full rounded-m3-sm border border-outline-variant bg-surface py-2.5 pl-[40px] pr-[44px] text-sm placeholder:text-on-surface-variant focus:border-on-surface"
+               className="w-full rounded-full border border-outline-variant bg-surface-container-low py-2.5 pl-[40px] pr-[44px] text-sm placeholder:text-on-surface-variant focus:border-on-surface"
             />
             <AnimatePresence initial={false}>
               {query.length > 0 && (

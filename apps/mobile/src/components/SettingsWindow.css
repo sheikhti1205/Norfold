@@ -29,6 +29,71 @@
   border-bottom: 1px solid var(--fb-outline-variant);
 }
 .fb-settings-window-title { font-size: 1rem; font-weight: 650; letter-spacing: -0.01em; }
+.fb-settings-window-actions { display: flex; align-items: center; gap: 2px; }
+.fb-settings-window-actions .fb-icon-control[data-active] {
+  background: var(--fb-surface-container-high);
+  color: var(--fb-on-surface);
+}
+/* The one search in settings: a pill attached to the top edge under the title
+   bar, with the pick list dropping straight below it. Same bar language as the
+   app-wide search overlay; no filter control (owner order 2026-11-13). */
+.fb-settings-searcharea {
+  position: relative;
+  z-index: 30;
+  flex: none;
+  padding: 10px 12px 10px;
+  background: var(--fb-surface);
+}
+.fb-settings-window-searchbar {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 48px; padding: 0 4px 0 12px;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 999px;
+  background: var(--fb-surface-container-low);
+  color: var(--fb-on-surface-variant);
+}
+/* Text-entry exception: focus moves the border only, never the accent. */
+.fb-settings-window-searchbar:focus-within { border-color: var(--fb-on-surface); }
+.fb-settings-window-searchicon { flex: none; }
+.fb-settings-window-searchbar input {
+  flex: 1; min-width: 0; min-height: 44px;
+  border: 0; outline: none;
+  color: var(--fb-on-surface);
+  background: transparent;
+  font: inherit;
+  font-size: 0.9375rem;
+}
+.fb-settings-window-searchbar input::placeholder { color: var(--fb-on-surface-variant); opacity: 1; }
+.fb-settings-window-searchbar input::-webkit-search-cancel-button { display: none; }
+.fb-settings-searchclear {
+  display: flex; flex: none; align-items: center; justify-content: center;
+  width: 44px; height: 44px; border-radius: 50%;
+  color: var(--fb-on-surface-variant);
+}
+.fb-settings-searchclear:hover { background: var(--fb-surface-container); color: var(--fb-on-surface); }
+.fb-settings-window-searchpanel {
+  position: absolute; inset-inline: 12px; top: calc(100% - 2px);
+  max-height: min(420px, 55dvh);
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 16px;
+  background: var(--fb-surface-container-low);
+  box-shadow: var(--shadow-md);
+}
+.fb-settings-window-searchstatus {
+  margin: 0;
+  padding: 6px 10px 4px;
+  font-size: 0.8125rem;
+  color: var(--fb-on-surface-variant);
+}
+.fb-settings-window-results { list-style: none; margin: 0; padding: 0; }
+.fb-settings-window-results .fb-settings-row {
+  min-height: 3.25rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+}
+.fb-settings-window-results .fb-settings-row-title { font-size: 0.875rem; }
 .fb-settings-window-body { flex: 1; min-height: 0; overflow: hidden; }
 /* The settings split view fills the window; its own panes keep their scroll. */
 .fb-settings-window-body > * { height: 100%; }

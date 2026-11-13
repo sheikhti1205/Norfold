@@ -2,12 +2,6 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// SettingsPage renders the shared TopUtilities, whose unread-badge owner is
-// auth-scoped. This suite exercises primitive semantics, not sign-in state.
-vi.mock("../../auth", () => ({
-  useAuth: () => ({ user: null, booting: false, bootError: null }),
-}));
-
 import { MemoryRouter } from "react-router";
 import { Palette } from "lucide-react";
 import { useState } from "react";
@@ -50,6 +44,13 @@ describe("settings foundation semantics", () => {
   it("offers a history-aware back control when requested", () => {
     render(<MemoryRouter><SettingsPage title="Appearance" backTo="/settings" backLabel="Back to Settings">Content</SettingsPage></MemoryRouter>);
     expect(screen.getByRole("button", { name: "Back to Settings" })).toBeTruthy();
+  });
+
+  it("never paints the global search or a notification bell", () => {
+    render(<MemoryRouter><SettingsPage title="Settings">Content</SettingsPage></MemoryRouter>);
+    expect(screen.queryByRole("navigation", { name: "App utilities" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Notifications" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Search" })).toBeNull();
   });
 
   it("disables action and route rows without nesting interactive controls", () => {

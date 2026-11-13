@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
+import { Link, MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import { MotionConfig } from "framer-motion";
 import { PrimaryNav, Shell } from "./Shell";
 import { TabTapProvider } from "./TabTap";
@@ -12,6 +12,12 @@ import { readFileSync } from "node:fs";
 
 vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "shell-reader" } }) }));
 vi.mock("./RoleOfferNotice", () => ({ RoleOfferNotice: () => null }));
+// The real window mounts the whole settings screen and its services; the
+// interception contract is what these tests own, not presentation.
+vi.mock("./SettingsWindow", () => ({
+  SettingsWindow: ({ open, initialPath }: { open: boolean; initialPath?: string }) =>
+    open ? <div data-testid="settings-window">{initialPath}</div> : null,
+}));
 
 afterEach(() => { cleanup(); resetBackInterceptors(); document.body.style.overflow = ""; });
 
@@ -56,6 +62,52 @@ describe("Shell floating primary navigation", () => {
     expect(within(nav).getByRole("link", { name: "Create report" })).toBeTruthy();
     expect(screen.queryByTestId("assistant-entry")).toBeNull();
     expect(screen.queryByRole("button", { name: "Open assistant" })).toBeNull();
+  });
+
+  it("opens an in-app settings link inside the window instead of replacing the page", () => {
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes><Route element={<Shell />}>
+          <Route index element={<Link to="/settings/notifications">Notification preferences</Link>} />
+          <Route path="/settings/notifications" element={<p>Notification page</p>} />
+        </Route></Routes>
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("link", { name: "Notification preferences" }));
+    // The section opens over the current screen, at that exact section.
+    expect(screen.getByTestId("settings-window").textContent).toBe("/settings/notifications");
+    expect(screen.getByRole("link", { name: "Notification preferences" })).toBeTruthy();
+    expect(screen.queryByText("Notification page")).toBeNull();
+  });
+
+  it("leaves links on the standalone settings page to that page's own router", () => {
+    render(
+      <MemoryRouter initialEntries={["/settings/notifications"]}>
+        <Routes><Route element={<Shell />}>
+          <Route path="/settings/notifications" element={<Link to="/settings/help">Help settings</Link>} />
+          <Route path="/settings/help" element={<p>Help page</p>} />
+        </Route></Routes>
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("link", { name: "Help settings" }));
+    expect(screen.getByText("Help page")).toBeTruthy();
+    expect(screen.queryByTestId("settings-window")).toBeNull();
+  });
+
+  it("opens the phone bottom bar's Settings destination in the window", async () => {
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout: "bottom" }));
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes><Route element={<Shell />}>
+          <Route index element={<p>Home screen</p>} />
+          <Route path="/settings" element={<p>Settings screen</p>} />
+        </Route></Routes>
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByRole("link", { name: "Settings" }));
+    expect(screen.getByTestId("settings-window").textContent).toBe("/settings");
+    expect(screen.queryByText("Settings screen")).toBeNull();
+    expect(screen.getByText("Home screen")).toBeTruthy();
   });
 
   it.each([
@@ -473,13 +525,14 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
   // The rail carries destinations the phone bar deliberately does not. Search
   // and Connect share a route, and Recovered is a Settings child, so these
   // selections cannot be inferred from the pathname alone.
-  it.each([
-    ["/search", "Search"],
-    ["/search?scope=people", "Connect"],
-    ["/saved", "Saved"],
-    ["/settings/returns", "Recovered"],
-    ["/reactions", "Liked / Disliked"],
-    ["/notifications", "Activity"],
+  it.each<[string, string[]]>([
+    // Search is an overlay button now, so `/search` highlights no rail row.
+    ["/search", []],
+    ["/search?scope=people", ["Connect"]],
+    ["/saved", ["Saved"]],
+    ["/settings/returns", ["Recovered"]],
+    ["/reactions", ["Liked / Disliked"]],
+    ["/notifications", ["Activity"]],
   ])("selects only the rail destination for %s", (path, label) => {
     setWidth(800);
     storeNavLayout("rail");
@@ -490,7 +543,7 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
         .getAllByRole("link")
         .filter((link) => link.getAttribute("aria-current") === "page")
         .map((link) => link.getAttribute("aria-label") ?? link.textContent),
-    ).toEqual([label]);
+    ).toEqual(label);
   });
 
   it("keeps the rail's destinations, order, targets, names and active treatment", () => {
@@ -500,23 +553,29 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     const nav = screen.getByRole("navigation", { name: "Primary" });
     const links = within(nav).getAllByRole("link");
     // Top-to-bottom DOM order is also the visual and keyboard order. The
-    // primary six come first, then the prototype's "Others" shelf.
+    // primary six come first, then the prototype's "Others" shelf. Search is
+    // the one primary row that is a button (it opens the overlay).
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
-      "/report", "/", "/my", "/search", "/chats", "/notifications", "/insights",
+      "/report", "/", "/my", "/chats", "/notifications", "/insights",
       "/search?scope=people", "/reactions", "/saved", "/settings/returns",
     ]);
     expect(
       links.map((link) => link.getAttribute("aria-label") ?? link.textContent?.trim()),
     ).toEqual([
-      "Create report", "Home", "My Reports", "Search", "Chats", "Activity", "Insights",
+      "Create report", "Home", "My Reports", "Chats", "Activity", "Insights",
       "Connect", "Liked / Disliked", "Saved", "Recovered",
     ]);
+    const searchRow = within(nav).getByRole("button", { name: "Search" });
+    expect(searchRow.getAttribute("aria-expanded")).toBe("false");
+    expect(searchRow.hasAttribute("aria-current")).toBe(false);
     const account = within(nav).getByRole("button", { name: /^Account/ });
     expect(account.getAttribute("aria-expanded")).toBe("false");
     expect(account.hasAttribute("aria-current")).toBe(false);
     // One identity control in the footer: no sibling settings glyph (R1).
     const pin = within(nav).getByRole("button", { name: "Expand navigation" });
-    expect([...nav.querySelectorAll("a, button")]).toEqual([pin, ...links, account]);
+    expect([...nav.querySelectorAll("a, button")]).toEqual([
+      pin, links[0], links[1], links[2], searchRow, ...links.slice(3), account,
+    ]);
     expect(
       links
         .filter((link) => link.getAttribute("aria-current") === "page")

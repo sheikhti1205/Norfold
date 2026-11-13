@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PostType } from "@norfold/shared";
 import { HomeFilterChips, HomeScopeChips } from "./HomeFilterChips";
 import { HomeTopBar } from "./HomeTopBar";
+import { toggleGlobalSearch } from "../components/globalSearch";
 import { TopUtilities } from "../components/TopUtilities";
 import { PostList } from "../components/PostList";
 import { MASONRY_CANVAS_CLASS, READABLE_COLUMN_CLASS, feedDensity, masonryColumns, resolveFeedLayout, useContentWidth, useViewportWidth } from "../components/responsive";
@@ -440,16 +441,12 @@ export function Home() {
   }
 
   /**
-   * The field is not resident, so opening it is a deliberate act. Focus moves
-   * on the state change (the field mounts on it), never after the crossfade.
+   * The magnifier opens the app's one search overlay (owner order 2026-11-13),
+   * never a resident field: search is not a destination, and the feed keeps its
+   * geometry. A `?q=` URL still shows the active filter below.
    */
-  function openSearch() {
-    // The bar is feed content now, so a half-scrolled bar would mount the field
-    // partly off-screen. Bring the row fully into view first (instant: focus and
-    // the keyboard are already moving, and a smooth scroll would animate under
-    // them).
-    scrollRef.current?.scrollToTop("auto");
-    setSearchFocused(true);
+  function openSearch(trigger: HTMLButtonElement) {
+    toggleGlobalSearch(trigger);
   }
 
   useEffect(() => {

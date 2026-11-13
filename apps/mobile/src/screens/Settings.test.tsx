@@ -77,6 +77,7 @@ import { cloudConnectionsSummary } from "../services/aiCredentials";
 import { readRememberedAccounts, rememberAccount } from "../services/rememberedAccounts";
 import { Settings } from "./Settings";
 import { SettingsPage } from "../components/settings";
+import { SettingsWindowHost } from "../components/settingsWindowHost";
 import { RouteTransition } from "../components/RouteTransition";
 
 afterEach(cleanup);
@@ -185,6 +186,17 @@ describe("Settings home", () => {
     fireEvent.click(screen.getByRole("button", { name: "Back to Settings" }));
     await screen.findByRole("heading", { level: 1, name: "Settings" });
     expect(screen.getByRole("searchbox", { name: "Search settings" })).toBe(search);
+  });
+
+  it("suppresses the in-page search while the window hosts the tree", () => {
+    render(<MemoryRouter>
+      <SettingsWindowHost.Provider value><Settings /></SettingsWindowHost.Provider>
+    </MemoryRouter>);
+    // The window's top bar owns the one search affordance there; the tree must
+    // not paint a second field behind it.
+    expect(screen.queryByRole("searchbox", { name: "Search settings" })).toBeNull();
+    expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Account & verification|Account & profile/ })).toBeTruthy();
   });
 
   it("keeps update history outside disclosures and searchable", async () => {

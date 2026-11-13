@@ -15,6 +15,8 @@ import { NavigationSetup } from "./NavigationSetup";
 import { RoleOfferNotice } from "./RoleOfferNotice";
 import { AccountMenu } from "./AccountMenu";
 import { SettingsWindow } from "./SettingsWindow";
+import { GlobalSearchOverlay } from "./GlobalSearchOverlay";
+import { toggleGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
 import {
   fadeUpVariants,
   fadeVariants,
@@ -34,14 +36,22 @@ const MotionLink = motion.create(Link);
  * named group. The phone bar keeps its own four-destination list below; a
  * nine-item pill on a 320px screen would be a row of glyphs.
  */
-const NAV = [
+/**
+ * One row that opens the shared search overlay instead of navigating: search
+ * is not a destination (SPEC §1), while `/search` survives as a deep link.
+ */
+type NavRow =
+  | { to: string; label: string; icon: LucideIcon; search?: false }
+  | { label: string; icon: LucideIcon; search: true };
+
+const NAV: readonly NavRow[] = [
   { to: "/", label: "Home", icon: Home },
   { to: "/my", label: "My Reports", icon: ClipboardList },
-  { to: "/search", label: "Search", icon: Search },
+  { label: "Search", icon: Search, search: true },
   { to: "/chats", label: "Chats", icon: MessageCircle },
   { to: "/notifications", label: "Activity", icon: Bell },
   { to: "/insights", label: "Insights", icon: BarChart3 },
-] as const;
+];
 
 /** The prototype's `Others` group. Every row lands on a surface that exists. */
 const NAV_OTHERS = [
@@ -64,6 +74,30 @@ const BAR_NAV = [
 ] as const;
 
 const HIDE_NAV = ["/help", "/posts/", "/ai-connection", "/connections/", "/chats/"];
+
+/**
+ * The settings path a rendered link points at, or null.
+ *
+ * The app is a hash router, so React Router renders `href="#/settings/..."`,
+ * while hand-written anchors use the plain path. Both have to resolve to the
+ * same window entry.
+ */
+function settingsPathFromHref(href: string | null): string | null {
+  if (!href) return null;
+  let path = href;
+  if (path.startsWith("#")) path = path.slice(1);
+  else if (/^[a-z]+:/i.test(path)) {
+    try {
+      const url = new URL(path);
+      if (url.origin !== window.location.origin) return null;
+      path = url.hash ? url.hash.slice(1) : url.pathname;
+    } catch {
+      return null;
+    }
+  }
+  if (path === "/settings" || path.startsWith("/settings/") || path.startsWith("/settings?")) return path;
+  return null;
+}
 
 /**
  * Surfaces designed for a wide canvas (packet `09` §1/§2/§21).
@@ -93,7 +127,12 @@ export function Shell() {
   const rail = navLayout === "rail";
   const column = wideCanvas ? WIDE_CANVAS_CLASS : READABLE_COLUMN_CLASS;
   const navigate = useNavigate();
-  const [settingsWindowOpen, setSettingsWindowOpen] = useState(false);
+  // `null` = closed. A string is the settings section the window opens at, so a
+  // menu row or an in-app link lands inside the window rather than swapping the
+  // page behind it.
+  const [settingsWindowPath, setSettingsWindowPath] = useState<string | null>(null);
+  const openSettingsWindow = (path = "/settings") => setSettingsWindowPath(path);
+  const searchOpen = useGlobalSearchOpen();
 
   // A breakpoint flip replaces the whole navigation. The element that had focus
   // unmounts, so focus would otherwise fall to <body> and the next Tab would
@@ -121,9 +160,34 @@ export function Shell() {
     target?.focus();
   }, [navLayout]);
 
+  // Settings is a window, not a page swap: an in-app link to any settings
+  // destination opens the window over what the reader is looking at instead of
+  // replacing it. This is the one interception point, so a link added anywhere
+  // in the app cannot regress into a separate settings page. Links inside the
+  // window are excluded (they use its own router), and a standing `/settings`
+  // URL keeps the standalone page so a deep link still works.
+  useEffect(() => {
+    if (settingsWindowPath !== null) return;
+    if (pathname === "/settings" || pathname.startsWith("/settings/")) return;
+    const intercept = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const anchor = (event.target as Element | null)?.closest?.("a[href]");
+      if (!anchor || anchor.closest(".fb-settings-window")) return;
+      const path = settingsPathFromHref(anchor.getAttribute("href"));
+      if (!path) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setSettingsWindowPath(path);
+    };
+    document.addEventListener("click", intercept, true);
+    return () => document.removeEventListener("click", intercept, true);
+  }, [pathname, settingsWindowPath]);
+
   return (
     <TabTapProvider>
       <div
+        data-global-search={searchOpen ? "true" : undefined}
         className={`fb-app-viewport flex w-full bg-surface text-on-surface ${
           rail ? "flex-row" : `mx-auto flex-col ${column}`
         }`}
@@ -144,7 +208,7 @@ export function Shell() {
             hide/show inside a layout still animates because that key is
             stable. */}
         <AnimatePresence key={`fb-rail-boundary-${navLayout}`} initial={false}>
-          {showNav && rail && <PrimaryNav key="fb-rail-nav" layout="rail" onOpenSettings={() => setSettingsWindowOpen(true)} />}
+          {showNav && rail && <PrimaryNav key="fb-rail-nav" layout="rail" onOpenSettings={openSettingsWindow} />}
         </AnimatePresence>
         <main
           className={`relative min-h-0 flex-1 ${rail ? `min-w-0 ${column}` : ""} ${
@@ -161,11 +225,13 @@ export function Shell() {
           </div>
         </main>
         <AnimatePresence key={`fb-bottom-boundary-${navLayout}`} initial={false}>
-          {showNav && !rail && <PrimaryNav key="fb-bottom-nav" layout="bottom" />}
+          {showNav && !rail && <PrimaryNav key="fb-bottom-nav" layout="bottom" onOpenSettings={openSettingsWindow} />}
         </AnimatePresence>
         <LiveRegion />
-        <SettingsWindow open={settingsWindowOpen} onClose={() => setSettingsWindowOpen(false)}
-          onExit={(path) => { setSettingsWindowOpen(false); navigate(path); }} />
+        <SettingsWindow open={settingsWindowPath !== null} initialPath={settingsWindowPath ?? "/settings"}
+          onClose={() => setSettingsWindowPath(null)}
+          onExit={(path) => { setSettingsWindowPath(null); navigate(path); }} />
+        <GlobalSearchOverlay />
       </div>
     </TabTapProvider>
   );
@@ -194,11 +260,12 @@ export function PrimaryNav({
    * gives each demo its own.
    */
   layoutScope?: string;
-  /** Opens the floating settings window from the account menu. */
-  onOpenSettings?: () => void;
+  /** Opens the floating settings window from the account menu, at `path`. */
+  onOpenSettings?: (path?: string) => void;
 }) {
   const { notifyTabTap } = useTabTap();
   const { pathname, search } = useLocation();
+  const searchOpen = useGlobalSearchOpen();
   // The pin is read once and written on press rather than through
   // `useAppearance`: that hook re-applies the whole stored appearance on every
   // appearance event, which would fight the fixture's page-wide text scale.
@@ -312,70 +379,90 @@ export function PrimaryNav({
   );
 
   const railPinned = rail && railPinnedState;
-  const renderDestination = ({ to, label, icon: Icon }: { to: string; label: string; icon: LucideIcon }) => {
-    const selected = selectedPath === to;
-    const link = (
+  const renderDestination = (destination: NavRow) => {
+    const { label, icon: Icon } = destination;
+    const isSearch = destination.search === true;
+    const selected = !isSearch && selectedPath === destination.to;
+    const body = <>
+      {selected && (
+        <motion.span
+          // One layout id per layout AND per mounted nav: a rail and a bar
+          // briefly coexist at the breakpoint, and repeated fixture demos
+          // would otherwise share (and lose) the pill.
+          layoutId={`fb-nav-active-${layout}-${layoutScope}`}
+          className="fb-nav-active-bg bg-primary-container"
+          transition={motionSprings.snappy}
+          aria-hidden="true"
+        />
+      )}
+      <Icon
+        size={22}
+        strokeWidth={selected ? 2.5 : 2}
+        className="fb-nav-icon"
+        aria-hidden="true"
+      />
+      {rail && !railPinned ? (
+        // Compact icon rail: accessible name always present; React Aria
+        // exposes the same name visually on hover AND keyboard focus.
+        <span className="fb-nav-label sr-only">{label}</span>
+      ) : railPinned ? (
+        // Pinned panel: every destination is named in place, selected or not.
+        <span className="fb-nav-label">{label}</span>
+      ) : (
+        <AnimatePresence initial={false}>
+          {selected && (
+            <motion.span
+              key="fb-nav-label"
+              className="fb-nav-label"
+              initial={{ opacity: 0, width: 0 }}
+              animate={{ opacity: 1, width: "auto" }}
+              exit={{ opacity: 0, width: 0 }}
+              transition={{ duration: motionDurations.fast }}
+              style={{ overflow: "hidden", whiteSpace: "nowrap" }}
+            >{label}</motion.span>
+          )}
+        </AnimatePresence>
+      )}
+    </>;
+    // Search opens the floating overlay; it is a button, not a destination, so
+    // no route is ever current for it.
+    const trigger = isSearch ? (
+      <motion.button
+        key={label}
+        type="button"
+        aria-label={label}
+        aria-expanded={searchOpen}
+        onClick={(event) => toggleGlobalSearch(event.currentTarget)}
+        whileTap={pressFeedback.iconButton}
+        transition={{ duration: motionDurations.instant }}
+        className="fb-nav-link text-on-surface-variant"
+      >
+        {body}
+      </motion.button>
+    ) : (
       <MotionLink
-        key={to}
-        to={to}
+        key={destination.to}
+        to={destination.to}
         aria-label={selected ? undefined : label}
         aria-current={selected ? "page" : undefined}
         onClick={() => {
           if (selected) {
             notifyTabTap();
-            if (to === "/") requestHistorySuppression("/");
+            if (destination.to === "/") requestHistorySuppression("/");
           }
         }}
         whileTap={pressFeedback.iconButton}
         transition={{ duration: motionDurations.instant }}
         className={`fb-nav-link ${selected ? "fb-nav-link-active text-on-primary-container" : "text-on-surface-variant"}`}
       >
-        {selected && (
-          <motion.span
-            // One layout id per layout AND per mounted nav: a rail and a bar
-            // briefly coexist at the breakpoint, and repeated fixture demos
-            // would otherwise share (and lose) the pill.
-            layoutId={`fb-nav-active-${layout}-${layoutScope}`}
-            className="fb-nav-active-bg bg-primary-container"
-            transition={motionSprings.snappy}
-            aria-hidden="true"
-          />
-        )}
-        <Icon
-          size={22}
-          strokeWidth={selected ? 2.5 : 2}
-          className="fb-nav-icon"
-          aria-hidden="true"
-        />
-        {rail && !railPinned ? (
-          // Compact icon rail: accessible name always present; React Aria
-          // exposes the same name visually on hover AND keyboard focus.
-          <span className="fb-nav-label sr-only">{label}</span>
-        ) : railPinned ? (
-          // Pinned panel: every destination is named in place, selected or not.
-          <span className="fb-nav-label">{label}</span>
-        ) : (
-          <AnimatePresence initial={false}>
-            {selected && (
-              <motion.span
-                key="fb-nav-label"
-                className="fb-nav-label"
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: "auto" }}
-                exit={{ opacity: 0, width: 0 }}
-                transition={{ duration: motionDurations.fast }}
-                style={{ overflow: "hidden", whiteSpace: "nowrap" }}
-              >{label}</motion.span>
-            )}
-          </AnimatePresence>
-        )}
+        {body}
       </MotionLink>
     );
     // A pinned panel names every row in place, so a hover tooltip would repeat
     // what is already on screen.
-    if (railPinned) return link;
-    return <TooltipTrigger key={to} delay={350}>
-      <Focusable>{link}</Focusable><Tooltip placement={rail ? "right" : "top"} className="fb-nav-tooltip">{label}</Tooltip>
+    if (railPinned) return trigger;
+    return <TooltipTrigger key={label} delay={350}>
+      <Focusable>{trigger}</Focusable><Tooltip placement={rail ? "right" : "top"} className="fb-nav-tooltip">{label}</Tooltip>
     </TooltipTrigger>;
   };
 

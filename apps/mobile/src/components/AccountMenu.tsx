@@ -23,16 +23,17 @@ type PanelId = "switch" | "personalization" | null;
  * the width of the rail, opens above the trigger, and leads with the account
  * line - avatar, name, earned badge, arrow - which opens the account switcher.
  * Then Personalization, Activity preferences, Settings, Report a problem, Help,
- * Log out. Settings opens the floating settings window instead of a nested
- * option list; Personalization is the Appearance controls under the name the
- * owner uses for them.
+ * Log out. Every settings destination opens the floating settings window at
+ * that section - the menu never swaps the page behind it for a separate one;
+ * Personalization is the Appearance controls under the name the owner uses for
+ * them.
  *
  * Rows are click-driven. The hover previews of R2 put a panel next to the card
  * and made the pointer own the layout; a click cannot be surprised by the
  * surface moving under it. A sub-panel replaces the row list inside the same
  * card, so nothing is ever painted beside it.
  */
-export function AccountMenu({ onOpenSettings = () => {} }: { onOpenSettings?: () => void }) {
+export function AccountMenu({ onOpenSettings = () => {} }: { onOpenSettings?: (path?: string) => void }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const wide = useWideViewport();
@@ -66,7 +67,9 @@ export function AccountMenu({ onOpenSettings = () => {} }: { onOpenSettings?: ()
   }, [panel]);
 
   const closeAll = () => { setPanel(null); setOpen(false); };
-  const openSettings = () => { closeAll(); onOpenSettings(); };
+  // Every settings row lands in the floating window at that section, so the
+  // popover never swaps the page behind it for a separate one.
+  const openDestination = (path: string) => { closeAll(); onOpenSettings(path); };
   const signOut = () => {
     if (busy) return;
     setBusy(true);
@@ -111,7 +114,7 @@ export function AccountMenu({ onOpenSettings = () => {} }: { onOpenSettings?: ()
               switching={switching} error={switchError} onSwitch={switchTo}
               onAdd={() => { closeAll(); navigate("/auth"); }} />
           </PanelShell> : panel === "personalization" ? <PanelShell title="Personalization" onBack={() => setPanel(null)}>
-            <PersonalizationPanel onOpenPage={() => { closeAll(); navigate("/settings/appearance"); }} />
+            <PersonalizationPanel onOpenPage={() => openDestination("/settings/appearance")} />
           </PanelShell> : <div className="fb-account-list">
             <button type="button" className="fb-account-row fb-account-identity" aria-haspopup="dialog"
               aria-expanded={false} onClick={() => setPanel("switch")}>
@@ -132,19 +135,19 @@ export function AccountMenu({ onOpenSettings = () => {} }: { onOpenSettings?: ()
               <Palette size={20} aria-hidden="true" /><span className="fb-account-row-label">Personalization</span>
               <ChevronRight size={18} aria-hidden="true" />
             </button>
-            <a href="/settings/notifications" className="fb-account-row" onClick={(event) => { event.preventDefault(); closeAll(); navigate("/settings/notifications"); }}>
+            <button type="button" className="fb-account-row" onClick={() => openDestination("/settings/notifications")}>
               <SlidersHorizontal size={20} aria-hidden="true" /><span className="fb-account-row-label">Activity preferences</span><ChevronRight size={18} aria-hidden="true" />
-            </a>
-            <button type="button" className="fb-account-row" aria-haspopup="dialog" onClick={openSettings}>
+            </button>
+            <button type="button" className="fb-account-row" aria-haspopup="dialog" onClick={() => openDestination("/settings")}>
               <Settings size={20} aria-hidden="true" /><span className="fb-account-row-label">Settings</span>
               <ChevronRight size={18} aria-hidden="true" />
             </button>
-            <a href="/settings/feedback" className="fb-account-row" onClick={(event) => { event.preventDefault(); closeAll(); navigate("/settings/feedback"); }}>
+            <button type="button" className="fb-account-row" onClick={() => openDestination("/settings/feedback")}>
               <MessageSquareWarning size={20} aria-hidden="true" /><span className="fb-account-row-label">Report a problem</span><ChevronRight size={18} aria-hidden="true" />
-            </a>
-            <a href="/settings/help" className="fb-account-row" onClick={(event) => { event.preventDefault(); closeAll(); navigate("/settings/help"); }}>
+            </button>
+            <button type="button" className="fb-account-row" onClick={() => openDestination("/settings/help")}>
               <CircleHelp size={20} aria-hidden="true" /><span className="fb-account-row-label">Help</span><ChevronRight size={18} aria-hidden="true" />
-            </a>
+            </button>
             <Button className="fb-account-row" onPress={() => { closeAll(); setError(false); setConfirming(true); }}>
               <LogOut size={20} aria-hidden="true" /><span className="fb-account-row-label">Log out</span><ChevronRight size={18} aria-hidden="true" />
             </Button>

@@ -27,6 +27,12 @@
   gap: 4px; border-radius: 999px;
   text-decoration: none; padding: 4px 2px;
 }
+/* Search is the one row that opens an overlay instead of navigating: it is a
+   button wearing the same row treatment as its link siblings. */
+button.fb-nav-link {
+  border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer;
+}
+button.fb-nav-link:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; }
 .fb-nav-link-active { flex: 2 1 0; font-weight: 600; }
 .fb-nav-active-bg {
   position: absolute; inset: 0; border-radius: inherit;

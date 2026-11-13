@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { categoryValue, chooseCategory } from "../test-utils/reportCategory";
@@ -21,7 +21,13 @@ const { fetchFeedMock, handlers, onRealtimeMock, tabTapState } = vi.hoisted(() =
 
 vi.mock("../services/posts", () => ({ fetchFeed: fetchFeedMock }));
 vi.mock("../services/realtime", () => ({ onRealtime: onRealtimeMock }));
-vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "u1", username: "tester" } }) }));
+vi.mock("../services/people", () => ({ searchPeople: vi.fn().mockResolvedValue({ items: [], nextCursor: null }) }));
+vi.mock("../auth", () => {
+  // One stable identity: the overlay keys its requests off the account id, and
+  // a fresh object on every render would also churn every consumer.
+  const user = { id: "u1", username: "tester" };
+  return { useAuth: () => ({ user }) };
+});
 vi.mock("../components/TabTap", () => ({ useTabTap: () => tabTapState }));
 vi.mock("../components/PostList", () => ({
   PostList: ({ items, error, emptySubtitle, onRetry, masonryColumns }: { items: Array<{ id: string }>; error: string | null; emptySubtitle: string; onRetry: () => Promise<void>; masonryColumns?: number }) => (
@@ -35,6 +41,8 @@ vi.mock("../components/PostList", () => ({
 }));
 
 import { Home } from "./Home";
+import { GlobalSearchOverlay } from "../components/GlobalSearchOverlay";
+import { resetGlobalSearch } from "../components/globalSearch";
 import { buildFeedCacheKey, clearFeedCaches, saveFeedCache } from "../hooks/feedCache";
 import { consumeBackIntercept, resetBackInterceptors } from "../components/backNavigation";
 import { ringOutcome } from "../test-utils/focusRingCascade";
@@ -52,21 +60,20 @@ function renderHome(entry = "/") {
   return render(
     <MemoryRouter initialEntries={[entry]}>
       <Home />
+      <GlobalSearchOverlay />
       <LocationProbe />
     </MemoryRouter>,
   );
 }
 
+afterEach(() => resetGlobalSearch());
+
 /**
- * The search field is not resident (owner redesign, 2026-10-19): it mounts only
- * after the trailing search affordance is activated. Every test that types has
- * to activate it first — that IS the behaviour under test, so it is not hidden
- * inside a fake.
+ * The inline field only renders when a query is restored from the URL: a
+ * shared link must show its active filter. The magnifier itself opens the
+ * app-wide search overlay (owner order 2026-11-13), so typing tests either
+ * start from `/?q=…` or drive the overlay's own field.
  */
-function openSearch() {
-  fireEvent.click(screen.getByTestId("home-search-open"));
-  return screen.getByLabelText("Search posts") as HTMLInputElement;
-}
 
 /**
  * jsdom has no layout: framer's `PopChild` measures `0x0` and skips the pop, so
@@ -166,14 +173,13 @@ describe("Home realtime", () => {
   });
 
   it("shows Updates, not a count, when a search query makes membership unprovable", async () => {
-    const { container } = renderHome();
-    await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
-
-    fireEvent.change(openSearch(), { target: { value: "wallet" } });
-    await waitFor(
-      () => expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ q: "wallet" }), undefined),
-      { timeout: 3000 },
+    // A query in force is enough: the overlay is the entry point now, but a
+    // shared `?q=` link must behave exactly as before.
+    const { container } = renderHome("/?q=wallet");
+    await waitFor(() =>
+      expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ q: "wallet" }), undefined),
     );
+    expect(await screen.findByText("b")).toBeTruthy();
 
     // Scroll the reader down, then receive an invalidation.
     const scroller = container.querySelector(".overflow-y-auto");
@@ -227,7 +233,7 @@ describe("Home realtime", () => {
     expect(scroller.contains(screen.getByTestId("home-toolbar"))).toBe(true);
   });
 
-  it("scrolls the bar back into view when search is opened", async () => {
+  it("opens the app-wide search overlay without moving the feed", async () => {
     const { container } = renderHome();
     await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
     const scroller = container.querySelector(".overflow-y-auto") as HTMLElement;
@@ -236,12 +242,14 @@ describe("Home realtime", () => {
     scroller.scrollTop = 40;
     fireEvent.scroll(scroller);
 
-    // Activating search is a deliberate act on the bar, so the row returns
-    // before the field mounts — the field is never opened off-screen.
-    const field = openSearch();
-    expect(scroller.scrollTop).toBe(0);
-    fireEvent.focus(field);
-    expect(screen.getByLabelText("Search posts")).toBe(field);
+    // Search is a floating overlay: it does not need the bar back on screen,
+    // so the feed keeps the reader's position.
+    fireEvent.click(screen.getByTestId("home-search-open"));
+    const overlay = await screen.findByRole("search");
+    await waitFor(() =>
+      expect(document.activeElement).toBe(within(overlay).getByRole("searchbox", { name: "Search reports, messages and people" })),
+    );
+    expect(scroller.scrollTop).toBe(40);
   });
 
   it("restores the type filter from the URL on mount", async () => {
@@ -260,18 +268,19 @@ describe("Home realtime", () => {
     );
   });
 
-  it("writes filter edits back to the URL", async () => {
+  it("writes filter edits back to the URL without turning search into a page filter", async () => {
     renderHome();
     await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
 
     fireEvent.click(screen.getByRole("radio", { name: "Lost" }));
     await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/?type=LOST"));
 
-    fireEvent.change(openSearch(), { target: { value: "wallet" } });
-    await waitFor(
-      () => expect(screen.getByTestId("location").textContent).toBe("/?type=LOST&q=wallet"),
-      { timeout: 3000 },
-    );
+    // The magnifier opens the shared overlay; typing there never rewrites the
+    // Home URL or the feed underneath.
+    fireEvent.click(screen.getByTestId("home-search-open"));
+    const overlay = await screen.findByRole("search");
+    fireEvent.change(within(overlay).getByRole("searchbox"), { target: { value: "wallet" } });
+    expect(screen.getByTestId("location").textContent).toBe("/?type=LOST");
   });
 
   it("exposes category, status and sort in Home filters and applies them to the feed and URL", async () => {
@@ -344,53 +353,22 @@ describe("Home realtime", () => {
     expect(screen.getByTestId("location").textContent).toBe("/?q=wallet");
   });
 
-  it("clear button appears while typing and clears the query, URL param, and feed filter", async () => {
-    renderHome();
-    await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
-
-    // Compact at rest: no field, no clear, no close — the row is title + actions.
-    expect(screen.queryByLabelText("Search posts")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Clear search" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Close search" })).toBeNull();
-    expect(screen.getByTestId("home-search-open").getAttribute("aria-label")).toBe("Open search");
-
-    fireEvent.change(openSearch(), { target: { value: "wallet" } });
-    await waitFor(
-      () => expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ q: "wallet" }), undefined),
-      { timeout: 3000 },
-    );
-    await waitFor(() => expect(screen.getByTestId("location").textContent).toContain("q=wallet"));
-
-    // Active field: clear + close affordances present.
-    expect(screen.getByRole("button", { name: "Clear search" })).toBeTruthy();
+  it("clears a URL-restored query from the inline filter field", async () => {
+    renderHome("/?q=wallet");
+    const field = screen.getByLabelText("Search posts") as HTMLInputElement;
+    expect(field.value).toBe("wallet");
     expect(screen.getByRole("button", { name: "Close search" })).toBeTruthy();
-    // ...and the trigger is gone, so there is never a second search control.
-    expect(screen.queryByTestId("home-search-open")).toBeNull();
 
-    fetchFeedMock.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
-    expect((screen.getByLabelText("Search posts") as HTMLInputElement).value).toBe("");
-    // Clearing restores the cached unfiltered feed instead of refetching:
-    // the URL param drops, the cached rows return, and no network call fires.
+    expect(field.value).toBe("");
     await waitFor(() => expect(screen.getByTestId("location").textContent).not.toContain("q="));
-    expect(screen.getByText("a")).toBeTruthy();
-    expect(screen.getByText("b")).toBeTruthy();
-    expect(screen.getByText("c")).toBeTruthy();
-    expect(fetchFeedMock).not.toHaveBeenCalled();
   });
 
-  it("closing the field collapses it back to the compact row and drops the query", async () => {
-    renderHome();
-    await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
-
-    fireEvent.change(openSearch(), { target: { value: "wallet" } });
-    expect(await screen.findByRole("button", { name: "Close search" })).toBeTruthy();
-
+  it("closing the inline filter field collapses it and drops the query", async () => {
+    renderHome("/?q=wallet");
     fireEvent.click(screen.getByRole("button", { name: "Close search" }));
     await waitFor(() => expect(screen.queryByLabelText("Search posts")).toBeNull());
-    expect(screen.queryByRole("button", { name: "Clear search" })).toBeNull();
-    // Reopening starts empty: closing cleared the query rather than hiding it.
-    expect(openSearch().value).toBe("");
+    await waitFor(() => expect(screen.getByTestId("location").textContent).not.toContain("q="));
   });
 
   it("re-tapping the active Home tab at the top refreshes and scrolls smoothly", async () => {
@@ -718,229 +696,23 @@ describe("Home feed redesign (reference-inspired)", () => {
     expect(screen.getByTestId("home-toolbar").textContent).not.toMatch(/signed in as/);
     expect(screen.getByTestId("home-brand").textContent).toContain("Norfold");
 
-    // The actions trail the title unit, and the field reuses the same copy.
+    // The actions trail the title unit; the magnifier is the one search entry.
     expect(screen.getByRole("button", { name: /^filters/i })).toBeTruthy();
-    expect(openSearch().placeholder).toBe("Search posts…");
+    expect(screen.getByTestId("home-search-open").getAttribute("aria-label")).toBe("Open search");
   });
 
-  it("moves focus into the field on an intentional activation", async () => {
+  it("opens the app-wide overlay and puts focus in its field", async () => {
     renderHome();
     await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
 
     fireEvent.click(screen.getByTestId("home-search-open"));
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Search posts")));
+    const overlay = await screen.findByRole("search");
+    await waitFor(() =>
+      expect(document.activeElement).toBe(within(overlay).getByRole("searchbox", { name: "Search reports, messages and people" })),
+    );
   });
 
-  it.each(["Close search", "Filters"])("keeps empty search open when focus moves to %s", async (label) => {
-    renderHome();
-    await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
-    const input = openSearch();
-    await waitFor(() => expect(document.activeElement).toBe(input));
-    await waitFor(() => expect(screen.queryByTestId("home-brand")).toBeNull());
-    const control = screen.getByRole("button", { name: label });
-    act(() => control.focus());
-    // Losing input focus must not replace the row while its next control is
-    // receiving keyboard focus or a pointer-down. Browser proof additionally
-    // clicks Filters inside the150ms exit and checks the real hit target.
-    expect(screen.queryByTestId("home-brand")).toBeNull();
-    expect(document.activeElement).toBe(control);
-    if (label === "Filters") {
-      fireEvent.click(control);
-      expect(await screen.findByRole("dialog", { name: "Filters" })).toBeTruthy();
-    } else {
-      fireEvent.click(control);
-      expect(await screen.findByTestId("home-brand")).toBeTruthy();
-    }
-  });
-
-  it("closes empty search once focus leaves the app bar", async () => {
-    renderHome();
-    await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
-    const input = openSearch();
-    await waitFor(() => expect(document.activeElement).toBe(input));
-    await waitFor(() => expect(screen.queryByTestId("home-brand")).toBeNull());
-    act(() => input.blur());
-    expect(await screen.findByTestId("home-brand")).toBeTruthy();
-  });
-
-  it("keeps the open state the same height as the title row", async () => {
-    // Regression: the pill's border used to be added on top of a 48px child, so
-    // opening search grew the row 48 -> 50 and pushed the chips and the feed.
-    // jsdom cannot measure, so this pins the contract the geometry depends on:
-    // the pill owns the 48px minimum and every child stays under its 46px inner
-    // box. The rendered numbers are in the harness `matrix.json`.
-    renderHome();
-    await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("home-search-open"));
-
-    const pill = await screen.findByTestId("home-search-field");
-    expect(pill.className).toContain("min-h-[48px]");
-    for (const child of Array.from(pill.querySelectorAll("[class]"))) {
-      expect(child.className).not.toContain("min-h-[48px]");
-    }
-  });
-
-  it("freezes the exiting trigger at its measured box so the field keeps its settled width", async () => {
-    // The trigger and the field share one flex slot. While the trigger exits it
-    // must not keep reserving its width, or the entering pill spends the whole
-    // 150ms crossfade narrower than it settles and widens in one frame at the
-    // end. jsdom has no layout, so the trigger's measured box is supplied
-    // explicitly — deliberately NOT the 48px its class suggests — and the
-    // assertion reads that measurement back out of the rule framer injects. A
-    // stub that answers "48px" for every element only proved that some rule
-    // existed, not that the trigger's own geometry was captured.
-    renderHome();
-    await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
-
-    const row = screen.getByTestId("home-search-row");
-    const trigger = screen.getByTestId("home-search-open");
-    const measured = { width: 46, height: 44, left: 251, top: 3, parentWidth: 320 };
-    const restoreBox = stubTriggerBox(trigger, row, measured);
-    try {
-      fireEvent.click(trigger);
-      await waitFor(() => expect(trigger.hasAttribute("data-motion-pop-id")).toBe(true));
-      const id = trigger.getAttribute("data-motion-pop-id");
-      // framer injects the rule through CSSOM (`insertRule`), so the style
-      // element's text stays empty — read the sheet, not textContent.
-      const rule = Array.from(document.styleSheets)
-        .flatMap((sheet) => Array.from(sheet.cssRules))
-        .map((cssRule) => cssRule.cssText)
-        .find((text) => text.includes(`[data-motion-pop-id="${id}"]`));
-      // Absolute and frozen at the box it actually had (anchorX/anchorY default
-      // to left/top): the flex row stops reserving it, so the field is already
-      // at its settled width during the crossfade.
-      expect(rule).toContain("position: absolute !important");
-      expect(rule).toContain(`width: ${measured.width}px !important`);
-      expect(rule).toContain(`height: ${measured.height}px !important`);
-      expect(rule).toContain(`left: ${measured.left}px !important`);
-      expect(rule).toContain(`top: ${measured.top}px !important`);
-      expect(screen.getByTestId("home-search-field").className).toContain("flex-1");
-    } finally {
-      restoreBox();
-    }
-  });
-
-  it("hands the exiting trigger's slot to the filter button for the whole swap", async () => {
-    // MINOR-A: `popLayout` takes the exiting trigger out of flow so the field
-    // owns the slot from its first frame, and the right-aligned filter button
-    // then slides into exactly the 48px box the popped trigger was measured at.
-    // The ghost is later in DOM order, so before this fix it painted over the
-    // filter icon and swallowed a tap aimed at it for the whole 150ms exit.
-    //
-    // jsdom has neither layout nor hit testing, so the row's measured geometry
-    // is supplied (320px row, ONE 48px action slot pinned to its right edge —
-    // the box the popped trigger was measured at) and a tap is resolved against
-    // it the way a browser does: the topmost node under the point that still
-    // accepts pointer events wins. The real stylesheet is loaded, so which node
-    // accepts the tap comes from index.css and not from the test.
-    const sheet = document.createElement("style");
-    sheet.textContent = readFileSync("src/index.css", "utf8");
-    document.head.appendChild(sheet);
-    let restoreBox: (() => void) | null = null;
-    try {
-      renderHome();
-      await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
-
-      const ROW = 320;
-      const SLOT = 48;
-      const box = (left: number, width: number) =>
-        ({
-          x: left,
-          y: 0,
-          left,
-          right: left + width,
-          top: 0,
-          bottom: 48,
-          width,
-          height: 48,
-          toJSON: () => ({}),
-        }) as DOMRect;
-
-      const row = screen.getByTestId("home-search-row");
-      const filter = screen.getByRole("button", { name: /^filters/i });
-      const trigger = screen.getByTestId("home-search-open");
-      row.getBoundingClientRect = () => box(0, ROW);
-      filter.getBoundingClientRect = () => box(ROW - SLOT, SLOT);
-      // The ghost keeps the box it was measured at, not where it "would be".
-      trigger.getBoundingClientRect = () => box(ROW - SLOT, SLOT);
-      // PopChild skips the pop on jsdom's 0x0 measurement; the collision this
-      // test is about only exists once the trigger is really popped.
-      restoreBox = stubTriggerBox(trigger, row, {
-        width: SLOT,
-        height: SLOT,
-        left: ROW - SLOT,
-        top: 0,
-        parentWidth: ROW,
-      });
-
-      function hitAt(x: number, y: number): Element | null {
-        const under = Array.from(document.body.querySelectorAll<HTMLElement>("*")).filter((el) => {
-          const r = el.getBoundingClientRect();
-          return r.width > 0 && x >= r.left && x < r.right && y >= r.top && y < r.bottom;
-        });
-        for (let i = under.length - 1; i >= 0; i -= 1) {
-          const candidate = under[i];
-          if (!candidate) continue;
-          const styles = getComputedStyle(candidate);
-          if (styles.pointerEvents === "none" || styles.visibility === "hidden") continue;
-          return candidate;
-        }
-        return null;
-      }
-      const tapCentre = { x: ROW - SLOT / 2, y: 24 };
-      const filterReceives = () => {
-        const hit = hitAt(tapCentre.x, tapCentre.y);
-        return hit === filter || filter.contains(hit);
-      };
-
-      fireEvent.click(trigger);
-      screen.getByTestId("home-search-field").getBoundingClientRect = () => box(0, ROW - SLOT);
-      await waitFor(() => expect(trigger.hasAttribute("data-motion-pop-id")).toBe(true));
-
-      let samples = 0;
-      const deadline = Date.now() + 145; // the exit is 150ms (motionDurations.fast)
-      while (Date.now() < deadline) {
-        const ghost = screen.queryByTestId("home-search-open");
-        if (!ghost) break;
-        expect(
-          getComputedStyle(ghost).visibility,
-          "the popped ghost must be out of hit testing in the slot it vacated",
-        ).toBe("hidden");
-        expect(filterReceives()).toBe(true);
-        samples += 1;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
-      // Several samples, so this measured a transition and not a settled state.
-      expect(samples).toBeGreaterThanOrEqual(3);
-
-      // And once the ghost is gone the slot stays the filter's.
-      await waitFor(() => expect(screen.queryByTestId("home-search-open")).toBeNull());
-      expect(filterReceives()).toBe(true);
-    } finally {
-      sheet.remove();
-      restoreBox?.();
-    }
-  });
-
-
-  it("draws the field's focus ring on the pill, not inside it", async () => {
-    // `index.css` `.fb-home-search-field` owns the ring because the app-wide
-    // `:focus-visible` rule is unlayered and a utility cannot suppress it. The
-    // input must therefore not pretend to opt out with a utility that loses.
-    renderHome();
-    await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("home-search-open"));
-
-    const pill = await screen.findByTestId("home-search-field");
-    expect(pill.className).toContain("fb-home-search-field");
-    expect(screen.getByLabelText("Search posts").className).not.toContain("focus:outline-none");
-  });
-
-  it("keeps a top-level heading while the field replaces the wordmark", async () => {
-    // The field branch replaces the brand branch, so without a heading of its
-    // own the Home screen would lose heading navigation while searching. The
-    // crossfade keeps the outgoing branch mounted briefly, so this asserts the
-    // settled state rather than the overlap.
+  it("keeps one top-level heading on the compact row", async () => {
     renderHome();
     await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
     await waitFor(() =>
@@ -950,13 +722,6 @@ describe("Home feed redesign (reference-inspired)", () => {
     // NIT: the heading wraps the brand button, whose label is an instruction.
     // The page's H1 must announce the page's name, not the control's hint.
     expect(screen.getByRole("heading", { level: 1, name: "Norfold" })).toBeTruthy();
-
-    fireEvent.click(screen.getByTestId("home-search-open"));
-    await waitFor(() => expect(screen.getByLabelText("Search posts")).toBeTruthy());
-    await waitFor(() =>
-      expect(screen.getAllByRole("heading", { level: 1 }).length).toBe(1),
-    );
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Norfold");
   });
 
   it("restores a query from the URL without raising the keyboard", async () => {
@@ -968,14 +733,15 @@ describe("Home feed redesign (reference-inspired)", () => {
     expect(document.activeElement).not.toBe(restored);
   });
 
-  it("returns focus to the search affordance when the field closes", async () => {
+  it("returns focus to the magnifier when the overlay closes", async () => {
     renderHome();
     await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
+    const trigger = screen.getByTestId("home-search-open");
 
-    fireEvent.change(openSearch(), { target: { value: "wallet" } });
+    fireEvent.click(trigger);
     fireEvent.click(await screen.findByRole("button", { name: "Close search" }));
 
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId("home-search-open")));
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
   });
 
   it("lets Android Back close a focused field instead of leaving Home", async () => {

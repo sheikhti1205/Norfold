@@ -3,11 +3,6 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// SettingsPage renders the shared TopUtilities, whose unread-badge owner is
-// auth-scoped. This suite exercises legal documents, not sign-in state.
-vi.mock("../auth", () => ({
-  useAuth: () => ({ user: { id: "test-reader" }, booting: false, bootError: null }),
-}));
 vi.mock("../components/responsive", async (importOriginal) => ({
   ...await importOriginal<typeof import("../components/responsive")>(),
   useViewportWidth: () => 320,
@@ -48,10 +43,12 @@ describe("legal documents", () => {
     expect(screen.getByRole("button", { name: "Back to Norfold" })).toBeTruthy();
   });
 
-  it.each([Terms, PrivacyPolicy, CommunityGuidelines])("keeps utilities on app documents", (Document) => {
+  it.each([Terms, PrivacyPolicy, CommunityGuidelines])("keeps global search and the bell off every legal document", (Document) => {
     const { container } = render(<MemoryRouter><Document /></MemoryRouter>);
-    expect(container.querySelector('a[href="/search"]')).not.toBeNull();
-    expect(container.querySelector('a[href="/notifications"]')).not.toBeNull();
+    // Settings owns one search in its own chrome; the tree never paints a
+    // second global entry or a notification bell (owner order 2026-11-13).
+    expect(container.querySelector('a[href="/search"]')).toBeNull();
+    expect(container.querySelector('a[href="/notifications"]')).toBeNull();
   });
   it("distinguishes durable peer messages from ephemeral AI chat and discloses safety retention", () => {
     const { container } = render(<MemoryRouter><PrivacyPolicy /></MemoryRouter>);

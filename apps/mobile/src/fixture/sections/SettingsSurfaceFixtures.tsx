@@ -37,7 +37,7 @@ function SettingsIndex() {
   const [query, setQuery] = useState("");
   const viewportWidth = useViewportWidth();
   const rows = settingsDestinations({ platform: "web", signedIn: true, capabilities: [] });
-  return <SettingsPage title="Settings" utilities={false} autoFocus={false} className="fb-settings-root">
+  return <SettingsPage title="Settings" autoFocus={false} className="fb-settings-root">
     <Link to="/profile" className="fb-settings-profile">
       <UserAvatar avatarUrl={null} username="Account" size={64} />
       <span className="fb-settings-profile-copy"><span className="fb-settings-profile-name">Account</span></span>
@@ -63,7 +63,7 @@ function SettingsIndex() {
 }
 
 function Choices({ variant, theme, layout }: { variant: FixtureVariant; theme: "system" | "light" | "dark"; layout: "bottom" | "rail" }) {
-  return <SettingsPage title="Appearance" backTo="/settings" utilities={false} autoFocus={false}>
+  return <SettingsPage title="Appearance" backTo="/settings" autoFocus={false}>
     <SettingsGroup title="Theme"><fieldset className="fb-choice-fieldset"><legend className="sr-only">Theme</legend><div className="fb-preview-grid fb-preview-grid-theme">
       {(["system", "light", "dark"] as const).map(value => <ThemeCard key={value} name={`theme-${variant}`} value={value} checked={theme === value} onChange={() => {}} />)}
     </div></fieldset></SettingsGroup>

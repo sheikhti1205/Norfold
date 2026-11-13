@@ -53,7 +53,7 @@ export function HomeTopBar({
   expanded: boolean;
   query: string;
   onQueryChange: (value: string) => void;
-  onOpen: () => void;
+  onOpen: (trigger: HTMLButtonElement) => void;
   onClear: () => void;
   onClose: () => void;
   onFocus: () => void;
@@ -237,7 +237,7 @@ export function HomeTopBar({
               ref={triggerRef}
               data-testid="home-search-open"
               aria-label="Open search"
-              onClick={onOpen}
+              onClick={(event) => onOpen(event.currentTarget)}
               whileTap={pressFeedback.iconButton}
               variants={scaleInVariants}
               initial="hidden"

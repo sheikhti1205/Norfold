@@ -220,6 +220,12 @@ account menu as the reference:
   `/settings` URL (`screens/settingsRoutes.tsx`, declared once), on its own
   memory history, so closing returns to the app exactly where the reader was and
   an in-window section visit leaves no settings URL behind.
+- **Every settings destination opens in the window.** Activity preferences,
+  Report a problem, Help and "Open Personalization" open the window at that
+  section; so does any in-app link to `/settings` or `/settings/*`, intercepted
+  once at the shell. A row never swaps the page behind the window for a separate
+  settings screen. A standing `/settings` URL still renders the standalone page,
+  so a deep link keeps working.
 - **Outside press dismisses the window**, Escape dismisses it, and Android Back
   walks the window's own sections first, then closes it.
 - **The page behind stays visible, blurred** (owner's explicit recall): the
@@ -237,4 +243,41 @@ page visible through it; outside press and Escape both close it; keyboard
 resize 224→256 and pointer drag 256→360 both persisted, and the menu tracked the
 360px rail. Signed-in settings content and phone-width rendered review remain
 unverified in this session (no personal-session consent).
+
+### 2026-11-13 rendered pass: one search surface
+
+Owner order in this session: the app bar's magnifier must open the prototype's
+floating search, and every search entry must reach that same surface. Reviewed
+through the dev-only `/__fixture/chrome` stage with headless Chromium, because
+the desktop session was locked and the in-app browser could not capture pixels.
+Captures: 1280x800, 390x844 and 320x720, in light, dark, AMOLED and xlarge text.
+
+- Geometry: the desktop pill is 640x48, centred at x=320 on a 1280 viewport;
+  the phone pill is 374x52 at x=8 (8px margins) with its top at 61, exactly 8px
+  below the 53px app bar; 320dp gives 304x52 at x=8..312. No horizontal overflow
+  at any width. The first capture was anchored at the viewport centre instead of
+  centred on it (right edge 1280 on a 1280 viewport) because Motion writes its
+  scale animation into the inline `transform`, which overrode the CSS translate.
+  The individual `translate` property now centres all three widths. The settings
+  window holds 1080x720 at x=100..1180 and is full-bleed at both phone widths.
+- The phone prompt clipped mid-word at the filter icon ("...and peop") because
+  Chrome ignores `text-overflow` on `::placeholder`. The prompt is a real
+  ellipsized element now: "Search reports, messages and p…" at 390 and "Search
+  reports, …" at 320/xlarge, with the input's aria-label unchanged. The filter
+  and close controls in both search pills are 44x44.
+- Interaction: focus lands in the field; Tab runs Advanced search, Close search,
+  then the recent searches; Escape closes and returns focus to the app-bar
+  trigger with aria-expanded=false; an outside press closes it; Apply closes the
+  filter card and returns focus to Advanced search. The settings window opens
+  its destinations in place, Escape and an outside press close it, and its
+  search bar attaches under the header with no bell.
+- Contrast from computed styles: the muted prompt measures 8.18:1 in light and
+  8.36:1 in dark and AMOLED; result titles 15.43:1 and 14.47:1. Recents,
+  no-results, loading ("Searching…") and error ("Try again") states exist in
+  source with tests; the signed-out query renders "Sign in to search reports
+  and people.".
+- Not covered: signed-in settings content, live search loading/error, and touch
+  targets on a physical device. The fixture has no session, so the settings list
+  is empty by design and signed-in destinations are filtered out of settings
+  search. Device acceptance still needs owner consent.
 
