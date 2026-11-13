@@ -9,6 +9,8 @@ const { shared, isolated, create } = vi.hoisted(() => {
 });
 vi.mock("./supabaseClient", async (original) => ({ ...await original<typeof import("./supabaseClient")>(), getSupabase: () => shared }));
 vi.mock("@supabase/supabase-js", async (original) => ({ ...await original<typeof import("@supabase/supabase-js")>(), createClient: create }));
+// The reset redirect must not depend on whatever share origin the local .env carries.
+vi.mock("../utils/reportLinks", () => ({ publicShareOrigin: () => "https://findbackapp.social" }));
 
 const user = { id: "recovery-account", email: "recover@example.invalid" };
 beforeEach(() => {
@@ -29,7 +31,7 @@ describe("isolated recovery OTP", () => {
     await recovery.updatePassword("new-password-123");
     expect(isolated.auth.verifyOtp).toHaveBeenCalledWith({ email: user.email, token: "123456", type: "recovery" });
     expect(create).toHaveBeenCalledWith(expect.any(String), expect.any(String), expect.objectContaining({ auth: expect.objectContaining({ persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }) }));
-    expect(isolated.auth.updateUser).toHaveBeenCalledWith({ password: "new-password-123" });
+    expect(isolated.auth.updateUser).toHaveBeenCalledWith({ password: "new-password-123", data: { norfold_password_set_at: expect.stringMatching(/.+/) } });
     expect(shared.auth.verifyOtp).not.toHaveBeenCalled(); expect(shared.auth.updateUser).not.toHaveBeenCalled();
     expect(getToken()).toBe("synthetic-existing-account-session");
     await recovery.dispose();

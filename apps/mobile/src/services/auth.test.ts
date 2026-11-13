@@ -88,6 +88,8 @@ describe("password setup capability", () => {
   const identity = (provider: string) => ({ provider } as NonNullable<import("@supabase/supabase-js").User["identities"]>[number]);
   it("requires setup only for a user with no email identity", () => {
     expect(needsPasswordSetup({ identities: [identity("google")] })).toBe(true);
+    expect(needsPasswordSetup({ identities: [identity("google")], user_metadata: { norfold_password_set_at: "2026-11-13T00:00:00.000Z" } })).toBe(false);
+    expect(needsPasswordSetup({ identities: [identity("google")], user_metadata: { norfold_password_set_at: "" } })).toBe(true);
     expect(needsPasswordSetup({ identities: [identity("email")] })).toBe(false);
     expect(needsPasswordSetup({ identities: [identity("google"), identity("email")] })).toBe(false);
     expect(needsPasswordSetup(null)).toBe(false);
@@ -97,9 +99,15 @@ describe("password setup capability", () => {
     clientMock.auth.updateUser.mockResolvedValue({ error: null });
     clientMock.auth.getUser.mockResolvedValue({ data: { user: USER }, error: null });
     await createAccountPassword("password123");
-    expect(clientMock.auth.updateUser).toHaveBeenCalledWith({ password: "password123" });
+    expect(clientMock.auth.updateUser).toHaveBeenCalledWith({ password: "password123", data: { norfold_password_set_at: expect.any(String) } });
     expect(await readPasswordSetupUser()).toEqual(USER);
     expect(clientMock.auth.getUser).toHaveBeenCalledOnce();
+  });
+  it("marks an existing password when Supabase reports same_password", async () => {
+    clientMock.auth.updateUser.mockResolvedValueOnce({ error: { code: "same_password", name: "AuthApiError", message: "New password should be different from the old password.", status: 422 } }).mockResolvedValueOnce({ error: null });
+    await expect(createAccountPassword("password123")).resolves.toBeUndefined();
+    expect(clientMock.auth.updateUser).toHaveBeenCalledTimes(2);
+    expect(clientMock.auth.updateUser).toHaveBeenNthCalledWith(2, { data: { norfold_password_set_at: expect.any(String) } });
   });
 });
 
@@ -824,7 +832,7 @@ describe("password recovery (Forgot password → recovery code → new password;
     expect(clientMock.auth.updateUser).not.toHaveBeenCalled();
     clientMock.auth.updateUser.mockResolvedValue({ data: {}, error: null });
     await expect(updatePassword("new-password-123")).resolves.toBeUndefined();
-    expect(clientMock.auth.updateUser).toHaveBeenCalledWith({ password: "new-password-123" });
+    expect(clientMock.auth.updateUser).toHaveBeenCalledWith({ password: "new-password-123", data: { norfold_password_set_at: expect.any(String) } });
   });
 });
 
