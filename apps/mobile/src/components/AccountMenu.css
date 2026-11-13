@@ -1,15 +1,14 @@
 /*
- * One identity control, one popover, and a panel that opens beside it.
+ * One identity control, one popover, and sub-panels that take the card over.
  *
  * The footer row is the only thing in the rail footer (owner order 2026-11-12,
- * R1). It is a full-width button, so the whole row is the target: avatar, name,
- * handle and earned badge. There is no second settings glyph to aim at.
+ * R1): a full-width button carrying avatar, name, handle and earned badge.
  *
- * The nested panel (R2) sits inside the same floating layer and is positioned
- * against the dialog rather than portalled separately, so Escape, outside press
- * and focus return stay with one layer instead of two overlapping traps. Below
- * 900px there is no room beside the popover, so the panel stacks underneath it
- * in normal flow rather than floating off-screen.
+ * Owner order 2026-11-13 (reference: the ChatGPT account menu): the popover is
+ * the width of the rail and opens above its trigger, so it covers the rail's
+ * destinations instead of sitting beside them. Rows are click-driven; a row
+ * with more inside replaces the list in the same card (the panel is not a
+ * second floating layer), which is also why nothing here can chase the pointer.
  */
 .fb-account-rail { margin-top: auto; display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
 .fb-account-rail .fb-nav-link { cursor: pointer; }
@@ -24,91 +23,117 @@
 .fb-account-trigger-name { font-size: 0.9375rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fb-account-trigger-handle { font-size: 0.75rem; color: var(--fb-on-surface-variant); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.fb-account-menu { width: 320px; max-width: calc(100vw - 88px); padding: 8px; border-radius: 18px; background: var(--fb-surface); border: 1px solid var(--fb-outline-variant); box-shadow: var(--shadow-md); }
-.fb-account-dialog { position: relative; outline: none; }
-.fb-account-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--fb-on-surface); text-align: start; text-decoration: none; font-size: 15px; cursor: pointer; }
+/* Menu width follows the rail (`--fb-rail-w` is written by the shell whenever
+   the rail is resized). Phones keep a readable menu instead: the rail's width
+   there is the icon column, not a surface a menu should imitate. */
+.fb-account-menu {
+  display: flex; flex-direction: column;
+  width: var(--fb-rail-w, 224px); max-width: calc(100vw - 88px);
+  padding: 8px; border-radius: 18px; background: var(--fb-surface);
+  border: 1px solid var(--fb-outline-variant); box-shadow: var(--shadow-md);
+}
+.fb-account-dialog { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow-y: auto; outline: none; }
+.fb-account-list { display: flex; flex-direction: column; min-height: 0; }
+
+/* The trigger sits inside the rail's 12px padding, so React Aria anchors the
+   card 12px in from the rail's outer edge. Pull it back by that padding: the
+   card then spans the rail exactly (width = `--fb-rail-w`), covers the row
+   above it, and does not overhang the content beside the rail. Phones keep the
+   computed position: their menu is wider than the trigger and end-aligned. */
+@media (min-width: 901px) {
+  .fb-account-menu { margin-inline-start: -12px; }
+}
+
+.fb-account-row {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px;
+  padding: 8px; border: 0; border-radius: 10px; background: transparent;
+  color: var(--fb-on-surface); text-align: start; text-decoration: none;
+  font-size: 0.9375rem; cursor: pointer;
+}
 .fb-account-row:hover, .fb-account-row:focus-visible, .fb-account-row[aria-expanded="true"] { background: var(--fb-surface-container); }
 .fb-account-row:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: -3px; }
+.fb-account-row svg { flex: none; }
 /* The label is the row that stretches. Spans in this list are not all labels:
    the avatar is a span too, and a blanket `> span` rule gave it flex: 1, which
-   pulled the 40px avatar across the whole row and cropped the photo into a
-   band. Keep growth on the text and let the canonical avatar keep its box. */
-.fb-account-row-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.fb-account-identity-text { display: flex; flex: 1; min-width: 0; flex-direction: column; overflow-wrap: anywhere; }
-.fb-account-identity-text span { color: var(--fb-on-surface-variant); }
+   pulled the avatar across the whole row and cropped the photo into a band. */
+.fb-account-row-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fb-account-divider { height: 1px; margin: 4px 0; background: var(--fb-outline-variant); }
 
-/* The preview floats beside the card at wide sizes instead of widening it.
-   Widening the card also changed its height, and because the popover is
-   bottom-anchored the whole list moved up under the pointer: the hovered row
-   left the pointer, the preview closed, the row moved back, and the panel
-   flickered in a loop. An absolute panel keeps the card's box (and every row)
-   fixed; `overflow: visible` lets it paint outside without the popover growing
-   a horizontal scrollbar. Below 901px it stacks in flow instead. */
-.fb-account-preview {
-  position: static; flex: none; width: 20rem; max-height: min(70dvh, 32rem);
-  overflow-y: auto; margin-inline-start: 8px;
-  padding: 14px; border: 1px solid var(--fb-outline-variant); border-radius: 14px;
-  background: var(--fb-surface);
+.fb-account-identity { gap: 10px; padding: 8px 6px; min-height: 56px; }
+.fb-account-identity-text { display: flex; flex: 1; min-width: 0; flex-direction: column; line-height: 1.25; }
+.fb-account-identity-name { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.fb-account-identity-name strong { font-size: 0.9375rem; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-account-identity-text > span:not(.fb-account-identity-name) {
+  font-size: 0.75rem; color: var(--fb-on-surface-variant);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-@media (min-width: 901px) {
-  .fb-account-menu { width: max-content; overflow: visible; }
-  .fb-account-body { display: block; }
-  .fb-account-list { width: 320px; }
-  /* 17px = the card's 8px padding + 1px border + the 8px gap. The dialog is
-     the containing block, and its border box sits 9px inside the card's, so
-     measuring from `100%` alone leaves the panel touching the card edge. */
-  .fb-account-preview {
-    position: absolute; inset-block-end: 0; inset-inline-start: calc(100% + 17px);
-    width: 20rem; max-height: min(34rem, calc(100dvh - 5rem)); margin-inline-start: 0;
-  }
+
+/* The sub-panel owns the card. Its header carries the only way back; rows below
+   are the panel's own content, at the same width the rows had. */
+.fb-account-panel { min-height: 0; }
+.fb-account-panel-head { display: flex; align-items: center; gap: 4px; padding: 0 0 6px; }
+.fb-account-back {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; flex: none; padding: 0; border: 0; border-radius: 8px;
+  background: transparent; color: var(--fb-on-surface); cursor: pointer;
 }
-@media (max-width: 900px) {
-  .fb-account-preview {
-    position: static; width: 100%; max-height: none; margin-top: 8px; margin-inline-start: 0;
-    box-shadow: none; border-radius: 14px;
-  }
-  /* A phone can hand this panel less height than eight rows need (a short
-     viewport, or a trigger near the middle of a long page). React Aria caps the
-     popover with an inline max-height, so the popover becomes the flex column
-     that cap applies to and the body is the item that shrinks and scrolls;
-     without this the dialog drew straight through the cap and its bottom rows
-     sat outside the viewport. The scroll belongs to this band only, where the
-     nested panel is static - at wide sizes that panel opens beside the popover
-     and must not be clipped. */
-  .fb-account-menu { display: flex; flex-direction: column; }
-  .fb-account-dialog { display: flex; flex-direction: column; min-height: 0; }
-  .fb-account-body { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
-  /* The panel is what the tap asked for, so it opens at the top of the scroll
-     area instead of behind eight rows the reader would have to pass first. */
-  .fb-account-preview { order: -1; }
+.fb-account-back:hover { background: var(--fb-surface-container); }
+.fb-account-back:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: -1px; }
+.fb-account-panel-title { margin: 0; font-size: 0.9375rem; font-weight: 650; letter-spacing: -0.01em; }
+.fb-account-panel-body { display: flex; flex-direction: column; }
+.fb-account-panel .fb-choice-fieldset { margin: 4px 0 0; padding: 0; border: 0; min-width: 0; }
+.fb-account-panel legend { padding: 0; margin-bottom: 6px; font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fb-on-surface-variant); }
+
+/* Theme tiles become rows inside the account card: three 57px tiles cannot show
+   a window preview at this width, so the preview sits to the label's right. */
+.fb-account-panel .fb-preview-grid-theme { grid-template-columns: 1fr; gap: 4px; }
+.fb-account-panel .fb-preview-grid-theme .fb-preview-choice {
+  display: flex; flex-direction: row-reverse; align-items: center; justify-content: space-between;
+  gap: 10px; min-height: 38px; text-align: start;
 }
-.fb-account-panel h3 { margin: 0 0 10px; font-size: 0.9375rem; font-weight: 650; letter-spacing: -0.01em; }
-.fb-account-panel .fb-choice-fieldset { margin: 12px 0 0; padding: 0; border: 0; min-width: 0; }
-.fb-account-panel legend { padding: 0; margin-bottom: 8px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fb-on-surface-variant); }
+.fb-account-panel .fb-preview-grid-theme .fb-preview-frame { width: 68px; min-height: 36px; flex: none; }
+.fb-account-panel .fb-preview-grid-theme .fb-preview-label { flex: 1; font-size: 0.875rem; }
+
 /* Two even rows of four. A wrapping flex row left 6 swatches on one line and 2
-   on the next at phone width, which reads as an accident rather than a palette. */
-.fb-account-accents { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; justify-items: center; }
-.fb-account-accent { width: 28px; height: 28px; border-radius: 999px; border: 2px solid transparent; cursor: pointer; }
+   on the next, which reads as an accident rather than a palette. */
+.fb-account-accents { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; justify-items: center; }
+.fb-account-accent { width: 26px; height: 26px; border-radius: 999px; border: 2px solid transparent; cursor: pointer; }
 .fb-account-accent[data-selected="true"] { border-color: var(--fb-on-surface); box-shadow: 0 0 0 2px var(--fb-surface); }
 .fb-account-accent:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: 2px; }
+
 .fb-account-panel-links { display: flex; flex-direction: column; }
 .fb-account-panel-link {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
-  min-height: 44px; padding: 4px 0; border: 0; border-bottom: 1px solid var(--fb-outline-variant);
-  background: transparent; color: var(--fb-on-surface); font-size: 0.875rem; text-align: start; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%;
+  min-height: 40px; margin-top: 6px; padding: 4px 2px; border: 0; border-top: 1px solid var(--fb-outline-variant);
+  background: transparent; color: var(--fb-primary); font-size: 0.8125rem; font-weight: 600; text-align: start; cursor: pointer;
 }
-.fb-account-panel-link:hover { color: var(--fb-primary); }
+.fb-account-panel-link:hover { text-decoration: underline; }
 .fb-account-panel-link:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: -3px; }
-.fb-account-rules { display: flex; flex-direction: column; gap: 12px; }
-.fb-account-rule { display: flex; flex-direction: column; gap: 4px; }
-.fb-account-rule-label { font-size: 0.8125rem; font-weight: 600; }
-.fb-account-rule select {
-  min-height: 40px; padding: 0 10px; border-radius: 10px;
-  border: 1px solid var(--fb-outline-variant); background: var(--fb-surface-container-low);
-  color: var(--fb-on-surface); font: inherit; font-size: 0.8125rem;
-}
-.fb-account-rule select:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: 2px; }
-.fb-account-rule-hint { font-size: 0.6875rem; line-height: 1.4; color: var(--fb-on-surface-variant); }
-.fb-account-panel-status { margin: 10px 0 0; font-size: 0.75rem; color: var(--fb-on-surface-variant); }
+.fb-account-panel-status { margin: 8px 0 0; font-size: 0.75rem; color: var(--fb-on-surface-variant); }
 .fb-account-panel-status[role="alert"] { color: var(--fb-error); }
+
+/* Switch account: the current identity is stated, never offered as a row that
+   would sign the reader out to sign back in as themselves. */
+.fb-account-current { display: flex; align-items: center; gap: 8px; padding: 4px 2px 8px; }
+.fb-account-current-tag {
+  margin-inline-start: auto; padding: 1px 7px; border: 1px solid var(--fb-outline-variant);
+  border-radius: 999px; font-size: 0.6875rem; color: var(--fb-on-surface-variant);
+}
+.fb-account-switch-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.fb-account-switch-row {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px;
+  padding: 6px; border: 0; border-radius: 8px; background: transparent;
+  color: var(--fb-on-surface); text-align: start; cursor: pointer;
+}
+.fb-account-switch-row:hover:not(:disabled) { background: var(--fb-surface-container); }
+.fb-account-switch-row:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: -3px; }
+.fb-account-switch-row:disabled { opacity: 0.6; cursor: default; }
+.fb-account-switch-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; line-height: 1.25; }
+.fb-account-switch-name { font-size: 0.875rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-account-switch-handle { font-size: 0.75rem; color: var(--fb-on-surface-variant); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-account-switch-busy { font-size: 0.6875rem; color: var(--fb-on-surface-variant); }
+.fb-account-switch-empty { margin: 6px 2px 8px; font-size: 0.8125rem; color: var(--fb-on-surface-variant); }
+
+@media (max-width: 900px) {
+  .fb-account-menu { width: 320px; }
+}

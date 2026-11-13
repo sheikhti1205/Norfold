@@ -332,6 +332,27 @@ hover does not exist on touch and the pin toggle does not exist yet.
 
 ### 7.4 Width and resizing
 
+**Superseded 2026-11-13 by owner order: the rail is resizable.** The original
+decision was "no drag-resizable rail"; the owner has since asked for it
+explicitly, twice, after a previous pass removed it. What was right in the
+original reasoning is kept: the rail reuses the existing separator contract
+rather than inventing a new one.
+
+- Expanded rail: 200-360px, default 224, persisted as `railWidth` in
+  `appearance.ts` alongside the other appearance preferences.
+- The separator is a real focusable `separator` with `aria-valuenow`, pointer
+  drag with pointer capture, ArrowLeft/ArrowRight steps and Home/End to the
+  bounds.
+- The collapsed rail stays 72/80px. The stored width applies to the expanded
+  rail only, and the account popover reads the same `--fb-rail-w` variable so
+  the two cannot drift.
+- 360 is the ceiling because 840 − 360 = 480px of content at the wide
+  breakpoint is the smallest still-useful column; 200 is the floor because below
+  it the labels stop fitting their own rows.
+
+<details>
+<summary>Original decision (2026-11-10), retained as history</summary>
+
 No drag-resizable rail. The app already has one resizable-pane contract
 (`SplitView.tsx:107-168`) with a keyboard-operable separator, clamped bounds and
 a per-device store (`panePreference.ts:46,72-80`); a second one for four icons
@@ -340,12 +361,13 @@ would be duplication with none of the benefit. The rail has exactly two widths,
 needs a third width, it reuses the `SplitView` separator contract rather than
 inventing a new one.
 
-224px is derived, not chosen for looks: 840 − 224 = 616px, still above the
-600px content floor. The label budget is arithmetic, not a measurement:
-224 − 24px horizontal padding − 20px icon − 12px gap leaves 168px for text
-inside the row, and 144px after the row's own 12px insets. "My Reports" at 200%
-text therefore has to fit in 144px, and that is the tightest case Phase 2 must
-review.
+</details>
+
+The label budget is still arithmetic, not a measurement: 224 is the default, and
+at that width 224 − 24px horizontal padding − 20px icon − 12px gap leaves 168px
+for text inside the row, and 144px after the row's own 12px insets. "My Reports"
+at 200% text therefore has to fit in 144px at the default width; dragging wider
+is the reader's remedy, and is why the floor is 200 rather than 72.
 
 ### 7.5 Motion
 
@@ -424,9 +446,12 @@ is avoided rather than mitigated. The flyout has its own failure mode — it
 covers content while open — accepted because it closes on leave, scroll and
 `Escape`, and because it is never open while the reader is reading.
 
-**Resizable panels invite over-persistence and breakpoint bugs — rejected.** A
-dragged rail persists into a narrower window, and the app already has one
-resizable contract to keep correct. Two fixed widths cannot drift.
+**Resizable panels invite over-persistence and breakpoint bugs — accepted by
+owner order (2026-11-13).** A dragged rail persists into a narrower window and is
+a second resizable contract to keep correct. The mitigation is the one the chat
+panes already use: clamp to 200-360, persist per device, and never apply the
+stored width below the wide breakpoint or in the collapsed rail. Two fixed
+widths cannot drift; a clamped, bounded width can only drift within its bounds.
 
 **A second navigation level on four destinations becomes ceremony — accepted as
 a risk, refused as a design.** The pinned panel may be pinned once and never

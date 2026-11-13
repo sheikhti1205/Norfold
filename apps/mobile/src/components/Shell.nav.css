@@ -147,6 +147,21 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
 .fb-nav-pin:hover { background: var(--fb-surface-container); }
 .fb-nav-pin:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: 2px; }
 .fb-nav-rail[data-pinned="true"] { width: 224px; padding: 12px; }
+/* Owner order 2026-11-13: the pinned sidebar is resizable. The handle sits on
+   the rail's inner edge (the rail clips at `overflow: hidden`), reads as a
+   separator to assistive tech, and drags horizontally; arrows move it in 16px
+   steps, Shift doubles the step, Home/End jump to the bounds. */
+.fb-nav-rail { position: relative; }
+.fb-nav-rail-resize {
+  position: absolute; inset-block: 0; inset-inline-end: 0; width: 10px;
+  z-index: 2; cursor: col-resize; touch-action: none; background: transparent;
+}
+.fb-nav-rail-resize::after {
+  content: ""; position: absolute; inset-block: 0; inset-inline-end: 0; width: 2px;
+  background: transparent; transition: background 120ms ease;
+}
+.fb-nav-rail-resize:hover::after, .fb-nav-rail-resize:focus-visible::after { background: var(--fb-primary); }
+.fb-nav-rail-resize:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: -3px; }
 .fb-nav-rail[data-pinned="true"] .fb-nav-link {
   flex-direction: row; justify-content: flex-start; gap: 12px;
   padding: 8px 12px;

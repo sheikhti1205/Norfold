@@ -31,6 +31,11 @@ every expanded width; no second settings control anywhere in the rail.
 
 ## R2. Popover rows open a preview, not a route
 
+> **Superseded in part, 2026-11-13.** Hover previews are removed by owner order:
+> rows are click-driven and a row's panel replaces the list **inside the same
+> card**, never floating beside it. The retained requirement is that each row
+> opens real content rather than a route. See the correction section below.
+
 The account popover's rows currently navigate. The owner wants the row to open a
 **nested floating popover showing what is inside**: previews, live values, the
 thing itself.
@@ -51,6 +56,11 @@ tiles; keyboard `Enter` on the same row opens it; Escape closes only the preview
 first, then the popover.
 
 ## R3. Settings opens a floating account panel
+
+> **Superseded, 2026-11-13.** Settings now opens the settings window directly,
+> and the account slice (identity, contact rules) lives at `/settings/account`,
+> mounted by that window. The panel described here duplicated the settings tree;
+> it is not built twice. See the correction section below.
 
 Pressing `Settings` inside the popover opens a floating panel, not the settings
 page.
@@ -141,17 +151,36 @@ send; coarse input still does not send on Enter.
 Acceptance: with both chat sidebars closed the thread still renders at 1024 and
 at 1280; reopening restores the exact previous widths; state survives a reload.
 
+## R8. The rail is resizable
+
+Owner order 2026-11-13, stated twice. The pinned rail must be resizable; a
+previous pass removed drag resizing and that is not acceptable.
+
+- Pointer drag on the rail's inner edge, clamped to 200-360px, persisted as
+  `railWidth` in the appearance store. Default remains 224.
+- Keyboard: the separator is focusable; ArrowLeft/ArrowRight step, Home/End jump
+  to the bounds, and `aria-valuenow` reports the current width.
+- The collapsed rail is unchanged (72/80px); the stored width governs the
+  expanded rail only.
+- The account popover reads the same `--fb-rail-w` variable, so its width and
+  the rail never drift apart.
+
+Acceptance: dragging the separator changes the rail width and the content column
+reflows in the same paint; the width survives a reload; keyboard steps and
+clamps at both bounds; a 360px rail does not break the account popover.
+
 ## Status
 
 | ID | Item | Status |
 | --- | --- | --- |
 | R1 | One account control | done |
-| R2 | Nested preview popovers | done, placement repaired from rendered review (2026-11-13) |
-| R3 | Floating account settings panel | done in source; one enforcement migration unapplied |
+| R2 | Row panels, not routes | done as click-driven in-card panels; hover previews superseded 2026-11-13 |
+| R3 | Settings surface | done in source as the settings window; contact rules at `/settings/account`; signed-in rendered review unverified |
 | R4 | All-type attachments, safely | blocked, live acceptance pending |
 | R5 | Emoji, stickers, GIFs everywhere | done |
 | R6 | Composer focus and Enter | done |
 | R7 | Collapsible sidebars | done |
+| R8 | Resizable rail | done in source; pointer and keyboard verified rendered |
 
 A row moves to `done` only with the acceptance check above observed. A row that
 cannot complete moves to `blocked` with the blocker named, and the pass carries
@@ -173,4 +202,39 @@ on with the next row.
 - The emoji palette measured itself against the window; it now measures against
   the composer, so a 390px phone gets a 261-273px palette with no sideways
   overflow.
+
+### 2026-11-13 correction: menu panels and the settings window
+
+The owner corrected the R2/R3 reading in the same session, with the ChatGPT
+account menu as the reference:
+
+- **No hover previews.** A row's panel replaces the list inside the same card.
+  Open and close are presses, not pointer crossings. This removes the second
+  floating layer and the "preview beside the popover" geometry that had already
+  put a 287px panel at x=347 on a 390px phone.
+- **Rows, in order:** identity (name, badge, chevron; pressing offers account
+  switching), Personalization, Activity preferences, Settings, Report a problem,
+  Help, Log out.
+- **Settings opens the settings window directly**, not an option list and not an
+  account-only panel. The window mounts the same settings route tree as the
+  `/settings` URL (`screens/settingsRoutes.tsx`, declared once), on its own
+  memory history, so closing returns to the app exactly where the reader was and
+  an in-window section visit leaves no settings URL behind.
+- **Outside press dismisses the window**, Escape dismisses it, and Android Back
+  walks the window's own sections first, then closes it.
+- **The page behind stays visible, blurred** (owner's explicit recall): the
+  backdrop is an 18px blur with a light scrim, and the window surface itself is
+  frosted, 84% surface with a 30px blur. Nothing is hidden behind an opaque
+  sheet.
+- **Wide placement:** the popover opens above the trigger, is exactly
+  `--fb-rail-w` wide, is pulled back by the rail's 12px padding so it spans the
+  rail's outer edges, and covers the rail's own destinations. Below 900px it is
+  above and end-aligned; the window is full-screen.
+
+Acceptance evidence: rendered at 1016px wide — menu 224x347 at x=0, flush with
+the 224px rail, seven rows in order; Settings window 955x601 with the blurred
+page visible through it; outside press and Escape both close it; keyboard
+resize 224→256 and pointer drag 256→360 both persisted, and the menu tracked the
+360px rail. Signed-in settings content and phone-width rendered review remain
+unverified in this session (no personal-session consent).
 
