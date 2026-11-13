@@ -47,6 +47,25 @@ describe("PostDetail viewer layout", () => {
     expect(screen.queryByTestId("report-viewer-report-pane")).toBeNull();
     expect(screen.queryByTestId("report-viewer-conversation-pane")).toBeNull();
   });
+  it("moves the conversation into its own floating surface on a narrow viewport", async () => {
+    const original = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    try {
+      renderDetail(true);
+      const report = await screen.findByTestId("report-viewer-report-pane");
+      expect(screen.queryByTestId("report-viewer-conversation-pane")).toBeNull();
+      expect(within(report).queryByTestId("detail-comments")).toBeNull();
+      // The action row stays in the report, so the thread is one tap away.
+      expect(within(report).getByTestId("report-viewer-inline-actions")).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: /^Comments, / }));
+      const dialog = await screen.findByRole("dialog", { name: "Comments" });
+      expect(within(dialog).getByTestId("detail-comments")).toBeTruthy();
+      expect(within(dialog).getByTestId("viewer-composer")).toBeTruthy();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: original });
+    }
+  });
   it("places actions before the composer inside the conversation pane", async () => {
     renderDetail(true);
     const pane = await screen.findByTestId("report-viewer-conversation-pane");

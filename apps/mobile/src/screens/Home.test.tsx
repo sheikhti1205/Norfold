@@ -183,11 +183,11 @@ describe("Home realtime", () => {
     expect(toolbar.hasAttribute("inert")).toBe(false);
     expect(toolbar.getAttribute("data-collapsed")).toBeNull();
     expect(toolbar.className).not.toContain("shrink-0");
-    // The wordmark stays whole: the entire row leaves, so shrinking the word
-    // would be a second, redundant stage. The old collapse attribute is gone.
-    const wordmark = container.querySelector('[data-testid="home-brand-wordmark"]');
-    expect(wordmark!.getAttribute("data-compact")).toBeNull();
-    expect(wordmark!.textContent).toBe("Norfold");
+    // The bar holds no brand unit any more (it lives in the sidebar), so there
+    // is no collapse stage to test: the whole bar still leaves and returns with
+    // the content and never resizes on its own.
+    expect(container.querySelector('[data-testid="home-brand-wordmark"]')).toBeNull();
+    expect(screen.getByRole("heading", { level: 1, name: "Norfold" })).toBeTruthy();
 
     // Scrolling back up is the same mechanism in reverse — the row was never
     // unmounted, so it returns with the content.
@@ -466,48 +466,15 @@ describe("Home brand and search affordances", () => {
     return waitFor(() => expect(screen.getByText("b")).toBeTruthy()).then(() => rendered);
   }
 
-  it("scrolls to the top from the brand without spending a request", async () => {
-    const scrollTo = vi.fn();
-    const originalScrollTo = HTMLElement.prototype.scrollTo;
-    HTMLElement.prototype.scrollTo = scrollTo as unknown as typeof HTMLElement.prototype.scrollTo;
-    try {
-      await renderAndWait();
-      expect(fetchFeedMock).toHaveBeenCalledTimes(1);
+  it("keeps the brand in the sidebar, not on the feed bar", async () => {
+    await renderAndWait();
 
-      const brand = screen.getByTestId("home-brand");
-      // The visible label is in the accessible name (WCAG 2.5.3) and the action
-      // is announced, since the mark itself is not a control label.
-      expect(brand.getAttribute("aria-label")).toContain("Norfold");
-      fireEvent.click(brand);
-
-      expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "smooth" });
-      expect(fetchFeedMock).toHaveBeenCalledTimes(1);
-    } finally {
-      HTMLElement.prototype.scrollTo = originalScrollTo;
-    }
-  });
-
-  it("scrolls the brand to the top instantly under reduced motion", async () => {
-    const scrollTo = vi.fn();
-    const originalScrollTo = HTMLElement.prototype.scrollTo;
-    HTMLElement.prototype.scrollTo = scrollTo as unknown as typeof HTMLElement.prototype.scrollTo;
-    const originalMatchMedia = window.matchMedia;
-    window.matchMedia = vi.fn().mockReturnValue({
-      matches: true,
-      media: "(prefers-reduced-motion: reduce)",
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-    }) as unknown as typeof window.matchMedia;
-    try {
-      await renderAndWait();
-      fireEvent.click(screen.getByTestId("home-brand"));
-      expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "auto" });
-    } finally {
-      window.matchMedia = originalMatchMedia;
-      HTMLElement.prototype.scrollTo = originalScrollTo;
-    }
+    // Owner feedback 2026-11-13: the mark and wordmark now live in the sidebar,
+    // so a second copy in the feed bar was duplicate chrome. The screen keeps
+    // its heading for assistive tech without drawing a second brand row.
+    expect(screen.queryByTestId("home-brand")).toBeNull();
+    expect(screen.queryByRole("button", { name: /scroll the feed to the top/i })).toBeNull();
+    expect(screen.getByRole("heading", { level: 1, name: "Norfold" })).toBeTruthy();
   });
 
   it("returns a scrolled reader to the top on a tab tap without a network refresh", async () => {
@@ -630,7 +597,7 @@ describe("Home feed redesign (reference-inspired)", () => {
     expect(screen.queryByRole("radio", { name: "Found" })).toBeNull();
   });
 
-  it("keeps one compact row: brand and wordmark, with the actions trailing", async () => {
+  it("keeps one compact row: the search action trails, with no second brand", async () => {
     renderHome();
     await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
 
@@ -638,7 +605,10 @@ describe("Home feed redesign (reference-inspired)", () => {
     // second line of chrome, so the feed keeps the space.
     expect(screen.queryByLabelText("Search posts")).toBeNull();
     expect(screen.getByTestId("home-toolbar").textContent).not.toMatch(/signed in as/);
-    expect(screen.getByTestId("home-brand").textContent).toContain("Norfold");
+    // The sidebar owns the visible brand; this row must not repeat it.
+    expect(screen.queryByTestId("home-brand")).toBeNull();
+    expect(screen.queryByTestId("home-brand-wordmark")).toBeNull();
+    expect(screen.getByRole("heading", { level: 1, name: "Norfold" })).toBeTruthy();
 
     // The actions trail the title unit; the magnifier is the one search entry,
     // and no separate sliders control duplicates the search filters.

@@ -12,11 +12,26 @@ interface SurfaceProps {
   children: ReactNode;
   footer?: ReactNode;
   busy?: boolean;
-  width?: "standard" | "report";
+  width?: "standard" | "report" | "comments";
   bodyClassName?: string;
+  /**
+   * The report owns its headline: the report's title is the first thing the
+   * reader sees, so a generic bar above it would be a second title. The bar is
+   * dropped and the close control floats over the content instead. The dialog
+   * keeps the same accessible name through `aria-label`, so "Report" is still
+   * announced and every `role="dialog"` query keeps working.
+   */
+  headerless?: boolean;
 }
 
-function DialogSurface({ open, onClose, title, description, children, footer, busy = false, confirmation = false, width = "standard", bodyClassName }: SurfaceProps & { confirmation?: boolean }) {
+function panelClass(width: SurfaceProps["width"], confirmation: boolean) {
+  if (confirmation) return "fb-confirm-panel";
+  if (width === "report") return "fb-report-panel";
+  if (width === "comments") return "fb-comments-panel";
+  return "fb-task-panel";
+}
+
+function DialogSurface({ open, onClose, title, description, children, footer, busy = false, confirmation = false, width = "standard", bodyClassName, headerless = false }: SurfaceProps & { confirmation?: boolean }) {
   const depth = useOverlayDepth();
   const descriptionId = useId();
   const viewport = useKeyboardInset();
@@ -28,19 +43,28 @@ function DialogSurface({ open, onClose, title, description, children, footer, bu
       top: Math.max(0, window.innerHeight - viewport.insetPx - viewport.viewportHeightPx),
       bottom: "auto",
     }}>
-    <Modal className={`fb-modal-panel ${confirmation ? "fb-confirm-panel" : "fb-task-panel"} ${width === "report" ? "fb-report-panel" : ""}`}>
+    <Modal className={`fb-modal-panel ${panelClass(width, confirmation)}`}>
       <OverlayDepthProvider depth={depth}>
         <OverlayStackBridge onClose={onClose} dismissible={!busy} />
-        <Dialog role={confirmation ? "alertdialog" : "dialog"} aria-describedby={description ? descriptionId : undefined}
+        <Dialog role={confirmation ? "alertdialog" : "dialog"}
+          aria-label={headerless ? title : undefined}
+          aria-describedby={description ? descriptionId : undefined}
           aria-busy={busy || undefined} className="fb-surface-dialog">
-          <header className="fb-surface-header">
-            <Heading slot="title" className="fb-surface-title">{title}</Heading>
-            {/* Explicit child focus avoids useDialog's delayed dialog refocus
-                racing nested-viewer restoration when a task is opened quickly. */}
-            {!confirmation && <Button autoFocus aria-label="Close" isDisabled={busy} onPress={onClose} className="fb-icon-control">
+          {headerless ? (
+            /* Explicit child focus avoids useDialog's delayed dialog refocus
+               racing nested-viewer restoration when a task is opened quickly. */
+            <Button autoFocus aria-label="Close" isDisabled={busy} onPress={onClose} className="fb-floating-close">
               <X size={20} aria-hidden="true" />
-            </Button>}
-          </header>
+            </Button>
+          ) : (
+            <header className="fb-surface-header">
+              <Heading slot="title" className="fb-surface-title">{title}</Heading>
+              {/* Same explicit focus as the headerless close control. */}
+              {!confirmation && <Button autoFocus aria-label="Close" isDisabled={busy} onPress={onClose} className="fb-icon-control">
+                <X size={20} aria-hidden="true" />
+              </Button>}
+            </header>
+          )}
           <div className={bodyClassName ? `fb-surface-body ${bodyClassName}` : "fb-surface-body"} onFocus={(event) => {
             const target = event.target;
             if (target instanceof HTMLElement && target.matches("input, textarea, select, [contenteditable='true']")) target.scrollIntoView?.({ block: "nearest" });

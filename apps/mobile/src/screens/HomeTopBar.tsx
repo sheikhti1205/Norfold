@@ -2,38 +2,40 @@ import type { ReactNode, RefObject } from "react";
 import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Search, X } from "lucide-react";
-import { BrandMark } from "../components/BrandMark";
 import { motionDurations, motionEasings, pressFeedback, scaleInVariants } from "../components/uiMotion";
 
 /** Shared swap timing for the one-row state change. */
 const swap = { duration: motionDurations.fast, ease: motionEasings.out } as const;
 
 /**
- * Home's app bar (owner redesign, 2026-10-19): ONE compact row — brand mark plus
- * wordmark as the title unit, with the essential actions trailing.
+ * Home's app bar: ONE compact row with the essential actions trailing.
  *
- * The search field is deliberately not resident. The row holds either the title
- * unit or the field, never both, so an idle Home spends its vertical space on
- * the feed; the field appears only on an explicit activation and returns focus
- * to its trigger on close. The permanent result/account line that used to sit
- * under the title is gone: account identity lives in the profile surface, and a
- * result count was duplicate chrome on every visit.
+ * The visible title unit is gone (owner feedback 2026-11-13): the brand mark
+ * and wordmark already live in the sidebar, so repeating them here spent the
+ * feed's first row on a second copy of the same identity. The screen keeps one
+ * visually hidden `h1` so the document still has its heading, and the row's
+ * height does not move when search opens.
+ *
+ * The search field is deliberately not resident. The row holds either the field
+ * or nothing but its trailing actions, never both, so an idle Home spends its
+ * vertical space on the feed; the field appears only on an explicit activation
+ * and returns focus to its trigger on close. Account identity lives in the
+ * profile surface, and a result count was duplicate chrome on every visit.
  *
  * Motion: a crossfade of the same slot at `motionDurations.fast` (150ms) — the
  * app's existing state-acknowledgement token, which matches Material's
  * fast-effects Web conversion. It is intentionally NOT a container transform:
  * Material's published 300/250ms pair belongs to a *linked* SearchBar→SearchView
- * expansion, which this is not, and no first-party source requires a wordmark to
- * morph into the field. Reduced motion keeps the crossfade and drops the
- * x-offset — the app-root MotionConfig degrades transform travel while keeping
- * opacity, so nothing here needs a second reduced-motion branch. Focus is moved
- * on the state change, never after the animation.
+ * expansion, which this is not. Reduced motion keeps the crossfade and drops
+ * the x-offset — the app-root MotionConfig degrades transform travel while
+ * keeping opacity, so nothing here needs a second reduced-motion branch. Focus
+ * is moved on the state change, never after the animation.
  *
- * Geometry: both states are exactly 48px tall, so the state change swaps the row
- * rather than resizing it and the chips row below never moves. The pill's 1px
- * border sits inside that 48px (border-box) and every child stays under it. The
- * focus ring is drawn on the pill, not on the input — see
- * `index.css` `.fb-home-search-field`.
+ * Geometry: the closed and open states are both exactly 48px tall, so the state
+ * change swaps the row rather than resizing it and the chips row below never
+ * moves. The pill's 1px border sits inside that 48px (border-box) and every
+ * child stays under it. The focus ring is drawn on the pill, not on the input —
+ * see `index.css` `.fb-home-search-field`.
  */
 export function HomeTopBar({
   expanded,
@@ -45,7 +47,6 @@ export function HomeTopBar({
   onFocus,
   onFieldBlur,
   onBlur,
-  onBrandTap,
   inputRef,
   utilities,
 }: {
@@ -65,7 +66,6 @@ export function HomeTopBar({
    */
   onFieldBlur: () => void;
   onBlur: () => void;
-  onBrandTap: () => void;
   inputRef: RefObject<HTMLInputElement | null>;
   utilities?: ReactNode;
 }) {
@@ -95,6 +95,9 @@ export function HomeTopBar({
         if (!(next instanceof Node) || !event.currentTarget.contains(next)) onBlur();
       }}
     >
+      {/* The sidebar owns the visible brand. This keeps the one heading the
+          screen needs without drawing a second wordmark. */}
+      <h1 className="sr-only">Norfold</h1>
       <AnimatePresence initial={false} mode="popLayout">
         {expanded ? (
           <motion.div
@@ -103,7 +106,7 @@ export function HomeTopBar({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -6 }}
             transition={swap}
-            // Height parity with the title row is the point: the pill's border
+            // Height parity with the closed row is the point: the pill's border
             // is inside its 48px min-height (box-border) and every child stays
             // at or below 46px, so opening search never moves the chips row or
             // the feed. The focus ring belongs to the pill — see
@@ -112,9 +115,6 @@ export function HomeTopBar({
             className="fb-home-search-field flex min-h-[48px] min-w-0 flex-1 items-center rounded-full border border-outline-variant bg-surface-container-low pr-1 focus-within:border-on-surface"
             data-testid="home-search-field"
           >
-            {/* The field replaces the wordmark, so the screen would otherwise
-                lose its only heading while searching. */}
-            <h1 className="sr-only">Norfold</h1>
             <button
               type="button"
               data-testid="home-search-close"
@@ -175,41 +175,12 @@ export function HomeTopBar({
               )}
             </AnimatePresence>
           </motion.div>
-        ) : (
-          <motion.div
-            key="brand"
-            initial={{ opacity: 0, x: 6 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 6 }}
-            transition={swap}
-            className="flex min-w-0 flex-1 items-center"
-          >
-            <h1 aria-label="Norfold" className="min-w-0 text-base font-semibold tracking-tight">
-              <button
-                type="button"
-                data-testid="home-brand"
-                aria-label="Norfold, scroll the feed to the top"
-                onClick={onBrandTap}
-                className="-ml-1 flex min-h-[48px] min-w-0 items-center gap-2 rounded-m3-sm px-1"
-              >
-                {/* Decorative beside the wordmark, and the button already
-                    carries the accessible name. */}
-                <BrandMark size={28} shape="tile" alt="" />
-                {/* No collapse stage: the whole bar is feed content now, so it
-                    leaves and returns with the scroll (owner feedback
-                    2026-11-06). The word never shrinks on its own. */}
-                <span data-testid="home-brand-wordmark" className="truncate">
-                  Norfold
-                </span>
-              </button>
-            </h1>
-          </motion.div>
-        )}
+        ) : null}
       </AnimatePresence>
       {/* The 48px hit areas carry their own padding, so the cluster is pulled
-          10px toward the edge to align the trailing icon's optical edge with
-          the brand tile instead of reading inset-left / padded-right. */}
-      <div className="fb-home-search-actions -mr-2.5 flex shrink-0 items-center">
+          10px toward the edge to align the trailing icon's optical edge with the
+          row instead of reading inset-left / padded-right. */}
+      <div className="fb-home-search-actions -mr-2.5 ml-auto flex shrink-0 items-center">
         {utilities}
         {/* `popLayout` is load-bearing: the trigger and the field share one flex
             slot. Without it the outgoing trigger keeps its 48px in flow for the

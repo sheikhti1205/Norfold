@@ -29,9 +29,10 @@ import { ReportSharingSettings } from "../components/ReportSharingSettings";
 import { ReportOverflow } from "../components/ReportOverflow";
 import { CommentSafetyMenu } from "../components/CommentSafetyMenu";
 import { RecoverySheet } from "../components/RecoverySheet";
-import { ConfirmDialog } from "../components/AdaptiveTaskSurface";
+import { ConfirmDialog, AdaptiveTaskSurface } from "../components/AdaptiveTaskSurface";
 import { PostActionRow } from "../components/PostActionRow";
 import { ReportViewerLayout } from "../components/ReportViewerLayout";
+import { useViewportWidth } from "../components/responsive";
 import { ReportMatches } from "../components/ReportMatches";
 import { announce, announceQuietly } from "../components/LiveRegion";
 import { listItemVariants, motionDurations, shouldReduceMotion } from "../components/uiMotion";
@@ -191,6 +192,13 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
   // Mutation failures stay inline + announce; they never own the page.
   const [actionError, setActionError] = useState<string | null>(null);
   const [recoveryPost, setRecoveryPost] = useState<PostItem | null>(null);
+  /**
+   * Narrow windows move the conversation out of the report into its own
+   * floating surface. The 900px boundary is the same one the report CSS uses,
+   * so the DOM and the layout cannot disagree about which composition is live.
+   */
+  const wideViewport = useViewportWidth() >= 900;
+  const [commentsOpen, setCommentsOpen] = useState(false);
 
   // This route component is reused for in-place report navigation. A new
   // report (or a new type/owner for the same id) or a new account is a new
@@ -198,6 +206,13 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
   useEffect(() => {
     setRecoveryPost(null);
   }, [id, post?.id, post?.type, post?.userId, user?.id]);
+
+  // The comment surface belongs to one report. Replacing the report in place,
+  // or widening the window until the conversation is inline again, closes it
+  // instead of leaving a stale thread over a different report.
+  useEffect(() => {
+    setCommentsOpen(false);
+  }, [id, post?.id, wideViewport]);
 
   // W3.3 multi-kind reaction UI state. The post summary override holds
   // server-truth counts/total once a write or realtime event delivers them;
@@ -427,7 +442,15 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
   // A feed Comments shortcut targets the existing section once the shell is
   // mounted. Retry/social/realtime hydration must not keep stealing focus.
   useEffect(() => {
-    if (loading || post?.id !== id || !["#detail-comments", "#detail-activity", "#detail-manage", "#detail-matches"].includes(hash)) return;
+    if (loading || post?.id !== id) return;
+    // The compact composition keeps the conversation in its own surface: a
+    // link to the thread opens that surface instead of scrolling to a node
+    // that is not in the report.
+    if (contextual && !wideViewport && (hash === "#detail-comments" || linkedComment)) {
+      setCommentsOpen(true);
+      if (!linkedComment) return;
+    }
+    if (!["#detail-comments", "#detail-activity", "#detail-manage", "#detail-matches"].includes(hash)) return;
     if (linkedComment && commentsLoading) return;
     const focusKey = `${id}:${locationKey}:${hash}:${linkedComment ?? ""}`;
     if (focusedLink.current === focusKey) return;
@@ -438,7 +461,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
       scrollToSection(target);
     });
     return () => cancelAnimationFrame(frame);
-  }, [loading, post?.id, id, hash, locationKey, linkedComment, commentsLoading, comments]);
+  }, [loading, post?.id, id, hash, locationKey, linkedComment, commentsLoading, comments, contextual, wideViewport]);
 
   // Live updates while viewing this post (no refresh).
   useEffect(() => {
@@ -1095,7 +1118,10 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
         <PostActionRow
           commentCount={comments.length}
           slots={{
-            onComments: () => scrollToSection("detail-comments"),
+            onComments: () => {
+              if (contextual && !wideViewport) { setCommentsOpen(true); return; }
+              scrollToSection("detail-comments");
+            },
             like: (
               <span className="flex items-center">
                 <button
@@ -1153,14 +1179,31 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
         );
   const feedbackBlock = <>{topErrorBlock}{actionErrorBlock}</>;
 
+  /**
+   * The comparison surface opens the report's secondary content: it is the
+   * actionable answer to "is this my item", so it sits directly under the
+   * facts instead of behind the owner controls, the rating and the overview.
+   */
+  const matchesBlock = <section id="detail-matches" tabIndex={-1} aria-label="Matches" className="flex scroll-mt-4 flex-col gap-1.5">
+    <h2 className="text-base font-semibold">Matches</h2>
+    <p className="text-xs text-on-surface-variant">
+      Reports of the opposite type with similar details. Review them yourself before reaching out.
+    </p>
+    <ReportMatches accountId={user?.id ?? null} post={post} onChanged={() => { void loadPost(loadGen.current); }} />
+  </section>;
+
   const extraBlock = <>
         {/* Owner management sits early, right after summary/actions. */}
         {isOwner && (
           <section id="detail-manage" tabIndex={-1} aria-label="Manage report" className="scroll-mt-4 rounded-m3-md bg-surface-container-low p-3">
-            <p className="mb-1 text-sm">
-              Current status: <strong>{statusLabel(post.status)}</strong>
-            </p>
-            <p className="mb-2 text-sm font-medium">Manage report (owner only)</p>
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+              <p className="text-sm font-medium">Manage report</p>
+              {/* The control only offers the statuses an owner may choose, so a
+                  server-set one (Recovered) would otherwise be invisible here. */}
+              <p className="text-sm text-on-surface-variant">
+                Status <strong className="font-medium text-on-surface">{statusLabel(post.status)}</strong>
+              </p>
+            </div>
             <Segmented<PostStatus>
               ariaLabel="Post status"
               wrapLongLabels
@@ -1195,27 +1238,35 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
           </section>
         )}
 
-        <section aria-label="Community Rating" className="flex flex-col gap-3 rounded-m3-lg bg-surface-container-low p-4">
-          <h2 className="text-sm font-medium text-on-surface-variant">Community Rating</h2>
+        <section aria-label="Community rating" className="flex flex-col gap-2 rounded-m3-lg bg-surface-container-low p-3">
+          <h2 className="text-sm font-medium text-on-surface-variant">Community rating</h2>
           <div aria-live="polite">
             {/* Read-only truth (D1): the client no longer writes a rating, so
                 the empty-state copy must not invite one either. "Be the first
                 to rate" contradicted "Report ratings are read-only." */}
             <p className="sr-only">
-              {post.ratingCount > 0 ? `Community rating: ${post.ratingAvg?.toFixed(1) ?? "—"} / 5 from ${post.ratingCount} rating${post.ratingCount === 1 ? "" : "s"}` : "No community ratings yet."}
+              {post.ratingCount === 0
+                ? "No community ratings yet."
+                : post.ratingAvg != null
+                  ? `Community rating: ${post.ratingAvg.toFixed(1)} / 5 from ${post.ratingCount} rating${post.ratingCount === 1 ? "" : "s"}`
+                  : `Community rating: average unavailable across ${post.ratingCount} rating${post.ratingCount === 1 ? "" : "s"}`}
             </p>
-            <div className="flex flex-wrap items-center gap-3" aria-hidden="true">
-              <span className="text-4xl font-semibold tabular-nums tracking-tight">{post.ratingCount > 0 ? post.ratingAvg?.toFixed(1) ?? "—" : "—"}</span>
-              <div className="flex gap-1">
+            <div className="flex flex-wrap items-center gap-2.5" aria-hidden="true">
+              {/* No average means no number: an empty placeholder glyph reads as
+                  missing data and gives the eye nothing to compare. */}
+              {post.ratingCount > 0 && post.ratingAvg != null && (
+                <span className="text-2xl font-semibold tabular-nums tracking-tight">{post.ratingAvg.toFixed(1)}</span>
+              )}
+              <div className="flex gap-0.5">
                 {[0, 1, 2, 3, 4].map((i) => (
                   <span key={i} className="relative inline-flex text-on-surface-variant">
-                    <Star size={24} />
-                    <span className="absolute inset-y-0 left-0 overflow-hidden text-on-surface" style={{ width: `${Math.max(0, Math.min(1, (post.ratingAvg ?? 0) - i)) * 100}%` }}><Star size={24} fill="currentColor" /></span>
+                    <Star size={18} />
+                    <span className="absolute inset-y-0 left-0 overflow-hidden text-on-surface" style={{ width: `${Math.max(0, Math.min(1, (post.ratingAvg ?? 0) - i)) * 100}%` }}><Star size={18} fill="currentColor" /></span>
                   </span>
                 ))}
               </div>
+              <p className="text-sm text-on-surface-variant" aria-hidden="true">{post.ratingCount} rating{post.ratingCount === 1 ? "" : "s"}</p>
             </div>
-            <p className="mt-1 text-sm text-on-surface-variant" aria-hidden="true">{post.ratingCount} rating{post.ratingCount === 1 ? "" : "s"}</p>
           </div>
           {socialLoading && <p role="status" className="text-sm text-on-surface-variant">Loading reactions…</p>}
           {socialError && (
@@ -1229,15 +1280,15 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
               score was never backed by a confirmed relationship. Historical
               ratings stay readable — the community average above and the
               viewer's own legacy score below. */}
-          <div className="border-t border-outline-variant pt-3">
+          <div className="border-t border-outline-variant pt-2">
             {myRating != null && <p className="text-sm font-medium">Your rating: {myRating} out of 5</p>}
             <p className="text-xs text-on-surface-variant">Report ratings are read-only.</p>
           </div>
         </section>
 
         {/* Overview: compact lazy heavy sections. */}
-        <section data-testid="detail-overview" id="detail-overview" aria-label="Overview" className="flex flex-col gap-3">
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-m3-lg border border-outline-variant bg-surface-container-low p-4 text-sm">
+        <section data-testid="detail-overview" id="detail-overview" aria-label="Overview" className="flex flex-col gap-2">
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-2 rounded-m3-lg border border-outline-variant bg-surface-container-low p-3 text-sm">
             <div>
               <dt className="text-xs text-on-surface-variant">Status</dt>
               <dd className="font-medium">{statusLabel(post.status)}</dd>
@@ -1252,7 +1303,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
                 {post.locationLabel ?? (post.latitude != null ? "Pinned location" : "Not specified")}
               </dd>
               {(post.latitude != null || post.locationLabel) && (
-                <dd className="mt-1 flex flex-wrap items-center gap-2">
+                <dd className="mt-0.5 flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
                     variant="text"
@@ -1300,15 +1351,6 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
             </div>
           )}
 
-        </section>
-
-        {/* Matches: dedicated compact section, async, never blocks the shell. */}
-        <section id="detail-matches" tabIndex={-1} aria-label="Matches" className="flex scroll-mt-4 flex-col gap-2">
-          <h2 className="text-base font-semibold">Matches</h2>
-          <p className="text-sm text-on-surface-variant">
-            Reports of the opposite type with similar details. Review them yourself before reaching out.
-          </p>
-           <ReportMatches accountId={user?.id ?? null} post={post} onChanged={() => { void loadPost(loadGen.current); }} />
         </section>
   </>;
   const composerBlock = <div ref={composerAnchorRef} className={contextual ? "bg-surface pt-2" : "sticky bottom-0 z-10 bg-surface pt-2"}>
@@ -1382,8 +1424,12 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
     <div className={contextual ? "flex min-h-0 min-w-0 flex-1 flex-col" : "flex flex-col gap-5"}>
       {!contextual && <header className="flex items-center px-4 pt-3"><BackButton fallbackTo="/" label="Back to feed" /></header>}
       {contextual ? <ReportViewerLayout
-        media={mediaBlock} identity={identityBlock} title={titleBlock} description={descriptionBlock} meta={metaBlock}
-        reportExtra={extraBlock} feedback={feedbackBlock} comments={commentsBlock}
+        media={mediaBlock} title={titleBlock} identity={identityBlock} description={descriptionBlock} meta={metaBlock}
+        matches={matchesBlock}
+        reportExtra={extraBlock}
+        feedback={wideViewport || !commentsOpen ? feedbackBlock : null}
+        comments={wideViewport ? commentsBlock : null}
+        conversation={wideViewport}
         shield={(content) => <BlockedByViewerShield rowId={post.id} blocked={post.blockedAuthor} revealed={viewerRevealed} onReveal={revealViewer}>{content}</BlockedByViewerShield>}
         actions={<BlockedByViewerShield rowId={post.id} blocked={post.blockedAuthor} revealed={viewerRevealed} onReveal={revealViewer} showWarning={false}>{actionsBlock}</BlockedByViewerShield>}
         composer={composerBlock}
@@ -1392,11 +1438,23 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
         <article className="flex flex-col gap-4 px-4">
           <BlockedByViewerShield rowId={post.id} blocked={post.blockedAuthor} contentClassName="flex flex-col gap-4">
             <section aria-label="Report summary" className="flex flex-col gap-2">{identityBlock}{titleBlock}{descriptionBlock}</section>
-            {mediaBlock}{metaBlock}{actionsBlock}{actionErrorBlock}{extraBlock}
+            {mediaBlock}{metaBlock}{actionsBlock}{actionErrorBlock}{extraBlock}{matchesBlock}
           </BlockedByViewerShield>
           {commentsBlock}
         </article>
       </>}
+
+      {/* Narrow windows: the conversation is its own floating surface, opened
+          from the report's comment action. It keeps the same thread and the
+          same composer as the wide split view, not a second implementation. */}
+      {contextual && !wideViewport && (
+        <AdaptiveTaskSurface open={commentsOpen} onClose={() => setCommentsOpen(false)}
+          title="Comments" width="comments" bodyClassName="fb-comments-body">
+          {feedbackBlock}
+          {commentsBlock}
+          <div className="fb-comments-composer">{composerBlock}</div>
+        </AdaptiveTaskSurface>
+      )}
 
       <RecoverySheet
         open={recoveryPost !== null}

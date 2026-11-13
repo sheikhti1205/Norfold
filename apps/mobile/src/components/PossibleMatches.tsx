@@ -125,8 +125,9 @@ function AccountMatches({ account, post, onConfirmMatch }: PossibleMatchesProps 
     // Only a failed candidate fetch reaches here: the semantic pass degrades to
     // the text/structured comparison instead of hiding the whole surface.
     return (
-      <div className="flex flex-col items-center gap-3">
+      <div className="flex flex-col items-center gap-2">
         <EmptyState
+          compact
           title="Possible matches unavailable"
           subtitle="Could not load reports to compare. Check your connection and try again."
         />
@@ -147,6 +148,7 @@ function AccountMatches({ account, post, onConfirmMatch }: PossibleMatchesProps 
     if (result.candidatesConsidered === 0) {
       return (
         <EmptyState
+          compact
           title="No reports to compare"
           subtitle="There are no open reports of the opposite type yet. Check back later as new reports are added."
         />
@@ -154,6 +156,7 @@ function AccountMatches({ account, post, onConfirmMatch }: PossibleMatchesProps 
     }
     return (
       <EmptyState
+        compact
         title="No possible matches"
         subtitle="No similar reports found. Check back later as new reports are added."
       />
@@ -171,11 +174,11 @@ function AccountMatches({ account, post, onConfirmMatch }: PossibleMatchesProps 
   const suggestionSummary = `${visibleMatches.length} possible match${visibleMatches.length === 1 ? "" : "es"} to review.`;
 
   return (
-    <section className="fb-match-list min-w-0 rounded-m3-lg bg-surface-container-low p-4" aria-labelledby="possible-matches-heading">
-      <h2 id="possible-matches-heading" className="mb-1 text-base font-semibold">
+    <section className="fb-match-list min-w-0 rounded-m3-lg bg-surface-container-low p-3" aria-labelledby="possible-matches-heading">
+      <h2 id="possible-matches-heading" className="mb-1 text-sm font-semibold">
         Possible matches
       </h2>
-      <p className="mb-3 text-xs text-on-surface-variant">{suggestionSummary}</p>
+      <p className="mb-2 text-xs text-on-surface-variant">{suggestionSummary}</p>
       <ul className="flex flex-col gap-2" role="list" aria-label="Possible matches">
         {visibleMatches.map((match, index) => (
           <motion.li
