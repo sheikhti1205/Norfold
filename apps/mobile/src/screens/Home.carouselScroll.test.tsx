@@ -130,8 +130,8 @@ describe("Home feed with the real card carousel", () => {
     expect(scroller.contains(screen.getByTestId("home-toolbar"))).toBe(true);
     expect(screen.getByTestId("home-toolbar").hasAttribute("inert")).toBe(false);
 
-    // The wordmark is never shrunk now: the whole row leaves with the feed.
-    const wordmark = container.querySelector('[data-testid="home-brand-wordmark"]');
-    expect(wordmark!.getAttribute("data-compact")).toBeNull();
+    // The bar carries no brand unit to shrink: the whole row leaves with the
+    // feed and the sidebar owns the mark.
+    expect(container.querySelector('[data-testid="home-brand-wordmark"]')).toBeNull();
   });
 });

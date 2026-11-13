@@ -43,4 +43,21 @@ describe("ReportViewerLayout", () => {
     expect(within(screen.getByTestId("report-viewer-report-pane")).getByText("Extra")).toBeTruthy();
     expect(within(screen.getByTestId("report-viewer-conversation-pane")).queryByText("Extra")).toBeNull();
   });
+
+  it("opens on the report title, ahead of the media", () => {
+    render(<ReportViewerLayout {...props} media={<span>Photo</span>} />);
+    const report = screen.getByRole("region", { name: "Report" });
+    const title = within(report).getByText("Title");
+    const photo = within(report).getByTestId("report-viewer-media");
+    expect(title.compareDocumentPosition(photo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("keeps the action row in the report when the conversation is its own surface", () => {
+    render(<ReportViewerLayout {...props} conversation={false} />);
+    const report = screen.getByRole("region", { name: "Report" });
+    expect(screen.queryByTestId("report-viewer-conversation-pane")).toBeNull();
+    expect(within(report).getByTestId("report-viewer-inline-actions")).toBeTruthy();
+    expect(within(report).getByText("Actions")).toBeTruthy();
+    expect(screen.queryByText("Composer")).toBeNull();
+  });
 });

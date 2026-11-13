@@ -238,12 +238,6 @@ export function Home() {
     clearNewPostCount(scopedCacheKey);
   }
 
-  // CF-010 §4: the brand is the way back to the top — no separate floating
-  // button. Same reduced-motion rule as every other programmatic scroll here.
-  function onBrandTap() {
-    scrollRef.current?.scrollToTop(reduceMotion ? "auto" : "smooth");
-  }
-
   // The bar no longer needs a scroll listener: it is part of the scroller, so
   // the browser moves it. Nothing here reacts per pixel, nothing here can
   // reflow the feed.
@@ -315,7 +309,6 @@ export function Home() {
                 searchFieldFocused.current = false;
                 setSearchFocused(false);
               }}
-              onBrandTap={onBrandTap}
               inputRef={searchInputRef}
             />
             </div>
