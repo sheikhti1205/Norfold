@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { useAppearance, ACCENT_OPTIONS, type AccentId, type NavLayout } from "../appearance";
-import { NavLayoutCard } from "./settings";
+import { useTheme, type Theme } from "../theme";
+import { NavLayoutCard, ThemeCard } from "./settings";
 import {
   CONTACT_RULE_LABELS, CONTACT_RULE_VALUES, DEFAULT_CONTACT_RULES, fetchContactRules,
   saveContactRules, type AccountContactRules, type ContactRule,
@@ -20,17 +21,30 @@ import "./AccountMenu.css";
  */
 export function AppearancePreview({ onOpenPage }: { onOpenPage: () => void }) {
   const { settings, update } = useAppearance();
+  const { theme, setTheme } = useTheme();
   const chooseAccent = (accent: AccentId) => update({ accent, accentSource: "preset" });
   const chooseLayout = (navLayout: NavLayout) => update({ navLayout, navLayoutChosen: true });
   return <div className="fb-account-panel">
     <h3>Appearance</h3>
-    <div role="group" aria-label="Accent" className="fb-account-accents">
-      {ACCENT_OPTIONS.map((option) => (
-        <button key={option.id} type="button" aria-label={option.label} aria-pressed={settings.accent === option.id}
-          className="fb-account-accent" data-selected={settings.accent === option.id}
-          style={{ background: option.swatch }} onClick={() => chooseAccent(option.id)} />
-      ))}
-    </div>
+    <fieldset className="fb-choice-fieldset">
+      <legend>Theme</legend>
+      <div className="fb-preview-grid fb-preview-grid-theme">
+        {(["system", "light", "dark"] as const satisfies readonly Theme[]).map((value) => (
+          <ThemeCard key={value} name="account-theme" value={value}
+            checked={theme === value} onChange={setTheme} />
+        ))}
+      </div>
+    </fieldset>
+    <fieldset className="fb-choice-fieldset">
+      <legend>Accent</legend>
+      <div className="fb-account-accents">
+        {ACCENT_OPTIONS.map((option) => (
+          <button key={option.id} type="button" aria-label={option.label} aria-pressed={settings.accent === option.id}
+            className="fb-account-accent" data-selected={settings.accent === option.id}
+            style={{ background: option.swatch }} onClick={() => chooseAccent(option.id)} />
+        ))}
+      </div>
+    </fieldset>
     <fieldset className="fb-choice-fieldset fb-account-layout">
       <legend>Navigation</legend>
       <div className="fb-preview-grid fb-preview-grid-nav">

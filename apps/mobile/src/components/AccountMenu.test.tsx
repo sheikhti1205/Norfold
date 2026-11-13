@@ -53,8 +53,15 @@ describe("account menu", () => {
     const dialog = await openMenu();
     fireEvent.click(within(dialog).getByRole("button", { name: /Appearance/ }));
     const panel = await within(dialog).findByRole("group", { name: "Appearance preview" });
+    // The panel is the appearance page in miniature: mode first, then accent,
+    // then navigation. All five controls are radios, not pictures.
+    expect(within(panel).getByRole("group", { name: "Theme" })).toBeTruthy();
     expect(within(panel).getByRole("group", { name: "Accent" })).toBeTruthy();
-    expect(within(panel).getAllByRole("radio")).toHaveLength(2);
+    expect(within(panel).getAllByRole("radio")).toHaveLength(5);
+    expect(
+      within(panel).getByRole("group", { name: "Theme" })
+        .querySelectorAll("input[type=radio]"),
+    ).toHaveLength(3);
     expect(within(panel).getByRole("button", { name: /Open Appearance/ })).toBeTruthy();
   });
 
