@@ -556,13 +556,13 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     // primary six come first, then the prototype's "Others" shelf. Search is
     // the one primary row that is a button (it opens the overlay).
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
-      "/report", "/", "/my", "/chats", "/notifications", "/insights",
+      "/", "/my", "/chats", "/notifications", "/insights",
       "/search?scope=people", "/reactions", "/saved", "/settings/returns",
     ]);
     expect(
       links.map((link) => link.getAttribute("aria-label") ?? link.textContent?.trim()),
     ).toEqual([
-      "Create report", "Home", "My Reports", "Chats", "Activity", "Insights",
+      "Home", "My Reports", "Chats", "Activity", "Insights",
       "Connect", "Liked / Disliked", "Saved", "Recovered",
     ]);
     const searchRow = within(nav).getByRole("button", { name: "Search" });
@@ -574,7 +574,7 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     // One identity control in the footer: no sibling settings glyph (R1).
     const pin = within(nav).getByRole("button", { name: "Expand navigation" });
     expect([...nav.querySelectorAll("a, button")]).toEqual([
-      pin, links[0], links[1], links[2], searchRow, ...links.slice(3), account,
+      pin, links[0], links[1], searchRow, ...links.slice(2), account,
     ]);
     expect(
       links
@@ -584,6 +584,11 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     // Same selected-pill treatment as the bar.
     expect(nav.querySelector(".fb-nav-active-bg")).toBeTruthy();
     expect(nav.querySelector(".fb-nav-label")).toBeTruthy();
+    // The pin control is the app mark itself (owner order 2026-11-13): one
+    // brand button holding the wordmark, with no separate pin glyph beside it.
+    const brand = nav.querySelector(".fb-nav-brand");
+    expect(brand?.querySelector(".fb-nav-wordmark")?.textContent).toBe("Norfold");
+    expect(nav.querySelector(".fb-nav-pin")).toBeNull();
   });
 
   it("pins the rail into a labelled panel and remembers the choice", () => {
@@ -696,7 +701,11 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
       expect(rail.flexDirection).toBe("column");
       expect(rail.flexGrow).toBe("0");
       expect(rail.flexShrink).toBe("0");
-      expect(rail.width).toBe("72px");
+      // Collapsed rail width lives in a token so the hover expansion can
+      // compute the exact negative margin that keeps <main> from reflowing.
+      expect(rail.width).toBe("var(--fb-rail-collapsed)");
+      expect(rail.getPropertyValue("--fb-rail-collapsed").trim()).toBe("72px");
+      expect(rail.getPropertyValue("--fb-rail-expanded").trim()).toBe("208px");
       // Positioned only so the resize handle can anchor to the rail's inner
       // edge. It stays an in-flow flex column (never fixed/absolute), which is
       // what keeps it from covering the content.
@@ -704,7 +713,9 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
       const item = getComputedStyle(
         within(nav).getByRole("link", { name: "My Reports" }),
       );
-      expect(item.minHeight).toBe("48px");
+      // Compact rows: ten destinations plus the identity control fit a
+      // 640px-tall window without the rail becoming a scroller.
+      expect(item.minHeight).toBe("38px");
       expect(item.flexDirection).toBe("column");
     } finally {
       style.remove();

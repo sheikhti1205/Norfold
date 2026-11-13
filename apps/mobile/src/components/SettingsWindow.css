@@ -28,7 +28,12 @@
   flex: none; padding: 10px 12px 10px 16px;
   border-bottom: 1px solid var(--fb-outline-variant);
 }
-.fb-settings-window-title { font-size: 1rem; font-weight: 650; letter-spacing: -0.01em; }
+.fb-settings-window-title {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 1rem; font-weight: 650; letter-spacing: -0.01em;
+}
+.fb-settings-window-back { flex: none; margin-inline-start: -6px; }
 .fb-settings-window-actions { display: flex; align-items: center; gap: 2px; }
 .fb-settings-window-actions .fb-icon-control[data-active] {
   background: var(--fb-surface-container-high);
@@ -97,6 +102,9 @@
 .fb-settings-window-body { flex: 1; min-height: 0; overflow: hidden; }
 /* The settings split view fills the window; its own panes keep their scroll. */
 .fb-settings-window-body > * { height: 100%; }
+/* A hosted page does not paint its sticky heading (the window bar is the one
+   title), so the pane supplies the small top inset that bar used to give. */
+.fb-settings-window-body .fb-settings-page { padding-top: 0.5rem; }
 
 @media (max-width: 900px) {
   .fb-settings-backdrop { padding: 0; }

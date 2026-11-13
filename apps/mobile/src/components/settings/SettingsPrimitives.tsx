@@ -6,6 +6,7 @@ import type { Theme } from "../../theme";
 import { density } from "../../design/density";
 import { colorTokensFor } from "../../design/colorSystem";
 import { BackButton } from "../BackButton";
+import { useReportSettingsWindowTitle, useSettingsWindowHosted } from "../settingsWindowHost";
 import "./settings.css";
 
 // Legacy category/tone names are accepted at the boundary but render neutral.
@@ -48,6 +49,12 @@ export interface SettingsPageProps {
 export function SettingsPage({ title, description, children, backTo, backState, backLabel = "Back to Settings", className = "", headingLevel = 1, autoFocus = true }: SettingsPageProps) {
   const heading = useRef<HTMLHeadingElement>(null);
   const Heading = headingLevel === 1 ? "h1" : "h2";
+  // Inside the floating window the chrome already names the page. The heading
+  // stays for focus and announcement, but is not painted a second time; the
+  // page's own back control is dropped because the window owns that affordance.
+  const hosted = useSettingsWindowHosted();
+  const clip = hosted ? " fb-settings-clip" : "";
+  useReportSettingsWindowTitle(title);
   useEffect(() => {
     if (!autoFocus) return;
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -59,11 +66,11 @@ export function SettingsPage({ title, description, children, backTo, backState, 
     };
   }, [title, autoFocus]);
   return <section className={`fb-settings-page ${className}`}>
-    <div className="fb-settings-sticky">
-      {backTo && <BackButton fallbackTo={backTo} fallbackState={backState} label={backLabel} />}
+    <div className={`fb-settings-sticky${clip}`}>
+      {!hosted && backTo && <BackButton fallbackTo={backTo} fallbackState={backState} label={backLabel} />}
       <Heading ref={heading} tabIndex={-1}>{title}</Heading>
     </div>
-    {description && <p className="fb-settings-page-description">{description}</p>}
+    {description && <p className={`fb-settings-page-description${clip}`}>{description}</p>}
     <div className="fb-settings-page-content">{children}</div>
   </section>;
 }
@@ -112,7 +119,7 @@ export function SettingsRow({ title, description, icon, iconTone, value, badge, 
       {description && <span id={`${id}-description`} className="fb-settings-row-description">{description}</span>}
     </span>
     {badge != null && <span id={`${id}-badge`} className="fb-settings-row-badge">{badge}</span>}
-    {value != null && <span id={`${id}-value`} className="fb-settings-row-value">{value}</span>}
+    {value != null && <span id={`${id}-value`} className="fb-settings-row-value" data-text={typeof value === "string" ? "" : undefined}>{value}</span>}
     {route && <ChevronRight size={18} aria-hidden="true" className="fb-settings-chevron" />}
   </>;
   const common = {

@@ -1,4 +1,4 @@
-import { Bookmark, FileStack, MessagesSquare, Settings as SettingsIcon, ShieldQuestion, Star, UserRound } from "lucide-react";
+import { Bookmark, ChevronRight, CircleCheck, FileStack, HelpCircle, MessagesSquare, Settings as SettingsIcon, Star, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useAuth } from "../auth";
@@ -9,6 +9,7 @@ import {
   REPUTATION_TIER_LABELS,
   type ReputationTier,
 } from "../services/trust";
+import "./Profile.css";
 
 /**
  * Own-profile reputation. The tier is a SERVER-owned label (NEW / NORMAL /
@@ -41,15 +42,20 @@ function useOwnReputation(userId: string | undefined) {
 }
 
 /**
- * Profile landing: identity hero plus Public profile / My reports / Settings /
- * Help. Uses the shared settings page/group/row language (large title, grouped
- * card) so it reads as part of Settings, not a boxed utility screen.
- * The identity hero uses the canonical UserAvatar; the account email and
- * verification status stay owner-only (never part of the public profile).
+ * Profile landing: who you are, then the places your account can take you.
  *
- * Profile is the ONE canonical trust surface (packet 08 §C/§D): the reputation
- * label and the way into ratings live here, not scattered onto every card, and
- * rating detail is reached from here rather than from Settings.
+ * Owner direction 2026-11-13 (references: the Instagram / X / Facebook profile
+ * headers): identity is one compact band - avatar, name, handle, trust label,
+ * email state - and everything else is a short destination list. No marketing
+ * paragraphs, no second reputation card, no row that repeats what the band
+ * already says. The page is a hub, not a dashboard.
+ *
+ * Profile stays the ONE canonical trust surface: the reputation label and the
+ * way into ratings live here, not scattered onto every card, and rating detail
+ * is reached from here rather than from Settings.
+ *
+ * The identity band uses the canonical UserAvatar; email and verification state
+ * stay owner-only and never reach the public profile.
  */
 export function Profile() {
   const { user } = useAuth();
@@ -57,67 +63,59 @@ export function Profile() {
   if (!user) return null;
 
   return (
-    <SettingsPage title="Profile" backTo="/settings" backLabel="Back to Settings">
-      <section
-        aria-label="Account"
-        className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-2 py-2 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
-      >
-        <UserAvatar avatarUrl={user.avatarUrl} username={user.username} size={64} />
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <p className="truncate text-lg font-bold leading-snug">{user.displayName || `@${user.username}`}</p>
-          <p className="truncate text-sm text-on-surface-variant">@{user.username}</p>
-          <p className="truncate text-sm text-on-surface-variant">{user.email}</p>
-          {user.emailVerified ? (
-            <p>
-              <StatusPill tone="success">Email verified</StatusPill>
-            </p>
-          ) : (
-            <Link to="/verify" className="text-sm font-medium text-on-surface underline">
-              Verify email
-            </Link>
-          )}
+    <SettingsPage title="Profile" backTo="/settings" backLabel="Back to Settings" className="fb-profile">
+      <section aria-label="Account" className="fb-profile-identity">
+        <UserAvatar avatarUrl={user.avatarUrl} username={user.username} size={56} />
+        <div className="fb-profile-copy">
+          <p className="fb-profile-name">{user.displayName?.trim() || `@${user.username}`}</p>
+          <p className="fb-profile-handle">@{user.username}</p>
+          <p className="fb-profile-mail">
+            <span className="fb-profile-email">{user.email}</span>
+            {user.emailVerified ? (
+              <span className="fb-profile-verified">
+                <CircleCheck size={14} aria-hidden="true" />
+                Email verified
+              </span>
+            ) : (
+              <Link to="/verify" className="fb-profile-verify">Verify email</Link>
+            )}
+          </p>
         </div>
-        <Link
-          to="/profile/edit"
-          className="col-start-2 flex min-h-[44px] items-center justify-self-start rounded-m3-md bg-surface-container px-4 text-sm font-medium text-on-surface hover:bg-surface-container-high sm:col-start-auto"
-        >
-          Edit profile
+        <Link to="/profile/edit" aria-label="Edit profile" className="fb-profile-edit">
+          Edit
+          <ChevronRight size={16} aria-hidden="true" />
         </Link>
       </section>
 
-      <SettingsGroup title="Reputation" description="Worked out by Norfold from your returns and ratings. Not a score you raise directly.">
-        {reputation.status === "loading" && <p role="status" className="fb-settings-row-description">Checking your reputation…</p>}
-        {reputation.status === "unavailable" && <p role="status" className="fb-settings-row-description">Your reputation is unavailable right now.</p>}
+      <section aria-label="Reputation" className="fb-profile-reputation">
+        {reputation.status === "loading" && (
+          <span role="status" className="fb-profile-reputation-note">Checking your reputation…</span>
+        )}
+        {reputation.status === "unavailable" && (
+          <span role="status" className="fb-profile-reputation-note">Your reputation is unavailable right now.</span>
+        )}
         {reputation.status === "ready" && (
-          <p className="fb-settings-row-description" data-testid="profile-reputation">
+          <>
             <StatusPill tone={reputation.tier === "TRUSTED" ? "success" : reputation.tier === "NORMAL" ? "accent" : "neutral"}>
               {REPUTATION_TIER_LABELS[reputation.tier]}
             </StatusPill>
-          </p>
+            <span className="fb-profile-reputation-label">Reputation</span>
+            <span className="fb-profile-reputation-note">From returned items and ratings</span>
+          </>
         )}
-        <SettingsRow
-          title="Ratings and recovered items"
-          description="What came back, and what each side said."
-          icon={Star}
-          iconTone="amber"
-          route="/settings/returns"
-        />
-      </SettingsGroup>
+      </section>
 
-      <nav aria-label="Profile actions">
-        <SettingsGroup>
-          <SettingsRow
-            title="Public profile"
-            description="See how others view your profile"
-            icon={UserRound}
-            iconTone="blue"
-            route={`/u/${user.username}`}
-          />
+      <nav aria-label="Profile actions" className="fb-profile-actions">
+        <SettingsGroup title="Activity">
           <SettingsRow title="My reports" icon={FileStack} route="/my" />
-           <SettingsRow title="Chats" description="Messages and requests" icon={MessagesSquare} route="/chats" />
           <SettingsRow title="Saved reports" icon={Bookmark} route="/saved" />
+          <SettingsRow title="Chats" icon={MessagesSquare} route="/chats" />
+          <SettingsRow title="Ratings & recoveries" icon={Star} iconTone="amber" route="/settings/returns" />
+        </SettingsGroup>
+        <SettingsGroup title="Account">
+          <SettingsRow title="Public profile" icon={UserRound} iconTone="blue" route={`/u/${user.username}`} />
           <SettingsRow title="Settings" icon={SettingsIcon} route="/settings" />
-          <SettingsRow title="Help & guide" icon={ShieldQuestion} iconTone="sky" route="/settings/help" />
+          <SettingsRow title="Help & guide" icon={HelpCircle} iconTone="help" route="/settings/help" />
         </SettingsGroup>
       </nav>
     </SettingsPage>

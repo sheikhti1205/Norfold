@@ -351,3 +351,73 @@ live and returns focus to its pill.
   states, and physical-device touch all remain unverified; device acceptance
   needs owner consent.
 
+### 2026-11-13 pass: rail brand control, create placement, Home discovery scope
+
+Owner direction in this session: the rail's expand/collapse control becomes the
+app logo, with the name shown while the column is open and the mark alone when
+collapsed; the brand sits inside the sidebar, left-aligned like the destination
+icons. The rail's large `+` moves next to the bell. Home's Nearby/Open/Recent
+row is removed because scope belongs to search.
+
+- **Brand control.** `.fb-nav-rail-head` now holds one `.fb-nav-brand` button:
+  the canonical `BrandMark` (`size={28} shape="tile" alt=""`) plus the `Norfold`
+  wordmark, with `aria-pressed` and the action name `Expand navigation` /
+  `Collapse navigation`. Hover and `:focus-visible` share the destination row
+  treatment. The old `.fb-nav-pin` glyph is gone.
+- **Alignment.** Pinned: nav 224px, the brand button starts at x=12 and its mark
+  at x=24, while the first destination glyph starts at x=23. The wordmark
+  follows the mark at the same inset as destination labels. Collapsed: nav 72px,
+  the 48px brand button is centred at x=12, the mark is x=22 with its centre on
+  36, the rail centre, and the first destination glyph centres on 35. The
+  wordmark is hidden and the action name is `Expand navigation`.
+- **Create placement.** The rail no longer renders a create action.
+  `TopUtilities` renders a 44px `Create report` icon link before the bell when
+  the resolved layout is rail; phones keep the bottom bar's floating `+` and
+  show no utility create. Clicking the utility link in the dev app opened
+  `#/report` and the `Create report` dialog.
+- **Home scope.** `HomeFilterChips.tsx` and `HomeNearby.test.tsx` are deleted
+  with the chip row, the nearby session, the radius sheet, the map fallback and
+  the snack. Search already owns Nearby (`SearchNearbyControls`), Status=Open
+  and the date presets, so no search control was added. Home still reads
+  `?status=OPEN` from the URL for a filtered feed.
+- **Chrome subscription.** `TopUtilities` reads `useStoredNavLayout()` rather
+  than `useAppearance()`. The fixture's page-wide text hold is the only
+  root-font-size writer; the full appearance hook re-applied the stored scale
+  inside the review fixture and broke `fixture.test.tsx` at 112.5%. The read-only
+  subscription keeps the layout reactive without a second appearance writer.
+- **Rendered evidence.** 800x650 light: pinned rail 224px with the wordmark,
+  create, bell and search in that order; collapsed rail 72px with the mark only.
+  320x650: light, dark, AMOLED and xlarge text (125% root). Home shows no Nearby
+  or Recent row; the bottom bar keeps the floating `+`; the header holds the
+  brand, bell and search. No horizontal overflow at 320 xlarge (`scrollWidth`
+  320). The wordmark token pair measured 14.63:1 against the rail surface in
+  light.
+- **Antislop after-pass.** R-02 PASS: no em dash added; the visible string is
+  the product name. R-03 PASS: four 320px renders, no overflow. R-23 PASS:
+  reused the canonical `BrandMark`; no asset created. R-24/R-26 PASS: create
+  navigates to `#/report` and opens the dialog; the brand toggles the rail; no
+  dead control added. R-25 PASS: wordmark on `--fb-surface` measured 14.63:1
+  light; the dark pair is the label pair already measured in the nav matrix.
+  R-27 PASS: Home's loading, empty and error states remain. R-32/R-39 PASS:
+  native button and link, accessible names, existing focus treatment. R-34 PASS:
+  light, dark and AMOLED rendered. R-35 PASS: the dev app was run; the brand was
+  clicked (224 to 72) and the create link was clicked (`#/report` plus dialog).
+  R-36/R-38 PASS: no fabricated content. R-04/R-09/R-10/R-12/R-13/R-19/R-29/
+  R-31 PASS: existing icon set, no decorative badge, glass, glow, shadow or new
+  motion; the palette is unchanged and each decision is recorded here or in
+  source comments. R-40 N/A: this change adds no media or third-party script.
+- **Verification.** `npm run typecheck` exits 0; ESLint exits 0 on the changed
+  TypeScript files; targeted suites (`fixture`, `TopUtilities`, `Shell`, `Home`)
+  pass 154 tests. The full mobile suite: 8404 passed, 4 failed.
+  `auth.recoveryOtp` stops at the environment guard `Public share origin must be
+  a bare public HTTPS origin`; the three `sqliteHistory` failures hit Windows
+  `EPERM` removing a temp directory. Both fail in isolation and are not caused
+  by this change.
+- **Open question.** Home's own header lockup (brand, then `Norfold`) now sits
+  beside the pinned rail's lockup, so the same brand appears twice in one top
+  row. It was left in place because it is Home's scroll-to-top control, not part
+  of the rail change; suppressing it when the rail is pinned is an owner
+  decision.
+- **Still unverified.** Physical-device touch and the real-account path were not
+  exercised in this pass. Device acceptance needs owner consent.
+

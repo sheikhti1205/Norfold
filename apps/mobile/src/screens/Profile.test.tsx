@@ -109,10 +109,11 @@ describe("Profile landing", () => {
     const nav = screen.getByRole("navigation", { name: "Profile actions" });
     const links = within(nav).getAllByRole("link");
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
-      "/u/tester",
       "/my",
-      "/chats",
       "/saved",
+      "/chats",
+      "/settings/returns",
+      "/u/tester",
       "/settings",
       "/settings/help",
     ]);
@@ -144,7 +145,7 @@ describe("Profile landing", () => {
 
   it("reaches rating detail from Profile, not from Settings", async () => {
     renderProfile();
-    const link = await screen.findByRole("link", { name: /ratings and recovered items/i });
+    const link = await screen.findByRole("link", { name: /ratings & recoveries/i });
     expect(link.getAttribute("href")).toBe("/settings/returns");
   });
 

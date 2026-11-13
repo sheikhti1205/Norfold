@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
-import { Bell, Search } from "lucide-react";
+import { Bell, Plus, Search } from "lucide-react";
 import { useAuth } from "../auth";
 import { NotificationPopover } from "./NotificationPopover";
 import { COMPACT_MAX_PX, useViewportWidth } from "./responsive";
+import { useStoredNavLayout } from "./navLayout";
 import { toggleGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
 import { fetchUnreadCount } from "../services/notifications";
 import { INBOX_CHANGED_EVENT } from "../services/notificationSignals";
@@ -27,6 +28,7 @@ export function TopUtilities({ liveBadge = true, ...props }: TopUtilitiesProps) 
 
 function AccountTopUtilities({ showSearch = true, liveBadge, unreadCount, account, allowPreview }: TopUtilitiesProps & { allowPreview: boolean }) {
   const width = useViewportWidth();
+  const rail = useStoredNavLayout() === "rail";
   const location = useLocation();
   const searchOpen = useGlobalSearchOpen();
   const [unread, setUnread] = useState<number | null>(null);
@@ -67,6 +69,13 @@ function AccountTopUtilities({ showSearch = true, liveBadge, unreadCount, accoun
       className="fb-icon-control" onClick={(event) => toggleGlobalSearch(event.currentTarget)}>
       <Search size={20} aria-hidden="true" />
     </button>}
+    {/* The rail has no create button (owner order 2026-11-13). On that layout
+        the action lives here, beside the bell, as an icon at the same weight as
+        its neighbours; phones keep the floating + in the bottom bar and must
+        not show a second one. */}
+    {rail && <Link to="/report" aria-label="Create report" className="fb-icon-control">
+      <Plus size={20} aria-hidden="true" />
+    </Link>}
     {allowPreview && width >= COMPACT_MAX_PX && location.pathname !== "/notifications"
       ? <NotificationPopover key={location.key} trigger={bell} />
       : <Link to="/notifications" aria-label="Notifications" className="fb-icon-control relative">{bell}</Link>}

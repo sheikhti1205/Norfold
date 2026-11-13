@@ -1,0 +1,251 @@
+/* Account insights: real counts, drawn as bars. No chart chrome, no card per
+   figure - the data is the interface. Every bar has a visible count beside it,
+   so the numbers survive any colour vision, theme or text scale. */
+
+.fb-insights {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.fb-insights-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  max-width: 44rem;
+  margin-inline: auto;
+  padding: 1.25rem 1rem 2rem;
+}
+
+.fb-insights-body h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+/* ── At a glance ───────────────────────────────────────────────────────── */
+.fb-insights-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  padding: 0.75rem 0;
+  border-block: 1px solid var(--fb-outline-variant);
+}
+
+.fb-insights-stats > div {
+  min-width: 0;
+  padding-inline: 0.75rem;
+  border-inline-start: 1px solid var(--fb-outline-variant);
+}
+
+.fb-insights-stats > div:first-child {
+  padding-inline-start: 0.25rem;
+  border-inline-start: 0;
+}
+
+.fb-insights-stats dt {
+  font-size: 0.75rem;
+  color: var(--fb-on-surface-variant);
+}
+
+.fb-insights-stats dd {
+  margin: 0.125rem 0 0;
+  font-size: 1.375rem;
+  line-height: 1.2;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Figures ───────────────────────────────────────────────────────────── */
+.fb-insight-block {
+  margin: 0;
+}
+
+.fb-insight-block + .fb-insight-block {
+  margin-top: 1rem;
+}
+
+.fb-insight-block figcaption {
+  margin-bottom: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--fb-on-surface-variant);
+}
+
+.fb-insight-pair {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+@media (min-width: 560px) {
+  .fb-insight-pair {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .fb-insight-pair .fb-insight-block + .fb-insight-block {
+    margin-top: 0;
+  }
+}
+
+.fb-insight-caption {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: var(--fb-on-surface-variant);
+}
+
+.fb-insights-note,
+.fb-insights-empty {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--fb-on-surface-variant);
+}
+
+.fb-insights-ratingline {
+  margin: 0 0 0.75rem;
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Monthly columns ───────────────────────────────────────────────────── */
+.fb-chart-columns {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.fb-chart-column {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.fb-chart-count {
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--fb-on-surface-variant);
+}
+
+.fb-chart-track {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 64px;
+  background: transparent;
+  overflow: hidden;
+}
+
+.fb-chart-bar {
+  display: block;
+  width: 100%;
+  border-radius: 6px 6px 0 0;
+  background: var(--fb-primary);
+}
+
+.fb-chart-month {
+  font-size: 0.6875rem;
+  color: var(--fb-on-surface-variant);
+}
+
+/* ── Lost / found split ────────────────────────────────────────────────── */
+.fb-chart-split {
+  display: flex;
+  gap: 2px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--fb-surface-container);
+  overflow: hidden;
+}
+
+.fb-chart-split-lost {
+  background: var(--fb-lost-ink);
+}
+
+.fb-chart-split-found {
+  background: var(--fb-found-ink);
+}
+
+.fb-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8125rem;
+  color: var(--fb-on-surface-variant);
+}
+
+.fb-chart-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.fb-chart-legend strong {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--fb-on-surface);
+}
+
+.fb-chart-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.fb-chart-dot-lost {
+  background: var(--fb-lost-ink);
+}
+
+.fb-chart-dot-found {
+  background: var(--fb-found-ink);
+}
+
+/* ── Horizontal bars (status, ratings) ─────────────────────────────────── */
+.fb-chart-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fb-chart-bars li {
+  display: grid;
+  grid-template-columns: 5.25rem minmax(0, 1fr) 1.5rem;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.fb-chart-bar-label {
+  color: var(--fb-on-surface-variant);
+  white-space: nowrap;
+}
+
+.fb-chart-bar-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--fb-surface-container);
+  overflow: hidden;
+}
+
+.fb-chart-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--fb-primary);
+}
+
+.fb-chart-bar-count {
+  min-width: 1.25rem;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  color: var(--fb-on-surface-variant);
+}

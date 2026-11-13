@@ -22,7 +22,7 @@ export function PostIdentityHeader({ post, overflow, contextReportId }: { post: 
     <div className="fb-post-identity-line">
       <span className="fb-post-name-badge"><UserIdentityTrigger person={contextReportId ? { ...post.author, contextReportId } : post.author} /><VerifiedBadge emailVerified={post.author.emailVerified} phoneVerified={post.author.phoneVerified} telegramPhoneVerified={(post.author as { telegramPhoneVerified?: boolean }).telegramPhoneVerified} /></span>
       <span data-testid="post-author" className="fb-post-handle">@{post.author.username}</span>
-      <span className="fb-post-time"><span aria-hidden="true">· </span><time data-testid="post-time" dateTime={post.createdAt} title={new Date(post.createdAt).toLocaleString()}>{timeAgo(post.createdAt)}</time></span>
+      <span className="fb-post-time"><time data-testid="post-time" dateTime={post.createdAt} title={new Date(post.createdAt).toLocaleString()}>{timeAgo(post.createdAt)}</time></span>
     </div>
     {overflow && <div className="fb-post-overflow">{overflow}</div>}
   </header>;

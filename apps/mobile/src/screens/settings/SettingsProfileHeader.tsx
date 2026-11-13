@@ -17,13 +17,13 @@ export function SettingsProfileHeader({ user }: { user: PublicUser }) {
       aria-label={`View profile, ${displayName}, @${user.username}`}
       className="fb-settings-profile"
     >
-      <UserAvatar avatarUrl={user.avatarUrl} username={user.username} size={64} />
+      <UserAvatar avatarUrl={user.avatarUrl} username={user.username} size={40} />
       <span className="fb-settings-profile-copy">
         <span className="fb-settings-profile-name">{displayName}</span>
         <span className="fb-settings-profile-username">@{user.username}</span>
       </span>
       <span className="fb-settings-profile-edit">
-        View profile
+        <span className="fb-settings-profile-edit-label">View profile</span>
         <ChevronRight size={18} aria-hidden="true" className="fb-settings-chevron" />
       </span>
     </Link>
