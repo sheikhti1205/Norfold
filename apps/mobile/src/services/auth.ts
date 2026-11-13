@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
+import { Capacitor } from "@capacitor/core";
 import { getSupabase } from "./supabaseClient";
 import { ApiError, cacheSessionToken, getTokenRevision } from "./session";
 import { BootTimeoutError, withTimeout } from "./timeout";
@@ -27,6 +28,11 @@ const DUPLICATE_ACCOUNT_MESSAGE = "An account with these details already exists.
 const RATE_LIMIT_MESSAGE = "Too many attempts. Please wait a moment and try again.";
 const EMAIL_SEND_LIMIT_MESSAGE = "You've asked for several codes. The most recent code still works. Try requesting another code later.";
 const INVALID_CODE_MESSAGE = "Invalid or expired verification code";
+const PASSWORD_SET_METADATA_KEY = "norfold_password_set_at";
+
+function passwordSetMetadata() {
+  return { [PASSWORD_SET_METADATA_KEY]: new Date().toISOString() };
+}
 
 export class EmailSendLimitedError extends ApiError {
   retryAfterSeconds?: number;
@@ -45,8 +51,12 @@ const PROFILE_LOAD_TIMEOUT_MS = 15_000;
 /** Re-exported so boot UI can distinguish "unreachable" from "signed out". */
 export { BootTimeoutError };
 
-export function needsPasswordSetup(user: Pick<User, "identities"> | null | undefined): boolean {
-  return user != null && !user.identities?.some((identity) => identity.provider === "email");
+export function needsPasswordSetup(
+  user: { identities?: User["identities"]; user_metadata?: User["user_metadata"] } | null | undefined,
+): boolean {
+  const marker = user?.user_metadata?.[PASSWORD_SET_METADATA_KEY];
+  return user != null && !user.identities?.some((identity) => identity.provider === "email")
+    && !(typeof marker === "string" && marker.length > 0);
 }
 
 /** Same syntax/length the registration trigger enforces (^[A-Za-z0-9_]{3,20}$). */
@@ -326,9 +336,22 @@ const MIN_PASSWORD_LENGTH = 8;
 /** Recovery-link landing path. Must be allowlisted as a Supabase redirect URL (hosted Auth config). */
 export const PASSWORD_RECOVERY_ROUTE = "/recovery";
 
-/** Absolute recovery URL sent as the reset-email redirect (App Links compatible). */
+/**
+ * Absolute recovery URL sent as the reset-email redirect (App Links compatible).
+ *
+ * On the web the link must return the reader to the app they are using, so the
+ * current browser origin is the answer: it is correct in production and it is
+ * the only origin a local build can redirect back to. The canonical public
+ * origin stays in charge on native shells, where the allowlisted App Link is
+ * what opens the installed app.
+ */
 export function passwordRecoveryRedirect(): string {
-  return `${publicShareOrigin()}${PASSWORD_RECOVERY_ROUTE}`;
+  const browserOrigin = !Capacitor.isNativePlatform()
+    && typeof window !== "undefined"
+    && /^https?:$/.test(window.location.protocol)
+    ? window.location.origin
+    : null;
+  return `${browserOrigin ?? publicShareOrigin()}${PASSWORD_RECOVERY_ROUTE}`;
 }
 
 /**
@@ -437,8 +460,15 @@ export function createPasswordRecovery(): PasswordRecovery {
         if (currentError || current.user?.id !== expected.id || current.user.email?.toLowerCase() !== expected.email) {
           throw new ApiError("Recovery could not confirm your account. Request a new code.", 409);
         }
-        const { data, error } = await auth().updateUser({ password });
+        const metadata = passwordSetMetadata();
+        const { data, error } = await auth().updateUser({ password, data: metadata });
         assertLive();
+        if (error?.code === "same_password") {
+          const { error: markerError } = await auth().updateUser({ data: metadata });
+          assertLive();
+          if (markerError) throw mapAuthError(markerError);
+          return;
+        }
         if (error) throw mapAuthError(error);
         if (data.user?.id !== expected.id) throw new ApiError("Password update could not be confirmed. Try signing in before retrying.", 409);
       });
@@ -462,7 +492,14 @@ export async function exchangeRecoveryCode(code: string): Promise<void> {
 /** Set a new password for the recovery session. Session stays valid; the user lands signed in. */
 export async function updatePassword(password: string): Promise<void> {
   if (password.length < MIN_PASSWORD_LENGTH) throw new ApiError("Password must be at least 8 characters.", 400);
-  const { error } = await getSupabase().auth.updateUser({ password });
+  const client = getSupabase();
+  const data = passwordSetMetadata();
+  const { error } = await client.auth.updateUser({ password, data });
+  if (error?.code === "same_password") {
+    const { error: markerError } = await client.auth.updateUser({ data });
+    if (markerError) throw mapAuthError(markerError);
+    return;
+  }
   if (error) throw mapAuthError(error);
 }
 
@@ -482,7 +519,13 @@ export async function setAccountPassword(password: string): Promise<void> {
 export async function createAccountPassword(password: string): Promise<void> {
   if (password.length < MIN_PASSWORD_LENGTH) throw new ApiError("Password must be at least 8 characters.", 400);
   const client = getSupabase();
-  const { error } = await withTimeout(() => client.auth.updateUser({ password }), 15_000, "Password update timed out. Please try again.");
+  const data = passwordSetMetadata();
+  const { error } = await withTimeout(() => client.auth.updateUser({ password, data }), 15_000, "Password update timed out. Please try again.");
+  if (error?.code === "same_password") {
+    const { error: markerError } = await withTimeout(() => client.auth.updateUser({ data }), 15_000, "Password update timed out. Please try again.");
+    if (markerError) throw mapAuthError(markerError);
+    return;
+  }
   if (error) throw mapAuthError(error);
 }
 
