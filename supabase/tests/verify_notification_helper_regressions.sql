@@ -42,8 +42,12 @@ update public.notifications set read = 1 where post_id = 'dedupe-legacy';
 delete from public.reactions where id = 'dedupe-legacy';
 insert into public.reactions (id, post_id, user_id, type, created_at)
 values ('dedupe-legacy', 'dedupe-legacy', '00000000-0000-4000-8000-00000000d202', 'DISLIKE', '2026-10-22T00:00:00.000Z');
-select 'legacy kind switch after read still notifies' as probe
-where (select count(*) from public.notifications where post_id = 'dedupe-legacy' and type in ('LIKE', 'DISLIKE') and reaction_kind is null) = 2;
+-- 20261112140000 made DISLIKE a silent reaction: it must not append a second
+-- notification, and it must not rewrite the read LIKE row that already exists.
+select 'suppressed DISLIKE leaves the read LIKE history untouched' as probe
+where (select count(*) from public.notifications where post_id = 'dedupe-legacy') = 1
+  and (select count(*) from public.notifications where post_id = 'dedupe-legacy' and type = 'LIKE' and reaction_kind is null and read = 1) = 1
+  and not exists (select 1 from public.notifications where post_id = 'dedupe-legacy' and type = 'DISLIKE');
 
 insert into public.reactions (id, post_id, user_id, type, created_at)
 values ('dedupe-self', 'dedupe-self', '00000000-0000-4000-8000-00000000d201', 'LOVE', '2026-10-22T00:00:00.000Z');
