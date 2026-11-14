@@ -1,16 +1,14 @@
 import { useEffect, useState } from "react";
 import { useUpdateSnapshot } from "../services/updates/runtime";
-import { useOutlet } from "react-router";
+import { useLocation, useOutlet } from "react-router";
 import { SplitView } from "../components/SplitView";
 import {
   Accessibility,
   Activity,
   Bell,
-  CloudUpload,
   CircleHelp,
   Cpu,
   Flag,
-  Image,
   Info,
   LayoutGrid,
   LogOut,
@@ -29,6 +27,7 @@ import {
 import type { PublicUser } from "@norfold/shared";
 import { useAuth } from "../auth";
 import { readRememberedAccounts, rememberAccount, removeRememberedAccount } from "../services/rememberedAccounts";
+import { readAccountSession } from "../services/accountSessions";
 import { announce } from "../components/LiveRegion";
 import {
   ACCENT_OPTIONS,
@@ -74,10 +73,9 @@ import "./Settings.css";
  */
 export const ROW_PRESENTATION: Record<string, { title: string; icon: LucideIcon; iconTone: SettingIconTone; detail?: boolean }> = {
   "recovered-items": { title: "Recovered items", icon: RotateCcw, iconTone: "success", detail: true },
-  account: { title: "Account & verification", icon: UserRound, iconTone: "account" },
+  account: { title: "Profile & security", icon: UserRound, iconTone: "account" },
   devices: { title: "Devices", icon: MonitorSmartphone, iconTone: "teal", detail: true },
-  backup: { title: "Chat backup", icon: CloudUpload, iconTone: "blue", detail: true },
-  "chat-preferences": { title: "Chat preferences", icon: MessageSquare, iconTone: "neutral", detail: true },
+  "chat-preferences": { title: "Chat", icon: MessageSquare, iconTone: "neutral", detail: true },
   appearance: { title: "Appearance", icon: Palette, iconTone: "appearance" },
   notifications: { title: "Notification preferences", icon: Bell, iconTone: "notifications" },
   accessibility: { title: "Accessibility", icon: Accessibility, iconTone: "accessibility" },
@@ -86,7 +84,6 @@ export const ROW_PRESENTATION: Record<string, { title: string; icon: LucideIcon;
   ai: { title: "Optional AI Chat", icon: Sparkles, iconTone: "ai", detail: true },
   privacy: { title: "Privacy & safety", icon: ShieldCheck, iconTone: "privacy" },
   feedback: { title: "Send feedback", icon: MessageSquare, iconTone: "neutral", detail: true },
-  media: { title: "Media & uploads", icon: Image, iconTone: "media" },
   diagnostics: { title: "Diagnostics", icon: Activity, iconTone: "privacy" },
   terms: { title: "Terms of use", icon: Scale, iconTone: "about" },
   "privacy-policy": { title: "Privacy policy", icon: ShieldCheck, iconTone: "privacy" },
@@ -125,6 +122,16 @@ export function accessibilitySummary(textScale: TextScaleId, reduceMotion: Reduc
 /** Live photo-quality flag. */
 export function mediaSummary(highQualityPhoto: boolean): string {
   return highQualityPhoto ? "High quality" : "Standard";
+}
+
+/** Whether this device can return to the account without a password. */
+export function keptOnDevice(accountId: string): boolean {
+  try {
+    return readAccountSession(accountId) !== null
+      && readRememberedAccounts().some((account) => account.id === accountId);
+  } catch {
+    return false;
+  }
 }
 
 /** Live verification state for the Account & verification row. */
@@ -169,7 +176,8 @@ export function notificationSummary(
 export function Settings() {
   const { user } = useAuth();
   const detail = useOutlet();
-  return <div className="fb-settings-layout"><SplitView selected={Boolean(detail)}
+  const { pathname } = useLocation();
+  return <div className="fb-settings-layout"><SplitView selected={Boolean(detail)} scrollKey={pathname}
     list={<SettingsNavigation key={user?.id ?? "guest"} detailSelected={Boolean(detail)} />}
     detail={detail ?? <section className="fb-settings-placeholder"><h2>Your settings</h2><p>Choose a category to make it yours.</p></section>} />
   </div>;
@@ -177,7 +185,7 @@ export function Settings() {
 
 function SettingsNavigation({ detailSelected }: { detailSelected: boolean }) {
   const updates = useUpdateSnapshot();
-  const { user, logout } = useAuth();
+  const { user, logout, setAccountKept } = useAuth();
   const { theme } = useTheme();
   const { settings } = useAppearance();
   const { layout: feedLayout } = useFeedLayoutPreference();
@@ -190,14 +198,15 @@ function SettingsNavigation({ detailSelected }: { detailSelected: boolean }) {
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const [retention, setRetention] = useState<{ id: string; keep: boolean } | null>(() =>
-    user ? { id: user.id, keep: readRememberedAccounts().some((account) => account.id === user.id) } : null);
+    user ? { id: user.id, keep: keptOnDevice(user.id) } : null);
   const keepAccount = retention?.id === user?.id && retention?.keep === true;
   const userId = user?.id;
   useEffect(() => {
     if (!userId) return;
-    // The switch reflects the durable choice: an account restored from the
-    // sign-in list is already remembered, and a toggle writes immediately.
-    setRetention({ id: userId, keep: readRememberedAccounts().some((account) => account.id === userId) });
+    // The switch reflects the durable choice: a kept account has both the
+    // remembered identity and the retained session that makes switching back
+    // passwordless.
+    setRetention({ id: userId, keep: keptOnDevice(userId) });
   }, [userId]);
   // The staff console entry is offered only to an account the SERVER says is
   // an ADMIN. An unreadable role leaves it hidden: the server refuses
@@ -279,7 +288,6 @@ function SettingsNavigation({ detailSelected }: { detailSelected: boolean }) {
       case "notifications": return notifValue ?? "Review settings";
       case "accessibility": return accessibilitySummary(settings.textScale, settings.reduceMotion);
       case "feed-layout": return feedLayoutSummary(feedLayout, resolveFeedLayout(feedLayout, viewportWidth));
-      case "media": return mediaSummary(settings.highQualityPhoto);
       case "about": return APP_VERSION;
       default: return undefined;
     }
@@ -343,6 +351,9 @@ function SettingsNavigation({ detailSelected }: { detailSelected: boolean }) {
           {inSection("account").length > 0 && (
             <SettingsGroup title="Account">{inSection("account")}</SettingsGroup>
           )}
+          {inSection("chat").length > 0 && (
+            <SettingsGroup title="Chat">{inSection("chat")}</SettingsGroup>
+          )}
           {inSection("preferences").length > 0 && (
             <SettingsGroup title="Preferences">{inSection("preferences")}</SettingsGroup>
           )}
@@ -401,23 +412,27 @@ function SettingsNavigation({ detailSelected }: { detailSelected: boolean }) {
           <div className="fb-settings-signout">
           <SettingsGroup>
             <PreferenceSwitchRow
-              title="Keep this account on this device"
+              title="Keep this account signed in"
               description={keepAccount
-                ? "Saved on this device. It appears on the sign-in screen."
-                : "Save your name and email for next time, not your password."}
+                ? "Saved on this device. Switch back without your password."
+                : "This account is not saved here. You will sign in again next time."}
               icon={UserRound}
               checked={keepAccount}
               onChange={keep => {
                 if (!user) return;
-                const saved = keep ? rememberAccount(user) : removeRememberedAccount(user.id);
-                setRetention({ id: user.id, keep: saved && keep });
-                if (!saved) setSignOutError("Couldn't update saved accounts on this device. Try again.");
-                else {
-                  setSignOutError(null);
+                const previous = keepAccount;
+                // Optimistic: the switch and the Sign out row agree at once.
+                // A failed vault write rolls the switch back and says why.
+                setRetention({ id: user.id, keep });
+                setSignOutError(null);
+                void setAccountKept(user.id, keep).then(() => {
                   announce(keep
-                    ? "This account will be remembered after you sign out."
-                    : "This account won't be remembered after you sign out.");
-                }
+                    ? "This account will stay signed in on this device."
+                    : "This account will be removed from this device after you sign out.");
+                }).catch((err: unknown) => {
+                  setRetention({ id: user.id, keep: previous });
+                  setSignOutError(friendlyError(err).message);
+                });
               }}
               disabled={signingOut}
             />

@@ -1,10 +1,7 @@
-/** Injected at build time by Vite (see vite.config.ts `define`). */
-declare const __SUPABASE_URL__: string;
-declare const __SUPABASE_PUBLISHABLE_KEY__: string;
-
 import { createClient, navigatorLock, processLock, type SupabaseClient } from "@supabase/supabase-js";
 import { storage } from "./storage";
 import { createAccountScopedAuthStorage } from "./accountScopedAuthStorage";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "./buildConfig";
 
 export class SupabaseConfigError extends Error {
   constructor(message: string) {
@@ -54,7 +51,7 @@ let authPersistence: ReturnType<typeof createAccountScopedAuthStorage> | null = 
 /** Backend storage identity from canonical build configuration, without starting
  * auth/network work merely to open offline account history. */
 export function getSupabaseBackendUrl(): string {
-  return validateSupabaseConfig(__SUPABASE_URL__, __SUPABASE_PUBLISHABLE_KEY__).url;
+  return validateSupabaseConfig(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY).url;
 }
 function sessionStorageKey(url: string): string {
   return `sb-${new URL(url).hostname.split(".")[0]}-auth-token`;
@@ -63,7 +60,7 @@ function sessionStorageKey(url: string): string {
 /** Presence only; read before SDK startup can discard an expired session. */
 export function hasStoredAuthSession(): boolean {
   try {
-    return storage.getItem(sessionStorageKey(__SUPABASE_URL__)) !== null;
+    return storage.getItem(sessionStorageKey(SUPABASE_URL)) !== null;
   } catch { return false; }
 }
 
@@ -73,7 +70,7 @@ export function hasStoredAuthSession(): boolean {
  */
 export function getSupabase(): SupabaseClient {
   if (client) return client;
-  const { url, key } = validateSupabaseConfig(__SUPABASE_URL__, __SUPABASE_PUBLISHABLE_KEY__);
+  const { url, key } = validateSupabaseConfig(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
   const storageKey = sessionStorageKey(url);
   authPersistence = createAccountScopedAuthStorage(storage, storageKey);
   client = createClient(url, key, {
@@ -103,6 +100,20 @@ export async function signOutSupabaseAccount(accountId: string): Promise<void> {
     // fails, and the boundary verifies that removal rather than trusting a 200.
     await sdk.auth.signOut();
   });
+}
+
+/** Drop only this SDK slot, without calling the server's logout endpoint. */
+export async function detachSupabaseAccount(accountId: string): Promise<void> {
+  const sdk = getSupabase();
+  const key = sessionStorageKey(getSupabaseBackendUrl());
+  await sdk.auth.stopAutoRefresh();
+  try {
+    await authPersistence!.cleanAccount(accountId, async () => {
+      authPersistence!.storage.removeItem(key);
+    });
+  } finally {
+    await sdk.auth.startAutoRefresh();
+  }
 }
 
 export interface RawFunctionRequest {
@@ -162,6 +173,6 @@ export function createSupabaseFunctionFetch(
 /** Production raw access always comes from the canonical SDK and build config. */
 export function fetchSupabaseFunction(name: string, accountId: string, input: RawFunctionRequest): Promise<Response> {
   return createSupabaseFunctionFetch(
-    validateSupabaseConfig(__SUPABASE_URL__, __SUPABASE_PUBLISHABLE_KEY__), getSupabase().auth,
+    validateSupabaseConfig(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY), getSupabase().auth,
   )(name, accountId, input);
 }

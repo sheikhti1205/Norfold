@@ -48,11 +48,13 @@ describe("the navigation catalogue", () => {
     }
     const placed = settingsDestinations(WEB).map((destination) => destination.id);
     expect(placed).toContain("chat-preferences");
-    expect(placed).toContain("backup");
+    expect(placed).not.toContain("backup");
+    expect(placed).not.toContain("media");
+    expect(placed).not.toContain("sign-in-security");
     expect(new Set(placed).size).toBe(placed.length);
   });
 
-  it("finds Chat preferences through the shared destination catalogue", () => {
+  it("finds the merged Chat row through the shared destination catalogue", () => {
     const entry = settingsDestinations(WEB).find((destination) => destination.id === "chat-preferences");
     expect(entry?.route).toBe("/settings/privacy/messages");
     expect(resolveDestination("chat-preferences", WEB)).toEqual({
@@ -69,6 +71,6 @@ describe("the navigation catalogue", () => {
     expect(resolveDestination("account", { platform: "web", signedIn: false, capabilities: [] }))
       .toEqual({ kind: "unavailable", reason: "auth" });
     expect(resolveDestination("account", { platform: "android", signedIn: true, capabilities: [] }))
-      .toEqual({ kind: "available", route: "/settings/account" });
+      .toEqual({ kind: "available", route: "/profile" });
   });
 });

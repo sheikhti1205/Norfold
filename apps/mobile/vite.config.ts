@@ -146,6 +146,10 @@ export default defineConfig(({ command, mode }) => {
       sourcemap,
     },
     define: {
+      // The dev server applies `import.meta.env.*` defines but not bare
+      // identifiers, so both spellings are emitted from one source of truth.
+      "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(url),
+      "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(publishableKey),
       "import.meta.env.VITE_PUBLIC_SHARE_ORIGIN": JSON.stringify(shareOrigin),
       "import.meta.env.VITE_MAP_STYLE_URL": JSON.stringify(mapEnv.styleUrl),
       "import.meta.env.VITE_MAP_SEARCH_CONTACT": JSON.stringify(mapEnv.contact),

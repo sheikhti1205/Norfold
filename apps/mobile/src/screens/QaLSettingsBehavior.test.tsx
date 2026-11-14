@@ -18,7 +18,7 @@ import { localOperationNotice } from "../services/ai/localIntelligenceView";
 /* ------------------------------------------------------------------ */
 
 const SEARCH_MATRIX: ReadonlyArray<{ title: string; keywords: string; route: string }> = [
-  { title: "Account & profile", keywords: "profile username email phone avatar", route: "/settings/account" },
+  { title: "Profile & verification", keywords: "profile username email phone avatar", route: "/profile" },
   { title: "Appearance", keywords: "theme dark amoled accent color personalization", route: "/settings/appearance" },
   { title: "Accessibility", keywords: "font text size motion reduce animation", route: "/settings/accessibility" },
   { title: "Media & uploads", keywords: "photo image quality data storage upload", route: "/settings/media" },

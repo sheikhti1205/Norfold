@@ -57,6 +57,7 @@ export type DestinationResolution =
 export type SettingsSection =
   | "updates"
   | "account"
+  | "chat"
   | "preferences"
   | "intelligence"
   | "privacy"
@@ -80,10 +81,20 @@ export const DESTINATIONS: readonly Destination[] = [
   },
   {
     id: "account",
+    route: "/profile",
+    title: "Profile & security",
+    summary: "Your name, photo, sign-in methods, verification and account safety.",
+    keywords: ["profile", "username", "email", "phone", "avatar", "photo", "verification", "verified", "google", "telegram", "drive", "manage", "password", "security", "sign", "in", "contact", "rules", "delete", "log", "out"],
+    category: "account",
+    auth: "signed-in",
+    platforms: ["web", "android"],
+  },
+  {
+    id: "sign-in-security",
     route: "/settings/account",
-    title: "Account & profile",
-    summary: "Your profile, username, email, phone and avatar.",
-    keywords: ["profile", "username", "email", "phone", "avatar", "manage"],
+    title: "Sign-in & security",
+    summary: "Password, contact rules, sign-out and deleting your account.",
+    keywords: ["password", "sign", "in", "security", "contact", "rules", "delete", "log", "out", "email"],
     category: "account",
     auth: "signed-in",
     platforms: ["web", "android"],
@@ -112,9 +123,9 @@ export const DESTINATIONS: readonly Destination[] = [
   {
     id: "chat-preferences",
     route: "/settings/privacy/messages",
-    title: "Chat preferences",
-    summary: "Who can contact you.",
-    keywords: ["chat", "preferences", "contact", "message", "request", "who", "can"],
+    title: "Chat",
+    summary: "Who can contact you, chat backup and media uploads.",
+    keywords: ["chat", "preferences", "contact", "message", "request", "who", "can", "backup", "restore", "google", "drive", "conversations", "save", "device", "transfer", "media", "uploads", "photo", "image", "video", "quality", "data"],
     category: "account",
     auth: "signed-in",
     platforms: ["web", "android"],
@@ -369,7 +380,7 @@ export const DESTINATIONS: readonly Destination[] = [
     title: "Media & uploads",
     summary: "Photo quality, data use and uploads.",
     keywords: ["photo", "image", "quality", "data", "storage", "upload", "high"],
-    category: "advanced",
+    category: "account",
     auth: "signed-in",
     platforms: ["web", "android"],
   },
@@ -432,8 +443,7 @@ export const SETTINGS_PLACEMENT: readonly { id: string; section: SettingsSection
   { id: "recovered-items", section: "account" },
   { id: "account", section: "account" },
   { id: "devices", section: "account" },
-  { id: "backup", section: "account" },
-  { id: "chat-preferences", section: "account" },
+  { id: "chat-preferences", section: "chat" },
   { id: "appearance", section: "preferences" },
   { id: "notifications", section: "preferences" },
   { id: "accessibility", section: "preferences" },
@@ -442,7 +452,6 @@ export const SETTINGS_PLACEMENT: readonly { id: string; section: SettingsSection
   { id: "ai", section: "intelligence" },
   { id: "privacy", section: "privacy" },
   { id: "feedback", section: "more" },
-  { id: "media", section: "advanced" },
   { id: "diagnostics", section: "troubleshooting" },
   { id: "terms", section: "legal" },
   { id: "privacy-policy", section: "legal" },

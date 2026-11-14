@@ -6,11 +6,13 @@ import { AccountMenu } from "./AccountMenu";
 
 const state = vi.hoisted(() => ({
   logout: vi.fn(),
+  switchAccount: vi.fn(),
   accounts: [] as { id: string; username: string; displayName: string; maskedEmail: string; loginEmail: string; lastUsedAt: number }[],
 }));
 vi.mock("../auth", () => ({ useAuth: () => ({
   user: { id: "1", username: "riley", displayName: "Riley", emailVerified: true },
   logout: state.logout,
+  switchAccount: state.switchAccount,
 }) }));
 vi.mock("../services/rememberedAccounts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/rememberedAccounts")>();
@@ -113,16 +115,28 @@ describe("account menu", () => {
     expect(within(panel).getByText("Current")).toBeTruthy();
     expect(within(panel).getByRole("button", { name: /Switch to Sam/ })).toBeTruthy();
     expect(within(panel).getByRole("button", { name: /Add another account/ })).toBeTruthy();
+    expect(panel.querySelectorAll(".fb-account-add")).toHaveLength(1);
   });
 
-  it("keeps the account being left when switching", async () => {
-    state.logout.mockResolvedValue(undefined);
+  it("switches without logging out the current account", async () => {
+    state.switchAccount.mockResolvedValue({ status: "switched" });
     state.accounts = [other];
     renderMenu();
     const dialog = await openMenu();
     fireEvent.click(within(dialog).getByRole("button", { name: /Riley/ }));
     fireEvent.click(await within(dialog).findByRole("button", { name: /Switch to Sam/ }));
-    await waitFor(() => expect(state.logout).toHaveBeenCalledWith({ keepAccount: true }));
+    await waitFor(() => expect(state.switchAccount).toHaveBeenCalledWith(other));
+    expect(state.logout).not.toHaveBeenCalled();
+  });
+
+  it("shows an error when switching cannot start", async () => {
+    state.switchAccount.mockRejectedValue(new Error("unavailable"));
+    state.accounts = [other];
+    renderMenu();
+    const dialog = await openMenu();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Riley/ }));
+    fireEvent.click(await within(dialog).findByRole("button", { name: /Switch to Sam/ }));
+    expect((await within(dialog).findByRole("alert")).textContent).toBe("Could not switch accounts. Try again.");
   });
 
   it("Escape closes the open panel before the popover", async () => {

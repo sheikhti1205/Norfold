@@ -15,12 +15,11 @@ describe("settingsIndex", () => {
         "/settings/about",
         "/settings/updates",
         "/settings/accessibility",
-        "/settings/account",
+        // Profile is the identity hub and owns the merged account row.
+        "/profile",
         // Device management (packet 05/06 consumer surface) postdates the
         // 2026-10-03 route map like the rows above.
         "/settings/devices",
-        // Encrypted Drive backup (packet 06) postdates the route map too.
-        "/settings/backup",
         "/settings/ai",
         "/settings/ai/connections",
         "/settings/ai/privacy",
@@ -38,11 +37,10 @@ describe("settingsIndex", () => {
         "/settings/local-intelligence/downloads",
         "/settings/ai/chat-models",
         "/settings/help",
-        "/settings/media",
         "/settings/notifications",
         "/settings/privacy",
-        // Chat preferences is an Account row (S5) and is indexed from the
-        // shared destination catalogue rather than a second hand-written list.
+        // The merged Chat row owns contact rules, backup and media uploads and
+        // is indexed from the shared destination catalogue.
         "/settings/privacy/messages",
         "/settings/privacy/appeals",
         "/settings/privacy/blocked",
@@ -91,8 +89,10 @@ describe("settingsIndex", () => {
     expect(searchSettings("version").map((r) => r.id)).toContain("about");
     // push -> Notifications
     expect(searchSettings("push").map((r) => r.id)).toContain("notifications");
-    // photo quality -> Media
-    expect(searchSettings("photo quality").map((r) => r.id)).toContain("media");
+    // photo quality -> merged Chat row
+    expect(searchSettings("photo quality").map((r) => r.id)).toContain("chat-preferences");
+    // backup -> merged Chat row
+    expect(searchSettings("backup").map((r) => r.id)).toContain("chat-preferences");
   });
 
   it("finds device management by the words a reader would use", () => {
@@ -129,9 +129,9 @@ describe("settingsIndex", () => {
       expect(groups.get(id)).toBe("Intelligence");
     }
     expect(groups.get("privacy")).toBe("Privacy");
-    for (const id of ["media", "diagnostics"]) {
-      expect(groups.get(id)).toBe("Advanced");
-    }
+    // Contact rules, backup and media uploads share one Chat row.
+    expect(groups.get("chat-preferences")).toBe("Chat");
+    expect(groups.get("diagnostics")).toBe("Advanced");
     for (const id of ["help", "replay", "about"]) {
       expect(groups.get(id)).toBe("Help & about");
     }

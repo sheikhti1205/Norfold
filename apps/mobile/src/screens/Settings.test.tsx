@@ -4,9 +4,10 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockLogout, mockFetchPrefs, mockPermission, mockFetchMyRole, mockBootstrapStatus, viewer } = vi.hoisted(() => ({
+const { mockLogout, mockSetAccountKept, mockFetchPrefs, mockPermission, mockFetchMyRole, mockBootstrapStatus, viewer } = vi.hoisted(() => ({
   viewer: { id: "u1" },
   mockLogout: vi.fn(),
+  mockSetAccountKept: vi.fn(),
   mockFetchPrefs: vi.fn(),
   mockPermission: vi.fn(),
   mockFetchMyRole: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock("../auth", () => ({
       createdAt: "2026-01-01T00:00:00.000Z",
     },
     logout: mockLogout,
+    setAccountKept: mockSetAccountKept,
   }),
 }));
 
@@ -74,7 +76,8 @@ import {
   notificationSummary,
 } from "./Settings";
 import { cloudConnectionsSummary } from "../services/aiCredentials";
-import { readRememberedAccounts, rememberAccount } from "../services/rememberedAccounts";
+import { readRememberedAccounts, rememberAccount, removeRememberedAccount } from "../services/rememberedAccounts";
+import { readAccountSession, removeAccountSession, saveAccountSession } from "../services/accountSessions";
 import { Settings } from "./Settings";
 import { SettingsPage } from "../components/settings";
 import { SettingsWindowHost } from "../components/settingsWindowHost";
@@ -89,6 +92,27 @@ beforeEach(() => {
   mockFetchPrefs.mockResolvedValue({ pushEnabled: true, likes: true, comments: true, mentions: true, status: true });
   mockPermission.mockResolvedValue("granted");
   mockLogout.mockResolvedValue(undefined);
+  // Mirror the real auth contract: keeping an account writes both the retained
+  // session and the remembered identity; dropping it removes both.
+  mockSetAccountKept.mockImplementation(async (id: string, keep: boolean) => {
+    if (!keep) {
+      removeAccountSession(id);
+      removeRememberedAccount(id);
+      return;
+    }
+    saveAccountSession({ accountId: id, access_token: "access-token", refresh_token: "refresh-token" });
+    rememberAccount({
+      id,
+      username: "tester",
+      displayName: "Test Person",
+      email: "tester@example.com",
+      phone: "+10000000000",
+      emailVerified: true,
+      phoneVerified: false,
+      avatarUrl: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    } as Parameters<typeof rememberAccount>[0]);
+  });
   // An ordinary account by default: no role, no capabilities.
   mockFetchMyRole.mockResolvedValue({ role: null, isAdmin: false, capabilities: [] });
   mockBootstrapStatus.mockResolvedValue({ canClaim: false, reason: "An admin already exists", alreadyAdmin: false, hasAdmin: true });
@@ -111,24 +135,31 @@ function rootHrefs(): string[] {
 
 it.each([false, true])("offers explicit logout identity retention without saving a password (keep=%s)", async keepAccount => {
   renderSettings();
-  const control = screen.getByRole("switch", { name: "Keep this account on this device" });
+  const control = screen.getByRole("switch", { name: "Keep this account signed in" });
   expect(control.getAttribute("aria-checked")).toBe("false");
-  if (keepAccount) fireEvent.click(control);
+  if (keepAccount) {
+    fireEvent.click(control);
+    await waitFor(() => expect(mockSetAccountKept).toHaveBeenCalledWith(viewer.id, true));
+  }
   fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
   await waitFor(() => expect(mockLogout).toHaveBeenCalledWith({ keepAccount }));
 });
 
 it("reflects and persists the account-retention choice immediately", async () => {
+  saveAccountSession({ accountId: viewer.id, access_token: "access-token", refresh_token: "refresh-token" });
   rememberAccount({ id: viewer.id, username: "tester", displayName: "Test Person", email: "tester@example.com" } as Parameters<typeof rememberAccount>[0]);
   renderSettings();
-  const control = screen.getByRole("switch", { name: "Keep this account on this device" });
+  const control = screen.getByRole("switch", { name: "Keep this account signed in" });
   await waitFor(() => expect(control.getAttribute("aria-checked")).toBe("true"));
   fireEvent.click(control);
   expect(control.getAttribute("aria-checked")).toBe("false");
-  expect(readRememberedAccounts().some((account) => account.id === viewer.id)).toBe(false);
+  expect(mockSetAccountKept).toHaveBeenCalledWith(viewer.id, false);
+  await waitFor(() => expect(readRememberedAccounts().some((account) => account.id === viewer.id)).toBe(false));
+  expect(readAccountSession(viewer.id)).toBeNull();
   fireEvent.click(control);
   expect(control.getAttribute("aria-checked")).toBe("true");
-  expect(readRememberedAccounts().some((account) => account.id === viewer.id)).toBe(true);
+  await waitFor(() => expect(readRememberedAccounts().some((account) => account.id === viewer.id)).toBe(true));
+  expect(readAccountSession(viewer.id)).not.toBeNull();
 });
 
 describe("summary helpers", () => {
@@ -196,7 +227,7 @@ describe("Settings home", () => {
     // not paint a second field behind it.
     expect(screen.queryByRole("searchbox", { name: "Search settings" })).toBeNull();
     expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Account & verification|Account & profile/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Profile & security/ })).toBeTruthy();
   });
 
   it("keeps update history outside disclosures and searchable", async () => {
@@ -223,18 +254,22 @@ describe("Settings home", () => {
     expect(screen.getByRole("link", { name: /Send feedback/i }).getAttribute("href")).toBe("/settings/feedback");
   });
 
-  it("keeps Chat preferences in Account and reachable through search", async () => {
+  it("keeps contact rules, chat backup and media uploads in one Chat row", async () => {
     renderSettings();
-    const account = screen.getByRole("region", { name: "Account" });
-    expect(within(account).getByRole("link", { name: "Chat preferences" }).getAttribute("href"))
-      .toBe("/settings/privacy/messages");
+    const chat = screen.getByRole("region", { name: "Chat" });
+    const rows = within(chat).getAllByRole("link");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.getAttribute("href")).toBe("/settings/privacy/messages");
+    expect(rows[0]!.textContent).toContain("Chat");
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search settings" }), { target: { value: "backup" } });
+    expect(await screen.findByRole("link", { name: /Chat/ })).toBeTruthy();
     fireEvent.change(screen.getByRole("searchbox", { name: "Search settings" }), { target: { value: "who can contact" } });
-    expect(await screen.findByRole("link", { name: /Chat preferences/ })).toBeTruthy();
+    expect(await screen.findByRole("link", { name: /Chat/ })).toBeTruthy();
   });
 
   it("gives the switch its own trailing control instead of a chevron slot", () => {
     renderSettings();
-    const control = screen.getByRole("switch", { name: "Keep this account on this device" });
+    const control = screen.getByRole("switch", { name: "Keep this account signed in" });
     expect(control.querySelector(".fb-settings-chevron")).toBeNull();
     expect(control.querySelector(".fb-switch-track")).toBeTruthy();
     expect(control.lastElementChild?.className).toContain("fb-switch-track");
@@ -262,7 +297,7 @@ describe("Settings home", () => {
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeTruthy();
     expect(screen.getByRole("searchbox", { name: "Search settings" })).toBeTruthy();
-    for (const name of ["Account", "Preferences", "Intelligence", "Privacy", "More"]) {
+    for (const name of ["Account", "Chat", "Preferences", "Intelligence", "Privacy", "More"]) {
       expect(screen.getByRole("region", { name })).toBeTruthy();
     }
   });
@@ -297,13 +332,11 @@ describe("Settings home", () => {
     const hrefs = rootHrefs();
     for (const href of [
       "/profile",
-      "/settings/account",
       "/settings/appearance",
       "/settings/notifications",
       "/settings/accessibility",
       "/settings/ai",
       "/settings/privacy",
-      "/settings/media",
       "/settings/diagnostics",
       "/settings/help",
       "/onboarding?replay=1",
@@ -341,14 +374,18 @@ describe("Settings home", () => {
     expect(screen.getByRole("link", { name: /Feed layout/ }).textContent).toMatch(/Compact/);
   });
 
-  it("groups moved rows under the Advanced, Legal and Help & about headings", () => {
+  it("groups moved rows under the Chat, Advanced, Legal and Help & about headings", () => {
     renderSettings();
+    const chat = screen.getByRole("region", { name: "Chat" });
+    expect(within(chat).getByRole("link", { name: /Chat/ }).getAttribute("href")).toBe(
+      "/settings/privacy/messages",
+    );
     const more = screen.getByRole("region", { name: "More" });
     expect(within(more).getByText("Advanced")).toBeTruthy();
     expect(within(more).getByText("Legal")).toBeTruthy();
     expect(within(more).getByText("Help & about")).toBeTruthy();
-    for (const [group, href] of [["Advanced", "/settings/media"], ["Legal", "/settings/terms"], ["Help & about", "/settings/help"]]) {
-      expect(within(within(more).getByRole("region", { name: group })).getByRole("link", { name: group === "Advanced" ? /Media & uploads/ : group === "Legal" ? /Terms of use/ : /Help & guide/ }).getAttribute("href")).toBe(href);
+    for (const [group, href] of [["Legal", "/settings/terms"], ["Help & about", "/settings/help"]]) {
+      expect(within(within(more).getByRole("region", { name: group })).getByRole("link", { name: group === "Legal" ? /Terms of use/ : /Help & guide/ }).getAttribute("href")).toBe(href);
     }
   });
 
@@ -369,7 +406,6 @@ describe("Settings home", () => {
     renderSettings();
     expect(await screen.findByText("Dark · Emerald")).toBeTruthy();
     expect(await screen.findByText("Default text · System motion")).toBeTruthy();
-    expect(await screen.findByText("Standard")).toBeTruthy();
     expect(await screen.findByText("On")).toBeTruthy();
     expect(await screen.findByText("Partially verified")).toBeTruthy();
   });

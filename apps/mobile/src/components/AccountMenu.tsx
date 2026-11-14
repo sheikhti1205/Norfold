@@ -34,7 +34,7 @@ type PanelId = "switch" | "personalization" | null;
  * card, so nothing is ever painted beside it.
  */
 export function AccountMenu({ onOpenSettings = () => {} }: { onOpenSettings?: (path?: string) => void }) {
-  const { user, logout } = useAuth();
+  const { user, logout, switchAccount } = useAuth();
   const navigate = useNavigate();
   const wide = useWideViewport();
   const [open, setOpen] = useState(false);
@@ -80,11 +80,11 @@ export function AccountMenu({ onOpenSettings = () => {} }: { onOpenSettings?: (p
     if (switching) return;
     setSwitching(account.id);
     setSwitchError(null);
-    // Keep the account being left: signing out of one account must not erase
-    // the other identity from this device's chooser.
-    void logout({ keepAccount: true }).then(() => {
+    void switchAccount(account).then((result) => {
       closeAll();
-      navigate("/signin", { state: { rememberedAccountId: account.id }, replace: true });
+      if (result.status === "needs-sign-in") {
+        navigate("/signin", { state: { rememberedAccountId: account.id, switchNeedsSignIn: true }, replace: true });
+      }
     }, () => setSwitchError("Could not switch accounts. Try again.")).finally(() => setSwitching(null));
   };
 
