@@ -28,11 +28,7 @@ const DUPLICATE_ACCOUNT_MESSAGE = "An account with these details already exists.
 const RATE_LIMIT_MESSAGE = "Too many attempts. Please wait a moment and try again.";
 const EMAIL_SEND_LIMIT_MESSAGE = "You've asked for several codes. The most recent code still works. Try requesting another code later.";
 const INVALID_CODE_MESSAGE = "Invalid or expired verification code";
-const PASSWORD_SET_METADATA_KEY = "norfold_password_set_at";
-
-function passwordSetMetadata() {
-  return { [PASSWORD_SET_METADATA_KEY]: new Date().toISOString() };
-}
+const PASSWORD_CODE_PATTERN = /^\d{6,10}$/;
 
 export class EmailSendLimitedError extends ApiError {
   retryAfterSeconds?: number;
@@ -51,12 +47,27 @@ const PROFILE_LOAD_TIMEOUT_MS = 15_000;
 /** Re-exported so boot UI can distinguish "unreachable" from "signed out". */
 export { BootTimeoutError };
 
-export function needsPasswordSetup(
-  user: { identities?: User["identities"]; user_metadata?: User["user_metadata"] } | null | undefined,
-): boolean {
-  const marker = user?.user_metadata?.[PASSWORD_SET_METADATA_KEY];
-  return user != null && !user.identities?.some((identity) => identity.provider === "email")
-    && !(typeof marker === "string" && marker.length > 0);
+/**
+ * Server-authoritative password presence for the signed-in account.
+ *
+ * `auth.users.encrypted_password` is the only source that proves a password
+ * exists. Identities can stay google-only after a password is set, and
+ * user_metadata is client-writable, so neither is proof. The RPC returns one
+ * boolean for `auth.uid()` and is granted to authenticated only.
+ */
+export async function readHasAccountPassword(): Promise<boolean> {
+  const { data, error } = await withTimeout(
+    () => Promise.resolve(getSupabase().rpc("has_account_password")),
+    15_000,
+    "Could not check your sign-in methods. Please try again.",
+  );
+  if (error) {
+    throw new ApiError("Could not check your sign-in methods. Please try again.", 400);
+  }
+  if (typeof data !== "boolean") {
+    throw new ApiError("Could not check your sign-in methods. Please try again.", 502);
+  }
+  return data;
 }
 
 /** Same syntax/length the registration trigger enforces (^[A-Za-z0-9_]{3,20}$). */
@@ -141,11 +152,15 @@ function mapAuthError(error: AuthErrorLike, recoverySend = false): ApiError {
   if (
     code === "otp_expired" ||
     code === "invalid_otp" ||
+    code === "reauthentication_not_valid" ||
     code === "token_has_expired" ||
     message.includes("token has expired") ||
     message.includes("invalid otp")
   ) {
     return new ApiError(INVALID_CODE_MESSAGE, 400);
+  }
+  if (code === "otp_disabled" || code === "signup_disabled") {
+    return new ApiError("Email code sign-in is not available right now. Try again later or contact support.", 503);
   }
   return new ApiError("Authentication failed. Please try again.", error.status ?? 400);
 }
@@ -460,15 +475,9 @@ export function createPasswordRecovery(): PasswordRecovery {
         if (currentError || current.user?.id !== expected.id || current.user.email?.toLowerCase() !== expected.email) {
           throw new ApiError("Recovery could not confirm your account. Request a new code.", 409);
         }
-        const metadata = passwordSetMetadata();
-        const { data, error } = await auth().updateUser({ password, data: metadata });
+        const { data, error } = await auth().updateUser({ password });
         assertLive();
-        if (error?.code === "same_password") {
-          const { error: markerError } = await auth().updateUser({ data: metadata });
-          assertLive();
-          if (markerError) throw mapAuthError(markerError);
-          return;
-        }
+        if (error?.code === "same_password") return;
         if (error) throw mapAuthError(error);
         if (data.user?.id !== expected.id) throw new ApiError("Password update could not be confirmed. Try signing in before retrying.", 409);
       });
@@ -493,48 +502,85 @@ export async function exchangeRecoveryCode(code: string): Promise<void> {
 export async function updatePassword(password: string): Promise<void> {
   if (password.length < MIN_PASSWORD_LENGTH) throw new ApiError("Password must be at least 8 characters.", 400);
   const client = getSupabase();
-  const data = passwordSetMetadata();
-  const { error } = await client.auth.updateUser({ password, data });
-  if (error?.code === "same_password") {
-    const { error: markerError } = await client.auth.updateUser({ data });
-    if (markerError) throw mapAuthError(markerError);
-    return;
-  }
+  const { error } = await client.auth.updateUser({ password });
+  if (error?.code === "same_password") return;
   if (error) throw mapAuthError(error);
 }
 
 /**
- * Give the signed-in account a password.
+ * Give the signed-in account a password during Google profile completion.
  *
- * A Google sign-up creates an account with no password identity, so the same
- * person can only ever get back in through Google. Setting one here lets that
- * account sign in with email + password too, without changing its identity.
+ * This runs immediately after Google authenticated the same account, so the
+ * provider has just proved control of the address. The later, optional
+ * "set a password" flows use an emailed code instead.
  */
 export async function setAccountPassword(password: string): Promise<void> {
   if (password.length < MIN_PASSWORD_LENGTH) throw new ApiError("Password must be at least 8 characters.", 400);
   const { error } = await getSupabase().auth.updateUser({ password });
-  if (error) throw mapAuthError(error);
+  if (error && error.code !== "same_password") throw mapAuthError(error);
 }
 
-export async function createAccountPassword(password: string): Promise<void> {
-  if (password.length < MIN_PASSWORD_LENGTH) throw new ApiError("Password must be at least 8 characters.", 400);
-  const client = getSupabase();
-  const data = passwordSetMetadata();
-  const { error } = await withTimeout(() => client.auth.updateUser({ password, data }), 15_000, "Password update timed out. Please try again.");
-  if (error?.code === "same_password") {
-    const { error: markerError } = await withTimeout(() => client.auth.updateUser({ data }), 15_000, "Password update timed out. Please try again.");
-    if (markerError) throw mapAuthError(markerError);
-    return;
+/** Read the signed-in account's email, refusing a different account. */
+async function passwordAccountEmail(accountId: string): Promise<string> {
+  const { data: { session } } = await getSupabase().auth.getSession();
+  const email = session?.user.email?.trim().toLowerCase();
+  if (!session || session.user.id !== accountId || !email) {
+    throw new ApiError("Your account changed. Try again from the current account.", 409);
   }
-  if (error) throw mapAuthError(error);
+  return email;
 }
 
-export async function readPasswordSetupUser(): Promise<User> {
-  const client = getSupabase();
-  const result = await withTimeout(() => client.auth.getUser(), 15_000, "Could not confirm your password. Please try again.");
-  if (result.error) throw mapAuthError(result.error);
-  if (!result.data.user) throw new ApiError("Could not confirm your password. Please try again.", 401);
-  return result.data.user;
+/**
+ * Send the email code that must precede a password save.
+ *
+ * This is the app's existing recovery mailbox: the Reset Password template is
+ * code-only and owned by the template job, so the reader receives a code with
+ * no link. The caller's current account is checked first so a stale screen
+ * cannot send a code to the wrong address.
+ */
+export async function sendAccountPasswordCode(accountId: string, email?: string): Promise<void> {
+  const address = (email ?? await passwordAccountEmail(accountId)).trim().toLowerCase();
+  const current = await passwordAccountEmail(accountId);
+  if (current !== address) {
+    throw new ApiError("Your account changed. Try again from the current account.", 409);
+  }
+  await requestPasswordReset(address);
+}
+
+/**
+ * Verify the emailed code on a screen-owned recovery session, then write the
+ * password through that same verified session.
+ *
+ * Verification is server-side and happens before the write (`verifyOtp` with
+ * the recovery code); the write cannot run on an unverified session. The
+ * screen-owned client never replaces or refreshes the app's own session, and a
+ * successful write is still only a claim until `readHasAccountPassword` reads
+ * the server's own record (the caller does that).
+ */
+export async function saveAccountPasswordWithCode(input: {
+  accountId: string;
+  email: string;
+  password: string;
+  code: string;
+}): Promise<void> {
+  const { accountId, password } = input;
+  const email = input.email.trim().toLowerCase();
+  const code = input.code.trim();
+  if (password.length < MIN_PASSWORD_LENGTH) throw new ApiError("Password must be at least 8 characters.", 400);
+  if (!PASSWORD_CODE_PATTERN.test(code)) throw new ApiError(INVALID_CODE_MESSAGE, 400);
+  if (await passwordAccountEmail(accountId) !== email) {
+    throw new ApiError("Your account changed. Try again from the current account.", 409);
+  }
+  const recovery = createPasswordRecovery();
+  try {
+    await recovery.verify(email, code);
+    if (await passwordAccountEmail(accountId) !== email) {
+      throw new ApiError("Your account changed. Try again from the current account.", 409);
+    }
+    await recovery.updatePassword(password);
+  } finally {
+    await recovery.dispose();
+  }
 }
 
 /** Server-reported result of self-serve account deletion (FBA-036). */

@@ -4,15 +4,18 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PublicUser } from "@norfold/shared";
 
-const { mockLogout, mockFinishDeletion, mockUser, mockRequestDeletion, mockFetchEligibility, mockSetPassword } = vi.hoisted(() => ({
+const { mockLogout, mockFinishDeletion, mockUser, mockRequestDeletion, mockFetchEligibility, mockSendPasswordCode, mockSavePassword, mockHasPassword, mockRefreshPasswordPresence } = vi.hoisted(() => ({
   mockLogout: vi.fn(),
   mockFinishDeletion: vi.fn(),
   mockRequestDeletion: vi.fn(),
   mockFetchEligibility: vi.fn(),
-  mockSetPassword: vi.fn(async (_password: string) => undefined),
+  mockSendPasswordCode: vi.fn(async (_accountId: string, _email: string) => undefined),
+  mockSavePassword: vi.fn(async (_input: { accountId: string; email: string; password: string; code: string }) => undefined),
   mockUser: {
     value: null as PublicUser | null,
   },
+  mockHasPassword: { value: null as boolean | null },
+  mockRefreshPasswordPresence: vi.fn(async () => true),
 }));
 
 vi.mock("../auth", () => ({
@@ -22,12 +25,15 @@ vi.mock("../auth", () => ({
     finishAccountDeletion: (accountId: string) => mockFinishDeletion(accountId),
     retryDeletionCleanup: () => mockLogout(),
     refreshUser: vi.fn(),
+    hasPassword: mockHasPassword.value,
+    refreshPasswordPresence: mockRefreshPasswordPresence,
   }),
 }));
 
 vi.mock("../services/auth", () => ({
   requestAccountDeletion: (...args: unknown[]) => mockRequestDeletion(...args),
-  setAccountPassword: (password: string) => mockSetPassword(password),
+  sendAccountPasswordCode: (...args: [string, string]) => mockSendPasswordCode(...args),
+  saveAccountPasswordWithCode: (input: { accountId: string; email: string; password: string; code: string }) => mockSavePassword(input),
 }));
 
 vi.mock("../services/profile", () => ({
@@ -42,6 +48,7 @@ vi.mock("../services/profile", () => ({
 
 import { AccountSettings } from "./AccountSettings";
 import { aiCredentials } from "../services/aiCredentials";
+import { ApiError } from "../services/session";
 
 const verifiedUser: PublicUser = {
   id: "u1",
@@ -76,21 +83,54 @@ afterEach(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   mockUser.value = { ...verifiedUser };
+  mockHasPassword.value = true;
+  mockRefreshPasswordPresence.mockResolvedValue(true);
   mockLogout.mockResolvedValue(undefined);
   mockFinishDeletion.mockResolvedValue(undefined);
   mockFetchEligibility.mockResolvedValue({ eligible: true, eligibleAt: null, phoneVerified: false });
 });
 
 describe("AccountSettings", () => {
-  it("adds a sign-in password for an account created with Google", async () => {
+  it("adds a sign-in password for an account created with Google after an emailed code", async () => {
+    mockHasPassword.value = false;
     renderAccount();
     fireEvent.click(screen.getByRole("button", { name: /sign-in password/i }));
     fireEvent.change(screen.getByLabelText("New password"), { target: { value: "password123" } });
     fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "password123" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save password" }));
-    await waitFor(() => expect(mockSetPassword).toHaveBeenCalledWith("password123"));
+    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+    await waitFor(() => expect(mockSendPasswordCode).toHaveBeenCalledWith("u1", "tester@example.com"));
+    expect(mockSavePassword).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Email code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify and save" }));
+    await waitFor(() => expect(mockSavePassword).toHaveBeenCalledWith({
+      accountId: "u1",
+      email: "tester@example.com",
+      password: "password123",
+      code: "123456",
+    }));
     await waitFor(() => expect(screen.queryByLabelText("New password")).toBeNull());
+    expect(mockRefreshPasswordPresence).toHaveBeenCalled();
     expect(screen.getByText(/you can sign in with your email and this password/i)).toBeTruthy();
+  });
+
+  it("never tells an account that already has a password to choose one", () => {
+    renderAccount();
+    expect(screen.getByText(/you can sign in with your email and this password/i)).toBeTruthy();
+    expect(screen.queryByText(/choose a password/i)).toBeNull();
+  });
+
+  it("asks a Google account with no password to add one", () => {
+    mockHasPassword.value = false;
+    renderAccount();
+    expect(screen.getByText(/add a password/i)).toBeTruthy();
+    expect(screen.queryByText(/you can sign in with your email and this password/i)).toBeNull();
+  });
+
+  it("waits for the server before claiming a password is missing", () => {
+    mockHasPassword.value = null;
+    renderAccount();
+    expect(screen.getByText(/checking your sign-in methods/i)).toBeTruthy();
+    expect(screen.queryByText(/add a password/i)).toBeNull();
   });
 
   it("refuses a mismatched or short sign-in password without writing it", async () => {
@@ -98,13 +138,50 @@ describe("AccountSettings", () => {
     fireEvent.click(screen.getByRole("button", { name: /sign-in password/i }));
     fireEvent.change(screen.getByLabelText("New password"), { target: { value: "short" } });
     fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "short" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save password" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/at least 8/i);
     fireEvent.change(screen.getByLabelText("New password"), { target: { value: "password123" } });
     fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "password124" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save password" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/do not match/i);
-    expect(mockSetPassword).not.toHaveBeenCalled();
+    expect(mockSendPasswordCode).not.toHaveBeenCalled();
+    expect(mockSavePassword).not.toHaveBeenCalled();
+  });
+
+  it("keeps the password unsaved when the emailed code is wrong or expired", async () => {
+    mockHasPassword.value = false;
+    mockSavePassword.mockRejectedValue(new ApiError("Invalid or expired verification code", 400));
+    renderAccount();
+    fireEvent.click(screen.getByRole("button", { name: /sign-in password/i }));
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "password123" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "password123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+    await screen.findByLabelText("Email code");
+    fireEvent.change(screen.getByLabelText("Email code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify and save" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Invalid or expired verification code");
+    expect(screen.getByLabelText("New password")).toBeTruthy();
+    expect(screen.queryByText(/you can sign in with your email and this password/i)).toBeNull();
+    expect(mockSavePassword).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not claim confirmation when the server cannot verify the saved password", async () => {
+    mockHasPassword.value = false;
+    mockSavePassword.mockResolvedValueOnce(undefined);
+    mockRefreshPasswordPresence.mockRejectedValueOnce(new Error("offline"));
+    renderAccount();
+    fireEvent.click(screen.getByRole("button", { name: /sign-in password/i }));
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "password123" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "password123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+    await screen.findByLabelText("Email code");
+    fireEvent.change(screen.getByLabelText("Email code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify and save" }));
+    expect(await screen.findByText(/saved.*couldn't verify/i)).toBeTruthy();
+    expect(screen.queryByText(/you can sign in with your email and this password/i)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(screen.getByText(/you can sign in with your email and this password/i)).toBeTruthy());
+    expect(mockSavePassword).toHaveBeenCalledTimes(1);
   });
 
   it("renders one account heading with a back target of /settings", () => {

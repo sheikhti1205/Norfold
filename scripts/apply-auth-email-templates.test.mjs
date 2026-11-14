@@ -101,7 +101,7 @@ test("the live origin is not mistaken for the retired product name", () => {
 });
 
 test("the subject comes from the template title", () => {
-  assert.equal(readSubject("<html><head><title>Your Norfold reset code</title></head></html>"), "Your Norfold reset code");
+  assert.equal(readSubject("<html><head><title>Set a new Norfold password</title></head></html>"), "Set a new Norfold password");
   assert.equal(readSubject("<html></html>"), "");
 });
 
@@ -120,7 +120,7 @@ test("validation rejects the failure modes that would ship a broken email", () =
   assert.equal(retired.ok, false);
   assert.ok(retired.problems.some((problem) => /retired product/.test(problem)));
 
-  const entitySubject = validateTemplate({ content: reset.replace("<title>Your Norfold reset code</title>", "<title>You&rsquo;re reset</title>") });
+  const entitySubject = validateTemplate({ content: reset.replace("<title>Set a new Norfold password</title>", "<title>You&rsquo;re reset</title>") });
   assert.equal(entitySubject.ok, false);
   assert.ok(entitySubject.problems.some((problem) => /HTML entity/.test(problem)));
 
@@ -198,7 +198,7 @@ test("applies exactly the eight template fields and verifies the result", async 
     ],
     "only the template fields may be written",
   );
-  assert.equal(sent.mailer_subjects_recovery, "Your Norfold reset code");
+  assert.equal(sent.mailer_subjects_recovery, "Set a new Norfold password");
   assert.equal(sent.mailer_subjects_confirmation, "Confirm your Norfold email");
   assert.equal(sent.mailer_subjects_email_change, "Confirm your new Norfold email");
   assert.equal(sent.mailer_subjects_reauthentication, "Your Norfold verification code");
