@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext } from "react";
+import { createContext, useCallback, useContext, useLayoutEffect, useRef } from "react";
 import { Link, useLocation, useNavigate, type LinkProps, type Location } from "react-router";
 
 /** UI navigation only; the auth provider and route guards remain authoritative. */
@@ -9,19 +9,48 @@ function isBackgroundPath(path: string): boolean {
   return ["/", "/search", "/my", "/saved", "/notifications"].includes(path) || /^\/u\/[A-Za-z0-9_]+$/.test(path);
 }
 
+function isReportPath(path: string): boolean {
+  return /^\/posts\/[^/]+$/.test(path);
+}
+
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
 /** History state is untrusted, and may belong to a previous signed-in account. */
 export function postBackgroundLocation(location: Location, viewerId: string | null): Location | null {
-  if (!viewerId || !/^\/posts\/[^/]+$/.test(location.pathname) || !record(location.state)) return null;
+  if (!viewerId || !isReportPath(location.pathname) || !record(location.state)) return null;
   const background = location.state.postBackground;
   if (!record(background) || background.viewerId !== viewerId || !record(background.location)) return null;
   const source = background.location;
   if (typeof source.pathname !== "string" || !isBackgroundPath(source.pathname) ||
     typeof source.search !== "string" || typeof source.hash !== "string" || typeof source.key !== "string") return null;
   return source as unknown as Location;
+}
+
+/**
+ * The page a report opens over.
+ *
+ * `PostLink` describes that page in history state. A plain link or an
+ * imperative navigate cannot, and without a background the router renders the
+ * standalone detail page, so the same report looked different depending on
+ * which surface linked to it. On a wide viewport the viewer therefore falls
+ * back to the last app page the reader was on. Report routes are never used as
+ * a background (that would stack two viewers), a cold entry has no page to
+ * float over, and phones keep the standalone page exactly like `PostLink`.
+ */
+export function useReportViewerBackground(location: Location, viewerId: string | null): Location | null {
+  const lastPage = useRef<Location | null>(null);
+  const report = isReportPath(location.pathname);
+  // Recorded after the page commits, never during render: a render React
+  // throws away must not become the background of a later report.
+  useLayoutEffect(() => {
+    if (!report) lastPage.current = location;
+  }, [location, report]);
+  const stated = postBackgroundLocation(location, viewerId);
+  if (stated) return stated;
+  if (!viewerId || !report || window.innerWidth < 768) return null;
+  return lastPage.current;
 }
 
 /**

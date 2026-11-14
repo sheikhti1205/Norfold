@@ -3,11 +3,20 @@ import {
   useState,
   type InputHTMLAttributes,
   type ReactNode,
-  type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Eye, EyeOff } from "lucide-react";
+import {
+  Button as AriaButton,
+  Label as AriaLabel,
+  ListBox,
+  ListBoxItem,
+  Select as AriaSelect,
+  SelectValue,
+} from "react-aria-components";
+import { Check, ChevronDown, Eye, EyeOff } from "lucide-react";
+import { LayeredPopover } from "./overlayFoundation";
+import "./Fields.css";
 import {
   fadeVariants,
   motionDurations,
@@ -27,7 +36,7 @@ interface FieldShellProps {
   /** Live availability/status line (role="status"), e.g. username checking. */
   status?: ReactNode;
   statusId?: string;
-  /** True while the control has focus — drives the label lift. */
+  /** True while the control has focus; drives the label lift. */
   focused?: boolean;
   /** Trailing control overlaid on the control (password reveal). */
   trailing?: ReactNode;
@@ -107,7 +116,7 @@ function FieldShell({
           </AnimatedNote>
         ) : null}
       </AnimatePresence>
-      {/* One live region that persists across text updates — no blink. */}
+      {/* One live region that persists across text updates, so it never blinks. */}
       <AnimatePresence initial={false}>
         {status != null ? (
           <motion.span
@@ -227,51 +236,127 @@ export function TextField({
   );
 }
 
-interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement> {
+export interface SelectOption {
+  value: string;
   label: string;
-  error?: string;
-  options: { value: string; label: string }[];
-  placeholder?: string;
 }
 
+interface SelectFieldProps {
+  /** Visible field label. Omit only when `aria-label` names the control. */
+  label?: string;
+  value?: string;
+  onChange?: (value: string) => void;
+  options: readonly SelectOption[];
+  placeholder?: string;
+  error?: string;
+  hint?: string;
+  disabled?: boolean;
+  className?: string;
+  /** Extra classes on the trigger, for rows that are not stacked form fields. */
+  triggerClassName?: string;
+  onOpenChange?: (open: boolean) => void;
+  name?: string;
+  id?: string;
+  "aria-label"?: string;
+}
+
+/** Sentinel for "no value". A real option may legitimately be `""` (for
+ * example "Waiting for review"), and React Aria reserves `null` for no
+ * selection at all, so the empty row needs its own key. */
+const EMPTY_KEY = "__fb_empty_select__";
+
+/**
+ * The one dropdown in Norfold.
+ *
+ * Native `<select>` renders the operating system's menu: square, unstyled, and
+ * different on every platform. This is the same anchored list language as the
+ * app's action menus (rounded surface, 44px rows, hover tone, a check on the
+ * selected row) and it is keyboard- and screen-reader-complete because React
+ * Aria owns the listbox behaviour. Every dropdown adopts it (owner order
+ * 2026-11-13).
+ */
 export function SelectField({
   label,
-  error,
+  value = "",
+  onChange,
   options,
-  placeholder = "Select…",
+  placeholder,
+  error,
+  hint,
+  disabled = false,
   className = "",
-  onFocus,
-  onBlur,
-  ...rest
+  triggerClassName = "",
+  onOpenChange,
+  name,
+  id,
+  "aria-label": ariaLabel,
 }: SelectFieldProps) {
-  const id = useId();
-  const errorId = `${id}-error`;
-  const [focused, setFocused] = useState(false);
+  const uid = useId();
+  const errorId = `${uid}-error`;
+  const hintId = `${uid}-hint`;
+  // A real empty option is shown by its own label; an explicit placeholder is
+  // the selectable "no filter / not chosen" row. A field that always holds a
+  // value gets neither: a stray "Select…" row would be a state it cannot save.
+  const hasEmptyOption = options.some((option) => option.value === "");
+  const rows = [
+    ...(placeholder != null && !hasEmptyOption ? [{ key: EMPTY_KEY, label: placeholder }] : []),
+    ...options.map((option) => ({
+      key: option.value === "" ? EMPTY_KEY : option.value,
+      label: option.label,
+    })),
+  ];
+  const hasEmptyRow = rows.some((row) => row.key === EMPTY_KEY);
+  const selectedKey = value === "" ? (hasEmptyRow ? EMPTY_KEY : null) : value;
   return (
-    <FieldShell label={label} htmlFor={id} error={error} errorId={errorId} focused={focused}>
-      <select
-        id={id}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
-        className={`${baseField} appearance-none ${error ? "border-error" : ""} ${className}`}
-        onFocus={(event) => {
-          setFocused(true);
-          onFocus?.(event);
-        }}
-        onBlur={(event) => {
-          setFocused(false);
-          onBlur?.(event);
-        }}
-        {...rest}
+    <AriaSelect
+      id={id}
+      name={name}
+      selectedKey={selectedKey}
+      onSelectionChange={(key) =>
+        onChange?.(key == null || key === EMPTY_KEY ? "" : String(key))
+      }
+      isDisabled={disabled}
+      isInvalid={Boolean(error)}
+      aria-label={ariaLabel}
+      aria-describedby={error ? errorId : hint ? hintId : undefined}
+      placeholder={placeholder}
+      onOpenChange={onOpenChange}
+      className={`block min-w-0 ${className}`}
+    >
+      {label != null && (
+        <AriaLabel className="mb-1 block text-sm font-medium text-on-surface">{label}</AriaLabel>
+      )}
+      <AriaButton
+        className={`${baseField} fb-select-trigger ${error ? "border-error" : ""} ${triggerClassName}`}
       >
-        <option value="">{placeholder}</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </FieldShell>
+        <SelectValue className="fb-select-value">
+          {({ selectedText, isPlaceholder }) => (
+            <span data-placeholder={isPlaceholder || undefined}>{selectedText}</span>
+          )}
+        </SelectValue>
+        <ChevronDown size={16} aria-hidden="true" className="fb-select-chevron" />
+      </AriaButton>
+      {error ? (
+        <span id={errorId} role="alert" className="mt-1 block text-xs text-error">{error}</span>
+      ) : hint ? (
+        <span id={hintId} className="mt-1 block text-xs text-on-surface-variant">{hint}</span>
+      ) : null}
+      <LayeredPopover className="fb-select-popover" offset={6}>
+        <ListBox className="fb-select-list">
+          {rows.map((row) => (
+            <ListBoxItem
+              key={row.key}
+              id={row.key}
+              textValue={row.label}
+              className="fb-menu-item fb-select-item"
+            >
+              <span>{row.label}</span>
+              <Check size={16} aria-hidden="true" className="fb-select-check" />
+            </ListBoxItem>
+          ))}
+        </ListBox>
+      </LayeredPopover>
+    </AriaSelect>
   );
 }
 
@@ -293,8 +378,8 @@ interface TextAreaFieldProps extends TextareaHTMLAttributes<HTMLTextAreaElement>
 /**
  * The multi-line sibling of `TextField`.
  *
- * It shares the ONE `FieldShell` — the same label lift, the same hint/error
- * slot, the same focus behaviour — so a long answer looks like the rest of
+ * It shares the ONE `FieldShell` (the same label lift, the same hint/error
+ * slot, the same focus behaviour), so a long answer looks like the rest of
  * the form instead of being a second field style. The reason it lives here
  * rather than in a screen: two forms (the safety report note and the
  * feedback message) need it, and a form field is a primitive, not a screen.

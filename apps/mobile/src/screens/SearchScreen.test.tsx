@@ -4,11 +4,10 @@ import { MemoryRouter, useLocation } from "react-router";
 import type { ReactNode } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchFeedMock, tabTapState, nlExtractLiveMock, nlHelperStateMock } = vi.hoisted(() => ({
+const { fetchFeedMock, tabTapState, nlExtractLiveMock } = vi.hoisted(() => ({
   fetchFeedMock: vi.fn(),
   tabTapState: { tapCount: 0 },
   nlExtractLiveMock: vi.fn(),
-  nlHelperStateMock: vi.fn(),
 }));
 const locationFixMock = vi.hoisted(() => vi.fn());
 vi.mock("../services/locationAdapter", () => ({
@@ -28,10 +27,10 @@ vi.mock("../services/posts", () => ({ fetchFeed: fetchFeedMock }));
 vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "u1", username: "tester" } }) }));
 vi.mock("../components/TabTap", () => ({ useTabTap: () => tabTapState }));
 vi.mock("../services/liveNarrowTasks", async () => {
-  // Only the two live seams are replaced. The result normaliser is real: a
-  // patch-shaped fake must keep meaning "the extractor ran".
+  // Only the live extraction seam is replaced. The result normaliser is real:
+  // a patch-shaped fake must keep meaning "the extractor ran".
   const actual = await vi.importActual<typeof import("../services/liveNarrowTasks")>("../services/liveNarrowTasks");
-  return { ...actual, nlExtractLive: nlExtractLiveMock, nlHelperState: nlHelperStateMock };
+  return { ...actual, nlExtractLive: nlExtractLiveMock };
 });
 
 import { SearchScreen } from "./SearchScreen";
@@ -43,11 +42,9 @@ import { clearFeedCaches } from "../hooks/feedCache";
 import * as feedHook from "../hooks/useFeed";
 import { clearNearbySession, getNearbySession } from "../services/nearby";
 import { makePost } from "../fixture/posts";
-import { NEEDLE_DESCRIPTOR } from "../services/ai/modelDescriptors";
+import { chooseSelectOption } from "../test-utils/select";
 import { mustProfile, stubGenerate } from "../services/ai/ops/testSupport";
 import { extractNlFilters, toValidatedPatch, type NlFilterPatch } from "../services/search/nlFilters";
-import type { LocalIntelligenceService } from "../services/ai/localIntelligenceView";
-import type { OfflineModelStatus } from "../services/ai/offlineModelManager";
 
 /** The profile the op tests use: the real validator chain, a fake model. */
 const PROFILE = "test-thought-envelope";
@@ -65,22 +62,6 @@ beforeAll(() => {
     },
   );
 });
-
-function helperService() {
-  // Only the platform boundary is faked. The shared lifecycle row, readiness
-  // hook, size derivation, compatibility gate and error copy run unchanged.
-  return {
-    android: true, ready: Promise.resolve(),
-    registry: { descriptorFor: () => NEEDLE_DESCRIPTOR },
-    manager: {
-      statusOf: (() => undefined) as (modelId: string) => OfflineModelStatus | undefined,
-    },
-    subscribe: () => () => {}, snapshot: () => 0,
-    ensureCompatibility: async () => {}, compatibility: () => ({ compatible: true }),
-    notice: () => null, busy: () => false,
-    download: vi.fn().mockResolvedValue(undefined), pause: vi.fn(), verify: vi.fn(), remove: vi.fn(),
-  };
-}
 
 function LocationProbe() {
   const loc = useLocation();
@@ -101,10 +82,6 @@ describe("SearchScreen URL filters", () => {
     fetchFeedMock.mockReset();
     nlExtractLiveMock.mockReset();
     nlExtractLiveMock.mockResolvedValue({});
-    nlHelperStateMock.mockReset();
-    // Default: the on-device helper is set up, so an empty patch really does
-    // mean "nothing confident". Tests for the other two states opt in.
-    nlHelperStateMock.mockResolvedValue("ready");
     tabTapState.tapCount = 0;
     clearFeedCaches();
     clearNearbySession();
@@ -116,16 +93,24 @@ describe("SearchScreen URL filters", () => {
     clearFeedCaches();
   });
 
-  it("switches to People without losing the mounted report search and its filters", async () => {
-    renderSearch("/search?type=FOUND&q=wallet");
-    await screen.findByRole("searchbox", { name: "Search posts" });
-    fireEvent.change(screen.getByRole("textbox", { name: "Describe your search" }), { target: { value: "near the old station" } });
-    fireEvent.click(screen.getByRole("button", { name: "People" }));
+  it("renders Connect as a people directory without a Reports tab or report search", async () => {
+    renderSearch("/search?scope=people");
+    expect(screen.getByRole("heading", { name: "Connect" })).toBeTruthy();
     expect(screen.getByRole("searchbox", { name: "Search people" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Reports" }));
-    expect(screen.getByRole("searchbox", { name: "Search posts" })).toHaveProperty("value", "wallet");
-    expect(screen.getByRole("textbox", { name: "Describe your search" })).toHaveProperty("value", "near the old station");
-    expect(screen.getByTestId("location").textContent).toContain("type=FOUND");
+    // The old Connect page mounted the whole report search behind a hidden
+    // attribute and offered a Reports tab. Neither belongs on a people page.
+    expect(screen.queryByRole("searchbox", { name: "Search posts" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Search type" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reports" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "People" })).toBeNull();
+  });
+
+  it("keeps Search report-only, with no people tab to leave through", () => {
+    renderSearch("/search");
+    expect(screen.getByRole("searchbox", { name: "Search posts" })).toBeTruthy();
+    expect(screen.queryByRole("searchbox", { name: "Search people" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "People" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reports" })).toBeNull();
   });
 
   it("keeps ordinary search visible with a compact advanced-filter launcher", () => {
@@ -155,7 +140,9 @@ describe("SearchScreen URL filters", () => {
         undefined,
       ),
     );
-    expect(screen.getByRole("radio", { name: "Found" }).getAttribute("aria-checked")).toBe("true");
+    // The type is restored into the sheet AND summarised by its chip; there is
+    // no permanent All/Lost/Found rail to read a radio state from.
+    expect(screen.getByText("Type: Found")).toBeTruthy();
     expect((screen.getByLabelText("Search posts") as HTMLInputElement).value).toBe("phone");
   });
 
@@ -181,7 +168,7 @@ describe("SearchScreen URL filters", () => {
     renderSearch();
     fireEvent.click(screen.getByRole("button", { name: "Filters" }));
     fireEvent.click(await screen.findByRole("button", { name: "Use my location once" }));
-    fireEvent.change(screen.getByLabelText("Distance"), { target: { value: "25" } });
+    await chooseSelectOption(screen.getByLabelText("Distance"), "25 km");
     resolveFix({ kind: "fix", lat: 12.345, lng: 77.654 });
     await waitFor(() => expect(screen.getByTestId("location").textContent).toContain("near=25"));
     await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ radiusM: 25000 }), undefined));
@@ -203,30 +190,34 @@ describe("SearchScreen URL filters", () => {
     renderSearch();
     await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole("radio", { name: "Found" }));
-    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/search?type=FOUND"));
-  });
-
-  it("offers ordinary date controls without calling Smart Search", async () => {
-    renderSearch();
     fireEvent.click(screen.getByRole("button", { name: "Filters" }));
-    fireEvent.change(await screen.findByLabelText("From date"), { target: { value: "2026-10-01" } });
-    fireEvent.change(screen.getByLabelText("To date"), { target: { value: "2026-10-21" } });
-    await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ dateFrom: "2026-10-01", dateTo: "2026-10-21" }), undefined));
-    expect(nlExtractLiveMock).not.toHaveBeenCalled();
-    expect(screen.getByTestId("location").textContent).toContain("dateFrom=2026-10-01");
+    await chooseSelectOption(await screen.findByLabelText("Type"), "Found");
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/search?type=FOUND"));
+    expect(await screen.findByText("Type: Found")).toBeTruthy();
   });
 
-  it("restores date inputs and clears all filters together without losing the query", async () => {
+  it("offers the app's calendar instead of native date inputs", async () => {
+    renderSearch("/search?dateFrom=2026-10-01&dateTo=2026-10-21");
+    await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: /Filters/ }));
+    expect(await screen.findByRole("button", { name: /From date\. Oct 1, 2026/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /To date\. Oct 21, 2026/ })).toBeTruthy();
+    expect(screen.getByRole("dialog").querySelector('input[type="date"]')).toBeNull();
+    expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ dateFrom: "2026-10-01", dateTo: "2026-10-21" }), undefined);
+    expect(nlExtractLiveMock).not.toHaveBeenCalled();
+  });
+
+  it("restores dates and clears all filters together without losing the query", async () => {
     renderSearch("/search?q=wallet&category=Electronics&dateFrom=2026-10-01&dateTo=2026-10-21");
     fireEvent.click(screen.getByRole("button", { name: /Filters/ }));
-    expect((await screen.findByLabelText("From date") as HTMLInputElement).value).toBe("2026-10-01");
-    expect((screen.getByLabelText("To date") as HTMLInputElement).value).toBe("2026-10-21");
+    expect(await screen.findByRole("button", { name: /From date\. Oct 1, 2026/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /To date\. Oct 21, 2026/ })).toBeTruthy();
     const dialog = screen.getByRole("dialog");
     fireEvent.click(Array.from(dialog.querySelectorAll("button")).find(button => button.textContent === "Clear all filters")!);
     await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/search?q=wallet"));
-    expect((screen.getByLabelText("From date") as HTMLInputElement).value).toBe("");
-    expect((screen.getByLabelText("To date") as HTMLInputElement).value).toBe("");
+    expect(screen.getByRole("button", { name: /From date\. Any date/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /To date\. Any date/ })).toBeTruthy();
   });
 
   it("does not send impossible or reversed date bounds to the feed", async () => {
@@ -243,8 +234,8 @@ describe("SearchScreen URL filters", () => {
     renderSearch("/search?dateFrom=2026-10-21&dateTo=2026-01-01");
     await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: /Filters/ }));
-    expect((await screen.findByLabelText("From date") as HTMLInputElement).value).toBe("2026-10-21");
-    expect((screen.getByLabelText("To date") as HTMLInputElement).value).toBe("2026-01-01");
+    expect(await screen.findByRole("button", { name: /From date\. Oct 21, 2026/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /To date\. Jan 1, 2026/ })).toBeTruthy();
     // No date chip claims a filter that is not applied.
     expect(screen.queryByRole("button", { name: /remove start date filter/i })).toBeNull();
   });
@@ -260,8 +251,8 @@ describe("SearchScreen URL filters", () => {
     // The sheet shows what is really applied, so the impossible day is not
     // presented as a filter the reader has on.
     fireEvent.click(screen.getByRole("button", { name: /Filters/ }));
-    expect((await screen.findByLabelText("From date") as HTMLInputElement).value).toBe("");
-    expect((screen.getByLabelText("To date") as HTMLInputElement).value).toBe("2026-10-21");
+    expect(await screen.findByRole("button", { name: /From date\. Any date/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /To date\. Oct 21, 2026/ })).toBeTruthy();
   });
 
   it("scrolls to top smoothly on tab tap", async () => {
@@ -343,33 +334,20 @@ describe("SearchScreen URL filters", () => {
     expect(fetchFeedMock).not.toHaveBeenCalled();
   });
 
-  it("cancel collapses the active field back to its compact state", async () => {
-    renderSearch();
-    await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
-
-    fireEvent.change(screen.getByLabelText("Search posts"), { target: { value: "phone" } });
-    expect(await screen.findByRole("button", { name: "Cancel" })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect((screen.getByLabelText("Search posts") as HTMLInputElement).value).toBe("");
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull());
-    expect(screen.queryByRole("button", { name: "Clear search" })).toBeNull();
-  });
-
-  describe("NL smart filters", () => {
-    function renderWithNl(nlExtract?: (input: string) => Promise<unknown>, helper?: ReturnType<typeof helperService>) {
+  describe("automatic smart filters", () => {
+    function renderWithNl(nlExtract?: (input: string) => Promise<unknown>, entry = "/search") {
       return render(
-        <MemoryRouter initialEntries={["/search"]}>
-          <SearchScreen nlExtract={nlExtract as never} helperService={helper as unknown as LocalIntelligenceService | undefined} />
+        <MemoryRouter initialEntries={[entry]}>
+          <SearchScreen nlExtract={nlExtract as never} />
           <LocationProbe />
         </MemoryRouter>,
       );
     }
 
-    it("applies an extracted patch to the ordinary editable controls", async () => {
+    it("applies an extracted patch to the ordinary filters without a button", async () => {
       const seen: string[] = [];
       fetchFeedMock.mockImplementation(async (filters) => ({
-        items: filters.q === "black wallet" && filters.category === "Bags & Wallets" && filters.status === "OPEN" && filters.dateFrom === "2026-09-18" && filters.dateTo === "2026-09-25"
+        items: filters.category === "Bags & Wallets" && filters.status === "OPEN" && filters.dateFrom === "2026-09-18" && filters.dateTo === "2026-09-25"
           ? [makePost("wallet-result", { title: "Black wallet result" })] : [], nextCursor: null, total: 1,
       }));
       renderWithNl(async (input: string) => {
@@ -384,10 +362,11 @@ describe("SearchScreen URL filters", () => {
       });
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-      fireEvent.change(screen.getByLabelText("Describe your search"), {
+      // No Smart search button exists: the settled phrase is the trigger.
+      expect(screen.queryByRole("button", { name: "Smart search" })).toBeNull();
+      fireEvent.change(screen.getByLabelText("Search posts"), {
         target: { value: "black wallet lost last week" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
 
       expect(await screen.findByText("Category: Bags & Wallets")).toBeTruthy();
       expect(await screen.findByText("Status: Open")).toBeTruthy();
@@ -396,7 +375,6 @@ describe("SearchScreen URL filters", () => {
       await waitFor(() =>
         expect(fetchFeedMock).toHaveBeenCalledWith(
           expect.objectContaining({
-            q: "black wallet",
             category: "Bags & Wallets",
             status: "OPEN",
             dateFrom: "2026-09-18",
@@ -407,311 +385,139 @@ describe("SearchScreen URL filters", () => {
       );
       expect(seen).toEqual(["black wallet lost last week"]);
       expect(await screen.findByText("Black wallet result")).toBeTruthy();
-      // The query lands in the editable search field, not a hidden filter.
-      expect((screen.getByLabelText("Search posts") as HTMLInputElement).value).toBe("black wallet");
+      // The reader's words are never rewritten under them, even when the
+      // extractor proposes a cleaner query.
+      expect((screen.getByLabelText("Search posts") as HTMLInputElement).value).toBe("black wallet lost last week");
     });
 
-    it("searches the raw phrase when no confident filters are extracted", async () => {
+    it("stays silent when no confident filters are extracted", async () => {
       renderWithNl(async () => ({}));
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "vague" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
+      fireEvent.change(screen.getByLabelText("Search posts"), { target: { value: "vague" } });
 
-      expect(await screen.findByText("No extra filters found — searching your words.")).toBeTruthy();
-      expect(screen.queryByText(/Category:/)).toBeNull();
-      await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/search?q=vague"));
-      await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ q: "vague" }), undefined));
-      const last = fetchFeedMock.mock.calls[fetchFeedMock.mock.calls.length - 1] as [
-        Record<string, unknown>,
-      ];
-      expect(last[0].category).toBeUndefined();
-      expect(last[0].q).toBe("vague");
-    });
-
-    it("names the failing boundary instead of claiming no filters were found", async () => {
-      // The defect S6 names: a failed engine used to arrive as an empty patch
-      // and become "No extra filters found", which claims a lookup that never
-      // happened. The failing stage is named, and the words are still searched.
-      renderWithNl(async () => ({ kind: "failed", failure: { stage: "runtime", code: "RUNTIME_ERROR" } }));
-      await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
-
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "vague" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-
-      expect(
-        await screen.findByText(
-          "Smart Search started but couldn't finish on this device. Searching your words normally.",
-        ),
-      ).toBeTruthy();
-      expect(screen.queryByText("No extra filters found — searching your words.")).toBeNull();
       await waitFor(() =>
         expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ q: "vague" }), undefined),
       );
-      expect(screen.getByTestId("location").textContent).not.toMatch(/category=|status=|dateFrom=|dateTo=/);
-    });
-
-    it("keeps the helper row when the failure can be repaired on this device", async () => {
-      const service = helperService();
-      renderWithNl(async () => ({
-        kind: "failed",
-        failure: { stage: "hash", code: "CHECKSUM_MISMATCH" },
-      }), service);
-      await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
-
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "wallet" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-
-      expect(
-        await screen.findByText(
-          "The search helper's files didn't pass their check. Searching your words normally.",
-        ),
-      ).toBeTruthy();
-      expect(await screen.findByRole("heading", { name: "Local search helper" })).toBeTruthy();
-    });
-
-    it("does not offer an install for a terminal device verdict", async () => {
-      renderWithNl(async () => ({
-        kind: "failed",
-        failure: { stage: "plugin", code: "UNSUPPORTED_DEVICE" },
-      }));
-      await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
-
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "wallet" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-
-      expect(await screen.findByText("Unavailable on this device.")).toBeTruthy();
+      // Automatic extraction has no button, note, or install offer to show.
+      expect(screen.queryByTestId("smart-search-note-row")).toBeNull();
+      expect(screen.queryByTestId("smart-search-offer-row")).toBeNull();
       expect(screen.queryByRole("heading", { name: "Local search helper" })).toBeNull();
-      expect(screen.queryByText("No extra filters found — searching your words.")).toBeNull();
+      expect(screen.queryByText(/Category:/)).toBeNull();
+      expect((screen.getByLabelText("Search posts") as HTMLInputElement).value).toBe("vague");
     });
 
-    it("offers explicit helper setup without leaving ordinary search", async () => {
-      nlHelperStateMock.mockResolvedValue("not-set-up");
-      const service = helperService();
-      renderWithNl(async () => ({}), service);
+    it("does not offer an install when extraction cannot run", async () => {
+      renderWithNl(async () => ({ kind: "failed", failure: { stage: "helper", code: "NOT_SET_UP" } }));
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "black wallet" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
+      fireEvent.change(screen.getByLabelText("Search posts"), { target: { value: "wallet" } });
 
-      expect(
-        await screen.findByText(
-          "Smart Search needs the local search helper. Searching your words normally.",
-        ),
-      ).toBeTruthy();
-      expect(screen.queryByText("No confident filters found — nothing changed.")).toBeNull();
+      await waitFor(() =>
+        expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ q: "wallet" }), undefined),
+      );
+      expect(screen.queryByRole("heading", { name: "Local search helper" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Not now" })).toBeNull();
+      expect(screen.queryByTestId("smart-search-note-row")).toBeNull();
+    });
 
-      fireEvent.click(await screen.findByRole("button", { name: "Not now" }));
-      await waitFor(() => expect(screen.queryByRole("button", { name: "Not now" })).toBeNull());
-      expect((screen.getByLabelText("Search posts") as HTMLInputElement).value).toBe("black wallet");
-      expect(document.activeElement).toBe(screen.getByLabelText("Search posts"));
-      // The fallback searched the reader's WORDS in the editable field; it
-      // wrote no filter into the URL that the reader never confirmed. The
-      // query itself is published after the debounce, so the URL is checked
-      // for FILTERS — not snapshotted, which would race the debounce.
-      expect(screen.getByTestId("location").textContent).not.toMatch(/category=|status=|sort=|dateFrom=|dateTo=/);
-      expect(service.download).not.toHaveBeenCalled();
-      // The words really are searched (the feed is asked for them), and the
-      // URL still carries no filter.
+    it("does not rewrite the field when the extractor proposes a cleaned query", async () => {
+      renderWithNl(async () => ({ query: "black wallet" }));
+      await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
+
+      fireEvent.change(screen.getByLabelText("Search posts"), { target: { value: "black wallet lost last week" } });
+
+      await waitFor(() =>
+        expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ q: "black wallet lost last week" }), undefined),
+      );
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect((screen.getByLabelText("Search posts") as HTMLInputElement).value).toBe("black wallet lost last week");
+    });
+
+    it("refuses an extracted date that is not a real day", async () => {
+      renderWithNl(async () => ({ query: "black wallet", dateFrom: "2026-02-30", dateTo: "2026-03-01" }));
+      await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
+
+      fireEvent.change(screen.getByLabelText("Search posts"), { target: { value: "black wallet" } });
+
       await waitFor(() =>
         expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ q: "black wallet" }), undefined),
       );
-      await waitFor(() => expect(screen.getByTestId("location").textContent).toMatch(/^\/search\?q=black/));
-      expect(screen.getByTestId("location").textContent).not.toMatch(/category=|status=|dateFrom=|dateTo=/);
+      // The whole range is refused: no half-applied date and no alert copy.
+      expect(screen.getByTestId("location").textContent).not.toContain("dateFrom=");
+      expect(screen.getByTestId("location").textContent).not.toContain("dateTo=");
+      expect(screen.queryByRole("button", { name: "Remove start date filter" })).toBeNull();
     });
 
-    it("keeps the offer and its transfer line while a new Smart Search works", async () => {
-      // The note comes and goes with every Smart Search. The offer must not go
-      // with it: a transfer in flight owns its progress line and its error
-      // line, and the reader must be able to see the bytes that move.
-      nlHelperStateMock.mockResolvedValue("not-set-up");
-      const service = helperService();
-      service.manager.statusOf = () => ({
-        modelId: NEEDLE_DESCRIPTOR.modelId,
-        download: "downloading",
-        residency: "unloaded",
-        downloadedBytes: 0,
-        checksumVerified: false,
-        updatedAt: "2026-10-21T00:00:00.000Z",
-      });
-      let call = 0;
+    it("ignores an answer for a phrase the reader has already replaced", async () => {
       let answer!: (value: Record<string, string>) => void;
-      renderWithNl(() => {
-        call += 1;
-        if (call === 1) return Promise.resolve({} as Record<string, string>);
-        return new Promise<Record<string, string>>(resolve => { answer = resolve; });
-      }, service);
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "wallet" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-      await screen.findByRole("heading", { name: "Local search helper" });
-
-      // A second Smart Search clears the note while it works.
-      // The heading mounts before lifecycle effects settle. Wait for the
-      // transfer's actual progress and the completed first request, not just
-      // the title, before starting the next request under batched worker load.
-      await screen.findByRole("progressbar", { name: "Local search helper download progress" });
-      await waitFor(() => {
-        expect(screen.queryByRole("button", { name: "Not now" })).toBeNull();
-        expect((screen.getByRole("button", { name: "Smart search" }) as HTMLButtonElement).disabled).toBe(false);
+      renderWithNl(() => new Promise(resolve => { answer = resolve; }));
+      fireEvent.change(screen.getByLabelText("Search posts"), {
+        target: { value: "old wallet" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-      await waitFor(() => expect(call).toBe(2));
-      await waitFor(() => expect(screen.queryByTestId("smart-search-note-row")).toBeNull());
-      // The offer is still there, with its transfer line.
-      expect(screen.getByTestId("smart-search-offer-row")).toBeTruthy();
-      expect(screen.getByRole("heading", { name: "Local search helper" })).toBeTruthy();
-      // And the way out is gone while the bytes move.
-      expect(screen.queryByRole("button", { name: "Not now" })).toBeNull();
-      answer({});
+      await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ q: "old wallet" }), undefined));
+
+      fireEvent.change(screen.getByLabelText("Search posts"), { target: { value: "new phone" } });
+      answer({ query: "old wallet", category: "Bags & Wallets" });
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect((screen.getByLabelText("Search posts") as HTMLInputElement).value).toBe("new phone");
+      expect(screen.queryByText("Category: Bags & Wallets")).toBeNull();
     });
 
-    it.each(["queued", "downloading", "verifying"] as const)(
-      "keeps the offer while the transfer is %s",
-      async (download) => {
-        // The device QUEUES a transfer before it downloads it and VERIFIES the
-        // bytes before it calls the model installed: all three states mean
-        // "the bytes are still moving".
-        nlHelperStateMock.mockResolvedValue("not-set-up");
-        const service = helperService();
-        service.manager.statusOf = () => ({
-          modelId: NEEDLE_DESCRIPTOR.modelId,
-          download,
-          residency: "unloaded",
-          downloadedBytes: 0,
-          checksumVerified: false,
-          updatedAt: "2026-10-21T00:00:00.000Z",
-        });
-        renderWithNl(async () => ({}), service);
-        fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "wallet" } });
-        fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-
-        await screen.findByRole("heading", { name: "Local search helper" });
-        // The way out is gone while the bytes move: dismissing the offer would
-        // strand a running transfer with no progress and no error line.
-        expect(screen.queryByRole("button", { name: "Not now" })).toBeNull();
-      },
-    );
-
-    it("starts a sized download only after the reader explicitly asks", async () => {
-      nlHelperStateMock.mockResolvedValue("not-set-up");
-      const service = helperService();
-      renderWithNl(async () => ({}), service);
-      expect(service.download).not.toHaveBeenCalled();
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "wallet" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-      const download = await screen.findByRole("button", { name: "Download · 35.3 MB" });
-      expect(service.download).not.toHaveBeenCalled();
-      fireEvent.click(download);
-      await waitFor(() => expect(service.download).toHaveBeenCalledExactlyOnceWith(NEEDLE_DESCRIPTOR.modelId));
-      expect((screen.getByLabelText("Search posts") as HTMLInputElement).value).toBe("wallet");
-    });
-
-    it("takes the way out away the moment the reader asks for the download", async () => {
-      // The device registers the transfer a TICK after the click. Until it
-      // does, the row is still busy — and offering "Not now" in that window
-      // would let the reader dismiss a download the device has already
-      // started, leaving it with no progress line and no error line.
-      nlHelperStateMock.mockResolvedValue("not-set-up");
-      const service = helperService();
-      service.download.mockImplementation(() => new Promise<void>(() => {}));
-      renderWithNl(async () => ({}), service);
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "wallet" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-      const download = await screen.findByRole("button", { name: "Download · 35.3 MB" });
-      expect(screen.getByRole("button", { name: "Not now" })).toBeTruthy();
-
-      fireEvent.click(download);
-      await waitFor(() => expect(screen.queryByRole("button", { name: "Not now" })).toBeNull());
-      // Nothing else hid it: the device never registered a transfer.
-      expect(service.manager.statusOf(NEEDLE_DESCRIPTOR.modelId)).toBeUndefined();
-    });
-
-    it("keeps ordinary search usable when the explicit download fails", async () => {
-      nlHelperStateMock.mockResolvedValue("not-set-up");
-      const service = helperService();
-      service.download.mockRejectedValue(new Error("out of space"));
-      renderWithNl(async () => ({}), service);
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "wallet" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-      fireEvent.click(await screen.findByRole("button", { name: "Download · 35.3 MB" }));
-      expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Free some space on this device, then try again.");
-      fireEvent.change(screen.getByLabelText("Search posts"), { target: { value: "phone" } });
-      await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ q: "phone" }), undefined));
-    });
-
-    it("offers nothing to install when filters were applied and the helper is missing", async () => {
-      nlHelperStateMock.mockResolvedValue("not-set-up");
-      renderWithNl(async () => ({ query: "black wallet" }));
+    it("ignores an answer that arrives after the screen is gone", async () => {
+      const errors: unknown[] = [];
+      const spy = vi.spyOn(console, "error").mockImplementation((...args) => { errors.push(args); });
+      let answer!: (value: Record<string, string>) => void;
+      const extract = vi.fn(() => new Promise(resolve => { answer = resolve as typeof answer; }));
+      const view = renderWithNl(extract);
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "black wallet" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
+      fireEvent.change(screen.getByLabelText("Search posts"), { target: { value: "black wallet" } });
+      // The settled phrase starts the extraction; the answer is still out
+      // when the reader leaves the screen.
+      await waitFor(() => expect(extract).toHaveBeenCalledWith("black wallet"));
+      const callsBeforeUnmount = fetchFeedMock.mock.calls.length;
+      view.unmount();
+      answer({ query: "black wallet", category: "Bags & Wallets" });
+      await new Promise(resolve => setTimeout(resolve, 0));
+      spy.mockRestore();
 
-      // Something happened, so there is nothing to explain and no action to
-      // offer — the missing-helper sentence is only ever for an empty patch.
-      expect(await screen.findByText(/Applied 1 smart filter/)).toBeTruthy();
-      expect(screen.queryByTestId("smart-search-manage-models")).toBeNull();
-      expect(screen.queryByText(/needs the on-device model/)).toBeNull();
+      expect(errors).toEqual([]);
+      expect(fetchFeedMock.mock.calls.length).toBe(callsBeforeUnmount);
     });
 
-    it("offers nothing to install when a set-up helper applied filters", async () => {
-      nlHelperStateMock.mockResolvedValue("ready");
-      renderWithNl(async () => ({ query: "black wallet" }));
+    it("runs once per settled phrase", async () => {
+      const extract = vi.fn(async () => ({}));
+      renderWithNl(extract);
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "black wallet" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-
-      expect(await screen.findByText(/Applied 1 smart filter/)).toBeTruthy();
-      expect(screen.queryByTestId("smart-search-manage-models")).toBeNull();
-      expect(screen.queryByText(/needs the on-device model/)).toBeNull();
+      fireEvent.change(screen.getByLabelText("Search posts"), { target: { value: "wallet" } });
+      await waitFor(() => expect(extract).toHaveBeenCalledWith("wallet"));
+      // A filter change is not a new phrase.
+      fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+      await chooseSelectOption(await screen.findByLabelText("Type"), "Found");
+      fireEvent.click(screen.getByRole("button", { name: "Done" }));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(extract).toHaveBeenCalledTimes(1);
     });
 
-    it("says on-device AI needs the Android app instead of offering an install that cannot happen", async () => {
-      nlHelperStateMock.mockResolvedValue("unsupported-platform");
-      renderWithNl(async () => ({}));
+    it("extracts again when the phrase is cleared and typed again", async () => {
+      const extract = vi.fn(async () => ({ category: "Electronics" }));
+      renderWithNl(extract);
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "black wallet" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
+      const field = () => screen.getByLabelText("Search posts");
+      fireEvent.change(field(), { target: { value: "phone" } });
+      await waitFor(() => expect(extract).toHaveBeenCalledTimes(1));
 
-      // The canonical Android-required line, not a promise of a future install.
-      expect(
-        await screen.findByText("On-device AI requires the Android app."),
-      ).toBeTruthy();
-      expect(screen.queryByText(/isn't set up on this device yet/)).toBeNull();
-      expect(screen.getByTestId("smart-search-note-row").querySelectorAll("a")).toHaveLength(0);
-      expect(screen.queryByTestId("smart-search-manage-models")).toBeNull();
-    });
+      fireEvent.change(field(), { target: { value: "" } });
+      await waitFor(() =>
+        expect(screen.getByTestId("location").textContent).not.toContain("q=phone"),
+      );
 
-    it("says the device cannot run it instead of offering an install that cannot help", async () => {
-      nlHelperStateMock.mockResolvedValue("unsupported-device");
-      renderWithNl(async () => ({}));
-      await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
-
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "black wallet" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-
-      // The canonical device-incompatible line, and no action: installing is
-      // not something the reader could do (REVIEW-CF040-RESIDUAL-R2 N1).
-      expect(await screen.findByText("Unavailable on this device.")).toBeTruthy();
-      expect(screen.queryByText(/isn't set up on this device yet/)).toBeNull();
-      expect(screen.getByTestId("smart-search-note-row").querySelectorAll("a")).toHaveLength(0);
-    });
-
-    it("makes no claim about the device when the state cannot be determined", async () => {
-      nlHelperStateMock.mockResolvedValue("unknown");
-      renderWithNl(async () => ({}));
-      await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
-
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "black wallet" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-
-      // `unknown` is the honest fallback: the ordinary sentence, no install
-      // offer, and nothing asserted about the helper's absence.
-      expect(await screen.findByText("No extra filters found — searching your words.")).toBeTruthy();
-      expect(screen.queryByText(/needs the on-device model/)).toBeNull();
-      expect(screen.queryByTestId("smart-search-manage-models")).toBeNull();
+      fireEvent.change(field(), { target: { value: "phone" } });
+      await waitFor(() => expect(extract).toHaveBeenCalledTimes(2));
     });
 
     it("uses ordinary search when extraction fails", async () => {
@@ -720,114 +526,14 @@ describe("SearchScreen URL filters", () => {
       });
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "wallet" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
+      fireEvent.change(screen.getByLabelText("Search posts"), { target: { value: "wallet" } });
 
-      expect(await screen.findByText("Smart Search couldn't add filters — searching your words.")).toBeTruthy();
       expect((screen.getByLabelText("Search posts") as HTMLInputElement).value).toBe("wallet");
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ q: "wallet" }), undefined));
+      expect(screen.queryByTestId("smart-search-note-row")).toBeNull();
     });
 
-    it("does not overwrite newer ordinary edits when extraction answers late", async () => {
-      let answer!: (value: Record<string, string>) => void;
-      renderWithNl(() => new Promise(resolve => { answer = resolve; }));
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "old wallet" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-      fireEvent.change(screen.getByLabelText("Search posts"), { target: { value: "new phone" } });
-      answer({ query: "old wallet", category: "Bags & Wallets" });
-      await waitFor(() => expect(screen.getByRole("button", { name: "Smart search" }).hasAttribute("disabled")).toBe(false));
-      expect((screen.getByLabelText("Search posts") as HTMLInputElement).value).toBe("new phone");
-      expect(screen.queryByText("Category: Bags & Wallets")).toBeNull();
-    });
-
-    it("keeps the reader's words when a FILTER changes while Smart Search works", async () => {
-      // A filter is not a new search. The answer must not be thrown away:
-      // the phrase is the reader's, and it is still what they asked for.
-      let answer!: (value: Record<string, string>) => void;
-      renderWithNl(() => new Promise(resolve => { answer = resolve; }));
-      await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
-
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "black wallet" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-      // The reader changes a filter while the answer is on its way.
-      fireEvent.click(screen.getByRole("radio", { name: "Found" }));
-      answer({ query: "black wallet", category: "Bags & Wallets" });
-
-      expect(
-        await screen.findByText(
-          "Your filter choices changed while Smart Search worked, so only your words were used.",
-        ),
-      ).toBeTruthy();
-      // The words are searched...
-      await waitFor(() => expect(screen.getByTestId("location").textContent).toContain("q=black"));
-      await waitFor(() =>
-        expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ q: "black wallet" }), undefined),
-      );
-      // ...and the reader's own filter choice is not overwritten.
-      expect(screen.queryByText("Category: Bags & Wallets")).toBeNull();
-      expect(screen.getByRole("radio", { name: "Found" }).getAttribute("aria-checked")).toBe("true");
-    });
-
-    it("refuses an extracted date that is not a real day", async () => {
-      renderWithNl(async () => ({ query: "black wallet", dateFrom: "2026-02-30" }));
-      await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
-
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "black wallet" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-
-      expect(
-        await screen.findByText(
-          "Smart Search had a date that isn't a real date, so only your words were used.",
-        ),
-      ).toBeTruthy();
-      // The impossible day never reaches the URL...
-      expect(screen.getByTestId("location").textContent).not.toContain("dateFrom=");
-      // ...and it is not counted as a filter the reader has on.
-      expect(screen.queryByRole("button", { name: "Remove start date filter" })).toBeNull();
-      await waitFor(() =>
-        expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ q: "black wallet" }), undefined),
-      );
-    });
-
-    it("ignores an answer that arrives after the screen is gone", async () => {
-      const errors: unknown[] = [];
-      const spy = vi.spyOn(console, "error").mockImplementation((...args) => { errors.push(args); });
-      let answer!: (value: Record<string, string>) => void;
-      const view = renderWithNl(() => new Promise(resolve => { answer = resolve; }));
-      await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
-
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "black wallet" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-      const callsBeforeUnmount = fetchFeedMock.mock.calls.length;
-      view.unmount();
-      answer({ query: "black wallet", category: "Bags & Wallets" });
-      await new Promise(resolve => setTimeout(resolve, 0));
-      spy.mockRestore();
-
-      expect(errors).toEqual([]);
-      // A late answer may not drive a search for a screen that is gone.
-      expect(fetchFeedMock.mock.calls.length).toBe(callsBeforeUnmount);
-    });
-
-    it("removing a date chip drops the filter", async () => {
-      renderWithNl(async () => ({ dateFrom: "2026-09-18", dateTo: "2026-09-25" }));
-      await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
-
-      fireEvent.change(screen.getByLabelText("Describe your search"), { target: { value: "last week" } });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-      expect(await screen.findByRole("button", { name: "Remove start date filter: 2026-09-18" })).toBeTruthy();
-
-      fetchFeedMock.mockClear();
-      fireEvent.click(screen.getByRole("button", { name: "Remove start date filter: 2026-09-18" }));
-      await waitFor(() =>
-        expect(screen.getByTestId("location").textContent).not.toContain("dateFrom="),
-      );
-      await waitFor(() => expect(screen.queryByRole("button", { name: "Remove start date filter: 2026-09-18" })).toBeNull());
-      // The end-date chip remains editable.
-      expect(screen.getByRole("button", { name: "Remove end date filter: 2026-09-25" })).toBeTruthy();
-    });
-
-    it("disables smart filters when no extractor is wired", async () => {
+    it("does nothing when no extractor is wired", async () => {
       render(
         <MemoryRouter initialEntries={["/search"]}>
           <SearchScreen nlExtract={undefined} />
@@ -835,60 +541,41 @@ describe("SearchScreen URL filters", () => {
         </MemoryRouter>,
       );
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
-      const button = screen.getByRole("button", { name: "Smart search" });
-      expect(button.getAttribute("disabled")).not.toBeNull();
-      expect(button.getAttribute("title")).toBe("Smart search unavailable");
+      expect(screen.queryByRole("button", { name: "Smart search" })).toBeNull();
+
+      fireEvent.change(screen.getByLabelText("Search posts"), { target: { value: "phone" } });
+      await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ q: "phone" }), undefined));
+      await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/search?q=phone"));
     });
 
     it("defaults a bare mount to the live transport", async () => {
       nlExtractLiveMock.mockReset();
-      nlExtractLiveMock.mockResolvedValue({ query: "black wallet" });
+      nlExtractLiveMock.mockResolvedValue({ category: "Electronics" });
       renderSearch();
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-      const button = screen.getByRole("button", { name: "Smart search" });
-      expect(button.getAttribute("title")).toBe("Apply smart filters");
-
-      fireEvent.change(screen.getByLabelText("Describe your search"), {
+      fireEvent.change(screen.getByLabelText("Search posts"), {
         target: { value: "black wallet lost last week" },
       });
-      expect(button.getAttribute("disabled")).toBeNull();
-      fireEvent.click(button);
 
       await waitFor(() =>
         expect(nlExtractLiveMock).toHaveBeenCalledWith("black wallet lost last week"),
       );
-      expect((screen.getByLabelText("Search posts") as HTMLInputElement).value).toBe("black wallet");
+      expect(await screen.findByText("Category: Electronics")).toBeTruthy();
     });
 
-    it("an explicit extractor still wins over the live default", async () => {
+    it("an explicit extractor wins over the live default", async () => {
       nlExtractLiveMock.mockReset();
-      renderWithNl(async () => ({ query: "explicit" }));
+      renderWithNl(async () => ({ category: "Electronics" }));
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-      fireEvent.change(screen.getByLabelText("Describe your search"), {
+      fireEvent.change(screen.getByLabelText("Search posts"), {
         target: { value: "explicit query" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
 
-      await waitFor(() =>
-        expect((screen.getByLabelText("Search posts") as HTMLInputElement).value).toBe("explicit"),
-      );
+      expect(await screen.findByText("Category: Electronics")).toBeTruthy();
       expect(nlExtractLiveMock).not.toHaveBeenCalled();
     });
-  });
-
-  it("gives the toolbar separation once the results scroll", async () => {
-    renderSearch();
-    await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
-    expect(screen.getByTestId("search-toolbar").className).not.toContain("shadow-sm");
-
-    const scroller = screen.getByTestId("search-results-scroller");
-    expect(scroller).toBeTruthy();
-    (scroller as HTMLElement).scrollTop = 100;
-    fireEvent.scroll(scroller as HTMLElement);
-
-    await waitFor(() => expect(screen.getByTestId("search-toolbar").className).toContain("shadow-sm"));
   });
 
   describe("Search S2: the explicit type and the place", () => {
@@ -925,16 +612,13 @@ describe("SearchScreen URL filters", () => {
       renderWithNl(async () => ({ query: "black wallet", postType: "LOST" }));
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-      fireEvent.change(screen.getByLabelText("Describe your search"), {
+      fireEvent.change(screen.getByLabelText("Search posts"), {
         target: { value: "black wallet lost" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
 
-      // The type lands in the ordinary control the reader already knows, and
-      // it is summarised as a chip that can be removed.
-      await waitFor(() =>
-        expect(screen.getByRole("radio", { name: "Lost" }).getAttribute("aria-checked")).toBe("true"),
-      );
+      // The type lands in the filter sheet the reader already uses for every
+      // other narrowing control, and it is summarised as a chip that can be
+      // removed. There is no button: the settled phrase is the trigger.
       expect(await screen.findByText("Type: Lost")).toBeTruthy();
       await waitFor(() =>
         expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ type: "LOST" }), undefined),
@@ -942,42 +626,21 @@ describe("SearchScreen URL filters", () => {
     });
 
     it("keeps the reader's own type when the extraction disagrees", async () => {
-      // The reader's own choice is their answer: Smart Search does not
-      // overrule it, and it says so.
+      // The reader's own choice is their answer: automatic extraction does
+      // not overrule it, and the chips show only the reader's type.
       renderWithNl(async () => ({ postType: "LOST" }), "/search?type=FOUND");
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-      fireEvent.change(screen.getByLabelText("Describe your search"), {
+      fireEvent.change(screen.getByLabelText("Search posts"), {
         target: { value: "black wallet lost" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
 
-      expect(
-        await screen.findByText(
-          "Your own filter choice was kept, so only your words were used.",
-        ),
-      ).toBeTruthy();
-      expect(screen.getByRole("radio", { name: "Found" }).getAttribute("aria-checked")).toBe("true");
-      expect(screen.queryByText("Type: Lost")).toBeNull();
-      expect(screen.getByText("Type: Found")).toBeTruthy();
       await waitFor(() =>
         expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ type: "FOUND" }), undefined),
       );
-    });
-
-    it("does not count a type the reader already had as newly applied", async () => {
-      renderWithNl(async () => ({ postType: "LOST" }), "/search?type=LOST");
-      await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
-
-      fireEvent.change(screen.getByLabelText("Describe your search"), {
-        target: { value: "black wallet lost" },
-      });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-
-      await waitFor(() => expect(screen.queryByTestId("smart-search-note-row")).not.toBeNull());
-      expect(screen.queryByText(/Applied \d+ smart filter/)).toBeNull();
-      // The reader's own type is still in force.
-      expect(screen.getByRole("radio", { name: "Lost" }).getAttribute("aria-checked")).toBe("true");
+      expect(screen.queryByText("Type: Lost")).toBeNull();
+      expect(screen.getByText("Type: Found")).toBeTruthy();
+      expect(screen.queryByTestId("smart-search-note-row")).toBeNull();
     });
 
     it("applies an extracted place and narrows the results to it", async () => {
@@ -985,10 +648,9 @@ describe("SearchScreen URL filters", () => {
       renderWithNl(async () => ({ query: "umbrella", place: "Gulshan" }));
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-      fireEvent.change(screen.getByLabelText("Describe your search"), {
+      fireEvent.change(screen.getByLabelText("Search posts"), {
         target: { value: "umbrella lost in Gulshan" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
 
       expect(await screen.findByText("Place: Gulshan")).toBeTruthy();
       // The place is applied ON THE DEVICE: the report that names it is
@@ -1005,18 +667,13 @@ describe("SearchScreen URL filters", () => {
       renderWithNl(async () => ({ place: "Gulshan" }), "/search?place=Chattogram");
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-      fireEvent.change(screen.getByLabelText("Describe your search"), {
+      fireEvent.change(screen.getByLabelText("Search posts"), {
         target: { value: "umbrella lost in Gulshan" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
 
-      expect(
-        await screen.findByText(
-          "Your own filter choice was kept, so only your words were used.",
-        ),
-      ).toBeTruthy();
-      expect(screen.getByText("Place: Chattogram")).toBeTruthy();
+      await waitFor(() => expect(screen.getByText("Place: Chattogram")).toBeTruthy());
       expect(screen.queryByText("Place: Gulshan")).toBeNull();
+      expect(screen.queryByTestId("smart-search-note-row")).toBeNull();
       // The reader's place still decides the results.
       await waitFor(() => expect(screen.getByText("Umbrella in Agrabad")).toBeTruthy());
       expect(screen.queryByText("Umbrella in Gulshan")).toBeNull();
@@ -1027,10 +684,9 @@ describe("SearchScreen URL filters", () => {
       renderWithNl(async () => ({ query: "umbrella", place: "Gulshan" }));
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-      fireEvent.change(screen.getByLabelText("Describe your search"), {
+      fireEvent.change(screen.getByLabelText("Search posts"), {
         target: { value: "umbrella lost in Gulshan" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
       expect(await screen.findByText("Place: Gulshan")).toBeTruthy();
 
       fireEvent.click(screen.getByRole("button", { name: "Remove place filter: Gulshan" }));
@@ -1060,24 +716,24 @@ describe("SearchScreen URL filters", () => {
       expect(nlExtractLiveMock).not.toHaveBeenCalled();
     });
 
-    it("tells the reader when a place was refused, and never applies it", async () => {
+    it("never applies a refused place, and says nothing", async () => {
       // The REAL path: the patch is built by the validator, so the refusal
       // is carried by the patch itself instead of vanishing inside it.
-      // A bare number is not a place name, and the reader is told.
+      // A bare number is not a place name. Automatic extraction is silent,
+      // so the refusal produces no chip, no param and no note.
       twoReports();
       renderWithNl(async () => toValidatedPatch({ query: "umbrella", place: "42" }));
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-      fireEvent.change(screen.getByLabelText("Describe your search"), {
+      fireEvent.change(screen.getByLabelText("Search posts"), {
         target: { value: "umbrella near 42" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
 
-      expect(
-        await screen.findByText(
-          "Smart Search had a place that isn't a place name, so only your words were used.",
-        ),
-      ).toBeTruthy();
+      // Ordinary search still runs on the reader's words.
+      await waitFor(() =>
+        expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ q: "umbrella near 42" }), undefined),
+      );
+      await new Promise(resolve => setTimeout(resolve, 0));
       // The refused place is never a filter: no chip, no URL param, and no
       // report dropped.
       expect(screen.queryByText(/^Place:/)).toBeNull();
@@ -1085,37 +741,36 @@ describe("SearchScreen URL filters", () => {
       expect(screen.getByText("Umbrella in Gulshan")).toBeTruthy();
       expect(screen.getByText("Umbrella in Agrabad")).toBeTruthy();
       expect(screen.queryByText(/loaded for /)).toBeNull();
-      // It is not counted as a filter the reader has on.
-      expect(screen.queryByText(/Applied \d+ smart filter/)).toBeNull();
+      expect(screen.queryByTestId("smart-search-note-row")).toBeNull();
     });
 
-    it("says what was applied when a place was refused beside another filter", async () => {
-      // "Only your words were used" would be a lie here: the category WAS
-      // applied. The note says both facts.
+    it("applies the usable filter and drops a refused place silently", async () => {
+      // The category is a real filter; the refused place is not. The reader
+      // sees the category chip and no place chip — the chips are the receipt.
       twoReports();
       renderWithNl(async () => toValidatedPatch({ query: "umbrella", category: "Bags & Wallets", place: "42" }));
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-      fireEvent.change(screen.getByLabelText("Describe your search"), {
+      fireEvent.change(screen.getByLabelText("Search posts"), {
         target: { value: "umbrella in a bag near 42" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
 
-      expect(
-        await screen.findByText(
-          "Smart Search had a place that isn't a place name, so it was not used. Applied 2 smart filters — review or remove them below.",
-        ),
-      ).toBeTruthy();
-      expect(screen.queryByText(/only your words were used/i)).toBeNull();
-      expect(screen.getByText("Category: Bags & Wallets")).toBeTruthy();
+      expect(await screen.findByText("Category: Bags & Wallets")).toBeTruthy();
       expect(screen.queryByText(/^Place:/)).toBeNull();
+      expect(screen.getByTestId("location").textContent).not.toContain("place=");
+      expect(screen.queryByTestId("smart-search-note-row")).toBeNull();
+      await waitFor(() =>
+        expect(fetchFeedMock).toHaveBeenCalledWith(
+          expect.objectContaining({ category: "Bags & Wallets" }),
+          undefined,
+        ),
+      );
     });
 
-    it("fails the whole extraction closed on a coordinate, so the reader gets the ordinary note", async () => {
+    it("fails the whole extraction closed on a coordinate, leaving ordinary search", async () => {
       // The op contract refuses a coordinate in ANY slot (R5), so the whole
-      // extraction is refused rather than half-applied — the ordinary search
-      // runs on the reader's words. The place-refusal note is NOT the path a
-      // coordinate takes.
+      // extraction is refused rather than half-applied — ordinary search runs
+      // on the reader's words, and nothing is announced.
       twoReports();
       renderWithNl(async (input: string) =>
         extractNlFilters(
@@ -1126,17 +781,20 @@ describe("SearchScreen URL filters", () => {
       );
       await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-      fireEvent.change(screen.getByLabelText("Describe your search"), {
+      fireEvent.change(screen.getByLabelText("Search posts"), {
         target: { value: "umbrella at 23.8103, 90.4125" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
 
-      expect(
-        await screen.findByText("No extra filters found — searching your words."),
-      ).toBeTruthy();
-      expect(screen.queryByText(/isn't a place name/)).toBeNull();
+      await waitFor(() =>
+        expect(fetchFeedMock).toHaveBeenCalledWith(
+          expect.objectContaining({ q: "umbrella at 23.8103, 90.4125" }),
+          undefined,
+        ),
+      );
+      await new Promise(resolve => setTimeout(resolve, 0));
       expect(screen.queryByText(/^Place:/)).toBeNull();
       expect(screen.getByTestId("location").textContent).not.toContain("place=");
+      expect(screen.queryByTestId("smart-search-note-row")).toBeNull();
     });
 
     it("never applies a coordinate the reader typed either", async () => {
@@ -1296,34 +954,6 @@ describe("SearchScreen URL filters", () => {
       expect(screen.getByText("Try another place.")).toBeTruthy();
       expect(screen.queryByText(/load more reports/i)).toBeNull();
       expect(screen.queryByRole("button", { name: "Show more reports" })).toBeNull();
-    });
-
-    it("disables the Download button while the device is busy with the request", async () => {
-      // T4: the device claims the model before its first await, so the row
-      // can disable the button instead of letting a second tap start a
-      // second transfer.
-      nlHelperStateMock.mockResolvedValue("not-set-up");
-      const service = helperService();
-      service.busy = () => true;
-      render(
-        <MemoryRouter initialEntries={["/search"]}>
-          <SearchScreen
-            nlExtract={async () => ({})}
-            helperService={service as unknown as LocalIntelligenceService}
-          />
-        </MemoryRouter>,
-      );
-      await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
-
-      fireEvent.change(screen.getByLabelText("Describe your search"), {
-        target: { value: "wallet" },
-      });
-      fireEvent.click(screen.getByRole("button", { name: "Smart search" }));
-
-      const download = await screen.findByRole("button", { name: "Download · 35.3 MB" });
-      expect(download.getAttribute("disabled")).not.toBeNull();
-      fireEvent.click(download);
-      expect(service.download).not.toHaveBeenCalled();
     });
   });
 });

@@ -6,6 +6,7 @@ import { clearFeedCaches } from "../hooks/feedCache";
 import { clearNearbySession, getNearbySession } from "../services/nearby";
 import { resetBackInterceptors, consumeBackIntercept } from "../components/backNavigation";
 import { resetModalLayers } from "../hooks/modalLayers";
+import { chooseSelectOption } from "../test-utils/select";
 
 const io = vi.hoisted(() => ({
   feed: vi.fn(), position: vi.fn(), permission: vi.fn(),
@@ -67,7 +68,7 @@ describe("adaptive report filters", () => {
     await waitFor(() => expect(io.feed).toHaveBeenCalledWith(expect.objectContaining({
       q: "wallet", type: "FOUND", category: "Electronics", dateFrom: "2026-10-01", nearLat: 23.781, nearLng: 90.408, radiusM: 25000,
     }), undefined));
-    fireEvent.change(within(dialog).getByLabelText("Distance"), { target: { value: "5" } });
+    await chooseSelectOption(within(dialog).getByLabelText("Distance"), "5 km");
     await waitFor(() => expect(io.feed.mock.calls.at(-1)?.[0].radiusM).toBe(5000));
     fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
     const chip = await screen.findByRole("button", { name: "Remove nearby filter: 5 km" });

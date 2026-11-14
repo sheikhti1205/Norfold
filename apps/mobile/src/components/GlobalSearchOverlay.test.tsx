@@ -122,7 +122,7 @@ describe("app-wide search", () => {
     const field = within(overlay).getByRole("searchbox");
     fireEvent.change(field, { target: { value: "zzzz" } });
     expect(await within(overlay).findByText("No results found")).toBeTruthy();
-    fireEvent.click(within(overlay).getByRole("button", { name: "Clear search" }));
+    fireEvent.click(within(overlay).getByRole("button", { name: "Start over" }));
     expect((field as HTMLInputElement).value).toBe("");
     expect(await within(overlay).findByText("Recent searches")).toBeTruthy();
   });

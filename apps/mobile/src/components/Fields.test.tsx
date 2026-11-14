@@ -128,7 +128,7 @@ describe("Fields motion", () => {
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
   });
 
-  it("keeps select fields label-associated and usable after the shell rework", () => {
+  it("opens the custom listbox and reports the picked value", async () => {
     const onChange = vi.fn();
     render(
       <SelectField
@@ -140,11 +140,12 @@ describe("Fields motion", () => {
         onChange={onChange}
       />,
     );
-    const select = screen.getByLabelText("Post type") as HTMLSelectElement;
-    expect(select.tagName).toBe("SELECT");
-    fireEvent.change(select, { target: { value: "FOUND" } });
-    expect(onChange).toHaveBeenCalled();
-    expect(screen.getByRole("option", { name: "Found" })).toBeTruthy();
+    const trigger = screen.getByLabelText("Post type");
+    expect(trigger.tagName).toBe("BUTTON");
+    fireEvent.click(trigger);
+    const option = await screen.findByRole("option", { name: "Found" });
+    fireEvent.click(option);
+    expect(onChange).toHaveBeenCalledWith("FOUND");
   });
 
   it("opens and lifts instantly — no tween — when reduced motion is forced", async () => {

@@ -756,11 +756,11 @@ describe("Home app-bar focus ring (index.css cascade)", () => {
 
   it("is not defeated by a higher-specificity override", () => {
     // Self-check of the evaluator against the exact counterexample from the
-    // review: `html .fb-home-search-field:has(...) { outline: 0 }` beat the
+    // review: `html .fb-search-field-pill:has(...) { outline: 0 }` beat the
     // old text-matching test while painting nothing. If a rule like this lands
     // in index.css, the two tests above fail.
     const defeated = ringOutcome(
-      `${css}\nhtml .fb-home-search-field:has(input:focus-visible) { outline: 0; }`,
+      `${css}\nhtml .fb-search-field-pill:has(input:focus-visible) { outline: 0; }`,
       HAS,
       "input",
     );

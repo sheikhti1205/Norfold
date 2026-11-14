@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import {
   CalendarDays,
   Check,
@@ -26,6 +26,8 @@ import { friendlyError } from "../utils/friendlyErrors";
 import { CATEGORY_OPTIONS } from "./CategoryField";
 import { POST_TYPE_OPTIONS, STATUS_OPTIONS, statusLabel } from "./Segmented";
 import { UserAvatar } from "./UserAvatar";
+import { PostLink } from "./PostNavigation";
+import { SearchField } from "./SearchField";
 import { closeGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
 import { motionDurations, motionEasings } from "./uiMotion";
 import "./GlobalSearchOverlay.css";
@@ -293,6 +295,10 @@ function SearchSurface() {
   const { user } = useAuth();
   const accountId = user?.id ?? null;
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // Opened from My reports, the one search surface searches that owner's
+  // reports: same pill filters, no people, and `/search` keeps the scope.
+  const myReports = pathname === "/my";
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<SearchFilters>(EMPTY_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -437,6 +443,7 @@ function SearchSurface() {
     setError(null);
     const reportRequest: Promise<PostItem[]> = accountId
       ? fetchFeed({
+        ...(myReports ? { userId: accountId } : {}),
         q: deferred,
         type: filters.type,
         category: filters.category,
@@ -446,7 +453,7 @@ function SearchSurface() {
         dateTo: range.to || undefined,
       }).then((page) => page.items.slice(0, 5))
       : Promise.resolve([]);
-    const peopleRequest: Promise<SearchedProfile[]> = accountId && deferred.length > 0
+    const peopleRequest: Promise<SearchedProfile[]> = accountId && !myReports && deferred.length > 0
       ? searchPeople(deferred, { limit: 5 }).then((page) => page.items)
       : Promise.resolve([]);
     Promise.allSettled([reportRequest, peopleRequest]).then(([reportResult, peopleResult]) => {
@@ -471,6 +478,7 @@ function SearchSurface() {
     range.from,
     range.to,
     shouldSearch,
+    myReports,
   ]);
 
   function remember(value: string) {
@@ -546,6 +554,7 @@ function SearchSurface() {
   function seeAll() {
     if (trimmed) remember(trimmed);
     const params = searchParamsFor(trimmed, filters);
+    if (myReports) params.set("scope", "mine");
     closeGlobalSearch();
     navigate(`/search${params.size ? `?${params}` : ""}`);
   }
@@ -555,6 +564,7 @@ function SearchSurface() {
     closeGlobalSearch();
   }
 
+  const searchLabel = myReports ? "Search your reports" : "Search reports, messages and people";
   const resultCount = reports.length + people.length;
   const showRecent = !shouldSearch;
   const showEmpty = Boolean(accountId) && shouldSearch && !loading && !error && resultCount === 0;
@@ -592,7 +602,7 @@ function SearchSurface() {
     <motion.div
       className="fb-search-overlay"
       role="search"
-      aria-label="Search reports, messages and people"
+      aria-label={searchLabel}
       style={phoneTop === null ? undefined : {
         top: phoneTop,
         maxHeight: `calc(100dvh - ${phoneTop}px - 12px)`,
@@ -603,19 +613,20 @@ function SearchSurface() {
       transition={{ duration: motionDurations.fast, ease: motionEasings.out }}
     >
       <div className="fb-search-bar">
-        <Search size={18} aria-hidden="true" className="fb-search-magnifier" />
-        <div className="fb-search-field">
-          <input
-            ref={input}
-            data-global-search-input
-            type="search"
-            value={query}
-            autoFocus
-            autoComplete="off"
-            aria-label="Search reports, messages and people"
-            aria-controls={shouldSearch ? resultsId : undefined}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
+        <SearchField
+          value={query}
+          onChange={setQuery}
+          ariaLabel={searchLabel}
+          placeholder={myReports ? "Search your reports…" : "Search reports, messages and people…"}
+          inputRef={input}
+          onClear={() => setQuery("")}
+          className="fb-search-overlay-field"
+          inputProps={{
+            "data-global-search-input": "",
+            autoFocus: true,
+            autoComplete: "off",
+            "aria-controls": shouldSearch ? resultsId : undefined,
+            onKeyDown: (event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
                 seeAll();
@@ -623,18 +634,9 @@ function SearchSurface() {
                 event.preventDefault();
                 document.getElementById(resultsId)?.querySelector<HTMLElement>("a")?.focus();
               }
-            }}
-          />
-          {/* A native placeholder cannot ellipsize in Chrome, and a phone was
-              cutting the prompt mid-word at the filter icon. A real element
-              elides it honestly at every width; the input keeps its aria-label
-              as the accessible name. */}
-          {query === "" && (
-            <div className="fb-search-placeholder" aria-hidden="true">
-              <span>Search reports, messages and people…</span>
-            </div>
-          )}
-        </div>
+            },
+          }}
+        />
         {/* Clearing filters is a real control next to the filter button, not
             an underlined link hiding at the end of the pill row. */}
         {activeCount > 0 && (
@@ -769,7 +771,7 @@ function SearchSurface() {
           </div>}
           {resultCount > 0 && <ul className="fb-search-list" id={resultsId} aria-label="Search results">
             {reports.map((report) => <li key={`report-${report.id}`}>
-              <Link to={`/posts/${report.id}`} className="fb-search-row" onClick={pickResult}>
+              <PostLink to={`/posts/${report.id}`} className="fb-search-row" onClick={pickResult}>
                 <Search size={18} aria-hidden="true" className="fb-search-row-icon" />
                 <span className="fb-search-row-copy">
                   <span className="fb-search-row-title">{report.title}</span>
@@ -777,7 +779,7 @@ function SearchSurface() {
                     {report.type === "LOST" ? "Lost" : "Found"} · {report.category} · {statusLabel(report.status)}
                   </span>
                 </span>
-              </Link>
+              </PostLink>
             </li>)}
             {people.map((person) => <li key={`person-${person.id}`}>
               <Link to={`/u/${encodeURIComponent(person.username)}`} className="fb-search-row" onClick={pickResult}>
@@ -791,7 +793,7 @@ function SearchSurface() {
           </ul>}
           {showEmpty && <div className="fb-search-note">
             <p><strong>No results found</strong><br />Try another search.</p>
-            <button type="button" className="fb-search-reset" onClick={clearAll}>Clear search</button>
+            <button type="button" className="fb-search-reset" onClick={clearAll}>Start over</button>
           </div>}
           {!accountId && <p className="fb-search-note">Sign in to search reports and people.</p>}
         </>}

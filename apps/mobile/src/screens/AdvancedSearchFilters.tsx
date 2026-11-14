@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { Button, Dialog, DialogTrigger, Heading } from "react-aria-components";
 import { useSearchParams } from "react-router";
 import { AnimatePresence, motion } from "framer-motion";
@@ -9,6 +9,7 @@ import { LayeredPopover } from "../components/overlayFoundation";
 import { COMPACT_MAX_PX, useViewportWidth } from "../components/responsive";
 import { CategoryField } from "../components/CategoryField";
 import { SelectField, TextField } from "../components/Fields";
+import { ReportDatePicker } from "../components/ReportDatePicker";
 import { STATUS_OPTIONS, statusLabel } from "../components/Segmented";
 import { useUrlParam } from "../hooks/useUrlParam";
 import { MAX_PLACE_CHARS, placeRejection, type PlaceRejection } from "../services/search/placeScope";
@@ -177,11 +178,10 @@ export function AdvancedSearchFilters({
     onToChange: (value: string) => void;
   };
   /**
-   * The LOST/FOUND type, shown as a chip next to the other active filters.
-   *
-   * The type CONTROL lives on the screen (the segmented control), so this
-   * is a state summary and a way out — the same shape as the date chips.
-   * Omitted (Home) leaves the type out of the sheet and the chips.
+   * The LOST/FOUND type. The CONTROL lives in this sheet with every other
+   * filter (owner order 2026-11-14: no permanent All/Lost/Found rail on the
+   * search page), so `value` is the live choice and `onChange` writes it to
+   * the same URL contract the old segmented control used.
    */
   postType?: {
     value: PostType | "";
@@ -212,6 +212,9 @@ export function AdvancedSearchFilters({
   // has no draft to offer still shows what is in force.
   const dateFromField = firstPresent(dateRange?.draftFrom, dateRange?.from);
   const dateToField = firstPresent(dateRange?.draftTo, dateRange?.to);
+  const uid = useId();
+  const dateFromId = `${uid}-date-from`;
+  const dateToId = `${uid}-date-to`;
   const active = [
     category ? { key: "category", label: `Category: ${category}`, clear: () => setCategory("") } : null,
     status ? { key: "status", label: `Status: ${statusLabel(status)}`, clear: () => setStatus("") } : null,
@@ -225,20 +228,50 @@ export function AdvancedSearchFilters({
   // chip on screen and no count beside it.
   const typeActive = Boolean(postType?.value);
   const activeCount = active.length + additionalFilters.length + (typeActive ? 1 : 0);
-  const description = dateRange ? "Changes apply immediately." : "Category, status and sort. Changes apply immediately.";
+  const description = "Results update as you choose.";
   const fields = <div className="fb-filter-fields">
+    {postType && <SelectField label="Type" placeholder="Any type" value={postType.value} onChange={value => postType.onChange(value as PostType | "")} options={[
+      { value: "LOST", label: "Lost" }, { value: "FOUND", label: "Found" },
+    ]} />}
     <CategoryField value={category} onChange={setCategory} />
-    <SelectField label="Status" value={status} onChange={e => setStatus(e.target.value as PostStatus | "")} options={STATUS_OPTIONS} />
+    <SelectField label="Status" placeholder="Any status" value={status} onChange={value => setStatus(value as PostStatus | "")} options={STATUS_OPTIONS} />
     {dateRange && <>
-      <TextField label="From date" type="date" style={{ paddingInline: 12 }} value={dateFromField} max={dateToField || undefined} onChange={e => dateRange.onFromChange(e.target.value)} />
-      <TextField label="To date" type="date" style={{ paddingInline: 12 }} value={dateToField} min={dateFromField || undefined} onChange={e => dateRange.onToChange(e.target.value)} />
+      {/* The app's ONE date control, not a native <input type="date">: the
+          browser renders its own square field, calendar glyph and mm/dd/yyyy
+          placeholder, which is the leftover-control look this sheet removes. */}
+      <div className="block min-w-0">
+        <label htmlFor={dateFromId} className="mb-1 block text-sm font-medium text-on-surface">From date</label>
+        <ReportDatePicker
+          id={dateFromId}
+          label="From date"
+          title="From date"
+          description="Show reports on or after this day."
+          placeholder="Any date"
+          value={dateFromField}
+          maxValue={dateToField || undefined}
+          onChange={dateRange.onFromChange}
+        />
+      </div>
+      <div className="block min-w-0">
+        <label htmlFor={dateToId} className="mb-1 block text-sm font-medium text-on-surface">To date</label>
+        <ReportDatePicker
+          id={dateToId}
+          label="To date"
+          title="To date"
+          description="Show reports on or before this day."
+          placeholder="Any date"
+          value={dateToField}
+          minValue={dateFromField || undefined}
+          onChange={dateRange.onToChange}
+        />
+      </div>
     </>}
     {place && <TextField label="Place" placeholder="e.g. Gulshan" value={place.value}
       hint="Matches place names in the loaded reports. More may match as you load them."
       error={placeRejection(place.value) ? PLACE_REJECTION_COPY[placeRejection(place.value)!] : undefined}
       onChange={e => place.onChange(e.target.value)} />}
     {additionalControls}
-    <SelectField label="Sort" value={sort} onChange={e => setSort(e.target.value as "newest" | "oldest")} options={[
+    <SelectField label="Sort" value={sort} onChange={value => setSort(value as "newest" | "oldest")} options={[
       { value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" },
     ]} />
     {activeCount > 0 && <button type="button" onClick={clearAll} className="fb-surface-button">Clear all filters</button>}

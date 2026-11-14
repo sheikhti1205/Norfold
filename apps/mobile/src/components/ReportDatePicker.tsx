@@ -15,6 +15,7 @@ import { motion, useAnimationControls } from "framer-motion";
 import { BottomSheet } from "./BottomSheet";
 import { Button } from "./Button";
 import { motionDurations, motionEasings, motionSprings, popoverVariants } from "./uiMotion";
+import "./ReportDatePicker.css";
 
 interface ReportDatePickerProps {
   value: string;
@@ -24,6 +25,19 @@ interface ReportDatePickerProps {
   expected?: "LOST" | "FOUND";
   disabled?: boolean;
   "aria-describedby"?: string;
+  /**
+   * Accessible name for a picker that is not the report's event date. The
+   * sheet title/description stay report-shaped unless overridden, so a filter
+   * field never announces "When was it lost/found?".
+   */
+  label?: string;
+  title?: string;
+  description?: string;
+  /** Empty-value copy. "Any date" reads as an absent filter bound. */
+  placeholder?: string;
+  /** Inclusive ISO-day bounds. Bounds are clamped to the past-only ceiling. */
+  minValue?: string;
+  maxValue?: string;
 }
 
 const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
@@ -79,12 +93,15 @@ const SWIPE_DOMINANCE = 1.3;
 /** Day selections arriving within this window after a swipe are accidental. */
 const SWIPE_SUPPRESS_MS = 400;
 
+function asCalendarDate(date: CalendarDate | CalendarDateTime | ZonedDateTime): CalendarDate {
+  return "day" in date && !("hour" in date) ? date : new CalendarDate(date.year, date.month, date.day);
+}
+
 function isFutureDate(date: CalendarDate | CalendarDateTime | ZonedDateTime): boolean {
   // The server rejects event_date > (now() at time zone 'utc')::date, so the
   // client must cap on the SAME UTC day or it can offer a doomed date.
   const now = today("UTC");
-  const calDate = "day" in date && !("hour" in date) ? date : new CalendarDate(date.year, date.month, date.day);
-  return calDate.compare(now) > 0;
+  return asCalendarDate(date).compare(now) > 0;
 }
 
 export function ReportDatePicker({
@@ -95,6 +112,12 @@ export function ReportDatePicker({
   id: providedId,
   expected,
   "aria-describedby": ariaDescribedBy,
+  label,
+  title,
+  description = "Select the date from the calendar below.",
+  placeholder = "Select date",
+  minValue,
+  maxValue,
 }: ReportDatePickerProps) {
   const id = useId();
   const triggerId = providedId || `${id}-trigger`;
@@ -139,7 +162,14 @@ export function ReportDatePicker({
     });
   };
 
-  const maxDate = today("UTC");
+  const todayDate = today("UTC");
+  const parsedMax = maxValue ? parseISO(maxValue) : null;
+  const maxDate = parsedMax && parsedMax.compare(todayDate) < 0 ? parsedMax : todayDate;
+  const minDate = minValue ? parseISO(minValue) : null;
+  const isBeforeMin = (date: CalendarDate | CalendarDateTime | ZonedDateTime): boolean =>
+    minDate !== null && asCalendarDate(date).compare(minDate) < 0;
+  const isOutOfRange = (date: CalendarDate | CalendarDateTime | ZonedDateTime): boolean =>
+    isFutureDate(date) || isBeforeMin(date);
 
   // What the header already shows (react-aria clamps its focused date to
   // maxValue, so the label must clamp the same way).
@@ -191,10 +221,12 @@ export function ReportDatePicker({
 
   /** Past-only field: a month after the current UTC month is a dead target. */
   const isMonthUnavailable = (year: number, month: number): boolean =>
-    year > maxDate.year || (year === maxDate.year && month > maxDate.month);
+    year > maxDate.year || (year === maxDate.year && month > maxDate.month) ||
+    (minDate !== null && (year < minDate.year || (year === minDate.year && month < minDate.month)));
 
+  const minYear = minDate?.year ?? MIN_JUMP_YEAR;
   const clampJumpYear = (year: number): number =>
-    Math.min(Math.max(year, MIN_JUMP_YEAR), maxDate.year);
+    Math.min(Math.max(year, minYear), maxDate.year);
 
   const stepJumpYear = (delta: number): void => {
     setJumpYear((year) => clampJumpYear(year + delta));
@@ -264,7 +296,7 @@ export function ReportDatePicker({
   };
 
   const closeSheet = (commit = false) => {
-    if (!disabled && commit && displayedValue && !isFutureDate(displayedValue)) {
+    if (!disabled && commit && displayedValue && !isOutOfRange(displayedValue)) {
       onChange(displayedValue.toString());
     }
     setIsJumpOpen(false);
@@ -291,8 +323,9 @@ export function ReportDatePicker({
   };
 
   const displayValue = value ? parseISO(value) : null;
-  const displayText = displayValue ? formatDisplay(displayValue) : "Select date";
+  const displayText = displayValue ? formatDisplay(displayValue) : placeholder;
   const hasError = Boolean(error);
+  const fieldLabel = label ?? `Date of event${expected ? ` (${expected.toLowerCase()})` : ""}`;
 
   const describedBy = [
     ariaDescribedBy,
@@ -312,8 +345,10 @@ export function ReportDatePicker({
         aria-expanded={isOpen && !disabled}
         aria-invalid={hasError || undefined}
         aria-describedby={describedBy}
-        aria-label={`Date of event${expected ? ` (${expected.toLowerCase()})` : ""}. ${displayText}`}
+        aria-label={`${fieldLabel}. ${displayText}`}
         className={`w-full min-h-[48px] flex items-center justify-between gap-3 rounded-m3-md border px-3.5 py-3 text-base text-on-surface bg-surface transition-colors ${
+          disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+        } ${
           hasError ? "border-error" : "border-outline-variant"
         } hover:border-on-surface focus:outline-none focus:ring-2 focus:ring-on-surface`}
         onClick={openSheet}
@@ -335,8 +370,8 @@ export function ReportDatePicker({
       <BottomSheet
         open={isOpen && !disabled}
         onClose={handleCancel}
-        title={`When was it ${expected?.toLowerCase() || "lost/found"}?`}
-        description="Select the date from the calendar below."
+        title={title ?? `When was it ${expected?.toLowerCase() || "lost/found"}?`}
+        description={description}
         height="large"
         dismissible={true}
         closeLabel="Close"
@@ -361,7 +396,8 @@ export function ReportDatePicker({
           focusedValue={focusedDate}
           onFocusChange={setFocusedDate}
           maxValue={maxDate}
-          isDateUnavailable={isFutureDate}
+          minValue={minDate ?? undefined}
+          isDateUnavailable={isOutOfRange}
           selectionMode="single"
           autoFocus
           className="w-full"
@@ -428,7 +464,7 @@ export function ReportDatePicker({
                 <button
                   type="button"
                   aria-label="Previous year"
-                  disabled={jumpYear <= MIN_JUMP_YEAR}
+                  disabled={jumpYear <= minYear}
                   onClick={() => stepJumpYear(-1)}
                   className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-on-surface"
                 >
@@ -502,7 +538,7 @@ export function ReportDatePicker({
                       "relative flex items-center justify-center h-10 w-full rounded-full transition-colors",
                       isOutsideVisibleRange && "text-on-surface-variant/30",
                       isUnavailable && "text-on-surface-variant/30 line-through",
-                      isDisabled && "opacity-50 cursor-not-allowed",
+                      isDisabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
                       isSelected && "text-surface font-medium",
                       isToday && !isSelected && "ring-2 ring-on-surface",
                       isToday && isSelected && "ring-2 ring-on-surface",
@@ -529,11 +565,12 @@ export function ReportDatePicker({
           </CalendarGrid>
           </div>
 
-          <div className="flex items-center justify-between mt-4 pt-4 border-t border-outline-variant">
+          <div className="fb-date-actions flex items-center justify-between mt-4 pt-4 border-t border-outline-variant">
             <Button
               type="button"
               variant="text"
               size="md"
+              disabled={isOutOfRange(today("UTC"))}
               onClick={() => {
                 // Server-aligned "today" (UTC) so the shortcut can never pick a
                 // date the validator rejects at the local/UTC day boundary.
@@ -552,7 +589,7 @@ export function ReportDatePicker({
                 <X size={16} aria-hidden className="mr-1" />
                 Cancel
               </Button>
-              <Button type="button" variant="primary" size="md" onClick={handleConfirm} disabled={!displayedValue || isFutureDate(displayedValue)}>
+              <Button type="button" variant="primary" size="md" onClick={handleConfirm} disabled={!displayedValue || isOutOfRange(displayedValue)}>
                 <Check size={16} aria-hidden className="mr-1" />
                 Confirm
               </Button>

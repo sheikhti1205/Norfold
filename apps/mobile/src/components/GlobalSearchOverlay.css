@@ -44,55 +44,12 @@
   align-items: center;
   gap: 8px;
   flex: none;
-  min-height: 46px;
-  padding: 0 4px 0 12px;
-  border: 1px solid var(--fb-outline-variant);
-  border-radius: 999px;
-  background: var(--fb-surface-container-low);
-  box-shadow: var(--shadow-md);
-  color: var(--fb-on-surface-variant);
-}
-/* The text-entry exception: no accent ring anywhere in the pill. Focus moves
-   only the border to on-surface, exactly as the design contract requires. */
-.fb-search-bar:focus-within { border-color: var(--fb-on-surface); }
-.fb-search-magnifier { flex: none; }
-.fb-search-field {
-  position: relative;
-  display: flex;
-  flex: 1;
-  min-width: 0;
-}
-/* The visible prompt is a real element because Chrome ignores text-overflow on
-   ::placeholder; this one elides at any width instead of clipping mid-word. */
-.fb-search-placeholder {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  overflow: hidden;
-  pointer-events: none;
-  color: var(--fb-on-surface-variant);
-  font-size: 0.9375rem;
-}
-.fb-search-placeholder > span {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.fb-search-bar input {
-  flex: 1;
-  min-width: 0;
-  min-height: 44px;
-  border: 0;
-  outline: none;
-  background: transparent;
+  padding: 2px 0;
   color: var(--fb-on-surface);
-  font: inherit;
-  font-size: 0.9375rem;
 }
-.fb-search-bar input::-webkit-search-cancel-button { display: none; }
+/* The overlay's field sits on a raised panel, so it keeps the panel's
+   elevation cue. Geometry stays the shared pill's. */
+.fb-search-overlay-field { box-shadow: var(--shadow-md); }
 
 .fb-search-iconbtn {
   display: inline-flex;
@@ -647,10 +604,11 @@
     translate: -50% 0;
     width: calc(100% - 16px);
   }
-  .fb-search-bar { min-height: 46px; }
-  .fb-search-pill { min-height: 36px; font-size: 0.75rem; }
-  .fb-search-clear-filters { min-height: 30px; padding: 0 9px; }
-  .fb-search-menu-option { min-height: 38px; }
+  .fb-search-bar { min-height: 48px; }
+  /* Search-surface controls keep the 44px tap target at phone width. */
+  .fb-search-pill { min-height: 44px; font-size: 0.8125rem; }
+  .fb-search-clear-filters { min-height: 44px; padding: 0 9px; }
+  .fb-search-menu-option { min-height: 44px; }
   .fb-search-date-trigger { min-height: 46px; }
   .fb-search-calendar { max-width: 300px; }
   .fb-search-date-grid { grid-template-columns: minmax(0, 1fr); }

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router";
+import { MemoryRouter, useLocation, useNavigate } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PostLink, PostNavigationProvider, postBackgroundLocation } from "./PostNavigation";
+import { PostLink, PostNavigationProvider, postBackgroundLocation, useReportViewerBackground } from "./PostNavigation";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 function Destination() {
@@ -16,6 +16,20 @@ function setup(viewerId: string | null = "reader", props = {}) {
   </PostNavigationProvider></MemoryRouter>);
 }
 function destination() { return JSON.parse(screen.getByTestId("destination").textContent!); }
+
+function BackgroundProbe({ viewerId }: { viewerId: string | null }) {
+  const location = useLocation();
+  const background = useReportViewerBackground(location, viewerId);
+  return <output data-testid="background">{JSON.stringify(background)}</output>;
+}
+function background() { return JSON.parse(screen.getByTestId("background").textContent!); }
+function PlainReportLink({ viewerId = "reader" }: { viewerId?: string | null }) {
+  const navigate = useNavigate();
+  return <>
+    <button type="button" onClick={() => navigate("/posts/p1#detail-activity")}>Open plainly</button>
+    <BackgroundProbe viewerId={viewerId} />
+  </>;
+}
 
 describe("contextual report navigation", () => {
   it("decides at activation time, preserving phone routes and wide-screen context after resize", () => {
@@ -53,5 +67,28 @@ describe("contextual report navigation", () => {
     expect(postBackgroundLocation({ ...base, state: { postBackground: { viewerId: "old-account", location: {
       pathname: "/search", search: "", hash: "", key: "source", state: null,
     } } } }, "reader")).toBeNull();
+  });
+});
+
+describe("report viewer background", () => {
+  it("floats a plainly-linked report over the page the reader came from", () => {
+    vi.stubGlobal("innerWidth", 1024);
+    render(<MemoryRouter initialEntries={["/notifications"]}><PlainReportLink /></MemoryRouter>);
+    expect(background()).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Open plainly" }));
+    expect(background()).toMatchObject({ pathname: "/notifications" });
+  });
+
+  it("keeps a cold report entry standalone", () => {
+    vi.stubGlobal("innerWidth", 1024);
+    render(<MemoryRouter initialEntries={["/posts/p1"]}><BackgroundProbe viewerId="reader" /></MemoryRouter>);
+    expect(background()).toBeNull();
+  });
+
+  it.each([[393, "reader"], [1024, null]] as const)("does not invent a background at %ipx for %s", (width, viewerId) => {
+    vi.stubGlobal("innerWidth", width);
+    render(<MemoryRouter initialEntries={["/notifications"]}><PlainReportLink viewerId={viewerId} /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Open plainly" }));
+    expect(background()).toBeNull();
   });
 });
