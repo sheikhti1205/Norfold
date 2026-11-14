@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type AriaAttributes } from "react";
 import { Link } from "react-router";
-import { createPortal, flushSync } from "react-dom";
+import { createPortal } from "react-dom";
 import { motion, type PanInfo } from "framer-motion";
 import { Heading } from "react-aria-components";
-import { Bell, Check, Mail, MoreVertical, RotateCcw, Settings, Trash2 } from "lucide-react";
+import { Bell, Check, CheckCheck, Flag, Inbox, Mail, MoreVertical, RotateCcw, Settings, Trash2 } from "lucide-react";
 import { BackButton } from "../components/BackButton";
-import { ActionMenu } from "../components/ActionMenu";
 import { useAuth } from "../auth";
 import { BlockedByViewerShield } from "../components/BlockedByViewerShield";
 import { UserAvatar } from "../components/UserAvatar";
 import { announce } from "../components/LiveRegion";
 import { ErrorView, InboxSkeleton, StateSwap } from "../components/uiPrimitives";
+import { PostLink } from "../components/PostNavigation";
 import {
   deleteNotifications,
   fetchNotifications,
@@ -29,13 +29,13 @@ import { formatTimestamp, timeAgo } from "../utils/dates";
 import { useFinePointer } from "../components/inputCapabilities";
 import { haptic } from "../utils/haptics";
 import { ReportSheet } from "../components/ReportSheet";
-import { copyReportLink, reportUrl } from "../utils/shareReport";
-import { parseReportLink } from "../utils/reportLinks";
 import "./Notifications.css";
 import "../components/NotificationInteractions.css";
 
 /** How long the undo affordance stays available after a delete. */
 export const UNDO_WINDOW_MS = 6000;
+/** Hover dwell before the floating row actions appear (right-click is instant). */
+export const ACTION_RAIL_HOVER_MS = 2000;
 /** Horizontal drag distance (px) that commits a swipe action. */
 export const SWIPE_THRESHOLD_PX = 72;
 
@@ -86,6 +86,8 @@ export function typeLabel(type: NotificationType): string {
       return "status update";
     case "MODERATION":
       return "review update";
+    case "ROLE":
+      return "access update";
     case "UNKNOWN":
       return "sent you an update";
     default:
@@ -137,24 +139,89 @@ export function Notifications({ preview = false, onNavigate }: NotificationsProp
 
 function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
   const finePointer = useFinePointer();
-  const [menuId, setMenuId] = useState<string | null>(null);
   const [reportId, setReportId] = useState<string | null>(null);
-  const [copyStatus, setCopyStatus] = useState("");
   const [card, setCard] = useState<{ item: NotificationItem; top: number; left: number } | null>(null);
+  const [rail, setRail] = useState<{ id: string; top: number; right: number } | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const railArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const railCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const railRow = useRef<HTMLElement | null>(null);
+  const railRef = useRef<HTMLDivElement | null>(null);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdStart = useRef<{ x: number; y: number } | null>(null);
   const held = useRef(false);
-  const menuRow = useRef<HTMLElement | null>(null);
   const cancelHold = () => { if (holdTimer.current) clearTimeout(holdTimer.current); holdTimer.current = null; holdStart.current = null; };
   const cancelHover = () => { if (hoverTimer.current) clearTimeout(hoverTimer.current); hoverTimer.current = null; setCard(null); };
-  useEffect(() => () => { if (hoverTimer.current) clearTimeout(hoverTimer.current); if (holdTimer.current) clearTimeout(holdTimer.current); }, []);
+  const closeRail = useCallback(() => {
+    if (railArmTimer.current) clearTimeout(railArmTimer.current);
+    railArmTimer.current = null;
+    if (railCloseTimer.current) clearTimeout(railCloseTimer.current);
+    railCloseTimer.current = null;
+    railRow.current = null;
+    setRail(null);
+  }, []);
+  /**
+   * The floating action pill. It is anchored to the row's trailing edge and
+   * grows LEFTWARD as labels expand, so the row itself never changes size.
+   * `right` is a distance from the viewport edge, which keeps the pill's
+   * trailing edge fixed while its width changes.
+   */
+  const openRail = useCallback((row: HTMLElement, id: string, focusFirst = false) => {
+    if (railArmTimer.current) clearTimeout(railArmTimer.current);
+    railArmTimer.current = null;
+    if (railCloseTimer.current) clearTimeout(railCloseTimer.current);
+    railCloseTimer.current = null;
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = null;
+    setCard(null);
+    const rect = row.getBoundingClientRect();
+    const right = Math.max(6, window.innerWidth - rect.right + 4);
+    const top = Math.min(Math.max(rect.top + rect.height / 2, 46), window.innerHeight - 46);
+    railRow.current = row;
+    setRail({ id, top, right });
+    if (focusFirst) requestAnimationFrame(() => railRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true }));
+  }, []);
+  const scheduleRailClose = useCallback(() => {
+    if (railCloseTimer.current) clearTimeout(railCloseTimer.current);
+    railCloseTimer.current = setTimeout(() => {
+      railCloseTimer.current = null;
+      railRow.current = null;
+      setRail(null);
+    }, 220);
+  }, []);
+  useEffect(() => () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+    if (railArmTimer.current) clearTimeout(railArmTimer.current);
+    if (railCloseTimer.current) clearTimeout(railCloseTimer.current);
+  }, []);
   useEffect(() => {
-    const close = () => { if (hoverTimer.current) clearTimeout(hoverTimer.current); setCard(null); };
+    if (!rail) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const row = railRow.current;
+      closeRail();
+      requestAnimationFrame(() => row?.querySelector<HTMLElement>(".fb-notification-body")?.focus({ preventScroll: true }));
+    };
+    const onPointerDown = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (railRef.current?.contains(target) || railRow.current?.contains(target)) return;
+      closeRail();
+    };
+    window.addEventListener("keydown", onKey, true);
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  }, [rail, closeRail]);
+  useEffect(() => {
+    const close = () => { if (hoverTimer.current) clearTimeout(hoverTimer.current); setCard(null); closeRail(); };
     window.addEventListener("scroll", close, true);
     window.addEventListener("resize", close);
     return () => { window.removeEventListener("scroll", close, true); window.removeEventListener("resize", close); };
-  }, []);
+  }, [closeRail]);
   const [view, setView] = useState<InboxView>("inbox");
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const [items, setItems] = useState<NotificationItem[] | null>(null);
@@ -399,6 +466,7 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
   const filteredItems = items?.filter((item) => filter === "all" || !item.read) ?? [];
   const sortedItems = [...filteredItems].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const visibleItems = preview ? sortedItems.slice(0, 8) : sortedItems;
+  const railItem = rail ? items?.find((item) => item.id === rail.id) ?? null : null;
   // The list owns the gesture guard: a pointer-down that starts inside a
   // shield never reaches the row's drag surface, so it can never commit a
   // swipe. The list is mounted only when there is something to show, so the
@@ -422,17 +490,25 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
         {preview ? <Heading slot="title" className="fb-notification-title">Notifications</Heading>
           : <h1 className="fb-notification-title">Notifications</h1>}
         <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">
-          {preview ? <ActionMenu label="Inbox actions" items={[
-            { id: "read-all", label: "Mark all read", disabled: unreadCount === 0, icon: <Check size={16} aria-hidden />,
-              onAction: () => void handleMarkAllRead() },
-          ]} /> : <>
+          {preview && unreadCount > 0 && (
+            <button
+              type="button"
+              onClick={() => void handleMarkAllRead()}
+              className="fb-notification-mark-all"
+            >
+              <CheckCheck size={16} aria-hidden />
+              <span>Mark all read</span>
+            </button>
+          )}
+          {!preview && <>
           {view === "inbox" && unreadCount > 0 && (
             <button
               type="button"
               onClick={() => void handleMarkAllRead()}
-              className="min-h-[44px] rounded-full px-3 text-sm font-medium text-on-surface underline"
+              className="fb-notification-mark-all"
             >
-              Mark all read
+              <CheckCheck size={16} aria-hidden />
+              <span>Mark all read</span>
             </button>
           )}
           <Link
@@ -451,8 +527,9 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
               clearUndo();
             }}
             aria-pressed={view === "deleted"}
-            className="min-h-[44px] rounded-full border border-outline-variant px-3 text-sm font-medium text-on-surface"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-outline-variant px-3 text-sm font-medium text-on-surface"
           >
+            {view === "inbox" ? <Trash2 size={15} aria-hidden /> : <Inbox size={15} aria-hidden />}
             {view === "inbox" ? "Deleted" : "Inbox"}
           </button>
           </>}
@@ -460,8 +537,15 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
       </header>
 
       {view === "inbox" && <div className="fb-notification-filters" role="group" aria-label="Filter notifications">
-        <button type="button" aria-pressed={filter === "all"} onClick={() => setFilter("all")}>All</button>
-        <button type="button" aria-pressed={filter === "unread"} onClick={() => setFilter("unread")}>Unread</button>
+        <button type="button" aria-pressed={filter === "all"} onClick={() => setFilter("all")}>
+          <Inbox size={15} aria-hidden />
+          <span>All</span>
+        </button>
+        <button type="button" aria-pressed={filter === "unread"} onClick={() => setFilter("unread")}>
+          <Mail size={15} aria-hidden />
+          <span>Unread</span>
+          {unreadCount > 0 && <span className="fb-notification-filter-count" aria-hidden="true">{unreadCount}</span>}
+        </button>
       </div>}
 
       {actionError && <p role="alert" className="py-2 text-sm text-error [overflow-wrap:anywhere]">{actionError}</p>}
@@ -506,7 +590,7 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
             const blocked = item.blockedActor === true;
             const route = notificationRoute(item);
             const body = item.postId ? (
-              <Link
+              <PostLink
                 to={route ?? `/posts/${item.postId}`}
                 onClick={() => {
                   if (!item.read) void handleMarkRead(item.id);
@@ -516,7 +600,7 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
                 className="fb-notification-body"
               >
                 <NotificationBody item={item} />
-              </Link>
+              </PostLink>
             ) : (
               <div className="fb-notification-body">
                 <NotificationBody item={item} />
@@ -540,22 +624,29 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
                   dragConstraints={{ left: 0, right: 0 }}
                   dragElastic={0.25}
                   data-testid="notification-row"
-                  onContextMenu={(event) => { event.preventDefault(); cancelHover(); menuRow.current = event.currentTarget; setMenuId(item.id); }}
-                  onKeyDown={(event) => { if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); menuRow.current = event.currentTarget; cancelHover(); setMenuId(item.id); } }}
+                  onContextMenu={(event) => { event.preventDefault(); openRail(event.currentTarget, item.id); }}
+                  onKeyDown={(event) => { if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); openRail(event.currentTarget, item.id, true); } }}
                   onPointerDown={(event) => {
                     if (event.pointerType !== "touch" || (event.target as Element).closest("button")) return;
                     cancelHold(); held.current = false;
                     holdStart.current = { x: event.clientX, y: event.clientY };
                     const row = event.currentTarget;
-                    holdTimer.current = setTimeout(() => { held.current = true; haptic("threshold"); menuRow.current = row; setMenuId(item.id); }, 450);
+                    holdTimer.current = setTimeout(() => { held.current = true; haptic("threshold"); openRail(row, item.id); }, 450);
                   }}
                   onPointerMove={(event) => { if (holdStart.current && Math.hypot(event.clientX - holdStart.current.x, event.clientY - holdStart.current.y) > 8) cancelHold(); }}
                   onPointerUp={cancelHold}
                   onPointerCancel={cancelHold}
                   onClickCapture={(event) => { if (held.current) { event.preventDefault(); event.stopPropagation(); held.current = false; } }}
                   onPointerEnter={(event) => {
-                    if (!finePointer || event.pointerType === "touch" || blocked || !item.postId || !item.thumbnailUrl || !["LIKE", "REACTION", "COMMENT", "MENTION", "STATUS"].includes(item.type)) return;
+                    if (!finePointer || event.pointerType === "touch") return;
                     const row = event.currentTarget;
+                    if (view === "inbox") {
+                      railArmTimer.current = setTimeout(() => {
+                        railArmTimer.current = null;
+                        openRail(row, item.id);
+                      }, ACTION_RAIL_HOVER_MS);
+                    }
+                    if (blocked || !item.postId || !item.thumbnailUrl || !["LIKE", "REACTION", "COMMENT", "MENTION", "STATUS"].includes(item.type)) return;
                     hoverTimer.current = setTimeout(() => {
                       const rect = row.getBoundingClientRect();
                       const height = item.type === "COMMENT" || item.type === "MENTION" ? 180 : 140;
@@ -563,7 +654,11 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
                       if (top >= 0) setCard({ item, top, left: Math.max(8, Math.min(rect.left, window.innerWidth - 328)) });
                     }, 200);
                   }}
-                  onPointerLeave={cancelHover}
+                  onPointerLeave={() => {
+                    cancelHover();
+                    if (railArmTimer.current) { clearTimeout(railArmTimer.current); railArmTimer.current = null; }
+                    if (rail?.id === item.id) scheduleRailClose();
+                  }}
                   onDragEnd={(_event, info: PanInfo) => {
                     if (preview || view !== "inbox") return;
                     const action = swipeActionFor(info.offset.x);
@@ -574,6 +669,7 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
                     }
                   }}
                   className="fb-notification-row"
+                  data-rail-open={rail?.id === item.id ? "true" : undefined}
                   data-unread={!item.read && view === "inbox" ? "true" : undefined}
                 >
                   {blocked ? (
@@ -600,25 +696,26 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
                       {body}
                     </BlockedByViewerShield>
                   ) : body}
-                  {finePointer && view === "inbox" && <div className="fb-notification-hover-actions" onPointerDown={(event) => event.stopPropagation()}>
-                    <button type="button" onClick={() => void (item.read ? handleMarkUnread(item.id) : handleMarkRead(item.id))}>{item.read ? "Mark as unread" : "Mark as read"}</button>
-                    <button type="button" onClick={() => void handleDelete([item.id])}>Remove</button>
-                  </div>}
-                  {/* Packet `08` §17: swipe is a shortcut, never the only route —
-                      the row keeps one compact overflow trigger instead of a
-                      permanent action bar. */}
-                  <NotificationOverflow
-                    item={item}
-                    view={view}
-                    onMarkRead={handleMarkRead}
-                    onMarkUnread={handleMarkUnread}
-                    onDelete={(ids) => { flushSync(() => setMenuId(null)); return handleDelete(ids); }}
-                    onRestore={handleRestore}
-                    onReport={setReportId}
-                    onCopyStatus={setCopyStatus}
-                    open={menuId === item.id}
-                    onOpenChange={(open) => { setMenuId(open ? item.id : null); if (!open && menuRow.current) { const row = menuRow.current; menuRow.current = null; requestAnimationFrame(() => row.querySelector<HTMLElement>(".fb-notification-body")?.focus()); } }}
-                  />
+                  {/* One trigger, one action surface. The three dots open the
+                      same floating icon rail as the two-second hover and the
+                      context-menu key, so there is never a second, older menu
+                      with different copy. */}
+                  <button
+                    type="button"
+                    className="fb-notification-overflow"
+                    aria-label={`More actions for ${item.blockedActor ? "a hidden notification" : `${item.actorUsername ?? "Norfold"} ${typeLabel(item.type)}`}`}
+                    // React's aria-haspopup union predates ARIA 1.2's "toolbar"
+                    // token; the attribute is valid HTML and announced correctly.
+                    {...({ "aria-haspopup": "toolbar" } as unknown as AriaAttributes)}
+                    aria-expanded={rail?.id === item.id}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      const row = event.currentTarget.closest<HTMLElement>(".fb-notification-row");
+                      if (row) openRail(row, item.id);
+                    }}
+                  >
+                    <MoreVertical size={18} aria-hidden />
+                  </button>
                 </motion.div>
               </li>
             );
@@ -627,13 +724,77 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
       )}
       </StateSwap>
       </div>
-      <div role="status">{copyStatus}</div>
       <ReportSheet open={reportId !== null} target={reportId ? { targetType: "POST", targetId: reportId } : null} onClose={() => setReportId(null)} />
 
       {card && createPortal(<div className="fb-notification-card" style={{ top: card.top, left: card.left }} aria-hidden="true">
         <img src={card.item.thumbnailUrl} alt="" width={72} height={72} />
         <div><strong>{card.item.postTitle}</strong>{(card.item.type === "COMMENT" || card.item.type === "MENTION") && card.item.preview && <p className="line-clamp-2">{card.item.preview.split(/(@[\w.]+)/g).map((part, index) => part.startsWith("@") ? <strong key={index}>{part}</strong> : part)}</p>}</div>
       </div>, document.body)}
+      {rail && railItem && createPortal(
+        <div
+          ref={railRef}
+          className="fb-notification-rail"
+          role="toolbar"
+          aria-label={`Actions for ${railItem.blockedActor ? "a hidden notification" : `${railItem.actorUsername ?? "Norfold"} ${typeLabel(railItem.type)}`}`}
+          style={{ top: rail.top, right: rail.right }}
+          onPointerEnter={() => { if (railCloseTimer.current) { clearTimeout(railCloseTimer.current); railCloseTimer.current = null; } }}
+          onPointerLeave={scheduleRailClose}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          {view === "deleted" ? (
+            <button
+              type="button"
+              className="fb-notification-rail-action"
+              aria-label="Restore to activity"
+              onClick={() => {
+                announce("Restored to activity");
+                closeRail();
+                void handleRestore([railItem.id]);
+              }}
+            >
+              <RotateCcw size={16} aria-hidden />
+              <span className="fb-notification-rail-label" aria-hidden="true">Restore</span>
+            </button>
+          ) : <>
+            <button
+              type="button"
+              className="fb-notification-rail-action"
+              aria-label={railItem.read ? "Mark as unread" : "Mark as read"}
+              onClick={() => {
+                announce(railItem.read ? "Marked as unread" : "Marked as read");
+                closeRail();
+                void (railItem.read ? handleMarkUnread(railItem.id) : handleMarkRead(railItem.id));
+              }}
+            >
+              {railItem.read ? <Mail size={16} aria-hidden /> : <Check size={16} aria-hidden />}
+              <span className="fb-notification-rail-label" aria-hidden="true">{railItem.read ? "Mark as unread" : "Mark as read"}</span>
+            </button>
+            <span className="fb-notification-rail-divider" aria-hidden="true" />
+            <button
+              type="button"
+              className="fb-notification-rail-action fb-notification-rail-danger"
+              aria-label="Remove from activity"
+              onClick={() => { closeRail(); void handleDelete([railItem.id]); }}
+            >
+              <Trash2 size={16} aria-hidden />
+              <span className="fb-notification-rail-label" aria-hidden="true">Remove</span>
+            </button>
+            {railItem.postId && !railItem.blockedActor && <>
+              <span className="fb-notification-rail-divider" aria-hidden="true" />
+              <button
+                type="button"
+                className="fb-notification-rail-action"
+                aria-label="Report"
+                onClick={() => { closeRail(); setReportId(railItem.postId); }}
+              >
+                <Flag size={16} aria-hidden />
+                <span className="fb-notification-rail-label" aria-hidden="true">Report</span>
+              </button>
+            </>}
+          </>}
+        </div>,
+        document.body,
+      )}
       {lastDeleted && view === "inbox" ? (
         <div
           role="status"
@@ -656,69 +817,6 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
   );
 }
 
-/**
- * Packet `08` §17 overflow. The row's actions used to sit in a permanent
- * bottom bar; that bar is gone (it was the heaviest thing on the row and it
- * dominated the list), but every action it held stays reachable by tap and by
- * keyboard — swipe alone is never the only route to an action.
- */
-function NotificationOverflow({
-  item,
-  view,
-  onMarkRead,
-  onMarkUnread,
-  onDelete,
-  onRestore,
-  onReport,
-  onCopyStatus,
-  open,
-  onOpenChange,
-}: {
-  item: NotificationItem;
-  view: "inbox" | "deleted";
-  onMarkRead: (id: string) => Promise<void>;
-  onMarkUnread: (id: string) => Promise<void>;
-  onDelete: (ids: readonly string[]) => Promise<void>;
-  onRestore: (ids: readonly string[]) => Promise<void>;
-  onReport: (id: string) => void;
-  onCopyStatus: (message: string) => void;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  // A shielded row must not name its actor: the row's content is hidden until
-  // the user asks for it, so the trigger's label stays neutral for a blocked
-  // actor (the block bit is direction-free — it never says who blocked whom).
-  const summary = item.blockedActor === true
-    ? "a hidden notification"
-    : `${item.actorUsername ?? "Norfold"} ${typeLabel(item.type)}`;
-  let shareable = false;
-  if (item.postId) {
-    try { shareable = parseReportLink(reportUrl(item.postId)) !== null; } catch { /* Share origin unavailable. */ }
-  }
-
-  return (
-    <div className="fb-notification-overflow" onPointerDown={(event) => event.stopPropagation()}>
-      <ActionMenu label={`More actions for ${summary}`} icon={<MoreVertical size={18} aria-hidden />} open={open} onOpenChange={onOpenChange}
-        items={view === "deleted" ? [
-          { id: "restore", label: "Restore", icon: <RotateCcw size={16} aria-hidden />, onAction: () => void onRestore([item.id]) },
-        ] : [
-          { id: "read", label: item.read ? "Mark as unread" : "Mark as read",
-            icon: item.read ? <Mail size={16} aria-hidden /> : <Check size={16} aria-hidden />,
-            onAction: () => {
-              announce(item.read ? "Marked as unread" : "Marked as read");
-              void (item.read ? onMarkUnread(item.id) : onMarkRead(item.id));
-            } },
-          { id: "delete", label: "Remove from activity", destructive: true, icon: <Trash2 size={16} aria-hidden />,
-            onAction: () => void onDelete([item.id]) },
-          ...(item.postId ? [{ id: "report", label: "Report", onAction: () => onReport(item.postId!) }] : []),
-          ...(item.postId && shareable ? [{ id: "copy", label: "Copy link", onAction: () => {
-            void copyReportLink(item.postId!).then((result) => onCopyStatus(result.status === "copied" ? "Link copied to clipboard." : "Could not copy the link.")).catch(() => onCopyStatus("Could not copy the link."));
-          } }] : []),
-        ]} />
-    </div>
-  );
-}
-
 // Exact legacy system templates only. Historical MATCHED rows predate current
 // mutual-consent enforcement: never retroactively claim both owners agreed.
 const LEGACY_STATUS_PREVIEWS = new Map([
@@ -737,7 +835,7 @@ export function NotificationBody({ item }: { item: NotificationItem }) {
       </span>
       <div className="fb-notification-copy">
         <p className="fb-notification-summary">
-          {item.type !== "STATUS" && item.type !== "MODERATION" && <><span className="font-semibold">{notificationActor(item)}</span>{" "}</>}
+          {item.type !== "STATUS" && item.type !== "MODERATION" && item.type !== "ROLE" && <><span className="font-semibold">{notificationActor(item)}</span>{" "}</>}
           <span className="text-on-surface-variant">
             {item.type === "REACTION" && reactionKindLabel(item.reactionKind)
               ? (
@@ -746,13 +844,13 @@ export function NotificationBody({ item }: { item: NotificationItem }) {
                   <span aria-hidden="true">{reactionEmojiForWire(item.reactionKind) ?? ""}</span>
                 </>
               )
-              : item.type === "STATUS" ? "Status update" : item.type === "MODERATION" ? "Review update" : typeLabel(item.type)}
+              : item.type === "STATUS" ? "Status update" : item.type === "MODERATION" ? "Review update" : item.type === "ROLE" ? "Access update" : typeLabel(item.type)}
           </span>
         </p>
       {item.postTitle ? (
         <p className="fb-notification-subject">{item.postTitle}</p>
       ) : null}
-      {preview && preview !== item.postTitle && ["COMMENT", "MENTION", "STATUS", "MODERATION"].includes(item.type) ? (
+      {preview && preview !== item.postTitle && ["COMMENT", "MENTION", "STATUS", "MODERATION", "ROLE"].includes(item.type) ? (
         <p className={`fb-notification-preview ${item.type === "MODERATION" || item.type === "STATUS" ? "" : "line-clamp-2"}`}>{preview}</p>
       ) : null}
       <div className="fb-notification-meta">

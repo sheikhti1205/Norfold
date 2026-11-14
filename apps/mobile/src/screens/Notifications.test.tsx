@@ -67,12 +67,12 @@ function deferred<T>() {
 }
 
 /**
- * Packet `08` §17: the row's actions live behind one overflow trigger, so a
- * test reaches them the way a user without a swipe does.
+ * Packet `08` §17: the row's actions live behind one overflow trigger, and
+ * every input opens the SAME floating icon rail — there is no second menu.
  */
 async function openRowActions(actor = "bob") {
   fireEvent.click(await screen.findByRole("button", { name: new RegExp(`more actions for ${actor}`, "i") }));
-  return screen.findByRole("menu");
+  return screen.findByRole("toolbar", { name: new RegExp(`actions for ${actor}`, "i") });
 }
 
 beforeEach(() => {
@@ -150,7 +150,7 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValueOnce([item()]).mockResolvedValueOnce([item({ actorUsername: "deleted actor" })]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^remove from activity$/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: "Deleted" }));
     // StateSwap keeps the outgoing inbox alive briefly for its exit motion.
@@ -168,7 +168,7 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValueOnce([item()]).mockResolvedValueOnce([item({ actorUsername: "account B actor" })]);
     const page = renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^remove from activity$/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: /undo/i }));
     authState.user = { id: "owner-b" };
@@ -185,7 +185,7 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValue([item()]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^remove from activity$/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: /undo/i }));
     await act(async () => { deletion.reject(new Error("network down")); });
@@ -199,10 +199,10 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValue([item()]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark as read/i }));
+    fireEvent.click(screen.getByRole("button", { name: /mark as read/i }));
     await waitFor(() => expect(markReadMock).toHaveBeenCalledTimes(1));
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark as unread/i }));
+    fireEvent.click(screen.getByRole("button", { name: /mark as unread/i }));
     expect(screen.getByLabelText(/unread/i)).toBeTruthy();
     // A later choice must reach the server after the earlier choice settles.
     expect(markUnreadMock).not.toHaveBeenCalled();
@@ -219,10 +219,10 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValue([item()]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark as read/i }));
+    fireEvent.click(screen.getByRole("button", { name: /mark as read/i }));
     await waitFor(() => expect(markReadMock).toHaveBeenCalledTimes(1));
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark as unread/i }));
+    fireEvent.click(screen.getByRole("button", { name: /mark as unread/i }));
     await act(async () => { reading.reject(new Error("network down")); });
     await waitFor(() => expect(markUnreadMock).toHaveBeenCalledTimes(1));
     await act(async () => { unreading.reject(new Error("network still down")); });
@@ -237,9 +237,9 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValue([item()]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark as read/i }));
+    fireEvent.click(screen.getByRole("button", { name: /mark as read/i }));
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark as unread/i }));
+    fireEvent.click(screen.getByRole("button", { name: /mark as unread/i }));
     await act(async () => { reading.resolve(1); });
     await waitFor(() => expect(markUnreadMock).toHaveBeenCalledTimes(1));
     await act(async () => { unreading.reject(new Error("network down")); });
@@ -254,9 +254,9 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValue([item()]);
     const page = renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark as read/i }));
+    fireEvent.click(screen.getByRole("button", { name: /mark as read/i }));
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^remove from activity$/i }));
     expect(deleteMock).not.toHaveBeenCalled();
     authState.user = { id: "owner-b" };
     fetchMock.mockResolvedValue([item({ actorUsername: "account B actor" })]);
@@ -273,7 +273,7 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValueOnce([item()]).mockResolvedValueOnce([]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^remove from activity$/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: /undo/i }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
@@ -289,7 +289,7 @@ describe("Notifications inbox", () => {
     fireEvent.click(await screen.findByRole("button", { name: /mark all read/i }));
     await waitFor(() => expect(markReadMock).toHaveBeenCalledTimes(1));
     await openRowActions("cara");
-    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^remove from activity$/i }));
     await waitFor(() => expect(screen.queryByText("cara")).toBeNull());
     await act(async () => { reading.reject(new Error("network down")); });
     await waitFor(() => expect(deleteMock).toHaveBeenCalledWith(["n2"]));
@@ -303,10 +303,10 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValue([item(), item({ id: "n2", actorUsername: "cara" })]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^remove from activity$/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledTimes(1));
     await openRowActions("cara");
-    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^remove from activity$/i }));
     await waitFor(() => expect(screen.queryByText("cara")).toBeNull());
     await act(async () => { deletion.reject(new Error("network down")); });
     await waitFor(() => expect(deleteMock).toHaveBeenCalledTimes(2));
@@ -321,7 +321,7 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValueOnce([item()]).mockResolvedValue([item({ read: true })]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark as read/i }));
+    fireEvent.click(screen.getByRole("button", { name: /mark as read/i }));
     await waitFor(() => expect(markReadMock).toHaveBeenCalledTimes(1));
     fireEvent(window, new Event("focus"));
     // Otherwise the pre-write server snapshot can overwrite optimism.
@@ -337,10 +337,10 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValueOnce([item()]).mockResolvedValue([item({ actorUsername: "fresh actor" })]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark as read/i }));
+    fireEvent.click(screen.getByRole("button", { name: /mark as read/i }));
     fireEvent(window, new Event("focus"));
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark as unread/i }));
+    fireEvent.click(screen.getByRole("button", { name: /mark as unread/i }));
     await act(async () => { reading.resolve(1); });
     await waitFor(() => expect(markUnreadMock).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("fresh actor")).toBeTruthy();
@@ -356,7 +356,7 @@ describe("Notifications inbox", () => {
     fireEvent(window, new Event("focus"));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark as read/i }));
+    fireEvent.click(screen.getByRole("button", { name: /mark as read/i }));
     await waitFor(() => expect(markReadMock).toHaveBeenCalledTimes(1));
     await act(async () => { stale.resolve([item({ actorUsername: "stale actor" })]); });
     expect(await screen.findByText("fresh actor")).toBeTruthy();
@@ -391,7 +391,7 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValue([item()]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^remove from activity$/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: /undo/i }));
     // Otherwise restore can commit first and the late delete wins on server.
@@ -407,7 +407,7 @@ describe("Notifications inbox", () => {
     fetchMock.mockResolvedValue([item()]);
     renderNotifications();
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^remove from activity$/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: /undo/i }));
     await waitFor(() => expect(restoreMock).toHaveBeenCalledTimes(1));
@@ -473,7 +473,7 @@ describe("Notifications inbox", () => {
     renderNotifications();
 
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^remove from activity$/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledWith(["n1"]));
     expect(await screen.findByText(/notification deleted/i)).toBeTruthy();
 
@@ -488,7 +488,7 @@ describe("Notifications inbox", () => {
     renderNotifications();
 
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /mark as unread/i }));
+    fireEvent.click(screen.getByRole("button", { name: /mark as unread/i }));
     await waitFor(() => expect(markUnreadMock).toHaveBeenCalledWith(["n1"]));
     expect(await screen.findByLabelText(/unread/i)).toBeTruthy();
   });
@@ -503,33 +503,38 @@ describe("Notifications inbox", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith({ deleted: true }));
 
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^restore$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^restore to activity$/i }));
     await waitFor(() => expect(restoreMock).toHaveBeenCalledWith(["n1"]));
   });
 
-  it("keeps the row free of a permanent action bar and drives the menu by keyboard", async () => {
+  it("keeps the row free of a permanent action bar and opens the same rail by keyboard", async () => {
     fetchMock.mockResolvedValue([item()]);
     renderNotifications();
     await screen.findByText("bob");
 
-    // §17: no permanent bottom bar — nothing to delete/mark until the menu opens.
-    expect(screen.queryByRole("menuitem", { name: /^remove from activity$/i })).toBeNull();
+    // §17: no permanent bottom bar — nothing to delete/mark until the rail opens.
+    expect(screen.queryByRole("button", { name: /^remove from activity$/i })).toBeNull();
     const trigger = screen.getByRole("button", { name: /more actions for bob/i });
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(trigger.getAttribute("aria-haspopup")).toBe("toolbar");
 
-    act(() => trigger.focus());
-    fireEvent.keyDown(trigger, { key: "ArrowDown" });
-    expect(trigger.getAttribute("aria-expanded")).toBe("true");
-    const menu = await screen.findByRole("menu");
-    const mark = within(menu).getByRole("menuitem", { name: /mark as read/i });
-    const del = within(menu).getByRole("menuitem", { name: /^remove from activity$/i });
-    // Focus enters the menu, arrows rove, Escape leaves and hands focus back.
+    // Shift+F10 on the row opens the same rail the three dots and the
+    // context-menu key open; there is no second, older menu.
+    const row = screen.getByTestId("notification-row");
+    fireEvent.keyDown(row, { key: "F10", shiftKey: true });
+    const rail = await screen.findByRole("toolbar", { name: /actions for bob/i });
+    const mark = within(rail).getByRole("button", { name: /mark as read/i });
+    const remove = within(rail).getByRole("button", { name: /^remove from activity$/i });
+    // Keyboard entry puts the first action in reach; one Escape leaves and
+    // hands focus back to the row's own link.
     await waitFor(() => expect(document.activeElement).toBe(mark));
-    fireEvent.keyDown(mark, { key: "ArrowDown" });
-    await waitFor(() => expect(document.activeElement).toBe(del));
-    fireEvent.keyDown(del, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
-    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("toolbar")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("link", { name: /bob.*lost wallet/i })));
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(remove.isConnected).toBe(false);
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("keeps a truthful empty state when the inbox is empty", async () => {
