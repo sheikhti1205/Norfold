@@ -1,0 +1,81 @@
+/* The app's one search field. Geometry and tokens live here so every surface
+   renders the same pill; the focus ring lives in index.css, where the
+   engine-generation cascade is tested. */
+.fb-search-field-pill {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  min-height: 48px;
+  padding-inline: 4px;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 999px;
+  background: var(--fb-surface-container-low);
+  color: var(--fb-on-surface);
+}
+.fb-search-field-pill:focus-within { border-color: var(--fb-on-surface); }
+
+/* The magnifier occupies the same 44px slot as Home's back arrow, so the text
+   starts at one x-position across every search surface. */
+.fb-search-field-leading {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-height: 44px;
+  color: var(--fb-on-surface-variant);
+}
+
+.fb-search-field-entry {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  /* At 320dp the prompt elides right up against the trailing action; this
+     keeps the ellipsis from touching the icon. */
+  padding-inline-end: 4px;
+}
+
+.fb-search-field-input {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.9375rem;
+}
+.fb-search-field-input::-webkit-search-cancel-button { display: none; }
+
+/* Chrome ignores text-overflow on ::placeholder. A real element elides the
+   prompt at 320dp instead of clipping a word in half. */
+.fb-search-field-placeholder {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: var(--fb-on-surface-variant);
+  font-size: 0.9375rem;
+  line-height: 44px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.fb-search-field-action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  color: var(--fb-on-surface-variant);
+  cursor: pointer;
+}
+.fb-search-field-action:hover { background: var(--fb-surface-container); color: var(--fb-on-surface); }
+.fb-search-field-action:disabled { cursor: not-allowed; opacity: 0.45; }
+.fb-search-field-action:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; }

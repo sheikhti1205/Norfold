@@ -63,8 +63,8 @@ export function SearchNearbyControls({ nearby }: { nearby: ReturnType<typeof use
     </button>
     {nearby.locating && <p role="status" className="text-xs text-on-surface-variant">Finding your approximate area…</p>}
     {nearby.error && <p role="alert" className="text-sm text-error">{nearby.error}</p>}
-    <SelectField label="Distance" value={String(nearby.radius)} onChange={e => {
-      const next = parseNearbyRadiusParam(e.target.value); if (next) nearby.setRadius(next);
+    <SelectField label="Distance" value={String(nearby.radius)} onChange={value => {
+      const next = parseNearbyRadiusParam(value); if (next) nearby.setRadius(next);
     }} options={NEARBY_RADIUS_OPTIONS_KM.map(km => ({ value: String(km), label: `${km} km` }))} />
     {nearby.active && <p role="status" className="text-xs text-on-surface-variant">Within {nearby.radius} km of your approximate area.</p>}
   </fieldset>;

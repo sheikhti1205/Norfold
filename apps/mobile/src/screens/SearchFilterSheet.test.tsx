@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { categoryValue, chooseCategory } from "../test-utils/reportCategory";
+import { selectValue } from "../test-utils/select";
 
 const { fetchFeedMock } = vi.hoisted(() => ({ fetchFeedMock: vi.fn() }));
 
@@ -39,23 +40,28 @@ describe("SearchScreen filter sheet (G14)", () => {
     clearFeedCaches();
   });
 
-  it("keeps query + type visible while advanced filters live in a sheet", async () => {
+  it("keeps the one query field visible and collects the type with the advanced filters", async () => {
     renderSearch();
     await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
 
-    // Visible row retained.
+    // Visible row retained: one search field, no type rail beside it.
     expect(screen.getByLabelText("Search posts")).toBeTruthy();
-    expect(screen.getByRole("radio", { name: "All" })).toBeTruthy();
-    expect(screen.getByRole("radio", { name: "Lost" })).toBeTruthy();
-    expect(screen.getByRole("radio", { name: "Found" })).toBeTruthy();
+    expect(screen.queryByRole("radio", { name: "All" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Lost" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Found" })).toBeNull();
 
     // Advanced filters are NOT on the visible row anymore.
     expect(screen.queryByLabelText("Category")).toBeNull();
     expect(screen.queryByLabelText("Status")).toBeNull();
     expect(screen.queryByLabelText("Sort")).toBeNull();
 
-    // A Filters launcher opens the sheet.
-    expect(screen.getByRole("button", { name: /filters/i })).toBeTruthy();
+    // A Filters launcher opens the sheet, which now owns the type too.
+    const trigger = screen.getByRole("button", { name: /filters/i });
+    fireEvent.click(trigger);
+    expect(await screen.findByLabelText("Type")).toBeTruthy();
+    expect(screen.getByLabelText("Category")).toBeTruthy();
+    expect(screen.getByLabelText("Status")).toBeTruthy();
+    expect(screen.getByLabelText("Sort")).toBeTruthy();
   });
 
   it("sheet edit round-trips to a removable chip + the URL", async () => {
@@ -121,7 +127,7 @@ describe("SearchScreen filter sheet (G14)", () => {
     // The sheet still reflects the deep-linked values when opened.
     fireEvent.click(screen.getByRole("button", { name: /^filters/i }));
     expect(categoryValue()).toBe("Electronics");
-    expect((screen.getByLabelText("Status") as HTMLSelectElement).value).toBe("OPEN");
-    expect((screen.getByLabelText("Sort") as HTMLSelectElement).value).toBe("oldest");
+    expect(selectValue("Status")).toBe("Open");
+    expect(selectValue("Sort")).toBe("Oldest first");
   });
 });

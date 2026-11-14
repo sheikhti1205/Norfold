@@ -1,12 +1,22 @@
-import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { Search, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Search } from "lucide-react";
 import { useSearchParams } from "react-router";
 import { useAuth } from "../auth";
 import type { PostType } from "@norfold/shared";
-import { Segmented } from "../components/Segmented";
+import { AppBar } from "../components/AppBar";
+import { SearchField } from "../components/SearchField";
 import { EmptyState } from "../components/PostCard";
 import { PostList } from "../components/PostList";
+import {
+  MASONRY_CANVAS_CLASS,
+  READABLE_COLUMN_CLASS,
+  feedDensity,
+  masonryColumns,
+  resolveFeedLayout,
+  useContentWidth,
+  useViewportWidth,
+} from "../components/responsive";
+import { useFeedLayoutPreference } from "../services/feedLayoutPreference";
 import { NewPostsPill } from "../components/NewPostsPill";
 import { PeopleSearch } from "../components/PeopleSearch";
 import { useFeed } from "../hooks/useFeed";
@@ -17,31 +27,8 @@ import { SearchNearbyControls, useSearchNearby } from "./SearchNearby";
 import "./SearchScreen.css";
 import type { NlFilterPatch } from "../services/search/nlFilters";
 import { cleanPlace, matchesPlace } from "../services/search/placeScope";
-import { nlExtractLive, nlHelperState, asNlExtractOutcome, type NlExtractOutcome } from "../services/liveNarrowTasks";
-import {
-  NL_EMPTY_PATCH_NOTE,
-  NL_SEARCH_FAILED_NOTE,
-  NL_SEARCH_FILTERS_CHANGED_NOTE,
-  NL_SEARCH_FILTERS_KEPT_NOTE,
-  localSearchFailureNote,
-  localSearchFailureOffersHelper,
-  nlSearchAppliedAndKeptNote,
-  nlSearchAppliedNote,
-  nlSearchRefusedNote,
-  type NlRefusal,
-} from "./nlHelperCopy";
-import { getApplicationAi } from "../services/ai/applicationAi";
-import { useLocalIntelligenceService, type LocalIntelligenceService } from "../services/ai/localIntelligenceView";
-import { LocalSearchHelperRow } from "./DownloadedModels";
-import {
-  fadeVariants,
-  motionDurations,
-  motionEasings,
-  motionSprings,
-  pressFeedback,
-  scaleInVariants,
-  shouldReduceMotion,
-} from "../components/uiMotion";
+import { nlExtractLive, asNlExtractOutcome, type NlExtractOutcome } from "../services/liveNarrowTasks";
+import { shouldReduceMotion } from "../components/uiMotion";
 
 type TypeFilter = PostType | "ALL";
 
@@ -53,82 +40,13 @@ function validDay(value: string): boolean {
   return !Number.isNaN(day.getTime()) && day.toISOString().slice(0, 10) === value;
 }
 
-/**
- * The download states in which the bytes are still moving.
- *
- * The device QUEUES a transfer before it downloads it, and it VERIFIES the
- * bytes before it calls the model installed. All three states are "the
- * transfer is running": a reader who clicks Download and is then offered "Not
- * now" would strand a running transfer with no progress and no error line.
- */
-const TRANSFER_IN_FLIGHT = new Set(["queued", "downloading", "verifying"]);
-
-/**
- * The explicit offer: the canonical helper lifecycle row plus a way out.
- *
- * A DOWNLOAD IN PROGRESS KEEPS THE OFFER ON SCREEN. The transfer belongs to
- * the device, not to this offer: unmounting the row while the bytes move
- * would leave a running download with no progress and no error line. So
- * "Not now" is not offered while a transfer runs, and the screen is told that
- * a transfer is running so a new Smart Search cannot hide the offer either.
- */
-function SearchHelperSetup({ service = getApplicationAi(), onDismiss, onTransferChange }: {
-  service?: LocalIntelligenceService;
-  onDismiss: () => void;
-  onTransferChange?: (running: boolean) => void;
-}) {
-  const { helper, phase } = useLocalIntelligenceService(service);
-  const modelId = helper?.modelId;
-  // The row's own operation counts as a running transfer. The device registers
-  // the transfer a tick AFTER the reader asks for it, so the status alone
-  // leaves a window in which a click would still be offered a way out — and
-  // taking that way out would strand a download the device has already
-  // started. The row knows it is busy from the click itself.
-  const [rowBusy, setRowBusy] = useState(false);
-  const rowBusyRef = useRef(false);
-  const handleRowBusy = useCallback((busy: boolean) => {
-    rowBusyRef.current = busy;
-    setRowBusy(busy);
-  }, []);
-  const statusInFlight = Boolean(
-    modelId && TRANSFER_IN_FLIGHT.has(service.manager.statusOf(modelId)?.download ?? ""),
-  );
-  const transferRunning = statusInFlight || rowBusy;
-  useEffect(() => {
-    onTransferChange?.(transferRunning);
-    return () => {
-      // The transfer belongs to the DEVICE, not to this offer. If the offer
-      // unmounts while the bytes are still moving, the screen must still know
-      // that a transfer runs — otherwise a later Smart Search would hide the
-      // offer and strand it.
-      const stillRunning = Boolean(
-        modelId && TRANSFER_IN_FLIGHT.has(service.manager.statusOf(modelId)?.download ?? ""),
-      );
-      onTransferChange?.(stillRunning || rowBusyRef.current);
-    };
-  }, [onTransferChange, transferRunning, modelId, service]);
-  return <div className="w-full min-w-0">
-    <LocalSearchHelperRow
-      service={service}
-      descriptor={helper}
-      phase={phase}
-      description={null}
-      onBusyChange={handleRowBusy}
-    />
-    {!transferRunning && (
-      <button type="button" onClick={onDismiss} className="min-h-[44px] px-2 text-sm font-medium text-on-surface underline">Not now</button>
-    )}
-  </div>;
-}
-
 interface SearchScreenProps {
   /** Injected NL extractor (test fakes or a live extractNlFilters composer).
-   * Absent means the live transport. Explicit undefined keeps smart search
-   * unavailable: the button stays disabled and nothing is ever guessed.
-   * A bare patch means the extractor ran; only a tagged outcome can say it
-   * never did. */
+   * Absent means the live transport. Explicit undefined means no extractor, so
+   * ordinary search runs alone and nothing is ever guessed. */
   nlExtract?: (input: string) => Promise<NlFilterPatch | NlExtractOutcome>;
-  helperService?: LocalIntelligenceService;
+  /** Feed restriction for a search opened from My reports (`scope=mine`). */
+  mineAccountId?: string;
 }
 
 export function SearchScreen(props: SearchScreenProps) {
@@ -137,25 +55,39 @@ export function SearchScreen(props: SearchScreenProps) {
 }
 
 function AccountSearchScreen(props: SearchScreenProps) {
-  const [params, setParams] = useSearchParams();
+  const { user } = useAuth();
+  const [params] = useSearchParams();
   const people = params.get("scope") === "people";
+  // Opened from My reports, search is scoped to that owner's reports.
+  const mine = params.get("scope") === "mine";
   const [peopleQuery, setPeopleQuery] = useUrlParam("people");
+  // Connect and Search are different places, not two tabs of one screen:
+  // Connect is the people directory, Search is the report search. Rendering
+  // ReportSearch under Connect mounted a second, unreachable search screen and
+  // offered a Reports tab on a page that is about people.
+  if (people) return <ConnectScreen query={peopleQuery} onQueryChange={setPeopleQuery} />;
   return <div className="fb-search-screen">
-    <div role="group" aria-label="Search type" className="flex shrink-0 gap-3 border-b border-outline-variant px-3">
-      {(["Reports", "People"] as const).map(label => <button key={label} type="button" aria-pressed={people === (label === "People")}
-        className={`min-h-[44px] border-b-2 px-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${people === (label === "People") ? "border-primary text-on-surface" : "border-transparent text-on-surface-variant"}`}
-        onClick={() => setParams(previous => { const next = new URLSearchParams(previous); if (label === "People") next.set("scope", "people"); else next.delete("scope"); return next; }, { replace: true })}>{label}</button>)}
+    <ReportSearch {...props} mineAccountId={mine ? user?.id : undefined} />
+  </div>;
+}
+
+function ConnectScreen({ query, onQueryChange }: { query: string; onQueryChange: (value: string) => void }) {
+  return <div className="fb-search-screen">
+    <AppBar title="Connect" backTo="/" backLabel="Back" utilities={false} />
+    <div className="fb-connect-canvas px-3 pt-2">
+      <SearchField
+        value={query}
+        onChange={onQueryChange}
+        ariaLabel="Search people"
+        placeholder="Name or @username"
+        onClear={() => onQueryChange("")}
+      />
     </div>
-    <div hidden={people} className={people ? "hidden" : "min-h-0 flex-1"}><ReportSearch {...props} /></div>
-    {people && <section aria-label="People search" className="flex min-h-0 flex-1 flex-col">
-      <header className="shrink-0 px-4 pt-4"><h1 className="mb-3 text-lg font-semibold">Search people</h1>
-        <label className="block text-sm font-medium">Username or name
-          <input type="search" aria-label="Search people" value={peopleQuery} onChange={event => setPeopleQuery(event.target.value)}
-            className="mt-2 w-full rounded-m3-sm border border-outline-variant bg-surface px-3 py-3 text-sm focus:border-on-surface focus:outline focus:outline-2 focus:outline-primary" />
-        </label>
-      </header>
-      <div className="min-h-0 flex-1 overflow-y-auto"><PeopleSearch query={peopleQuery} /></div>
-    </section>}
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="fb-connect-canvas px-4">
+        <PeopleSearch query={query} />
+      </div>
+    </div>
   </div>;
 }
 
@@ -164,6 +96,7 @@ function ReportSearch(props: SearchScreenProps) {
   // An explicit prop — including explicit undefined — always wins so tests
   // can inject fakes or pin the disabled copy.
   const nlExtract = "nlExtract" in props ? props.nlExtract : nlExtractLive;
+  const mineAccountId = props.mineAccountId;
   const { tapCount } = useTabTap();
   // Imperative travel (scroll-to-top) cannot see MotionConfig — collapse to
   // instant when the OS prefers reduced motion. Read live (not the cached
@@ -227,228 +160,89 @@ function ReportSearch(props: SearchScreenProps) {
       return next;
     }, { replace: true });
   }, [clearingFilters, setSearchParams]);
-  // NL smart search: extracted values land in the ordinary editable
-  // controls above (query field, filter chips), never applied blindly.
-  const [nlInput, setNlInput] = useState("");
-  const [nlBusy, setNlBusy] = useState(false);
-  const [nlNote, setNlNote] = useState<string | null>(null);
-  // True only when an empty result means "the helper isn't set up here", not
-  // "the helper looked and found nothing". Those two are different truths and
-  // must not share copy (CF-040 F6).
-  const [nlHelperMissing, setNlHelperMissing] = useState(false);
-  // True while the helper's transfer is running. The offer stays on screen
-  // then: a running download with no progress line and no error line is a
-  // download the reader cannot see.
-  // The transfer state lives in a REF, not in state. The offer reports it, and
-  // the decision "may I hide the offer now?" is taken inside an event
-  // handler: a state value would be one render behind the offer's report, and
-  // a stale "no transfer" would hide a running download with no progress line
-  // and no error line. A ref is read at the moment of the decision.
-  const helperTransferRef = useRef(false);
-  const handleTransferChange = useCallback((running: boolean) => {
-    helperTransferRef.current = running;
-  }, []);
-  // A delayed convenience layer must never replace a newer ordinary search —
-  // but only a NEWER SEARCH makes an answer stale. Changing a FILTER while
-  // Smart Search works is not a new search: the words are still the reader's
-  // words, so the answer may not be thrown away and the phrase may not be
-  // lost. The extracted FILTERS are simply not applied over a filter the
-  // reader changed in the meantime.
+  // Smart filters are automatic. Extraction reads the SAME words the reader
+  // typed in the one search field, runs once per settled phrase, and writes
+  // confident values into the ordinary editable filters. The reader's own
+  // choices always win; the field's words are never rewritten under them.
   const ordinaryQueryRef = useRef(query);
   ordinaryQueryRef.current = query;
   const filterContext = JSON.stringify([type, place, advanced.category, advanced.status, advanced.sort, dateFrom, dateTo, nearby.feedFilters]);
   const filterContextRef = useRef(filterContext);
   filterContextRef.current = filterContext;
   const nlRequest = useRef(0);
+  const lastExtractedPhrase = useRef("");
   useEffect(() => () => { nlRequest.current += 1; }, []);
 
-  async function applyNlFilters() {
-    const text = nlInput.trim();
-    if (nlExtract === undefined || nlBusy || text === "") return;
+  async function applyExtractedFilters(text: string) {
+    if (nlExtract === undefined || text === "") return;
     const request = ++nlRequest.current;
-    const queryAtRequest = ordinaryQueryRef.current;
     const filtersAtRequest = filterContextRef.current;
-    // Alive means: this answer still belongs to the search the reader is
-    // looking at. A newer ordinary query is a newer search, so that answer is
-    // dropped; unmounting drops it too.
-    const alive = () => request === nlRequest.current && ordinaryQueryRef.current === queryAtRequest;
-    setNlBusy(true);
-    setNlNote(null);
-    // The offer is only hidden when nothing is downloading: a transfer in
-    // flight has to keep its progress line and its error line.
-    if (!helperTransferRef.current) setNlHelperMissing(false);
+    // Alive means: this answer still belongs to the words in the field. A
+    // newer phrase, a changed field or an unmount drops the answer.
+    const alive = () => request === nlRequest.current && ordinaryQueryRef.current.trim() === text;
     try {
       const outcome = asNlExtractOutcome(await nlExtract(text));
-      if (!alive()) return;
-      // The helper FAILED, so it never produced an answer. Naming the first
-      // failing boundary is the only honest report: "no confident filters"
-      // would claim an engine ran that did not. The words are still searched,
-      // and the helper row stays available wherever a retry or repair can
-      // actually change the outcome.
-      if (outcome.kind === "failed") {
-        setQuery(text);
-        setNlNote(localSearchFailureNote(outcome.failure));
-        if (!helperTransferRef.current) {
-          setNlHelperMissing(localSearchFailureOffersHelper(outcome.failure));
-        }
-        return;
-      }
+      if (!alive() || outcome.kind === "failed") return;
       const patch = outcome.patch;
-      // A refused place is not a filter: it never counts as one, and it never
-      // makes an empty patch look like a patch with filters in it.
-      const hasFilters = Object.entries(patch).some(([key, value]) =>
-        key !== "placeRefused" && value !== undefined && value !== "");
-      const helperState = hasFilters ? "ready" : await nlHelperState();
-      if (!alive()) return;
-      // The reader changed the filters while this answer was coming: its
-      // filters are not applied over the reader's own choice, but the words
-      // still are.
-      const filtersChanged = filterContextRef.current !== filtersAtRequest;
-      // Search always has a useful text query even when extraction is silent.
-      setQuery(patch.query?.trim() || text);
-      let applied = 0;
-      // The filters applied BESIDE the reader's words. The words are
-      // always searched, so "only your words were used" is true exactly
-      // when this count is zero.
-      let appliedBesidesWords = 0;
-      let kept = 0;
-      // What the extractor offered that could not become a filter. The
-      // reader is told about it; none of it is counted as applied.
-      const refusals: NlRefusal[] = [];
-      // A place the extractor offered but that is not a place NAME is
-      // refused. The refusal is CARRIED by the patch (`placeRefused`), so it
-      // reaches the reader instead of vanishing: the patch itself never
-      // holds an unusable place.
-      if (patch.placeRefused === true) refusals.push("place");
-      if (patch.query?.trim()) {
-        applied += 1;
+      // A filter the reader changed while the answer was coming is their
+      // answer: extracted filters are not applied over it.
+      if (filterContextRef.current !== filtersAtRequest) return;
+      // THE READER'S OWN CHOICE WINS, and a filter already in force is left
+      // alone. Automatic extraction is silent: the chips are the receipt.
+      if (patch.postType !== undefined && type === "ALL") setType(patch.postType);
+      if (patch.place !== undefined) {
+        const extractedPlace = cleanPlace(patch.place);
+        if (extractedPlace !== "" && place === "") setPlaceParam(extractedPlace);
       }
-      if (!filtersChanged) {
-        // THE READER'S OWN CHOICE WINS. A filter the reader has already
-        // chosen is their answer: Smart Search may not overrule it. It is
-        // applied only where the reader has not chosen one, and a filter
-        // that is already in force is not counted as newly applied.
-        if (patch.postType !== undefined) {
-          if (type === "ALL") {
-            setType(patch.postType);
-            applied += 1;
-            appliedBesidesWords += 1;
-          } else if (type !== patch.postType) {
-            kept += 1;
-          }
-        }
-        if (patch.place !== undefined) {
-          // A place is a NAME. A value that is not one (a coordinate, a bare
-          // number) is refused here, before it can reach the URL, and it is
-          // not counted as applied — the count of applied filters stays
-          // true.
-          const extractedPlace = cleanPlace(patch.place);
-          if (extractedPlace === "") {
-            if (!refusals.includes("place")) refusals.push("place");
-          } else if (place === "") {
-            setPlaceParam(extractedPlace);
-            applied += 1;
-            appliedBesidesWords += 1;
-          } else if (place !== extractedPlace) {
-            kept += 1;
-          }
-        }
-        if (patch.category !== undefined) {
-          if (advanced.category === "") {
-            advanced.setCategory(patch.category);
-            applied += 1;
-            appliedBesidesWords += 1;
-          } else if (advanced.category !== patch.category) {
-            kept += 1;
-          }
-        }
-        if (patch.status !== undefined) {
-          if (advanced.status === "") {
-            advanced.setStatus(patch.status);
-            applied += 1;
-            appliedBesidesWords += 1;
-          } else if (advanced.status !== patch.status) {
-            kept += 1;
-          }
-        }
-        // A date that is not a real day is not a filter. It is refused here,
-        // before it can reach the URL, and it is not counted as applied.
-        const fromReal = patch.dateFrom === undefined || validDay(patch.dateFrom);
-        const toReal = patch.dateTo === undefined || validDay(patch.dateTo);
-        const reversed =
-          patch.dateFrom !== undefined && patch.dateTo !== undefined &&
-          fromReal && toReal && patch.dateFrom > patch.dateTo;
-        const rangeInvalid =
-          (patch.dateFrom !== undefined && !fromReal) ||
-          (patch.dateTo !== undefined && !toReal) ||
-          reversed;
-        if (rangeInvalid) {
-          refusals.push("date");
-        } else if (patch.dateFrom !== undefined || patch.dateTo !== undefined) {
-          // A range is judged as a WHOLE: half a range is not a range, and a
-          // range the reader already set is their range — Smart Search does
-          // not overrule it. The two bounds are still counted separately,
-          // exactly as the date chips below are two filters.
-          if (dateFrom !== "" || dateTo !== "") {
-            kept += 1;
-          } else {
-            if (patch.dateFrom !== undefined) {
-              setDateFromParam(patch.dateFrom);
-              applied += 1;
-              appliedBesidesWords += 1;
-            }
-            if (patch.dateTo !== undefined) {
-              setDateToParam(patch.dateTo);
-              applied += 1;
-              appliedBesidesWords += 1;
-            }
-          }
-        }
-      }
-      // The offer is only hidden when nothing is downloading: a transfer in
-      // flight has to keep its progress line and its error line.
-      if (!helperTransferRef.current) {
-        setNlHelperMissing(applied === 0 && helperState === "not-set-up");
-      }
-      if (filtersChanged) {
-        setNlNote(NL_SEARCH_FILTERS_CHANGED_NOTE);
-      } else if (refusals.length > 0) {
-        // The refusal says what was refused AND what was applied: "only your
-        // words were used" is only true when no filter besides the words
-        // was applied.
-        setNlNote(nlSearchRefusedNote(refusals, applied, appliedBesidesWords));
-      } else if (applied > 0 && kept > 0) {
-        setNlNote(nlSearchAppliedAndKeptNote(applied));
-      } else if (applied > 0) {
-        setNlNote(nlSearchAppliedNote(applied));
-      } else if (kept > 0) {
-        setNlNote(NL_SEARCH_FILTERS_KEPT_NOTE);
-      } else {
-        setNlNote(NL_EMPTY_PATCH_NOTE[helperState]);
+      if (patch.category !== undefined && advanced.category === "") advanced.setCategory(patch.category);
+      if (patch.status !== undefined && advanced.status === "") advanced.setStatus(patch.status);
+      // A date that is not a real day, or a reversed range, is not a filter.
+      const fromReal = patch.dateFrom === undefined || validDay(patch.dateFrom);
+      const toReal = patch.dateTo === undefined || validDay(patch.dateTo);
+      const reversed =
+        patch.dateFrom !== undefined && patch.dateTo !== undefined &&
+        fromReal && toReal && patch.dateFrom > patch.dateTo;
+      if (fromReal && toReal && !reversed && dateFrom === "" && dateTo === "") {
+        if (patch.dateFrom !== undefined) setDateFromParam(patch.dateFrom);
+        if (patch.dateTo !== undefined) setDateToParam(patch.dateTo);
       }
     } catch {
-      if (!alive()) return;
-      setQuery(text);
-      setNlNote(NL_SEARCH_FAILED_NOTE);
-    } finally {
-      if (request === nlRequest.current) setNlBusy(false);
+      // Ordinary search already ran; automatic extraction never blocks it.
     }
   }
-  // Search activation: the field rests as a compact affordance and expands
-  // into its active state on focus/input; clear/cancel collapse it back.
-  const [searchFocused, setSearchFocused] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const searchActive = searchFocused || query.length > 0;
-  // Toolbar separation: a subtle border/shadow once results scroll.
-  const [toolbarSeparated, setToolbarSeparated] = useState(false);
-  const toolbarSeparatedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Search results are reports; they use the same feed presentation the reader
+  // already chose on Home instead of a search-only card variant. The measured
+  // canvas width drives the masonry column count, exactly as Home does it.
+  const { layout: feedLayout } = useFeedLayoutPreference();
+  const viewportWidth = useViewportWidth();
+  const resolvedLayout = resolveFeedLayout(feedLayout, viewportWidth);
+  const resultsCanvasRef = useRef<HTMLDivElement>(null);
+  const resultsWidth = useContentWidth(resultsCanvasRef, viewportWidth);
+  const resultsCanvasClass = resolvedLayout === "masonry" ? MASONRY_CANVAS_CLASS : READABLE_COLUMN_CLASS;
 
   // Debounce search input ~400ms — do not network-fetch every keystroke.
   useEffect(() => {
     const t = setTimeout(() => setAppliedQuery(query.trim()), 400);
     return () => clearTimeout(t);
   }, [query]);
+
+  // Smart filters run on their own once a phrase settles: one extraction per
+  // phrase, and a newer phrase supersedes an answer still in flight. Nothing
+  // is announced; the applied-filter chips are the receipt.
+  useEffect(() => {
+    // An emptied field forgets the phrase: typing it again is a new search.
+    if (appliedQuery === "") {
+      lastExtractedPhrase.current = "";
+      return;
+    }
+    if (appliedQuery === lastExtractedPhrase.current) return;
+    lastExtractedPhrase.current = appliedQuery;
+    void applyExtractedFilters(appliedQuery);
+    // The extractor reads the live filter context through a ref; re-running
+    // it on every filter change would fight the reader's own choices.
+  }, [appliedQuery]);
 
   // Publish the applied query to the URL once it settles.
   useEffect(() => {
@@ -457,6 +251,7 @@ function ReportSearch(props: SearchScreenProps) {
 
   const { items, total, loading, loadingMore, error, failedOperation, updatesAvailable, hasMore, refresh, loadMore } = useFeed(
     {
+      ...(mineAccountId ? { userId: mineAccountId } : {}),
       type: type === "ALL" ? "" : type,
       category: advanced.category || undefined,
       status: advanced.status || undefined,
@@ -504,23 +299,6 @@ function ReportSearch(props: SearchScreenProps) {
     scrollRef.current?.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
   }, [tapCount, refreshReports, reduceMotion]);
 
-  // One guarded setState per toolbar crossing, never per pixel, so scroll
-  // cannot rerender the results list.
-  function handleResultsScroll(e: SyntheticEvent) {
-    const top = (e.target as HTMLElement).scrollTop ?? 0;
-    const next = top > 8;
-    if (next !== toolbarSeparatedRef.current) {
-      toolbarSeparatedRef.current = next;
-      setToolbarSeparated(next);
-    }
-  }
-
-  function collapseSearch() {
-    setQuery("");
-    setSearchFocused(false);
-    searchInputRef.current?.blur();
-  }
-
   const filterPanel = <AdvancedSearchFilters compactTrigger
     filters={{ ...advanced, clearAll: clearSearchFilters }}
     additionalControls={<SearchNearbyControls nearby={nearby} />}
@@ -535,155 +313,40 @@ function ReportSearch(props: SearchScreenProps) {
   />;
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2">
-      <header
-        data-testid="search-toolbar"
-        style={{ transitionDuration: reduceMotion ? "0s" : `${motionDurations.fast}s` }}
-         className={`border-b px-3 pt-2 transition-[border-color,box-shadow] ${
-          toolbarSeparated ? "border-outline-variant shadow-sm" : "border-transparent shadow-none"
-        }`}
-      >
-        <h1 className="text-lg font-semibold tracking-tight">Search reports</h1>
-        {(!loading && (!error || items.length > 0)) && <AnimatePresence initial={false} mode="wait">
-          <motion.p
-            key={`${total}:${visibleItems.length}`}
-            variants={fadeVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            transition={{ duration: motionDurations.fast, ease: motionEasings.out }}
-            className="text-xs text-on-surface-variant"
-            role="status"
-          >
+    <div className="flex h-full min-h-0 flex-col">
+      <AppBar
+        title={mineAccountId ? "Search my reports" : "Search"}
+        // The count is route chrome, not a second heading row. At 320dp the
+        // bar drops the subtitle by its own container rule and the list still
+        // carries the answer.
+        subtitle={!loading && (!error || items.length > 0) ? (
+          <span role="status">
             {placeInForce
               ? `${visibleItems.length} matching report${visibleItems.length === 1 ? "" : "s"} loaded for ${place}`
               : `${total} result${total === 1 ? "" : "s"}`}
-          </motion.p>
-        </AnimatePresence>}
-      </header>
+          </span>
+        ) : undefined}
+        backTo="/"
+        backLabel="Back"
+        utilities={false}
+      />
 
-      {/* Ordinary search stays visible; only the advanced fields occupy a panel.
-          Large text/helper downloads can scroll without consuming the results. */}
-      <div className="fb-search-controls">
-        <div className="fb-search-query">
-          <motion.label
-            layout
-            transition={motionSprings.soft}
-            className="relative block min-w-0 flex-1 basis-[128px]"
-          >
-            <Search
-              size={16}
-              aria-hidden
-              className="pointer-events-none absolute left-[14px] top-1/2 -translate-y-1/2 text-on-surface-variant"
-            />
-            <input
-              ref={searchInputRef}
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setSearchFocused(false)}
-              placeholder="Search title or description…"
-              aria-label="Search posts"
-               className="w-full rounded-full border border-outline-variant bg-surface-container-low py-2.5 pl-[40px] pr-[44px] text-sm placeholder:text-on-surface-variant focus:border-on-surface"
-            />
-            <AnimatePresence initial={false}>
-              {query.length > 0 && (
-                <motion.button
-                  key="search-clear"
-                  type="button"
-                  onClick={() => setQuery("")}
-                  aria-label="Clear search"
-                  whileTap={pressFeedback.iconButton}
-                  variants={scaleInVariants}
-                  initial="hidden"
-                  animate="visible"
-                  exit="exit"
-                  transition={{ duration: motionDurations.fast, ease: motionEasings.out }}
-                    className="absolute right-0 top-1/2 flex min-h-[44px] min-w-[44px] -translate-y-1/2 items-center justify-center rounded-full text-on-surface-variant"
-                >
-                  <X size={16} aria-hidden />
-                </motion.button>
-              )}
-            </AnimatePresence>
-          </motion.label>
-          <AnimatePresence initial={false}>
-            {searchActive && (
-              <motion.button
-                key="search-cancel"
-                type="button"
-                aria-label="Cancel"
-                onClick={collapseSearch}
-                variants={fadeVariants}
-                initial="hidden"
-                animate="visible"
-                exit="exit"
-                transition={{ duration: motionDurations.fast, ease: motionEasings.out }}
-                className="fb-search-cancel shrink-0 rounded-full min-h-[44px] min-w-[44px] px-2 text-sm font-medium text-on-surface"
-              >
-                <span>Cancel</span><X size={18} aria-hidden />
-              </motion.button>
-            )}
-          </AnimatePresence>
+      <div className="fb-search-canvas flex flex-col gap-2 px-3 pb-2 pt-2" data-testid="search-toolbar">
+        {/* One search field for this screen. Everything that narrows the feed
+            except the words lives behind the filter trigger, including the
+            LOST/FOUND type (owner order 2026-11-14). Smart filters run
+            automatically from the same words; the chips are the receipt. */}
+        <div className="fb-search-row">
+          <SearchField
+            value={query}
+            onChange={setQuery}
+            ariaLabel="Search posts"
+            placeholder="Search title or description…"
+            inputRef={searchInputRef}
+            onClear={() => setQuery("")}
+          />
           {filterPanel}
         </div>
-
-        <Segmented<TypeFilter>
-          ariaLabel="Post type"
-          value={type}
-          onChange={setType}
-          options={[
-            { value: "ALL", label: "All" },
-            { value: "LOST", label: "Lost" },
-            { value: "FOUND", label: "Found" },
-          ]}
-        />
-
-        <div className="flex flex-wrap items-center gap-2">
-          <label htmlFor="nl-search" className="sr-only">
-            Describe your search
-          </label>
-          <input
-            id="nl-search"
-            type="text"
-            value={nlInput}
-            onChange={(e) => setNlInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void applyNlFilters();
-            }}
-            placeholder="Try &lsquo;black wallet lost last week&rsquo;&hellip;"
-            aria-label="Describe your search"
-            className="min-w-0 flex-1 basis-[128px] rounded-m3-sm border border-outline-variant bg-surface px-3 py-3 text-sm placeholder:text-on-surface-variant focus:border-on-surface focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={() => void applyNlFilters()}
-            disabled={nlExtract === undefined || nlBusy || nlInput.trim() === ""}
-            title={nlExtract === undefined ? "Smart search unavailable" : "Apply smart filters"}
-            className="inline-flex min-h-[48px] shrink-0 items-center justify-center rounded-m3-sm border border-outline-variant bg-surface px-4 text-sm font-medium text-on-surface disabled:opacity-50"
-          >
-             {nlBusy ? "Applying…" : "Smart search"}
-          </button>
-        </div>
-        {nlNote !== null && (
-          <div className="flex flex-wrap items-center gap-2" data-testid="smart-search-note-row">
-            <p className="text-xs text-on-surface-variant" role="status">
-              {nlNote}
-            </p>
-          </div>
-        )}
-        {/* The offer is NOT inside the note row. The note comes and goes with
-            every Smart Search, and the offer has to survive it: a transfer in
-            flight owns its progress line and its error line, and the reader
-            must still be able to see (and not strand) the bytes that move. */}
-        {nlHelperMissing && (
-          <div className="flex flex-wrap items-center gap-2" data-testid="smart-search-offer-row">
-            <SearchHelperSetup service={props.helperService} onTransferChange={handleTransferChange} onDismiss={() => {
-              setNlHelperMissing(false);
-              searchInputRef.current?.focus();
-            }} />
-          </div>
-        )}
 
         {invalidDates && <p role="alert" className="text-sm text-error">Choose a valid date range: use real days, with the start date on or before the end date.</p>}
       </div>
@@ -693,7 +356,8 @@ function ReportSearch(props: SearchScreenProps) {
           whole screen would leave the reader with a sliver of a list and no
           way to tell an empty search from a broken one. The floor holds the
           list at a usable height, and the column gives up the difference. */}
-      <div ref={scrollRef} data-testid="search-results-scroller" onScroll={handleResultsScroll} className="min-h-[4rem] flex-1 overflow-y-auto">
+      <div ref={scrollRef} data-testid="search-results-scroller" className="min-h-[4rem] flex-1 overflow-y-auto">
+        <div ref={resultsCanvasRef} className={resultsCanvasClass}>
         <NewPostsPill count={0} hasUpdates={updatesAvailable} onTap={() => { void refreshReports(); scrollRef.current?.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" }); }} />
         {feedEmpty || placeEmpty ? (
           <EmptyState
@@ -731,11 +395,13 @@ function ReportSearch(props: SearchScreenProps) {
             hasMore={hasMore}
             onLoadMore={loadMoreReports}
             onRetry={refreshReports}
-            density="compact"
+            density={feedDensity(resolvedLayout)}
+            masonryColumns={masonryColumns(resultsWidth)}
             emptyTitle="No matches"
             emptySubtitle="Try different filters or a broader search."
           />
         )}
+        </div>
       </div>
     </div>
   );

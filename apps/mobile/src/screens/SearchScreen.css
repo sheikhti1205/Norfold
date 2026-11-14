@@ -1,17 +1,18 @@
-.fb-search-screen { display:flex; flex-direction:column; height:100%; min-height:0; width:100%; max-width:56rem; margin-inline:auto; }
-/* Keep a useful results viewport when large text wraps the query controls.
-   The controls remain independently scrollable, including helper transfers. */
-.fb-search-controls { display:flex; flex-direction:column; flex:none; min-height:0; max-height:40%; overflow:auto; overscroll-behavior:contain; gap:.5rem; padding:0 .75rem; }
-.fb-search-query { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:.35rem; }
-.fb-search-cancel { display:flex; align-items:center; justify-content:center; }
-.fb-search-cancel > svg { display:none; }
-@media (max-width:599px) {
-  .fb-search-cancel > span { display:none; }
-  .fb-search-cancel > svg { display:block; }
-  .fb-search-query > .fb-search-cancel { width:44px; padding:0; }
-}
-.fb-search-controls > [role="radiogroup"] { display:flex; flex-wrap:wrap; align-self:flex-start; gap:.25rem; padding:0; background:transparent; }
-.fb-search-controls > [role="radiogroup"] button { min-height:44px; padding:.3rem .5rem; font-size:.8125rem; }
+/* The shell gives /search the full canvas. The screen itself must not be a
+   second centred column: the results scroller owns the window edge, exactly
+   like Home's feed. The search chrome shares Home's 1152px cap; the results
+   themselves take the reader's feed layout (see SearchScreen), so a wide
+   window is not mostly gutters and the scrollbar is never a floating inner
+   bar at the edge of a phone-width strip. */
+.fb-search-screen { display:flex; flex-direction:column; height:100%; min-height:0; width:100%; }
+.fb-search-canvas { width:100%; max-width:1152px; margin-inline:auto; }
+/* Connect is a people list, not a feed: one readable directory column, the
+   same 44rem cap as settings, so names do not stretch across a wide window. */
+.fb-connect-canvas { width:100%; max-width:44rem; margin-inline:auto; }
+/* One row: the app's search field, then the filter trigger. Active-filter
+   chips wrap underneath in the same grid, never in a second bar. */
+.fb-search-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:.5rem; }
+.fb-search-row > .fb-search-filter-chips { grid-column:1 / -1; }
 .fb-filter-trigger { position:relative; flex:none; }
 .fb-filter-count { position:absolute; right:0; top:0; min-width:18px; border-radius:1rem; background:var(--fb-on-surface); color:var(--fb-surface); font-size:.6875rem; padding:0 .2rem; }
 .fb-popover.fb-search-filter-popover { display:flex; flex-direction:column; width:380px; overflow:hidden; }
@@ -24,4 +25,4 @@
 .fb-search-filter-chips button, .fb-search-chip { display:inline-flex; align-items:center; gap:.35rem; min-height:44px; max-width:100%; border:0; background:transparent; padding:.25rem .4rem; border-radius:.4rem; font-size:.8125rem; text-align:start; overflow-wrap:anywhere; }
 .fb-search-filter-chips button:hover { background:var(--fb-surface-container); }
 .fb-search-filter-chips button svg { flex:none; }
-.fb-search-controls input:focus-visible, .fb-search-filter-chips button:focus-visible, .fb-search-nearby button:focus-visible { outline:2px solid var(--fb-focus); outline-offset:-2px; }
+.fb-search-filter-chips button:focus-visible, .fb-search-nearby button:focus-visible { outline:2px solid var(--fb-focus); outline-offset:-2px; }

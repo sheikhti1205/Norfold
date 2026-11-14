@@ -1,0 +1,8 @@
+/* The date sheet's footer is Today + Cancel + Confirm. At the narrowest
+   supported width (320dp) those three cannot share one row at the default
+   20px inline padding, and the row overflowed into a horizontal scrollbar.
+   Tighten only the inline padding there; height (the tap target) is
+   unchanged and every wider width keeps the standard button metrics. */
+@media (max-width: 359px) {
+  .fb-date-actions button { padding-inline: 12px; }
+}

@@ -21,7 +21,7 @@ export interface UserAvatarProps {
   /** Rendered square size in CSS pixels. */
   size?: number;
   className?: string;
-  /** Messenger surfaces use a squircle; everything else keeps the circle. */
+  /** Profile pictures are squircles (owner rule 2026-11-13); a circle is opt-in. */
   shape?: "circle" | "squircle";
 }
 
@@ -51,7 +51,7 @@ function GenericAvatarGlyph({ size }: { size: number }) {
  * never shown. Decorative by default (`aria-hidden`) because the user's name is
  * rendered adjacent to every call site; pass a `className` to restyle.
  */
-export function UserAvatar({ avatarUrl, username, size = 40, className = "", shape = "circle" }: UserAvatarProps) {
+export function UserAvatar({ avatarUrl, username, size = 40, className = "", shape = "squircle" }: UserAvatarProps) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const name = (username ?? "").trim();
   const showImage = Boolean(avatarUrl) && avatarUrl !== failedUrl;

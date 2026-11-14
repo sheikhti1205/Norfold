@@ -56,7 +56,7 @@ interface Compound {
   pseudos: Array<{ name: string; arg: string | null }>;
 }
 
-const FIELD_CLASS = "fb-home-search-field";
+const FIELD_CLASS = "fb-search-field-pill";
 
 function stripComments(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, "");

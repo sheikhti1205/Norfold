@@ -107,25 +107,25 @@ body {
  * is that a button focus also shows the pill contour there (two contours, not
  * zero). The `@supports` block upgrades that to input-only where `:has()`
  * exists. */
-.fb-home-search-field:focus-within {
+.fb-search-field-pill:focus-within {
   outline: 2px solid var(--fb-focus);
   outline-offset: 2px;
 }
 
 /* Unconditional: inside the pill the input's own ring paints a divider between
- * the back button and the text, in both engine generations. */
-.fb-home-search-field input:focus-visible {
+ * the leading control and the text, in both engine generations. */
+.fb-search-field-pill input:focus-visible {
   outline: none;
 }
 
 @supports selector(:has(*)) {
   /* Modern engines: retire the fallback contour for every focus inside the
    * pill, then restore it for the input alone. */
-  .fb-home-search-field:focus-within {
+  .fb-search-field-pill:focus-within {
     outline: none;
   }
 
-  .fb-home-search-field:has(input:focus-visible) {
+  .fb-search-field-pill:has(input:focus-visible) {
     outline: 2px solid var(--fb-focus);
     outline-offset: 2px;
   }

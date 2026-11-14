@@ -1,7 +1,8 @@
 import type { ReactNode, RefObject } from "react";
 import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Search, X } from "lucide-react";
+import { ArrowLeft, Search } from "lucide-react";
+import { SearchField } from "../components/SearchField";
 import { motionDurations, motionEasings, pressFeedback, scaleInVariants } from "../components/uiMotion";
 
 /** Shared swap timing for the one-row state change. */
@@ -106,74 +107,38 @@ export function HomeTopBar({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -6 }}
             transition={swap}
-            // Height parity with the closed row is the point: the pill's border
-            // is inside its 48px min-height (box-border) and every child stays
-            // at or below 46px, so opening search never moves the chips row or
-            // the feed. The focus ring belongs to the pill — see
-            // `index.css` `.fb-home-search-field`, because the app-wide
-            // `:focus-visible` rule is unlayered and a utility cannot win.
-            className="fb-home-search-field flex min-h-[48px] min-w-0 flex-1 items-center rounded-full border border-outline-variant bg-surface-container-low pr-1 focus-within:border-on-surface"
+            // Height parity with the closed row is the point: the pill is 48px
+            // (box-border) and every child stays at or below 44px, so opening
+            // search never moves the feed. The focus ring belongs to the pill,
+            // see `index.css` `.fb-search-field-pill`.
+            className="flex min-h-[48px] min-w-0 flex-1"
             data-testid="home-search-field"
           >
-            <button
-              type="button"
-              data-testid="home-search-close"
-              aria-label="Close search"
-              onClick={onClose}
-              className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full text-on-surface-variant"
-            >
-              {/* An arrow, not a second ✕: "leave the field" and "clear the query"
-                  are separate semantics, so they must not look alike. It also
-                  matches the Android Back behaviour wired in Home. */}
-              <ArrowLeft size={18} aria-hidden />
-            </button>
-            <input
-              ref={inputRef}
-              type="search"
+            <SearchField
               value={query}
-              onChange={(e) => onQueryChange(e.target.value)}
-              onFocus={onFocus}
-              onBlur={onFieldBlur}
+              onChange={onQueryChange}
+              ariaLabel="Search posts"
               // Short enough to survive the field's 320dp + Extra-large-text
-              // width measured in the render harness; the accessible name
-              // ("Search posts") carries the same meaning for assistive tech.
+              // width. The prompt elides as a real element.
               placeholder="Search posts…"
-              aria-label="Search posts"
-              // Relative font size so the field tracks the app's text-size
-              // setting (an absolute px size would stay put at Extra-large).
-              //
-              // px, not rem: the row's height must not depend on the root font
-              // size, or opening search resizes the bar at Extra-large text
-              // (rem padding on an 18.75px line pushed the pill to 50.1 of a
-              // 48px row). A fixed 44px control inside the pill's 48px keeps
-              // rest and open identical at every text size.
-              className="h-[44px] min-w-0 flex-1 bg-transparent px-0.5 text-[0.9375rem] placeholder:text-on-surface-variant [&::-webkit-search-cancel-button]:hidden"
-            />
-            <AnimatePresence initial={false}>
-              {query.length > 0 && (
-                <motion.button
-                  key="home-search-clear"
+              inputRef={inputRef}
+              onClear={onClear}
+              inputProps={{ onFocus, onBlur: onFieldBlur }}
+              leading={
+                <button
                   type="button"
-                  onClick={() => {
-                    onClear();
-                    // Clearing is done to retype: without this the button
-                    // unmounts and focus falls to <body>, so the next Tab skips
-                    // the input entirely (review R2 MINOR-2).
-                    inputRef.current?.focus();
-                  }}
-                  aria-label="Clear search"
-                  whileTap={pressFeedback.iconButton}
-                  variants={scaleInVariants}
-                  initial="hidden"
-                  animate="visible"
-                  exit="exit"
-                  transition={swap}
-                  className="flex min-h-[44px] min-w-[48px] shrink-0 items-center justify-center rounded-full text-on-surface-variant"
+                  data-testid="home-search-close"
+                  aria-label="Close search"
+                  onClick={onClose}
+                  className="fb-search-field-action"
                 >
-                  <X size={16} aria-hidden />
-                </motion.button>
-              )}
-            </AnimatePresence>
+                  {/* An arrow, not a second ✕: "leave the field" and "clear the
+                      query" are separate semantics, so they must not look alike.
+                      It also matches the Android Back behaviour wired in Home. */}
+                  <ArrowLeft size={18} aria-hidden />
+                </button>
+              }
+            />
           </motion.div>
         ) : null}
       </AnimatePresence>

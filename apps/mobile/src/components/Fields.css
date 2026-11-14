@@ -1,0 +1,32 @@
+/* The one dropdown trigger and menu. The list rows reuse the app's action-menu
+   language (fb-menu-item); this file only adds the field trigger and the
+   selected-row check. */
+.fb-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 48px;
+  text-align: start;
+}
+.fb-select-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fb-select-value[data-placeholder] { color: var(--fb-on-surface-variant); }
+.fb-select-chevron { flex: none; color: var(--fb-on-surface-variant); }
+.fb-select-popover {
+  min-width: var(--trigger-width, 12rem);
+  max-width: min(26rem, calc(100vw - 16px));
+  padding: 4px;
+}
+.fb-select-list {
+  outline: none;
+  max-height: min(320px, 50dvh);
+  overflow: auto;
+}
+.fb-select-item { cursor: pointer; }
+.fb-select-check { flex: none; opacity: 0; color: var(--fb-on-surface); }
+.fb-select-item[data-selected] .fb-select-check { opacity: 1; }

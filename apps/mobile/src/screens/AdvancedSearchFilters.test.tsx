@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -162,7 +162,7 @@ describe("AdvancedSearchFilters optional date range", () => {
     );
   }
 
-  it("offers the two date fields when the caller passes a range", async () => {
+  it("offers the two date triggers with the applied days", async () => {
     render(
       <MemoryRouter>
         <SheetHarness appliedFrom="2026-10-01" appliedTo="2026-10-21" />
@@ -170,21 +170,27 @@ describe("AdvancedSearchFilters optional date range", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Filters" }));
 
-    expect((await screen.findByLabelText("From date") as HTMLInputElement).value).toBe("2026-10-01");
-    expect((screen.getByLabelText("To date") as HTMLInputElement).value).toBe("2026-10-21");
+    expect(await screen.findByRole("button", { name: /From date\. Oct 1, 2026/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /To date\. Oct 21, 2026/ })).toBeTruthy();
+    // The native date field is gone: no browser calendar, no mm/dd/yyyy box.
+    expect(document.querySelector('input[type="date"]')).toBeNull();
   });
 
-  it("keeps the caller's values when a date is edited", async () => {
+  it("opens the app calendar and keeps the day the reader confirms", async () => {
     render(
       <MemoryRouter>
         <SheetHarness appliedFrom="2026-10-01" appliedTo="2026-10-21" />
       </MemoryRouter>,
     );
     fireEvent.click(screen.getByRole("button", { name: "Filters" }));
-    fireEvent.change(await screen.findByLabelText("From date"), { target: { value: "2026-09-18" } });
+    fireEvent.click(await screen.findByRole("button", { name: /From date\. Oct 1, 2026/ }));
+
+    const calendar = await screen.findByTestId("bottom-sheet");
+    fireEvent.click(within(calendar).getByRole("button", { name: /October 18, 2026/ }));
+    fireEvent.click(within(calendar).getByRole("button", { name: /confirm/i }));
 
     await waitFor(() =>
-      expect((screen.getByLabelText("From date") as HTMLInputElement).value).toBe("2026-09-18"),
+      expect(screen.getByRole("button", { name: /From date\. Oct 18, 2026/ })).toBeTruthy(),
     );
   });
 
@@ -199,8 +205,8 @@ describe("AdvancedSearchFilters optional date range", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Filters" }));
 
-    expect((await screen.findByLabelText("From date") as HTMLInputElement).value).toBe("2026-10-21");
-    expect((screen.getByLabelText("To date") as HTMLInputElement).value).toBe("2026-01-01");
+    expect(await screen.findByRole("button", { name: /From date\. Oct 21, 2026/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /To date\. Jan 1, 2026/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /remove start date filter/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /remove end date filter/i })).toBeNull();
   });
@@ -216,8 +222,8 @@ describe("AdvancedSearchFilters optional date range", () => {
     fireEvent.click(screen.getByRole("button", { name: "Filters" }));
 
     expect(await screen.findByRole("dialog", { name: "Filters" })).toBeTruthy();
-    expect(screen.queryByLabelText("From date")).toBeNull();
-    expect(screen.queryByLabelText("To date")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^From date/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^To date/ })).toBeNull();
   });
 
   it("keeps Home's category/status/sort controls without adding dates", async () => {
@@ -232,9 +238,7 @@ describe("AdvancedSearchFilters optional date range", () => {
     expect(dialog.querySelector('input[type="date"]')).toBeNull();
     expect(screen.getByLabelText("Status")).toBeTruthy();
     expect(screen.getByLabelText("Sort")).toBeTruthy();
-    expect(
-      screen.getByText("Category, status and sort. Changes apply immediately."),
-    ).toBeTruthy();
+    expect(screen.getByText("Results update as you choose.")).toBeTruthy();
   });
 
   it("makes both date fields available with a clear Done action", async () => {
@@ -246,9 +250,11 @@ describe("AdvancedSearchFilters optional date range", () => {
     fireEvent.click(screen.getByRole("button", { name: "Filters" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Filters" });
-    expect(dialog.querySelectorAll('input[type="date"]')).toHaveLength(2);
+    expect(dialog.querySelectorAll('input[type="date"]')).toHaveLength(0);
+    expect(screen.getByRole("button", { name: /From date\. Oct 1, 2026/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /To date\. Oct 21, 2026/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
-    expect(screen.getByText("Changes apply immediately.")).toBeTruthy();
+    expect(screen.getByText("Results update as you choose.")).toBeTruthy();
   });
 });
 
