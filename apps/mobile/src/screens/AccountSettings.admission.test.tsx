@@ -7,13 +7,6 @@ const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "u1", username: "tester", email: "tester@example.com" }, finishAccountDeletion: vi.fn(), retryDeletionCleanup: vi.fn(), refreshUser: vi.fn() }) }));
 vi.mock("../services/supabaseClient", async (original) => ({ ...await original<typeof import("../services/supabaseClient")>(), getSupabase: () => ({ auth: { getSession: async () => ({ data: { session: { user: { id: "u1" }, access_token: "jwt" } }, error: null }) }, functions: { invoke } }) }));
 vi.mock("../services/profile", () => ({ fetchPhoneChangeEligibility: async () => ({ eligible: true }), formatPhoneChangeEligibleAt: () => "" }));
-// The page loads contact rules on mount. Unmocked, jsdom's fetch rejects and
-// the page raises a second `role="alert"` next to the deletion error this
-// suite asserts on. Defaults keep the rule pickers fully rendered.
-vi.mock("../services/accountRules", async (original) => {
-  const mod = await original<typeof import("../services/accountRules")>();
-  return { ...mod, fetchContactRules: async () => mod.DEFAULT_CONTACT_RULES };
-});
 import { AccountSettings } from "./AccountSettings";
 afterEach(cleanup);
 for (const known of [true, false]) {

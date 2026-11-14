@@ -101,14 +101,20 @@ describe("settings window", () => {
     expect(screen.queryByRole("link", { name: /notifications/i })).toBeNull();
   });
 
-  it("opens a top-attached search field whose results pick a section inside the window", async () => {
+  it("opens the search inside the header row instead of a second row", async () => {
     renderWindow();
     await screen.findByRole("dialog", { name: "Settings" });
+    const head = document.querySelector(".fb-settings-window-head")!;
+    expect(head.querySelector(".fb-settings-window-search")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Search settings" }));
     const field = screen.getByRole("searchbox", { name: "Search settings" });
-    // The field takes focus when it opens, and the whole settings catalogue is
-    // searchable - not just the current section.
+    // The field takes focus when it opens, inside the header it replaced, so
+    // nothing is inserted above the page and nothing moves down.
     expect(document.activeElement).toBe(field);
+    expect(head.contains(field)).toBe(true);
+    expect(head.querySelector(".fb-settings-window-actions .fb-settings-window-search")).toBeTruthy();
+    expect(document.querySelector(".fb-settings-searcharea")).toBeNull();
+    // The whole settings catalogue is searchable, not just the current section.
     fireEvent.change(field, { target: { value: "profile" } });
     expect(screen.getByRole("status").textContent).toContain("setting");
     // Pick the real result row, not the mock Settings root's own static link.

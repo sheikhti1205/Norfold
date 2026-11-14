@@ -4,12 +4,11 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PublicUser } from "@norfold/shared";
 
-const { mockSetUser, mockUpdateProfile, mockReadProviders, mockTelegram, mockDrive } = vi.hoisted(() => ({
+const { mockSetUser, mockUpdateProfile, mockReadProviders, mockTelegram } = vi.hoisted(() => ({
   mockSetUser: vi.fn(),
   mockUpdateProfile: vi.fn(),
   mockReadProviders: vi.fn(),
   mockTelegram: vi.fn(),
-  mockDrive: vi.fn(),
 }));
 
 const { mockUser } = vi.hoisted(() => ({
@@ -25,14 +24,8 @@ vi.mock("../services/accountProviders", () => ({ readLinkedProviders: mockReadPr
 vi.mock("../services/telegram", () => ({ getTelegramAccount: mockTelegram }));
 vi.mock("../services/profile", () => ({ updateMyProfile: mockUpdateProfile }));
 vi.mock("./AccountSettings", () => ({
-  AccountSecuritySections: () => <section aria-label="Sign-in controls">Password and contact rules</section>,
+  AccountSecuritySections: () => <section aria-label="Sign-in controls">Password sign-in</section>,
   MobileNumberRow: () => <a href="/profile/edit">Mobile number</a>,
-}));
-vi.mock("../services/messaging/driveAuth", () => ({
-  driveAuth: () => ({
-    available: () => mockDrive().available,
-    current: () => (mockDrive().connected ? { token: "synthetic", expiresAt: Date.now() + 60_000 } : null),
-  }),
 }));
 
 import { Profile } from "./Profile";
@@ -73,7 +66,6 @@ beforeEach(() => {
   mockUser.value = { ...baseUser };
   mockReadProviders.mockResolvedValue(new Set(["email"]));
   mockTelegram.mockResolvedValue({ linked: false, phone: null, username: null });
-  mockDrive.mockReturnValue({ available: false, connected: false });
   mockUpdateProfile.mockResolvedValue({ ...baseUser, displayName: "New Name" });
 });
 
@@ -164,23 +156,24 @@ describe("Profile landing", () => {
     expect(within(region).queryByRole("link", { name: "Telegram" })).toBeNull();
   });
 
-  it("shows Drive access below the connected accounts and links to Chat backup", async () => {
-    mockDrive.mockReturnValue({ available: true, connected: true });
+  it("keeps chat-owned controls out of Profile", () => {
     renderProfile();
-    const drive = await screen.findByRole("region", { name: "Drive access" });
-    expect(await within(drive).findByText("Connected")).toBeTruthy();
-    expect(within(drive).getByRole("link", { name: "Chat backup" }).getAttribute("href")).toBe(
-      "/settings/backup",
-    );
-    const groups = Array.from(document.querySelectorAll(".fb-profile-groups > section"));
-    expect(groups.indexOf(drive)).toBeGreaterThan(groups.findIndex((group) => group.getAttribute("aria-labelledby") && group.textContent?.includes("Connected accounts")));
+    // Contact rules, auto-connect and backup belong to Chat. Profile is
+    // identity and sign-in security, so it must not repeat them.
+    expect(screen.queryByRole("region", { name: "Drive access" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Chat backup" })).toBeNull();
+    expect(screen.queryByText(/contact rules/i)).toBeNull();
+    expect(screen.queryByText(/who can message you/i)).toBeNull();
   });
 
-  it("states when Drive backup is not available instead of pretending it is off", async () => {
+  it("gives the email address its own line under the label", () => {
     renderProfile();
-    const drive = await screen.findByRole("region", { name: "Drive access" });
-    expect(within(drive).getByText("Unavailable")).toBeTruthy();
-    expect(within(drive).getByText(/not set up in this build/i)).toBeTruthy();
+    const region = screen.getByRole("region", { name: "Connected accounts" });
+    const label = within(region).getByText("Email");
+    const row = label.closest(".fb-settings-row");
+    expect(row).toBeTruthy();
+    expect(row!.classList.contains("fb-profile-email-row")).toBe(true);
+    expect(within(region).getByText("tester@example.com")).toBeTruthy();
   });
 
   it("shows security controls and devices without a redundant account link", async () => {

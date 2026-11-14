@@ -1,0 +1,26 @@
+/* The contact-rule control sits inside the "Who can message you" group, so it
+   keeps the row rhythm instead of painting a card of its own. */
+.fb-chat-contact-rule {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0.25rem 12px;
+}
+
+.fb-chat-contact-rule .fb-select-trigger {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border-color: var(--fb-outline-variant);
+  background: var(--fb-surface-container-low);
+  font-size: 0.9375rem;
+}
+
+.fb-chat-contact-status {
+  font-size: 0.8125rem;
+  color: var(--fb-on-surface-variant);
+}
+
+.fb-chat-contact-status[role="alert"] {
+  color: var(--fb-error);
+}

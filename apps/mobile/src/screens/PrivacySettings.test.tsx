@@ -56,6 +56,8 @@ describe("PrivacySettings", () => {
     const safety = screen.getByRole("region", { name: "Safety" });
     expect(within(safety).getByRole("link", { name: /Blocked accounts/i }).getAttribute("href")).toBe("/settings/privacy/blocked");
     expect(within(safety).getByRole("link", { name: /Your safety reports/i }).getAttribute("href")).toBe("/settings/privacy/reports");
+    // Chat preferences live in Chat; Privacy is not a second door to them.
+    expect(within(safety).queryByRole("link", { name: /Chat preferences/i })).toBeNull();
   });
 
   it("renders one h1 backed to /settings and shows the real location state", async () => {

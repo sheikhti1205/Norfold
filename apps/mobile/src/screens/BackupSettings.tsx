@@ -406,7 +406,7 @@ export function BackupSettings() {
 
       <SettingsGroup
         title="Backups"
-        description="Chats, photos and files stored in your Drive. Restoring a backup adds it here; it never deletes what you already have. Chat preferences stay in Settings and are not part of a backup."
+        description="Chats, photos and files stored in your Drive. Restoring a backup adds it here; it never deletes what you already have. Chat preferences stay in Chat and are not part of a backup."
       >
         {inventory.state === "loading" ? (
           <SettingsRow title="Checking your backups…" icon={CloudDownload} />
