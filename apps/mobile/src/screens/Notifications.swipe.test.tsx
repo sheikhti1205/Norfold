@@ -50,7 +50,7 @@ function renderNotifications() {
 /** Packet `08` §17: every action the swipe offers is reachable by tap too. */
 async function openRowActions() {
   fireEvent.click(await screen.findByRole("button", { name: /more actions for bob/i }));
-  return screen.findByRole("menu");
+  return screen.findByRole("toolbar");
 }
 
 beforeEach(() => {
@@ -106,7 +106,7 @@ describe("inbox change signal", () => {
     renderNotifications();
 
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^remove from activity$/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledWith(["n1"]));
     await waitFor(() => expect(signalMock).toHaveBeenCalled());
   });
@@ -119,7 +119,7 @@ describe("undo window", () => {
     renderNotifications();
 
     await openRowActions();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^remove from activity$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^remove from activity$/i }));
     expect(await screen.findByText(/notification deleted/i)).toBeTruthy();
 
     act(() => {
