@@ -9,7 +9,6 @@ import { subscribeSafetyChanged } from "../services/safetySignals";
 import { onRealtime } from "../services/realtime";
 import { useAuth } from "../auth";
 import { UserAvatar } from "../components/UserAvatar";
-import { ConversationStrip, type StripPerson } from "../components/ConversationStrip";
 import { ChatIdentity } from "../components/ChatIdentity";
 import { StatusChip } from "../components/StatusChip";
 import { formatChatDay, formatEventDate, timeAgo } from "../utils/dates";
@@ -494,25 +493,19 @@ export function LegacyChatsRedirect() {
   return <Navigate replace to={{ pathname: conversationId ? `/chats/${encodeURIComponent(conversationId)}` : "/chats", search: location.search, hash: location.hash }} />;
 }
 
-/** Collapsed conversation pane: the same people as a labelled avatar rail.
- *
- * Extracted so the rail can be rendered without the messaging runtime. Names and
- * previews leave the rail; the count survives in the link's accessible name,
- * and the expand control is the only chrome it needs. */
-export function ChatRail({ rows, labels, identities, people = [], selectedId, onExpand, headingRef, toggleRef }: {
+/** Collapsed conversation pane: the same people in the same order, as an avatar
+ * rail. Every conversation the full list shows stays reachable here; names,
+ * previews and counts leave the rail, the count survives in the link's
+ * accessible name, and the expand control is the only chrome it needs. */
+export function ChatRail({ rows, labels, identities, selectedId, onExpand, headingRef, toggleRef }: {
   rows: { conversationId: string; peerId: string; unreadCount: number }[];
   labels: Map<string, string>;
   identities?: ReturnType<typeof readCachedAccountIdentities>;
-  people?: StripPerson[];
   selectedId?: string;
   onExpand: () => void;
   headingRef?: RefObject<HTMLHeadingElement | null>;
   toggleRef?: RefObject<HTMLButtonElement | null>;
 }) {
-  const navigate = useNavigate();
-  // The active set is the N most recent conversations plus the open one, newest first;
-  // it survives navigation within this session and is never persisted to the server.
-  const activePeople = people.filter((person, index) => index < 8 || person.conversationId === selectedId);
   return <section className="fb-chat-page fb-chat-rail" aria-label="Chats">
     <header className="fb-chat-header fb-chat-rail-header">
       <h1 ref={headingRef} tabIndex={-1} className="sr-only">Chats</h1>
@@ -520,8 +513,6 @@ export function ChatRail({ rows, labels, identities, people = [], selectedId, on
         <PanelLeftOpen size={20} aria-hidden="true" />
       </button>
     </header>
-    <ConversationStrip people={activePeople} activeConversationId={selectedId}
-      onOpen={(conversationId) => navigate(`/chats/${conversationId}`)} />
     <ul className="fb-chat-rail-list">
       {rows.map((row) => {
         const name = labels.get(row.peerId);
@@ -582,8 +573,6 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
   // previews leave, each avatar stays a labelled link and the unread marker
   // survives as a dot with the count in the link's name.
   if (pane?.wide && pane.collapsed) return <ChatRail rows={rows} labels={labels} identities={identities} selectedId={selectedId}
-    people={rows.map((row) => ({ conversationId: row.conversationId, name: labels.get(row.peerId) || "Member",
-      username: identities.get(row.peerId)?.username || "", avatarUrl: identities.get(row.peerId)?.avatarUrl }))}
     onExpand={pane.toggle} headingRef={heading} toggleRef={paneToggle} />;
   return <section className="fb-chat-page" aria-label="Chats">
     <AppBar title="Chats" autoFocus actions={<>
