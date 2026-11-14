@@ -30,8 +30,16 @@ describe("the collapsed conversation rail", () => {
 
   it("does not put names, previews or counts where the rail has no room", () => {
     renderRail();
-    expect(screen.queryByText("@river")).toBeNull();
+    expect(screen.queryByText("river")).toBeNull();
+    expect(screen.queryByText("meadow")).toBeNull();
     expect(screen.queryByText("3")).toBeNull();
+  });
+
+  it("keeps the list's order and never repeats a person in a second strip", () => {
+    renderRail();
+    const links = screen.getAllByRole("link");
+    expect(links.map((link) => link.getAttribute("href"))).toEqual(["/chats/c-1", "/chats/c-2"]);
+    expect(document.querySelector(".fb-conversation-strip")).toBeNull();
   });
 
   it("offers one control back to the full list", () => {
