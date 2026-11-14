@@ -2,38 +2,78 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
+import type { BackupInventoryEntry } from "../services/messaging/backupDrive";
 
 const mocks = vi.hoisted(() => ({
   backup: {
     subscribe: vi.fn(),
     status: vi.fn(), promptDecision: vi.fn(), connect: vi.fn(), disable: vi.fn(),
     forget: vi.fn(), markDirty: vi.fn(), uploadNow: vi.fn(), restore: vi.fn(), tick: vi.fn(),
+    inspect: vi.fn(),
   },
   rotate: vi.fn(),
   refresh: vi.fn(),
   listeners: new Set<() => void>(),
   accountId: "00000000-0000-4000-9a01-000000000001",
+  deviceId: "00000000-0000-4000-9a01-0000000000aa",
   authSessionId: "synthetic-session-a",
 }));
 
+// `webInstallationId` labels the current device in the stats, so the mock must
+// answer it; the real runtime owns that identity.
 vi.mock("../services/messaging/backupRuntime", () => ({ driveBackup: () => mocks.backup, startDriveBackup: () => () => undefined }));
 vi.mock("../services/messaging/backupKey", () => ({ rotateBackupKey: mocks.rotate }));
-vi.mock("../services/messaging/runtime", () => ({ refreshMessaging: mocks.refresh }));
+vi.mock("../services/messaging/runtime", () => ({
+  refreshMessaging: mocks.refresh,
+  webInstallationId: () => mocks.deviceId,
+}));
 vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: mocks.accountId }, authSessionId: mocks.authSessionId }) }));
 
 import { BackupSettings, describeBackupTime } from "./BackupSettings";
 
 const NOW = 1_760_000_000_000;
+const ACCOUNT = "00000000-0000-4000-9a01-000000000001";
+const DEVICE = "00000000-0000-4000-9a01-0000000000aa";
+const OTHER_DEVICE = "00000000-0000-4000-9a01-0000000000bb";
 const UP_TO_DATE = { kind: "up-to-date" as const, lastUploadAt: NOW, enabled: true };
 const COMMITTED = { kind: "committed" as const, lastUploadAt: NOW, snapshotRevision: 1 };
 const OFF = { kind: "off" as const, enabled: false };
 const WAITING = { kind: "waiting" as const, nextAttemptAt: NOW, enabled: true };
 
+/** One real manifest summary, with its object name derived like the service. */
+function backup(deviceId: string, ageHours: number, overrides: Partial<BackupInventoryEntry> = {}): BackupInventoryEntry {
+  return {
+    name: `norfold.${ACCOUNT}.manifest.${deviceId}.v2.bin`,
+    deviceId,
+    version: 3,
+    exportedAt: NOW - ageHours * 60 * 60_000,
+    conversations: 2,
+    messages: 12,
+    attachments: 3,
+    removedMessages: 1,
+    bytes: 4096,
+    complete: true,
+    readable: true,
+    ...overrides,
+  };
+}
+const BACKUP = backup(DEVICE, 0.0167);
+
+function listBackups(...entries: BackupInventoryEntry[]) {
+  mocks.backup.inspect.mockResolvedValue({ kind: "listed", backups: entries, readAt: NOW });
+}
+
+/** Expand the newest row, which is where its stats and restore action live. */
+async function openNewestBackup() {
+  fireEvent.click(await screen.findByRole("button", { name: /Most recent backup/ }));
+}
+
 afterEach(cleanup);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.accountId = "00000000-0000-4000-9a01-000000000001";
+  mocks.accountId = ACCOUNT;
+  mocks.deviceId = DEVICE;
   mocks.authSessionId = "synthetic-session-a";
   mocks.listeners.clear();
   mocks.backup.subscribe.mockImplementation((listener: () => void) => {
@@ -45,6 +85,7 @@ beforeEach(() => {
   mocks.backup.connect.mockResolvedValue(COMMITTED);
   mocks.backup.uploadNow.mockResolvedValue(COMMITTED);
   mocks.backup.restore.mockResolvedValue({ kind: "restored", messages: 3, manifest: {} });
+  listBackups();
   mocks.rotate.mockResolvedValue({ accountId: "a", generation: "b", keyHex: "c", createdAt: 1 });
   mocks.refresh.mockResolvedValue(undefined);
 });
@@ -63,6 +104,7 @@ describe("the backup settings surface", () => {
     fireEvent.click(screen.getByRole("button", { name: "Back up now" }));
     expect((await screen.findByTestId("backup-error")).textContent).toBe(copy);
   });
+
   it("names a Drive rejection without blaming the connection", async () => {
     mocks.backup.status.mockReturnValue(WAITING);
     mocks.backup.uploadNow.mockResolvedValue({ kind: "failed", reason: "provider" });
@@ -91,20 +133,23 @@ describe("the backup settings surface", () => {
     expect(disclosure.textContent).toContain("Internal code: backup: identity conflict");
   });
 
-  it("keeps disconnect available as a compact named icon action", () => {
+  it("keeps disconnect as a named destructive row, never an icon-only control", () => {
     mocks.backup.status.mockReturnValue(WAITING);
     renderScreen();
-    const disconnect = screen.getByRole("button", { name: "Disconnect Google Drive…" });
+    const disconnect = screen.getByRole("button", { name: "Disconnect Google Drive" });
+    expect(disconnect.getAttribute("data-destructive")).toBe("true");
+    expect(disconnect.textContent).toContain("Existing backups stay in your Drive.");
     expect(disconnect.querySelector("svg")).toBeTruthy();
-    expect(disconnect.textContent).not.toContain("Disconnect Google Drive");
   });
 
   it.each(["account", "session"])("drops late restore notices and HEAD work after %s changes", async change => {
     mocks.backup.status.mockReturnValue(UP_TO_DATE);
+    listBackups(BACKUP);
     let resolve!: (value: unknown) => void;
     mocks.backup.restore.mockReturnValueOnce(new Promise(done => { resolve = done; }));
     const view = renderScreen();
-    fireEvent.click(screen.getByRole("button", { name: "Restore from Drive" }));
+    await openNewestBackup();
+    fireEvent.click(screen.getByRole("button", { name: "Restore this backup" }));
     if (change === "account") mocks.accountId = "00000000-0000-4000-9a01-000000000002";
     else mocks.authSessionId = "synthetic-session-b";
     view.rerender(<MemoryRouter><BackupSettings /></MemoryRouter>);
@@ -118,7 +163,7 @@ describe("the backup settings surface", () => {
     expect(screen.getByText("Google Drive backup")).toBeTruthy();
     expect(screen.getByText("Off")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Connect Google Drive" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Restore from Drive" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Restore this backup" })).toBeNull();
   });
 
   it("says plainly when the build cannot connect, without a dead button", () => {
@@ -174,8 +219,10 @@ describe("the backup settings surface", () => {
 
   it("does not claim restored chat caught up when HEAD reconciliation fails", async () => {
     mocks.backup.status.mockReturnValue(UP_TO_DATE);
+    listBackups(BACKUP);
     mocks.refresh.mockRejectedValueOnce(new Error("synthetic HEAD offline")); renderScreen();
-    fireEvent.click(screen.getByRole("button", { name: "Restore from Drive" }));
+    await openNewestBackup();
+    fireEvent.click(screen.getByRole("button", { name: "Restore this backup" }));
     expect((await screen.findByTestId("backup-error")).textContent).toContain("catch up");
     expect(screen.queryByTestId("backup-notice")).toBeNull();
   });
@@ -189,18 +236,20 @@ describe("the backup settings surface", () => {
     expect(screen.queryByText(/Check your connection/)).toBeNull();
   });
 
-  it("backs up on demand and restores into chat", async () => {
+  it("backs up on demand and restores the chosen installation", async () => {
     mocks.backup.status.mockReturnValue(UP_TO_DATE);
+    listBackups(BACKUP);
     renderScreen();
     fireEvent.click(screen.getByRole("button", { name: "Back up now" }));
     await waitFor(() => expect(mocks.backup.uploadNow).toHaveBeenCalledTimes(1));
     expect((await screen.findByTestId("backup-notice")).textContent).toBe("Your chats are backed up.");
 
-    fireEvent.click(screen.getByRole("button", { name: "Restore from Drive" }));
-    await waitFor(() => expect(mocks.backup.restore).toHaveBeenCalledTimes(1));
+    await openNewestBackup();
+    fireEvent.click(screen.getByRole("button", { name: "Restore this backup" }));
+    await waitFor(() => expect(mocks.backup.restore).toHaveBeenCalledWith(DEVICE));
     expect((await screen.findByTestId("backup-notice")).textContent)
       .toBe("Restored 3 messages. Chat is catching up.");
-    expect(mocks.refresh).toHaveBeenCalledWith("00000000-0000-4000-9a01-000000000001");
+    expect(mocks.refresh).toHaveBeenCalledWith(ACCOUNT);
   });
 
   it("turns automatic backup off without disconnecting Drive", () => {
@@ -230,9 +279,9 @@ describe("the backup settings surface", () => {
   it("disconnects only after an explicit second confirmation", () => {
     mocks.backup.status.mockReturnValue(UP_TO_DATE);
     renderScreen();
-    fireEvent.click(screen.getByRole("button", { name: "Disconnect Google Drive…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect Google Drive" }));
     expect(mocks.backup.forget).not.toHaveBeenCalled();
-    expect(screen.getByText(/Existing backups stay in your Drive/)).toBeTruthy();
+    expect(screen.getByText(/Automatic backup stops/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
     expect(mocks.backup.forget).toHaveBeenCalledTimes(1);
   });
@@ -250,10 +299,10 @@ describe("the backup settings surface", () => {
     renderScreen();
     expect(screen.getByText(/Backup is paused so the copy already in your Drive stays intact/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Back up now" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Restore from Drive" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Restore this backup" })).toBeNull();
     // Disabling and disconnecting must stay possible.
     expect(screen.getByRole("switch", { name: "Back up automatically" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Disconnect Google Drive…" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Disconnect Google Drive" })).toBeTruthy();
   });
 
   it("keeps the switch on when the opt-out could not be saved", () => {
@@ -272,7 +321,7 @@ describe("the backup settings surface", () => {
     expect(screen.getByRole("button", { name: "Reconnect Google Drive" })).toBeTruthy();
     // Nothing is uploading right now, so no switch or restore is offered.
     expect(screen.queryByRole("switch")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Restore from Drive" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Restore this backup" })).toBeNull();
   });
 
   it("describes recency without exact timestamps", () => {
@@ -290,5 +339,108 @@ describe("the backup settings surface", () => {
     renderScreen();
     expect(screen.getByText("On")).toBeTruthy();
     expect(screen.getByText(/Changes are backed up while Norfold is open/)).toBeTruthy();
+  });
+});
+
+describe("the stored backup list", () => {
+  it("lists the four most recent backups and says how many it is not showing", async () => {
+    mocks.backup.status.mockReturnValue(UP_TO_DATE);
+    listBackups(
+      backup(DEVICE, 0), backup(OTHER_DEVICE, 1), backup(OTHER_DEVICE, 2),
+      backup(OTHER_DEVICE, 3), backup(OTHER_DEVICE, 4),
+    );
+    const view = renderScreen();
+    await screen.findByRole("button", { name: /Most recent backup/ });
+    expect(view.container.querySelectorAll(".fb-backup-row")).toHaveLength(4);
+    expect(screen.getAllByRole("button", { name: /Earlier backup/ })).toHaveLength(3);
+    expect(screen.getByText("Showing the 4 most recent of 5 backups.")).toBeTruthy();
+  });
+
+  it("shows the real manifest statistics when a backup is expanded", async () => {
+    mocks.backup.status.mockReturnValue(UP_TO_DATE);
+    listBackups(BACKUP);
+    renderScreen();
+    await openNewestBackup();
+    const stats = screen.getByText("Backed up").closest("dl")!;
+    // Every stat comes from the manifest, including the size of its chunks.
+    for (const term of ["Backed up", "Device", "Conversations", "Messages", "Photos & files", "Removed messages", "Size"]) {
+      expect(stats.textContent).toContain(term);
+    }
+    expect(stats.textContent).toContain("This device");
+    expect(stats.textContent).toContain("4 KB");
+    expect(stats.textContent).toContain("12");
+    // Chat preferences are not part of the format; the screen says so instead
+    // of inventing a preferences statistic.
+    expect(stats.textContent).not.toContain("Preferences");
+    expect(screen.getByText(/Chat preferences stay in Settings and are not part of a backup/)).toBeTruthy();
+  });
+
+  it("restores exactly the installation whose backup was chosen", async () => {
+    mocks.backup.status.mockReturnValue(UP_TO_DATE);
+    const older = backup(OTHER_DEVICE, 2);
+    listBackups(BACKUP, older);
+    renderScreen();
+    await screen.findByRole("button", { name: /Most recent backup/ });
+    fireEvent.click(screen.getAllByRole("button", { name: /Earlier backup/ })[0]!);
+    expect(screen.getByText("Another device")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Restore this backup" }));
+    await waitFor(() => expect(mocks.backup.restore).toHaveBeenCalledWith(OTHER_DEVICE));
+    expect(mocks.backup.restore).not.toHaveBeenCalledWith(DEVICE);
+  });
+
+  it("asks for the whole backup when a legacy manifest has no installation", async () => {
+    mocks.backup.status.mockReturnValue(UP_TO_DATE);
+    listBackups(backup(OTHER_DEVICE, 0, { version: 1 }));
+    renderScreen();
+    await openNewestBackup();
+    fireEvent.click(screen.getByRole("button", { name: "Restore this backup" }));
+    await waitFor(() => expect(mocks.backup.restore).toHaveBeenCalledWith(undefined));
+  });
+
+  it("refuses to offer a restore for a backup that cannot be opened safely", async () => {
+    mocks.backup.status.mockReturnValue(UP_TO_DATE);
+    listBackups(
+      backup(DEVICE, 0, { complete: false }),
+      backup(OTHER_DEVICE, 1, { readable: false }),
+    );
+    renderScreen();
+    await openNewestBackup();
+    expect(screen.getByText(/Some parts of this backup are missing from Drive/)).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: /Earlier backup/ })[0]!);
+    expect(screen.getByText(/Norfold can't open it/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Restore this backup" })).toBeNull();
+  });
+
+  it("says there are no backups yet without inventing one", async () => {
+    mocks.backup.status.mockReturnValue(UP_TO_DATE);
+    listBackups();
+    renderScreen();
+    expect(await screen.findByText("No backups yet")).toBeTruthy();
+    expect(document.querySelectorAll(".fb-backup-row")).toHaveLength(0);
+  });
+
+  it("reports an unreadable inventory instead of claiming the list is empty", async () => {
+    mocks.backup.status.mockReturnValue(UP_TO_DATE);
+    mocks.backup.inspect.mockResolvedValue({ kind: "failed" });
+    renderScreen();
+    expect(await screen.findByText("Backups unavailable")).toBeTruthy();
+    expect(screen.getByText("Your backups couldn't be read right now.")).toBeTruthy();
+    expect(screen.queryByText("No backups yet")).toBeNull();
+  });
+
+  it("does not ask for a connection in a build that cannot make one", async () => {
+    mocks.backup.status.mockReturnValue({ kind: "unavailable", reason: "unconfigured", enabled: false });
+    mocks.backup.inspect.mockResolvedValue({ kind: "unavailable" });
+    renderScreen();
+    expect(await screen.findByText(/isn't configured in this build/)).toBeTruthy();
+    expect(screen.queryByText("Connect Google Drive to see your backups.")).toBeNull();
+  });
+
+  it("names the busy state rather than showing a stale empty list", async () => {
+    mocks.backup.status.mockReturnValue(UP_TO_DATE);
+    mocks.backup.inspect.mockResolvedValue({ kind: "busy" });
+    renderScreen();
+    expect(await screen.findByText("Backups unavailable")).toBeTruthy();
+    expect(screen.getByText("Backup is busy right now. Try again in a moment.")).toBeTruthy();
   });
 });

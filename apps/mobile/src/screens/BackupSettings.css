@@ -1,0 +1,78 @@
+/* Chat backup: status and actions use the shared settings row language, and a
+   stored backup expands in place. No card around the list, no second surface;
+   hairlines and typography carry the grouping (owner order 2026-11-13). */
+
+.fb-backup-row { width: 100%; text-align: start; }
+.fb-backup-row .fb-settings-row-copy { flex: 1; }
+.fb-backup-chevron { transition: transform 0.15s ease; }
+.fb-backup-row[aria-expanded="true"] .fb-backup-chevron { transform: rotate(180deg); }
+
+.fb-backup-stats {
+  padding: 0.875rem 0.25rem 1rem;
+  border-top: 1px solid var(--fb-outline-variant);
+}
+.fb-backup-stats dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.75rem 1.25rem;
+  margin: 0 0 1rem;
+}
+.fb-backup-stats dt {
+  font-size: 0.75rem;
+  line-height: 1.3;
+  color: var(--fb-on-surface-variant);
+}
+.fb-backup-stats dd {
+  margin: 0.125rem 0 0;
+  font-size: 0.9375rem;
+  line-height: 1.35;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.fb-backup-warning {
+  margin: 0 0 0.875rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--fb-warning);
+  overflow-wrap: anywhere;
+}
+
+.fb-backup-message {
+  margin: 0;
+  padding: 0.75rem 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--fb-on-surface-variant);
+  overflow-wrap: anywhere;
+}
+.fb-backup-message[data-tone="error"] { color: var(--fb-error); }
+
+.fb-backup-confirm { padding: 0.875rem 0.25rem 1rem; }
+.fb-backup-confirm p {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--fb-on-surface);
+  overflow-wrap: anywhere;
+}
+.fb-backup-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.fb-backup-footnote {
+  margin: 0.25rem 0.25rem 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--fb-on-surface-variant);
+}
+
+@media (max-width: 480px) {
+  .fb-backup-stats { padding-inline: 0.25rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fb-backup-chevron { transition: none; }
+}

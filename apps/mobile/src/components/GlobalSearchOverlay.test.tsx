@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +17,11 @@ vi.mock("../services/people", () => ({ searchPeople: io.searchPeople }));
 
 import { GlobalSearchOverlay } from "./GlobalSearchOverlay";
 import { resetGlobalSearch, toggleGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
+
+// Vitest does not transform CSS imports for the test environment (the `?inline`
+// module is empty), so the layer contract is asserted against the stylesheet
+// source itself rather than a blank string.
+const searchStyles = readFileSync(resolve(process.cwd(), "src/components/GlobalSearchOverlay.css"), "utf8");
 
 const report = {
   id: "report-1",
@@ -89,6 +96,17 @@ beforeEach(() => {
 afterEach(() => { cleanup(); resetGlobalSearch(); });
 
 describe("app-wide search", () => {
+  it("keeps the full viewport backdrop below the search surface", async () => {
+    render(<Harness />);
+    const { overlay } = await openSearch();
+    const backdrop = document.querySelector<HTMLElement>(".fb-search-backdrop");
+    expect(backdrop).toBeTruthy();
+    expect(overlay.classList.contains("fb-search-overlay")).toBe(true);
+    expect(searchStyles).toMatch(/\.fb-search-backdrop\s*\{[^}]*position:\s*fixed;[^}]*inset:\s*0;[^}]*z-index:\s*70;/s);
+    expect(searchStyles).toMatch(/\.fb-search-overlay\s*\{[^}]*z-index:\s*74;/s);
+    expect(searchStyles).not.toMatch(/\[data-global-search="true"\][^{]*fb-app-bar/);
+  });
+
   it("opens one floating bar over the app without navigating", async () => {
     render(<Harness />);
     const { overlay, trigger } = await openSearch();

@@ -138,6 +138,40 @@ afterEach(() => {
 });
 
 describe("MyPosts (My Reports alignment)", () => {
+  it("filters loaded reports inline and returns focus on Escape", async () => {
+    renderMyPosts();
+    await screen.findByText("Report p1");
+    const trigger = screen.getByRole("button", { name: "Search" });
+    fireEvent.click(trigger);
+    const field = screen.getByRole("searchbox", { name: "Search your reports" });
+    expect(screen.getByTestId("app-bar").contains(field)).toBe(true);
+    expect(document.activeElement).toBe(field);
+    fireEvent.change(field, { target: { value: "p2" } });
+    await waitFor(() => expect(screen.queryByText("Report p1")).toBeNull());
+    expect(screen.getByText("Report p2")).toBeTruthy();
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(updatePostStatusMock).not.toHaveBeenCalled();
+    fireEvent.change(field, { target: { value: "no match" } });
+    expect(await screen.findByText("No matching loaded reports")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(screen.getByText("Report p1")).toBeTruthy();
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(screen.queryByRole("searchbox", { name: "Search your reports" })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("matches report descriptions, categories and locations", async () => {
+    renderMyPosts();
+    await screen.findByText("Report p1");
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    const field = screen.getByRole("searchbox", { name: "Search your reports" });
+    for (const query of ["DESCRIPTION", "pets", "austin"]) {
+      fireEvent.change(field, { target: { value: query } });
+      expect(screen.getByText("Report p1")).toBeTruthy();
+      expect(screen.getByText("Report p2")).toBeTruthy();
+    }
+  });
+
   it("offers to clear an empty status filter without claiming there are no reports", async () => {
     fetchFeedMock.mockImplementation(async (filters) => filters.status
       ? { items: [], nextCursor: null, total: 0 }

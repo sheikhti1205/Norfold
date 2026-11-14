@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PublicUser } from "@norfold/shared";
@@ -68,6 +68,13 @@ function renderAccount() {
     </MemoryRouter>,
   );
   return utils;
+}
+
+/** Sign-in, contact rules and deletion now live inside the merged Profile
+ *  surface; scope account assertions there so Profile's own status notes do
+ *  not satisfy or break them. */
+function accountSecurity() {
+  return within(screen.getByTestId("account-security"));
 }
 
 const F08_SESSION_KEY = "F08-SESSION-ONLY-u1-KEY";
@@ -184,9 +191,9 @@ describe("AccountSettings", () => {
     expect(mockSavePassword).toHaveBeenCalledTimes(1);
   });
 
-  it("renders one account heading with a back target of /settings", () => {
+  it("renders one profile heading with a back target of /settings", () => {
     renderAccount();
-    expect(screen.getByRole("heading", { level: 1, name: "Account" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Profile" })).toBeTruthy();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     const back = screen.getByRole("button", { name: "Back to Settings" });
     expect(back).toBeTruthy();
@@ -194,7 +201,7 @@ describe("AccountSettings", () => {
 
   it("renders username and email as information, never as inputs", () => {
     const { container } = renderAccount();
-    expect(screen.getByText("@tester")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Copy username @tester" })).toBeTruthy();
     expect(screen.getByText("tester@example.com")).toBeTruthy();
     // No editable fields on this screen: information rows, not disabled inputs.
     expect(container.querySelectorAll("input").length).toBe(0);
@@ -204,7 +211,7 @@ describe("AccountSettings", () => {
   it("shows a verified status for a verified email and no verify action", () => {
     renderAccount();
     expect(screen.getByText("Verified")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: /verify/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /verify email/i })).toBeNull();
   });
 
   it("offers the real verify-email action only while the email is unverified", () => {
@@ -255,7 +262,7 @@ describe("AccountSettings", () => {
     renderAccount();
     fireEvent.click(screen.getByRole("button", { name: /log out/i }));
     await waitFor(() => expect(mockLogout).toHaveBeenCalledTimes(1));
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(accountSecurity().queryByRole("status")).toBeNull();
     expect(screen.queryByRole("button", { name: /remove keys and log out/i })).toBeNull();
   });
 
@@ -263,7 +270,7 @@ describe("AccountSettings", () => {
     await aiCredentials.connect("u1", F08_SESSION_KEY, { remember: false, provider: "openai" });
     renderAccount();
     fireEvent.click(screen.getByRole("button", { name: /log out/i }));
-    const notice = await screen.findByRole("status");
+    const notice = await accountSecurity().findByRole("status");
     expect(notice.textContent).toMatch(/remove.*stored AI provider keys/i);
     expect(mockLogout).not.toHaveBeenCalled();
     expect(document.body.textContent).not.toContain(F08_SESSION_KEY);
@@ -281,7 +288,7 @@ describe("AccountSettings", () => {
     aiCredentials.clearSession();
     renderAccount();
     fireEvent.click(screen.getByRole("button", { name: /log out/i }));
-    const notice = await screen.findByRole("status");
+    const notice = await accountSecurity().findByRole("status");
     expect(notice.textContent).toMatch(/remove.*stored AI provider keys/i);
     expect(mockLogout).not.toHaveBeenCalled();
     expect(document.body.textContent).not.toContain(F08_SAVED_KEY);
@@ -293,10 +300,10 @@ describe("AccountSettings", () => {
     await aiCredentials.connect("u1", F08_SESSION_KEY, { remember: false, provider: "openai" });
     renderAccount();
     fireEvent.click(screen.getByRole("button", { name: /log out/i }));
-    await screen.findByRole("status");
+    await accountSecurity().findByRole("status");
     expect(mockLogout).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(accountSecurity().queryByRole("status")).toBeNull();
     expect(mockLogout).not.toHaveBeenCalled();
   });
 
@@ -335,7 +342,7 @@ describe("AccountSettings", () => {
     fireEvent.click(screen.getByRole("button", { name: /permanently delete/i }));
     await waitFor(() => expect(mockRequestDeletion).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mockFinishDeletion).toHaveBeenCalledWith("u1"));
-    expect(screen.getByRole("status").textContent).toMatch(/permanently deleted/i);
+    expect(accountSecurity().getByRole("status").textContent).toMatch(/permanently deleted/i);
   });
 
   it("does not claim local cleanup succeeded when logout fails", async () => {
@@ -380,7 +387,7 @@ describe("AccountSettings", () => {
     expect(mockRequestDeletion).toHaveBeenCalledWith("u1");
     expect(mockFinishDeletion).not.toHaveBeenCalled();
     expect(mockLogout).not.toHaveBeenCalled();
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(accountSecurity().queryByRole("status")).toBeNull();
   });
 
   it("cancelling the delete confirm disarms without calling the server", () => {
