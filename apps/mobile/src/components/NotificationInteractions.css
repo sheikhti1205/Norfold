@@ -1,12 +1,81 @@
-.fb-notification-row { position:relative; }
-.fb-notification-hover-actions { display:none; }
-@media (hover:hover) and (pointer:fine) {
-  .fb-notification-row:hover .fb-notification-time { visibility:hidden; }
-  .fb-notification-row:hover .fb-notification-hover-actions,
-  .fb-notification-hover-actions:focus-within { display:flex; }
-  .fb-notification-hover-actions { position:absolute; right:3rem; bottom:.15rem; gap:.5rem; background:var(--fb-surface); font-size:.75rem; }
-  .fb-notification-hover-actions button { min-height:32px; text-decoration:underline; }
+/*
+ * One floating action pill per list, opened by a two-second hover or by
+ * right-click. It is a fixed layer: it never takes part in the row's layout,
+ * so opening it cannot move the row or its neighbours. The pill is anchored by
+ * its trailing edge and grows leftward as a label expands - the icon stays put
+ * and the row's own trailing controls are hidden, not removed.
+ */
+.fb-notification-row { position: relative; }
+.fb-notification-row[data-rail-open="true"] {
+  background: color-mix(in srgb, var(--fb-primary) 6%, transparent);
+  border-radius: 0.75rem;
 }
+.fb-notification-row[data-rail-open="true"] .fb-notification-time,
+.fb-notification-row[data-rail-open="true"] .fb-notification-overflow { visibility: hidden; }
+
+@media (hover: hover) and (pointer: fine) {
+  .fb-notification-row:hover .fb-notification-time { opacity: .45; }
+}
+
+.fb-notification-rail {
+  position: fixed; z-index: 95;
+  display: flex; align-items: center; gap: 2px;
+  max-width: calc(100vw - 16px);
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--fb-surface);
+  border: 1px solid var(--fb-outline-variant);
+  box-shadow: 0 10px 28px -10px #0000004d, 0 2px 8px #0000001f;
+  transform: translateY(-50%);
+  transform-origin: right center;
+  animation: fb-notification-rail-in .14s cubic-bezier(.2, 0, 0, 1);
+}
+@supports (background: color-mix(in srgb, white 50%, transparent)) {
+  .fb-notification-rail { background: color-mix(in srgb, var(--fb-surface) 88%, transparent); backdrop-filter: blur(14px) saturate(1.35); }
+}
+@keyframes fb-notification-rail-in {
+  from { opacity: 0; transform: translateY(-50%) scale(.94); }
+  to { opacity: 1; transform: translateY(-50%) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fb-notification-rail { animation: none; }
+  .fb-notification-rail-label { transition: none; }
+}
+
+.fb-notification-rail-action {
+  display: inline-flex; align-items: center; justify-content: flex-end;
+  height: 34px; min-width: 34px; padding: 0 9px;
+  border: 0; border-radius: 999px;
+  background: transparent; color: var(--fb-on-surface);
+  font-size: .8125rem; font-weight: 600; line-height: 1;
+  white-space: nowrap; cursor: pointer;
+  transition: background-color .14s ease, color .14s ease;
+}
+.fb-notification-rail-action:hover,
+.fb-notification-rail-action:focus-visible {
+  background: color-mix(in srgb, var(--fb-primary) 13%, var(--fb-surface));
+  color: var(--fb-primary);
+}
+.fb-notification-rail-action:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: -2px; }
+.fb-notification-rail-action svg { flex: none; }
+.fb-notification-rail-label {
+  max-width: 0; margin-inline-start: 0; opacity: 0; overflow: hidden;
+  /* Instant: the label is the button's meaning, not a delayed flourish. */
+  transition: none;
+}
+.fb-notification-rail-action:hover .fb-notification-rail-label,
+.fb-notification-rail-action:focus-visible .fb-notification-rail-label {
+  max-width: 9rem; margin-inline-start: .35rem; opacity: 1;
+}
+.fb-notification-rail-danger:hover,
+.fb-notification-rail-danger:focus-visible {
+  color: var(--fb-error);
+  background: color-mix(in srgb, var(--fb-error) 14%, var(--fb-surface));
+}
+.fb-notification-rail-divider { width: 1px; height: 18px; flex: none; background: var(--fb-outline-variant); }
+
+/* Hover preview card: unchanged, but it never coexists with the action pill
+   because opening one clears the other. */
 .fb-notification-card { position:fixed; z-index:90; display:flex; gap:.75rem; width:320px; max-width:calc(100vw - 16px); max-height:140px; overflow:hidden; padding:.75rem; background:var(--fb-surface); color:var(--fb-on-surface); border:1px solid var(--fb-outline-variant); border-radius:.6rem; box-shadow:0 4px 16px #0003; pointer-events:none; }
 .fb-notification-card img { width:72px; height:72px; object-fit:cover; flex:none; }
 .fb-notification-card p { margin-top:.35rem; overflow-wrap:anywhere; }
