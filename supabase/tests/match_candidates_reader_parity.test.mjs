@@ -27,6 +27,7 @@ const MIG = join(ROOT, "migrations", "20261022160000_match_candidates_reader.sql
 const FEED_MIG = join(ROOT, "migrations", "20261020090000_cf060_r10_feed_block_flag.sql");
 const VERIFY = join(ROOT, "tests", "verify_20261022160000_match_candidates_reader.sql");
 const CAPS = join(ROOT, "..", "apps", "mobile", "src", "services", "appCapabilities.ts");
+const MIGRATIONS = join(ROOT, "migrations");
 const read = (p) => readFileSync(p, "utf8");
 
 const sql = read(MIG);
@@ -223,6 +224,95 @@ describe("the match-candidate reader is shaped for the hosted schema", () => {
     assert.match(verify, /findback_match_candidates_client/i);
     assert.match(verify, /rollback/i, "the verifier rolls its scratch rows back");
     assert.match(verify, /UNRUN|NOT been applied/i, "the verifier states that it has not been applied");
+  });
+});
+
+/**
+ * Every migration in apply order, so a shape guard can read the EFFECTIVE
+ * definition instead of one historical file. The candidate/feed parity broke
+ * once because this test compared the candidate reader with the feed reader as
+ * of 20261020090000 while a later migration appended `view_count` to the live
+ * feed; the runtime verifier caught it only in CI. This helper closes that gap.
+ */
+function chainSources() {
+  return readdirSync(MIGRATIONS)
+    .filter((name) => name.endsWith(".sql"))
+    .sort()
+    .map((name) => readFileSync(join(MIGRATIONS, name), "utf8"));
+}
+
+/**
+ * The `returns table (...)` columns of the last declaration of `functionName`
+ * anywhere in the chain, as lower-cased `name type` pairs in declaration order.
+ * Comment text is stripped first so a prose mention cannot spoof the guard.
+ */
+function effectiveReturnsTable(functionName, sources = chainSources()) {
+  let columns = null;
+  for (const source of sources) {
+    const text = source
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/--[^\n]*/g, " ");
+    const marker = new RegExp(
+      `create (?:or replace )?function public\\.${functionName}\\s*\\(`,
+      "gi",
+    );
+    for (const match of text.matchAll(marker)) {
+      const returnsAt = text.indexOf("returns", match.index);
+      if (returnsAt < 0 || !/^returns\s+table\s*\(/i.test(text.slice(returnsAt))) {
+        columns = null;
+        continue;
+      }
+      const open = text.indexOf("(", returnsAt);
+      let depth = 0;
+      let close = -1;
+      for (let i = open; i < text.length; i += 1) {
+        if (text[i] === "(") depth += 1;
+        else if (text[i] === ")") {
+          depth -= 1;
+          if (depth === 0) {
+            close = i;
+            break;
+          }
+        }
+      }
+      assert.ok(close > open, `${functionName}: returns table list is closed`);
+      columns = text
+        .slice(open + 1, close)
+        .split(",")
+        .map((column) => column.replace(/\s+/g, " ").trim().toLowerCase())
+        .filter(Boolean);
+    }
+  }
+  return columns;
+}
+
+describe("the effective chain keeps the candidate projection aligned with the feed", () => {
+  it("still projects the live feed shape minus exactly blocked_author", () => {
+    const feed = effectiveReturnsTable("findback_query_posts_client");
+    const legacy = effectiveReturnsTable("findback_match_candidates_client");
+    const v2 = effectiveReturnsTable("findback_match_candidates_v2");
+    assert.ok(feed, "the feed reader is declared in the chain");
+    assert.ok(legacy, "the legacy candidate reader is declared in the chain");
+    assert.ok(v2, "the shipping candidate reader is declared in the chain");
+    assert.ok(feed.includes("blocked_author boolean"), "the feed still carries the block bit");
+    assert.deepEqual(
+      legacy,
+      feed.filter((column) => column !== "blocked_author boolean"),
+      "the legacy candidate shape is the live feed shape minus the block bit",
+    );
+    assert.deepEqual(v2, legacy, "the shipping v2 row shape matches the legacy candidate row");
+  });
+
+  it("detects a feed column that never reaches the candidate readers", () => {
+    const feed = effectiveReturnsTable("findback_query_posts_client", [
+      ...chainSources(),
+      "create or replace function public.findback_query_posts_client() returns table (id text, blocked_author boolean, caption text) language sql as $$ select 'x', false, 'y' $$;",
+    ]);
+    assert.notDeepEqual(
+      effectiveReturnsTable("findback_match_candidates_client"),
+      feed.filter((column) => column !== "blocked_author boolean"),
+      "a feed-only trailing column is drift, not parity",
+    );
   });
 });
 

@@ -55,7 +55,10 @@ select pg_temp.r4_check('only documented chat RPCs are callable by ordinary acco
   'findback_chat_receipt_observe','findback_reserve_chat_media',
     'findback_fetch_chat_media_delivery','findback_ack_chat_media_delivery','findback_chat_set_muted',
    'findback_chat_media_target_client','findback_register_chat_device',
-   'findback_chat_history_authority','findback_chat_set_pin')));
+   'findback_chat_history_authority','findback_chat_set_pin',
+   -- Photo transport participant test: a boolean relationship read for the
+   -- signed-in caller only, added by 20261112170000_chat_file_transport.sql.
+   'findback_chat_file_participant')));
 select pg_temp.r4_check('private chat tables stay closed to clients',
  not has_table_privilege('authenticated','public.chat_conversations','select')
  and not has_table_privilege('authenticated','public.chat_messages','select')

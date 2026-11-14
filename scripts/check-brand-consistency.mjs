@@ -62,7 +62,10 @@ export function checkBrandConsistency({read=path=>readFileSync(resolve(root,path
  assert.ok(icons.length>=3,'notification presenter lost its channels');
  assert.deepEqual(icons.filter(icon=>icon!=='setSmallIcon(R.drawable.ic_stat_findback)'),[],
   'every notification must use the canonical status icon');
- for(const screen of ['HomeTopBar','Splash','About'])assert.ok(text(`apps/mobile/src/screens/${screen}.tsx`).includes('<BrandMark'));
+ // Owner feedback 2026-11-13 removed the duplicate mark from Home's app bar;
+ // the canonical mark now lives once, in the shell's navigation rail.
+ for(const screen of ['Splash','About'])assert.ok(text(`apps/mobile/src/screens/${screen}.tsx`).includes('<BrandMark'));
+ assert.ok(text('apps/mobile/src/components/Shell.tsx').includes('<BrandMark'),'the shell rail carries the canonical mark');
  const auth=text('apps/mobile/src/components/auth/AuthShell.tsx');
  assert.ok(auth.includes('<BrandMark'),'shared auth must use canonical brand');
  assert.doesNotMatch(auth,/\bRadar\b|<svg|assets\/brand\//,'shared auth must not substitute or clone the mark');
