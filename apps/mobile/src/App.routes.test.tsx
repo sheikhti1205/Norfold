@@ -18,10 +18,14 @@ const auth = vi.hoisted(() => ({
   bootError: null as string | null,
   retryBoot: vi.fn(),
   needsProfile: null as import("./services/auth/googleSignIn").GoogleProfileSeed | null,
+  hasPassword: null as boolean | null,
   needsPasswordSetup: false,
   passwordSetupSettled: true,
+  requestRequiredPasswordCode: vi.fn(),
   saveRequiredPassword: vi.fn(),
   confirmRequiredPassword: vi.fn(),
+  dismissPasswordSetup: vi.fn(),
+  refreshPasswordPresence: vi.fn(),
   logout: vi.fn(),
 }));
 const native = vi.hoisted(() => ({ back: null as (() => void) | null, platform: true }));
@@ -155,10 +159,14 @@ beforeEach(() => {
   auth.booting = false;
   auth.bootError = null;
   auth.needsProfile = null;
+  auth.hasPassword = null;
   auth.needsPasswordSetup = false;
   auth.passwordSetupSettled = true;
+  auth.requestRequiredPasswordCode.mockReset();
   auth.saveRequiredPassword.mockReset();
   auth.confirmRequiredPassword.mockReset();
+  auth.dismissPasswordSetup.mockReset();
+  auth.refreshPasswordPresence.mockReset();
   auth.logout.mockReset();
   native.platform = true;
   localStorage.clear();
@@ -187,7 +195,7 @@ it("blocks unsettled sessions before rendering the app", () => {
   expect(screen.queryByText("Home screen")).toBeNull();
 });
 
-it("gates a Google-only session, deep links and history navigation", async () => {
+it("gates a session the server says has no password, across deep links and history navigation", async () => {
   signedIn();
   auth.needsPasswordSetup = true;
   renderAt("/settings/account");
@@ -203,36 +211,43 @@ it("gates a Google-only session, deep links and history navigation", async () =>
 it("does not redirect-loop when a saved password cannot be confirmed", async () => {
   signedIn();
   auth.needsPasswordSetup = true;
-  auth.saveRequiredPassword.mockResolvedValue(undefined);
+  auth.requestRequiredPasswordCode.mockResolvedValue(undefined);
+  auth.saveRequiredPassword.mockResolvedValue({ confirmed: false });
   auth.confirmRequiredPassword.mockResolvedValue(false);
   const view = renderAt("/");
   await screen.findByRole("heading", { name: "Create a password" });
   fireEvent.change(screen.getByLabelText("New password"), { target: { value: "password123" } });
   fireEvent.change(screen.getByLabelText("Confirm new password"), { target: { value: "password123" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save password" }));
-  await screen.findByText("Your password was saved but we could not confirm it. Try again.");
+  fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+  await screen.findByLabelText("Email code");
+  fireEvent.change(screen.getByLabelText("Email code"), { target: { value: "123456" } });
+  fireEvent.click(screen.getByRole("button", { name: "Verify and save" }));
+  await screen.findByText("Your password was saved. We couldn't verify it yet.");
+  expect(auth.saveRequiredPassword).toHaveBeenCalledWith("password123", "123456");
   view.rerender(<App router={router!} />);
   fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-  await waitFor(() => expect(auth.confirmRequiredPassword).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(auth.confirmRequiredPassword).toHaveBeenCalledTimes(1));
   expect(auth.saveRequiredPassword).toHaveBeenCalledTimes(1);
   expect(router?.state.location.pathname).toBe("/create-password");
   expect(screen.getAllByRole("alert")).toHaveLength(1);
 });
 
-it("continues into the app once confirmation clears the gate", async () => {
+it("continues into the app once the server confirms the password was saved", async () => {
   signedIn();
   auth.needsPasswordSetup = true;
-  auth.saveRequiredPassword.mockResolvedValue(undefined);
-  auth.confirmRequiredPassword.mockResolvedValue(true);
+  auth.requestRequiredPasswordCode.mockResolvedValue(undefined);
+  auth.saveRequiredPassword.mockResolvedValue({ confirmed: true });
   const view = renderAt("/");
   await screen.findByRole("heading", { name: "Create a password" });
   fireEvent.change(screen.getByLabelText("New password"), { target: { value: "password123" } });
   fireEvent.change(screen.getByLabelText("Confirm new password"), { target: { value: "password123" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save password" }));
-  await waitFor(() => expect(auth.confirmRequiredPassword).toHaveBeenCalled());
+  fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+  await screen.findByLabelText("Email code");
+  fireEvent.change(screen.getByLabelText("Email code"), { target: { value: "123456" } });
+  fireEvent.click(screen.getByRole("button", { name: "Verify and save" }));
+  await waitFor(() => expect(auth.saveRequiredPassword).toHaveBeenCalledWith("password123", "123456"));
   auth.needsPasswordSetup = false;
   view.rerender(<App router={router!} />);
-  await act(async () => { await router!.navigate("/create-password", { replace: true }); });
   await screen.findByText("Home screen");
 });
 
