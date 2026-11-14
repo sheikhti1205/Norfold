@@ -54,6 +54,7 @@ type SectionLabel = Readonly<{ group: string; description: string }>;
 const SECTION_LABEL: Record<SettingsSection, SectionLabel> = {
   updates: { group: "Updates", description: "Updates & version history" },
   account: { group: "Account", description: "Account" },
+  chat: { group: "Chat", description: "Chat" },
   preferences: { group: "Preferences", description: "Preferences" },
   intelligence: { group: "Intelligence", description: "Intelligence" },
   privacy: { group: "Privacy", description: "Privacy" },
@@ -89,6 +90,7 @@ type Presentation = Readonly<{
 const PRESENTATION: Record<string, Presentation> = {
   "recovered-items": { icon: RotateCcw, iconTone: "success" },
   account: { icon: UserRound, iconTone: "account" },
+  "sign-in-security": { icon: KeyRound, iconTone: "privacy" },
   devices: { icon: MonitorSmartphone, iconTone: "teal" },
   backup: { icon: CloudUpload, iconTone: "blue" },
   "chat-preferences": { icon: MessageSquare, iconTone: "neutral" },

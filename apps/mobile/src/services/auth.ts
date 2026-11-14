@@ -12,10 +12,9 @@ import { getConnectedOpenRouterKey } from "./aiCredentials";
 import { builtInHelp } from "./helpFaq";
 import { buildGroundedPrompt, groundAppAnswer } from "./ai/appKnowledge";
 import { requestPhoneChange } from "./profile";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "./buildConfig";
 
 /** Same validated, publishable-only Vite configuration as getSupabase(). */
-declare const __SUPABASE_URL__: string;
-declare const __SUPABASE_PUBLISHABLE_KEY__: string;
 
 /** Signup may require email verification before a session is available. */
 export interface RegisterResult {
@@ -411,7 +410,7 @@ export function createPasswordRecovery(): PasswordRecovery {
     assertLive();
     if (!client) {
       getSupabase(); // Validate the canonical publishable-only build config.
-      client = createClient(__SUPABASE_URL__, __SUPABASE_PUBLISHABLE_KEY__, {
+      client = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
         auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false,
           storageKey: `findback-password-recovery-${++recoveryClientSequence}` },
         global: { fetch: async (input, init) => {
@@ -684,7 +683,7 @@ async function phoneMutation<T>(
   if (error || !session || session.user.id !== userId) {
     throw new ApiError("Your account changed. Try again from the current account.", 409);
   }
-  const isolated = createClient(__SUPABASE_URL__, __SUPABASE_PUBLISHABLE_KEY__, {
+  const isolated = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,

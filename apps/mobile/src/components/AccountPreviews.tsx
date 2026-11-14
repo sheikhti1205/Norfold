@@ -87,8 +87,8 @@ export function SwitchAccountPanel({ current, accounts, switching, error, onSwit
         </button>
       </li>)}
     </ul> : <p className="fb-account-switch-empty">No other accounts on this device.</p>}
-    <button type="button" className="fb-account-panel-link" onClick={onAdd}>
-      <Plus size={16} aria-hidden="true" />Add another account
+    <button type="button" className="fb-account-add" aria-label="Add another account" onClick={onAdd}>
+      <Plus size={18} aria-hidden="true" /><span>Add another account</span>
     </button>
     {error && <p role="alert" className="fb-account-panel-status">{error}</p>}
   </div>;

@@ -30,7 +30,8 @@ import {
   setPendingEmail as persistPendingEmail,
   setToken,
 } from "./services/session";
-import { getSupabase } from "./services/supabaseClient";
+import { detachSupabaseAccount, getSupabase } from "./services/supabaseClient";
+import { readAccountSession, removeAccountSession, saveAccountSession } from "./services/accountSessions";
 import { readAuthSessionId } from "./services/authSessionIdentity";
 import { clearMessagingRuntime, ensureMessagingDevice } from "./services/messaging/runtime";
 import { AuthAccountChangedError } from "./services/accountScopedAuthStorage";
@@ -52,7 +53,7 @@ import { startPushNotifications, stopPushNotifications } from "./services/pushRu
 import { clearUserScopedLocalState } from "./services/userScopedState";
 import { aiCredentials } from "./services/aiCredentials";
 import { purgeMessagingAccount } from "./services/messaging/runtime";
-import { rememberAccount, refreshRememberedAccount, removeRememberedAccount } from "./services/rememberedAccounts";
+import { readRememberedAccounts, rememberAccount, refreshRememberedAccount, removeRememberedAccount, type RememberedAccount } from "./services/rememberedAccounts";
 import {
   beginConfirmedAccountDeletion, finishAccountAuthCleanup, inspectPendingAccountDeletions,
   type PendingAccountDeletion,
@@ -69,6 +70,8 @@ import {
 export type RegisterOutcome =
   | { status: "authenticated"; user: PublicUser }
   | { status: "pending"; email: string };
+
+export type SwitchAccountResult = { status: "switched" } | { status: "needs-sign-in" };
 
 interface AuthContextValue {
   user: PublicUser | null;
@@ -109,6 +112,8 @@ interface AuthContextValue {
   /** Resend the pending-signup confirmation code. */
   resendPendingEmail: () => Promise<void>;
   logout: (options?: { keepAccount?: boolean }) => Promise<void>;
+  switchAccount: (account: RememberedAccount) => Promise<SwitchAccountResult>;
+  setAccountKept: (id: string, keep: boolean) => Promise<void>;
   deletionCompletion: { accountId: string; state: "cleaning" | "complete" | "cleanup-failed" } | null;
   /** Inventory failure is not evidence that an account was deleted. */
   deletionRecoveryError: boolean;
@@ -323,6 +328,12 @@ export function AuthProvider({ children, boot = true }: { children: ReactNode; b
     let unsubscribe: (() => void) | undefined;
     try {
       const { data } = getSupabase().auth.onAuthStateChange((event, session) => {
+        if (session && readRememberedAccounts().some(account => account.id === session.user.id)) {
+          try {
+            saveAccountSession({ accountId: session.user.id, access_token: session.access_token,
+              refresh_token: session.refresh_token, expires_at: session.expires_at });
+          } catch { /* A storage failure must not break SDK auth event delivery. */ }
+        }
         const previousAccount = sdkAccount.current ?? currentUser.current?.id ?? null;
         if (event === "SIGNED_OUT" && (previousAccount !== null || hadStoredSession.current) && !intentionalSignOut.current.has(previousAccount)) markSessionExpired();
         if (session) clearSessionExpired();
@@ -594,7 +605,7 @@ export function AuthProvider({ children, boot = true }: { children: ReactNode; b
 
   const deviceSignedOut = useCallback(() => currentUser.current === null && sdkAccount.current === null, []);
 
-  const cleanAccountOnDevice = useCallback(async (accountId: string | null) => {
+  const cleanAccountOnDevice = useCallback(async (accountId: string | null, localOnly = false) => {
     intentionalSignOut.current.set(accountId, (intentionalSignOut.current.get(accountId) ?? 0) + 1);
     try {
     // Account A -> B switch starts here: drop this session's token cache and
@@ -631,7 +642,10 @@ export function AuthProvider({ children, boot = true }: { children: ReactNode; b
       if (keysFailed) throw new Error("Stored AI keys could not be removed. Retry cleanup on this device.");
       return;
     }
-    try { await apiLogout(accountId ?? undefined); }
+    try {
+      if (localOnly && accountId) await detachSupabaseAccount(accountId);
+      else await apiLogout(accountId ?? undefined);
+    }
     catch (error) {
       // The persistence boundary refused because A's slot now holds B: A's
       // session is already gone, so nothing to clean, but keys still surface.
@@ -647,6 +661,10 @@ export function AuthProvider({ children, boot = true }: { children: ReactNode; b
       return;
     }
     clearAllAuth();
+    if (localOnly) {
+      sdkAccount.current = null;
+      sdkSessionId.current = null;
+    }
     aiCredentials.clearSession();
     setPendingEmailState(null);
     setNeedsProfileState(null); // W0-B (S2, additive): completion cannot outlive the session.
@@ -665,11 +683,94 @@ export function AuthProvider({ children, boot = true }: { children: ReactNode; b
     const account = currentUser.current;
     const accountId = account?.id ?? sdkAccount.current;
     if (accountId) {
+      if (options?.keepAccount) {
+        const { data, error } = await getSupabase().auth.getSession();
+        if (error || data.session?.user.id !== accountId) throw new Error("Could not save this sign-in.");
+        saveAccountSession({ accountId, access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token, expires_at: data.session.expires_at });
+      } else {
+        removeAccountSession(accountId);
+      }
       const updated = options?.keepAccount && account && !unadmittedDeletions.current.has(accountId)
         ? rememberAccount(account) : removeRememberedAccount(accountId);
       if (!updated) throw new Error("Couldn't update saved accounts on this device. Try again.");
     }
-    await cleanAccountOnDevice(accountId);
+    await cleanAccountOnDevice(accountId, !!options?.keepAccount);
+  }, [cleanAccountOnDevice]);
+
+  const setAccountKept = useCallback(async (id: string, keep: boolean) => {
+    if (!keep) {
+      removeAccountSession(id);
+      if (!removeRememberedAccount(id)) throw new Error("Couldn't update saved accounts on this device.");
+      return;
+    }
+    const account = currentUser.current;
+    if (!account || account.id !== id) throw new Error("Only the current account can be saved.");
+    const { data, error } = await getSupabase().auth.getSession();
+    if (error || data.session?.user.id !== id) throw new Error("Could not save this sign-in.");
+    saveAccountSession({ accountId: id, access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token, expires_at: data.session.expires_at });
+    if (!rememberAccount(account)) {
+      removeAccountSession(id);
+      throw new Error("Couldn't update saved accounts on this device.");
+    }
+  }, []);
+
+  const switchAccount = useCallback(async (target: RememberedAccount): Promise<SwitchAccountResult> => {
+    const current = currentUser.current;
+    if (!current) throw new Error("Current account is unavailable.");
+    const sdk = getSupabase();
+    const { data, error } = await sdk.auth.getSession();
+    if (error || data.session?.user.id !== current.id) throw new Error("Could not save this sign-in.");
+    saveAccountSession({ accountId: current.id, access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token, expires_at: data.session.expires_at });
+    if (!rememberAccount(current)) throw new Error("Couldn't update saved accounts on this device.");
+    const saved = readAccountSession(target.id);
+    if (!saved) {
+      await cleanAccountOnDevice(current.id, true);
+      return { status: "needs-sign-in" };
+    }
+    await aiCredentials.removeAccountCredentials(current.id);
+    await stopPushNotifications();
+    const detachFailedSwitch = async () => {
+      const active = await sdk.auth.getSession();
+      const owner = active.data.session?.user.id;
+      if (owner && owner !== current.id && owner !== target.id) throw new AuthAccountChangedError();
+      if (owner) await detachSupabaseAccount(owner);
+      sdkAccount.current = null;
+      beginAccountSwitch();
+    };
+    intentionalSignOut.current.set(current.id, (intentionalSignOut.current.get(current.id) ?? 0) + 1);
+    try {
+      beginAccountSwitch();
+      aiCredentials.clearSession();
+      disconnectRealtime();
+      clearUserScopedLocalState();
+      setUserState(null);
+      setNeedsProfileState(null);
+      const result = await sdk.auth.setSession({ access_token: saved.access_token, refresh_token: saved.refresh_token });
+      if (result.error || result.data.session?.user.id !== target.id) {
+        removeAccountSession(target.id);
+        await detachFailedSwitch();
+        return { status: "needs-sign-in" };
+      }
+      const next = await fetchMe(target.id);
+      if (next.id !== target.id || sdkAccount.current !== target.id) throw new Error("Account changed during sign-in.");
+      const latest = await sdk.auth.getSession();
+      if (latest.error || latest.data.session?.user.id !== target.id) throw new Error("Account changed during sign-in.");
+      saveAccountSession({ accountId: target.id, access_token: latest.data.session.access_token,
+        refresh_token: latest.data.session.refresh_token, expires_at: latest.data.session.expires_at });
+      setUserState(next);
+      return { status: "switched" };
+    } catch {
+      removeAccountSession(target.id);
+      await detachFailedSwitch();
+      return { status: "needs-sign-in" };
+    } finally {
+      const count = (intentionalSignOut.current.get(current.id) ?? 1) - 1;
+      if (count) intentionalSignOut.current.set(current.id, count);
+      else intentionalSignOut.current.delete(current.id);
+    }
   }, [cleanAccountOnDevice]);
 
   const publishDeletion = useCallback((ticket: number, accountId: string, state: "cleaning" | "complete" | "cleanup-failed") => {
@@ -877,6 +978,8 @@ export function AuthProvider({ children, boot = true }: { children: ReactNode; b
       verifyPendingEmail,
       resendPendingEmail,
       logout,
+      switchAccount,
+      setAccountKept,
       deletionCompletion,
       deletionRecoveryError,
       finishAccountDeletion,
@@ -910,6 +1013,8 @@ export function AuthProvider({ children, boot = true }: { children: ReactNode; b
       verifyPendingEmail,
       resendPendingEmail,
       logout,
+      switchAccount,
+      setAccountKept,
       deletionCompletion,
       deletionRecoveryError,
       finishAccountDeletion,
