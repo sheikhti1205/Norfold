@@ -20,9 +20,10 @@ import {
   updatePassword,
   verifyPhoneChangeCode,
   saveProfilePhone,
-  needsPasswordSetup,
-  createAccountPassword,
-  readPasswordSetupUser,
+  readHasAccountPassword,
+  sendAccountPasswordCode,
+  saveAccountPasswordWithCode,
+  setAccountPassword,
 } from "./auth";
 import { isLikelySecretKey, SupabaseConfigError, validateSupabaseConfig } from "./supabaseClient";
 import { aiCredentials } from "./aiCredentials";
@@ -38,6 +39,7 @@ const { clientMock, singleMock, ilikeMock, limitMock, selectMock, isolatedClient
       signOut: vi.fn(), resend: vi.fn(), verifyOtp: vi.fn(), refreshSession: vi.fn(),
       onAuthStateChange: vi.fn(), updateUser: vi.fn(), setSession: vi.fn(),
       resetPasswordForEmail: vi.fn(), exchangeCodeForSession: vi.fn(),
+      signInWithOtp: vi.fn(),
       dispose: vi.fn(),
     },
     rpc: vi.fn(), from: vi.fn(), functions: { invoke: vi.fn() },
@@ -84,30 +86,116 @@ const USER = {
   user_metadata: { phone: "01812345678" },
 };
 
-describe("password setup capability", () => {
-  const identity = (provider: string) => ({ provider } as NonNullable<import("@supabase/supabase-js").User["identities"]>[number]);
-  it("requires setup only for a user with no email identity", () => {
-    expect(needsPasswordSetup({ identities: [identity("google")] })).toBe(true);
-    expect(needsPasswordSetup({ identities: [identity("google")], user_metadata: { norfold_password_set_at: "2026-11-13T00:00:00.000Z" } })).toBe(false);
-    expect(needsPasswordSetup({ identities: [identity("google")], user_metadata: { norfold_password_set_at: "" } })).toBe(true);
-    expect(needsPasswordSetup({ identities: [identity("email")] })).toBe(false);
-    expect(needsPasswordSetup({ identities: [identity("google"), identity("email")] })).toBe(false);
-    expect(needsPasswordSetup(null)).toBe(false);
-    expect(needsPasswordSetup(undefined)).toBe(false);
+describe("password presence and setup", () => {
+  const SHARE_ORIGIN = "https://password-setup-test.example";
+  const session = { user: USER, access_token: "tok" };
+  beforeEach(() => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", SHARE_ORIGIN);
   });
-  it("saves and rereads through the auth service", async () => {
-    clientMock.auth.updateUser.mockResolvedValue({ error: null });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+  const mockSession = (user: typeof USER = USER) => {
+    clientMock.auth.getSession.mockResolvedValue({ data: { session: { ...session, user } }, error: null });
+  };
+
+  it("reads the authoritative boolean from the server", async () => {
+    clientMock.rpc.mockResolvedValueOnce({ data: true, error: null });
+    await expect(readHasAccountPassword()).resolves.toBe(true);
+    expect(clientMock.rpc).toHaveBeenCalledWith("has_account_password");
+  });
+
+  it("surfaces an unreadable authority instead of guessing", async () => {
+    clientMock.rpc.mockResolvedValueOnce({ data: null, error: { message: "boom", status: 503 } });
+    await expect(readHasAccountPassword()).rejects.toThrow("Could not check your sign-in methods. Please try again.");
+    clientMock.rpc.mockResolvedValueOnce({ data: null, error: null });
+    await expect(readHasAccountPassword()).rejects.toMatchObject({ status: 502 });
+  });
+
+  it("sends the code to the current account's email through the recovery mailbox", async () => {
+    mockSession();
+    clientMock.auth.resetPasswordForEmail.mockResolvedValue({ data: {}, error: null });
+    await sendAccountPasswordCode(USER.id, USER.email);
+    expect(clientMock.auth.resetPasswordForEmail).toHaveBeenCalledWith(USER.email, { redirectTo: `${SHARE_ORIGIN}/recovery` });
+    expect(clientMock.auth.signInWithOtp).not.toHaveBeenCalled();
+  });
+
+  it("refuses to send a code after the account changed", async () => {
+    mockSession({ ...USER, id: "other" });
+    await expect(sendAccountPasswordCode(USER.id, USER.email)).rejects.toMatchObject({ status: 409 });
+    expect(clientMock.auth.resetPasswordForEmail).not.toHaveBeenCalled();
+  });
+
+  it("maps an email send limit honestly", async () => {
+    mockSession();
+    clientMock.auth.resetPasswordForEmail.mockResolvedValue({
+      data: {},
+      error: { code: "over_email_send_rate_limit", message: "rate limit", status: 429 },
+    });
+    await expect(sendAccountPasswordCode(USER.id, USER.email)).rejects.toMatchObject({
+      code: "EMAIL_SEND_LIMITED",
+      status: 429,
+    });
+  });
+
+  it("verifies the recovery code before writing the password", async () => {
+    mockSession();
+    clientMock.auth.verifyOtp.mockResolvedValue({ data: { user: USER, session }, error: null });
     clientMock.auth.getUser.mockResolvedValue({ data: { user: USER }, error: null });
-    await createAccountPassword("password123");
-    expect(clientMock.auth.updateUser).toHaveBeenCalledWith({ password: "password123", data: { norfold_password_set_at: expect.any(String) } });
-    expect(await readPasswordSetupUser()).toEqual(USER);
-    expect(clientMock.auth.getUser).toHaveBeenCalledOnce();
+    clientMock.auth.updateUser.mockResolvedValue({ data: { user: USER }, error: null });
+    await saveAccountPasswordWithCode({ accountId: USER.id, email: USER.email, password: "password123", code: "123456" });
+    expect(clientMock.auth.verifyOtp).toHaveBeenCalledWith({ email: USER.email, token: "123456", type: "recovery" });
+    expect(clientMock.auth.updateUser).toHaveBeenCalledWith({ password: "password123" });
+    expect(clientMock.auth.dispose).toHaveBeenCalled();
   });
-  it("marks an existing password when Supabase reports same_password", async () => {
-    clientMock.auth.updateUser.mockResolvedValueOnce({ error: { code: "same_password", name: "AuthApiError", message: "New password should be different from the old password.", status: 422 } }).mockResolvedValueOnce({ error: null });
-    await expect(createAccountPassword("password123")).resolves.toBeUndefined();
-    expect(clientMock.auth.updateUser).toHaveBeenCalledTimes(2);
-    expect(clientMock.auth.updateUser).toHaveBeenNthCalledWith(2, { data: { norfold_password_set_at: expect.any(String) } });
+
+  it("never writes a password when the code is wrong or expired", async () => {
+    mockSession();
+    clientMock.auth.verifyOtp.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { code: "otp_expired", message: "Token has expired or is invalid", status: 400 },
+    });
+    await expect(saveAccountPasswordWithCode({ accountId: USER.id, email: USER.email, password: "password123", code: "123456" }))
+      .rejects.toThrow("Invalid or expired verification code");
+    expect(clientMock.auth.updateUser).not.toHaveBeenCalled();
+  });
+
+  it("never writes a password when the verified account does not match", async () => {
+    mockSession();
+    const other = { ...USER, id: "someone-else", email: "other@example.com" };
+    clientMock.auth.verifyOtp.mockResolvedValue({
+      data: { user: other, session: { ...session, user: other } },
+      error: null,
+    });
+    await expect(saveAccountPasswordWithCode({ accountId: USER.id, email: USER.email, password: "password123", code: "123456" }))
+      .rejects.toThrow("Invalid or expired verification code");
+    expect(clientMock.auth.updateUser).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed code before calling the network", async () => {
+    await expect(saveAccountPasswordWithCode({ accountId: USER.id, email: USER.email, password: "password123", code: "12" }))
+      .rejects.toThrow("Invalid or expired verification code");
+    expect(clientMock.auth.verifyOtp).not.toHaveBeenCalled();
+  });
+
+  it("treats an existing matching password as an already-satisfied write", async () => {
+    mockSession();
+    clientMock.auth.verifyOtp.mockResolvedValue({ data: { user: USER, session }, error: null });
+    clientMock.auth.getUser.mockResolvedValue({ data: { user: USER }, error: null });
+    clientMock.auth.updateUser.mockResolvedValue({
+      data: { user: USER },
+      error: { code: "same_password", name: "AuthApiError", message: "New password should be different from the old password.", status: 422 },
+    });
+    await expect(saveAccountPasswordWithCode({ accountId: USER.id, email: USER.email, password: "password123", code: "123456" }))
+      .resolves.toBeUndefined();
+  });
+});
+
+describe("initial Google password", () => {
+  it("writes without an OTP only for the just-authenticated profile-completion path", async () => {
+    clientMock.auth.updateUser.mockResolvedValue({ data: { user: USER }, error: null });
+    await setAccountPassword("password123");
+    expect(clientMock.auth.updateUser).toHaveBeenCalledWith({ password: "password123" });
   });
 });
 
@@ -832,7 +920,7 @@ describe("password recovery (Forgot password → recovery code → new password;
     expect(clientMock.auth.updateUser).not.toHaveBeenCalled();
     clientMock.auth.updateUser.mockResolvedValue({ data: {}, error: null });
     await expect(updatePassword("new-password-123")).resolves.toBeUndefined();
-    expect(clientMock.auth.updateUser).toHaveBeenCalledWith({ password: "new-password-123", data: { norfold_password_set_at: expect.any(String) } });
+    expect(clientMock.auth.updateUser).toHaveBeenCalledWith({ password: "new-password-123" });
   });
 });
 

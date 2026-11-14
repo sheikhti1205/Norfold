@@ -15,6 +15,7 @@ vi.mock("@capacitor/core", () => ({
   Capacitor: { isNativePlatform: () => false, getPlatform: () => "web" }, registerPlugin: vi.fn()
 }));
 vi.mock("./services/supabaseClient", () => ({ getSupabase: () => ({ auth: {
+  getSession: async () => ({ data: { session: null }, error: null }),
   onAuthStateChange: (callback: typeof seams.callback) => {
     seams.callback = callback;
     return { data: { subscription: { unsubscribe: () => {} } } };
@@ -23,8 +24,8 @@ vi.mock("./services/supabaseClient", () => ({ getSupabase: () => ({ auth: {
 vi.mock("./services/auth", () => ({
   BootTimeoutError: class BootTimeoutError extends Error {},
   restoreSession: () => seams.restoreSession(), fetchMe: (...args: unknown[]) => seams.fetchMe(...args),
-  needsPasswordSetup: (user: { identities?: { provider: string }[] } | null) => user != null && !user.identities?.some((item) => item.provider === "email"),
-  createAccountPassword: vi.fn(), readPasswordSetupUser: vi.fn(),
+  readHasAccountPassword: vi.fn(async () => true),
+  sendAccountPasswordCode: vi.fn(), saveAccountPasswordWithCode: vi.fn(),
   login: (...args: unknown[]) => seams.login(...args), logout: vi.fn(), register: (...args: unknown[]) => seams.register(...args), sendPendingEmailCode: vi.fn(), verifyPendingEmailCode: vi.fn()
 }));
 vi.mock("./services/auth/googleSignIn", async (importOriginal) => ({

@@ -18,9 +18,9 @@ import {
   restoreSession,
   sendPendingEmailCode,
   verifyPendingEmailCode,
-  needsPasswordSetup as userNeedsPasswordSetup,
-  createAccountPassword,
-  readPasswordSetupUser,
+  readHasAccountPassword,
+  sendAccountPasswordCode,
+  saveAccountPasswordWithCode,
 } from "./services/auth";
 import {
   beginAccountSwitch,
@@ -72,10 +72,20 @@ export type RegisterOutcome =
 
 interface AuthContextValue {
   user: PublicUser | null;
+  /** Authoritative password presence; null while unknown or unverifiable. */
+  hasPassword: boolean | null;
   needsPasswordSetup: boolean;
   passwordSetupSettled: boolean;
-  saveRequiredPassword: (password: string) => Promise<void>;
+  /** Send the code that must precede a password save (prompt flow only). */
+  requestRequiredPasswordCode: () => Promise<void>;
+  /** Verify the emailed code, set the password, then reread the authority. */
+  saveRequiredPassword: (password: string, code: string) => Promise<{ confirmed: boolean }>;
+  /** Re-read the authority only; never writes the password again. */
   confirmRequiredPassword: () => Promise<boolean>;
+  /** Session-scoped "Not now"; the prompt does not nag again this session. */
+  dismissPasswordSetup: () => void;
+  /** Re-read the authority after a password write from another screen. */
+  refreshPasswordPresence: () => Promise<boolean>;
   /** SDK session routing identity only; never a token or authority certificate. */
   authSessionId: string | null;
   /** True while we try to hydrate a stored session on boot. */
@@ -123,6 +133,22 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 const DELETION_CLEANUP_KEY = "findback.auth.deletedAccountCleanup";
 const PENDING_DEADLINE_KEY = "findback.auth.pendingEmailDeadline";
+const PASSWORD_DISMISS_KEY = "findback.auth.passwordPromptDismissed";
+
+function passwordDismissKey(accountId: string): string {
+  return `${PASSWORD_DISMISS_KEY}:${accountId}`;
+}
+
+/** Session-scoped: one tab's "Not now" survives reloads until it is closed. */
+function readPasswordPromptDismissed(accountId: string): boolean {
+  try { return sessionStorage.getItem(passwordDismissKey(accountId)) === "1"; } catch { return false; }
+}
+
+function rememberPasswordPromptDismissed(accountId: string): void {
+  try { sessionStorage.setItem(passwordDismissKey(accountId), "1"); } catch { /* keep it in memory */ }
+}
+
+type PasswordPresence = "unknown" | "has" | "missing";
 
 function readPendingDeadline(email: string | null): number {
   try {
@@ -132,12 +158,19 @@ function readPendingDeadline(email: string | null): number {
 }
 
 export function AuthProvider({ children, boot = true }: { children: ReactNode; boot?: boolean }) {
-  const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
+  const [passwordPresence, setPasswordPresence] = useState<PasswordPresence>("unknown");
+  const passwordPresenceRef = useRef<PasswordPresence>("unknown");
+  const [passwordPromptDismissed, setPasswordPromptDismissed] = useState(false);
   // `boot={false}` is the static visual-fixture mount: it renders real
   // components with no session, no SDK and no network, so the state is settled
   // from the first paint instead of waiting on a restore that will never run.
   const [passwordSetupSettled, setPasswordSetupSettled] = useState(!boot);
   const passwordGate = useRef<{ account: string | null; required: boolean }>({ account: null, required: false });
+  const passwordPresenceRead = useRef(0);
+  // Derived, never a second source of truth: the prompt exists only while the
+  // server says there is no password AND this session has not dismissed it.
+  const needsPasswordSetup = passwordPresence === "missing" && !passwordPromptDismissed;
+  const hasPassword = passwordPresence === "unknown" ? null : passwordPresence === "has";
   const [authSessionId,setAuthSessionId]=useState<string|null>(null);
   const sdkSessionId=useRef<string|null>(null);
   const [user, publishUser] = useState<PublicUser | null>(null);
@@ -173,6 +206,41 @@ export function AuthProvider({ children, boot = true }: { children: ReactNode; b
     currentUser.current = next;
     publishUser(next);
   }, [assertAccount]);
+  const applyPasswordPresence = useCallback((accountId: string, presence: PasswordPresence) => {
+    if (sdkAccount.current !== accountId) return;
+    passwordPresenceRef.current = presence;
+    passwordGate.current = { account: accountId, required: presence === "missing" };
+    setPasswordPresence(presence);
+    setPasswordPromptDismissed(presence === "missing" && readPasswordPromptDismissed(accountId));
+    setPasswordSetupSettled(true);
+  }, []);
+  const resetPasswordPresence = useCallback(() => {
+    ++passwordPresenceRead.current;
+    passwordPresenceRef.current = "unknown";
+    passwordGate.current = { account: null, required: false };
+    setPasswordPresence("unknown");
+    setPasswordPromptDismissed(false);
+    setPasswordSetupSettled(true);
+  }, []);
+  const readPasswordPresence = useCallback((accountId: string, block: boolean) => {
+    const read = ++passwordPresenceRead.current;
+    if (block) setPasswordSetupSettled(false);
+    // Deferred: awaiting Supabase inside onAuthStateChange can deadlock.
+    setTimeout(() => {
+      void readHasAccountPassword()
+        .then((present) => {
+          if (read !== passwordPresenceRead.current || sdkAccount.current !== accountId) return;
+          applyPasswordPresence(accountId, present ? "has" : "missing");
+        })
+        .catch(() => {
+          if (read !== passwordPresenceRead.current || sdkAccount.current !== accountId) return;
+          // A failed read is never proof that a password is missing. Keep a
+          // known answer; an unknown answer must not manufacture a prompt.
+          if (passwordPresenceRef.current === "unknown") applyPasswordPresence(accountId, "unknown");
+          else setPasswordSetupSettled(true);
+        });
+    }, 0);
+  }, [applyPasswordPresence]);
   const [deletionCompletion, setDeletionCompletion] = useState<AuthContextValue["deletionCompletion"]>(null);
   const [pendingEmail, setPendingEmailState] = useState<string | null>(() => getPendingEmail());
   const [pendingEmailDeadline, setPendingEmailDeadline] = useState(() => readPendingDeadline(getPendingEmail()));
@@ -260,12 +328,8 @@ export function AuthProvider({ children, boot = true }: { children: ReactNode; b
         if (session) clearSessionExpired();
         if (event === "SIGNED_OUT") hadStoredSession.current = false;
         const nextAccount = session?.user.id ?? null;
-        const required = nextAccount !== null && (
-          (passwordGate.current.account === nextAccount && passwordGate.current.required) || userNeedsPasswordSetup(session?.user)
-        );
-        passwordGate.current = { account: nextAccount, required };
-        setNeedsPasswordSetup(required);
-        setPasswordSetupSettled(true);
+        const samePasswordAccount = nextAccount !== null && passwordGate.current.account === nextAccount;
+        const knownPasswordPresence = samePasswordAccount && passwordPresenceRef.current !== "unknown";
         const nextSessionId=readAuthSessionId(session);
         // A same-account SIGNED_IN may replace the SDK session without SIGNED_OUT.
         // Fence old messaging/media/RTC work synchronously, before React effects
@@ -281,6 +345,10 @@ export function AuthProvider({ children, boot = true }: { children: ReactNode; b
         const epoch = event === "INITIAL_SESSION" && !accountChanged
           ? authEpoch.current : ++authEpoch.current;
         sdkAccount.current = nextAccount;
+        // The authoritative read runs outside this callback. A known answer
+        // stays usable while it refreshes; a new/unknown account waits for it.
+        if (nextAccount === null) resetPasswordPresence();
+        else readPasswordPresence(nextAccount, !knownPasswordPresence);
         if (nextAccount !== null) lastAccount.current = nextAccount;
         sdkObserved.current = true;
         if (event === "SIGNED_OUT" || (accountChanged && nextAccount === null)) profileAdoptionBlocked.current = true;
@@ -334,7 +402,7 @@ export function AuthProvider({ children, boot = true }: { children: ReactNode; b
       /* Supabase not configured; boot handling already cleared state */
     }
     return () => unsubscribe?.();
-  }, [boot]);
+  }, [boot, resetPasswordPresence, readPasswordPresence]);
 
   // A failed mid-session refresh signs the user out in place.
   useEffect(
@@ -349,8 +417,9 @@ export function AuthProvider({ children, boot = true }: { children: ReactNode; b
         setUserState(null);
         setPendingEmailState(null);
         setNeedsProfileState(null); // W0-B (S2, additive): see SIGNED_OUT above.
+        resetPasswordPresence();
       }),
-    [],
+    [resetPasswordPresence],
   );
 
   useEffect(() => {
@@ -384,23 +453,70 @@ export function AuthProvider({ children, boot = true }: { children: ReactNode; b
     if (epoch === authEpoch.current) setUserState(next);
   }, []);
 
-  const saveRequiredPassword = useCallback(async (password: string) => {
-    const account = passwordGate.current.account;
-    if (!account || !passwordGate.current.required) throw new AuthAccountChangedError();
-    await createAccountPassword(password);
-    if (passwordGate.current.account !== account) throw new AuthAccountChangedError();
+  const currentAccountEmail = useCallback(async (accountId: string) => {
+    const { data: { session } } = await getSupabase().auth.getSession();
+    const email = session?.user.email?.trim().toLowerCase();
+    if (!session || session.user.id !== accountId || !email) throw new AuthAccountChangedError();
+    return email;
   }, []);
 
-  const confirmRequiredPassword = useCallback(async () => {
+  const requestRequiredPasswordCode = useCallback(async () => {
     const account = passwordGate.current.account;
     if (!account || !passwordGate.current.required) throw new AuthAccountChangedError();
-    const refreshed = await readPasswordSetupUser();
-    if (passwordGate.current.account !== account || refreshed.id !== account) throw new AuthAccountChangedError();
-    const required = userNeedsPasswordSetup(refreshed);
-    passwordGate.current = { account, required };
-    setNeedsPasswordSetup(required);
-    return !required;
+    const email = await currentAccountEmail(account);
+    await sendAccountPasswordCode(account, email);
+    if (passwordGate.current.account !== account) throw new AuthAccountChangedError();
+  }, [currentAccountEmail]);
+
+  const saveRequiredPassword = useCallback(async (password: string, code: string) => {
+    const account = passwordGate.current.account;
+    if (!account || !passwordGate.current.required) throw new AuthAccountChangedError();
+    const email = await currentAccountEmail(account);
+    await saveAccountPasswordWithCode({ accountId: account, email, password, code });
+    if (passwordGate.current.account !== account || sdkAccount.current !== account) throw new AuthAccountChangedError();
+    // The write succeeded; only the server's own record may declare success.
+    let confirmed = false;
+    try { confirmed = await readHasAccountPassword(); } catch { confirmed = false; }
+    if (passwordGate.current.account !== account || sdkAccount.current !== account) throw new AuthAccountChangedError();
+    if (confirmed) {
+      passwordPresenceRef.current = "has";
+      passwordGate.current = { account, required: false };
+      setPasswordPresence("has");
+      setPasswordPromptDismissed(false);
+      setPasswordSetupSettled(true);
+    }
+    return { confirmed };
+  }, [currentAccountEmail]);
+
+  const confirmRequiredPassword = useCallback(async () => {
+    const account = passwordGate.current.account ?? sdkAccount.current;
+    if (!account) throw new AuthAccountChangedError();
+    const confirmed = await readHasAccountPassword();
+    if (passwordGate.current.account !== account || sdkAccount.current !== account) throw new AuthAccountChangedError();
+    passwordPresenceRef.current = confirmed ? "has" : "missing";
+    passwordGate.current = { account, required: !confirmed };
+    setPasswordPresence(confirmed ? "has" : "missing");
+    if (confirmed) setPasswordPromptDismissed(false);
+    else setPasswordPromptDismissed(readPasswordPromptDismissed(account));
+    setPasswordSetupSettled(true);
+    return confirmed;
   }, []);
+
+  const dismissPasswordSetup = useCallback(() => {
+    const account = passwordGate.current.account ?? sdkAccount.current;
+    if (!account) return;
+    rememberPasswordPromptDismissed(account);
+    setPasswordPromptDismissed(true);
+  }, []);
+
+  const refreshPasswordPresence = useCallback(async () => {
+    const account = sdkAccount.current;
+    if (!account) return false;
+    const present = await readHasAccountPassword();
+    if (sdkAccount.current !== account) return false;
+    applyPasswordPresence(account, present ? "has" : "missing");
+    return present;
+  }, [applyPasswordPresence]);
 
   const login = useCallback(async (email: string, password: string) => {
     const epoch = authEpoch.current;
@@ -742,10 +858,14 @@ export function AuthProvider({ children, boot = true }: { children: ReactNode; b
   const value = useMemo(
     () => ({
       user,
+      hasPassword,
       needsPasswordSetup,
       passwordSetupSettled,
+      requestRequiredPasswordCode,
       saveRequiredPassword,
       confirmRequiredPassword,
+      dismissPasswordSetup,
+      refreshPasswordPresence,
       authSessionId,
       booting,
       bootError,
@@ -771,10 +891,14 @@ export function AuthProvider({ children, boot = true }: { children: ReactNode; b
     }),
     [
       user,
+      hasPassword,
       needsPasswordSetup,
       passwordSetupSettled,
+      requestRequiredPasswordCode,
       saveRequiredPassword,
       confirmRequiredPassword,
+      dismissPasswordSetup,
+      refreshPasswordPresence,
       authSessionId,
       booting,
       bootError,

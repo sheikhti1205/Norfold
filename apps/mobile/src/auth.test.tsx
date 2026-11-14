@@ -29,8 +29,10 @@ const hoisted = vi.hoisted(() => ({
   fetchMe: vi.fn(() => new Promise(() => {})),
   authCallback: null as ((event: string, session: unknown) => void) | null,
   storedSession: false,
-  createAccountPassword: vi.fn(),
-  readPasswordSetupUser: vi.fn(),
+  readHasAccountPassword: vi.fn(),
+  sendAccountPasswordCode: vi.fn(),
+  saveAccountPasswordWithCode: vi.fn(),
+  session: { user: { id: "00000000-0000-4000-8000-000000000001", email: "alice@example.com" }, access_token: "token" },
 }));
 
 vi.mock("@capacitor/core", () => ({
@@ -47,15 +49,16 @@ vi.mock("./services/auth", () => ({
   restoreSession: (...args: unknown[]) => hoisted.restoreSession(...args),
   sendPendingEmailCode: vi.fn(),
   verifyPendingEmailCode: vi.fn(),
-  needsPasswordSetup: (user: { identities?: { provider: string }[] } | null) => user != null && !user.identities?.some((item) => item.provider === "email"),
-  createAccountPassword: (...args: unknown[]) => hoisted.createAccountPassword(...args),
-  readPasswordSetupUser: () => hoisted.readPasswordSetupUser(),
+  readHasAccountPassword: () => hoisted.readHasAccountPassword(),
+  sendAccountPasswordCode: (...args: unknown[]) => hoisted.sendAccountPasswordCode(...args),
+  saveAccountPasswordWithCode: (...args: unknown[]) => hoisted.saveAccountPasswordWithCode(...args),
 }));
 
 vi.mock("./services/supabaseClient", () => ({
   hasStoredAuthSession: () => hoisted.storedSession,
   getSupabase: () => ({
     auth: {
+      getSession: async () => ({ data: { session: hoisted.session }, error: null }),
       onAuthStateChange: (cb: (event: string, session: unknown) => void) => {
         hoisted.authCallback = cb;
         return hoisted.onAuthStateChange(cb);
@@ -139,6 +142,11 @@ beforeEach(() => {
   hoisted.stopPush.mockResolvedValue(undefined);
   hoisted.apiLogout.mockResolvedValue(undefined);
   hoisted.restoreSession.mockResolvedValue({ ...USER_A });
+  hoisted.readHasAccountPassword.mockReset();
+  hoisted.readHasAccountPassword.mockResolvedValue(true);
+  hoisted.sendAccountPasswordCode.mockReset();
+  hoisted.saveAccountPasswordWithCode.mockReset();
+  sessionStorage.clear();
   hoisted.onAuthStateChange.mockReturnValue({
     data: { subscription: { unsubscribe: vi.fn() } },
   });
@@ -155,23 +163,81 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it("keeps a Google session gated until the reread confirms email sign-in", async () => {
+it("does not gate an account the server says already has a password", async () => {
   const capture: { current: AuthState | null } = { current: null };
   const Harness = probeHarness(capture);
+  hoisted.readHasAccountPassword.mockResolvedValue(true);
   render(<Harness />);
   expect(capture.current?.passwordSetupSettled).toBe(false);
-  const google = { id: USER_A.id, identities: [{ provider: "google" }] };
+  const google = { id: USER_A.id, email: "alice@example.com", identities: [{ provider: "google" }] };
   act(() => hoisted.authCallback!("INITIAL_SESSION", { user: google, access_token: "token" }));
-  expect(capture.current?.passwordSetupSettled).toBe(true);
+  await waitFor(() => expect(capture.current?.passwordSetupSettled).toBe(true));
+  expect(capture.current?.hasPassword).toBe(true);
+  expect(capture.current?.needsPasswordSetup).toBe(false);
+});
+
+it("gates only after the authoritative read says there is no password", async () => {
+  const capture: { current: AuthState | null } = { current: null };
+  const Harness = probeHarness(capture);
+  const google = { id: USER_A.id, email: "alice@example.com", identities: [{ provider: "google" }] };
+  hoisted.readHasAccountPassword.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  render(<Harness />);
+  act(() => hoisted.authCallback!("INITIAL_SESSION", { user: google, access_token: "token" }));
+  await waitFor(() => expect(capture.current?.needsPasswordSetup).toBe(true));
+  expect(capture.current?.hasPassword).toBe(false);
+
+  hoisted.sendAccountPasswordCode.mockResolvedValue(undefined);
+  await act(async () => { await capture.current!.requestRequiredPasswordCode(); });
+  expect(hoisted.sendAccountPasswordCode).toHaveBeenCalledWith(USER_A.id, "alice@example.com");
+
+  hoisted.saveAccountPasswordWithCode.mockResolvedValue(undefined);
+  await act(async () => {
+    await expect(capture.current!.saveRequiredPassword("password123", "123456")).resolves.toEqual({ confirmed: true });
+  });
+  expect(hoisted.saveAccountPasswordWithCode).toHaveBeenCalledWith({
+    accountId: USER_A.id, email: "alice@example.com", password: "password123", code: "123456",
+  });
+  await waitFor(() => expect(capture.current?.needsPasswordSetup).toBe(false));
+  expect(capture.current?.hasPassword).toBe(true);
+});
+
+it("keeps the gate honest when the post-save reread has not confirmed yet", async () => {
+  const capture: { current: AuthState | null } = { current: null };
+  const Harness = probeHarness(capture);
+  hoisted.readHasAccountPassword.mockResolvedValue(false);
+  render(<Harness />);
+  act(() => hoisted.authCallback!("INITIAL_SESSION", { user: { id: USER_A.id, email: "alice@example.com" }, access_token: "token" }));
+  await waitFor(() => expect(capture.current?.needsPasswordSetup).toBe(true));
+  hoisted.saveAccountPasswordWithCode.mockResolvedValue(undefined);
+  await act(async () => {
+    await expect(capture.current!.saveRequiredPassword("password123", "123456")).resolves.toEqual({ confirmed: false });
+  });
   expect(capture.current?.needsPasswordSetup).toBe(true);
-  hoisted.createAccountPassword.mockResolvedValue(undefined);
-  hoisted.readPasswordSetupUser.mockResolvedValueOnce(google).mockResolvedValueOnce({ ...google, identities: [{ provider: "email" }] });
-  await act(async () => { await capture.current!.saveRequiredPassword("password123"); });
-  act(() => hoisted.authCallback!("USER_UPDATED", { user: { ...google, identities: [{ provider: "email" }] }, access_token: "token" }));
-  expect(capture.current?.needsPasswordSetup).toBe(true);
-  await act(async () => { expect(await capture.current!.confirmRequiredPassword()).toBe(false); });
-  expect(capture.current?.needsPasswordSetup).toBe(true);
-  await act(async () => { expect(await capture.current!.confirmRequiredPassword()).toBe(true); });
+});
+
+it("does not manufacture a password prompt when the authority cannot be read", async () => {
+  const capture: { current: AuthState | null } = { current: null };
+  const Harness = probeHarness(capture);
+  hoisted.readHasAccountPassword.mockRejectedValue(new Error("offline"));
+  render(<Harness />);
+  act(() => hoisted.authCallback!("INITIAL_SESSION", { user: { id: USER_A.id, email: "alice@example.com" }, access_token: "token" }));
+  await waitFor(() => expect(capture.current?.passwordSetupSettled).toBe(true));
+  expect(capture.current?.hasPassword).toBeNull();
+  expect(capture.current?.needsPasswordSetup).toBe(false);
+});
+
+it("keeps a dismissed password prompt closed for the session", async () => {
+  const capture: { current: AuthState | null } = { current: null };
+  const Harness = probeHarness(capture);
+  hoisted.readHasAccountPassword.mockResolvedValue(false);
+  render(<Harness />);
+  act(() => hoisted.authCallback!("INITIAL_SESSION", { user: { id: USER_A.id, email: "alice@example.com" }, access_token: "token" }));
+  await waitFor(() => expect(capture.current?.needsPasswordSetup).toBe(true));
+  act(() => capture.current!.dismissPasswordSetup());
+  expect(capture.current?.needsPasswordSetup).toBe(false);
+  expect(sessionStorage.getItem(`findback.auth.passwordPromptDismissed:${USER_A.id}`)).toBe("1");
+  act(() => hoisted.authCallback!("INITIAL_SESSION", { user: { id: USER_A.id, email: "alice@example.com" }, access_token: "token" }));
+  await waitFor(() => expect(capture.current?.passwordSetupSettled).toBe(true));
   expect(capture.current?.needsPasswordSetup).toBe(false);
 });
 

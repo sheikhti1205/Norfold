@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { LogOut } from "lucide-react";
 import { useAuth } from "../auth";
-import { requestAccountDeletion, setAccountPassword } from "../services/auth";
+import { requestAccountDeletion, sendAccountPasswordCode, saveAccountPasswordWithCode } from "../services/auth";
+import { ApiError } from "../services/session";
 import { fetchPhoneChangeEligibility, formatPhoneChangeEligibleAt } from "../services/profile";
 import { Button } from "../components/Button";
+import { SelectField } from "../components/Fields";
+import { useOtpCountdown } from "../components/auth/useOtpCountdown";
 import { UserAvatar } from "../components/UserAvatar";
 import { TelegramSettings } from "../components/settings/TelegramSettings";
 import {
@@ -35,8 +38,26 @@ import "./AccountSettings.css";
  *   action/status is omitted rather than warned about.
  * - no avatar upload affordance: initials fallback only.
  */
+/**
+ * Password-flow copy: the auth service's ApiError messages are already
+ * user-facing (wrong/expired code, send limits, account changed), so they are
+ * shown as written instead of being flattened to a generic failure.
+ */
+function passwordErrorCopy(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  return friendlyError(error).message;
+}
+
+function passwordRetrySeconds(error: unknown): number {
+  if (error instanceof Error && "retryAfterSeconds" in error) {
+    const value = (error as { retryAfterSeconds?: unknown }).retryAfterSeconds;
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+  }
+  return 60;
+}
+
 export function AccountSettings() {
-  const { user, logout, finishAccountDeletion, retryDeletionCleanup } = useAuth();
+  const { user, logout, finishAccountDeletion, retryDeletionCleanup, hasPassword: passwordPresence, refreshPasswordPresence } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
   const [checkingKeys, setCheckingKeys] = useState(false);
   const [confirmKeyRemoval, setConfirmKeyRemoval] = useState(false);
@@ -54,11 +75,16 @@ export function AccountSettings() {
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSaved, setPasswordSaved] = useState(false);
+  const [passwordConfirmationPending, setPasswordConfirmationPending] = useState(false);
+  const [passwordCodeSent, setPasswordCodeSent] = useState(false);
+  const [passwordCode, setPasswordCode] = useState("");
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const { seconds: passwordResendIn, setSeconds: setPasswordResendIn } = useOtpCountdown();
   const [localCleanupDone, setLocalCleanupDone] = useState(false);
   const currentAccount = useRef(user?.id ?? null);
   currentAccount.current = user?.id ?? null;
   // Six-month replacement gate (spec 25, W5-IDENTITY): server-read only.
-  // A fetch failure leaves this null and the row keeps its default copy —
+  // A fetch failure leaves this null and the row keeps its default copy:
   // availability is never guessed locally and no countdown is fabricated.
   const [phoneEligibility, setPhoneEligibility] = useState<{
     eligible: boolean;
@@ -112,6 +138,16 @@ export function AccountSettings() {
 
   if (!user) return null;
   const userId = user.id;
+  // The account's own record is the only honest source for "a password exists":
+  // the server's encrypted_password check, never an identity or a metadata
+  // marker. `passwordSaved` covers the seconds before the shared authority
+  // refreshes after a save on this screen.
+  const hasPassword = passwordSaved || passwordPresence === true;
+  const passwordDescription = hasPassword
+    ? "You can sign in with your email and this password."
+    : passwordPresence === false
+      ? "Add a password so you can also sign in without Google."
+      : "Checking your sign-in methods…";
 
   // Held gate without a date still names the block (never the default copy):
   // matches the dateless request_phone_change 409 ("You cannot change your
@@ -200,20 +236,80 @@ export function AccountSettings() {
     setDeleteError(null);
   }
 
+  async function sendPasswordCode() {
+    setPasswordBusy(true);
+    setPasswordError(null);
+    setPasswordMessage(null);
+    try {
+      await sendAccountPasswordCode(user!.id, user!.email);
+      setPasswordCodeSent(true);
+      setPasswordCode("");
+      setPasswordResendIn(30);
+      setPasswordMessage(`We sent a code to ${user!.email}. Enter it to confirm the password.`);
+    } catch (error) {
+      setPasswordError(passwordErrorCopy(error) || "Couldn’t send the code. Try again.");
+      if (error instanceof Error && /too many|several codes/i.test(error.message)) setPasswordResendIn(passwordRetrySeconds(error));
+    } finally {
+      setPasswordBusy(false);
+    }
+  }
+
   async function savePassword(event: FormEvent) {
     event.preventDefault();
     setPasswordError(null);
+    if (passwordConfirmationPending) {
+      setPasswordBusy(true);
+      try {
+        if (await refreshPasswordPresence()) {
+          setPasswordSaved(true);
+          setPasswordConfirmationPending(false);
+          setPasswordOpen(false);
+        } else {
+          setPasswordError("Your password was saved, but we couldn't verify it. Try again.");
+        }
+      } catch {
+        setPasswordError("Your password was saved, but we couldn't verify it. Try again.");
+      } finally {
+        setPasswordBusy(false);
+      }
+      return;
+    }
     if (password.length < 8) { setPasswordError("Use at least 8 characters."); return; }
     if (password !== passwordConfirm) { setPasswordError("The two passwords do not match."); return; }
+    if (!passwordCodeSent) {
+      await sendPasswordCode();
+      return;
+    }
+    if (!/^\d{6,10}$/.test(passwordCode.trim())) {
+      setPasswordError("Enter the code from your email.");
+      return;
+    }
     setPasswordBusy(true);
     try {
-      await setAccountPassword(password);
+      await saveAccountPasswordWithCode({
+        accountId: user!.id,
+        email: user!.email,
+        password,
+        code: passwordCode.trim(),
+      });
+      const confirmed = await refreshPasswordPresence().catch(() => false);
+      if (!confirmed) {
+        setPasswordConfirmationPending(true);
+        setPasswordError("Your password was saved, but we couldn't verify it. Try again.");
+        setPassword("");
+        setPasswordConfirm("");
+        setPasswordCode("");
+        return;
+      }
       setPasswordSaved(true);
       setPasswordOpen(false);
+      setPasswordCodeSent(false);
+      setPasswordCode("");
+      setPasswordMessage(null);
       setPassword("");
       setPasswordConfirm("");
     } catch (error) {
-      setPasswordError(friendlyError(error).message || "Couldn’t set a password. Try again.");
+      setPasswordError(passwordErrorCopy(error) || "Couldn’t set a password. Try again.");
     } finally {
       setPasswordBusy(false);
     }
@@ -264,17 +360,14 @@ export function AccountSettings() {
       <SettingsGroup title="Sign-in">
         <SettingsRow
           title="Sign-in password"
-          description={passwordSaved
-            ? "Set. You can sign in with your email and this password."
-            // Nothing local proves whether this account already has a password
-            // (the Auth record does not report it), so the resting state must
-            // not claim "Add" — that was a lie for every Google account that
-            // already had one.
-            : "Choose a password so you can also sign in without Google."}
-          value={passwordOpen ? "Close" : passwordSaved ? "Set" : "Manage"}
+          description={passwordDescription}
+          value={passwordOpen ? "Close" : hasPassword ? "Change" : passwordPresence === false ? "Add" : "Manage"}
           onClick={() => {
             setPasswordOpen(open => !open);
             setPasswordError(null);
+            setPasswordMessage(null);
+            setPasswordCodeSent(false);
+            setPasswordCode("");
           }}
         />
         {passwordOpen && (
@@ -304,8 +397,37 @@ export function AccountSettings() {
               />
             </label>
             <p className="fb-account-hint">At least 8 characters.</p>
-            {passwordError && <p className="fb-account-notice" role="alert">{passwordError}</p>}
-            <Button type="submit" loading={passwordBusy}>Save password</Button>
+            {passwordCodeSent && (
+              <>
+                <label htmlFor="fb-account-password-code">
+                  Email code
+                  <input
+                    id="fb-account-password-code"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={10}
+                    required
+                    value={passwordCode}
+                    onChange={event => setPasswordCode(event.target.value.replace(/\D/g, "").slice(0, 10))}
+                  />
+                </label>
+                <p className="fb-account-hint">Enter the code sent to {user.email}. It expires shortly.</p>
+              </>
+            )}
+            {passwordMessage && <p className="fb-account-hint" role="status">{passwordMessage}</p>}
+            {passwordError && <p className="fb-account-error" role="alert">{passwordError}</p>}
+            <Button type="submit" loading={passwordBusy}>{passwordConfirmationPending ? "Try again" : passwordCodeSent ? "Verify and save" : "Send code"}</Button>
+            {passwordCodeSent && !passwordConfirmationPending && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={passwordBusy || passwordResendIn > 0}
+                onClick={() => void sendPasswordCode()}
+              >
+                {passwordResendIn > 0 ? `Resend in ${passwordResendIn}s` : "Resend code"}
+              </Button>
+            )}
           </form>
         )}
       </SettingsGroup>
@@ -431,15 +553,17 @@ function ContactRules() {
   };
 
   return <SettingsGroup title="Contact rules" description="Who can reach you before a conversation connects.">
-    <label className="fb-account-contact-rule">
-      <span className="fb-account-contact-label">{CONTACT_RULE_QUESTION}</span>
-      <select value={rules.messageFrom} disabled={loading} aria-label={CONTACT_RULE_QUESTION}
-        aria-describedby="account-contact-hint"
-        onChange={(event) => choose(event.target.value as ContactRule)}>
-        {CONTACT_RULE_VALUES.map((value) => <option key={value} value={value}>{CONTACT_RULE_LABELS[value]}</option>)}
-      </select>
-      <span id="account-contact-hint" className="fb-account-contact-hint">{CONTACT_RULE_HINT}</span>
+    <div className="fb-account-contact-rule">
+      <SelectField
+        label={CONTACT_RULE_QUESTION}
+        value={rules.messageFrom}
+        disabled={loading}
+        onChange={(value) => choose(value as ContactRule)}
+        hint={CONTACT_RULE_HINT}
+        triggerClassName="fb-account-contact-trigger"
+        options={CONTACT_RULE_VALUES.map((value) => ({ value, label: CONTACT_RULE_LABELS[value] }))}
+      />
       {status && <span role={failed ? "alert" : "status"} className="fb-account-contact-status">{status}</span>}
-    </label>
+    </div>
   </SettingsGroup>;
 }

@@ -14,7 +14,7 @@ there is no CLI template wiring to update either.
 
 | File | Dashboard template (Authentication → Emails) | Subject line to paste |
 | --- | --- | --- |
-| `reset-password.html` | Reset Password | `Your Norfold reset code` |
+| `reset-password.html` | Reset Password | `Set a new Norfold password` |
 | `confirm-signup.html` | Confirm Signup | `Confirm your Norfold email` |
 | `magic-link.html` | Magic Link | `Your Norfold sign-in code` |
 | `invite.html` | Invite User | `You’re invited to Norfold` |
