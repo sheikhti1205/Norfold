@@ -85,10 +85,11 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
    Safe-area insets belong to `.fb-app-viewport` alone (index.css): the rail is
    inside that box, so it pads by its own 12px and never repeats env(). */
 .fb-nav-rail {
-  /* Collapsed rail names nothing but its icons; hovering or keyboard focus
-     widens it to name every destination, then it contracts (owner order
-     2026-11-13). The negative inline-end margin cancels the extra width, so
-     <main> never reflows while the panel is open - it paints over the page. */
+  /* Collapsed rail names nothing but its icons; a resting pointer (2s) or
+     keyboard focus widens it to name every destination, then it contracts
+     (owner order 2026-11-13). The negative inline-end margin cancels the extra
+     width, so <main> never reflows while the panel is open - it paints over
+     the page. */
   --fb-rail-collapsed: 72px;
   --fb-rail-expanded: 208px;
   display: flex; flex-direction: column; flex: none;
@@ -143,26 +144,28 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
 .fb-nav-tooltip { z-index: 120; max-width: 16rem; padding: 6px 10px; border-radius: 8px; background: var(--fb-on-surface); color: var(--fb-surface); font-size: .875rem; overflow-wrap: anywhere; }
 @media (min-width: 1200px) { .fb-nav-rail { --fb-rail-collapsed: 80px; } }
 
-/* Hover / keyboard-focus expansion. Scoped to the unpinned rail: a pinned
-   panel is already named and user-sized. */
-.fb-nav-rail[data-pinned="false"]:is(:hover, :has(:focus-visible)) {
+/* Intent expansion. Scoped to the unpinned rail: a pinned panel is already
+   named and user-sized. `data-hover-expanded` is set only after the pointer
+   rests for two seconds (Shell.tsx), so passing over the rail or pressing a
+   destination never flashes the named overlay. Keyboard focus stays immediate. */
+.fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) {
   width: var(--fb-rail-expanded);
   margin-inline-end: calc(var(--fb-rail-collapsed) - var(--fb-rail-expanded));
   box-shadow: var(--shadow-md);
 }
-.fb-nav-rail[data-pinned="false"]:is(:hover, :has(:focus-visible)) .fb-nav-link {
+.fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-nav-link {
   flex-direction: row; justify-content: flex-start; gap: 10px; padding-inline: 10px;
 }
 /* Undo Tailwind's sr-only clipping only while the panel has room for the
    text; the label is still the row's accessible name in both states. */
-.fb-nav-rail[data-pinned="false"]:is(:hover, :has(:focus-visible)) .fb-nav-label {
+.fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-nav-label {
   position: static; width: auto; height: auto; margin: 0; padding: 0;
   overflow: visible; clip: auto; clip-path: none; border: 0;
   text-align: start; white-space: nowrap;
   font-size: 0.8125rem; font-weight: 500;
 }
 .fb-nav-rail[data-pinned="false"] .fb-nav-rail-section { display: none; }
-.fb-nav-rail[data-pinned="false"]:is(:hover, :has(:focus-visible)) .fb-nav-rail-section { display: block; }
+.fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-nav-rail-section { display: block; }
 @media (prefers-reduced-motion: reduce) {
   .fb-nav-rail { transition: none; }
 }
@@ -202,7 +205,7 @@ html.fb-reduce-motion .fb-nav-rail { transition: none; }
    destination glyphs. Any state that names rows (pinned, hover, keyboard focus)
    left-aligns the brand with those rows instead (owner order 2026-11-13). */
 .fb-nav-rail[data-pinned="false"] .fb-nav-rail-head { justify-content: center; }
-.fb-nav-rail[data-pinned="false"]:is(:hover, :has(:focus-visible)) .fb-nav-rail-head { justify-content: flex-start; }
+.fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-nav-rail-head { justify-content: flex-start; }
 .fb-nav-brand {
   display: inline-flex; align-items: center; gap: 10px;
   max-width: 100%; min-height: 40px; padding: 0 10px;
@@ -218,7 +221,7 @@ html.fb-reduce-motion .fb-nav-rail { transition: none; }
   color: var(--fb-on-surface); white-space: nowrap;
 }
 .fb-nav-rail[data-pinned="false"] .fb-nav-wordmark { display: none; }
-.fb-nav-rail[data-pinned="false"]:is(:hover, :has(:focus-visible)) .fb-nav-wordmark { display: inline; }
+.fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-nav-wordmark { display: inline; }
 .fb-nav-rail[data-pinned="true"] { width: 224px; padding: 12px; }
 /* Owner order 2026-11-13: the pinned sidebar is resizable. The handle sits on
    the rail's inner edge (the rail clips at `overflow: hidden`), reads as a
@@ -247,10 +250,10 @@ html.fb-reduce-motion .fb-nav-rail { transition: none; }
 .fb-nav-rail[data-pinned="false"] .fb-account-trigger { justify-content: center; padding-inline: 0; }
 .fb-nav-rail[data-pinned="false"] .fb-account-trigger-text,
 .fb-nav-rail[data-pinned="false"] .fb-account-trigger .fb-verified-badge { display: none; }
-.fb-nav-rail[data-pinned="false"]:is(:hover, :has(:focus-visible)) .fb-account-trigger {
+.fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-account-trigger {
   justify-content: flex-start; gap: 10px; padding-inline: 8px;
 }
-.fb-nav-rail[data-pinned="false"]:is(:hover, :has(:focus-visible)) .fb-account-trigger-text { display: flex; }
-.fb-nav-rail[data-pinned="false"]:is(:hover, :has(:focus-visible)) .fb-account-trigger .fb-verified-badge { display: inline-flex; }
+.fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-account-trigger-text { display: flex; }
+.fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-account-trigger .fb-verified-badge { display: inline-flex; }
 body:has(#report-editor-overlay) .fb-nav-slot,
 body:has(#report-editor-overlay) .fb-nav-rail { display: none; }

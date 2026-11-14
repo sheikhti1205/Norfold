@@ -12,6 +12,9 @@ export interface AppBarProps {
   backLabel?: string;
   /** Route-specific actions (filter, refresh, pane toggle) trail the title. */
   actions?: ReactNode;
+  /** An in-place replacement for the title, without changing the bar height. */
+  inlineSearch?: ReactNode;
+  showUtilitySearch?: boolean;
   /** Global search/notification utilities. Off only where the route owns them
    * inside its own row (Home) or where the surface is immersive (conversation). */
   utilities?: boolean;
@@ -34,6 +37,8 @@ export function AppBar({
   backTo,
   backLabel = "Back",
   actions,
+  inlineSearch,
+  showUtilitySearch = true,
   utilities = true,
   headingLevel = 1,
   autoFocus = false,
@@ -48,14 +53,17 @@ export function AppBar({
   return (
     <header className={`fb-app-bar ${className}`} data-testid="app-bar">
       {backTo && <BackButton fallbackTo={backTo} label={backLabel} />}
-      <div className="fb-app-bar-title">
+      <div className={`fb-app-bar-title${inlineSearch ? " fb-app-bar-title-searching" : ""}`}>
+        <div className="fb-app-bar-title-copy">
         {title != null && (
           <Heading ref={heading} tabIndex={autoFocus ? -1 : undefined}>{title}</Heading>
         )}
         {subtitle != null && <p className="fb-app-bar-subtitle">{subtitle}</p>}
+        </div>
+        {inlineSearch && <div className="fb-app-bar-inline-search">{inlineSearch}</div>}
       </div>
       {actions && <div className="fb-app-bar-actions">{actions}</div>}
-      {utilities && <TopUtilities />}
+      {utilities && <TopUtilities showSearch={showUtilitySearch} />}
     </header>
   );
 }

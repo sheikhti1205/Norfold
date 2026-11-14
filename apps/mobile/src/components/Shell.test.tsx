@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { Link, MemoryRouter, Route, Routes, useNavigate } from "react-router";
+import { createMemoryRouter, Link, MemoryRouter, Route, RouterProvider, Routes, useNavigate } from "react-router";
+import { useEffect } from "react";
 import { MotionConfig } from "framer-motion";
 import { PrimaryNav, Shell } from "./Shell";
 import { TabTapProvider } from "./TabTap";
@@ -15,8 +16,8 @@ vi.mock("./RoleOfferNotice", () => ({ RoleOfferNotice: () => null }));
 // The real window mounts the whole settings screen and its services; the
 // interception contract is what these tests own, not presentation.
 vi.mock("./SettingsWindow", () => ({
-  SettingsWindow: ({ open, initialPath }: { open: boolean; initialPath?: string }) =>
-    open ? <div data-testid="settings-window">{initialPath}</div> : null,
+  SettingsWindow: ({ open, initialPath, onClose }: { open: boolean; initialPath?: string; onClose: () => void }) =>
+    open ? <div data-testid="settings-window">{initialPath}<button aria-label="Close window" onClick={onClose} /></div> : null,
 }));
 
 afterEach(() => { cleanup(); resetBackInterceptors(); document.body.style.overflow = ""; });
@@ -78,6 +79,63 @@ describe("Shell floating primary navigation", () => {
     expect(screen.getByTestId("settings-window").textContent).toBe("/settings/notifications");
     expect(screen.getByRole("link", { name: "Notification preferences" })).toBeTruthy();
     expect(screen.queryByText("Notification page")).toBeNull();
+  });
+
+  it("intercepts programmatic push and replace without changing the page behind the window", () => {
+    function Home() {
+      const navigate = useNavigate();
+      return <><p>Home screen</p>
+        <button onClick={() => navigate("/settings/notifications?tab=push")}>Open notifications</button>
+        <button onClick={() => navigate("/settings/appearance", { replace: true })}>Open appearance</button>
+      </>;
+    }
+    render(<MemoryRouter initialEntries={["/"]}>
+      <Routes><Route element={<Shell />}>
+        <Route index element={<Home />} />
+        <Route path="/settings/*" element={<p>Standalone settings</p>} />
+      </Route></Routes>
+    </MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Open notifications" }));
+    expect(screen.getByTestId("settings-window").textContent).toContain("/settings/notifications?tab=push");
+    fireEvent.click(screen.getByRole("button", { name: "Open appearance" }));
+    expect(screen.getByTestId("settings-window").textContent).toContain("/settings/appearance");
+    fireEvent.click(screen.getByRole("button", { name: "Close window" }));
+    expect(screen.getByText("Home screen")).toBeTruthy();
+    expect(screen.queryByText("Standalone settings")).toBeNull();
+  });
+
+  it("allows programmatic navigation from a standalone settings deep link", () => {
+    function Standalone() {
+      const navigate = useNavigate();
+      return <button onClick={() => navigate("/settings/help")}>Open help</button>;
+    }
+    render(<MemoryRouter initialEntries={["/settings/notifications"]}>
+      <Routes><Route element={<Shell />}>
+        <Route path="/settings/notifications" element={<Standalone />} />
+        <Route path="/settings/help" element={<p>Help page</p>} />
+      </Route></Routes>
+    </MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Open help" }));
+    expect(screen.getByText("Help page")).toBeTruthy();
+    expect(screen.queryByTestId("settings-window")).toBeNull();
+  });
+
+  it("intercepts effect navigation under the app's data-router route tree", async () => {
+    function Home() {
+      const navigate = useNavigate();
+      useEffect(() => { navigate("/settings/help", { replace: true }); }, [navigate]);
+      return <p>Home screen</p>;
+    }
+    const router = createMemoryRouter([{ path: "*", element: <Routes>
+      <Route element={<Shell />}>
+        <Route index element={<Home />} />
+        <Route path="/settings/help" element={<p>Standalone help</p>} />
+      </Route>
+    </Routes> }], { initialEntries: ["/"] });
+    render(<RouterProvider router={router} />);
+    await waitFor(() => expect(screen.getByTestId("settings-window").textContent).toContain("/settings/help"));
+    expect(router.state.location.pathname).toBe("/");
+    expect(screen.getByText("Home screen")).toBeTruthy();
   });
 
   it("leaves links on the standalone settings page to that page's own router", () => {

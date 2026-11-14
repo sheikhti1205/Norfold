@@ -13,6 +13,8 @@ import { Search, ArrowLeft, X } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { useAuth } from "../auth";
 import { Settings } from "../screens/Settings";
+import { Profile } from "../screens/Profile";
+import { ProfileEdit } from "../screens/ProfileEdit";
 import { settingsRouteElements } from "../screens/settingsRoutes";
 import { SettingsRow } from "./settings";
 import { SettingsWindowHost, SettingsWindowTitle } from "./settingsWindowHost";
@@ -38,8 +40,10 @@ import "./SettingsWindow.css";
  * The window keeps its own memory history. Opening it never changes the app's
  * URL, so closing puts the reader back exactly where they were without
  * replaying navigation, and a section visit inside the window leaves no
- * settings URL behind. A destination outside `/settings` is handed back to the
- * real router, which closes the window on the way.
+ * settings URL behind. The owner's profile is part of this surface: the
+ * settings identity header and any `/profile` link open it inside the window,
+ * so nobody is thrown back to a separate page. Any other destination is handed
+ * back to the real router, which closes the window on the way.
  *
  * React Router 8 refuses a `<Router>` inside another `<Router>`, so this uses
  * the same history and context values a MemoryRouter would provide, minus the
@@ -165,6 +169,11 @@ function SettingsWindowSurface({ initialPath, onClose, onExit }: {
                     <RouterDepthProvider depth={depth}>
                       <Routes>
                         <Route path="/settings" element={<Settings />}>{settingsRouteElements()}</Route>
+                        {/* Own profile lives in the window too: the settings
+                            identity header links here, and Profile's own edit
+                            link must not close the surface mid-flow. */}
+                        <Route path="/profile" element={<Profile />} />
+                        <Route path="/profile/edit" element={<ProfileEdit />} />
                         <Route path="*" element={<ExitToApp onExit={onExit} />} />
                       </Routes>
                     </RouterDepthProvider>

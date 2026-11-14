@@ -150,4 +150,14 @@ describe("the resizable conversation pane", () => {
     render(<SplitView selected={false} list={<button type="button">List</button>} detail={<p>Thread</p>} />);
     expect(screen.queryByRole("separator")).toBeNull();
   });
+
+  it("returns a new detail route to the top of its pane", () => {
+    const view = (scrollKey: string) => <SplitView selected={false} scrollKey={scrollKey}
+      list={<p>List</p>} detail={<p>Details</p>} />;
+    const { rerender } = render(view("/settings/devices"));
+    const pane = document.querySelector<HTMLElement>(".fb-split-detail")!;
+    pane.scrollTop = 200;
+    rerender(view("/settings/account"));
+    expect(pane.scrollTop).toBe(0);
+  });
 });

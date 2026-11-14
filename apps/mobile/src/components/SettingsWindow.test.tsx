@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { SettingsWindow } from "./SettingsWindow";
 
@@ -19,10 +19,20 @@ vi.mock("../screens/Settings", async () => {
       <h2>Settings root</h2>
       <Link to="/settings/account">Account link</Link>
       <Link to="/profile">Profile link</Link>
+      <Link to="/my">My reports link</Link>
       <Outlet />
     </div>,
   };
 });
+
+// The window's own profile routes render the real screens in production; here
+// only the routing behaviour matters, not their data loading. The profile stub
+// uses the real page primitive so the window title follows the page.
+vi.mock("../screens/Profile", async () => {
+  const { SettingsPage } = await import("./settings/SettingsPrimitives");
+  return { Profile: () => <SettingsPage title="Profile"><p>Profile page</p></SettingsPage> };
+});
+vi.mock("../screens/ProfileEdit", () => ({ ProfileEdit: () => <p>Profile edit page</p> }));
 
 vi.mock("../screens/settingsRoutes", async () => {
   const { Route } = await import("react-router");
@@ -99,15 +109,15 @@ describe("settings window", () => {
     // The field takes focus when it opens, and the whole settings catalogue is
     // searchable - not just the current section.
     expect(document.activeElement).toBe(field);
-    fireEvent.change(field, { target: { value: "account" } });
+    fireEvent.change(field, { target: { value: "profile" } });
     expect(screen.getByRole("status").textContent).toContain("setting");
-    const account = screen.getAllByRole("link")
-      .find((link) => link.getAttribute("href") === "/settings/account");
-    expect(account).toBeTruthy();
-    fireEvent.click(account!);
+    // Pick the real result row, not the mock Settings root's own static link.
+    const results = within(screen.getByRole("list", { name: "Settings search results" }));
+    const profile = results.getByRole("link", { name: /Profile & security/ });
+    fireEvent.click(profile);
     // Picking navigates the window's own history; the app behind never moves,
     // and the field puts itself away.
-    await waitFor(() => expect(screen.getByText("Account page")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Profile page")).toBeTruthy());
     expect(screen.queryByRole("searchbox", { name: "Search settings" })).toBeNull();
     expect(screen.getByRole("dialog", { name: "Settings" })).toBeTruthy();
   });
@@ -122,9 +132,21 @@ describe("settings window", () => {
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Search settings" }));
   });
 
-  it("hands a non-settings destination back to the real app", async () => {
+  it("keeps the owner's profile inside the window instead of swapping the page", async () => {
     const { onExit } = renderWindow();
     fireEvent.click(screen.getByRole("link", { name: "Profile link" }));
-    await waitFor(() => expect(onExit).toHaveBeenCalledWith("/profile"));
+    expect(await screen.findByText("Profile page")).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Settings" })).toBeTruthy();
+    expect(onExit).not.toHaveBeenCalled();
+    // The window title follows the page, so the chrome never says "Settings"
+    // while the profile is showing.
+    await waitFor(() =>
+      expect(document.querySelector(".fb-settings-window-title")?.textContent).toBe("Profile"));
+  });
+
+  it("hands a non-settings destination back to the real app", async () => {
+    const { onExit } = renderWindow();
+    fireEvent.click(screen.getByRole("link", { name: "My reports link" }));
+    await waitFor(() => expect(onExit).toHaveBeenCalledWith("/my"));
   });
 });

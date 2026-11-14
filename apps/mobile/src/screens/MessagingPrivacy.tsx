@@ -5,6 +5,8 @@ import { SettingsGroup, SettingsPage, SettingsRow, PreferenceSwitchRow } from ".
 import { fetchMessagingPreferences, setMessagingPreference } from "../services/messaging/runtime";
 import { useMessaging } from "../services/messaging/useMessaging";
 import type { MessagingPreferences } from "../services/messaging/session";
+import { BackupSettings } from "./BackupSettings";
+import { MediaSettings } from "./MediaSettings";
 
 export function MessagingPrivacy() {
   const { user } = useAuth();
@@ -47,7 +49,7 @@ function MessagingPrivacySession({ accountId }: { accountId: string }) {
       if (alive.current) setError("Could not confirm your saved setting. Try reloading before changing it again.");
     } finally { if (alive.current) setBusy(false); }
   }
-  return <SettingsPage title="Messages" backTo="/settings/privacy" backLabel="Back to Privacy">
+  return <SettingsPage title="Chat" backTo="/settings">
     <SettingsGroup title="Who can message you" description="New people send requests by default. You choose when to connect.">
       {preferences && <PreferenceSwitchRow title="Allow direct messages" icon={MessagesSquare}
         description="Let new people start a conversation without waiting for you to accept. Changing this won’t accept your pending requests."
@@ -66,6 +68,8 @@ function MessagingPrivacySession({ accountId }: { accountId: string }) {
     {saved && <p role="status" className="text-sm text-on-surface-variant">Settings saved.</p>}
     {error && <div><p role="alert" className="text-sm text-error">{error}</p>
       <button type="button" className="min-h-[44px] px-2 underline" disabled={busy} onClick={() => { setSaved(false); setAttempt((value) => value + 1); }}>Reload settings</button></div>}
+    <BackupSettings />
+    <MediaSettings />
     <SettingsGroup>
       <SettingsRow title="Chats" route="/chats" />
       <SettingsRow title="Blocked accounts" route="/settings/privacy/blocked" />

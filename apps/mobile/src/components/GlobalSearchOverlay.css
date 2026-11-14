@@ -2,7 +2,7 @@
    docs/design/nav/prototype.html: a floating pill bar over a blurred page,
    centred on wide screens and anchored 8px under the measured app bar on a
    phone. The layer order is explicit because the rail is positioned: backdrop
-   (70) < app bar (72, kept crisp and operable) < search (74) < settings window
+   (70) < search (74) < settings window
    (80). Nothing here moves layout. */
 
 .fb-search-backdrop {
@@ -12,13 +12,6 @@
   background: color-mix(in srgb, var(--scrim) 42%, transparent);
   -webkit-backdrop-filter: blur(12px) saturate(1.05);
   backdrop-filter: blur(12px) saturate(1.05);
-}
-
-/* The app bar paints above the backdrop so its own search button stays
-   readable while the overlay it opened is up. */
-[data-global-search="true"] :is(.fb-app-bar, [data-testid="home-search-row"]) {
-  position: relative;
-  z-index: 72;
 }
 
 .fb-search-overlay {

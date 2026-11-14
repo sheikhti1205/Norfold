@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { Capacitor } from "@capacitor/core";
-import { Link, useLocation, useNavigate } from "react-router";
+import { Link, UNSAFE_NavigationContext, useLocation, useNavigate } from "react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { Archive, BarChart3, Bell, Bookmark, ClipboardList, Heart, Home, MessageCircle, Plus, Search, Settings as SettingsIcon, UserRound, type LucideIcon } from "lucide-react";
 import { Focusable, Tooltip, TooltipTrigger } from "react-aria-components";
@@ -77,11 +77,12 @@ const BAR_NAV = [
 const HIDE_NAV = ["/help", "/posts/", "/ai-connection", "/connections/", "/chats/"];
 
 /**
- * The settings path a rendered link points at, or null.
+ * The floating settings window's path for a rendered link, or null.
  *
  * The app is a hash router, so React Router renders `href="#/settings/..."`,
  * while hand-written anchors use the plain path. Both have to resolve to the
- * same window entry.
+ * same window entry. The owner's profile is part of that surface: a `/profile`
+ * link opens the window instead of replacing the page behind it.
  */
 function settingsPathFromHref(href: string | null): string | null {
   if (!href) return null;
@@ -97,6 +98,8 @@ function settingsPathFromHref(href: string | null): string | null {
     }
   }
   if (path === "/settings" || path.startsWith("/settings/") || path.startsWith("/settings?")) return path;
+  // Profile is part of the same floating surface (owner order 2026-11-13).
+  if (path === "/profile" || path.startsWith("/profile/") || path.startsWith("/profile?")) return path;
   return null;
 }
 
@@ -131,8 +134,33 @@ export function Shell() {
   // `null` = closed. A string is the settings section the window opens at, so a
   // menu row or an in-app link lands inside the window rather than swapping the
   // page behind it.
-  const [settingsWindowPath, setSettingsWindowPath] = useState<string | null>(null);
-  const openSettingsWindow = (path = "/settings") => setSettingsWindowPath(path);
+  const [settingsWindow, setSettingsWindow] = useState<{ path: string; id: number } | null>(null);
+  const settingsWindowId = useRef(0);
+  const openSettingsWindow = useCallback((path = "/settings") => {
+    setSettingsWindow({ path, id: ++settingsWindowId.current });
+  }, []);
+  const navigationContext = useContext(UNSAFE_NavigationContext);
+  const windowNavigation = useMemo(() => {
+    const navigator = navigationContext.navigator;
+    const intercept = (to: Parameters<typeof navigator.push>[0]) => {
+      const path = typeof to === "string" ? to : `${to.pathname ?? ""}${to.search ?? ""}${to.hash ?? ""}`;
+      if (settingsRoute || !(path === "/settings" || path.startsWith("/settings/") || path.startsWith("/settings?") || path.startsWith("/settings#"))) return false;
+      openSettingsWindow(path);
+      return true;
+    };
+    return {
+      ...navigationContext,
+      navigator: {
+        ...navigator,
+        push: (...args: Parameters<typeof navigator.push>) => {
+          if (!intercept(args[0])) navigator.push(...args);
+        },
+        replace: (...args: Parameters<typeof navigator.replace>) => {
+          if (!intercept(args[0])) navigator.replace(...args);
+        },
+      },
+    };
+  }, [navigationContext, settingsRoute, openSettingsWindow]);
   const searchOpen = useGlobalSearchOpen();
 
   // A breakpoint flip replaces the whole navigation. The element that had focus
@@ -162,13 +190,13 @@ export function Shell() {
   }, [navLayout]);
 
   // Settings is a window, not a page swap: an in-app link to any settings
-  // destination opens the window over what the reader is looking at instead of
-  // replacing it. This is the one interception point, so a link added anywhere
-  // in the app cannot regress into a separate settings page. Links inside the
-  // window are excluded (they use its own router), and a standing `/settings`
-  // URL keeps the standalone page so a deep link still works.
+  // destination, or to the owner's profile, opens the window over what the
+  // reader is looking at instead of replacing it. This is the one interception
+  // point, so a link added anywhere in the app cannot regress into a separate
+  // settings page. Links inside the window are excluded (they use its own
+  // router), and a standing `/settings` URL keeps the standalone page so a
+  // deep link still works.
   useEffect(() => {
-    if (settingsWindowPath !== null) return;
     if (pathname === "/settings" || pathname.startsWith("/settings/")) return;
     const intercept = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0) return;
@@ -179,13 +207,14 @@ export function Shell() {
       if (!path) return;
       event.preventDefault();
       event.stopPropagation();
-      setSettingsWindowPath(path);
+      openSettingsWindow(path);
     };
     document.addEventListener("click", intercept, true);
     return () => document.removeEventListener("click", intercept, true);
-  }, [pathname, settingsWindowPath]);
+  }, [pathname, openSettingsWindow]);
 
   return (
+    <UNSAFE_NavigationContext.Provider value={windowNavigation}>
     <TabTapProvider>
       <div
         data-global-search={searchOpen ? "true" : undefined}
@@ -229,12 +258,13 @@ export function Shell() {
           {showNav && !rail && <PrimaryNav key="fb-bottom-nav" layout="bottom" onOpenSettings={openSettingsWindow} />}
         </AnimatePresence>
         <LiveRegion />
-        <SettingsWindow open={settingsWindowPath !== null} initialPath={settingsWindowPath ?? "/settings"}
-          onClose={() => setSettingsWindowPath(null)}
-          onExit={(path) => { setSettingsWindowPath(null); navigate(path); }} />
+        <SettingsWindow key={settingsWindow?.id} open={settingsWindow !== null} initialPath={settingsWindow?.path ?? "/settings"}
+          onClose={() => setSettingsWindow(null)}
+          onExit={(path) => { setSettingsWindow(null); navigate(path); }} />
         <GlobalSearchOverlay />
       </div>
     </TabTapProvider>
+    </UNSAFE_NavigationContext.Provider>
   );
 }
 
@@ -361,7 +391,9 @@ export function PrimaryNav({
   // The bottom bar sits where the keyboard appears, so it yields that space.
   // The rail is a column beside the content: the keyboard cannot cover it, and
   // hiding it would widen <main> by 6.5rem and pull it back, so it stays.
-  if (fullscreen || (keyboardOpen && !rail)) return null;
+  // (This early return sits AFTER every hook in this component: a conditional
+  // return above the hover-intent state changed the hook order the moment the
+  // keyboard or fullscreen flipped.)
 
   const belongsTo = (root: string) => pathname === root || pathname.startsWith(`${root}/`);
   // Search and Connect share one route and differ by scope, so the selection
@@ -382,6 +414,31 @@ export function PrimaryNav({
   );
 
   const railPinned = rail && railPinnedState;
+  // Owner order 2026-11-13: hovering the icon rail must not open the named
+  // panel instantly. A press is usually navigation, not a request to see the
+  // overlay expanded, so the pointer has to rest for two seconds before the
+  // panel opens. Any press inside the rail cancels the pending expansion.
+  const [hoverExpanded, setHoverExpanded] = useState(false);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelHoverExpand = useCallback(() => {
+    if (hoverTimer.current !== null) {
+      clearTimeout(hoverTimer.current);
+      hoverTimer.current = null;
+    }
+    setHoverExpanded(false);
+  }, []);
+  const scheduleHoverExpand = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.pointerType === "touch" || railPinned || hoverTimer.current !== null) return;
+    hoverTimer.current = setTimeout(() => {
+      hoverTimer.current = null;
+      setHoverExpanded(true);
+    }, 2000);
+  };
+  useEffect(() => () => {
+    if (hoverTimer.current !== null) clearTimeout(hoverTimer.current);
+  }, []);
+  useEffect(() => { if (railPinned) cancelHoverExpand(); }, [railPinned, cancelHoverExpand]);
+  if (fullscreen || (keyboardOpen && !rail)) return null;
   const renderDestination = (destination: NavRow) => {
     const { label, icon: Icon } = destination;
     const isSearch = destination.search === true;
@@ -481,8 +538,12 @@ export function PrimaryNav({
         aria-label="Primary"
         data-layout="rail"
         data-pinned={railPinned ? "true" : "false"}
+        data-hover-expanded={hoverExpanded ? "true" : "false"}
         className="fb-nav-rail shrink-0"
         style={railPinned ? { width: railWidthState } : undefined}
+        onPointerEnter={scheduleHoverExpand}
+        onPointerLeave={cancelHoverExpand}
+        onPointerDown={cancelHoverExpand}
         variants={fadeVariants}
         initial="hidden"
         animate="visible"

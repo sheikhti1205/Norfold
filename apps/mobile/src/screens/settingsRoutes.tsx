@@ -3,11 +3,9 @@ import { NativeOnly, RequireAdmin } from "../components/Guards";
 import { RequireCapability } from "../components/RequireCapability";
 import { AccountSettings } from "./AccountSettings";
 import { Devices } from "./Devices";
-import { BackupSettings } from "./BackupSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { AccessibilitySettings } from "./AccessibilitySettings";
 import { FeedLayoutSettings } from "./FeedLayoutSettings";
-import { MediaSettings } from "./MediaSettings";
 import { NotificationPreferences } from "./NotificationPreferences";
 import { PrivacySettings } from "./PrivacySettings";
 import { MessagingPrivacy } from "./MessagingPrivacy";
@@ -50,11 +48,13 @@ export function settingsRouteElements() {
     <Route path="/settings/administrator" element={<AdminBootstrap />} />
     <Route path="/settings/account" element={<AccountSettings />} />
     <Route path="/settings/devices" element={<Devices />} />
-    <Route path="/settings/backup" element={<BackupSettings />} />
+    {/* Backup and media are sections of the merged Chat screen now. Old links,
+        help topics and announcements keep working through this redirect. */}
+    <Route path="/settings/backup" element={<Navigate to="/settings/privacy/messages" replace />} />
     <Route path="/settings/appearance" element={<AppearanceSettings />} />
     <Route path="/settings/accessibility" element={<AccessibilitySettings />} />
     <Route path="/settings/feed-layout" element={<FeedLayoutSettings />} />
-    <Route path="/settings/media" element={<MediaSettings />} />
+    <Route path="/settings/media" element={<Navigate to="/settings/privacy/messages" replace />} />
     <Route path="/settings/notifications" element={<NotificationPreferences />} />
     <Route path="/settings/privacy" element={<PrivacySettings />} />
     <Route path="/settings/privacy/messages" element={<MessagingPrivacy />} />

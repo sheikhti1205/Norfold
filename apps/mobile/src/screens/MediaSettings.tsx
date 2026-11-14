@@ -3,7 +3,6 @@ import { useAppearance } from "../appearance";
 import {
   PreferenceSwitchRow,
   SettingsGroup,
-  SettingsPage,
 } from "../components/settings";
 
 /**
@@ -15,28 +14,22 @@ export function MediaSettings() {
   const { settings, update } = useAppearance();
 
   return (
-    <SettingsPage
-      title="Media"
-      description="How Norfold handles your photos. Changes apply right away."
-      backTo="/settings"
+    <SettingsGroup
+      title="Media & uploads"
+      description="Photos are made smaller before upload so reports stay quick to open."
     >
-      <SettingsGroup
-        title="Photo uploads"
-        description="Photos are made smaller before upload so reports stay quick to open."
-      >
-        <PreferenceSwitchRow
-          title="High quality photos"
-          description={
-            settings.highQualityPhoto
-              ? "On. Photos keep extra detail and use more mobile data and storage."
-              : "Off. Photos use less mobile data and storage."
-          }
-          icon={Image}
-          iconTone="media"
-          checked={settings.highQualityPhoto}
-          onChange={(highQualityPhoto) => update({ highQualityPhoto })}
-        />
-      </SettingsGroup>
-    </SettingsPage>
+      <PreferenceSwitchRow
+        title="High quality photos"
+        description={
+          settings.highQualityPhoto
+            ? "On. Photos keep extra detail and use more mobile data and storage."
+            : "Off. Photos use less mobile data and storage."
+        }
+        icon={Image}
+        iconTone="media"
+        checked={settings.highQualityPhoto}
+        onChange={(highQualityPhoto) => update({ highQualityPhoto })}
+      />
+    </SettingsGroup>
   );
 }

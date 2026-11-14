@@ -42,10 +42,10 @@ afterEach(() => {
 });
 
 describe("MediaSettings", () => {
-  it("renders one heading and a high-quality photo switch that toggles the real flag", () => {
+  it("renders the media section without page chrome and toggles the real flag", () => {
     renderScreen();
-    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    expect(screen.getByRole("heading", { level: 1, name: /media/i })).toBeTruthy();
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    expect(screen.getByRole("heading", { level: 2, name: "Media & uploads" })).toBeTruthy();
     const control = screen.getByRole("switch", { name: /high quality/i });
     expect(control.getAttribute("aria-checked")).toBe("false");
     act(() => { control.click(); });

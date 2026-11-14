@@ -36,6 +36,15 @@
   font-size: 0.875rem;
 }
 
+/* The merged Profile surface stacks the sign-in, contact and deletion groups in
+   one column. Same 1rem rhythm the Profile groups use, so moving the security
+   sections there does not visually split them. */
+.fb-profile-security {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 .fb-account-confirm-row {
   display: flex;
   flex-wrap: wrap;
@@ -74,19 +83,17 @@
   font-size: 1rem;
 }
 .fb-account-password input:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 1px; }
-.fb-account-hint { margin: 0; font-size: 0.75rem; color: var(--fb-on-surface-variant); }
+.fb-account-hint { margin: 0; font-size: 0.75rem; color: var(--fb-on-surface-variant); overflow-wrap: anywhere; }
 
 /* Contact rules now live in the account page (the popover's nested panel is
    gone). Same card geometry as a settings row, with the select as the control. */
 .fb-account-contact-rule { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; }
-.fb-account-contact-label { font-weight: 600; }
-.fb-account-contact-rule select {
+.fb-account-contact-rule .fb-select-trigger {
   min-height: 44px; padding: 0 12px; border-radius: 10px;
-  border: 1px solid var(--fb-outline-variant);
-  background: var(--fb-surface-container-low); color: var(--fb-on-surface);
-  font: inherit; font-size: 0.9375rem;
+  border-color: var(--fb-outline-variant);
+  background: var(--fb-surface-container-low);
+  font-size: 0.9375rem;
 }
-.fb-account-contact-rule select:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: 2px; }
 .fb-account-contact-hint { font-size: 0.8125rem; line-height: 1.45; color: var(--fb-on-surface-variant); }
 .fb-account-contact-status { font-size: 0.8125rem; color: var(--fb-on-surface-variant); }
 .fb-account-contact-status[role="alert"] { color: var(--fb-error); }

@@ -12,12 +12,23 @@
   container-type: inline-size;
 }
 .fb-app-bar-title {
+  position: relative;
   display: flex;
   flex-direction: column;
   justify-content: center;
   min-width: 0;
   flex: 1;
 }
+.fb-app-bar-title-searching .fb-app-bar-title-copy { visibility: hidden; }
+.fb-app-bar-inline-search {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.fb-app-bar-inline-search > * { width: 100%; min-width: 0; }
+.fb-app-bar-inline-search .fb-search-field-pill { padding-inline-start: 12px; }
 .fb-app-bar-title :is(h1, h2) {
   margin: 0;
   font-size: 1.125rem;

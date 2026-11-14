@@ -30,11 +30,13 @@ const FIXED_LIST_MAX_REM = 22;
  * With `pane`, the list becomes a window-splitter: resizable by pointer or
  * keyboard, collapsible to a narrow rail, remembered on this device. The
  * detail pane is never affected by the compact/expanded decision inside it. */
-export function SplitView({ selected, list, detail, pane }: {
+export function SplitView({ selected, list, detail, pane, scrollKey }: {
   selected: boolean;
   list: ReactNode | ((state: SplitPaneState) => ReactNode);
   detail: ReactNode;
   pane?: SplitPaneConfig;
+  /** Changes when the detail route changes; the detail pane returns to its top. */
+  scrollKey?: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const listPane = useRef<HTMLDivElement>(null);
@@ -135,6 +137,15 @@ export function SplitView({ selected, list, detail, pane }: {
       (listHidden ? detailPane.current : listPane.current)?.focus();
     }
   }, [listHidden, detailHidden]);
+
+  // A new detail route starts at its first row. Without this the pane keeps the
+  // previous page's offset, so a reader who scrolled Devices arrived halfway
+  // down Account. Route identity is the caller's to supply: a chat thread keeps
+  // its own scroll behaviour.
+  useLayoutEffect(() => {
+    if (scrollKey === undefined) return;
+    if (detailPane.current) detailPane.current.scrollTop = 0;
+  }, [scrollKey]);
 
   const adjustable = Boolean(pane) && wide;
   const collapsed = adjustable && pref.collapsed;

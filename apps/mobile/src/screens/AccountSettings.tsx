@@ -7,13 +7,11 @@ import { fetchPhoneChangeEligibility, formatPhoneChangeEligibleAt } from "../ser
 import { Button } from "../components/Button";
 import { SelectField } from "../components/Fields";
 import { useOtpCountdown } from "../components/auth/useOtpCountdown";
-import { UserAvatar } from "../components/UserAvatar";
 import { TelegramSettings } from "../components/settings/TelegramSettings";
+import { Profile } from "./Profile";
 import {
   SettingsGroup,
-  SettingsPage,
   SettingsRow,
-  StatusPill,
 } from "../components/settings";
 import { describeCloudConnections } from "../services/aiCredentials";
 import { friendlyError } from "../utils/friendlyErrors";
@@ -23,21 +21,6 @@ import {
 } from "../services/accountRules";
 import "./AccountSettings.css";
 
-/**
- * Account detail screen (integrator: mount at `/settings/account`).
- *
- * Identity facts render as information rows, never as editable inputs:
- * - username: read-only (fixed at signup by the provisioning trigger).
- * - email: read-only. No email-change flow ships in this build, so there is
- *   no editable field; the `/verify` send/verify-code flow only re-verifies
- *   the existing address, so a Verify action is offered only while the
- *   stored email is unverified.
- * - mobile: editable via the profile editor (`/profile/edit`), which owns
- *   the validated Bangladesh update path.
- * - no phone verification row: no SMS provider ships, so the unsupported
- *   action/status is omitted rather than warned about.
- * - no avatar upload affordance: initials fallback only.
- */
 /**
  * Password-flow copy: the auth service's ApiError messages are already
  * user-facing (wrong/expired code, send limits, account changed), so they are
@@ -57,32 +40,11 @@ function passwordRetrySeconds(error: unknown): number {
 }
 
 export function AccountSettings() {
-  const { user, logout, finishAccountDeletion, retryDeletionCleanup, hasPassword: passwordPresence, refreshPasswordPresence } = useAuth();
-  const [loggingOut, setLoggingOut] = useState(false);
-  const [checkingKeys, setCheckingKeys] = useState(false);
-  const [confirmKeyRemoval, setConfirmKeyRemoval] = useState(false);
-  const [signOutError, setSignOutError] = useState<string | null>(null);
-  const [deleteArmed, setDeleteArmed] = useState(false);
-  const [deleteEmail, setDeleteEmail] = useState("");
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [deleted, setDeleted] = useState(false);
-  // A Google-created account has no password. This is the plain way to add one
-  // later without changing how the account signs in.
-  const [passwordOpen, setPasswordOpen] = useState(false);
-  const [password, setPassword] = useState("");
-  const [passwordConfirm, setPasswordConfirm] = useState("");
-  const [passwordBusy, setPasswordBusy] = useState(false);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [passwordSaved, setPasswordSaved] = useState(false);
-  const [passwordConfirmationPending, setPasswordConfirmationPending] = useState(false);
-  const [passwordCodeSent, setPasswordCodeSent] = useState(false);
-  const [passwordCode, setPasswordCode] = useState("");
-  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
-  const { seconds: passwordResendIn, setSeconds: setPasswordResendIn } = useOtpCountdown();
-  const [localCleanupDone, setLocalCleanupDone] = useState(false);
-  const currentAccount = useRef(user?.id ?? null);
-  currentAccount.current = user?.id ?? null;
+  return <Profile />;
+}
+
+export function MobileNumberRow() {
+  const { user } = useAuth();
   // Six-month replacement gate (spec 25, W5-IDENTITY): server-read only.
   // A fetch failure leaves this null and the row keeps its default copy:
   // availability is never guessed locally and no countdown is fabricated.
@@ -95,11 +57,6 @@ export function AccountSettings() {
   // account; failures are supplementary (default copy stays). Declared before
   // the early returns below so hook order stays stable.
   const accountId = user?.id ?? null;
-  useEffect(() => {
-    if (accountId === null) return;
-    setDeleteArmed(false); setDeleteEmail(""); setDeleteError(null); setDeleting(false);
-    setDeleted(false); setLocalCleanupDone(false);
-  }, [accountId]);
   useEffect(() => {
     let alive = true;
     setPhoneEligibility(null);
@@ -118,10 +75,53 @@ export function AccountSettings() {
     };
   }, [accountId]);
 
+  const mobileGateHeld = phoneEligibility !== null && !phoneEligibility.eligible;
+  const mobileCooldown = mobileGateHeld ? formatPhoneChangeEligibleAt(phoneEligibility.eligibleAt) : "";
+  const mobileDescription = mobileCooldown
+    ? `Number change available ${mobileCooldown}.`
+    : mobileGateHeld
+      ? "Number change is not available yet. Try again later."
+      : "Bangladesh mobile number.";
+  if (!user) return null;
+  return <SettingsRow title="Mobile number" description={mobileDescription} value={user.phone || "Add a number"} route="/profile/edit" />;
+}
+
+export function AccountSecuritySections() {
+  const { user, logout, finishAccountDeletion, retryDeletionCleanup, hasPassword: passwordPresence, refreshPasswordPresence } = useAuth();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [checkingKeys, setCheckingKeys] = useState(false);
+  const [confirmKeyRemoval, setConfirmKeyRemoval] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+  const [deleteArmed, setDeleteArmed] = useState(false);
+  const [deleteEmail, setDeleteEmail] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleted, setDeleted] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSaved, setPasswordSaved] = useState(false);
+  const [passwordConfirmationPending, setPasswordConfirmationPending] = useState(false);
+  const [passwordCodeSent, setPasswordCodeSent] = useState(false);
+  const [passwordCode, setPasswordCode] = useState("");
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const { seconds: passwordResendIn, setSeconds: setPasswordResendIn } = useOtpCountdown();
+  const [localCleanupDone, setLocalCleanupDone] = useState(false);
+  const currentAccount = useRef(user?.id ?? null);
+  currentAccount.current = user?.id ?? null;
+  const accountId = user?.id ?? null;
+  useEffect(() => {
+    if (accountId === null) return;
+    setDeleteArmed(false); setDeleteEmail(""); setDeleteError(null); setDeleting(false);
+    setDeleted(false); setLocalCleanupDone(false);
+  }, [accountId]);
+
   // The auth-owned feedback in App survives the protected-route redirect.
   if (deleted) {
     return (
-      <SettingsPage title="Account" description="Your sign-in details." backTo="/settings">
+      <div className="fb-profile-security" data-testid="account-security">
         <p role="status" className="fb-account-notice">
           Your account was permanently deleted. {localCleanupDone ? "This device has been signed out and its stored keys removed." : "Finishing sign-out on this device…"}
         </p>
@@ -132,7 +132,7 @@ export function AccountSettings() {
             void retryDeletionCleanup().finally(() => setDeleting(false));
           }}>Finish signing out</Button>
         </> : null}
-      </SettingsPage>
+      </div>
     );
   }
 
@@ -148,19 +148,6 @@ export function AccountSettings() {
     : passwordPresence === false
       ? "Add a password so you can also sign in without Google."
       : "Checking your sign-in methods…";
-
-  // Held gate without a date still names the block (never the default copy):
-  // matches the dateless request_phone_change 409 ("You cannot change your
-  // mobile number yet. Try again later.") in row-length form.
-  const mobileGateHeld = phoneEligibility !== null && !phoneEligibility.eligible;
-  const mobileCooldown = mobileGateHeld
-    ? formatPhoneChangeEligibleAt(phoneEligibility.eligibleAt)
-    : "";
-  const mobileDescription = mobileCooldown
-    ? `Number change available ${mobileCooldown}.`
-    : mobileGateHeld
-      ? "Number change is not available yet. Try again later."
-      : "Bangladesh mobile number.";
 
   function runLogout() {
     if (loggingOut) return;
@@ -316,45 +303,7 @@ export function AccountSettings() {
   }
 
   return (
-    <SettingsPage
-      title="Account"
-      description="Your sign-in details."
-      backTo="/settings"
-    >
-      <SettingsGroup title="Account information">
-        <SettingsRow
-          title="Profile photo"
-          value={<UserAvatar avatarUrl={user.avatarUrl} username={user.username} size={40} />}
-        />
-        <SettingsRow
-          title="Username"
-          description="Fixed when your account was created."
-          value={`@${user.username}`}
-        />
-        <SettingsRow
-          title="Email"
-          value={user.email}
-          badge={
-            user.emailVerified ? (
-              <StatusPill tone="success">Verified</StatusPill>
-            ) : undefined
-          }
-        />
-        {!user.emailVerified && (
-          <SettingsRow
-            title="Verify email"
-            description="Confirm access to this address with a code."
-            route="/verify"
-          />
-        )}
-        <SettingsRow
-          title="Mobile number"
-          description={mobileDescription}
-          value={user.phone}
-          route="/profile/edit"
-        />
-      </SettingsGroup>
-
+    <div className="fb-profile-security" data-testid="account-security">
       <ContactRules />
 
       <SettingsGroup title="Sign-in">
@@ -512,7 +461,7 @@ export function AccountSettings() {
           {deleteError}
         </p>
       ) : null}
-    </SettingsPage>
+    </div>
   );
 }
 

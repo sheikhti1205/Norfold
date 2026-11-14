@@ -23,6 +23,8 @@ import { RecoverySheet } from "../components/RecoverySheet";
 import { MatchActivity } from "../components/MatchActivity";
 import { ConfirmDialog } from "../components/AdaptiveTaskSurface";
 import { useViewportWidth } from "../components/responsive";
+import { Search } from "lucide-react";
+import { SearchField } from "../components/SearchField";
 
 const MY_CACHE_BASE = "my:reports";
 
@@ -86,6 +88,9 @@ export function MyPosts() {
   const { tapCount } = useTabTap();
   const navigate = useNavigate();
   const scrollRef = useRef<PullToRefreshHandle>(null);
+  const searchTrigger = useRef<HTMLButtonElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [ownerStatus, setOwnerStatus] = useState<OwnerStatusFilter>("ALL");
   const filterRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
@@ -93,8 +98,6 @@ export function MyPosts() {
   // that cleanup depend on the state.
   const pendingDeleteRef = useRef<PendingDelete | null>(null);
   const mountedRef = useRef(false);
-  const ownerStatusRef = useRef(ownerStatus);
-  useEffect(() => { ownerStatusRef.current = ownerStatus; }, [ownerStatus]);
   const [notice, setNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [recoveryPost, setRecoveryPost] = useState<PostItem | null>(null);
@@ -125,6 +128,21 @@ export function MyPosts() {
     { userId: user?.id, status: ownerStatus === "ALL" ? "" : ownerStatus },
     { cacheKey: MY_CACHE_BASE, scrollRef },
   );
+  // Status writes read the live restriction without making the callbacks
+  // depend on a value that changes on every filter press.
+  const ownerStatusRef = useRef(ownerStatus);
+  useEffect(() => { ownerStatusRef.current = ownerStatus; }, [ownerStatus]);
+  const searchTerm = searchQuery.trim().toLocaleLowerCase();
+  const visibleItems = searchTerm
+    ? items.filter((item) => [item.title, item.description, item.category, item.locationLabel]
+      .some((value) => value?.toLocaleLowerCase().includes(searchTerm)))
+    : items;
+
+  function closeSearch() {
+    setSearchOpen(false);
+    setSearchQuery("");
+    searchTrigger.current?.focus();
+  }
 
   // The sheet always reads the live row, not the snapshot taken when it
   // opened: a refetch can replace the same id with a different type/owner.
@@ -236,7 +254,7 @@ export function MyPosts() {
       } catch (err) {
         // The server refused: the report is still there, and the screen says
         // so. It never shows a deleted state the server rejected.
-        const message = `Report not deleted — ${friendlyError(err).message}`;
+        const message = `Report not deleted. ${friendlyError(err).message}`;
         reportDeletionFailure({ userId: pending.userId, message });
         announce(message);
       } finally {
@@ -299,7 +317,7 @@ export function MyPosts() {
     clearUndoTimer();
     pendingDeleteRef.current = null;
     setPendingDelete(null);
-    setNotice("Deletion cancelled — the report is still here.");
+    setNotice("Deletion cancelled. The report is still here.");
     announce("Deletion cancelled.");
   }, [clearUndoTimer]);
 
@@ -560,7 +578,33 @@ export function MyPosts() {
   return (
     <div className="mx-auto flex h-full w-full max-w-[100rem] flex-col gap-4 py-5 lg:py-8">
       <AppBar backTo="/profile" backLabel="Back to profile" title="My reports"
-        subtitle={`${total} report${total === 1 ? "" : "s"} · manage the status of items you have reported.`} />
+        subtitle={`${total} report${total === 1 ? "" : "s"} · manage the status of items you have reported.`}
+        showUtilitySearch={false}
+        actions={<button ref={searchTrigger} type="button" className="fb-icon-control"
+          aria-label="Search" aria-expanded={searchOpen}
+          onClick={() => searchOpen ? closeSearch() : setSearchOpen(true)}>
+          <Search size={20} aria-hidden="true" />
+        </button>}
+        inlineSearch={searchOpen ? <SearchField
+          value={searchQuery}
+          onChange={setSearchQuery}
+          ariaLabel="Search your reports"
+          placeholder="Search your reports"
+          leading={<></>}
+          onClear={() => setSearchQuery("")}
+          inputProps={{
+            autoFocus: true,
+            onKeyDown: (event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                closeSearch();
+              } else if (event.key === "Enter") {
+                event.preventDefault();
+              }
+            },
+          }}
+        /> : undefined} />
 
       {actionError && (
         <p role="alert" className="mx-4 lg:mx-8 rounded-m3-sm border border-error px-3 py-2 text-sm text-error">
@@ -650,7 +694,7 @@ export function MyPosts() {
           <NewPostsPill count={0} hasUpdates={updatesAvailable} onTap={() => { void refresh(); scrollRef.current?.scrollToTop(); }} />
           <MatchActivity accountId={user?.id ?? null} />
           <PostList
-            items={items}
+            items={visibleItems}
             loading={loading}
             loadingMore={loadingMore}
             error={error}
@@ -658,12 +702,22 @@ export function MyPosts() {
             hasMore={hasMore}
             onLoadMore={loadMore}
             onRetry={refresh}
-            emptyTitle={ownerStatus === "ALL" ? "You have no reports yet" : "No reports with this status"}
-            emptySubtitle={ownerStatus === "ALL" ? "Tap Report to post a lost or found item." : "Try another status or clear the filter."}
+            emptyTitle={searchTerm ? "No matching loaded reports" : ownerStatus === "ALL" ? "You have no reports yet" : "No reports with this status"}
+            emptySubtitle={searchTerm
+              ? (hasMore ? "Load more reports to continue searching." : "Try another search.")
+              : ownerStatus === "ALL" ? "Tap Report to post a lost or found item." : "Try another status or clear the filter."}
             density="owner-feed"
             masonryColumns={ownerColumns}
           />
-          {ownerStatus !== "ALL" && items.length === 0 && !loading && !error && (
+          {searchTerm && visibleItems.length === 0 && hasMore && !loading && !error && (
+            <div className="flex justify-center">
+              <button type="button" className="min-h-[44px] px-3 text-sm font-semibold underline"
+                disabled={loadingMore} onClick={() => void loadMore()}>
+                {loadingMore ? "Loading more reports" : "Load more reports"}
+              </button>
+            </div>
+          )}
+          {!searchTerm && ownerStatus !== "ALL" && items.length === 0 && !loading && !error && (
             <div className="flex justify-center">
               <button type="button" onClick={() => setOwnerStatus("ALL")} className="min-h-[44px] px-4 text-sm font-medium underline">
                 Clear filter
@@ -713,7 +767,7 @@ export function MyPosts() {
           data-testid="my-posts-delete-undo"
           className="sticky bottom-3 mx-4 lg:mx-8 flex items-center gap-3 rounded-m3-md bg-on-surface px-4 py-3 text-sm text-surface"
         >
-          <span className="flex-1">Delete scheduled — Undo for a few seconds</span>
+          <span className="flex-1">Delete scheduled. Undo for a few seconds</span>
           <button
             type="button"
             onClick={undoDelete}
@@ -731,7 +785,7 @@ export function MyPosts() {
           className="sticky bottom-3 mx-4 lg:mx-8 flex items-center gap-3 rounded-m3-md bg-on-surface px-4 py-3 text-sm text-surface"
         >
           <span className="flex-1">
-            Status changed to {ownerStatusLabel(statusUndo.next, statusUndo.type)} — Undo for a few seconds
+            Status changed to {ownerStatusLabel(statusUndo.next, statusUndo.type)}. Undo for a few seconds
           </span>
           <button
             type="button"
