@@ -29,8 +29,8 @@ import "./SettingsWindow.css";
  * Owner order 2026-11-13 (references: the VS Code settings window and the
  * owner's top-attached search sketch): the Settings row opens the settings
  * surface over the app, and a press outside it closes the window. The surface
- * is the real settings tree - the same route elements the `/settings` URL
- * mounts - so a page cannot exist in one place and not the other.
+ * is the real settings tree - the one settingsRoutes list - so a section cannot
+ * exist in the window and be missing at its old URL, or the reverse.
  *
  * The window owns the ONE settings search: a single icon in its top bar that
  * expands into a field in the same row, beside the title, with results dropping
@@ -38,10 +38,12 @@ import "./SettingsWindow.css";
  * order 2026-11-14). The tree carries no second search field, and settings
  * carries no notification bell (owner order 2026-11-13).
  *
- * The window keeps its own memory history. Opening it never changes the app's
- * URL, so closing puts the reader back exactly where they were without
- * replaying navigation, and a section visit inside the window leaves no
- * settings URL behind. The owner's profile is part of this surface: the
+ * The window keeps its own memory history. Opening it from a row never changes
+ * the app's URL, so closing puts the reader back exactly where they were
+ * without replaying navigation, and a section visit inside the window leaves no
+ * settings URL behind. A historical `/settings...` address is redirected to
+ * Home and opens this same tree at that destination, so a bookmark still lands
+ * on the section it names. The owner's profile is part of this surface: the
  * settings identity header and any `/profile` link open it inside the window,
  * so nobody is thrown back to a separate page. Any other destination is handed
  * back to the real router, which closes the window on the way.

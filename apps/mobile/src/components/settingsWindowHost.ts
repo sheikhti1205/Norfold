@@ -4,9 +4,8 @@ import { createContext, useContext, useLayoutEffect } from "react";
  * True while the settings tree is mounted inside the floating settings window.
  *
  * The window owns the single settings search affordance: one icon in its top
- * bar, opening a top-attached field over the tree. The standalone `/settings`
- * page keeps its own in-page field, so a page must never paint that field while
- * it is hosted in the window - otherwise the surface shows two search entries
+ * bar, opening a top-attached field over the tree. A hosted page must never
+ * paint a second in-page field, otherwise the surface shows two search entries
  * (owner order 2026-11-13).
  *
  * This is presentation context, not authorisation: it says where the tree is

@@ -42,8 +42,7 @@ export interface SettingsPageProps {
  * Content only: Shell remains the sole viewport/safe-area/scroll owner.
  *
  * The bar holds the escape control and the title, nothing else. Settings search
- * is owned by the surface that presents the tree - the floating window's top
- * search, or the standalone page's own field - so a second global search icon
+ * is owned by the floating window's top search, so a second global search icon
  * and a notification bell never appear here (owner order 2026-11-13).
  */
 export function SettingsPage({ title, description, children, backTo, backState, backLabel = "Back to Settings", className = "", headingLevel = 1, autoFocus = true }: SettingsPageProps) {

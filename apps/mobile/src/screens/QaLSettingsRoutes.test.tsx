@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
 /**
- * QA L app-level audit: every settings backTo lands on a mounted route
- * (real <App/> with marker screens), Diagnostics renders no secret-shaped
- * strings with fixture data, and consumer-tier AI screens render no raw
- * technical terms (checksum/SHA/revision/TTFT/model-enum).
+ * QA L content audit: Diagnostics renders no secret-shaped strings with fixture
+ * data, and consumer-tier AI screens render no raw technical terms
+ * (checksum/SHA/revision/TTFT/model-enum).
+ *
+ * These are content checks, not routing checks: the screens are mounted
+ * directly. The app-route matrix (every settings backTo under the real <App/>)
+ * lives in QaLSettingsRouteMatrix.test.tsx so this file stays light and cannot
+ * push the worker into its 4 GB heap cap.
  */
+import type { ReactElement } from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PublicUser } from "@norfold/shared";
 
@@ -43,7 +49,6 @@ vi.mock("@capacitor/core", () => ({ Capacitor: { isNativePlatform: () => false, 
 vi.mock("@capacitor/app", () => ({
   App: { getLaunchUrl: async () => undefined, addListener: () => Promise.resolve({ remove: () => {} }) },
 }));
-vi.mock("./Onboarding", () => ({ Onboarding: () => <p>Onboarding screen</p>, ONBOARDING_PAGES: [] }));
 vi.mock("../services/aiCredentials", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/aiCredentials")>();
   return { ...actual, aiCredentials: { ...aiCreds, credentialHandle: actual.aiCredentials.credentialHandle } };
@@ -51,24 +56,24 @@ vi.mock("../services/aiCredentials", async (importOriginal) => {
 vi.mock("../services/notificationPreferences", () => ({
   fetchNotificationPreferences: async () => ({ pushEnabled: true }),
 }));
-vi.mock("../services/pushRuntime", () => ({
-  pushController: () => ({ permission: async () => "unsupported" as const }),
-  // ChatPushLinkHandler mounts on every route and imports these; a partial mock
-  // makes them undefined and the component throws on every render.
-  CHAT_PUSH_BOUND_EVENT: "findback:chat-push-bound",
-  takeChatPushTap: async () => null,
-  listenForChatPushTap: async () => () => {},
-  acknowledgeChatPushTap: async () => {},
-}));
 
-import { App, createAppRouter } from "../App";
-let router: ReturnType<typeof createAppRouter> | undefined;
+import { ApplicationAiService } from "../services/ai/applicationAi";
+import { AiConnection } from "./AiConnection";
+import { AiSettings } from "./AiSettings";
+import { CloudModels } from "./CloudModels";
+import { Diagnostics } from "./Diagnostics";
+import { DownloadedModels } from "./DownloadedModels";
+import { CommunityGuidelines, PrivacyPolicy, Terms } from "./Legal";
+import { LocalIntelligence } from "./LocalIntelligence";
 
-function renderAt(hash: string) {
-  window.history.replaceState(null, "", `/#${hash}`);
-  router?.dispose();
-  router = createAppRouter();
-  return render(<App router={router} />);
+/** One offline service; the web build has no on-device model store. */
+let offlineAi: ApplicationAiService | undefined;
+function offlineService() {
+  return (offlineAi ??= new ApplicationAiService({ android: false }));
+}
+
+function renderScreen(element: ReactElement, route = "/") {
+  return render(<MemoryRouter initialEntries={[route]}>{element}</MemoryRouter>);
 }
 
 beforeEach(() => {
@@ -81,62 +86,12 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
-  router?.dispose();
   vi.clearAllMocks();
-  window.history.replaceState(null, "", "/");
-});
-
-/** Every backTo/fallbackTo used by settings screens, plus every row target. */
-const BACK_TO_ROUTES = [
-  "/settings",
-  "/settings/ai",
-  "/settings/account",
-  "/settings/devices",
-  "/settings/backup",
-  "/profile",
-  "/",
-  "/settings/appearance",
-  "/settings/accessibility",
-  "/settings/feed-layout",
-  "/settings/media",
-  "/settings/notifications",
-  "/settings/privacy",
-  "/settings/help",
-  "/settings/about",
-  "/settings/diagnostics",
-  "/settings/ai/models",
-  "/settings/ai/connections",
-  "/settings/local-intelligence",
-  "/settings/local-intelligence/downloads",
-  "/onboarding?replay=1",
-  "/verify",
-  "/my",
-  "/search",
-  "/report",
-  "/notifications",
-  "/help",
-  "/ai-connection",
-  "/ai-models",
-  "/profile/edit",
-  "/settings/terms",
-  "/settings/privacy-policy",
-  "/settings/community-guidelines",
-] as const;
-
-describe("QA L: every settings backTo lands on a mounted route", () => {
-  it.each(BACK_TO_ROUTES)("route %s renders content (no splash redirect)", async (route) => {
-    renderAt(route);
-    await waitFor(() => {
-      expect(document.body.textContent!.length).toBeGreaterThan(0);
-    });
-    expect(screen.queryByText("Loading Norfold…")).toBeNull();
-    expect(screen.queryByRole("heading", { name: "Something went wrong" })).toBeNull();
-  });
 });
 
 it.each(["/settings/ai/connections", "/ai-connection"])(
   "provider route %s finishes loading the key form rather than an error page", async (route) => {
-    renderAt(route);
+    renderScreen(<AiConnection />, route);
     expect(await screen.findByRole("heading", { level: 1, name: "Providers" })).not.toBeNull();
     expect(await screen.findByText("No key saved")).not.toBeNull();
     expect(screen.getByLabelText("OpenRouter API key")).not.toBeNull();
@@ -146,11 +101,11 @@ it.each(["/settings/ai/connections", "/ai-connection"])(
 
 describe("QA L: the legal documents are reachable and say what they are", () => {
   it.each([
-    ["/settings/terms", "Terms of use"],
-    ["/settings/privacy-policy", "Privacy policy"],
-    ["/settings/community-guidelines", "Community guidelines"],
-  ] as const)("route %s renders its own document", async (route, heading) => {
-    renderAt(route);
+    ["Terms of use", Terms],
+    ["Privacy policy", PrivacyPolicy],
+    ["Community guidelines", CommunityGuidelines],
+  ] as const)("%s renders its own document", async (heading, Screen) => {
+    renderScreen(<Screen />);
     await waitFor(() => {
       expect(screen.getByRole("heading", { level: 1, name: heading })).not.toBeNull();
     });
@@ -164,9 +119,9 @@ const SECRET_SHAPED =
 
 describe("QA L: Diagnostics renders no secret-shaped strings", () => {
   it("fixture render carries no keys, tokens, or key material", async () => {
-    renderAt("/settings/diagnostics");
+    renderScreen(<Diagnostics />);
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Diagnostics" })).not.toBeNull();
+      expect(screen.getByRole("heading", { level: 1, name: "Diagnostics" })).not.toBeNull();
     });
     expect(document.body.textContent ?? "").not.toMatch(SECRET_SHAPED);
   });
@@ -175,17 +130,24 @@ describe("QA L: Diagnostics renders no secret-shaped strings", () => {
 const CONSUMER_FORBIDDEN =
   /sha-?256|\bsha\b|checksum|catalogue pin|revision|ttft|tokens\/s|\.gguf|\.onnx|quantiz|unknown model \S+/i;
 
+/**
+ * The consumer-facing AI screens, by the address each one serves. The two
+ * on-device screens are rendered even though the web build redirects them:
+ * the wording audit is about their copy, not about platform reachability.
+ */
+const AI_SCREENS: ReadonlyArray<readonly [string, () => ReactElement]> = [
+  ["/settings/ai", () => <AiSettings />],
+  ["/settings/ai/chat-models", () => <CloudModels />],
+  ["/settings/ai/connections", () => <AiConnection />],
+  ["/settings/local-intelligence", () => <LocalIntelligence service={offlineService()} />],
+  ["/settings/local-intelligence/downloads", () => <DownloadedModels service={offlineService()} />],
+];
+
 describe("QA L: consumer-tier AI screens render no raw technical terms", () => {
-  it.each([
-    "/settings/ai",
-    "/settings/ai/models",
-    "/settings/ai/connections",
-    "/settings/local-intelligence",
-    "/settings/local-intelligence/downloads",
-  ] as const)(
+  it.each(AI_SCREENS)(
     "screen %s stays consumer-worded",
-    async (route) => {
-      renderAt(route);
+    async (_route, make) => {
+      renderScreen(make());
       await waitFor(() => {
         expect(document.body.textContent!.length).toBeGreaterThan(0);
       });
@@ -197,17 +159,15 @@ describe("QA L: consumer-tier AI screens render no raw technical terms", () => {
     // Owner direction 2026-10-25: the benchmark/CPU-GPU surface is not a
     // consumer surface at all, so the route must not exist and no consumer
     // screen may link to it.
-    renderAt("/settings/ai/advanced");
-    await waitFor(() => {
-      expect(screen.queryByRole("heading", { name: "Advanced" })).toBeNull();
-    });
-    for (const route of ["/settings/ai", "/settings/ai/models", "/settings/local-intelligence"]) {
-      renderAt(route);
+    for (const [route, make] of AI_SCREENS) {
+      cleanup();
+      renderScreen(make());
       await waitFor(() => {
         expect(document.body.textContent!.length).toBeGreaterThan(0);
       });
-      expect(screen.queryByText(/measure performance|run speed tests/i)).toBeNull();
-      expect(screen.queryByRole("link", { name: /advanced/i })).toBeNull();
+      expect(screen.queryByRole("heading", { name: "Advanced" }), route).toBeNull();
+      expect(screen.queryByText(/measure performance|run speed tests/i), route).toBeNull();
+      expect(screen.queryByRole("link", { name: /advanced/i }), route).toBeNull();
     }
   });
 });

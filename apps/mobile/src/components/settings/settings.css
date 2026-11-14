@@ -111,7 +111,17 @@
 }
 .fb-settings-row:first-child { border-start-start-radius: 0; border-start-end-radius: 0; }
 .fb-settings-row:last-child { border-end-start-radius: 0; border-end-end-radius: 0; }
-a.fb-settings-row:hover, button.fb-settings-row:hover:not(:disabled) { background: var(--fb-surface-container-low); }
+/* A pointer highlight is a rounded row, not a full-bleed square painted across
+   the list (owner defect 2026-11-13). Separators still carry the grouping. */
+a.fb-settings-row:hover, button.fb-settings-row:hover:not(:disabled) {
+  background: var(--fb-surface-container-low);
+  border-radius: 10px;
+}
+a.fb-settings-row:focus-visible, button.fb-settings-row:focus-visible {
+  outline: 2px solid var(--fb-focus);
+  outline-offset: -2px;
+  border-radius: 10px;
+}
 /* A text value beside a title, a status badge and a chevron has no room on a
    phone at large text: the title would shrink to one character per line. Below
    480px the value takes its own full-width line (still inside the same row and

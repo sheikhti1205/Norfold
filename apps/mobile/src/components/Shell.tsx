@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { Capacitor } from "@capacitor/core";
 import { Link, UNSAFE_NavigationContext, useLocation, useNavigate } from "react-router";
 import { AnimatePresence, motion } from "framer-motion";
@@ -116,14 +116,13 @@ const WIDE_CANVAS = ["/", "/search", "/chats", "/connections", "/my"];
 
 /** The document never scrolls: routes own the bounded viewport scroller. */
 export function Shell() {
-  const { pathname } = useLocation();
+  const { pathname, state: locationState } = useLocation();
   const width = useViewportWidth();
   const chatThread = pathname.startsWith("/chats/") || pathname.startsWith("/connections/");
   const showNav = chatThread ? width >= MEDIUM_MAX_PX : !HIDE_NAV.some((p) => pathname.startsWith(p));
-  const settingsRoute = pathname === "/settings" || pathname.startsWith("/settings/");
-  const wideCanvas = WIDE_CANVAS.includes(pathname) || chatThread || settingsRoute;
+  const wideCanvas = WIDE_CANVAS.includes(pathname) || chatThread;
   const ownsInternalScroll =
-    settingsRoute || pathname === "/" || pathname === "/search" || pathname.startsWith("/help") || pathname.startsWith("/connections") || pathname.startsWith("/chats");
+    pathname === "/" || pathname === "/search" || pathname.startsWith("/help") || pathname.startsWith("/connections") || pathname.startsWith("/chats");
   // Owner ruling 4(e): the stored preference only becomes a side rail at the
   // compact breakpoint and up. The rail is an in-flow sibling of the content,
   // so it takes layout space and never covers what the reader is reading.
@@ -144,7 +143,7 @@ export function Shell() {
     const navigator = navigationContext.navigator;
     const intercept = (to: Parameters<typeof navigator.push>[0]) => {
       const path = typeof to === "string" ? to : `${to.pathname ?? ""}${to.search ?? ""}${to.hash ?? ""}`;
-      if (settingsRoute || !(path === "/settings" || path.startsWith("/settings/") || path.startsWith("/settings?") || path.startsWith("/settings#"))) return false;
+      if (!(path === "/settings" || path.startsWith("/settings/") || path.startsWith("/settings?") || path.startsWith("/settings#"))) return false;
       openSettingsWindow(path);
       return true;
     };
@@ -160,7 +159,7 @@ export function Shell() {
         },
       },
     };
-  }, [navigationContext, settingsRoute, openSettingsWindow]);
+  }, [navigationContext, openSettingsWindow]);
   const searchOpen = useGlobalSearchOpen();
 
   // A breakpoint flip replaces the whole navigation. The element that had focus
@@ -194,10 +193,8 @@ export function Shell() {
   // reader is looking at instead of replacing it. This is the one interception
   // point, so a link added anywhere in the app cannot regress into a separate
   // settings page. Links inside the window are excluded (they use its own
-  // router), and a standing `/settings` URL keeps the standalone page so a
-  // deep link still works.
+  // router).
   useEffect(() => {
-    if (pathname === "/settings" || pathname.startsWith("/settings/")) return;
     const intercept = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -211,7 +208,18 @@ export function Shell() {
     };
     document.addEventListener("click", intercept, true);
     return () => document.removeEventListener("click", intercept, true);
-  }, [pathname, openSettingsWindow]);
+  }, [openSettingsWindow]);
+
+  // Owner order 2026-11-14: settings is a window, never a page. A retired
+  // `/settings...` address is redirected to Home by the app route, which hands
+  // the exact destination over as navigation state; the window opens here and
+  // the state is cleared, so the address settles on plain Home.
+  const settingsDeepLink = (locationState as { settingsWindowPath?: unknown } | null)?.settingsWindowPath;
+  useLayoutEffect(() => {
+    if (typeof settingsDeepLink !== "string") return;
+    openSettingsWindow(settingsDeepLink);
+    navigate("/", { replace: true, state: null });
+  }, [settingsDeepLink, navigate, openSettingsWindow]);
 
   return (
     <UNSAFE_NavigationContext.Provider value={windowNavigation}>
