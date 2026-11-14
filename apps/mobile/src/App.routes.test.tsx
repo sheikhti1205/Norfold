@@ -550,6 +550,22 @@ describe("consumer route map", () => {
 
   it.each([
     ["/profile", "Profile screen"],
+    ["/profile/edit", "ProfileEdit screen"],
+    ["/my", "MyPosts screen"],
+    ["/notifications", "Notifications screen"],
+    ["/search", "Search screen"],
+    ["/report", "CreateReport screen"],
+  ])("renders signed route %s inside the shell", (route, markerText) => {
+    signedIn();
+    renderAt(route);
+    expect(screen.getByRole("navigation", { name: "Primary" })).toBeTruthy();
+    expect(screen.getByText(markerText)).toBeTruthy();
+  });
+
+  // Owner order 2026-11-14: settings is a window, never a page. A retired
+  // `/settings...` address is a replace-redirect to Home; the window opens the
+  // exact section over it, so the old standalone page cannot resurface.
+  it.each([
     ["/settings", "Settings screen"],
     ["/settings/administrator", "AdminBootstrap screen"],
     ["/settings/account", "AccountSettings screen"],
@@ -571,16 +587,13 @@ describe("consumer route map", () => {
     ["/settings/help", "HelpGuide screen"],
     ["/settings/about", "About screen"],
     ["/settings/diagnostics", "Diagnostics screen"],
-    ["/profile/edit", "ProfileEdit screen"],
-    ["/my", "MyPosts screen"],
-    ["/notifications", "Notifications screen"],
-    ["/search", "Search screen"],
-    ["/report", "CreateReport screen"],
-  ])("renders signed route %s inside the shell", (route, markerText) => {
+  ])("opens retired settings address %s in the window over Home", async (route, markerText) => {
     signedIn();
     renderAt(route);
-    expect(screen.getByRole("navigation", { name: "Primary" })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: "Settings" })).toBeTruthy();
     expect(screen.getByText(markerText)).toBeTruthy();
+    expect(screen.getByText("Home screen")).toBeTruthy();
+    expect(router?.state.location.pathname).toBe("/");
   });
 
   it.each([
@@ -599,21 +612,25 @@ describe("consumer route map", () => {
     expect(screen.getByText("About screen")).toBeTruthy();
   });
 
-  it("keeps the /offline-ai redirect on the canonical on-device settings area", () => {
+  it("keeps the /offline-ai redirect on the canonical on-device settings area", async () => {
     signedIn();
     renderAt("/offline-ai");
-    expect(screen.getByText("LocalIntelligence screen")).toBeTruthy();
+    expect(await screen.findByText("LocalIntelligence screen")).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Settings" })).toBeTruthy();
+    expect(screen.getByText("Home screen")).toBeTruthy();
+    expect(router?.state.location.pathname).toBe("/");
   });
 
   it("routes the legacy /ai-models redirect into the canonical settings window", async () => {
-    // `/ai-models` is a legacy native URL: the redirect lands on the canonical
-    // destination, which the shell opens in its floating settings window rather
-    // than as a page inside the nav shell.
+    // `/ai-models` is a legacy native URL: it uses the same Home handoff as the
+    // retired settings addresses, so closing the window lands on Home instead of
+    // a blank redirect-only route behind it.
     signedIn();
     renderAt("/ai-models");
     expect(await screen.findByText("LocalIntelligence screen")).toBeTruthy();
     expect(screen.getByRole("dialog", { name: "Settings" })).toBeTruthy();
-    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
+    expect(screen.getByText("Home screen")).toBeTruthy();
+    expect(router?.state.location.pathname).toBe("/");
   });
 
   it("renders the public shared report without auth", () => {
@@ -628,6 +645,19 @@ describe("consumer route map", () => {
     returningGuest();
     renderAt("/settings/appearance");
     expect(screen.getByText("Gateway:email")).toBeTruthy();
+  });
+
+  it("opens a signed-out settings deep link at its section after sign-in", async () => {
+    returningGuest();
+    renderAt("/settings/notifications");
+    await waitFor(() => expect(router?.state.location.pathname).toBe("/auth"));
+    expect(peekAuthReturnTo()).toBe("/settings/notifications");
+    signedIn();
+    await act(async () => { await router!.navigate("/auth"); });
+    await waitFor(() => expect(router?.state.location.pathname).toBe("/"));
+    expect(await screen.findByRole("dialog", { name: "Settings" })).toBeTruthy();
+    expect(screen.getByText("NotificationPreferences screen")).toBeTruthy();
+    expect(peekAuthReturnTo()).toBeNull();
   });
 
   it.each([["/privacy", "Privacy policy"], ["/terms", "Terms of use"], ["/community-guidelines", "Community guidelines"]])("exposes canonical legal %s without auth", (path, title) => {
@@ -669,7 +699,8 @@ describe("consumer route map", () => {
     await waitFor(() => expect(peekAuthReturnTo()).toBeNull());
     // Nothing is replayed: the next protected visit is a normal signed-in route.
     await act(async () => { await router!.navigate("/settings"); });
-    expect(router?.state.location.pathname).toBe("/settings");
+    await waitFor(() => expect(router?.state.location.pathname).toBe("/"));
+    expect(await screen.findByRole("dialog", { name: "Settings" })).toBeTruthy();
     expect(peekAuthReturnTo()).toBeNull();
   });
 
@@ -721,7 +752,7 @@ describe("consumer route map", () => {
     expect(sessionStorage.getItem("findback.pendingReportLink")).toBeNull();
   });
 
-  it("requires sign-in, not an existing admin role, for administrator setup", () => {
+  it("requires sign-in for the retired administrator address, then opens the window", async () => {
     returningGuest();
     renderAt("/settings/administrator");
     expect(screen.getByText("Gateway:email")).toBeTruthy();
@@ -729,6 +760,7 @@ describe("consumer route map", () => {
     cleanup();
     signedIn();
     renderAt("/settings/administrator");
+    expect(await screen.findByRole("dialog", { name: "Settings" })).toBeTruthy();
     expect(screen.getByText("AdminBootstrap screen")).toBeTruthy();
   });
 

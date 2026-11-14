@@ -37,7 +37,10 @@ vi.mock("../screens/ProfileEdit", () => ({ ProfileEdit: () => <p>Profile edit pa
 vi.mock("../screens/settingsRoutes", async () => {
   const { Route } = await import("react-router");
   return {
-    settingsRouteElements: () => <Route path="/settings/account" element={<p>Account page</p>} />,
+    settingsRouteElements: () => <>
+      <Route path="/settings/account" element={<p>Account page</p>} />
+      <Route path="/settings/devices" element={<p>Devices page</p>} />
+    </>,
   };
 });
 
@@ -115,15 +118,15 @@ describe("settings window", () => {
     expect(head.querySelector(".fb-settings-window-actions .fb-settings-window-search")).toBeTruthy();
     expect(document.querySelector(".fb-settings-searcharea")).toBeNull();
     // The whole settings catalogue is searchable, not just the current section.
-    fireEvent.change(field, { target: { value: "profile" } });
+    fireEvent.change(field, { target: { value: "device" } });
     expect(screen.getByRole("status").textContent).toContain("setting");
     // Pick the real result row, not the mock Settings root's own static link.
     const results = within(screen.getByRole("list", { name: "Settings search results" }));
-    const profile = results.getByRole("link", { name: /Profile & security/ });
-    fireEvent.click(profile);
+    const devices = results.getByRole("link", { name: /Devices/ });
+    fireEvent.click(devices);
     // Picking navigates the window's own history; the app behind never moves,
     // and the field puts itself away.
-    await waitFor(() => expect(screen.getByText("Profile page")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Devices page")).toBeTruthy());
     expect(screen.queryByRole("searchbox", { name: "Search settings" })).toBeNull();
     expect(screen.getByRole("dialog", { name: "Settings" })).toBeTruthy();
   });

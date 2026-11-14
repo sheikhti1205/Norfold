@@ -92,7 +92,7 @@ describe("Shell floating primary navigation", () => {
     render(<MemoryRouter initialEntries={["/"]}>
       <Routes><Route element={<Shell />}>
         <Route index element={<Home />} />
-        <Route path="/settings/*" element={<p>Standalone settings</p>} />
+        <Route path="/settings/*" element={<p>Settings page (must not render)</p>} />
       </Route></Routes>
     </MemoryRouter>);
     fireEvent.click(screen.getByRole("button", { name: "Open notifications" }));
@@ -101,23 +101,22 @@ describe("Shell floating primary navigation", () => {
     expect(screen.getByTestId("settings-window").textContent).toContain("/settings/appearance");
     fireEvent.click(screen.getByRole("button", { name: "Close window" }));
     expect(screen.getByText("Home screen")).toBeTruthy();
-    expect(screen.queryByText("Standalone settings")).toBeNull();
+    expect(screen.queryByText("Settings page (must not render)")).toBeNull();
   });
 
-  it("allows programmatic navigation from a standalone settings deep link", () => {
-    function Standalone() {
-      const navigate = useNavigate();
-      return <button onClick={() => navigate("/settings/help")}>Open help</button>;
-    }
-    render(<MemoryRouter initialEntries={["/settings/notifications"]}>
-      <Routes><Route element={<Shell />}>
-        <Route path="/settings/notifications" element={<Standalone />} />
-        <Route path="/settings/help" element={<p>Help page</p>} />
-      </Route></Routes>
-    </MemoryRouter>);
-    fireEvent.click(screen.getByRole("button", { name: "Open help" }));
-    expect(screen.getByText("Help page")).toBeTruthy();
-    expect(screen.queryByTestId("settings-window")).toBeNull();
+  it("opens a redirected settings destination in the window and settles on Home", async () => {
+    // The app route redirects a retired `/settings...` address to Home with
+    // the exact destination as state; Shell opens it and clears the state.
+    const router = createMemoryRouter([{ path: "*", element: <Routes>
+      <Route element={<Shell />}>
+        <Route index element={<p>Home screen</p>} />
+      </Route>
+    </Routes> }], { initialEntries: [{ pathname: "/", state: { settingsWindowPath: "/settings/help" } }] });
+    render(<RouterProvider router={router} />);
+    await waitFor(() => expect(screen.getByTestId("settings-window").textContent).toContain("/settings/help"));
+    expect(router.state.location.pathname).toBe("/");
+    expect(router.state.location.state).toBeNull();
+    expect(screen.getByText("Home screen")).toBeTruthy();
   });
 
   it("intercepts effect navigation under the app's data-router route tree", async () => {
@@ -129,27 +128,13 @@ describe("Shell floating primary navigation", () => {
     const router = createMemoryRouter([{ path: "*", element: <Routes>
       <Route element={<Shell />}>
         <Route index element={<Home />} />
-        <Route path="/settings/help" element={<p>Standalone help</p>} />
+        <Route path="/settings/help" element={<p>Settings page (must not render)</p>} />
       </Route>
     </Routes> }], { initialEntries: ["/"] });
     render(<RouterProvider router={router} />);
     await waitFor(() => expect(screen.getByTestId("settings-window").textContent).toContain("/settings/help"));
     expect(router.state.location.pathname).toBe("/");
     expect(screen.getByText("Home screen")).toBeTruthy();
-  });
-
-  it("leaves links on the standalone settings page to that page's own router", () => {
-    render(
-      <MemoryRouter initialEntries={["/settings/notifications"]}>
-        <Routes><Route element={<Shell />}>
-          <Route path="/settings/notifications" element={<Link to="/settings/help">Help settings</Link>} />
-          <Route path="/settings/help" element={<p>Help page</p>} />
-        </Route></Routes>
-      </MemoryRouter>,
-    );
-    fireEvent.click(screen.getByRole("link", { name: "Help settings" }));
-    expect(screen.getByText("Help page")).toBeTruthy();
-    expect(screen.queryByTestId("settings-window")).toBeNull();
   });
 
   it("opens the phone bottom bar's Settings destination in the window", async () => {

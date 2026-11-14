@@ -4,7 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import { AuthProvider } from "./auth";
 import { ThemeProvider } from "./theme";
 import { motionConfigValueFor, useAppearance } from "./appearance";
-import { GuestOnly, NativeOnly, OnboardingRoute, RequireAuth } from "./components/Guards";
+import { GuestOnly, OnboardingRoute, RequireAuth } from "./components/Guards";
 import { Shell } from "./components/Shell";
 import { BackButtonHandler } from "./components/BackButtonHandler";
 import { AccountDeletionFeedback } from "./components/AccountDeletionFeedback";
@@ -38,8 +38,6 @@ import { Reactions } from "./screens/Reactions";
 import { Help } from "./screens/Help";
 import { AiConnection } from "./screens/AiConnection";
 import { Notifications } from "./screens/Notifications";
-import { Settings } from "./screens/Settings";
-import { settingsRouteElements } from "./screens/settingsRoutes";
 import { CommunityGuidelines, PrivacyPolicy, Terms } from "./screens/Legal";
 import { ReportLinkHandler } from "./components/ReportLinkHandler";
 import { ChatPushLinkHandler } from "./components/ChatPushLinkHandler";
@@ -86,6 +84,21 @@ function AppMotionConfig({ children }: { children: ReactNode }) {
       {children}
     </MotionConfig>
   );
+}
+
+/**
+ * Owner order 2026-11-14: settings is a window, never a page. An old
+ * `/settings...` address (typed, refreshed, bookmarked, or restored from a
+ * return-to after sign-in) hands its exact destination to Home as navigation
+ * state, where Shell opens it in the floating window. The redirect replaces
+ * the entry so Back never returns to the retired standalone page.
+ *
+ * `destination` covers the two legacy AI aliases: they are redirect-only routes
+ * too, and leaving them inside Shell left a blank background behind the window.
+ */
+function SettingsDeepLink({ destination }: { destination?: string } = {}) {
+  const { pathname, search, hash } = useLocation();
+  return <Navigate to="/" replace state={{ settingsWindowPath: destination ?? `${pathname}${search}${hash}` }} />;
 }
 
 // Created once by the entrypoint, outside StrictMode's render cycle. Keep the
@@ -195,6 +208,13 @@ function AppRouteTree() {
             <Route path="/forgot" element={<ForgotPassword />} />
               <Route path="/recovery" element={<Recovery />} />
               <Route path="/create-password" element={<Navigate to="/" replace />} />
+              {/* Owner order 2026-11-14: settings is a window, never a page.
+                  Every retired `/settings...` address is a replace-redirect to
+                  Home; Shell opens the exact destination in the floating
+                  window from the state this passes. */}
+              <Route path="/settings/*" element={<RequireAuth><SettingsDeepLink /></RequireAuth>} />
+              <Route path="/ai-models" element={<RequireAuth><SettingsDeepLink destination="/settings/local-intelligence" /></RequireAuth>} />
+              <Route path="/offline-ai" element={<RequireAuth><SettingsDeepLink destination="/settings/local-intelligence" /></RequireAuth>} />
             <Route
               element={
                 <RequireAuth>
@@ -222,11 +242,6 @@ function AppRouteTree() {
               <Route path="/about" element={<About />} />
               <Route path="/help" element={<Help />} />
               <Route path="/ai-connection" element={<AiConnection />} />
-                <Route path="/ai-models" element={<NativeOnly><Navigate to="/settings/local-intelligence" replace /></NativeOnly>} />
-               <Route path="/offline-ai" element={<NativeOnly><Navigate to="/settings/local-intelligence" replace /></NativeOnly>} />
-              <Route path="/settings" element={<Settings />}>
-                {settingsRouteElements()}
-              </Route>
             </Route>
             <Route path="*" element={<Navigate to="/splash" replace />} />
            </Routes>

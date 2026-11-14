@@ -37,10 +37,11 @@ import { Diagnostics } from "./Diagnostics";
 /**
  * The settings subtree, declared once.
  *
- * The same rows feed the inline `/settings` route and the floating settings
- * window. Keeping one list means a settings page can never exist in the window
- * and be missing at its URL, or the reverse. Returned as route elements (not a
- * wrapper component) because `<Routes>` only accepts Route/Fragment children.
+ * The floating window is its only host. A historical `/settings...` address is
+ * redirected to Home and opens this same tree at that destination in the
+ * window, so a section cannot land in the window and be missing at its old URL,
+ * or the reverse. Returned as route elements (not a wrapper component) because
+ * `<Routes>` only accepts Route/Fragment children.
  */
 export function settingsRouteElements() {
   return <>
