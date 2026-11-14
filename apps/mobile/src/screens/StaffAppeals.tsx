@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { useParams } from "react-router";
+import { FileText, MessageCircle, MessageSquare, UserRound } from "lucide-react";
 import { useAuth } from "../auth";
 import { Button } from "../components/Button";
 import { SelectField, TextAreaField } from "../components/Fields";
@@ -8,13 +9,22 @@ import { RequireCapability } from "../components/RequireCapability";
 import { SettingsGroup, SettingsPage, SettingsRow, StatusPill } from "../components/settings";
 import { appealOutcome, appealSubjectLabel, safetyReviewError } from "../components/AppealCopy";
 import { describeEvidence } from "../components/ModerationCaseSheet";
-import { fetchStaffAppeal, listStaffAppeals, resolveAppeal, type AppealReceiptCursor, type AppealStatus } from "../services/moderation";
+import { fetchStaffAppeal, listStaffAppeals, resolveAppeal, type AppealReceiptCursor, type AppealStatus, type ReportTargetType } from "../services/moderation";
 import { ApiError } from "../services/session";
-import { formatSafetyDate, MODERATION_ACTION_LABELS, MODERATION_VISIBILITY_LABELS, REPORT_REASON_LABELS } from "../utils/safetyCopy";
+import { formatSafetyDate, MODERATION_ACTION_LABELS, MODERATION_VISIBILITY_LABELS, REPORT_REASON_LABELS, REPORT_TARGET_LABELS } from "../utils/safetyCopy";
 import { useSafetyPages, useSafetyResource } from "../utils/useSafetyResource";
 import { useSafetyLifetime } from "../utils/useSafetyLifetime";
 import "../components/AdminConsole.css";
 import "../components/SafetyReview.css";
+
+/** The thing the appealed decision acted on, named the way the case sheet names it. */
+const APPEAL_SUBJECTS = {
+  POST: { title: "Lost & found report", Icon: FileText },
+  COMMENT: { title: "Comment", Icon: MessageSquare },
+  USER: { title: "Person", Icon: UserRound },
+  MESSAGE: { title: "Chat message", Icon: MessageCircle },
+} as const satisfies Record<ReportTargetType, { title: string; Icon: typeof FileText }>;
+
 
 export function StaffAppeals() {
   const { user } = useAuth();
@@ -23,7 +33,7 @@ export function StaffAppeals() {
 function AppealQueue() {
   const [status, setStatus] = useState<AppealStatus | "">("");
   return <SettingsPage title="Appeals to review" backTo="/settings" description="Review appeals about account and content decisions.">
-    <SelectField label="Appeal status" value={status} onChange={event => setStatus(event.target.value as AppealStatus | "")} options={[
+    <SelectField label="Appeal status" value={status} onChange={value => setStatus(value as AppealStatus | "")} options={[
       { value: "", label: "Waiting for review" }, { value: "SUBMITTED", label: "Submitted" }, { value: "UNDER_REVIEW", label: "Being reviewed" }, { value: "RESOLVED", label: "Resolved" },
     ]} />
     <AppealQueueRows key={status} status={status} />
@@ -36,7 +46,7 @@ function AppealQueueRows({ status }: { status: AppealStatus | "" }) {
     {page.error != null && <div role="alert" className="fb-safety-copy"><p>{safetyReviewError(page.error, "appeals")}</p><button className="fb-safety-read-action" onClick={() => void page.refresh()}>Retry appeals</button></div>}
     {page.items === null && !page.error && <p role="status" className="fb-safety-copy">Loading appeals…</p>}
     {page.items?.length === 0 && !page.error && !page.cursor && <p className="fb-safety-copy">No appeals are waiting in this view.</p>}
-    <ol className="fb-admin-list">{page.items?.map(row => <li key={row.id}><SettingsRow title={appealSubjectLabel(row)} description={`${appealOutcome(row)} · ${formatSafetyDate(row.submittedAt)}`} route={`/settings/moderation/appeals/${encodeURIComponent(row.id)}`} /></li>)}</ol>
+    <ol className="fb-admin-list">{page.items?.map(row => <li key={row.id}><SettingsRow icon={row.subjectKind === "SANCTION" ? UserRound : FileText} iconTone="neutral" title={appealSubjectLabel(row)} description={`${appealOutcome(row)} · ${formatSafetyDate(row.submittedAt)}`} route={`/settings/moderation/appeals/${encodeURIComponent(row.id)}`} /></li>)}</ol>
     {page.cursor && <button className="fb-safety-read-action" disabled={page.loading} onClick={() => void page.more()}>More appeals</button>}
   </SettingsGroup>;
 }
@@ -72,6 +82,9 @@ function AppealDetail({ id }: { id: string }) {
   const refresh = async () => { setError(null); const refreshed = await resource.refresh(); if (alive.current && refreshed) setStale(false); };
   const row = resource.value;
   const fault = error ?? resource.error;
+  const targetType = row?.originalAction?.targetType ?? null;
+  const subjectInfo = targetType ? APPEAL_SUBJECTS[targetType] : null;
+  const SubjectIcon = subjectInfo?.Icon ?? FileText;
   return <SettingsPage title="Review appeal" backTo="/settings/moderation/appeals" backLabel="Back to appeals">
     <div className="fb-safety-toolbar">
       <button className="fb-safety-read-action" disabled={saving || resource.loading} onClick={() => void refresh()}>Refresh appeal</button>
@@ -80,15 +93,27 @@ function AppealDetail({ id }: { id: string }) {
     {fault != null && <p role="alert" className="fb-admin-error">{safetyReviewError(fault, "appeals")}</p>}
     {!row && !fault && <p role="status" className="fb-safety-copy">Loading appeal…</p>}
     {row && <>
-      <SettingsGroup title={appealSubjectLabel(row)}>
-        <div className="fb-safety-copy"><StatusPill tone={row.decision === "GRANTED" && row.changeApplied !== false ? "success" : "neutral"}>{appealOutcome(row)}</StatusPill>
-          <p className="fb-admin-note">Sent {formatSafetyDate(row.submittedAt)}{row.resolvedAt && ` · Resolved ${formatSafetyDate(row.resolvedAt)}`}</p>
-          {row.expiresAt && row.status !== "RESOLVED" && <p className="fb-admin-note">Review by {formatSafetyDate(row.expiresAt)}</p>}
+      <SettingsGroup title="What this appeal is about">
+        <div className="fb-case-summary">
+          <span className="fb-case-summary-icon" aria-hidden="true"><SubjectIcon size={20} /></span>
+          <div className="fb-case-summary-copy">
+            <p className="fb-case-summary-title">{subjectInfo?.title ?? appealSubjectLabel(row)}</p>
+            <p className="fb-case-summary-meta">
+              {[appealSubjectLabel(row), `Sent ${formatSafetyDate(row.submittedAt)}`, row.resolvedAt && `Resolved ${formatSafetyDate(row.resolvedAt)}`, row.expiresAt && row.status !== "RESOLVED" && `Review by ${formatSafetyDate(row.expiresAt)}`].filter(Boolean).join(" · ")}
+            </p>
+            <p className="fb-case-summary-note">
+              {targetType
+                ? `The appeal asks staff to review a decision about this ${REPORT_TARGET_LABELS[targetType]}.`
+                : "The original decision behind this appeal is no longer available."}
+            </p>
+            <div className="fb-case-summary-status"><StatusPill tone={row.decision === "GRANTED" && row.changeApplied !== false ? "success" : "neutral"}>{appealOutcome(row)}</StatusPill></div>
+          </div>
         </div>
       </SettingsGroup>
       <SettingsGroup title="Appeal message"><p className="fb-safety-text fb-safety-copy">{row.message}</p></SettingsGroup>
       <SettingsGroup title="Original decision">
         {row.originalAction ? <dl className="fb-safety-facts">
+          <div><dt>Applies to</dt><dd>{REPORT_TARGET_LABELS[row.originalAction.targetType]}</dd></div>
           <div><dt>Action</dt><dd>{MODERATION_ACTION_LABELS[row.originalAction.action]}</dd></div>
           <div><dt>Reason</dt><dd>{REPORT_REASON_LABELS[row.originalAction.reason as keyof typeof REPORT_REASON_LABELS] ?? "Staff review"}</dd></div>
           <div><dt>Decided</dt><dd>{formatSafetyDate(row.originalAction.createdAt)}</dd></div>

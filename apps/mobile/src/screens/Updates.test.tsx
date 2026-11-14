@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { Updates } from "./Updates";
 import { UpdateChanges } from "../components/UpdateChanges";
+import { APP_VERSION } from "../services/appCapabilities";
 
 // SettingsPage renders the shared TopUtilities, whose unread-badge owner is
 // auth-scoped. This suite exercises update state, not sign-in state.
@@ -118,7 +119,8 @@ describe("updates screen", () => {
   it("says plainly that a web build has nothing to install", () => {
     runtime.snapshot = snapshot();
     renderScreen();
-    expect(screen.getByTestId("updates-installed").textContent).toBe("Web build");
+    expect(screen.getByTestId("updates-installed").textContent).toContain("Web build");
+    expect(screen.getByTestId("updates-installed").textContent).toContain(APP_VERSION);
     expect(screen.getByText(/Web updates are deployed automatically/)).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Updates & version history" })).toBeTruthy();
   });
@@ -203,16 +205,66 @@ describe("updates screen", () => {
       ],
     });
     renderScreen();
-    expect(screen.getByTestId("updates-eligible").textContent).toContain("0.15.0-beta.1");
+    expect(screen.getByTestId("updates-featured").textContent).toContain("0.15.0-beta.1");
+    expect(screen.getByText("Download 0.15.0-beta.1")).toBeTruthy();
     const items = screen.getAllByTestId("updates-history-item");
     expect(items).toHaveLength(3);
     expect(items[0]!.textContent).toContain("Installed");
     // An assetless tag says so instead of offering bytes that do not exist.
     expect(items[1]!.textContent).toContain("No files published");
-    expect(items[1]!.textContent).toContain("announcement");
+    expect(items[1]!.textContent).toContain("Announcement");
     // A normal older release carries no state pill: it is neither installed,
     // eligible, empty nor unaccepted.
     expect(items[2]!.querySelector(".fb-status-pill")).toBeNull();
+  });
+
+  it("tells the story of the running build instead of a commit subject", () => {
+    runtime.snapshot = snapshot({
+      lastCheck: { attemptedAt: 2_000, status: "ok", checkedAt: 1_000 },
+      history: [release()],
+    });
+    renderScreen();
+    const featured = screen.getByTestId("updates-featured");
+    expect(featured.textContent).toContain(APP_VERSION);
+    expect(featured.textContent).toContain("What changed");
+    expect(featured.textContent).toContain("New features");
+    expect(featured.textContent).toContain("Send documents, video and audio files in a chat.");
+    expect(featured.textContent).toContain("Settings opens in a floating window");
+    // The catalogue summary is a CI commit subject, not reader copy.
+    expect(screen.queryByText("Faster search and clearer failure messages.")).toBeNull();
+  });
+
+  it("links a new feature only when its destination exists for this platform", () => {
+    runtime.snapshot = snapshot();
+    renderScreen();
+    const link = screen.getByRole("link", { name: "Search reports" });
+    expect(link.getAttribute("href")).toBe("/search");
+  });
+
+  it("opens an earlier version to its written notes", () => {
+    runtime.snapshot = snapshot({ history: [release()] });
+    renderScreen();
+    const item = screen.getByTestId("updates-history-item");
+    const details = item.querySelector("details")!;
+    expect(details.open).toBe(false);
+    fireEvent.click(item.querySelector("summary")!);
+    expect(details.open).toBe(true);
+    expect(item.textContent).toContain("Pin up to three messages");
+  });
+
+  it("says when a version has no written notes instead of showing its commit subject", () => {
+    runtime.snapshot = snapshot({
+      history: [release({
+        id: "v0.99.0-beta.1",
+        versionName: "0.99.0-beta.1",
+        tag: "v0.99.0-beta.1",
+        summary: "fix: internal release plumbing",
+      })],
+    });
+    renderScreen();
+    const item = screen.getByTestId("updates-history-item");
+    expect(item.textContent).toContain("No written notes for this version in this build.");
+    expect(screen.queryByText("fix: internal release plumbing")).toBeNull();
   });
 
   it("keeps notices off by default and only changes on an explicit choice", () => {

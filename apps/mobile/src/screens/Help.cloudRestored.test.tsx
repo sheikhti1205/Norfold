@@ -33,7 +33,7 @@
 //   Help.responseLifecycle / Help.streamingPartial -> kept in place, re-pointed at
 //                                 the new surface (no local/photo/FAQ assertions).
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { chooseSelectOption } from "../test-utils/select";import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Help, type HelpAssistantDeps } from "./Help";
 import { ChatStore } from "../services/ai/chatStore";
@@ -206,7 +206,7 @@ describe("restored Help behaviors (packet 11)", () => {
     ];
     mount({ listCatalog: async () => rows });
     fireEvent.click(screen.getByTestId("composer-model-chip"));
-    fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "deepseek" } });
+    await chooseSelectOption(screen.getByLabelText("Provider"), "DeepSeek");
     await screen.findByText("DeepSeek chat");
     expect(screen.queryByText("needle-tools")).toBeNull();
     expect(screen.queryByRole("button", { name: /needle/i })).toBeNull();
@@ -228,7 +228,7 @@ describe("restored Help behaviors (packet 11)", () => {
     ];
     mount({ createAdapter: () => adapter, listCatalog: async () => rows });
     fireEvent.click(screen.getByTestId("composer-model-chip"));
-    fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "deepseek" } });
+    await chooseSelectOption(screen.getByLabelText("Provider"), "DeepSeek");
     fireEvent.click(await screen.findByRole("button", { name: "Use DeepSeek chat" }));
     send("Hello");
     await screen.findByText("Answered by the chosen row.");

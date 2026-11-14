@@ -59,7 +59,10 @@ describe("AccountSettings identity (W7)", () => {
     renderAccount();
     const avatar = screen.getByTestId("user-avatar");
     expect(avatar.textContent).toBe("TE");
-    expect(screen.getByText("@tester")).toBeTruthy();
+    // The handle appears twice by design: the name heading and the copy
+    // control's decorative span. Assert the accessible surfaces instead.
+    expect(screen.getByRole("heading", { name: "@tester" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Copy username @tester" })).toBeTruthy();
   });
 
   it("renders the profile photo inside the canonical UserAvatar when one exists", () => {
@@ -67,6 +70,6 @@ describe("AccountSettings identity (W7)", () => {
     const { container } = renderAccount();
     const img = container.querySelector('[data-testid="user-avatar"] img') as HTMLImageElement;
     expect(img?.src).toBe("https://example.com/a.png");
-    expect(screen.getByText("@tester")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "@tester" })).toBeTruthy();
   });
 });

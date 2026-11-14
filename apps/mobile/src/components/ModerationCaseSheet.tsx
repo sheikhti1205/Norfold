@@ -1,4 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { FileText, MessageCircle, MessageSquare, UserRound } from "lucide-react";
 import { useAuth } from "../auth";
 import { AdaptiveTaskSurface } from "./AdaptiveTaskSurface";
 import { Button } from "./Button";
@@ -35,6 +36,36 @@ export interface TargetLine {
   label: string;
   value: string;
 }
+
+/**
+ * The subject of a case at a glance.
+ *
+ * The queue row names a target type; a reviewer needs to know immediately
+ * whether they are judging a person, a post, a comment or one chat message,
+ * because the same reason code means different things in each context.
+ */
+const CASE_SUBJECTS = {
+  POST: {
+    title: "Lost & found report",
+    note: "One post, with the reports filed about it.",
+    Icon: FileText,
+  },
+  COMMENT: {
+    title: "Comment",
+    note: "One comment, with the reports filed about it.",
+    Icon: MessageSquare,
+  },
+  USER: {
+    title: "A person",
+    note: "Reports about an account. Evidence below is what each reporter chose to send.",
+    Icon: UserRound,
+  },
+  MESSAGE: {
+    title: "Chat message",
+    note: "One message, with the reports filed about it.",
+    Icon: MessageCircle,
+  },
+} as const satisfies Record<ReportTargetType, { title: string; note: string; Icon: typeof FileText }>;
 
 /**
  * The target, in words — never in ids.
@@ -245,6 +276,8 @@ export function ModerationCaseSheet({
 
   const targetLines = describeTarget(entry.targetType, target?.target ?? null);
   const sanctionKind = action === "" ? null : ACTION_SANCTION_KINDS[action] ?? null;
+  const subject = CASE_SUBJECTS[entry.targetType];
+  const SubjectIcon = subject.Icon;
 
   const apply = async (): Promise<void> => {
     if (applying || loading || !target || !open || !user) return;
@@ -293,10 +326,17 @@ export function ModerationCaseSheet({
   return (
     <AdaptiveTaskSurface open={open} onClose={onClose} title="Review this case" busy={applying}>
       <div className="flex flex-col gap-4 py-2">
-        <p className="text-sm text-on-surface-variant">
-          {entry.reportCount === 1 ? "1 report" : `${entry.reportCount} reports`} about a{" "}
-          {REPORT_TARGET_LABELS[entry.targetType]}. First reported {formatSafetyDate(entry.firstReportedAt)}.
-        </p>
+        <section className="fb-case-summary" aria-label="Case summary">
+          <span className="fb-case-summary-icon" aria-hidden="true"><SubjectIcon size={20} /></span>
+          <div className="fb-case-summary-copy">
+            <p className="fb-case-summary-title">{subject.title}</p>
+            <p className="fb-case-summary-meta">
+              {entry.reportCount === 1 ? "1 report" : `${entry.reportCount} reports`}
+              {" · first reported "}{formatSafetyDate(entry.firstReportedAt)}
+            </p>
+            <p className="fb-case-summary-note">{subject.note}</p>
+          </div>
+        </section>
 
         {loading ? (
           <p role="status" className="fb-admin-note">
@@ -341,71 +381,86 @@ export function ModerationCaseSheet({
         ) : null}
 
         {targetLines.length > 0 ? (
-          <section aria-label="What was reported" className="flex flex-col gap-1">
-            <h3 className="text-sm font-semibold text-on-surface">What was reported</h3>
-            {targetLines.map((line) => (
-              <p key={line.label} className="fb-admin-log-detail">
-                <span className="font-medium text-on-surface">{line.label}:</span> {line.value}
-              </p>
-            ))}
+          <section aria-label="What was reported" className="fb-case-block">
+            <h3 className="fb-case-block-title">What was reported</h3>
+            <dl className="fb-case-fields">
+              {targetLines.map((line) => (
+                <div key={line.label} className="fb-case-field">
+                  <dt>{line.label}</dt>
+                  <dd>{line.value}</dd>
+                </div>
+              ))}
+            </dl>
           </section>
         ) : null}
 
         {target && target.reports.length > 0 ? (
-          <section aria-label="The reports" className="flex flex-col gap-2">
-            <h3 className="text-sm font-semibold text-on-surface">The reports</h3>
-            {target.reports.map((report) => {
-              const evidence = describeEvidence(report.evidence);
-              const messages = describeEvidenceMessages(report.evidence);
-              return (
-                <div key={report.id} className="fb-admin-log-row">
-                  <p className="fb-admin-log-headline">{REPORT_REASON_LABELS[report.reason]}</p>
-                  <p className="fb-admin-log-detail">Reported {formatSafetyDate(report.createdAt)}</p>
-                  {report.detail ? (
-                    <p className="fb-admin-log-detail">The reporter wrote: “{report.detail}”</p>
-                  ) : null}
-                  {report.evidence === null ? (
-                    <p className="fb-admin-log-detail">
-                      The saved snapshot is no longer available — it expires after 90 days.
-                    </p>
-                  ) : evidence.length > 0 ? (
-                    evidence.map((line) => (
-                      <p key={line.label} className="fb-admin-log-detail">
-                        <span className="font-medium text-on-surface">{line.label}:</span> {line.value}
-                      </p>
-                    ))
-                  ) : null}
-                  {messages.length > 0 ? (
-                    <div className="flex flex-col gap-1" data-testid="moderation-case-messages">
-                      <p className="fb-admin-log-detail">
-                        <span className="font-medium text-on-surface">Reporter-selected recent messages:</span>{" "}
-                        {messages.length === 1 ? "1 message" : `${messages.length} messages`}, not the whole chat.
-                      </p>
-                      <ul className="flex flex-col gap-1">
-                        {messages.map((message) => (
-                          <li key={message.messageId} className="fb-admin-log-detail">
-                            <span className="font-medium text-on-surface">
-                              {CHAT_MESSAGE_TYPE_LABELS[message.type]}
-                            </span>
-                            {message.sentAt ? ` · ${formatSafetyDate(message.sentAt)}` : ""}
-                            {message.excerpt ? ` — “${message.excerpt}”` : ""}
-                          </li>
-                        ))}
-                      </ul>
+          <section aria-label="The reports" className="fb-case-block">
+            <h3 className="fb-case-block-title">The reports</h3>
+            <div className="fb-case-reports">
+              {target.reports.map((report, index) => {
+                const evidence = describeEvidence(report.evidence);
+                const messages = describeEvidenceMessages(report.evidence);
+                return (
+                  <article key={report.id} className="fb-case-report">
+                    <header className="fb-case-report-head">
+                      <span className="fb-case-report-index">Report {index + 1}</span>
+                      <span className="fb-case-report-kind">{REPORT_TARGET_LABELS[entry.targetType]}</span>
+                    </header>
+                    <p className="fb-case-report-reason">{REPORT_REASON_LABELS[report.reason]}</p>
+                    <p className="fb-admin-log-detail">Filed {formatSafetyDate(report.createdAt)}</p>
+                    {report.detail ? (
+                      <p className="fb-case-report-detail">The reporter wrote: “{report.detail}”</p>
+                    ) : null}
+                    <div className="fb-case-evidence">
+                      <p className="fb-case-evidence-title">What the reporter sent</p>
+                      {report.evidence === null ? (
+                        <p className="fb-admin-log-detail">
+                          The saved snapshot is no longer available — it expires after 90 days.
+                        </p>
+                      ) : evidence.length > 0 ? (
+                        <dl className="fb-case-fields">
+                          {evidence.map((line) => (
+                            <div key={line.label} className="fb-case-field">
+                              <dt>{line.label}</dt>
+                              <dd>{line.value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      ) : null}
+                      {messages.length > 0 ? (
+                        <div className="fb-case-messages" data-testid="moderation-case-messages">
+                          <p className="fb-case-evidence-title">
+                            {messages.length === 1
+                              ? "1 selected message"
+                              : `${messages.length} selected messages`}
+                            <span className="fb-case-evidence-note">not the whole chat</span>
+                          </p>
+                          <ul className="fb-case-message-list">
+                            {messages.map((message) => (
+                              <li key={message.messageId}>
+                                <span className="fb-case-message-type">{CHAT_MESSAGE_TYPE_LABELS[message.type]}</span>
+                                {message.sentAt ? <span className="fb-case-message-time">{formatSafetyDate(message.sentAt)}</span> : null}
+                                {message.excerpt ? <span className="fb-case-message-body">“{message.excerpt}”</span> : null}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {report.media.length > 0 ? (
+                        <p className="fb-case-media" data-testid="moderation-case-media">
+                          {report.media.length === 1 ? "1 attached evidence copy" : `${report.media.length} attached evidence copies`}
+                          {" · "}
+                          {report.media.filter((item) => item.mime.startsWith("audio/")).length > 0
+                            ? "Photos and voice notes are copied from the sent message."
+                            : "Photos are copied from the sent message."}
+                        </p>
+                      ) : null}
                     </div>
-                  ) : null}
-                  {report.media.length > 0 ? (
-                    <p className="fb-admin-log-detail" data-testid="moderation-case-media">
-                      {report.media.length === 1 ? "1 attached evidence copy" : `${report.media.length} attached evidence copies`}
-                      {" · "}
-                      {report.media.filter((item) => item.mime.startsWith("audio/")).length > 0
-                        ? "Photos and voice notes are copied from the sent message."
-                        : "Photos are copied from the sent message."}
-                    </p>
-                  ) : null}
-                </div>
-              );
-            })}
+                  </article>
+                );
+              })}
+            </div>
           </section>
         ) : null}
 
@@ -437,8 +492,8 @@ export function ModerationCaseSheet({
                   value,
                   label: `${MODERATION_ACTION_LABELS[value]} — ${MODERATION_ACTION_HINTS[value]}`,
                 }))}
-                onChange={(event) => {
-                  setAction(event.target.value as ModerationAction | "");
+                onChange={(value) => {
+                  setAction(value as ModerationAction | "");
                   setError(null);
                 }}
               />
@@ -447,8 +502,8 @@ export function ModerationCaseSheet({
                 value={reasonCode}
                 placeholder="Choose a reason"
                 options={REPORT_REASONS.map((value) => ({ value, label: REPORT_REASON_LABELS[value] }))}
-                onChange={(event) => {
-                  setReasonCode(event.target.value as ReportReason | "");
+                onChange={(value) => {
+                  setReasonCode(value as ReportReason | "");
                   setError(null);
                 }}
               />

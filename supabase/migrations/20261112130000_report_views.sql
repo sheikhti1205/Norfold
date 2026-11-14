@@ -1,3 +1,11 @@
+-- Report view counts, and the feed readers that return them.
+--
+-- Both feed readers stay SECURITY DEFINER, exactly as the P11 authority closure
+-- left them (20261102120000): that migration revoked the client-facing table
+-- grants on attachments, ratings and reactions because the readers run as the
+-- owner. Re-creating them as invoker readers here would fail for every signed-in
+-- caller ("permission denied") unless those grants were widened back, undoing
+-- the least-privilege closure. `set search_path` is pinned on each function.
 begin;
 
 alter table public.item_posts add column view_count bigint not null default 0;
@@ -114,7 +122,7 @@ returns table (
 )
 language sql
 stable
-security invoker
+security definer
 set search_path = public, pg_temp
 as $$
   with filtered as (
@@ -301,7 +309,7 @@ returns table (
 )
 language sql
 stable
-security invoker
+security definer
 set search_path = public, pg_temp
 as $$
   with filtered as (

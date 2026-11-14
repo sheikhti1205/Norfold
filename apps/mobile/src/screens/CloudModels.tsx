@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Star } from "lucide-react";
 import { useAuth } from "../auth";
 import { Button } from "../components/Button";
+import { SelectField } from "../components/Fields";
 import { AdvancedDisclosure, SettingsPage } from "../components/settings";
 import { aiCredentials } from "../services/aiCredentials";
 import { createProviderAdapter } from "../services/ai/providerRegistry";
@@ -139,7 +140,7 @@ function AccountModelPicker({ accountId, selected, onSelect, listModels }: Cloud
   const needle = query.trim().toLowerCase();
   const filtered = models.filter(({ title, model }) => `${title} ${model.modelId}`.toLowerCase().includes(needle));
   return <div className="flex min-w-0 flex-col gap-3">
-    <label className="flex flex-col gap-1 text-sm">Provider<select className={fieldClass} value={provider} onChange={(event) => { providerChosenByUser.current = true; setProvider(event.target.value as CloudProvider); setManual(""); }}>{CLOUD_PROVIDERS.map((id) => <option key={id} value={id}>{CLOUD_PROVIDER_LABELS[id]}</option>)}</select></label>
+    <SelectField label="Provider" value={provider} onChange={(value) => { providerChosenByUser.current = true; setProvider(value as CloudProvider); setManual(""); }} options={CLOUD_PROVIDERS.map((id) => ({ value: id, label: CLOUD_PROVIDER_LABELS[id] }))} />
     <label className="flex flex-col gap-1 text-sm">Search models<input type="search" className={fieldClass} value={query} onChange={(event) => setQuery(event.target.value)} /></label>
     <div className="flex flex-wrap items-center justify-between gap-2"><p role="status" data-testid="cloudmodels-status" className="min-w-0 text-xs text-on-surface-variant">{loading ? "Loading models…" : message ?? (filtered.length ? "Choose a model for text chat." : "No models listed. You can enter a model ID below.")}</p><Button variant="text" onClick={() => setTick((value) => value + 1)}>Refresh</Button></div>
     {/* A persistent live region: the pending note arrives after an async load

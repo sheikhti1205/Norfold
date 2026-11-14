@@ -12,6 +12,7 @@ vi.mock("../services/aiCredentials", () => ({ aiCredentials: {
 } }));
 vi.mock("../services/openRouter", () => ({ createOpenRouterClient: () => ({ validateKey: state.validateKey }) }));
 import { AiConnection } from "./AiConnection";
+import { chooseSelectOption } from "../test-utils/select";
 import { loadGenericEndpoint } from "../services/ai/genericEndpoint";
 import { loadCloudModelPreferences } from "../services/ai/cloudModelPreferences";
 beforeEach(() => { state.account = "account-a"; state.present = false; state.saved = false; vi.clearAllMocks(); });
@@ -55,7 +56,7 @@ it("does not paint a pending save into the next account", async () => {
 });
 it("validates and saves the generic endpoint locally under Advanced", async () => {
   render(tree());
-  fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "generic" } });
+  await chooseSelectOption(screen.getByLabelText("Provider"), "OpenAI-compatible");
   fireEvent.click(screen.getByText("Advanced"));
   fireEvent.change(screen.getByLabelText("Base URL"), { target: { value: "http://example.test/v1" } });
   fireEvent.click(screen.getByRole("button", { name: "Save base URL" }));
@@ -77,7 +78,7 @@ it("uses concise fixed failure copy instead of rendering an exception that could
 });
 it("edits and removes a generic endpoint only for the current account", async () => {
   render(tree());
-  fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "generic" } });
+  await chooseSelectOption(screen.getByLabelText("Provider"), "OpenAI-compatible");
   fireEvent.click(screen.getByText("Advanced"));
   fireEvent.change(screen.getByLabelText("Base URL"), { target: { value: "https://first.example.test/v1" } });
   fireEvent.click(screen.getByRole("button", { name: "Save base URL" }));
@@ -91,7 +92,7 @@ it("edits and removes a generic endpoint only for the current account", async ()
 });
 it("saves a manual model ID for the generic provider as the account default", async () => {
   render(tree());
-  fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "generic" } });
+  await chooseSelectOption(screen.getByLabelText("Provider"), "OpenAI-compatible");
   fireEvent.click(screen.getByText("Advanced"));
   fireEvent.change(screen.getByLabelText("Model ID"), { target: { value: "custom/chat" } });
   fireEvent.click(screen.getByRole("button", { name: "Save model ID" }));

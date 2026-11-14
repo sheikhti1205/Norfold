@@ -855,16 +855,110 @@ function mergeSnapshots(parts: readonly { manifest: BackupManifest; snapshot: Hi
 }
 
 /**
+ * One stored installation backup, summarised without reading its chunks.
+ *
+ * The manifest is the only authority for what a backup contains: a row here
+ * reports exactly what that manifest describes. `complete` means every chunk
+ * object it names still exists; it is a presence check, not a byte-level
+ * verification (that happens only when a restore actually reads the chunks).
+ */
+export interface BackupInventoryEntry {
+  /** The manifest object's Drive name; stable row identity. */
+  name: string;
+  /** Null when the manifest could not be opened. */
+  deviceId: string | null;
+  version: number | null;
+  exportedAt: number | null;
+  conversations: number;
+  messages: number;
+  attachments: number;
+  /** Messages the backup records as removed or unsent. */
+  removedMessages: number;
+  /** Plaintext bytes of the chunk objects the manifest describes. */
+  bytes: number;
+  /** Every chunk the manifest names is still present in the folder. */
+  complete: boolean;
+  readable: boolean;
+}
+
+/**
+ * Read and summarise the account's stored backups, newest first.
+ *
+ * Only manifests are downloaded and decrypted, so this is safe to call from a
+ * settings screen: nothing is written, and no chunk or media object is read.
+ * A manifest that cannot be opened becomes an unreadable row instead of hiding
+ * the backups that can.
+ */
+export async function inspectBackups(input: { store: BackupDriveStore; key: BackupKey;
+  scope: BackupScope; crypto?: Crypto }): Promise<BackupInventoryEntry[]> {
+  const crypto = input.crypto ?? globalThis.crypto;
+  const { store, key, scope } = input;
+  const files = (await store.list()).filter((file) => isBackupName(file.name, scope.accountId));
+  const present = new Set(files.map((file) => file.name));
+  const deviceManifests = files
+    .filter((file) => MANIFEST.exec(file.name)?.[1] === scope.accountId)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const legacy = files.find((file) => file.name === legacyManifestName(scope.accountId));
+  // Match restore: a device manifest set supersedes the legacy single manifest.
+  const targets = deviceManifests.length > 0 ? deviceManifests : legacy ? [legacy] : [];
+  const entries: BackupInventoryEntry[] = [];
+  for (const file of targets) {
+    try {
+      const manifest = await readManifestFile(store, file, key, scope, crypto);
+      const parts = manifest.conversations.flatMap((entry) => entry.parts);
+      const media = manifest.media ?? [];
+      const mediaParts = media.flatMap((entry) => entry.parts);
+      entries.push({
+        name: file.name,
+        deviceId: manifest.deviceId || null,
+        version: manifest.version,
+        exportedAt: manifest.exportedAt,
+        conversations: manifest.conversations.length,
+        messages: parts.reduce((sum, part) => sum + part.messages, 0),
+        attachments: media.length,
+        removedMessages: manifest.tombstones.length,
+        bytes: parts.reduce((sum, part) => sum + part.bytes, 0)
+          + mediaParts.reduce((sum, part) => sum + part.bytes, 0),
+        complete: [...parts, ...mediaParts].every((part) => present.has(part.chunk)),
+        readable: true,
+      });
+    } catch {
+      entries.push({
+        name: file.name, deviceId: null, version: null, exportedAt: null,
+        conversations: 0, messages: 0, attachments: 0, removedMessages: 0, bytes: 0,
+        complete: false, readable: false,
+      });
+    }
+  }
+  return entries.sort((a, b) => (b.exportedAt ?? -1) - (a.exportedAt ?? -1)
+    || a.name.localeCompare(b.name));
+}
+
+/**
  * Read, verify and assemble the backup. Every installation's manifest is read and
  * unioned; a version-1 backup is read only when no version-2 manifest exists.
- * Nothing is written to history here.
+ * With `deviceId`, only that installation's manifest is read, which is what the
+ * per-backup restore action asks for. Nothing is written to history here.
  */
 export async function downloadBackup(input: { store: BackupDriveStore; key: BackupKey;
-  scope: BackupScope; crypto?: Crypto }): Promise<BackupDownload> {
+  scope: BackupScope; crypto?: Crypto; deviceId?: string }): Promise<BackupDownload> {
   const crypto = input.crypto ?? globalThis.crypto;
   const { store, key, scope } = input;
   const files = (await store.list()).filter((file) => isBackupName(file.name, scope.accountId));
   const byName = new Map(files.map((file) => [file.name, file]));
+  if (input.deviceId) {
+    // The object name carries the installation id, so a chosen backup cannot
+    // resolve to another installation's manifest.
+    const file = byName.get(manifestName(scope.accountId, input.deviceId));
+    if (!file) throw fail("backup: chunk missing");
+    const manifest = await readManifestFile(store, file, key, scope, crypto);
+    if (manifest.version === LEGACY_VERSION) throw fail("backup: invalid manifest");
+    return {
+      manifest,
+      snapshot: await readSnapshot(store, key, scope, manifest, crypto, byName),
+      media: await readMediaObjects(store, key, manifest, crypto, byName),
+    };
+  }
   const deviceManifests = files
     .filter((file) => MANIFEST.exec(file.name)?.[1] === scope.accountId)
     .sort((a, b) => a.name.localeCompare(b.name));

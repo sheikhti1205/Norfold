@@ -52,7 +52,7 @@ export type ReactionType = (typeof REACTION_TYPES)[number];
  * moderation migration; the DB CHECK has seven server kinds. UNKNOWN is never
  * written.
  */
-export const NOTIFICATION_TYPES = ["LIKE", "DISLIKE", "COMMENT", "MENTION", "STATUS", "REACTION", "MODERATION", "UNKNOWN"] as const;
+export const NOTIFICATION_TYPES = ["LIKE", "DISLIKE", "COMMENT", "MENTION", "STATUS", "REACTION", "MODERATION", "ROLE", "UNKNOWN"] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
 export const VERIFICATION_CHANNELS = ["EMAIL", "PHONE"] as const;

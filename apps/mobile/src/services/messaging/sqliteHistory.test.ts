@@ -35,6 +35,20 @@ let dir: string;
 let path: string;
 let database: DatabaseSync;
 let clock: number;
+let staleDatabases: DatabaseSync[] = [];
+
+/**
+ * Re-open the raw inspection handle.
+ *
+ * The previous handle is NOT closed here: a live adapter may still own it, and
+ * closing it out from under the adapter would break the test. It is kept for
+ * afterEach, which closes every handle before deleting the temp directory.
+ * Windows cannot unlink a SQLite file that any handle still maps (EPERM).
+ */
+function reopenDatabase(): DatabaseSync {
+  staleDatabases.push(database);
+  return new DatabaseSync(path);
+}
 
 function driverFor(db: DatabaseSync, beforeStatement?: (sql: string) => void | Promise<void>): SqliteDriver {
   return {
@@ -157,12 +171,18 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "findback-sqlite-"));
   path = join(dir, "messaging.db");
   database = new DatabaseSync(path);
+  staleDatabases = [];
   clock = 1_700_000_000_000;
 });
 afterEach(() => {
   vi.restoreAllMocks();
   try { database.close(); } catch { /* already closed by the adapter */ }
-  rmSync(dir, { recursive: true, force: true });
+  // Handles a test replaced while an adapter still owned them. Windows keeps
+  // the file locked until every handle is closed, and rmSync would EPERM.
+  for (const stale of staleDatabases) {
+    try { stale.close(); } catch { /* the adapter or the test already closed it */ }
+  }
+  rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 describe("schema and durability", () => {
@@ -171,7 +191,7 @@ describe("schema and durability", () => {
     await first.enqueueOutgoing({ ...outgoing, id: MESSAGE_2 });
     await first.enqueueOutgoing(outgoing);
     await first.close();
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     const reopened = await open();
     expect((await reopened.listMessages(CONVERSATION)).map((message) => message.id)).toEqual([MESSAGE_2, MESSAGE]);
     expect((await reopened.claimNextOutgoing())?.message.id).toBe(MESSAGE_2);
@@ -184,7 +204,7 @@ describe("schema and durability", () => {
     await first.persistInbound(inbound({ createdAt: clock - 5000 }));
     await first.persistInbound(inbound({ id: MESSAGE_2 }, EVENT_2, MAILBOX_2, 2));
     await first.close();
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     const reopened = await open();
     expect((await reopened.getMessage(MESSAGE))?.createdAt).toBe(clock - 5000);
     expect((await reopened.getMessage(MESSAGE_2))?.createdAt).toBe(clock);
@@ -227,9 +247,9 @@ describe("schema and durability", () => {
     database.exec("create table messaging_meta (key text primary key, value text not null)");
     database.prepare("insert into messaging_meta (key, value) values (?, ?)")
       .run("schema_version", String(MESSAGING_SQLITE_SCHEMA_VERSION + 1));
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     await expect(open()).rejects.toThrow(/Unsupported messaging schema version/);
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     expect(database.prepare("pragma journal_mode").get()).toEqual({ journal_mode: "delete" });
     expect(database.prepare("select name from sqlite_master where type = 'table' and name = 'conversations'").get())
       .toBeUndefined();
@@ -347,7 +367,7 @@ describe("schema and durability", () => {
     // It was issued after the copy was attempted, i.e. on the failure path.
     expect(issued.lastIndexOf("pragma foreign_keys = on")).toBeGreaterThan(issued.indexOf("drop table messages"));
     // The adapter closed its handle on failure, so reopen the file to inspect it.
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     // Rolled back: the original table, its CHECK and its row are untouched.
     expect(database.prepare("select body from messages where id = ?").get(MESSAGE)).toEqual({ body: "Hello there" });
     expect(database.prepare("select name from sqlite_master where type = 'table' and name = 'messages_v5'").get())
@@ -412,7 +432,7 @@ describe("schema and durability", () => {
       }
     })).rejects.toThrow(/did not preserve every message/);
     expect(corrupted).toBe(true);
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     expect(database.prepare("select count(*) as n from messages").get()).toEqual({ n: 1 });
     expect(database.prepare("select name from sqlite_master where type = 'table' and name = 'messages_v5'").get())
       .toBeUndefined();
@@ -428,7 +448,7 @@ describe("schema and durability", () => {
     // The explicit rollback ran; the file is not merely cleaned up by close().
     expect(issued).toContain("rollback");
     // The adapter closed its handle on failure, so reopen the file to inspect it.
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     // The rollback left the old table intact, and a second open migrates it.
     expect(database.prepare("select body from messages where id = ?").get(MESSAGE)).toEqual({ body: "Hello there" });
     const history = await open();
@@ -467,7 +487,7 @@ describe("schema and durability", () => {
 
   it("keeps every schema statement idempotent", async () => {
     await (await open()).close();
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     for (const statement of MESSAGING_SQLITE_SCHEMA) database.exec(statement);
   });
 
@@ -506,10 +526,10 @@ describe("schema and durability", () => {
 describe("account/installation binding", () => {
   it("refuses a database file created for another account or installation", async () => {
     await (await open()).close();
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     await expect(openOn(database, { accountId: B, deviceId: DEVICE })).rejects.toThrow(/different account/);
 
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     await expect(openOn(database, { accountId: A, deviceId: OTHER_DEVICE })).rejects.toThrow(/different installation/);
   });
 
@@ -541,7 +561,7 @@ describe("account/installation binding", () => {
     expect(raw.prepare("select value from messaging_meta where key = 'account_id'").get()).toEqual({ value: B });
     raw.close();
 
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     await expect(openOn(database, { accountId: A, deviceId: DEVICE })).rejects.toThrow(/different account/);
   });
 
@@ -905,7 +925,7 @@ describe("tombstones", () => {
       unsent_at integer not null, unsent_by text not null)`);
     database.prepare("insert into tombstones (message_id, conversation_id, unsent_at, unsent_by) values (?,?,?,?)")
       .run(MESSAGE, CONVERSATION, clock, B);
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
 
     const history = await open();
     // The reviewer's counterexample: before the fix this NULL matched any
@@ -933,7 +953,7 @@ describe("tombstones", () => {
       unsent_at integer not null, unsent_by text not null)`);
     database.prepare("insert into tombstones (message_id, conversation_id, unsent_at, unsent_by) values (?,?,?,?)")
       .run(MESSAGE, CONVERSATION, clock, B);
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
 
     const history = await open();
     // An envelope from a different author contradicts the tombstone. A valid
@@ -1340,7 +1360,7 @@ describe("chat replies", () => {
     expect(await history.getMessage(MESSAGE_2)).toMatchObject({ body: "That one", replyToId: MESSAGE });
     expect((await history.getMessage(MESSAGE))?.replyToId).toBeUndefined();
     await history.close();
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     const reopened = await open();
     expect((await reopened.getMessage(MESSAGE_2))?.replyToId).toBe(MESSAGE);
     await reopened.close();
@@ -1368,7 +1388,7 @@ describe("chat replies", () => {
     const first = await open();
     await first.enqueueOutgoing(outgoing);
     await first.close();
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     // A v11 file predates the column; dropping it recreates exactly what the
     // voice build wrote, so opening this is a real forward migration.
     database.exec("alter table messages drop column reply_to_id");
@@ -1424,7 +1444,7 @@ describe("chat media schema and migration", () => {
       exec: async (sql) => { await driver.exec(sql); if (sql === failAt) throw new Error("Injected v9 failure"); },
       run: async (sql, params) => { const result = await driver.run(sql, params); if (sql === failAt) throw new Error("Injected v9 failure"); return result; },
     }, { accountId: A, deviceId: DEVICE })).rejects.toThrow("Injected v9 failure");
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     expect(database.prepare("select value from messaging_meta where key='schema_version'").get()?.value).toBe("8");
     expect(database.prepare("select * from messages order by id").all()).toEqual(before);
     expect(database.prepare("select * from media_attachments").all()).toEqual(media);
@@ -1433,7 +1453,7 @@ describe("chat media schema and migration", () => {
     const h = await open();
     expect(database.prepare("select value from messaging_meta where key='schema_version'").get()?.value).toBe(String(MESSAGING_SQLITE_SCHEMA_VERSION));
     expect(database.prepare("pragma foreign_key_check").all()).toEqual([]);
-    await h.close(); database = new DatabaseSync(path);
+    await h.close(); database = reopenDatabase();
     const reopened = await open(); expect((await reopened.getMessage(MESSAGE_2))?.messageType).toBe("MEDIA");
     await reopened.close();
   });
@@ -1458,7 +1478,7 @@ describe("chat media schema and migration", () => {
     expect((await history.getMessage(MESSAGE_2))?.messageType).toBe("MEDIA");
     expect(() => database.prepare("update messages set message_type='VIDEO'").run()).toThrow(/CHECK/);
     await history.close();
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     const reopened = await open();
     expect((await reopened.getMessage(MESSAGE_2))?.messageType).toBe("MEDIA");
     await reopened.close();
@@ -1473,7 +1493,7 @@ describe("chat media schema and migration", () => {
       if (sql === S.backfillMediaType) throw new Error("Injected after backfill");
       return changed;
     } }, { accountId: A, deviceId: DEVICE })).rejects.toThrow("Injected after backfill");
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     expect(database.prepare("pragma table_info(messages)").all().map((column) => column.name))
       .not.toContain("message_type");
     expect(database.prepare("select * from messages order by id").all()).toEqual(before);
@@ -1614,7 +1634,7 @@ describe("chat media records", () => {
     const fixture = await mediaFixture(ATTACHMENT, MESSAGE);
     await first.enqueueOutgoingWithMedia({ ...outgoing, body: "", replyToId: MESSAGE_2 }, fixture.metadata, fixture.bytes);
     await first.close();
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     const reopened = await openWithMedia(port);
     expect((await reopened.claimNextOutgoing())?.message.replyToId).toBe(MESSAGE_2);
     await reopened.close();
@@ -1628,7 +1648,7 @@ describe("chat media records", () => {
     await first.enqueueOutgoingWithMedia(mediaMessage, fixture.metadata, fixture.bytes);
     await first.close();
 
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     const reopened = await openWithMedia(new FakeMediaBytes(() => clock));
     expect(await reopened.getMessage(MESSAGE)).toMatchObject({ messageType: "TEXT" });
     expect(await reopened.getMessage(MESSAGE_2)).toMatchObject({ body: "", messageType: "MEDIA" });
@@ -1894,7 +1914,7 @@ describe("chat media records", () => {
     const fixture = await mediaFixture(ATTACHMENT, MESSAGE, { direction: "IN", expiresAt: clock + 1000 });
     await history.clearMedia();
     await history.close();
-    database = new DatabaseSync(path);
+    database = reopenDatabase();
     const reopened = await openWithMedia(port);
     let acks = 0;
     try {

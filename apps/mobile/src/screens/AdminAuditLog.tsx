@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
+import { ArrowUpRight } from "lucide-react";
 import { readAuditLog, type AuditEntry } from "../services/roles";
 import { SettingsGroup, SettingsPage } from "../components/settings";
 import { adminErrorMessage, describeActivity } from "../components/adminConsole";
@@ -73,6 +75,12 @@ export function AdminAuditLog() {
                   headline={line.headline}
                   detail={line.detail}
                   time={line.time}
+                  review={line.review ? (
+                    <Link className="fb-admin-log-review" to={line.review.to}>
+                      {line.review.label}
+                      <ArrowUpRight size={15} aria-hidden="true" />
+                    </Link>
+                  ) : undefined}
                 />
               );
             })}

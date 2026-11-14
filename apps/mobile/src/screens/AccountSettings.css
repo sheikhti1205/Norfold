@@ -85,15 +85,5 @@
 .fb-account-password input:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 1px; }
 .fb-account-hint { margin: 0; font-size: 0.75rem; color: var(--fb-on-surface-variant); overflow-wrap: anywhere; }
 
-/* Contact rules now live in the account page (the popover's nested panel is
-   gone). Same card geometry as a settings row, with the select as the control. */
-.fb-account-contact-rule { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; }
-.fb-account-contact-rule .fb-select-trigger {
-  min-height: 44px; padding: 0 12px; border-radius: 10px;
-  border-color: var(--fb-outline-variant);
-  background: var(--fb-surface-container-low);
-  font-size: 0.9375rem;
-}
-.fb-account-contact-hint { font-size: 0.8125rem; line-height: 1.45; color: var(--fb-on-surface-variant); }
-.fb-account-contact-status { font-size: 0.8125rem; color: var(--fb-on-surface-variant); }
-.fb-account-contact-status[role="alert"] { color: var(--fb-error); }
+/* Contact rules moved to Chat (owner order 2026-11-14); the account page keeps
+   identity and sign-in controls only. */

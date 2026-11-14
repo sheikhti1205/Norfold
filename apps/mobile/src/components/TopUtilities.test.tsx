@@ -167,17 +167,19 @@ describe("notification utility quick view", () => {
     expect(screen.getByText("reader-new")).toBeTruthy();
   });
 
-  it("keeps blocked actor labels private in a nested action menu and Back dismisses one layer", async () => {
+  it("keeps blocked actor labels private in the action rail and Back dismisses one layer", async () => {
     io.rows.mockResolvedValue([row("secret", false, { blockedActor: true })]);
     render(tree());
     const dialog = await openInbox();
     const trigger = await within(dialog).findByRole("button", { name: /more actions for a hidden notification/i });
     expect(within(dialog).queryByRole("link", { name: /reader-secret/i })).toBeNull();
     fireEvent.click(trigger);
-    const menu = await screen.findByRole("menu");
-    expect(menu.getAttribute("aria-label")).not.toContain("reader-secret");
+    // One floating rail per list, exposed as a toolbar rather than a menu
+    // (owner order 2026-11-14): the labels stay generic for a blocked actor.
+    const rail = await screen.findByRole("toolbar");
+    expect(rail.getAttribute("aria-label")).not.toContain("reader-secret");
     act(() => { expect(consumeBackIntercept()).toBe(true); });
-    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("toolbar")).toBeNull());
     expect(screen.getByRole("dialog", { name: "Notifications" })).toBeTruthy();
     await waitFor(() => expect(document.activeElement).toBe(trigger));
     fireEvent.keyDown(dialog, { key: "Escape" });

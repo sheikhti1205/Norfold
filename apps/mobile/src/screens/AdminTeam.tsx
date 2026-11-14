@@ -128,10 +128,15 @@ export function AdminTeam() {
     pendingWrite.current = true;
     setBusy(true);
     setActionError(null);
+    setSavedNote(null);
+    const wasInvite = (invites ?? []).some(
+      (invite) => invite.email === email && invite.acceptedAt === null && invite.revokedAt === null,
+    );
     try {
       await revokeRole(email);
       if (!alive.current) return;
       setConfirming(null);
+      setSavedNote(wasInvite ? "Invitation cancelled." : "Role removed. The person has been notified in their inbox.");
       await refresh();
     } catch (err) {
       if (!alive.current) return;
@@ -248,7 +253,7 @@ export function AdminTeam() {
               if (!alive.current || accessLost.current) return;
               // The editor unmounts here, so the confirmation belongs to the
               // page it returns to, not to a component that is gone.
-              setSavedNote(`Saved. ${editing.label} has the permissions shown here now.`);
+              setSavedNote(`Saved. ${editing.label} has the permissions shown here now, and has been notified in their inbox.`);
               setEditing(null);
               void refresh();
             }}
@@ -334,7 +339,7 @@ function PersonRow({
       </div>
       <p className="fb-admin-person-caps">
         {isAdmin
-          ? "Full access — the admin can do everything, including managing roles."
+          ? "Full access. The admin can do everything, including managing roles."
           : describeCapabilities(person.capabilities)}
       </p>
       <div className="fb-admin-actions">

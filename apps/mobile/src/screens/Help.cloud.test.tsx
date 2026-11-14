@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Help, type HelpAssistantDeps } from "./Help";
+import { chooseSelectOption } from "../test-utils/select";
 import { ChatStore } from "../services/ai/chatStore";
 import type { ModelRecord, ProviderAdapter } from "../services/ai/providerContract";
 import { resetBackInterceptors } from "../components/backNavigation";
@@ -70,7 +71,7 @@ describe("packet 11 cloud-only Chat", () => {
   it.each(["paid", "unknown", "variable"] as const)("sends a selected %s-price cloud row with its provider", async (price) => {
     const { complete } = mount({ listCatalog: async () => [row("deepseek", price), row("offline", "free")] });
     fireEvent.click(screen.getByTestId("composer-model-chip"));
-    fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "deepseek" } });
+    await chooseSelectOption(screen.getByLabelText("Provider"), "DeepSeek");
     fireEvent.click(await screen.findByRole("button", { name: "Use deepseek chat" }));
     send("Hello cloud");
     await screen.findByText("Cloud answer");

@@ -96,7 +96,6 @@ import { OtpField } from "../components/auth/OtpField";
 import { ThemeProvider } from "../theme";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { AccessibilitySettings } from "./AccessibilitySettings";
-import { MediaSettings } from "./MediaSettings";
 import { HelpGuide } from "./HelpGuide";
 import { About } from "./About";
 import { Settings } from "./Settings";
@@ -240,8 +239,10 @@ describe("QA I — xlarge (125% root) renders without horizontal overflow", () =
     return render(<MemoryRouter>{ui}</MemoryRouter>);
   }
 
-  it("Appearance / Accessibility / Media keep one h1, no nesting, no overflow", () => {
-    for (const Screen of [AppearanceSettings, AccessibilitySettings, MediaSettings]) {
+  it("Appearance / Accessibility keep one h1, no nesting, no overflow", () => {
+    // Media is a nested group inside Chat → Messages & privacy now, not a
+    // standalone page: it owns no h1 or page frame of its own.
+    for (const Screen of [AppearanceSettings, AccessibilitySettings]) {
       const view = renderXlarge(
         <ThemeProvider>
           <Screen />

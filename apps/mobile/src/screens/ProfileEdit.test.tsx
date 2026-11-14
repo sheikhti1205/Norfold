@@ -5,16 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PublicUser } from "@norfold/shared";
 
 const {
-  mockLogout,
-  mockRefreshUser,
-  mockSavePhone,
+  mockSendPhone,
+  mockVerifyPhone,
   mockUpdateProfile,
   mockSetUser,
   mockUser,
 } = vi.hoisted(() => ({
-  mockLogout: vi.fn(),
-  mockRefreshUser: vi.fn(),
-  mockSavePhone: vi.fn(),
+  mockSendPhone: vi.fn(),
+  mockVerifyPhone: vi.fn(),
   mockUpdateProfile: vi.fn(),
   mockSetUser: vi.fn(),
   mockUser: {
@@ -25,16 +23,18 @@ const {
 vi.mock("../auth", () => ({
   useAuth: () => ({
     user: mockUser.value,
-    logout: mockLogout,
-    refreshUser: mockRefreshUser,
     setUser: mockSetUser,
   }),
 }));
 
-vi.mock("../services/auth", () => ({ saveProfilePhone: mockSavePhone }));
+vi.mock("../services/auth", () => ({
+  sendPhoneChangeCode: mockSendPhone,
+  verifyPhoneChangeCode: mockVerifyPhone,
+}));
 vi.mock("../services/profile", () => ({ updateMyProfile: mockUpdateProfile }));
 
 import { ProfileEdit } from "./ProfileEdit";
+import { ApiError } from "../services/session";
 
 const baseUser: PublicUser = {
   id: "u1",
@@ -63,17 +63,21 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   mockUser.value = { ...baseUser };
-  mockSavePhone.mockResolvedValue({ ...baseUser, phone: "+8801912345678", phoneVerified: false });
+  mockSendPhone.mockResolvedValue(undefined);
+  mockVerifyPhone.mockResolvedValue({
+    ...baseUser,
+    phone: "+8801912345678",
+    phoneVerified: true,
+  });
   mockUpdateProfile.mockResolvedValue({ ...baseUser, displayName: "New Tester", bio: "hi", locationLabel: "Dhaka" });
-  mockRefreshUser.mockResolvedValue(undefined);
 });
 
 describe("ProfileEdit rework", () => {
-  it("renders one heading with a back link to the account screen", () => {
+  it("renders one heading with a back link to the profile hub", () => {
     renderEdit();
     expect(screen.getByRole("heading", { level: 1, name: "Edit profile" })).toBeTruthy();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "Back to Account" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Back to Profile" })).toBeTruthy();
   });
 
   it("keeps username and email read-only information, not editable inputs", () => {
@@ -99,10 +103,11 @@ describe("ProfileEdit rework", () => {
     expect(screen.getByText("5/280")).toBeTruthy();
   });
 
-  it("carries no unsupported-flow warning copy", () => {
+  it("states that a number change is saved only after the code is confirmed", () => {
     renderEdit();
     expect(screen.queryByText(/isn't available in this build/i)).toBeNull();
-    expect(screen.getByText(/verify.*new.*number/i)).toBeTruthy();
+    expect(screen.getByText(/saved only after the code is confirmed/i)).toBeTruthy();
+    expect(screen.getByText("Not verified")).toBeTruthy();
   });
 
   it("saves identity fields via updateMyProfile and reflects the refreshed user", async () => {
@@ -177,67 +182,81 @@ describe("ProfileEdit rework", () => {
     expect(alert.textContent).not.toContain("Network request failed");
   });
 
-  it("keeps the phone behavior: rejects an invalid number without calling the backend", async () => {
+  it("rejects an invalid number without asking the server for a code", () => {
     renderEdit();
     fireEvent.change(screen.getByRole("textbox", { name: /mobile/i }), {
       target: { value: "not-a-number" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    expect(await screen.findByText(/valid Bangladesh mobile number/i)).toBeTruthy();
-    expect(mockSavePhone).not.toHaveBeenCalled();
-    expect(mockRefreshUser).not.toHaveBeenCalled();
+    expect(screen.getByText(/valid Bangladesh mobile number/i)).toBeTruthy();
+    const send = screen.getByRole("button", { name: "Send code" }) as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    expect(mockSendPhone).not.toHaveBeenCalled();
+    expect(mockVerifyPhone).not.toHaveBeenCalled();
+    expect(mockSetUser).not.toHaveBeenCalled();
   });
 
-  it("keeps the phone behavior: saves a valid number and announces it live", async () => {
+  it("sends a code to the typed number and waits for it before writing anything", async () => {
     renderEdit();
     fireEvent.change(screen.getByRole("textbox", { name: /mobile/i }), {
       target: { value: "01912345678" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    await waitFor(() => expect(mockSavePhone).toHaveBeenCalledWith("u1", "+8801912345678"));
+    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+    await waitFor(() => expect(mockSendPhone).toHaveBeenCalledWith("u1", "+8801912345678", false));
+    expect((await screen.findByRole("status")).textContent).toContain("+8801912345678");
+    expect(screen.getByRole("textbox", { name: "SMS code" })).toBeTruthy();
+    // The number is not stored, and no verification is claimed, by sending.
+    expect(mockSetUser).not.toHaveBeenCalled();
+    expect(mockVerifyPhone).not.toHaveBeenCalled();
+    // The destination cannot drift while its code is pending.
+    expect((screen.getByRole("textbox", { name: /mobile/i }) as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it("verifies the SMS code before storing the new number", async () => {
+    renderEdit();
+    fireEvent.change(screen.getByRole("textbox", { name: /mobile/i }), {
+      target: { value: "01912345678" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+    await screen.findByRole("textbox", { name: "SMS code" });
+    fireEvent.change(screen.getByRole("textbox", { name: "SMS code" }), {
+      target: { value: "123456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Verify number" }));
+    await waitFor(() => expect(mockVerifyPhone).toHaveBeenCalledWith("u1", "+8801912345678", "123456"));
     await waitFor(() =>
       expect(mockSetUser).toHaveBeenCalledWith(
-        expect.objectContaining({ phone: "+8801912345678", phoneVerified: false }),
+        expect.objectContaining({ phone: "+8801912345678", phoneVerified: true }),
       ),
     );
-    expect(await screen.findByText("Mobile number saved.")).toBeTruthy();
-    expect(screen.getByRole("link", { name: /verify mobile number/i }).getAttribute("href")).toBe(
-      "/verify",
-    );
+    expect(await screen.findByText("Mobile number verified.")).toBeTruthy();
   });
 
-  it("keeps the saved phone announcement after the auth profile updates", async () => {
-    mockSetUser.mockImplementation((user: PublicUser) => {
-      mockUser.value = user;
-    });
-    const view = renderEdit();
-    fireEvent.change(screen.getByRole("textbox", { name: /mobile/i }), {
-      target: { value: "01912345678" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    await waitFor(() => expect(mockSetUser).toHaveBeenCalled());
-    view.rerender(
-      <MemoryRouter>
-        <ProfileEdit />
-      </MemoryRouter>,
+  it("shows the server's replacement-gate sentence when a change is held", async () => {
+    mockSendPhone.mockRejectedValueOnce(
+      new ApiError("You cannot change your mobile number yet. Try again later.", 409),
     );
-    expect(screen.getByText("Mobile number saved.")).toBeTruthy();
-    expect((screen.getByRole("textbox", { name: /mobile/i }) as HTMLInputElement).value).toBe(
-      "+8801912345678",
-    );
-  });
-
-  it("surfaces phone save failures as human copy in a live alert", async () => {
-    mockSavePhone.mockRejectedValueOnce(new Error("Network request failed"));
     renderEdit();
     fireEvent.change(screen.getByRole("textbox", { name: /mobile/i }), {
       target: { value: "01912345678" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "You cannot change your mobile number yet. Try again later.",
+    );
+    expect(mockSetUser).not.toHaveBeenCalled();
+  });
+
+  it("surfaces send failures as human copy in a live alert", async () => {
+    mockSendPhone.mockRejectedValueOnce(new Error("Network request failed"));
+    renderEdit();
+    fireEvent.change(screen.getByRole("textbox", { name: /mobile/i }), {
+      target: { value: "01912345678" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/could not save/i);
+    expect(alert.textContent).toMatch(/network problem|could not|try again/i);
     expect(alert.textContent).not.toContain("Network request failed");
-    expect(mockRefreshUser).not.toHaveBeenCalled();
+    expect(mockSetUser).not.toHaveBeenCalled();
   });
 
   it("renders nothing when there is no signed-in user", () => {

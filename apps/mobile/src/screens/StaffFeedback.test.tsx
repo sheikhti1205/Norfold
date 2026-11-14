@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { StaffFeedback, StaffFeedbackDetail } from "./StaffFeedback";
+import { chooseSelectOption } from "../test-utils/select";
 import { ApiError } from "../services/session";
 const f = vi.hoisted(() => ({ user: "staff-a", role: vi.fn(), list: vi.fn(), detail: vi.fn(), review: vi.fn() }));
 vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: f.user } }) }));
@@ -71,9 +72,8 @@ it("failed queue reads are not reported as no feedback", async () => {
 });
 it("changing status filter ignores a slower previous queue response", async () => {
   let finish!: (v: unknown) => void; f.list.mockReturnValueOnce(new Promise(resolve => { finish = resolve; })); render(tree());
-  const filter = await screen.findByLabelText("Feedback status");
   f.list.mockResolvedValue({ items: [], nextCursor: null });
-  fireEvent.change(filter, { target: { value: "RESOLVED" } });
+  await chooseSelectOption(await screen.findByLabelText("Feedback status"), "Resolved");
   await act(async () => { finish({ items: [{ ...row, id: "stale" }], nextCursor: null }); });
   expect(screen.queryByRole("link", { name: "Something is broken" })).toBeNull();
 });

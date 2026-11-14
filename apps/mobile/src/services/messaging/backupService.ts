@@ -10,8 +10,8 @@
  */
 import type { HistorySnapshot } from "./history";
 import {
-  downloadBackup, uploadBackup, BackupDriveError, type BackupDriveStore,
-  type BackupManifest, isBackupName,
+  downloadBackup, inspectBackups, uploadBackup, BackupDriveError, type BackupDriveStore,
+  type BackupInventoryEntry, type BackupManifest, isBackupName,
 } from "./backupDrive";
 import { importBackupKey, BackupCryptoError } from "./backupCrypto";
 import { BackupError } from "./backup";
@@ -149,6 +149,14 @@ export type BackupOperationResult =
   | { kind: "needs-connection" }
   | { kind: "failed"; reason: "offline" | "provider" | "throttled" | "integrity" | "snapshot" | "storage" | "device-limit" | "account" | "other" };
 
+/** A read-only inventory; it never changes policy, history or Drive objects. */
+export type BackupInventoryResult =
+  | { kind: "listed"; backups: BackupInventoryEntry[]; readAt: number }
+  | { kind: "busy" }
+  | { kind: "needs-connection" }
+  | { kind: "unavailable" }
+  | { kind: "failed" };
+
 export interface BackupDiagnostic {
   httpStatus?: number;
   providerReason?: DriveProviderReason;
@@ -204,6 +212,8 @@ type Operation = {
   lease: BackupLease;
   controller: AbortController;
   promise: Promise<BackupOperationResult>;
+  /** Restore only: the installation whose manifest was chosen. Omitted = all. */
+  restoreDeviceId?: string;
 };
 class SupersededBackup extends Error {}
 class BackupPolicyUnavailable extends Error {}
@@ -404,11 +414,48 @@ export class DriveBackup {
     return this.admit("upload");
   }
 
-  restore(): Promise<BackupOperationResult> {
-    return this.admit("restore");
+  /**
+   * Restore every installation's manifest, or one chosen installation's
+   * backup. A chosen backup is still merged through the ordinary import, so it
+   * adds content and never deletes what is already here.
+   */
+  restore(deviceId?: string): Promise<BackupOperationResult> {
+    return this.admit("restore", deviceId);
   }
 
-  private admit(kind: Operation["kind"]): Promise<BackupOperationResult> {
+  /**
+   * Read-only backup inventory for the settings screen: manifest summaries
+   * only, no chunks, no writes. It refuses while another pass is admitted so a
+   * listing cannot race a restore or an upload.
+   */
+  async inspect(): Promise<BackupInventoryResult> {
+    if (this.disposed) return { kind: "unavailable" };
+    if (this.operation) return { kind: "busy" };
+    const lease = this.capture();
+    if (!lease) return { kind: "unavailable" };
+    if (!this.deps.auth.available()) return { kind: "unavailable" };
+    const op: Operation = {
+      kind: "restore", stage: "authorization", lease,
+      controller: new AbortController(), promise: Promise.resolve({ kind: "skipped", reason: "not-ready" }),
+    };
+    try {
+      // Silent renewal only: a listing must never open a consent window.
+      const access = this.deps.auth.current() ?? await this.deps.auth.renew(op.controller.signal);
+      this.assertCurrent(op);
+      if (!access) return { kind: "needs-connection" };
+      const material = await this.deps.key(op.lease);
+      this.assertCurrent(op);
+      if (material.accountId !== op.lease.accountId) return { kind: "failed" };
+      const key = await importBackupKey(material.generation, material.keyHex);
+      const backups = await inspectBackups({ store: this.fencedStore(op), key, scope: op.lease });
+      this.assertCurrent(op);
+      return { kind: "listed", backups, readAt: this.now() };
+    } catch {
+      return this.current(op) ? { kind: "failed" } : { kind: "busy" };
+    }
+  }
+
+  private admit(kind: Operation["kind"], restoreDeviceId?: string): Promise<BackupOperationResult> {
     if (this.operation) {
       // Only equivalent current upload requests can join the admitted pass.
       return kind === "upload" && this.operation.kind !== "restore" && this.current(this.operation)
@@ -419,7 +466,8 @@ export class DriveBackup {
     if (kind === "upload" && (!this.state(lease.accountId).enabled || this.uploadVeto.has(lease.accountId))) {
       return Promise.resolve({ kind: "skipped", reason: "off" });
     }
-    const op: Operation = { kind, lease, stage: "authorization", controller: new AbortController(), promise: Promise.resolve({ kind: "skipped", reason: "not-ready" }) };
+    const op: Operation = { kind, lease, stage: "authorization", controller: new AbortController(), promise: Promise.resolve({ kind: "skipped", reason: "not-ready" }),
+      ...(restoreDeviceId ? { restoreDeviceId } : {}) };
     this.operation = op;
     op.promise = Promise.resolve().then(() => this.execute(op)).finally(() => {
       if (this.operation === op) this.operation = null;
@@ -472,7 +520,7 @@ export class DriveBackup {
       this.assertCurrent(op);
       const store = this.fencedStore(op);
       if (op.kind === "restore") {
-        const restored = await downloadBackup({ store, key, scope: op.lease });
+        const restored = await downloadBackup({ store, key, scope: op.lease, deviceId: op.restoreDeviceId });
         this.assertCurrent(op);
         op.stage = "history-merge";
         await this.deps.importSnapshot(op.lease, restored.snapshot, restored.media);

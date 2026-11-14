@@ -5,6 +5,7 @@
  * screens render, instead of a hand-copied approximation that drifts. Nothing
  * here fetches: both take what the screen already knows.
  */
+import type { ReactNode } from "react";
 import { capabilityLabels, roleWord } from "./adminConsole";
 
 /** The person (or invitation) an access grant would replace. */
@@ -67,16 +68,20 @@ export function AdminAuditLine({
   headline,
   detail,
   time,
+  review,
 }: {
   headline: string;
   detail: string | null;
   time: string;
+  /** The way from the record to the thing it is about, when one exists. */
+  review?: ReactNode;
 }) {
   return (
     <li className="fb-admin-log-row">
       <p className="fb-admin-log-headline">{headline}</p>
       {detail && <p className="fb-admin-log-detail">{detail}</p>}
       {time && <p className="fb-admin-log-time">{time}</p>}
+      {review}
     </li>
   );
 }

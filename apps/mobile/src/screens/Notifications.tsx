@@ -5,6 +5,7 @@ import { motion, type PanInfo } from "framer-motion";
 import { Heading } from "react-aria-components";
 import { Bell, Check, CheckCheck, Flag, Inbox, Mail, MoreVertical, RotateCcw, Settings, Trash2 } from "lucide-react";
 import { BackButton } from "../components/BackButton";
+import { registerBackInterceptor } from "../components/backNavigation";
 import { useAuth } from "../auth";
 import { BlockedByViewerShield } from "../components/BlockedByViewerShield";
 import { UserAvatar } from "../components/UserAvatar";
@@ -149,6 +150,7 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
   const railArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const railCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const railRow = useRef<HTMLElement | null>(null);
+  const railOrigin = useRef<"trigger" | "row">("row");
   const railRef = useRef<HTMLDivElement | null>(null);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdStart = useRef<{ x: number; y: number } | null>(null);
@@ -188,6 +190,10 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
     const right = Math.max(6, window.innerWidth - rect.right + 4);
     const top = Math.min(Math.max(rect.top + rect.height / 2, 46), window.innerHeight - 46);
     railRow.current = row;
+    // Which control gets focus back when the rail closes: a pointer opened it
+    // from the row's own trigger, while the keyboard/context-menu path started
+    // at the row content and must return there.
+    railOrigin.current = focusFirst ? "row" : "trigger";
     setRail({ id, top, right, container: row.closest<HTMLElement>(".fb-popover") ?? document.body });
     if (focusFirst) requestAnimationFrame(() => railRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true }));
   }, []);
@@ -213,12 +219,27 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
   }, []);
   useEffect(() => {
     if (!rail) return;
+    // The rail is one disclosure layer above the popover. Its own dismissal
+    // must return focus to the control that opened it, and must consume
+    // Back/Escape alone: the popover bridge behind it would otherwise tear
+    // down the whole inbox with the same press.
+    const dismissRail = () => {
+      const row = railRow.current;
+      const preferBody = railOrigin.current === "row";
+      closeRail();
+      requestAnimationFrame(() => {
+        const body = row?.querySelector<HTMLElement>(".fb-notification-body") ?? null;
+        const trigger = row?.querySelector<HTMLElement>(".fb-notification-overflow") ?? null;
+        (preferBody ? body ?? trigger : trigger ?? body)?.focus({ preventScroll: true });
+      });
+    };
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      const row = railRow.current;
-      closeRail();
-      requestAnimationFrame(() => row?.querySelector<HTMLElement>(".fb-notification-body")?.focus({ preventScroll: true }));
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      dismissRail();
     };
+    const offBack = registerBackInterceptor(() => { dismissRail(); return true; });
     const onPointerDown = (event: Event) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
@@ -228,6 +249,7 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
     window.addEventListener("keydown", onKey, true);
     document.addEventListener("pointerdown", onPointerDown, true);
     return () => {
+      offBack();
       window.removeEventListener("keydown", onKey, true);
       document.removeEventListener("pointerdown", onPointerDown, true);
     };

@@ -242,8 +242,6 @@ jobs:
           set -euo pipefail
           VERSION="$(node -p "require('./apps/mobile/package.json').version")"
           VCODE=$((100000 + $(git rev-list --count HEAD)))
-          SUBJECT="$(git log -1 --pretty=%s)"
-          RECENT="$(git log -3 --pretty=%s | paste -sd ';' - | cut -c1-280)"
           PRIOR=()
           PREVIOUS=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=20" --jq 'map(select(.draft == false and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$")) and any(.assets[]; .name == "catalogue.v1.json"))) | .[0].tag_name // empty')
           if [ -n "$PREVIOUS" ]; then
@@ -261,7 +259,7 @@ jobs:
             --version-code "$VCODE" \
             --git-sha "${BUILD_SHA}" \
             --published-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --summary "${SUBJECT}. Recent changes: ${RECENT}" \
+            --summary "Signed Android build of Norfold ${VERSION}." \
             --signing-channel beta \
             --out release-stage/catalogue.v1.json
           node -e 'const c=require("./release-stage/catalogue.v1.json"); console.log(`catalogue: ${c.releases[0].id} versionCode ${c.releases[0].versionCode} artifacts ${c.releases[0].artifacts.length}`)'

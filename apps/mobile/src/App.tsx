@@ -51,7 +51,7 @@ import { SavedReportsProvider } from "./hooks/useSavedReports";
 import { Connections, LegacyChatsRedirect, MessagingThread } from "./screens/Messaging";
 import { MessagingLifecycle } from "./components/MessagingLifecycle";
 import { MessagePillHost } from "./components/MessagePillHost";
-import { postBackgroundLocation, PostNavigationProvider } from "./components/PostNavigation";
+import { PostNavigationProvider, useReportViewerBackground } from "./components/PostNavigation";
 import { PostModal } from "./components/PostModal";
 import { SignedOutEntry } from "./screens/RememberedAccounts";
 import { clearAuthReturnTo, getAuthReturnRoute, peekAuthReturnTo } from "./utils/authReturnTo";
@@ -138,7 +138,7 @@ function AppRouteTree() {
   useEffect(() => {
     if (user && peekAuthReturnTo() === `${location.pathname}${location.search}${location.hash}`) clearAuthReturnTo();
   }, [user, location.pathname, location.search, location.hash]);
-  const background = postBackgroundLocation(location, user?.id ?? null);
+  const background = useReportViewerBackground(location, user?.id ?? null);
   if (passwordSetupSettled === false) return <Splash />;
   if (needsPasswordSetup) {
     return location.pathname === "/create-password"
