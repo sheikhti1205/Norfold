@@ -77,14 +77,14 @@ const COMMENT_REPLIES_INCREMENT = 5;
 /** Visual indent cap: deeper logical levels render flat with an @reply target. */
 const COMMENT_MAX_VISUAL_DEPTH = 2;
 
-function scrollToSection(id: string) {
+function scrollToSection(id: string, focusOnly = false) {
   const el = document.getElementById(id);
   if (!el) return;
   // Override-aware (not OS-only): the persisted appearance Reduce Motion
   // setting layers on top of prefers-reduced-motion — see shouldReduceMotion.
   const reduced = shouldReduceMotion();
   el.focus({ preventScroll: true });
-  el.scrollIntoView({ behavior: reduced ? "instant" : "smooth", block: "start" });
+  if (!focusOnly) el.scrollIntoView({ behavior: reduced ? "instant" : "smooth", block: "start" });
 }
 
 /**
@@ -458,7 +458,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
       focusedLink.current = focusKey;
       const target = linkedComment && comments.some(c => c.id === linkedComment)
         ? `detail-comment-${linkedComment}` : hash.slice(1);
-      scrollToSection(target);
+      scrollToSection(target, contextual && wideViewport && target === "detail-activity");
     });
     return () => cancelAnimationFrame(frame);
   }, [loading, post?.id, id, hash, locationKey, linkedComment, commentsLoading, comments, contextual, wideViewport]);

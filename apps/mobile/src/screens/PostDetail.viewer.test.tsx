@@ -73,6 +73,19 @@ describe("PostDetail viewer layout", () => {
     const composer = within(pane).getByTestId("viewer-composer");
     expect(actions.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+  it("focuses the contextual activity footer without scrolling the modal", async () => {
+    const scrollIntoView = vi.fn();
+    const original = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    try {
+      render(<MemoryRouter initialEntries={["/posts/p1#detail-activity"]}><Routes><Route path="/posts/:id" element={<PostDetail contextual />} /></Routes></MemoryRouter>);
+      const pane = await screen.findByTestId("report-viewer-conversation-pane");
+      await vi.waitFor(() => expect(document.activeElement).toBe(pane.querySelector("#detail-activity")));
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
+    }
+  });
   it("omits the media region when there are no images", async () => {
     posts.fetchPost.mockResolvedValue({ ...post, attachments: [] });
     renderDetail(true);
