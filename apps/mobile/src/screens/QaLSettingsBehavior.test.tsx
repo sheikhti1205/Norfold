@@ -18,7 +18,6 @@ import { localOperationNotice } from "../services/ai/localIntelligenceView";
 /* ------------------------------------------------------------------ */
 
 const SEARCH_MATRIX: ReadonlyArray<{ title: string; keywords: string; route: string }> = [
-  { title: "Profile & verification", keywords: "profile username email phone avatar", route: "/profile" },
   { title: "Appearance", keywords: "theme dark amoled accent color personalization", route: "/settings/appearance" },
   { title: "Accessibility", keywords: "font text size motion reduce animation", route: "/settings/accessibility" },
   { title: "Chat", keywords: "chat preferences message request backup media uploads photo image quality", route: "/settings/privacy/messages" },
@@ -123,7 +122,6 @@ function LocationProbe() {
 }
 
 const SETTINGS_TARGETS = [
-  "/profile",
   "/settings/appearance",
   "/settings/accessibility",
   "/settings/feed-layout",

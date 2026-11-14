@@ -70,7 +70,6 @@ vi.mock("../services/roles", () => ({
 
 import {
   accessibilitySummary,
-  accountSummary,
   appearanceSummary,
   mediaSummary,
   notificationSummary,
@@ -172,13 +171,6 @@ describe("summary helpers", () => {
     expect(appearanceSummary("dark", "emerald", "system")).toBe("Dark · System colors");
   });
 
-  it("composes the account value from live verification flags", () => {
-    expect(accountSummary({ emailVerified: true, phoneVerified: true })).toBe("Verified");
-    expect(accountSummary({ emailVerified: true, phoneVerified: false })).toBe("Partially verified");
-    expect(accountSummary({ emailVerified: false, phoneVerified: true })).toBe("Partially verified");
-    expect(accountSummary({ emailVerified: false, phoneVerified: false })).toBe("Unverified");
-  });
-
   it("composes the accessibility value from live text and motion settings", () => {
     expect(accessibilitySummary("standard", "system")).toBe("Default text · System motion");
     expect(accessibilitySummary("large", "reduce")).toBe("Large text · Reduced motion");
@@ -227,7 +219,8 @@ describe("Settings home", () => {
     // not paint a second field behind it.
     expect(screen.queryByRole("searchbox", { name: "Search settings" })).toBeNull();
     expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Profile & security/ })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /Profile & security/ })).toBeNull();
+    expect(screen.getByRole("link", { name: /view profile/i })).toBeTruthy();
   });
 
   it("keeps update history outside disclosures and searchable", async () => {
@@ -331,7 +324,6 @@ describe("Settings home", () => {
     renderSettings();
     const hrefs = rootHrefs();
     for (const href of [
-      "/profile",
       "/settings/appearance",
       "/settings/notifications",
       "/settings/accessibility",
@@ -407,7 +399,6 @@ describe("Settings home", () => {
     expect(await screen.findByText("Dark · Emerald")).toBeTruthy();
     expect(await screen.findByText("Default text · System motion")).toBeTruthy();
     expect(await screen.findByText("On")).toBeTruthy();
-    expect(await screen.findByText("Partially verified")).toBeTruthy();
   });
 
   it("shows honest fallbacks when live sources are unreadable", async () => {
@@ -474,14 +465,12 @@ describe("Settings home", () => {
  * Team administration is ADMIN-only; review access is a separate capability.
  */
 describe("the staff console entry", () => {
-  it.each(["appeals_review", "feedback_read"])("offers only the permitted %s destination", async capability => {
+  it.each(["reports_review", "appeals_review", "feedback_read"])("offers the staff hub for %s", async capability => {
     mockFetchMyRole.mockResolvedValue({ role: "MODERATOR", isAdmin: false, capabilities: [capability] });
     renderSettings();
-    const allowed = capability === "appeals_review" ? "Review appeals" : "Review feedback";
-    const refused = capability === "appeals_review" ? "Review feedback" : "Review appeals";
-    const link = await screen.findByRole("link", { name: allowed });
-    expect(link.getAttribute("href")).toBe(`/settings/moderation/${capability === "appeals_review" ? "appeals" : "feedback"}`);
-    expect(screen.queryByRole("link", { name: refused })).toBeNull();
+    const link = await screen.findByRole("link", { name: /staff console/i });
+    expect(link.getAttribute("href")).toBe("/settings/staff");
+    expect(within(screen.getByRole("region", { name: "Staff" })).getAllByRole("link")).toHaveLength(1);
     expect(screen.queryByRole("link", { name: /team & permissions/i })).toBeNull();
   });
   it("drops previous staff entries immediately when the signed-in account changes", async () => {
@@ -491,24 +480,24 @@ describe("the staff console entry", () => {
       .mockReturnValueOnce(new Promise((done) => { resolveOld = done; }))
       .mockResolvedValueOnce({ role: null, isAdmin: false, capabilities: [] });
     const { rerender } = render(<MemoryRouter><Settings /></MemoryRouter>);
-    await screen.findByRole("link", { name: "Review reports" });
+    await screen.findByRole("link", { name: /staff console/i });
     viewer.id = "u2";
     rerender(<MemoryRouter><Settings /></MemoryRouter>);
-    expect(screen.queryByRole("link", { name: "Review reports" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /staff console/i })).toBeNull();
     expect(screen.queryByRole("link", { name: /team & permissions/i })).toBeNull();
     await waitFor(() => expect(mockFetchMyRole).toHaveBeenCalledTimes(2));
     viewer.id = "u3";
     rerender(<MemoryRouter><Settings /></MemoryRouter>);
     resolveOld(admin);
     await waitFor(() => expect(mockFetchMyRole).toHaveBeenCalledTimes(3));
-    expect(screen.queryByRole("link", { name: "Review reports" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /staff console/i })).toBeNull();
   });
 
   it("offers review to a permitted moderator without exposing team administration", async () => {
     mockFetchMyRole.mockResolvedValue({ role: "MODERATOR", isAdmin: false, capabilities: ["reports_review"] });
     renderSettings();
-    const row = await screen.findByRole("link", { name: "Review reports" });
-    expect(row.getAttribute("href")).toBe("/settings/moderation/queue");
+    const row = await screen.findByRole("link", { name: /staff console/i });
+    expect(row.getAttribute("href")).toBe("/settings/staff");
     expect(screen.queryByRole("link", { name: /team & permissions/i })).toBeNull();
   });
 
@@ -516,58 +505,57 @@ describe("the staff console entry", () => {
     mockFetchMyRole.mockResolvedValue({ role: "MODERATOR", isAdmin: false, capabilities: ["feedback_review"] });
     renderSettings();
     await waitFor(() => expect(mockFetchMyRole).toHaveBeenCalled());
-    expect(screen.queryByRole("link", { name: "Review reports" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /staff console/i })).toBeNull();
   });
 
   it("offers report review to ADMIN even without an enumerated capability list", async () => {
     mockFetchMyRole.mockResolvedValue({ role: "ADMIN", isAdmin: true, capabilities: [] });
     renderSettings();
-    expect(await screen.findByRole("link", { name: "Review reports" })).toBeTruthy();
+    expect(await screen.findByRole("link", { name: /staff console/i })).toBeTruthy();
   });
 
   it("is hidden from an ordinary reader", async () => {
     renderSettings();
     await waitFor(() => expect(mockFetchMyRole).toHaveBeenCalled());
     expect(screen.queryByRole("link", { name: /team & permissions/i })).toBeNull();
-    expect(screen.queryByRole("region", { name: "Moderation" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Staff" })).toBeNull();
   });
 
-  it("is shown to an admin, pointing at the team console", async () => {
+  it("is shown to an admin, pointing at the staff hub", async () => {
     mockFetchMyRole.mockResolvedValue({
       role: "ADMIN",
       isAdmin: true,
       capabilities: ["reports_review", "audit_read"],
     });
     renderSettings();
-    const row = await screen.findByRole("link", { name: /team & permissions/i });
-    expect(row.getAttribute("href")).toBe("/settings/team");
+    const row = await screen.findByRole("link", { name: /staff console/i });
+    expect(row.getAttribute("href")).toBe("/settings/staff");
   });
 
   it("refreshes server authority after explicit role acceptance without a page reload", async () => {
     renderSettings();
     await waitFor(() => expect(mockFetchMyRole).toHaveBeenCalled());
-    expect(screen.queryByRole("link", { name: /team & permissions/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /staff console/i })).toBeNull();
     mockFetchMyRole.mockResolvedValue({role:"ADMIN",isAdmin:true,capabilities:[]});
     fireEvent(window, new Event("findback:role-changed"));
-    expect(await screen.findByRole("link", { name: /team & permissions/i })).toBeTruthy();
+    expect(await screen.findByRole("link", { name: /staff console/i })).toBeTruthy();
   });
 
-  it("is hidden from a moderator, whose destinations are admin-only", async () => {
+  it("offers the hub to a moderator with a review capability", async () => {
     mockFetchMyRole.mockResolvedValue({
       role: "MODERATOR",
       isAdmin: false,
       capabilities: ["reports_review"],
     });
     renderSettings();
-    await waitFor(() => expect(mockFetchMyRole).toHaveBeenCalled());
-    expect(screen.queryByRole("link", { name: /team & permissions/i })).toBeNull();
+    expect(await screen.findByRole("link", { name: /staff console/i })).toBeTruthy();
   });
 
   it("stays hidden when the role cannot be read", async () => {
     mockFetchMyRole.mockRejectedValue(new Error("offline"));
     renderSettings();
     await waitFor(() => expect(mockFetchMyRole).toHaveBeenCalled());
-    expect(screen.queryByRole("link", { name: /team & permissions/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /staff console/i })).toBeNull();
   });
 });
 

@@ -54,6 +54,7 @@ import { clearUserScopedLocalState } from "./services/userScopedState";
 import { aiCredentials } from "./services/aiCredentials";
 import { purgeMessagingAccount } from "./services/messaging/runtime";
 import { readRememberedAccounts, rememberAccount, refreshRememberedAccount, removeRememberedAccount, type RememberedAccount } from "./services/rememberedAccounts";
+import { addAccountIntentAccount, clearAddAccountIntent } from "./utils/addAccountIntent";
 import {
   beginConfirmedAccountDeletion, finishAccountAuthCleanup, inspectPendingAccountDeletions,
   type PendingAccountDeletion,
@@ -204,6 +205,11 @@ export function AuthProvider({ children, boot = true }: { children: ReactNode; b
     if (profileAdoptionBlocked.current || (sdkObserved.current && sdkAccount.current !== accountId)) throw new AuthAccountChangedError();
   }, []);
   const setUserState = useCallback((next: PublicUser | null) => {
+    // A different account finishing sign-in ends an "add another account"
+    // attempt. Same-account refreshes and boot restores leave it untouched, so
+    // a provider round trip keeps its intent until the second account lands.
+    const addAccountOrigin = addAccountIntentAccount();
+    if (next !== null && addAccountOrigin !== null && addAccountOrigin !== next.id) clearAddAccountIntent();
     if (next !== null) assertAccount(next.id);
     if (next !== null) clearSessionExpired();
     if (next !== null) lastAccount.current = next.id;

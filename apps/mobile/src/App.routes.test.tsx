@@ -576,7 +576,6 @@ describe("consumer route map", () => {
     ["/notifications", "Notifications screen"],
     ["/search", "Search screen"],
     ["/report", "CreateReport screen"],
-    ["/ai-models", "LocalIntelligence screen"],
   ])("renders signed route %s inside the shell", (route, markerText) => {
     signedIn();
     renderAt(route);
@@ -604,6 +603,17 @@ describe("consumer route map", () => {
     signedIn();
     renderAt("/offline-ai");
     expect(screen.getByText("LocalIntelligence screen")).toBeTruthy();
+  });
+
+  it("routes the legacy /ai-models redirect into the canonical settings window", async () => {
+    // `/ai-models` is a legacy native URL: the redirect lands on the canonical
+    // destination, which the shell opens in its floating settings window rather
+    // than as a page inside the nav shell.
+    signedIn();
+    renderAt("/ai-models");
+    expect(await screen.findByText("LocalIntelligence screen")).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Settings" })).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
   });
 
   it("renders the public shared report without auth", () => {

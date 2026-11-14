@@ -68,9 +68,10 @@ describe("the navigation catalogue", () => {
     // unknown to the consumer catalogue: neither may resolve to a route.
     expect(resolveDestination("cloud-connections", WEB)).toEqual({ kind: "unavailable", reason: "unknown" });
     expect(resolveDestination("moderation-queue", WEB)).toEqual({ kind: "unavailable", reason: "unknown" });
-    expect(resolveDestination("account", { platform: "web", signedIn: false, capabilities: [] }))
+    expect(resolveDestination("account", WEB)).toEqual({ kind: "unavailable", reason: "unknown" });
+    expect(resolveDestination("sign-in-security", { platform: "web", signedIn: false, capabilities: [] }))
       .toEqual({ kind: "unavailable", reason: "auth" });
-    expect(resolveDestination("account", { platform: "android", signedIn: true, capabilities: [] }))
-      .toEqual({ kind: "available", route: "/profile" });
+    expect(resolveDestination("sign-in-security", { platform: "android", signedIn: true, capabilities: [] }))
+      .toEqual({ kind: "available", route: "/settings/account" });
   });
 });

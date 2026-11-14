@@ -6,6 +6,7 @@ import { fetchMyRole } from "../services/roles";
 import { Splash } from "../screens/Splash";
 import { Onboarding } from "../screens/Onboarding";
 import { getAuthReturnRoute, rememberAuthReturnTo } from "../utils/authReturnTo";
+import { addAccountIntentAccount } from "../utils/addAccountIntent";
 import {
   hasPendingReportLink,
   isOnboardingComplete,
@@ -75,8 +76,14 @@ function ScopedAdmin({ children }: { children: ReactNode }) {
 
 export function GuestOnly({ children }: { children: ReactNode }) {
   const { user, booting, bootError, needsProfile } = useAuth();
+  const [params] = useSearchParams();
   if (booting || (bootError && !user)) return <Splash />;
-  if (user) return <Navigate to={getAuthReturnRoute()} replace />;
+  // Adding a second account keeps the current session signed in, so the guest
+  // gateway must stay open for the account that asked to add one. Every other
+  // signed-in visit still goes back to the app.
+  const addingAccount = params.get("addAccount") === "1"
+    || (user !== null && addAccountIntentAccount() === user.id);
+  if (user && !addingAccount) return <Navigate to={getAuthReturnRoute()} replace />;
   // W0-C (W0-QA defect 1): restart-while-incomplete. A kept session with no
   // Norfold profile must resume at completion, ahead of the pending-link and
   // onboarding branches below (completion itself resumes the pending link).

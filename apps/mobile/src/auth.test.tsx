@@ -32,7 +32,10 @@ const hoisted = vi.hoisted(() => ({
   readHasAccountPassword: vi.fn(),
   sendAccountPasswordCode: vi.fn(),
   saveAccountPasswordWithCode: vi.fn(),
-  session: { user: { id: "00000000-0000-4000-8000-000000000001", email: "alice@example.com" }, access_token: "token" },
+  session: {
+    user: { id: "00000000-0000-4000-8000-000000000001", email: "alice@example.com" },
+    access_token: "token", refresh_token: "refresh-token", expires_at: 2_000_000_000,
+  },
 }));
 
 vi.mock("@capacitor/core", () => ({
@@ -56,6 +59,7 @@ vi.mock("./services/auth", () => ({
 
 vi.mock("./services/supabaseClient", () => ({
   hasStoredAuthSession: () => hoisted.storedSession,
+  detachSupabaseAccount: vi.fn(async () => {}),
   getSupabase: () => ({
     auth: {
       getSession: async () => ({ data: { session: hoisted.session }, error: null }),

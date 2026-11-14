@@ -15,11 +15,19 @@ export function AuthShell({
   title,
   supporting,
   illustration,
+  backTo = "/",
+  backLabel = "Back to Norfold",
+  onBack,
   children,
 }: {
   title: string;
   supporting?: string;
   illustration?: boolean;
+  /** Where the header's way back leads. Defaults to the public home. */
+  backTo?: string;
+  backLabel?: string;
+  /** Optional side effect for the way back (e.g. cancelling a flow). */
+  onBack?: () => void;
   children: ReactNode;
 }) {
   return (
@@ -34,7 +42,14 @@ export function AuthShell({
           <BrandMark size={44} shape="tile" alt="" />
           <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
         </Link>
-        <Link to="/" state={{ showPublic: true }} className="inline-flex min-h-11 items-center text-sm text-primary">Back to Norfold</Link>
+        <Link
+          to={backTo}
+          state={backTo === "/" ? { showPublic: true } : undefined}
+          onClick={onBack}
+          className="inline-flex min-h-11 items-center text-sm text-primary"
+        >
+          {backLabel}
+        </Link>
         {illustration && (
           <span
             aria-hidden="true"

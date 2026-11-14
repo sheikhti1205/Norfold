@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { Link } from "react-router";
-import { ChevronRight, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { NavLayoutCard, SettingsGroup, SettingsPage, SettingsRow, SettingsSearch, ThemeCard } from "../../components/settings";
 import { AccountMenu } from "../../components/AccountMenu";
-import { UserAvatar } from "../../components/UserAvatar";
+import { SettingsProfileHeader } from "../../screens/settings/SettingsProfileHeader";
 import { settingsDestinations, settingsSectionFor, type SettingsSection } from "../../services/destinations";
-import { accountSummary, accessibilitySummary, appearanceSummary, mediaSummary, ROW_PRESENTATION } from "../../screens/Settings";
+import { accessibilitySummary, appearanceSummary, mediaSummary, ROW_PRESENTATION } from "../../screens/Settings";
 import { feedLayoutSummary } from "../../screens/FeedLayoutSettings";
 import { resolveFeedLayout, useViewportWidth } from "../../components/responsive";
 import { APP_VERSION } from "../../services/appCapabilities";
@@ -13,9 +12,25 @@ import { FixtureFrame, FixtureSection, type FixtureVariant } from "../FixtureSec
 import "../../screens/Settings.css";
 import "../../screens/AppearanceSettings.css";
 import "../../components/AccountMenu.css";
+import type { PublicUser } from "@norfold/shared";
+
+const FIXTURE_USER: PublicUser = {
+  id: "fixture-user",
+  username: "account",
+  email: "account@example.com",
+  phone: "+10000000000",
+  emailVerified: true,
+  phoneVerified: false,
+  avatarUrl: null,
+  displayName: "Account",
+  bio: null,
+  locationLabel: null,
+  createdAt: "2026-01-01T00:00:00.000Z",
+};
 
 const titles: Record<string, string> = {
-  "recovered-items": "Recovered items", account: "Account & verification", devices: "Devices", backup: "Chat backup",
+  "recovered-items": "Recovered items", "sign-in-security": "Sign-in & security",
+  devices: "Devices", backup: "Chat backup",
   "chat-preferences": "Chat preferences", appearance: "Appearance", notifications: "Notification preferences",
   accessibility: "Accessibility", "feed-layout": "Feed layout", "local-intelligence": "Local tools", ai: "Optional AI Chat",
   privacy: "Privacy & safety", feedback: "Send feedback", media: "Media & uploads", diagnostics: "Diagnostics",
@@ -23,12 +38,11 @@ const titles: Record<string, string> = {
   help: "Help & guide", replay: "Replay introduction", updates: "Updates & version history", about: "About Norfold",
 };
 const sections: readonly [SettingsSection, string | undefined][] = [
-  ["updates", undefined], ["account", "Account"], ["preferences", "Preferences"], ["intelligence", "Intelligence"],
+  ["updates", undefined], ["account", "Account"], ["chat", "Chat"], ["preferences", "Preferences"], ["intelligence", "Intelligence"],
   ["privacy", "Privacy"], ["more", "More"], ["advanced", "Advanced"], ["troubleshooting", "Troubleshooting"],
   ["legal", "Legal"], ["helpAbout", "Help & about"],
 ];
 const values: Record<string, string> = {
-  account: accountSummary({ emailVerified: true, phoneVerified: false }),
   appearance: appearanceSummary("system", "blue"), notifications: "Review settings",
   accessibility: accessibilitySummary("standard", "system"), media: mediaSummary(false), about: APP_VERSION,
 };
@@ -38,11 +52,7 @@ function SettingsIndex() {
   const viewportWidth = useViewportWidth();
   const rows = settingsDestinations({ platform: "web", signedIn: true, capabilities: [] });
   return <SettingsPage title="Settings" autoFocus={false} className="fb-settings-root">
-    <Link to="/profile" className="fb-settings-profile">
-      <UserAvatar avatarUrl={null} username="Account" size={64} />
-      <span className="fb-settings-profile-copy"><span className="fb-settings-profile-name">Account</span></span>
-      <span className="fb-settings-profile-edit">View profile <ChevronRight size={18} aria-hidden="true" /></span>
-    </Link>
+    <SettingsProfileHeader user={FIXTURE_USER} />
     <SettingsSearch query={query} onQueryChange={setQuery} />
     {sections.map(([section, title]) => <SettingsGroup key={section} title={title}>
       {rows.filter(row => settingsSectionFor(row.id) === section && (titles[row.id] ?? row.title).toLowerCase().includes(query.toLowerCase())).map(row => {

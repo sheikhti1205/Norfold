@@ -8,7 +8,6 @@ import {
   Bell,
   CircleHelp,
   Cpu,
-  Flag,
   Info,
   LayoutGrid,
   LogOut,
@@ -24,9 +23,8 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import type { PublicUser } from "@norfold/shared";
 import { useAuth } from "../auth";
-import { readRememberedAccounts, rememberAccount, removeRememberedAccount } from "../services/rememberedAccounts";
+import { readRememberedAccounts } from "../services/rememberedAccounts";
 import { readAccountSession } from "../services/accountSessions";
 import { announce } from "../components/LiveRegion";
 import {
@@ -73,7 +71,6 @@ import "./Settings.css";
  */
 export const ROW_PRESENTATION: Record<string, { title: string; icon: LucideIcon; iconTone: SettingIconTone; detail?: boolean }> = {
   "recovered-items": { title: "Recovered items", icon: RotateCcw, iconTone: "success", detail: true },
-  account: { title: "Profile & security", icon: UserRound, iconTone: "account" },
   devices: { title: "Devices", icon: MonitorSmartphone, iconTone: "teal", detail: true },
   "chat-preferences": { title: "Chat", icon: MessageSquare, iconTone: "neutral", detail: true },
   appearance: { title: "Appearance", icon: Palette, iconTone: "appearance" },
@@ -132,15 +129,6 @@ export function keptOnDevice(accountId: string): boolean {
   } catch {
     return false;
   }
-}
-
-/** Live verification state for the Account & verification row. */
-export function accountSummary(
-  user: Pick<PublicUser, "emailVerified" | "phoneVerified">,
-): string {
-  if (user.emailVerified && user.phoneVerified) return "Verified";
-  if (user.emailVerified || user.phoneVerified) return "Partially verified";
-  return "Unverified";
 }
 
 /**
@@ -208,11 +196,7 @@ function SettingsNavigation({ detailSelected }: { detailSelected: boolean }) {
     // passwordless.
     setRetention({ id: userId, keep: keptOnDevice(userId) });
   }, [userId]);
-  // The staff console entry is offered only to an account the SERVER says is
-  // an ADMIN. An unreadable role leaves it hidden: the server refuses
-  // everything an ordinary account asks for, so the client never offers what
-  // would be refused. A moderator is staff, but every console destination is
-  // admin-only, so a moderator gets no entry here (not a row that bounces).
+  // An unreadable server role leaves the staff console hidden.
   const [roleSnapshot, setRoleSnapshot] = useState<{ userId: string; role: MyRole } | null>(null);
   // Hide previous-account authority on the first render, before effects run.
   const staffRole = roleSnapshot?.userId === user?.id ? roleSnapshot?.role : null;
@@ -272,10 +256,8 @@ function SettingsNavigation({ detailSelected }: { detailSelected: boolean }) {
     capabilities: [],
   };
   const matches = trimmed ? searchSettings(trimmed, destinationContext) : null;
-  // Staff console entry. Moderators are staff, but every console destination
-  // is admin-only, so offering them a row would be a tap that bounces back.
-  // The row appears for an ADMIN only.
-  const isStaff = staffRole?.role === "ADMIN";
+  const isStaff = staffRole?.role === "ADMIN" || staffRole?.isAdmin ||
+    staffRole?.capabilities.some(capability => ["reports_review", "appeals_review", "feedback_read"].includes(capability));
 
   // Rows and the search index are generated from the same catalogue, filtered
   // for this caller, so no row can advertise a route the catalogue does not
@@ -283,7 +265,6 @@ function SettingsNavigation({ detailSelected }: { detailSelected: boolean }) {
   const rows = settingsDestinations(destinationContext);
   const rowValue = (id: string): string | undefined => {
     switch (id) {
-      case "account": return accountSummary(user);
       case "appearance": return appearanceSummary(theme, settings.accent, settings.accentSource);
       case "notifications": return notifValue ?? "Review settings";
       case "accessibility": return accessibilitySummary(settings.textScale, settings.reduceMotion);
@@ -364,30 +345,14 @@ function SettingsNavigation({ detailSelected }: { detailSelected: boolean }) {
             <SettingsGroup title="Privacy">{inSection("privacy")}</SettingsGroup>
           )}
           {isStaff && (
-            <SettingsGroup title="Moderation">
+            <SettingsGroup title="Staff">
               <SettingsRow
-                title="Team & permissions"
-                description="Who can moderate, and what each of them may do."
+                title="Staff console"
+                description="Reports, appeals, feedback and team permissions."
                 icon={UserCog}
                 iconTone="privacy"
-                route="/settings/team"
+                route="/settings/staff"
               />
-            </SettingsGroup>
-          )}
-          {(staffRole?.isAdmin || staffRole?.capabilities.includes("reports_review")) && (
-            <SettingsGroup title="Reports to review">
-              <SettingsRow
-                title="Review reports"
-                icon={Flag}
-                iconTone="privacy"
-                route="/settings/moderation/queue"
-              />
-            </SettingsGroup>
-          )}
-          {(staffRole?.isAdmin || staffRole?.capabilities.includes("appeals_review") || staffRole?.capabilities.includes("feedback_read")) && (
-            <SettingsGroup title="Staff reviews">
-              {(staffRole?.isAdmin || staffRole?.capabilities.includes("appeals_review")) && <SettingsRow title="Review appeals" icon={Scale} iconTone="privacy" route="/settings/moderation/appeals" />}
-              {(staffRole?.isAdmin || staffRole?.capabilities.includes("feedback_read")) && <SettingsRow title="Review feedback" icon={MessageSquare} iconTone="help" route="/settings/moderation/feedback" />}
             </SettingsGroup>
           )}
           <SettingsGroup title="More">

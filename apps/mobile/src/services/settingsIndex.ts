@@ -18,7 +18,6 @@ import {
   Scale,
   ShieldCheck,
   Sparkles,
-  UserRound,
   UserRoundX,
   Users,
   type LucideIcon,
@@ -89,7 +88,6 @@ type Presentation = Readonly<{
 /** Icon and tone only. Never a title, route or alias. */
 const PRESENTATION: Record<string, Presentation> = {
   "recovered-items": { icon: RotateCcw, iconTone: "success" },
-  account: { icon: UserRound, iconTone: "account" },
   "sign-in-security": { icon: KeyRound, iconTone: "privacy" },
   devices: { icon: MonitorSmartphone, iconTone: "teal" },
   backup: { icon: CloudUpload, iconTone: "blue" },
