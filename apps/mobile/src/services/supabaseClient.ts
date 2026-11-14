@@ -1,4 +1,4 @@
-import { createClient, navigatorLock, processLock, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { storage } from "./storage";
 import { createAccountScopedAuthStorage } from "./accountScopedAuthStorage";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "./buildConfig";
@@ -77,7 +77,9 @@ export function getSupabase(): SupabaseClient {
     auth: {
       storageKey,
       storage: authPersistence.storage,
-      lock: globalThis.navigator?.locks ? navigatorLock : processLock,
+      // No explicit `lock`: @supabase/auth-js 2.116 coordinates refreshes
+      // without navigator.locks, and passing the retired navigatorLock lets a
+      // stuck cross-tab lock queue freeze getSession() until boot times out.
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: false,
