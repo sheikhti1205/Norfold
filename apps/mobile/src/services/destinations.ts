@@ -80,16 +80,6 @@ export const DESTINATIONS: readonly Destination[] = [
     platforms: ["web", "android"],
   },
   {
-    id: "account",
-    route: "/profile",
-    title: "Profile & security",
-    summary: "Your name, photo, sign-in methods, verification and account safety.",
-    keywords: ["profile", "username", "email", "phone", "avatar", "photo", "verification", "verified", "google", "telegram", "drive", "manage", "password", "security", "sign", "in", "contact", "rules", "delete", "log", "out"],
-    category: "account",
-    auth: "signed-in",
-    platforms: ["web", "android"],
-  },
-  {
     id: "sign-in-security",
     route: "/settings/account",
     title: "Sign-in & security",
@@ -441,7 +431,6 @@ export const DESTINATIONS: readonly Destination[] = [
 /** Settings placement, in reading order per section. */
 export const SETTINGS_PLACEMENT: readonly { id: string; section: SettingsSection }[] = [
   { id: "recovered-items", section: "account" },
-  { id: "account", section: "account" },
   { id: "devices", section: "account" },
   { id: "chat-preferences", section: "chat" },
   { id: "appearance", section: "preferences" },

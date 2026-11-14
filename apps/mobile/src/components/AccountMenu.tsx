@@ -11,6 +11,8 @@ import { VerifiedBadge } from "./VerifiedBadge";
 import {
   readRememberedAccounts, subscribeRememberedAccounts, type RememberedAccount,
 } from "../services/rememberedAccounts";
+import { beginAddAccountIntent } from "../utils/addAccountIntent";
+import { rememberAuthReturnTo } from "../utils/authReturnTo";
 import { PersonalizationPanel, SwitchAccountPanel } from "./AccountPreviews";
 import "./AccountMenu.css";
 
@@ -34,7 +36,7 @@ type PanelId = "switch" | "personalization" | null;
  * card, so nothing is ever painted beside it.
  */
 export function AccountMenu({ onOpenSettings = () => {} }: { onOpenSettings?: (path?: string) => void }) {
-  const { user, logout, switchAccount } = useAuth();
+  const { user, logout, switchAccount, setAccountKept } = useAuth();
   const navigate = useNavigate();
   const wide = useWideViewport();
   const [open, setOpen] = useState(false);
@@ -87,6 +89,22 @@ export function AccountMenu({ onOpenSettings = () => {} }: { onOpenSettings?: (p
       }
     }, () => setSwitchError("Could not switch accounts. Try again.")).finally(() => setSwitching(null));
   };
+  // Adding an account keeps the current one signed in: the session is saved to
+  // the device vault first, so switching back never asks for its password. The
+  // gateway then signs in the second account; signing a different account in
+  // clears the intent (auth.tsx), and Cancel returns to Settings.
+  const addAccount = () => {
+    if (!user || switching) return;
+    setSwitching(user.id);
+    setSwitchError(null);
+    void setAccountKept(user.id, true).then(() => {
+      rememberAuthReturnTo("/settings");
+      beginAddAccountIntent(user.id);
+      closeAll();
+      navigate("/auth?addAccount=1");
+    }, () => setSwitchError("Could not add another account. Try again."))
+      .finally(() => setSwitching(null));
+  };
 
   return <div className="fb-account-rail">
     <DialogTrigger isOpen={open} onOpenChange={(next) => { setOpen(next); if (!next) setPanel(null); }}>
@@ -111,8 +129,7 @@ export function AccountMenu({ onOpenSettings = () => {} }: { onOpenSettings?: (p
         <Dialog aria-label="Account" className="fb-account-dialog">
           {panel === "switch" ? <PanelShell title="Switch account" onBack={() => setPanel(null)}>
             <SwitchAccountPanel current={{ id: user?.id ?? "", name, username: user?.username ?? "" }} accounts={others}
-              switching={switching} error={switchError} onSwitch={switchTo}
-              onAdd={() => { closeAll(); navigate("/auth"); }} />
+              switching={switching} error={switchError} onSwitch={switchTo} onAdd={addAccount} />
           </PanelShell> : panel === "personalization" ? <PanelShell title="Personalization" onBack={() => setPanel(null)}>
             <PersonalizationPanel onOpenPage={() => openDestination("/settings/appearance")} />
           </PanelShell> : <div className="fb-account-list">

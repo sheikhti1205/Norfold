@@ -6,7 +6,7 @@ import { consumeBackIntercept, resetBackInterceptors } from "../backNavigation";
 
 const { authMock, pendingMock, servicesMock } = vi.hoisted(() => ({
   authMock: {
-    user: null as null,
+    user: null as null | { id: string; username: string; displayName: string },
     booting: false,
     pendingEmail: null as null | string,
     login: vi.fn(),
@@ -28,6 +28,7 @@ import { AuthGateway } from "../../screens/AuthGateway";
 import { SignIn } from "../../screens/SignIn";
 import { Register } from "../../screens/Register";
 import { rememberAuthReturnTo } from "../../utils/authReturnTo";
+import { addAccountIntentAccount, beginAddAccountIntent } from "../../utils/addAccountIntent";
 
 const mockCheckUsername = vi.mocked(checkUsername);
 
@@ -58,6 +59,7 @@ function renderGateway(ui: React.ReactNode = <AuthGateway />, path = "/auth") {
         <Route path="/register" element={ui} />
         <Route path="/posts/:id" element={<p>Shared report destination</p>} />
         <Route path="/chats/:id" element={<p>Protected conversation destination</p>} />
+        <Route path="/settings" element={<p>Settings destination</p>} />
         <Route path="/" element={<p>Home destination</p>} />
         <Route path="/verify" element={<p>Verify destination</p>} />
         <Route path="/forgot" element={<p>Forgot destination</p>} />
@@ -450,6 +452,43 @@ describe("AuthGateway Google entry (W0-C S3, appended)", () => {  it("shows Cont
       __resetGoogleSignInSeams();
       delete (authMock as unknown as { setUser?: unknown }).setUser;
     }
+  });
+});
+
+describe("AuthGateway add another account", () => {
+  const riley = { id: "u1", username: "riley", displayName: "Riley" };
+
+  it("keeps the signed-in account on the gateway and says it stays signed in", () => {
+    authMock.user = riley;
+    beginAddAccountIntent(riley.id);
+    renderGateway(<AuthGateway />, "/auth?addAccount=1");
+    expect(screen.getByRole("heading", { level: 1, name: "Add another account" })).toBeTruthy();
+    expect(screen.getByText("Riley stays signed in on this device. Sign in to the account you want to add.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Cancel" })).toBeTruthy();
+    expect(screen.queryByText("Home destination")).toBeNull();
+  });
+
+  it("cancels back to the remembered destination and clears the intent", async () => {
+    authMock.user = riley;
+    beginAddAccountIntent(riley.id);
+    rememberAuthReturnTo("/settings");
+    renderGateway(<AuthGateway />, "/auth?addAccount=1");
+    fireEvent.click(screen.getByRole("link", { name: "Cancel" }));
+    expect(await screen.findByText("Settings destination")).toBeTruthy();
+    expect(addAccountIntentAccount()).toBeNull();
+  });
+
+  it("sends a signed-in account home when the intent belongs to another account", () => {
+    authMock.user = riley;
+    beginAddAccountIntent("someone-else");
+    renderGateway(<AuthGateway />, "/auth");
+    expect(screen.getByText("Home destination")).toBeTruthy();
+  });
+
+  it("keeps the ordinary signed-in redirect without an add intent", () => {
+    authMock.user = riley;
+    renderGateway(<AuthGateway />, "/auth");
+    expect(screen.getByText("Home destination")).toBeTruthy();
   });
 });
 

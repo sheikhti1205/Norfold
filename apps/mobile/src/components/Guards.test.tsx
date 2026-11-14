@@ -15,6 +15,7 @@ vi.mock("../auth", () => ({
 
 import { GuestOnly, OnboardingRoute, RequireAuth } from "./Guards";
 import { ONBOARDING_STORAGE_KEY, ONBOARDING_VERSION } from "../services/onboarding";
+import { beginAddAccountIntent } from "../utils/addAccountIntent";
 
 const origin = "https://findbackapp.social";
 const postId = "5b6f7c8d-1234-4abc-8def-123456789012";
@@ -114,6 +115,29 @@ describe("GuestOnly", () => {
     expect(screen.getByText("Auth form")).toBeTruthy();
     expect(location()).toBe("/guarded");
     expect(localStorage.getItem(ONBOARDING_STORAGE_KEY)).toBeNull();
+  });
+
+  it("keeps the gateway open for the signed-in account that is adding another", () => {
+    auth.user = { id: "u1" };
+    beginAddAccountIntent("u1");
+    renderGuard("/guarded", <GuestOnly><p>Auth form</p></GuestOnly>);
+    expect(screen.getByText("Auth form")).toBeTruthy();
+    expect(location()).toBe("/guarded");
+  });
+
+  it("honours the explicit add-account route for the signed-in account", () => {
+    auth.user = { id: "u1" };
+    renderGuard("/guarded?addAccount=1", <GuestOnly><p>Auth form</p></GuestOnly>);
+    expect(screen.getByText("Auth form")).toBeTruthy();
+    expect(location()).toBe("/guarded?addAccount=1");
+  });
+
+  it("still sends a signed-in account home when the add intent belongs to another account", () => {
+    auth.user = { id: "u1" };
+    beginAddAccountIntent("u2");
+    renderGuard("/guarded", <GuestOnly><p>Auth form</p></GuestOnly>);
+    expect(screen.queryByText("Auth form")).toBeNull();
+    expect(location()).toBe("/");
   });
 
   it("renders for a returning guest whose onboarding is complete", () => {

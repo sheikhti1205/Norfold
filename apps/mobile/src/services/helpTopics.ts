@@ -141,7 +141,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     summary: "What is removed, and which safety records remain.",
     keywords: ["delete", "account", "remove", "erase", "close account"],
     group: "Your account",
-    destinationId: "account",
+    destinationId: "sign-in-security",
     platforms: ["web", "android"],
     body: [
       "Deleting your account removes your reports and photos.",

@@ -1,18 +1,22 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { AccountMenu } from "./AccountMenu";
+import { addAccountIntentAccount } from "../utils/addAccountIntent";
+import { peekAuthReturnTo } from "../utils/authReturnTo";
 
 const state = vi.hoisted(() => ({
   logout: vi.fn(),
   switchAccount: vi.fn(),
+  setAccountKept: vi.fn(),
   accounts: [] as { id: string; username: string; displayName: string; maskedEmail: string; loginEmail: string; lastUsedAt: number }[],
 }));
 vi.mock("../auth", () => ({ useAuth: () => ({
   user: { id: "1", username: "riley", displayName: "Riley", emailVerified: true },
   logout: state.logout,
   switchAccount: state.switchAccount,
+  setAccountKept: state.setAccountKept,
 }) }));
 vi.mock("../services/rememberedAccounts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/rememberedAccounts")>();
@@ -29,10 +33,16 @@ const other = {
 };
 const onOpenSettings = vi.fn();
 
-beforeEach(() => { state.accounts = []; onOpenSettings.mockReset(); });
+beforeEach(() => { state.accounts = []; onOpenSettings.mockReset(); sessionStorage.clear(); });
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
-function renderMenu() { render(<MemoryRouter><AccountMenu onOpenSettings={onOpenSettings} /></MemoryRouter>); }
+function LocationProbe() {
+  const l = useLocation();
+  return <output data-testid="location">{l.pathname}{l.search}</output>;
+}
+function renderMenu() {
+  render(<MemoryRouter><LocationProbe /><AccountMenu onOpenSettings={onOpenSettings} /></MemoryRouter>);
+}
 async function openMenu() {
   fireEvent.click(screen.getByRole("button", { name: "Account, Riley" }));
   return screen.findByRole("dialog", { name: "Account" });
@@ -127,6 +137,30 @@ describe("account menu", () => {
     fireEvent.click(await within(dialog).findByRole("button", { name: /Switch to Sam/ }));
     await waitFor(() => expect(state.switchAccount).toHaveBeenCalledWith(other));
     expect(state.logout).not.toHaveBeenCalled();
+  });
+
+  it("keeps the current account signed in before opening the add-account gateway", async () => {
+    state.setAccountKept.mockResolvedValue(undefined);
+    renderMenu();
+    const dialog = await openMenu();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Riley/ }));
+    fireEvent.click(await within(dialog).findByRole("button", { name: /Add another account/ }));
+    await waitFor(() => expect(state.setAccountKept).toHaveBeenCalledWith("1", true));
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/auth?addAccount=1"));
+    expect(addAccountIntentAccount()).toBe("1");
+    expect(peekAuthReturnTo()).toBe("/settings");
+    expect(state.logout).not.toHaveBeenCalled();
+  });
+
+  it("stays on the account panel when the current account cannot be kept", async () => {
+    state.setAccountKept.mockRejectedValue(new Error("storage full"));
+    renderMenu();
+    const dialog = await openMenu();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Riley/ }));
+    fireEvent.click(await within(dialog).findByRole("button", { name: /Add another account/ }));
+    expect((await within(dialog).findByRole("alert")).textContent).toBe("Could not add another account. Try again.");
+    expect(screen.getByTestId("location").textContent).toBe("/");
+    expect(addAccountIntentAccount()).toBeNull();
   });
 
   it("shows an error when switching cannot start", async () => {

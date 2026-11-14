@@ -15,6 +15,7 @@ import { MyAppeals } from "./MyAppeals";
 import { FeedbackForm } from "./FeedbackForm";
 import { Returns } from "./Returns";
 import { ModerationQueue } from "./ModerationQueue";
+import { ModerationHub } from "./ModerationHub";
 import { StaffAppeals, StaffAppeal } from "./StaffAppeals";
 import { StaffFeedback, StaffFeedbackDetail } from "./StaffFeedback";
 import { AiSettings } from "./AiSettings";
@@ -63,6 +64,7 @@ export function settingsRouteElements() {
     <Route path="/settings/privacy/appeals" element={<MyAppeals />} />
     <Route path="/settings/feedback" element={<FeedbackForm />} />
     <Route path="/settings/returns" element={<Returns />} />
+    <Route path="/settings/staff" element={<ModerationHub />} />
     <Route path="/settings/moderation/queue" element={<RequireCapability capability="reports_review"><ModerationQueue /></RequireCapability>} />
     <Route path="/settings/moderation/appeals" element={<StaffAppeals />} />
     <Route path="/settings/moderation/appeals/:appealId" element={<StaffAppeal />} />

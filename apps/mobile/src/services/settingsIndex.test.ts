@@ -15,8 +15,6 @@ describe("settingsIndex", () => {
         "/settings/about",
         "/settings/updates",
         "/settings/accessibility",
-        // Profile is the identity hub and owns the merged account row.
-        "/profile",
         // Device management (packet 05/06 consumer surface) postdates the
         // 2026-10-03 route map like the rows above.
         "/settings/devices",
@@ -125,7 +123,7 @@ describe("settingsIndex", () => {
 
   it("groups entries under the W4 root structure", () => {
     const groups = new Map(SETTINGS_INDEX.map((entry) => [entry.id, entry.group]));
-    expect(groups.get("account")).toBe("Account");
+    expect(groups.has("account")).toBe(false);
     for (const id of ["appearance", "accessibility", "notifications"]) {
       expect(groups.get(id)).toBe("Preferences");
     }

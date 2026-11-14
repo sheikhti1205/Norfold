@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router";
+import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "../auth";
 import { registerBackInterceptor } from "../components/backNavigation";
@@ -8,6 +8,7 @@ import { TextField } from "../components/Fields";
 import { announce } from "../components/LiveRegion";
 import { motionDurations, motionEasings } from "../components/uiMotion";
 import { getAuthReturnRoute } from "../utils/authReturnTo";
+import { addAccountIntentAccount, clearAddAccountIntent } from "../utils/addAccountIntent";
 import { clearSessionExpired, SESSION_EXPIRED_MESSAGE, sessionExpiredPending } from "../services/sessionExpiry";
 import { AuthShell } from "../components/auth/AuthShell";
 import {
@@ -48,6 +49,15 @@ export function AuthGateway({ initialMode = "email", initialEmail = "" }: AuthGa
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [params] = useSearchParams();
+  // The account that opened this gateway to add a second one. It stays signed
+  // in, so this page must not bounce it straight back to the app; once a
+  // different account signs in the gateway is finished.
+  const entryUserId = useRef(user?.id ?? null);
+  const addingAccount = params.get("addAccount") === "1"
+    || (user !== null && addAccountIntentAccount() === user.id);
+  const addingFor = addingAccount && user && entryUserId.current === user.id ? user : null;
+  const addingName = addingFor ? addingFor.displayName?.trim() || addingFor.username : "";
   // X1: the external OAuth callback bridge routes here with a failure marker.
   const googleError = (location.state as { googleError?: string } | null)?.googleError ?? null;
   const [stage, setStage] = useState<Stage>(initialMode);
@@ -93,7 +103,7 @@ export function AuthGateway({ initialMode = "email", initialEmail = "" }: AuthGa
     if (sessionExpired) announce(SESSION_EXPIRED_MESSAGE);
   }, [sessionExpired]);
 
-  if (user) return <Navigate to={getAuthReturnRoute()} replace />;
+  if (user && !addingFor) return <Navigate to={getAuthReturnRoute()} replace />;
 
   /**
    * W0-C (S3) Google handoff. The button already ran the S1+S2 exchange:
@@ -127,15 +137,22 @@ export function AuthGateway({ initialMode = "email", initialEmail = "" }: AuthGa
 
   return (
     <AuthShell
-      title={stage === "email" ? "Welcome to Norfold" : stage === "signin" ? "Sign in" : "Create your account"}
+      title={addingFor
+        ? "Add another account"
+        : stage === "email" ? "Welcome to Norfold" : stage === "signin" ? "Sign in" : "Create your account"}
       supporting={
-        stage === "email"
-          ? "Sign in or create an account to report and recover lost items."
-          : stage === "signin"
-            ? "Welcome back — sign in to continue."
-            : "Your contact details help reunite items with their owners."
+        addingFor
+          ? `${addingName} stays signed in on this device. Sign in to the account you want to add.`
+          : stage === "email"
+            ? "Sign in or create an account to report and recover lost items."
+            : stage === "signin"
+              ? "Welcome back — sign in to continue."
+              : "Your contact details help reunite items with their owners."
       }
-      illustration={stage === "email"}
+      illustration={stage === "email" && !addingFor}
+      backTo={addingFor ? getAuthReturnRoute() : undefined}
+      backLabel={addingFor ? "Cancel" : undefined}
+      onBack={addingFor ? clearAddAccountIntent : undefined}
     >
       {sessionExpired ? (
         <p
