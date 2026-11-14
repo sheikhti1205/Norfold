@@ -46,7 +46,8 @@ a.fb-notification-body:hover { background:var(--fb-surface-container); }
 .fb-notification-meta { display:flex; flex-wrap:wrap; align-items:center; gap:.4rem; margin-top:.2rem; }
 .fb-notification-dot { height:7px; width:7px; border-radius:50%; background:var(--fb-primary); flex:none; }
 .fb-notification-time { font-size:.75rem; color:var(--fb-on-surface-variant); }
-.fb-notification-overflow { flex:none; }
+.fb-notification-overflow { flex:none; display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:999px; color:var(--fb-on-surface-variant); }
+.fb-notification-overflow:active { background:var(--fb-surface-container); }
 .fb-notification-empty { display:flex; flex-direction:column; align-items:center; gap:.5rem; text-align:center; padding:2rem .75rem; }
 .fb-notification-undo {
   display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; flex:none; min-width:0;

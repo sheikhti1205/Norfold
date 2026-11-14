@@ -35,7 +35,7 @@ import "../components/NotificationInteractions.css";
 /** How long the undo affordance stays available after a delete. */
 export const UNDO_WINDOW_MS = 6000;
 /** Hover dwell before the floating row actions appear (right-click is instant). */
-export const ACTION_RAIL_HOVER_MS = 2000;
+export const ACTION_RAIL_HOVER_MS = 180;
 /** Horizontal drag distance (px) that commits a swipe action. */
 export const SWIPE_THRESHOLD_PX = 72;
 
@@ -141,7 +141,10 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
   const finePointer = useFinePointer();
   const [reportId, setReportId] = useState<string | null>(null);
   const [card, setCard] = useState<{ item: NotificationItem; top: number; left: number } | null>(null);
-  const [rail, setRail] = useState<{ id: string; top: number; right: number } | null>(null);
+  // `container` is the overlay the rail must live inside. A popover marks every
+  // outside body sibling inert, so a body portal paints and hovers but can
+  // never receive the click — it would fall through to the row's report link.
+  const [rail, setRail] = useState<{ id: string; top: number; right: number; container: HTMLElement } | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const railArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const railCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -166,25 +169,38 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
    * `right` is a distance from the viewport edge, which keeps the pill's
    * trailing edge fixed while its width changes.
    */
-  const openRail = useCallback((row: HTMLElement, id: string, focusFirst = false) => {
+  const openRail = useCallback((row: HTMLElement, id: string, focusFirst = false, keepPreview = false) => {
     if (railArmTimer.current) clearTimeout(railArmTimer.current);
     railArmTimer.current = null;
     if (railCloseTimer.current) clearTimeout(railCloseTimer.current);
     railCloseTimer.current = null;
-    if (hoverTimer.current) clearTimeout(hoverTimer.current);
-    hoverTimer.current = null;
-    setCard(null);
+    // A hover opens the rail beside the report preview: they are two different
+    // disclosures (what is this, and what can I do), and the owner needs the
+    // actions immediately, not after the preview has had its turn. Any other
+    // trigger dismisses the preview because the pointer is no longer just
+    // reading the row.
+    if (!keepPreview) {
+      if (hoverTimer.current) clearTimeout(hoverTimer.current);
+      hoverTimer.current = null;
+      setCard(null);
+    }
     const rect = row.getBoundingClientRect();
     const right = Math.max(6, window.innerWidth - rect.right + 4);
     const top = Math.min(Math.max(rect.top + rect.height / 2, 46), window.innerHeight - 46);
     railRow.current = row;
-    setRail({ id, top, right });
+    setRail({ id, top, right, container: row.closest<HTMLElement>(".fb-popover") ?? document.body });
     if (focusFirst) requestAnimationFrame(() => railRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true }));
   }, []);
   const scheduleRailClose = useCallback(() => {
     if (railCloseTimer.current) clearTimeout(railCloseTimer.current);
     railCloseTimer.current = setTimeout(() => {
       railCloseTimer.current = null;
+      // A row leave can arrive after the rail's own pointerenter cancelled the
+      // previous timer (the rail is a separate fixed layer, so moving from the
+      // row onto it dispatches both). Without this guard the rail would close
+      // 220ms under a stationary pointer, and the next click would fall through
+      // to the row's report link.
+      if (railRef.current?.matches(":hover") || railRef.current?.contains(document.activeElement)) return;
       railRow.current = null;
       setRail(null);
     }, 220);
@@ -640,12 +656,13 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
                   onPointerEnter={(event) => {
                     if (!finePointer || event.pointerType === "touch") return;
                     const row = event.currentTarget;
-                    if (view === "inbox") {
-                      railArmTimer.current = setTimeout(() => {
-                        railArmTimer.current = null;
-                        openRail(row, item.id);
-                      }, ACTION_RAIL_HOVER_MS);
-                    }
+                    // Both views: the Inbox rail acts on the notification and the
+                    // Deleted rail restores it. Hover is the trigger whenever a
+                    // fine pointer exists, so neither view needs a three-dot.
+                    railArmTimer.current = setTimeout(() => {
+                      railArmTimer.current = null;
+                      openRail(row, item.id, false, true);
+                    }, ACTION_RAIL_HOVER_MS);
                     if (blocked || !item.postId || !item.thumbnailUrl || !["LIKE", "REACTION", "COMMENT", "MENTION", "STATUS"].includes(item.type)) return;
                     hoverTimer.current = setTimeout(() => {
                       const rect = row.getBoundingClientRect();
@@ -654,9 +671,15 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
                       if (top >= 0) setCard({ item, top, left: Math.max(8, Math.min(rect.left, window.innerWidth - 328)) });
                     }, 200);
                   }}
-                  onPointerLeave={() => {
+                  onPointerLeave={(event) => {
                     cancelHover();
                     if (railArmTimer.current) { clearTimeout(railArmTimer.current); railArmTimer.current = null; }
+                    // Moving onto the rail dispatches this row leave as well.
+                    // The rail's own pointerenter may already have cancelled a
+                    // previous close; scheduling another here would shut the
+                    // rail under a stationary pointer.
+                    const next = event.relatedTarget as Node | null;
+                    if (next && railRef.current?.contains(next)) return;
                     if (rail?.id === item.id) scheduleRailClose();
                   }}
                   onDragEnd={(_event, info: PanInfo) => {
@@ -696,26 +719,30 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
                       {body}
                     </BlockedByViewerShield>
                   ) : body}
-                  {/* One trigger, one action surface. The three dots open the
-                      same floating icon rail as the two-second hover and the
-                      context-menu key, so there is never a second, older menu
-                      with different copy. */}
-                  <button
-                    type="button"
-                    className="fb-notification-overflow"
-                    aria-label={`More actions for ${item.blockedActor ? "a hidden notification" : `${item.actorUsername ?? "Norfold"} ${typeLabel(item.type)}`}`}
-                    // React's aria-haspopup union predates ARIA 1.2's "toolbar"
-                    // token; the attribute is valid HTML and announced correctly.
-                    {...({ "aria-haspopup": "toolbar" } as unknown as AriaAttributes)}
-                    aria-expanded={rail?.id === item.id}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    onClick={(event) => {
-                      const row = event.currentTarget.closest<HTMLElement>(".fb-notification-row");
-                      if (row) openRail(row, item.id);
-                    }}
-                  >
-                    <MoreVertical size={18} aria-hidden />
-                  </button>
+                  {/* One action surface. On a hover-capable pointer the row
+                      itself opens the floating rail, so a second trigger would
+                      be a duplicate control (and its corner sat under the
+                      rail's own actions). Touch has no hover, so there the
+                      three dots stay as the visible way in; long-press and the
+                      context-menu key work in both cases. */}
+                  {!finePointer && (
+                    <button
+                      type="button"
+                      className="fb-notification-overflow"
+                      aria-label={`More actions for ${item.blockedActor ? "a hidden notification" : `${item.actorUsername ?? "Norfold"} ${typeLabel(item.type)}`}`}
+                      // React's aria-haspopup union predates ARIA 1.2's "toolbar"
+                      // token; the attribute is valid HTML and announced correctly.
+                      {...({ "aria-haspopup": "toolbar" } as unknown as AriaAttributes)}
+                      aria-expanded={rail?.id === item.id}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        const row = event.currentTarget.closest<HTMLElement>(".fb-notification-row");
+                        if (row) openRail(row, item.id);
+                      }}
+                    >
+                      <MoreVertical size={18} aria-hidden />
+                    </button>
+                  )}
                 </motion.div>
               </li>
             );
@@ -793,7 +820,7 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
             </>}
           </>}
         </div>,
-        document.body,
+        rail.container,
       )}
       {lastDeleted && view === "inbox" ? (
         <div
