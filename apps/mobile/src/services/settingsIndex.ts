@@ -131,7 +131,9 @@ function entry(id: string, section: SettingsSection, description?: string): Sett
     keywords: destination.keywords.join(" "),
     group: SECTION_LABEL[section].group,
     route: destination.route,
-    description: description ?? presentation.description ?? SECTION_LABEL[section].description,
+    // The subtitle names what the destination holds, not just the section it
+    // sits in: a row reading "Chat / Chat" taught the reader nothing.
+    description: description ?? presentation.description ?? destination.summary,
     icon: presentation.icon,
     iconTone: presentation.iconTone,
   };

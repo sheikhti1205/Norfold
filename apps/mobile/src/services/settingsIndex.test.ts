@@ -112,11 +112,15 @@ describe("settingsIndex", () => {
     expect(searchSettings("   ")).toEqual([]);
   });
 
-  it("attaches a group path hint to every result", () => {
+  it("gives every result a real subtitle instead of repeating its section", () => {
     for (const result of searchSettings("a")) {
       expect(typeof result.description).toBe("string");
       expect((result.description as string).length).toBeGreaterThan(0);
     }
+    // A row that only repeated the section name ("Chat / Chat") told the
+    // reader nothing; the subtitle is the destination's own summary.
+    const chat = searchSettings("chat").find((result) => result.id === "chat-preferences");
+    expect(chat?.description).toBe("Who can contact you, chat backup and media uploads.");
   });
 
   it("groups entries under the W4 root structure", () => {

@@ -22,6 +22,10 @@ vi.mock("../services/messaging/runtime", () => ({
   refreshMessaging: vi.fn(),
   webInstallationId: () => "device",
 }));
+vi.mock("../services/accountRules", async (original) => {
+  const mod = await original<typeof import("../services/accountRules")>();
+  return { ...mod, fetchContactRules: async () => mod.DEFAULT_CONTACT_RULES };
+});
 vi.mock("../services/messaging/backupRuntime", () => ({ driveBackup: () => mocks.backup }));
 vi.mock("../appearance", () => ({
   useAppearance: () => ({ settings: { highQualityPhoto: false }, update: mocks.update }),
@@ -43,7 +47,14 @@ describe("Chat settings", () => {
     for (const name of ["Who can message you", "Chat backup", "Media & uploads"]) {
       expect(screen.getByRole("heading", { level: 2, name })).toBeTruthy();
     }
-    fireEvent.click(await screen.findByRole("switch", { name: /Allow direct messages/ }));
+    // Contact rules belong to Chat, beside the auto-connect switch: one group
+    // chooses who may start, the other chooses whether an allowed start
+    // connects immediately.
+    expect(await screen.findByLabelText("Who can start a conversation with you")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Chats" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Blocked accounts" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Privacy policy" })).toBeNull();
+    fireEvent.click(await screen.findByRole("switch", { name: /Connect new people automatically/ }));
     await waitFor(() => expect(mocks.setPreference).toHaveBeenCalledWith("reader", "openMessages", true));
     expect(screen.getByRole("button", { name: "Connect Google Drive" })).toBeTruthy();
     fireEvent.click(screen.getByRole("switch", { name: /High quality photos/ }));

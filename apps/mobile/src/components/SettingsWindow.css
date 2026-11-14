@@ -29,6 +29,7 @@
 }
 .fb-settings-dialog { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; outline: none; }
 .fb-settings-window-head {
+  position: relative; z-index: 20;
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   flex: none; padding: 10px 12px 10px 16px;
   border-bottom: 1px solid var(--fb-outline-variant);
@@ -40,49 +41,49 @@
 }
 .fb-settings-window-back { flex: none; margin-inline-start: -6px; }
 .fb-settings-window-actions { display: flex; align-items: center; gap: 2px; }
-.fb-settings-window-actions .fb-icon-control[data-active] {
-  background: var(--fb-surface-container-high);
-  color: var(--fb-on-surface);
-}
-/* The one search in settings: a pill attached to the top edge under the title
-   bar, with the pick list dropping straight below it. Same bar language as the
-   app-wide search overlay; no filter control (owner order 2026-11-13). */
-.fb-settings-searcharea {
+.fb-settings-window-head[data-searching] .fb-settings-window-actions { gap: 6px; }
+/* The one search in settings: the magnifier becomes a field in this same
+   header row, beside the title, and the pick list drops below the bar. The
+   header never grows a second row, so opening search never pushes the page
+   (owner order 2026-11-14). Same bar language as the app-wide search overlay;
+   no filter control (owner order 2026-11-13). */
+.fb-settings-window-search {
   position: relative;
-  z-index: 30;
-  flex: none;
-  padding: 10px 12px 10px;
-  background: var(--fb-surface);
-}
-.fb-settings-window-searchbar {
-  display: flex; align-items: center; gap: 8px;
-  min-height: 48px; padding: 0 4px 0 12px;
+  display: flex; align-items: center; gap: 6px;
+  width: clamp(12rem, 26vw, 19rem);
+  min-height: 36px;
+  padding: 0 4px 0 10px;
   border: 1px solid var(--fb-outline-variant);
   border-radius: 999px;
   background: var(--fb-surface-container-low);
   color: var(--fb-on-surface-variant);
+  animation: fb-settings-search-grow 160ms ease-out;
 }
 /* Text-entry exception: focus moves the border only, never the accent. */
-.fb-settings-window-searchbar:focus-within { border-color: var(--fb-on-surface); }
+.fb-settings-window-search:focus-within { border-color: var(--fb-on-surface); }
 .fb-settings-window-searchicon { flex: none; }
-.fb-settings-window-searchbar input {
-  flex: 1; min-width: 0; min-height: 44px;
+.fb-settings-window-search input {
+  flex: 1; min-width: 0; height: 34px;
   border: 0; outline: none;
   color: var(--fb-on-surface);
   background: transparent;
   font: inherit;
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
 }
-.fb-settings-window-searchbar input::placeholder { color: var(--fb-on-surface-variant); opacity: 1; }
-.fb-settings-window-searchbar input::-webkit-search-cancel-button { display: none; }
+.fb-settings-window-search input::placeholder { color: var(--fb-on-surface-variant); opacity: 1; }
+.fb-settings-window-search input::-webkit-search-cancel-button { display: none; }
 .fb-settings-searchclear {
   display: flex; flex: none; align-items: center; justify-content: center;
-  width: 44px; height: 44px; border-radius: 50%;
+  width: 30px; height: 30px; border-radius: 50%;
   color: var(--fb-on-surface-variant);
 }
 .fb-settings-searchclear:hover { background: var(--fb-surface-container); color: var(--fb-on-surface); }
+@keyframes fb-settings-search-grow {
+  from { width: 2.25rem; }
+}
 .fb-settings-window-searchpanel {
-  position: absolute; inset-inline: 12px; top: calc(100% - 2px);
+  position: absolute; inset-inline: auto 0; top: calc(100% + 14px);
+  width: min(24rem, calc(100vw - 4rem));
   max-height: min(420px, 55dvh);
   overflow: auto;
   padding: 8px;
@@ -107,6 +108,13 @@
 .fb-settings-window-body { flex: 1; min-height: 0; overflow: hidden; }
 /* The settings split view fills the window; its own panes keep their scroll. */
 .fb-settings-window-body > * { height: 100%; }
+/* A page mounted directly in the window (Profile, Profile edit) owns the
+   scroll here. Without this it was clipped by the body and the wheel did
+   nothing (owner defect 2026-11-14). */
+.fb-settings-window-body > .fb-settings-page {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 /* A hosted page does not paint its sticky heading (the window bar is the one
    title), so the pane supplies the small top inset that bar used to give.
    The window itself is the surface: an opaque page column inside a wider pane
@@ -116,8 +124,20 @@
   background: transparent;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .fb-settings-window-search { animation: none; }
+}
+
 @media (max-width: 600px) {
   .fb-settings-backdrop { padding: 0; }
   .fb-settings-window { width: 100%; height: 100%; max-height: 100%; border: 0; border-radius: 0; }
   .fb-settings-window-head { padding-top: max(10px, env(safe-area-inset-top)); }
+  /* Compact header: while searching, the field takes the title's room instead
+     of squeezing the title into an ellipsis of two characters. The actions row
+     has to grow with it, or the field stops at its own content width (a 36px
+     sliver) and the close control drifts into the middle of the bar. */
+  .fb-settings-window-head[data-searching] .fb-settings-window-title { display: none; }
+  .fb-settings-window-head[data-searching] .fb-settings-window-actions { flex: 1 1 auto; min-width: 0; }
+  .fb-settings-window-search { flex: 1 1 auto; width: auto; min-width: 0; }
+  .fb-settings-window-searchpanel { width: calc(100vw - 72px); }
 }

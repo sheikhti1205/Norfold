@@ -5,7 +5,6 @@ import { requestAccountDeletion, sendAccountPasswordCode, saveAccountPasswordWit
 import { ApiError } from "../services/session";
 import { fetchPhoneChangeEligibility, formatPhoneChangeEligibleAt } from "../services/profile";
 import { Button } from "../components/Button";
-import { SelectField } from "../components/Fields";
 import { useOtpCountdown } from "../components/auth/useOtpCountdown";
 import { TelegramSettings } from "../components/settings/TelegramSettings";
 import { Profile } from "./Profile";
@@ -15,10 +14,6 @@ import {
 } from "../components/settings";
 import { describeCloudConnections } from "../services/aiCredentials";
 import { friendlyError } from "../utils/friendlyErrors";
-import {
-  CONTACT_RULE_LABELS, CONTACT_RULE_VALUES, DEFAULT_CONTACT_RULES, fetchContactRules,
-  saveContactRules, type AccountContactRules, type ContactRule,
-} from "../services/accountRules";
 import "./AccountSettings.css";
 
 /**
@@ -304,8 +299,6 @@ export function AccountSecuritySections() {
 
   return (
     <div className="fb-profile-security" data-testid="account-security">
-      <ContactRules />
-
       <SettingsGroup title="Sign-in">
         <SettingsRow
           title="Sign-in password"
@@ -465,54 +458,3 @@ export function AccountSecuritySections() {
   );
 }
 
-const CONTACT_RULE_QUESTION = "Who can start a conversation with you";
-const CONTACT_RULE_HINT =
-  "Applies to new conversations. People you have connected with can always reach you.";
-
-/**
- * Contact rules used to live only in the account popover's nested panel. The
- * Settings row now opens the settings window directly, so the stored rule needs
- * a real home; it belongs beside the other account-level facts, not in a menu.
- */
-function ContactRules() {
-  const [rules, setRules] = useState<AccountContactRules>(DEFAULT_CONTACT_RULES);
-  const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    void fetchContactRules().then((next) => { if (alive) setRules(next); },
-      () => { if (alive) { setFailed(true); setStatus("Could not load your contact rules. Pull them up again in a moment."); } })
-      .finally(() => { if (alive) setLoading(false); });
-    return () => { alive = false; };
-  }, []);
-
-  const choose = (value: ContactRule) => {
-    const previous = rules;
-    const next = { ...rules, messageFrom: value, connectFrom: value };
-    setRules(next);
-    setFailed(false);
-    setStatus(null);
-    void saveContactRules(next).then((saved) => setRules(saved), () => {
-      setRules(previous);
-      setFailed(true);
-      setStatus("That rule was not saved. Try again.");
-    });
-  };
-
-  return <SettingsGroup title="Contact rules" description="Who can reach you before a conversation connects.">
-    <div className="fb-account-contact-rule">
-      <SelectField
-        label={CONTACT_RULE_QUESTION}
-        value={rules.messageFrom}
-        disabled={loading}
-        onChange={(value) => choose(value as ContactRule)}
-        hint={CONTACT_RULE_HINT}
-        triggerClassName="fb-account-contact-trigger"
-        options={CONTACT_RULE_VALUES.map((value) => ({ value, label: CONTACT_RULE_LABELS[value] }))}
-      />
-      {status && <span role={failed ? "alert" : "status"} className="fb-account-contact-status">{status}</span>}
-    </div>
-  </SettingsGroup>;
-}

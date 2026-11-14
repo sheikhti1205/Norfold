@@ -2,9 +2,10 @@
  * Profile hub (owner direction 2026-11-14): the person comes first - a large
  * centred portrait with its own edit control, a name that can be edited in
  * place, a handle that copies on press, and the account's verification state as
- * two chips. Connected accounts and Drive access sit under the identity, then
- * the destinations. This is navigation, not a dashboard: no card per group, no
- * marketing paragraphs.
+ * place. Connected accounts sit under the identity, then the destinations.
+ * This is navigation, not a dashboard: no card per group, no marketing
+ * paragraphs. Chat-owned settings (contact rules, receipts, backup) are not
+ * repeated here (owner order 2026-11-14).
  */
 
 .fb-profile {
@@ -316,6 +317,22 @@
 
 .fb-profile .fb-settings-row-title {
   font-size: 0.9375rem;
+}
+
+/* The email address is data, not a label: it takes its own line under "Email"
+   so the label never gets squeezed into a mid-word break and a long address
+   wraps as a unit instead of colliding with the Verified pill. */
+.fb-profile-email-row {
+  flex-wrap: wrap;
+}
+
+.fb-profile-email-row .fb-settings-row-value {
+  order: 3;
+  flex: 1 0 100%;
+  max-width: 100%;
+  padding-inline-start: 34px;
+  text-align: start;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 360px) {

@@ -372,7 +372,7 @@ describe("the stored backup list", () => {
     // Chat preferences are not part of the format; the screen says so instead
     // of inventing a preferences statistic.
     expect(stats.textContent).not.toContain("Preferences");
-    expect(screen.getByText(/Chat preferences stay in Settings and are not part of a backup/)).toBeTruthy();
+    expect(screen.getByText(/Chat preferences stay in Chat and are not part of a backup/)).toBeTruthy();
   });
 
   it("restores exactly the installation whose backup was chosen", async () => {

@@ -1,4 +1,4 @@
-import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button, Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 import {
   UNSAFE_createMemoryHistory,
@@ -33,9 +33,10 @@ import "./SettingsWindow.css";
  * mounts - so a page cannot exist in one place and not the other.
  *
  * The window owns the ONE settings search: a single icon in its top bar that
- * opens a field attached to the top edge, with results dropping below it. The
- * tree carries no second search field, and settings carries no notification
- * bell (owner order 2026-11-13).
+ * expands into a field in the same row, beside the title, with results dropping
+ * below it. The field never adds a second row or pushes the page down (owner
+ * order 2026-11-14). The tree carries no second search field, and settings
+ * carries no notification bell (owner order 2026-11-13).
  *
  * The window keeps its own memory history. Opening it never changes the app's
  * URL, so closing puts the reader back exactly where they were without
@@ -117,11 +118,18 @@ function SettingsWindowSurface({ initialPath, onClose, onExit }: {
   const searchToggle = useRef<HTMLButtonElement>(null);
   // Closing the field returns focus to the icon that opened it. Picking a
   // result is different: the destination's heading takes focus, so the toggle
-  // must not steal it back.
+  // must not steal it back. The toggle is mounted only while the field is
+  // closed, so focus is restored after that commit.
+  const restoreSearchFocus = useRef(false);
   const closeSearch = useCallback(() => {
+    restoreSearchFocus.current = true;
     setSearchOpen(false);
-    searchToggle.current?.focus();
   }, []);
+  useLayoutEffect(() => {
+    if (searchOpen || !restoreSearchFocus.current) return;
+    restoreSearchFocus.current = false;
+    searchToggle.current?.focus();
+  }, [searchOpen]);
   // Escape belongs to the field while it is open, not to the window: a reader
   // dismissing search stays where the tree is. The bridge asks this before it
   // closes the window, so one keypress consumes exactly one layer.
@@ -142,7 +150,7 @@ function SettingsWindowSurface({ initialPath, onClose, onExit }: {
         <UNSAFE_LocationContext.Provider value={location}>
           <UNSAFE_RouteContext.Provider value={route}>
             <Dialog aria-label="Settings" className="fb-settings-dialog">
-              <header className="fb-settings-window-head">
+              <header className="fb-settings-window-head" data-searching={searchOpen || undefined}>
                 {canGoBack && (
                   <Button aria-label="Back" className="fb-icon-control fb-settings-window-back" onPress={goBack}>
                     <ArrowLeft size={18} aria-hidden="true" />
@@ -150,19 +158,17 @@ function SettingsWindowSurface({ initialPath, onClose, onExit }: {
                 )}
                 <Heading slot="title" className="fb-settings-window-title">{windowTitle}</Heading>
                 <div className="fb-settings-window-actions">
-                  <Button ref={searchToggle} aria-label="Search settings" aria-expanded={searchOpen}
-                    className="fb-icon-control" data-active={searchOpen || undefined}
-                    onPress={() => { if (searchOpen) closeSearch(); else setSearchOpen(true); }}>
-                    <Search size={18} aria-hidden="true" />
-                  </Button>
+                  {searchOpen
+                    ? <SettingsWindowSearch onDismiss={closeSearch} onPicked={() => setSearchOpen(false)} />
+                    : <Button ref={searchToggle} aria-label="Search settings" className="fb-icon-control"
+                        onPress={() => setSearchOpen(true)}>
+                        <Search size={18} aria-hidden="true" />
+                      </Button>}
                   <Button aria-label="Close settings" className="fb-icon-control" onPress={onClose}>
                     <X size={18} aria-hidden="true" />
                   </Button>
                 </div>
               </header>
-              {searchOpen && <SettingsWindowSearch
-                onPicked={() => setSearchOpen(false)}
-              />}
               <div className="fb-settings-window-body">
                 <SettingsWindowHost.Provider value>
                   <SettingsWindowTitle.Provider value={setPageTitle}>
@@ -189,20 +195,22 @@ function SettingsWindowSurface({ initialPath, onClose, onExit }: {
 }
 
 /**
- * The window's one search: a field attached to the top edge, results dropping
- * straight below it.
+ * The window's one search: the magnifier expands into a field in the header
+ * row, beside the title, and results drop below the bar.
  *
  * Every entry comes from `searchSettings`, so the list is the same catalogue
  * the Settings tree is generated from - search cannot offer a destination the
  * tree does not have. Results are ordinary links in the window's own router,
  * so picking one changes the window and leaves the page behind untouched.
  */
-function SettingsWindowSearch({ onPicked }: {
+function SettingsWindowSearch({ onDismiss, onPicked }: {
+  onDismiss: () => void;
   onPicked: () => void;
 }) {
   const { user } = useAuth();
   const [query, setQuery] = useState("");
   const input = useRef<HTMLInputElement>(null);
+  const area = useRef<HTMLDivElement>(null);
   const resultsId = useId();
   const trimmed = query.trim();
   const results = useMemo(() => {
@@ -215,30 +223,39 @@ function SettingsWindowSearch({ onPicked }: {
   }, [trimmed, user]);
   const count = results?.length ?? 0;
 
-  return <div className="fb-settings-searcharea">
-    <div className="fb-settings-window-searchbar" role="search">
-      <Search size={18} aria-hidden="true" className="fb-settings-window-searchicon" />
-      <input
-        ref={input}
-        type="search"
-        value={query}
-        autoFocus
-        aria-label="Search settings"
-        placeholder="Search settings"
-        aria-controls={results ? resultsId : undefined}
-        onChange={(event) => setQuery(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowDown" && count > 0) {
-            event.preventDefault();
-            document.getElementById(resultsId)?.querySelector<HTMLElement>("a")?.focus();
-          }
-        }}
-      />
-      {query && <button type="button" aria-label="Clear search" className="fb-settings-searchclear"
-        onClick={() => { setQuery(""); input.current?.focus(); }}>
-        <X size={16} aria-hidden="true" />
-      </button>}
-    </div>
+  // A press outside the field or its results dismisses search, the way a
+  // normal search bar behaves. Result clicks stay inside the area and pick.
+  useEffect(() => {
+    const dismiss = (event: PointerEvent) => {
+      if (area.current?.contains(event.target as Node)) return;
+      onDismiss();
+    };
+    document.addEventListener("pointerdown", dismiss, true);
+    return () => document.removeEventListener("pointerdown", dismiss, true);
+  }, [onDismiss]);
+
+  return <div ref={area} className="fb-settings-window-search" role="search">
+    <Search size={16} aria-hidden="true" className="fb-settings-window-searchicon" />
+    <input
+      ref={input}
+      type="search"
+      value={query}
+      autoFocus
+      aria-label="Search settings"
+      placeholder="Search settings"
+      aria-controls={results ? resultsId : undefined}
+      onChange={(event) => setQuery(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "ArrowDown" && count > 0) {
+          event.preventDefault();
+          document.getElementById(resultsId)?.querySelector<HTMLElement>("a")?.focus();
+        }
+      }}
+    />
+    {query && <button type="button" aria-label="Clear search" className="fb-settings-searchclear"
+      onClick={() => { setQuery(""); input.current?.focus(); }}>
+      <X size={16} aria-hidden="true" />
+    </button>}
     {results && <div className="fb-settings-window-searchpanel">
       <p role="status" className="fb-settings-window-searchstatus">
         {count

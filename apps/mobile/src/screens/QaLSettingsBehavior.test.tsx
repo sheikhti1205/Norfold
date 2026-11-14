@@ -21,7 +21,7 @@ const SEARCH_MATRIX: ReadonlyArray<{ title: string; keywords: string; route: str
   { title: "Profile & verification", keywords: "profile username email phone avatar", route: "/profile" },
   { title: "Appearance", keywords: "theme dark amoled accent color personalization", route: "/settings/appearance" },
   { title: "Accessibility", keywords: "font text size motion reduce animation", route: "/settings/accessibility" },
-  { title: "Media & uploads", keywords: "photo image quality data storage upload", route: "/settings/media" },
+  { title: "Chat", keywords: "chat preferences message request backup media uploads photo image quality", route: "/settings/privacy/messages" },
   { title: "Notifications", keywords: "push comment mention like status report bell", route: "/settings/notifications" },
   { title: "Optional AI Chat", keywords: "ai model cloud chat providers", route: "/settings/ai" },
   { title: "Local tools", keywords: "local on device search helper", route: "/settings/local-intelligence" },
@@ -123,11 +123,11 @@ function LocationProbe() {
 }
 
 const SETTINGS_TARGETS = [
-  "/settings/account",
+  "/profile",
   "/settings/appearance",
   "/settings/accessibility",
   "/settings/feed-layout",
-  "/settings/media",
+  "/settings/privacy/messages",
   "/settings/notifications",
   "/settings/ai",
   // "/settings/ai/connections" moved inside AI & models (W4) — covered by the
@@ -361,7 +361,7 @@ describe("QA L: W4 root groups moved rows without orphaning destinations", () =>
     const hrefs = Array.from(document.querySelectorAll("a[href]")).map((a) =>
       (a as HTMLAnchorElement).getAttribute("href"),
     );
-    for (const href of ["/settings/media", "/settings/diagnostics", "/settings/help", "/onboarding?replay=1", "/settings/about"]) {
+    for (const href of ["/settings/privacy/messages", "/settings/diagnostics", "/settings/help", "/onboarding?replay=1", "/settings/about"]) {
       expect(hrefs, `nested row linking to ${href} exists`).toContain(href);
     }
   });

@@ -4,7 +4,6 @@ import {
   Check,
   CircleAlert,
   CircleCheck,
-  CloudUpload,
   Copy,
   FileStack,
   Globe,
@@ -27,7 +26,6 @@ import { announce } from "../components/LiveRegion";
 import { UserAvatar } from "../components/UserAvatar";
 import { SettingsGroup, SettingsPage, SettingsRow, StatusPill } from "../components/settings";
 import { readLinkedProviders } from "../services/accountProviders";
-import { driveAuth } from "../services/messaging/driveAuth";
 import { updateMyProfile } from "../services/profile";
 import { getTelegramAccount } from "../services/telegram";
 import { AccountSecuritySections, MobileNumberRow } from "./AccountSettings";
@@ -133,27 +131,6 @@ function useTelegramLink(userId: string | undefined) {
     };
   }, [userId]);
   return scoped(state, userId);
-}
-
-interface DriveAccess {
-  available: boolean;
-  connected: boolean;
-}
-
-/** Local Drive grant state. Reading a token is not a network call. */
-function useDriveAccess(userId: string | undefined) {
-  const [state, setState] = useState<{ accountId: string; value: DriveAccess } | null>(null);
-  useEffect(() => {
-    const accountId = userId ?? "";
-    if (!accountId) return;
-    try {
-      const auth = driveAuth();
-      setState({ accountId, value: { available: auth.available(), connected: auth.current() !== null } });
-    } catch {
-      setState({ accountId, value: { available: false, connected: false } });
-    }
-  }, [userId]);
-  return state?.accountId === (userId ?? "") ? state.value : null;
 }
 
 /**
@@ -345,9 +322,13 @@ function VerificationChip({
  * Owner direction 2026-11-14 (references: the enlarged-photo profile headers):
  * the photo is the centre of the page with its own edit control, the name is
  * large and editable in place, the handle copies on press, and verification is
- * a pair of chips rather than a paragraph. Connected accounts and Drive access
- * sit directly under the identity so the reader can see what the account holds
- * before navigating away. Sign-in and account controls are on the same screen.
+ * a pair of chips rather than a paragraph. Connected accounts sit directly
+ * under the identity so the reader can see what the account holds before
+ * navigating away. Sign-in and account controls are on the same screen.
+ *
+ * Chat settings (contact rules, message preferences, backup) live in Chat only:
+ * this page is identity, verification and sign-in security (owner order
+ * 2026-11-14), never a second door to the same controls.
  *
  * Profile stays the ONE canonical trust surface: the reputation label and the
  * way into ratings live here, not scattered onto every card.
@@ -357,7 +338,6 @@ export function Profile() {
   const reputation = useOwnReputation(user?.id);
   const providers = useLinkedProviders(user?.id);
   const telegram = useTelegramLink(user?.id);
-  const drive = useDriveAccess(user?.id);
   if (!user) return null;
 
   const googleLinked = providers.status === "ready" && providers.value.has("google");
@@ -381,21 +361,6 @@ export function Profile() {
       : telegram.value.linked
         ? telegram.value.handle ? `@${telegram.value.handle}` : "Connected"
         : "Not connected";
-
-  const driveValue = drive === null
-    ? "Checking…"
-    : !drive.available
-      ? "Unavailable"
-      : drive.connected
-        ? <StatusPill tone="success"><Check size={12} aria-hidden="true" /> Connected</StatusPill>
-        : "Not connected";
-  const driveDescription = drive === null
-    ? "Checking Drive access…"
-    : !drive.available
-      ? "Drive backup is not set up in this build."
-      : drive.connected
-        ? "Encrypted chat backups go to your own Google Drive."
-        : "Keep your chats by connecting your own Google Drive.";
 
   return (
     <SettingsPage title="Profile" backTo="/settings" backLabel="Back to Settings" className="fb-profile">
@@ -436,6 +401,7 @@ export function Profile() {
           <SettingsRow
             title="Email"
             icon={Mail}
+            className="fb-profile-email-row"
             value={user.email}
             badge={user.emailVerified ? <StatusPill tone="success">Verified</StatusPill> : undefined}
             route={user.emailVerified ? undefined : "/verify"}
@@ -445,17 +411,6 @@ export function Profile() {
             title="Telegram"
             icon={Send}
             value={telegramValue}
-          />
-        </SettingsGroup>
-
-        <SettingsGroup title="Drive access">
-          <SettingsRow
-            title="Chat backup"
-            icon={CloudUpload}
-            iconTone="blue"
-            description={driveDescription}
-            value={driveValue}
-            route="/settings/backup"
           />
         </SettingsGroup>
 
