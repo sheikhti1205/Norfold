@@ -10,6 +10,7 @@ import { onRealtime } from "../services/realtime";
 import { useAuth } from "../auth";
 import { UserAvatar } from "../components/UserAvatar";
 import { ChatIdentity } from "../components/ChatIdentity";
+import { PostLink } from "../components/PostNavigation";
 import { StatusChip } from "../components/StatusChip";
 import { formatChatDay, formatEventDate, timeAgo } from "../utils/dates";
 import { haptic } from "../utils/haptics";
@@ -27,6 +28,8 @@ import { PreferenceSwitchRow } from "../components/settings";
 import { ActionMenu, type MenuAction } from "../components/ActionMenu";
 import { LongPressArea } from "../components/LongPressArea";
 import { AppBar } from "../components/AppBar";
+import { TopUtilities } from "../components/TopUtilities";
+import { MEDIUM_MAX_PX, useViewportWidth } from "../components/responsive";
 import { PeopleSearch } from "../components/PeopleSearch";
 import { PeerChatComposer } from "../components/PeerChatComposer";
 import { ChatLocationComposer } from "../components/ChatLocationComposer";
@@ -143,7 +146,7 @@ function ReportContextSession({ reportId, preview }: { reportId: string; preview
     Report unavailable</p>;
   const post = state.post!;
   if (preview) return <span className="fb-chat-row-context" dir="auto">{post.type === "LOST" ? "Lost" : "Found"} report · {post.title}</span>;
-  return <Link className="fb-chat-context fb-chat-report-card" to={`/posts/${encodeURIComponent(reportId)}`} data-chat-report={reportId}>
+  return <PostLink className="fb-chat-context fb-chat-report-card" to={`/posts/${encodeURIComponent(reportId)}`} data-chat-report={reportId}>
     {firstImageSrc && <img src={firstImageSrc} alt={post.title} loading="lazy" />}
     <span className="fb-chat-report-copy">
       <span className="fb-chat-secondary">{post.type === "LOST" ? "Lost" : "Found"} report</span>
@@ -153,7 +156,7 @@ function ReportContextSession({ reportId, preview }: { reportId: string; preview
         {post.eventDate && <time dateTime={post.eventDate}>{formatEventDate(post.eventDate)}</time>}
       </span>
     </span>
-  </Link>;
+  </PostLink>;
 }
 
 /** One static coordinate set the sender chose to share. No live position. */
@@ -480,10 +483,18 @@ function VoiceDraft({ recorder, status, recording, notice, url, snapshot, sendin
 export function Connections() {
   const { user } = useAuth();
   const { conversationId } = useParams();
+  const width = useViewportWidth();
+  // On a wide window the app utilities belong to the content side (top-right),
+  // never inside the 320px conversation sidebar. Phones keep them in the list
+  // page's own top bar, where that page is the whole app.
+  const showAppUtilities = width >= MEDIUM_MAX_PX;
   return user ? <SplitView selected={!!conversationId}
     pane={{ ...CHAT_PANE, label: "Resize conversation list" }}
     list={(pane) => <ConnectionsSession key={user.id} accountId={user.id} selectedId={conversationId} pane={pane} />}
-    detail={conversationId ? <Outlet /> : <div className="fb-chat-empty"><h2>Choose a conversation</h2><p>Open a chat, or search for someone to connect with.</p></div>} /> : null;
+    detail={conversationId ? <Outlet /> : <div className="fb-chat-empty">
+      {showAppUtilities && <div className="fb-chat-empty-utilities"><TopUtilities /></div>}
+      <h2>Choose a conversation</h2><p>Open a chat, or search for someone to connect with.</p>
+    </div>} /> : null;
 }
 
 /** Replace, rather than stack a duplicate legacy screen in navigation history. */
@@ -574,12 +585,14 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
   // survives as a dot with the count in the link's name.
   if (pane?.wide && pane.collapsed) return <ChatRail rows={rows} labels={labels} identities={identities} selectedId={selectedId}
     onExpand={pane.toggle} headingRef={heading} toggleRef={paneToggle} />;
+  const sidebar = pane?.wide === true;
   return <section className="fb-chat-page" aria-label="Chats">
-    <AppBar title="Chats" autoFocus actions={<>
-      <RetrySync accountId={accountId} />
-      {pane?.wide && <button ref={paneToggle} type="button" className="fb-chat-icon" aria-label="Collapse conversation list" onClick={pane.toggle}>
+    <AppBar title="Chats" autoFocus utilities={!sidebar && !selectedId} actions={sidebar ? (
+      <button ref={paneToggle} type="button" className="fb-chat-icon" aria-label="Collapse conversation list" onClick={pane.toggle}>
         <PanelLeftClose size={20} aria-hidden="true" />
-      </button>}
+      </button>
+    ) : <>
+      <RetrySync accountId={accountId} />
       <ActionMenu label="Filter chats" icon={<ListFilter size={20} aria-hidden="true" />} items={["All", "Unread", "Archived"].map(value => ({ id: value, label: value, onAction: () => setFilter(value) }))} />
     </>} />
     <label className="fb-chat-search"><Search size={17} aria-hidden="true" /><input type="search" aria-label="Search people or chats" placeholder="Search people or chats" value={query} onChange={event => setQuery(event.target.value)} /></label>
@@ -587,6 +600,7 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
     <div className="fb-chat-filters" role="group" aria-label="Show conversations">
       {["All", "Requests"].map((value) => <button key={value} type="button" aria-label={value === "Requests" ? `Requests, ${requests}` : "All"}
         aria-pressed={filter === value} onClick={() => setFilter(value)}>{value}{value === "Requests" && requests > 0 && <span className="fb-chat-count" aria-hidden="true">{requests}</span>}</button>)}
+      {sidebar && <span className="fb-chat-filter-tools"><ActionMenu label="Filter chats" icon={<ListFilter size={20} aria-hidden="true" />} items={["All", "Unread", "Archived"].map(value => ({ id: value, label: value, onAction: () => setFilter(value) }))} /></span>}
       {["Unread", "Archived"].includes(filter) && <span className="fb-chat-active-filter">{filter}</span>}
     </div>
     <div className="fb-chat-list">
@@ -661,6 +675,9 @@ export function MessagingThread() {
 
 function ThreadSession({ accountId, conversationId }: { accountId: string; conversationId: string }) {
   const { user } = useAuth();
+  // On the wide split the app utilities live at the top-right of the thread,
+  // not in the conversation sidebar. On a phone the list page owns them.
+  const wideApp = useViewportWidth() >= MEDIUM_MAX_PX;
   const chat = useMessaging();
   const [cached] = useState(() => getCachedMessagingThreadState(accountId, conversationId));
   const [renderedRevision, setRenderedRevision] = useState(-1);
@@ -1641,6 +1658,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         conversationId={conversationId}
         status={!view ? "Saved chat" : view.mode === "CONNECTED" ? "Connected" : "Message request"} />
       {detailsToggle}
+      {wideApp && <><RetrySync accountId={accountId} /><TopUtilities /></>}
     </header>
     {/* Pinned messages: one compact row directly under the header. Tapping a
         chip uses the same jump as a reply quote — scroll, focus and ring. */}

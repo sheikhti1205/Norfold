@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Link } from "react-router";
+import { ArrowUpRight } from "lucide-react";
 import { AdminCapabilityMatrix } from "../../components/AdminCapabilityMatrix";
 import { AdminAuditLine, AdminReplaceWarning } from "../../components/AdminConsoleParts";
 import { describeActivity } from "../../components/adminConsole";
@@ -83,6 +85,30 @@ function Warning({ width }: { width?: number }) {
   );
 }
 
+function LogRows() {
+  return (
+    <ol className="fb-admin-log">
+      {ENTRIES.map((entry) => {
+        const line = describeActivity(entry);
+        return (
+          <AdminAuditLine
+            key={entry.id}
+            headline={line.headline}
+            detail={line.detail}
+            time={line.time}
+            review={line.review ? (
+              <Link className="fb-admin-log-review" to={line.review.to}>
+                {line.review.label}
+                <ArrowUpRight size={15} aria-hidden="true" />
+              </Link>
+            ) : undefined}
+          />
+        );
+      })}
+    </ol>
+  );
+}
+
 export function AdminFixtures() {
   return (
     <FixtureSection
@@ -115,34 +141,10 @@ export function AdminFixtures() {
       </FixtureFrame>
 
       <FixtureFrame section="admin" variant="normal">
-        <ol className="fb-admin-log">
-          {ENTRIES.map((entry) => {
-            const line = describeActivity(entry);
-            return (
-              <AdminAuditLine
-                key={entry.id}
-                headline={line.headline}
-                detail={line.detail}
-                time={line.time}
-              />
-            );
-          })}
-        </ol>
+        <LogRows />
       </FixtureFrame>
       <FixtureFrame section="admin" variant="small-width" width={320}>
-        <ol className="fb-admin-log">
-          {ENTRIES.map((entry) => {
-            const line = describeActivity(entry);
-            return (
-              <AdminAuditLine
-                key={entry.id}
-                headline={line.headline}
-                detail={line.detail}
-                time={line.time}
-              />
-            );
-          })}
-        </ol>
+        <LogRows />
       </FixtureFrame>
       <FixtureFrame section="admin" variant="empty">
         <p className="fb-admin-note">Nothing has happened yet.</p>

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BottomSheet } from "../components/BottomSheet";
+import { Capacitor } from "@capacitor/core";
+import { Check, ChevronRight, Globe, LogOut, Smartphone, TabletSmartphone, Unplug, type LucideIcon } from "lucide-react";
+import { AdaptiveTaskSurface } from "../components/AdaptiveTaskSurface";
 import { Button } from "../components/Button";
 import { announce } from "../components/LiveRegion";
 import { SettingsGroup, SettingsPage, SettingsRow, StatusPill } from "../components/settings";
@@ -11,11 +13,24 @@ import {
   renameDevice,
   type SignedInDevice,
 } from "../services/devices";
+import { currentDeviceLabel, isPlaceholderDeviceName, type EnrollmentPlatform } from "../services/deviceLabel";
 import { friendlyError } from "../utils/friendlyErrors";
+import "./Devices.css";
 
 /** One human sentence for a device operation, never raw transport text. */
 function deviceError(err: unknown): string {
   return friendlyError(err).message;
+}
+
+function deviceIcon(platform: string | null): LucideIcon {
+  if (platform === "android") return Smartphone;
+  if (platform === "ios") return TabletSmartphone;
+  return Globe;
+}
+
+/** This build's own enrollment platform, matching what Chat enrolls. */
+function ownPlatform(): EnrollmentPlatform {
+  return Capacitor.getPlatform() === "android" ? "android" : "web";
 }
 
 /**
@@ -44,6 +59,24 @@ export function Devices() {
     try {
       const devices = await listDevices();
       if (!alive.current) return;
+      // Earlier builds enrolled every browser as "Browser". This installation
+      // can adopt its specific name immediately; a name the reader chose is
+      // never a placeholder, so a rename is left alone. A failure keeps the
+      // server's name and is retried the next time this screen opens.
+      const mine = devices.find((device) => device.current);
+      if (mine && isPlaceholderDeviceName(mine.name)) {
+        const label = currentDeviceLabel(ownPlatform());
+        // A label this build cannot make specific is not worth a write.
+        if (!isPlaceholderDeviceName(label)) {
+          try {
+            await renameDevice(mine.deviceId, label);
+            mine.name = label;
+          } catch {
+            // Keep what the server holds.
+          }
+          if (!alive.current) return;
+        }
+      }
       setRows(devices);
     } catch (err) {
       if (!alive.current) return;
@@ -114,6 +147,7 @@ export function Devices() {
             key={row.deviceId}
             title={row.name}
             description={`${describeDevicePlatform(row.platform)} · ${describeDeviceActivity(row.lastSeenAt)}`}
+            icon={deviceIcon(row.platform)}
             badge={row.current ? <StatusPill tone="neutral">This device</StatusPill> : undefined}
             onClick={() => { setNotice(null); setSelected(row); }}
           />
@@ -133,9 +167,13 @@ interface DeviceSheetProps {
 }
 
 /**
- * Rename or remove one device. The destructive step is a second press inside
- * the same sheet — no browser confirm, no dialog stacked on a dialog — and the
- * current installation only offers a name plus a pointer to Account sign-out.
+ * Rename or remove one device.
+ *
+ * The editor is a floating task surface at every width: a centred card on a
+ * desktop window and a full task surface on a phone, never a desktop sheet
+ * rising from the bottom edge. The device itself is the header; the only two
+ * actions are the rename form and one icon-led removal row, and removal still
+ * needs a second, explicit press here rather than a browser confirm.
  */
 function DeviceSheet({ device, onClose, onRenamed, onRemoved }: DeviceSheetProps) {
   const [draft, setDraft] = useState("");
@@ -151,6 +189,7 @@ function DeviceSheet({ device, onClose, onRenamed, onRemoved }: DeviceSheetProps
 
   const trimmed = draft.trim();
   const canRename = device !== null && trimmed.length >= 1 && trimmed.length <= 64 && trimmed !== device.name && busy === null;
+  const PlatformIcon = deviceIcon(device?.platform ?? null);
 
   const submitRename = async (): Promise<void> => {
     if (!device || !canRename) return;
@@ -188,20 +227,41 @@ function DeviceSheet({ device, onClose, onRenamed, onRemoved }: DeviceSheetProps
   };
 
   return (
-    <BottomSheet
+    <AdaptiveTaskSurface
       open={device !== null}
       onClose={onClose}
       title={device?.name ?? "Device"}
       description="Rename this device or remove its access."
+      busy={busy !== null}
+      footer={device ? <>
+        <Button variant="text" disabled={busy !== null} onClick={onClose}>Close</Button>
+        <Button type="submit" form="device-name-form" loading={busy === "rename"} disabled={!canRename}>
+          <Check size={17} aria-hidden /> Save name
+        </Button>
+      </> : undefined}
     >
-      <div className="flex flex-col gap-5 pb-8">
+      <div className="fb-device-editor">
+        <div className="fb-device-facts">
+          <span className={`fb-device-glyph${device?.current ? " fb-device-glyph--current" : ""}`} aria-hidden="true">
+            <PlatformIcon size={20} />
+          </span>
+          <div className="fb-device-facts-copy">
+            <p data-testid="device-facts">
+              {device ? `${describeDevicePlatform(device.platform)} · ${describeDeviceActivity(device.lastSeenAt)}` : ""}
+            </p>
+            <p className="fb-device-facts-note">
+              {device?.current ? "You are using this device now." : "This device is signed in to Chat."}
+            </p>
+          </div>
+          {device?.current ? <StatusPill tone="neutral">This device</StatusPill> : null}
+        </div>
+
         <form
-          className="flex flex-col gap-2"
+          id="device-name-form"
+          className="fb-device-form"
           onSubmit={(event) => { event.preventDefault(); void submitRename(); }}
         >
-          <label htmlFor="device-name" className="text-sm font-medium text-on-surface">
-            Device name
-          </label>
+          <label htmlFor="device-name">Device name</label>
           <input
             id="device-name"
             type="text"
@@ -210,52 +270,53 @@ function DeviceSheet({ device, onClose, onRenamed, onRemoved }: DeviceSheetProps
             autoComplete="off"
             disabled={busy !== null}
             onChange={(event) => setDraft(event.target.value)}
-            className="min-h-[48px] w-full rounded-m3-md border border-outline-variant bg-surface px-4 py-2.5 text-base text-on-surface focus:border-on-surface focus:outline-none disabled:opacity-60"
           />
-          <p className="text-xs text-on-surface-variant">Shown only to you, up to 64 characters.</p>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <Button type="submit" loading={busy === "rename"} disabled={!canRename}>
-              Save name
-            </Button>
-            <Button variant="text" disabled={busy !== null} onClick={onClose}>
-              Close
-            </Button>
-          </div>
+          <p>Shown only to you, up to 64 characters.</p>
         </form>
 
         {error ? (
-          <p role="alert" className="text-sm text-error">{error}</p>
+          <p role="alert" className="fb-device-error">{error}</p>
         ) : null}
 
-        {device?.current ? (
-          <p className="text-sm text-on-surface-variant">
-            This is the device you’re using. To sign it out, use Log out in Account.
-          </p>
-        ) : (
-          <div className="border-t border-outline-variant pt-4">
-            {armed ? (
-              <div className="flex flex-col gap-2">
-                <p className="text-sm text-on-surface">
-                  Remove {device?.name}? It signs out of Chat and stops receiving messages here.
-                  You can sign in again on that device later.
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button variant="error" loading={busy === "remove"} onClick={() => void submitRemove()}>
-                    Remove device
-                  </Button>
-                  <Button variant="text" disabled={busy !== null} onClick={() => setArmed(false)}>
-                    Cancel
-                  </Button>
-                </div>
+        <div className="fb-device-actions">
+          {device?.current ? (
+            <div className="fb-device-note">
+              <span className="fb-device-glyph" aria-hidden="true"><LogOut size={18} /></span>
+              <p>This is the device you’re using. To sign it out, use Log out in Account.</p>
+            </div>
+          ) : armed ? (
+            <div className="fb-device-confirm">
+              <p>
+                Remove {device?.name}? It signs out of Chat and stops receiving messages here.
+                You can sign in again on that device later.
+              </p>
+              <div className="fb-device-confirm-actions">
+                <Button variant="error" loading={busy === "remove"} onClick={() => void submitRemove()}>
+                  Remove device
+                </Button>
+                <Button variant="text" disabled={busy !== null} onClick={() => setArmed(false)}>
+                  Cancel
+                </Button>
               </div>
-            ) : (
-              <Button variant="outline" disabled={busy !== null} onClick={arm}>
-                Remove device…
-              </Button>
-            )}
-          </div>
-        )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="fb-device-action"
+              aria-label="Remove device…"
+              disabled={busy !== null}
+              onClick={arm}
+            >
+              <span className="fb-device-glyph fb-device-glyph--danger" aria-hidden="true"><Unplug size={18} /></span>
+              <span className="fb-device-action-copy">
+                <span className="fb-device-action-title">Remove device…</span>
+                <span className="fb-device-action-text">Signs it out of Chat and stops its messages syncing here.</span>
+              </span>
+              <ChevronRight size={18} aria-hidden="true" />
+            </button>
+          )}
+        </div>
       </div>
-    </BottomSheet>
+    </AdaptiveTaskSurface>
   );
 }

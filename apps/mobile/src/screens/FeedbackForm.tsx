@@ -25,6 +25,14 @@ import { isMissingServerFunction } from "../utils/safetyService";
 import { useAuth } from "../auth";
 import { useSafetyLifetime } from "../utils/useSafetyLifetime";
 
+/** One line per kind, so a reader picks the right one before writing. */
+const FEEDBACK_CATEGORY_HINTS: Readonly<Record<FeedbackCategory, string>> = {
+  BUG: "Something crashes, fails, or does not respond.",
+  SUGGESTION: "An idea for something Norfold should do.",
+  USABILITY: "A screen is confusing, cramped, or hard to reach.",
+  OTHER: "Anything that does not fit the other three.",
+};
+
 /**
  * The one feedback form.
  *
@@ -160,7 +168,7 @@ function ScopedFeedbackForm() {
         deviceClass: scalars.deviceClass,
       });
       if (!alive.current) return;
-      const outcome = "Thanks — your feedback was sent.";
+      const outcome = "Thanks, your feedback was sent.";
       setNotice(outcome);
       announce(outcome);
       setMessage("");
@@ -224,6 +232,7 @@ function ScopedFeedbackForm() {
                 name="feedback-category"
                 value={value}
                 title={FEEDBACK_CATEGORY_LABELS[value]}
+                description={FEEDBACK_CATEGORY_HINTS[value]}
                 checked={category === value}
                 onChange={() => {
                   setCategory(value);
@@ -296,7 +305,7 @@ function ScopedFeedbackForm() {
             key={row.id}
             className="fb-settings-row"
             data-testid="feedback-history-row"
-            aria-label={`${FEEDBACK_CATEGORY_LABELS[row.category]} — ${FEEDBACK_STATUS_LABELS[row.status]}`}
+            aria-label={`${FEEDBACK_CATEGORY_LABELS[row.category]}, ${FEEDBACK_STATUS_LABELS[row.status]}`}
           >
             <span className="fb-settings-row-copy">
               <span className="fb-settings-row-title">{FEEDBACK_CATEGORY_LABELS[row.category]}</span>

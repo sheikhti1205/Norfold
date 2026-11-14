@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { useParams } from "react-router";
+import { Bug, Lightbulb, MessageSquare, MousePointerClick } from "lucide-react";
 import { useAuth } from "../auth";
 import { Button } from "../components/Button";
 import { SelectField, TextAreaField } from "../components/Fields";
@@ -7,7 +8,7 @@ import { announce } from "../components/LiveRegion";
 import { RequireCapability } from "../components/RequireCapability";
 import { SettingsGroup, SettingsPage, SettingsRow, StatusPill } from "../components/settings";
 import { safetyReviewError } from "../components/AppealCopy";
-import { FEEDBACK_CATEGORY_LABELS, fetchStaffFeedback, listStaffFeedback, reviewFeedback, type FeedbackStatus, type FeedbackCursor } from "../services/feedback";
+import { FEEDBACK_CATEGORY_LABELS, fetchStaffFeedback, listStaffFeedback, reviewFeedback, type FeedbackCategory, type FeedbackStatus, type FeedbackCursor } from "../services/feedback";
 import { ApiError } from "../services/session";
 import { formatSafetyDate } from "../utils/safetyCopy";
 import { useSafetyPages, useSafetyResource } from "../utils/useSafetyResource";
@@ -16,6 +17,14 @@ import "../components/AdminConsole.css";
 import "../components/SafetyReview.css";
 
 const STAFF_STATUS = { NEW: "New", REVIEWING: "Being reviewed", RESOLVED: "Resolved" };
+
+/** The category in one glance; the icon names the kind, the label confirms it. */
+const CATEGORY_ICONS = {
+  BUG: Bug,
+  SUGGESTION: Lightbulb,
+  USABILITY: MousePointerClick,
+  OTHER: MessageSquare,
+} as const satisfies Record<FeedbackCategory, typeof Bug>;
 export function StaffFeedback() {
   const { user } = useAuth();
   return <RequireCapability capability="feedback_read"><FeedbackQueue key={user?.id} /></RequireCapability>;
@@ -23,7 +32,7 @@ export function StaffFeedback() {
 function FeedbackQueue() {
   const [status, setStatus] = useState<FeedbackStatus | "">("");
   return <SettingsPage title="Feedback to review" backTo="/settings" description="Read feedback and keep its review status up to date.">
-    <SelectField label="Feedback status" value={status} onChange={event => setStatus(event.target.value as FeedbackStatus | "")} options={[
+    <SelectField label="Feedback status" value={status} onChange={value => setStatus(value as FeedbackStatus | "")} options={[
       { value: "", label: "Waiting for review" }, ...(["NEW", "REVIEWING", "RESOLVED"] as const).map(value => ({ value, label: STAFF_STATUS[value] })),
     ]} /><FeedbackQueueRows key={status} status={status} />
   </SettingsPage>;
@@ -35,7 +44,7 @@ function FeedbackQueueRows({ status }: { status: FeedbackStatus | "" }) {
     {page.error != null && <div role="alert" className="fb-safety-copy"><p>{safetyReviewError(page.error, "feedback")}</p><button className="fb-safety-read-action" onClick={() => void page.refresh()}>Retry feedback</button></div>}
     {page.items === null && !page.error && <p role="status" className="fb-safety-copy">Loading feedback…</p>}
     {page.items?.length === 0 && !page.error && !page.cursor && <p className="fb-safety-copy">No feedback is waiting for review.</p>}
-    <ol className="fb-admin-list">{page.items?.map(row => <li key={row.id}><SettingsRow title={FEEDBACK_CATEGORY_LABELS[row.category]} description={`${STAFF_STATUS[row.status]} · ${formatSafetyDate(row.createdAt)}`} route={`/settings/moderation/feedback/${encodeURIComponent(row.id)}`} /></li>)}</ol>
+    <ol className="fb-admin-list">{page.items?.map(row => <li key={row.id}><SettingsRow icon={CATEGORY_ICONS[row.category]} iconTone="neutral" title={FEEDBACK_CATEGORY_LABELS[row.category]} description={`${STAFF_STATUS[row.status]} · ${formatSafetyDate(row.createdAt)}`} route={`/settings/moderation/feedback/${encodeURIComponent(row.id)}`} /></li>)}</ol>
     {page.cursor && <button className="fb-safety-read-action" disabled={page.loading} onClick={() => void page.more()}>More feedback</button>}
   </SettingsGroup>;
 }
@@ -69,12 +78,23 @@ function FeedbackDetail({ id }: { id: string }) {
   const refresh = async () => { setError(null); const refreshed = await resource.refresh(); if (alive.current && refreshed) { setStale(false); setNote(null); } };
   const fault = error ?? resource.error;
   const disabled = saving || stale || resource.loading;
+  const CategoryIcon = row ? CATEGORY_ICONS[row.category] : MessageSquare;
   return <SettingsPage title="Review feedback" backTo="/settings/moderation/feedback" backLabel="Back to feedback">
     <div className="fb-safety-toolbar"><button className="fb-safety-read-action" disabled={saving || resource.loading} onClick={() => void refresh()}>Refresh feedback</button>{notice && <p role="status" className="fb-admin-note">{notice}</p>}</div>
     {fault != null && <p role="alert" className="fb-admin-error">{safetyReviewError(fault, "feedback")}</p>}
     {!row && !fault && <p role="status" className="fb-safety-copy">Loading feedback…</p>}
     {row && <>
-      <SettingsGroup title={FEEDBACK_CATEGORY_LABELS[row.category]}><div className="fb-safety-copy"><StatusPill tone={row.status === "RESOLVED" ? "success" : "neutral"}>{STAFF_STATUS[row.status]}</StatusPill><p className="fb-admin-note">Sent {formatSafetyDate(row.createdAt)} · Updated {formatSafetyDate(row.updatedAt)}</p></div></SettingsGroup>
+      <SettingsGroup title="What this feedback is about">
+        <div className="fb-case-summary">
+          <span className="fb-case-summary-icon" aria-hidden="true"><CategoryIcon size={20} /></span>
+          <div className="fb-case-summary-copy">
+            <p className="fb-case-summary-title">{FEEDBACK_CATEGORY_LABELS[row.category]}</p>
+            <p className="fb-case-summary-meta">{STAFF_STATUS[row.status]} · Sent {formatSafetyDate(row.createdAt)} · Updated {formatSafetyDate(row.updatedAt)}</p>
+            <p className="fb-case-summary-note">{row.technicalContext?.screen ? `The sender was on the ${row.technicalContext.screen} screen when this was sent.` : "No screen was included with this feedback."}</p>
+            <div className="fb-case-summary-status"><StatusPill tone={row.status === "RESOLVED" ? "success" : "neutral"}>{STAFF_STATUS[row.status]}</StatusPill></div>
+          </div>
+        </div>
+      </SettingsGroup>
       <SettingsGroup title="Message"><p className="fb-safety-copy fb-safety-text">{row.message}</p></SettingsGroup>
       <SettingsGroup title="Technical details">
         {row.technicalContext ? <dl className="fb-safety-facts">{([

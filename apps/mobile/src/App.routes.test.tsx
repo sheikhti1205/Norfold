@@ -447,6 +447,17 @@ describe("consumer route map", () => {
     expect(screen.getByText("Home screen")).toBe(home);
   });
 
+  it("opens the floating viewer for a report link that carries no background state", async () => {
+    signedIn();
+    renderAt("/notifications");
+    expect(await screen.findByText("Notifications screen")).toBeTruthy();
+    await act(async () => { await router!.navigate("/posts/p1#detail-activity"); });
+    const dialog = await screen.findByRole("dialog", { name: "Report" });
+    expect(dialog.textContent).toContain("PostDetail screen");
+    // The page the entry point lived on stays mounted underneath.
+    expect(screen.getByText("Notifications screen")).toBeTruthy();
+  });
+
   it("renders a direct report link standalone and never restores a different account background", async () => {
     signedIn();
     renderAt("/posts/p1");

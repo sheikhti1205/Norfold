@@ -86,7 +86,8 @@ function isNotificationType(value: unknown): value is NotificationType {
     value === "MENTION" ||
     value === "STATUS" ||
     value === "REACTION" ||
-    value === "MODERATION"
+    value === "MODERATION" ||
+    value === "ROLE"
   );
 }
 

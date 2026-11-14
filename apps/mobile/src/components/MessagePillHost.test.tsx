@@ -4,7 +4,13 @@ import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MessagePillHost } from "./MessagePillHost";
 
-const state = vi.hoisted(() => ({ conversations: [] as any[] }));
+type ConversationRow = {
+  conversationId: string;
+  unreadCount: number;
+  cachedProjection: null;
+  lastMessage: { authorId: string; body: string; messageType?: string };
+};
+const state = vi.hoisted(() => ({ conversations: [] as ConversationRow[] }));
 vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "me" }, booting: false, needsProfile: false }) }));
 vi.mock("../services/messaging/useMessaging", () => ({ useMessaging: () => ({
   accountId: "me", status: "ready", conversations: state.conversations, currentProjections: null,

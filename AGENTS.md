@@ -1,9 +1,17 @@
 # Norfold — Agent Rules (always loaded)
 
+## Browser verification — owner order 2026-11-14
+
+- For every UI or visual claim in this repository, use the `browser` skill and the owner's real, logged-in Chrome tab through the `browse` MCP tools. The owner has explicitly authorized this session to use that tab.
+- Attach to the existing tab, inspect the actual current page, and verify the fix there. Do not substitute headless Chrome, an isolated Playwright context, the fixture route, DOM tests, or a local-only build when the owner has directed you to check the live session.
+- If the relay is unreachable or no tab is attached, fix or restart the relay (`browse serve` / `browse doctor`) or ask the owner. Never quietly fall back to another browser.
+- Screenshot or snapshot the real page before claiming a visual fix is visible.
+
 ## Project identity and private context — owner update 2026-11-03
 
 - This is `sheikhti1205/Norfold`, the former FindBack React/Capacitor lost-and-found product. It is NOT the retired Compose workspace `Norfold-App/norfold-compose-legacy`.
 - Read `D:\GDrive\Norfold\00_CONTROL\START_HERE.md` directly. That folder is the private Drive data and is no longer linked into this checkout; never stage, force-add, copy into tracked files, or publish its contents. Agents may read that path at any time.
+- Read `D:\GDrive\Norfold\00_CONTROL\OWNER-INSTRUCTIONS-LEDGER.md` before any completion claim. Every stated owner instruction is tracked there with a status and evidence; an instruction that is not in the ledger is not done. Owner order 2026-11-13.
 - Do not import the retired project's `Norfold-internal` coordination, Compose/editor phase rules or post-pass policy based on the Norfold name. Current source, the latest owner direction and this product's own control tree govern.
 
 ## Proportional execution — owner order 2026-11-02

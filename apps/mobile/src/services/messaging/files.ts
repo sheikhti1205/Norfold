@@ -104,6 +104,8 @@ export function chatFileExtension(name: string): string {
 export function safeChatFileName(name: string): string {
   const cleaned = name
     .replace(/[\\/]/g, "-")
+    // Control characters are exactly what this sanitizer exists to remove.
+    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f]/g, "")
     .trim()
     .slice(0, 120);

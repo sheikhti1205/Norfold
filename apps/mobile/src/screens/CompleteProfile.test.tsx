@@ -197,9 +197,10 @@ describe("CompleteProfile seeds (W0.5)", () => {
     const complete = vi.fn(async () => FAKE_USER);
     __setCompleteSocialProfile(complete);
     renderProfile();
-    expect(screen.getByAltText("Suggested profile photo")).toBeTruthy();
+    const avatarImage = () => document.querySelector('[data-testid="user-avatar"] img');
+    expect(avatarImage()).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Remove photo" }));
-    expect(screen.queryByAltText("Suggested profile photo")).toBeNull();
+    expect(avatarImage()).toBeNull();
     fireEvent.change(screen.getByLabelText("Mobile (Bangladesh)"), {
       target: { value: "01812345678" },
     });

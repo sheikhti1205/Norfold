@@ -5,6 +5,7 @@ import { createMediaTransport } from "./mediaTransport";
 import { uuid } from "./validation";
 import { kickChatWake } from "./chatWake";
 import { createDeviceEnrollment } from "./deviceEnrollment";
+import { currentDeviceLabel } from "../deviceLabel";
 import { openWebDeviceIdentity } from "./webDeviceIdentity";
 import { openAndroidDeviceIdentity } from "./androidDeviceIdentity";
 import type { HistoryCandidate } from "./peerHistory";
@@ -45,7 +46,10 @@ export function createSupabaseMessagingSession(identity: MessagingScope, history
       challenge: async publicKey => {
         const { data, error } = await getSupabase().rpc("findback_device_enrollment_challenge", {
           p_device_id: scope.deviceId, p_public_key: publicKey,
-          p_name: owner.platform === "web" ? "Browser" : "Android device", p_platform: owner.platform,
+          // A specific default ("Chrome on Windows", "Pixel 7") is what makes
+          // two installations distinguishable in Devices. The reader can rename
+          // either one later.
+          p_name: currentDeviceLabel(owner.platform), p_platform: owner.platform,
         }).abortSignal(signal);
         if (error) throw new Error("Device could not connect"); return data;
       },

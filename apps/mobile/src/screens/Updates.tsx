@@ -1,11 +1,18 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import { Capacitor } from "@capacitor/core";
-import { Button } from "../components/Button";
+import { ChevronDown, CloudOff, Download, Globe, RefreshCw, Smartphone } from "lucide-react";
 import { UpdateChanges } from "../components/UpdateChanges";
 import { UpdateJob } from "../components/UpdateJob";
 import { nativeUpdates, useNativeUpdateState } from "../services/updates/nativeRuntime";
 import { announce } from "../components/LiveRegion";
-import { PreferenceSwitchRow, SettingsGroup, SettingsPage, StatusPill } from "../components/settings";
+import {
+  PreferenceSwitchRow,
+  SettingsGroup,
+  SettingsPage,
+  SettingsRow,
+  StatusPill,
+} from "../components/settings";
 import { APP_VERSION } from "../services/appCapabilities";
 import type { UpdateCheckFailure, UpdateSnapshot } from "../services/updates/controller";
 import type { AndroidRelease, ReleaseHistoryRecord } from "../services/updates/types";
@@ -20,6 +27,9 @@ import { formatTimestamp } from "../utils/dates";
 import { readBuildInfo } from "../services/buildInfo";
 import { useAuth } from "../auth";
 import { fetchMyRole } from "../services/roles";
+import { destinationFor, resolveDestination, type DestinationContext } from "../services/destinations";
+import { releaseNoteFor, type ReleaseNote } from "../services/updates/releaseNotes";
+import "./Updates.css";
 
 /** One human sentence per failure cause; never a raw transport or provider string. */
 export function checkFailureCopy(code: UpdateCheckFailure): string {
@@ -44,7 +54,10 @@ function checkedAt(ms: number | null): string {
   return formatTimestamp(new Date(ms).toISOString());
 }
 
-function checkStatusCopy(snapshot: UpdateSnapshot, native: boolean): { label: string; tone: "neutral" | "success" | "warning" | "error" } {
+function checkStatusCopy(
+  snapshot: UpdateSnapshot,
+  native: boolean,
+): { label: string; tone: "neutral" | "success" | "warning" | "error" } {
   const check = snapshot.lastCheck;
   if (check === null) return { label: "Not checked yet", tone: "neutral" };
   if (check.status === "error") return { label: "Couldn't check", tone: "warning" };
@@ -54,8 +67,13 @@ function checkStatusCopy(snapshot: UpdateSnapshot, native: boolean): { label: st
   return { label: "No compatible update", tone: "neutral" };
 }
 
-function historyState(release: AndroidRelease | ReleaseHistoryRecord, snapshot: UpdateSnapshot): string | null {
-  if ("downloadStatus" in release) return release.downloadStatus === "none" ? "No files published" : "Archived beta";
+function historyState(
+  release: AndroidRelease | ReleaseHistoryRecord,
+  snapshot: UpdateSnapshot,
+): string | null {
+  if ("downloadStatus" in release) {
+    return release.downloadStatus === "none" ? "No files published" : "Archived beta";
+  }
   if (snapshot.installed !== null && release.versionCode === snapshot.installed.versionCode) {
     return "Installed";
   }
@@ -65,18 +83,66 @@ function historyState(release: AndroidRelease | ReleaseHistoryRecord, snapshot: 
   return null;
 }
 
-function InstalledIdentity({ snapshot, native }: { snapshot: UpdateSnapshot; native: boolean }) {
-  if (snapshot.installed !== null) {
-    return (
-      <p className="text-sm text-on-surface" data-testid="updates-installed">
-        {APP_VERSION} · build {snapshot.installed.versionCode}
-      </p>
-    );
-  }
+/**
+ * The capabilities a written note names, linked only when the canonical
+ * destination resolves for this reader. An unresolved id stays as text, never
+ * as a dead control.
+ */
+function FeatureList({ note, context }: { note: ReleaseNote; context: DestinationContext }) {
   return (
-    <p className="text-sm text-on-surface" data-testid="updates-installed">
-      {native ? "This build can't confirm its own version" : "Web build"}
-    </p>
+    <ul className="fb-update-list">
+      {note.features.map((feature) => {
+        const destination = feature.destinationId ? destinationFor(feature.destinationId) : null;
+        const resolution = feature.destinationId
+          ? resolveDestination(feature.destinationId, context)
+          : null;
+        return (
+          <li key={feature.summary}>
+            {feature.summary}
+            {destination !== null && resolution?.kind === "available" ? (
+              <Link className="fb-update-feature-link" to={resolution.route}>
+                {destination.title}
+              </Link>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function ChangeList({ changes }: { changes: readonly string[] }) {
+  return (
+    <ul className="fb-update-list">
+      {changes.map((change) => <li key={change}>{change}</li>)}
+    </ul>
+  );
+}
+
+/** The written story for one version: about, what changed, new features. */
+function ReleaseNoteBody({
+  note,
+  context,
+}: {
+  note: ReleaseNote;
+  context: DestinationContext;
+}) {
+  return (
+    <>
+      <p className="fb-update-about">{note.about}</p>
+      {note.changes.length > 0 ? (
+        <>
+          <h3 className="fb-update-subheading">What changed</h3>
+          <ChangeList changes={note.changes} />
+        </>
+      ) : null}
+      {note.features.length > 0 ? (
+        <>
+          <h3 className="fb-update-subheading">New features</h3>
+          <FeatureList note={note} context={context} />
+        </>
+      ) : null}
+    </>
   );
 }
 
@@ -89,17 +155,19 @@ export function Updates() {
   const check = snapshot.lastCheck;
   const status = checkStatusCopy(snapshot, native);
   const [buildGitSha, setBuildGitSha] = useState("");
+
   useEffect(() => {
     let live = true;
     setRole(null);
-    if (user?.id) void fetchMyRole().then(value => {
+    if (user?.id) void fetchMyRole().then((value) => {
       if (live) setRole({ userId: user.id, capabilities: value.capabilities });
     }).catch(() => {});
     return () => { live = false; };
   }, [user?.id]);
+
   useEffect(() => {
     let live = true;
-    void readBuildInfo().then(info => { if (live) setBuildGitSha(info.buildGitSha ?? ""); });
+    void readBuildInfo().then((info) => { if (live) setBuildGitSha(info.buildGitSha ?? ""); });
     return () => { live = false; };
   }, []);
 
@@ -116,7 +184,48 @@ export function Updates() {
   }, [snapshot.history]);
 
   const checking = snapshot.checking;
-  const jobActive=["downloading","verifying","ready","installing","needs-permission","needs-confirmation"].includes(job.kind);
+  const jobActive = ["downloading", "verifying", "ready", "installing", "needs-permission", "needs-confirmation"].includes(job.kind);
+
+  const context: DestinationContext = {
+    platform: native ? "android" : "web",
+    signedIn: !!user,
+    capabilities: role && role.userId === user?.id ? role.capabilities : [],
+  };
+  const catalogueContext = {
+    ...context,
+    buildGitSha,
+    capabilitiesKnown: role !== null && role.userId === user?.id,
+    satisfiedPrerequisites: [],
+  };
+
+  const installedLine = snapshot.installed !== null
+    ? `Android build ${snapshot.installed.versionCode} · ${APP_VERSION}`
+    : native
+      ? "This build can't confirm its own version"
+      : `Web build · ${APP_VERSION}`;
+
+  const checkLine = check === null
+    ? "Norfold checks for a newer version when you open this screen."
+    : check.status === "error"
+      ? checkFailureCopy(check.code ?? "offline")
+      : `Checked ${checkedAt(check.checkedAt)}.`;
+
+  // The story leads with what the reader can install. Without an installable
+  // update it describes the build they are running, which is the honest answer
+  // on the web where there is nothing to install.
+  const eligible = snapshot.eligible;
+  const featuredVersion = eligible?.versionName ?? APP_VERSION;
+  const featuredRelease = eligible
+    ?? snapshot.history.find((release) => release.versionName === APP_VERSION)
+    ?? null;
+  const featuredNote = releaseNoteFor(featuredVersion);
+  const featuredState = eligible !== null
+    ? "Available to install"
+    : featuredVersion === APP_VERSION ? "This build" : "Published";
+  const featuredFeatures = (snapshot.features ?? [])
+    .filter((feature) => feature.releaseId === featuredRelease?.id);
+
+  const history = snapshot.history;
 
   return (
     <div data-testid="updates-screen">
@@ -126,62 +235,94 @@ export function Updates() {
         backTo="/settings"
       >
         <SettingsGroup title="This build">
-          <div className="flex flex-wrap items-start justify-between gap-3 px-3 py-3">
-            <div className="min-w-0">
-              <InstalledIdentity snapshot={snapshot} native={native} />
-              <p className="mt-1 text-sm text-on-surface-variant">
-                {check === null
-                  ? "Norfold checks for a newer version when you open this screen."
-                  : check.status === "error"
-                    ? checkFailureCopy(check.code ?? "offline")
-                    : `Checked ${checkedAt(check.checkedAt)}.`}
-              </p>
-            </div>
-            <StatusPill tone={status.tone}>{status.label}</StatusPill>
-          </div>
-
-          {snapshot.eligible !== null ? (
-            <div className="px-3 pb-3">
-              <p className="text-sm font-medium text-on-surface" data-testid="updates-eligible">
-                {snapshot.eligible.versionName} is available
-              </p>
-              <p className="mt-1 text-sm text-on-surface-variant">{snapshot.eligible.summary}</p>
-              {native && !jobActive ? <Button className="mt-2" variant="outline" onClick={()=>void nativeUpdates.download(snapshot.eligible!,snapshot.installed)}>Download update</Button> : null}
-            </div>
+          <SettingsRow
+            title={`Norfold ${APP_VERSION}`}
+            description={<span data-testid="updates-installed">{installedLine}</span>}
+            icon={native ? Smartphone : Globe}
+            value={<StatusPill tone={status.tone}>{status.label}</StatusPill>}
+          />
+          <SettingsRow
+            title={checking ? "Checking…" : "Check now"}
+            description={checkLine}
+            icon={RefreshCw}
+            disabled={checking}
+            onClick={() => void checkForUpdates().then((next) => {
+              announce(
+                next.lastCheck?.status === "error"
+                  ? "Couldn't check for updates."
+                  : next.eligible !== null
+                    ? "A newer version is available."
+                    : !native ? "Version history updated."
+                      : next.installed === null ? "This build can't confirm its own version."
+                        : "No compatible update is available.",
+              );
+            })}
+          />
+          {eligible !== null ? (
+            native && !jobActive ? (
+              <SettingsRow
+                title={`Download ${eligible.versionName}`}
+                description={releaseNoteFor(eligible.versionName)?.about
+                  ?? "A newer Android build is ready to install."}
+                icon={Download}
+                value="Download"
+                onClick={() => void nativeUpdates.download(eligible, snapshot.installed)}
+              />
+            ) : (
+              <SettingsRow
+                title={`${eligible.versionName} is available`}
+                description={releaseNoteFor(eligible.versionName)?.about
+                  ?? "A newer Android build is ready to install."}
+                icon={Download}
+              />
+            )
           ) : null}
+        </SettingsGroup>
 
-          <div className="flex flex-wrap items-center gap-2 px-3 pb-4">
-            <Button
-              variant="outline"
-              loading={checking}
-              onClick={() => void checkForUpdates().then((next) => {
-                announce(
-                  next.lastCheck?.status === "error"
-                    ? "Couldn't check for updates."
-                    : next.eligible !== null
-                      ? "A newer version is available."
-                       : !native ? "Version history updated."
-                         : next.installed === null ? "This build can't confirm its own version."
-                           : "No compatible update is available.",
-                );
-              })}
-              data-testid="updates-check-button"
-            >
-              Check now
-            </Button>
-            {check?.status === "error" ? (
-              <span className="text-sm text-on-surface-variant">Last checked {checkedAt(check.checkedAt)}.</span>
+        <SettingsGroup title="What this update is about">
+          <div className="fb-update-featured" data-testid="updates-featured">
+            <div className="fb-update-featured-head">
+              <span className="fb-update-featured-version">{featuredVersion}</span>
+              <StatusPill tone={featuredState === "Available to install" ? "warning" : "neutral"}>
+                {featuredState}
+              </StatusPill>
+            </div>
+            {featuredNote !== null ? (
+              <ReleaseNoteBody note={featuredNote} context={context} />
+            ) : (
+              <p className="fb-update-note">
+                Written notes for this version are not in this build yet. The version number and
+                release date below are the facts this build can prove.
+              </p>
+            )}
+            {featuredFeatures.length > 0 ? (
+              <>
+                <h3 className="fb-update-subheading">Announced features</h3>
+                <UpdateChanges features={featuredFeatures} context={catalogueContext} />
+              </>
+            ) : null}
+            {featuredRelease !== null ? (
+              <p className="fb-update-note">
+                Published {formatTimestamp(featuredRelease.publishedAt)}.
+              </p>
             ) : null}
           </div>
         </SettingsGroup>
 
-        {native && job.kind !== "idle" ? <SettingsGroup title="Update progress">
-          <UpdateJob state={job} onInstall={()=>void nativeUpdates.install()} onCancel={()=>void nativeUpdates.cancel()} onPermission={()=>void nativeUpdates.openPermission()} />
-        </SettingsGroup> : null}
+        {native && job.kind !== "idle" ? (
+          <SettingsGroup title="Update progress">
+            <UpdateJob
+              state={job}
+              onInstall={() => void nativeUpdates.install()}
+              onCancel={() => void nativeUpdates.cancel()}
+              onPermission={() => void nativeUpdates.openPermission()}
+            />
+          </SettingsGroup>
+        ) : null}
 
         <SettingsGroup
           title="Update notices"
-          description="Off by default: versions and changes stay here in Settings. Turn this on for a quiet card when a newer version is ready — only once per version, and never over something you're doing."
+          description="Off by default: versions and changes stay here in Settings. Turn this on for a quiet card when a newer version is ready, only once per version, and never over something you're doing."
         >
           <PreferenceSwitchRow
             title="Show update notices"
@@ -196,31 +337,53 @@ export function Updates() {
 
         <SettingsGroup
           title="Version history"
-          description={native ? undefined : "Web updates are deployed automatically; there is nothing to install here."}
+          description={native
+            ? "Every release this device knows about, newest first. Open one to read what changed."
+            : "Web updates are deployed automatically; there is nothing to install here. Open a version to read what changed."}
         >
-          {snapshot.history.length === 0 ? (
-            <p className="px-3 py-3 text-sm text-on-surface-variant" data-testid="updates-history-empty">
-              No version history is available on this device yet.
-            </p>
+          {history.length === 0 ? (
+            <SettingsRow
+              title="No version history yet"
+              description={<span data-testid="updates-history-empty">Norfold lists each release here after it checks for updates.</span>}
+              icon={CloudOff}
+            />
           ) : (
-            <ul className="divide-y divide-outline-variant" data-testid="updates-history">
-              {snapshot.history.map((release) => {
+            <ul className="fb-update-history" data-testid="updates-history">
+              {history.map((release) => {
+                const note = releaseNoteFor(release.versionName);
                 const state = historyState(release, snapshot);
+                const isFeatured = release.versionName === featuredVersion;
+                const features = (snapshot.features ?? [])
+                  .filter((feature) => feature.releaseId === release.id);
                 return (
-                  <li key={release.id} className="px-3 py-3" data-testid="updates-history-item">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-on-surface">{release.versionName}</p>
-                        <p className="mt-1 text-sm text-on-surface-variant">{release.summary}</p>
-                        <UpdateChanges features={(snapshot.features ?? []).filter(feature => feature.releaseId === release.id)}
-                          context={{ platform: native ? "android" : "web", buildGitSha, signedIn: !!user, capabilities: role && role.userId === user?.id ? role.capabilities : [], capabilitiesKnown: role !== null && role.userId === user?.id, satisfiedPrerequisites: [] }} />
-                        <p className="mt-1 text-xs text-on-surface-variant">
+                  <li key={release.id} data-testid="updates-history-item">
+                    <details className="fb-update-version">
+                      <summary>
+                        <span className="fb-update-version-copy">
+                          <span className="fb-update-version-name">{release.versionName}</span>
+                          <span className="fb-update-version-about">
+                            {note?.about ?? "No written notes for this version in this build."}
+                          </span>
+                        </span>
+                        {state !== null ? <StatusPill tone="neutral">{state}</StatusPill> : null}
+                        <ChevronDown size={18} aria-hidden="true" className="fb-update-chevron" />
+                      </summary>
+                      <div className="fb-update-version-body">
+                        {note !== null ? <ReleaseNoteBody note={note} context={context} /> : null}
+                        {!isFeatured && features.length > 0 ? (
+                          <>
+                            <h3 className="fb-update-subheading">Announced features</h3>
+                            <UpdateChanges features={features} context={catalogueContext} />
+                          </>
+                        ) : null}
+                        <p className="fb-update-note">
                           {formatTimestamp(release.publishedAt)}
-                           {!("artifacts" in release) || release.artifacts.length === 0 ? " · announcement" : ""}
+                          {!("artifacts" in release) || release.artifacts.length === 0
+                            ? " · Announcement"
+                            : ""}
                         </p>
                       </div>
-                      {state !== null ? <StatusPill tone="neutral">{state}</StatusPill> : null}
-                    </div>
+                    </details>
                   </li>
                 );
               })}

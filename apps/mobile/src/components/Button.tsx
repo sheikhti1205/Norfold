@@ -37,7 +37,7 @@ export function Button({
       type={type}
       whileTap={pressFeedback.button}
       transition={{ duration: motionDurations.instant }}
-      className={`inline-flex items-center justify-center gap-2 rounded-m3-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${VARIANTS[variant]} ${sizeCls} ${className}`}
+      className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-m3-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${VARIANTS[variant]} ${sizeCls} ${className}`}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       // framer-motion retypes onDrag* as pan handlers; the native HTML drag

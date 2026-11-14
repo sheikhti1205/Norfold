@@ -31,7 +31,7 @@ describe("isolated recovery OTP", () => {
     await recovery.updatePassword("new-password-123");
     expect(isolated.auth.verifyOtp).toHaveBeenCalledWith({ email: user.email, token: "123456", type: "recovery" });
     expect(create).toHaveBeenCalledWith(expect.any(String), expect.any(String), expect.objectContaining({ auth: expect.objectContaining({ persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }) }));
-    expect(isolated.auth.updateUser).toHaveBeenCalledWith({ password: "new-password-123", data: { norfold_password_set_at: expect.stringMatching(/.+/) } });
+    expect(isolated.auth.updateUser).toHaveBeenCalledWith({ password: "new-password-123" });
     expect(shared.auth.verifyOtp).not.toHaveBeenCalled(); expect(shared.auth.updateUser).not.toHaveBeenCalled();
     expect(getToken()).toBe("synthetic-existing-account-session");
     await recovery.dispose();

@@ -4,6 +4,7 @@ import { AdaptiveTaskSurface } from "./AdaptiveTaskSurface";
 import { Button } from "./Button";
 import { useAppIdle } from "../hooks/appIdle";
 import { claimUpdatePrompt, checkForUpdates, refreshInstalledUpdates, dismissUpdate, setUpdateIdle, useUpdateSnapshot } from "../services/updates/runtime";
+import { releaseNoteFor } from "../services/updates/releaseNotes";
 import type { AndroidRelease } from "../services/updates/types";
 
 /**
@@ -15,7 +16,7 @@ import type { AndroidRelease } from "../services/updates/types";
  *
  * The shown release is latched locally rather than read from `pending` on every
  * render. Opening the dialog itself registers a modal layer, so the app stops
- * being idle the instant it appears — deriving the render from `pending` would
+ * being idle the instant it appears, so deriving the render from `pending` would
  * unmount the dialog that just opened it. The latch keeps it open until the
  * reader acts; Escape, back, outside-click, "Later" and "See what's new" all
  * dismiss durably, so the same release never asks again.
@@ -74,7 +75,8 @@ export function UpdatePrompt() {
       }
     >
       <p className="text-sm text-on-surface-variant" data-testid="update-prompt-summary">
-        {shown.summary}
+        {releaseNoteFor(shown.versionName)?.about
+          ?? "A newer build of Norfold is ready. Open Updates to see what changed."}
       </p>
     </AdaptiveTaskSurface>
   );

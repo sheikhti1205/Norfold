@@ -85,6 +85,17 @@ const ACTION_WORDS: Readonly<Record<string, string>> = {
   BAN: "banned a member",
 };
 
+const MODERATION_AUDIT_ACTIONS: ReadonlySet<string> = new Set([
+  "NO_ACTION", "PUBLISH", "HIDE", "REMOVE", "WARN", "PROBATION",
+  "RESTRICT_POSTING", "SUSPEND", "BAN",
+]);
+
+const ROLE_AUDIT_ACTIONS: ReadonlySet<string> = new Set([
+  "BOOTSTRAP_ADMIN", "ROLE_GRANTED", "ROLE_INVITED", "ROLE_REVOKED",
+  "CAPABILITIES_CHANGED", "INVITATION_ACCEPTED", "INVITATION_CAPABILITIES_CHANGED",
+  "INVITATION_REVOKED", "ROLE_OFFER_ACCEPTED",
+]);
+
 /** One readable line of the activity log. */
 export interface ActivityLine {
   /** What happened, in words. Never an action id. */
@@ -93,6 +104,8 @@ export interface ActivityLine {
   detail: string | null;
   /** When it happened, in the reader's own time zone. */
   time: string;
+  /** Where the reader can act on what this entry is about, when there is one. */
+  review: { label: string; to: string } | null;
 }
 
 /** Reads a server state object without trusting its shape. */
@@ -114,6 +127,41 @@ function emailOf(state: Record<string, unknown>, fallback: string): string | nul
   return null;
 }
 
+/** "removed content" becomes "Removed content" at the start of a line. */
+function sentenceCase(value: string): string {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+}
+
+/** What a moderation action was applied to, when the log names it. */
+function targetNoun(targetType: string): string | null {
+  switch (targetType.trim().toUpperCase()) {
+    case "POST":
+      return "post";
+    case "COMMENT":
+      return "comment";
+    case "MESSAGE":
+      return "message";
+    default:
+      return null;
+  }
+}
+
+/** A moderation line that names the thing, not just "content". */
+function moderationHeadline(action: string, targetType: string): string | null {
+  const noun = targetNoun(targetType);
+  if (!noun) return null;
+  switch (action) {
+    case "PUBLISH":
+      return `Published a ${noun}`;
+    case "HIDE":
+      return `Hid a ${noun}`;
+    case "REMOVE":
+      return `Removed a ${noun}`;
+    default:
+      return null;
+  }
+}
+
 /**
  * One audit row, said in words.
  *
@@ -123,12 +171,14 @@ function emailOf(state: Record<string, unknown>, fallback: string): string | nul
  */
 export function describeActivity(entry: AuditEntry): ActivityLine {
   const action = entry.action.trim().toUpperCase();
-  const verb = ACTION_WORDS[action] ?? "changed something";
+  const verb = ACTION_WORDS[action] ?? "recorded a change";
   const previous = stateOf(entry.previousState);
   const next = stateOf(entry.newState);
   const target = emailOf(next, "") ?? emailOf(previous, "") ?? (entry.targetId.includes("@") ? entry.targetId : null);
   const role = typeof next.role === "string" ? next.role : typeof previous.role === "string" ? previous.role : null;
   const word = roleWord(role);
+  const moderationAction = MODERATION_AUDIT_ACTIONS.has(action);
+  const roleAction = ROLE_AUDIT_ACTIONS.has(action);
 
   let headline: string;
   let detail: string | null = null;
@@ -177,12 +227,26 @@ export function describeActivity(entry: AuditEntry): ActivityLine {
       headline = target ? `${target} claimed the admin role` : "The admin role was claimed";
       detail = "The first admin account. This can only happen once.";
       break;
+    case "ROLE_OFFER_ACCEPTED":
+      headline = target ? `${target} accepted a role` : "A role offer was accepted";
+      detail = "The person accepted the access offered to them.";
+      break;
     default:
-      headline = target ? `${verb} (${target})` : verb;
+      headline = moderationHeadline(action, entry.targetType)
+        ?? (target ? `${sentenceCase(verb)} (${target})` : sentenceCase(verb));
       detail = null;
   }
 
-  return { headline, detail, time: formatActivityTime(entry.createdAt) };
+  return {
+    headline,
+    detail,
+    time: formatActivityTime(entry.createdAt),
+    review: moderationAction
+      ? { label: "Review reports", to: "/settings/moderation/queue" }
+      : roleAction
+        ? { label: "Open team", to: "/settings/team" }
+        : null,
+  };
 }
 
 /** "Review reports, Hide and publish content" — the permissions held now. */

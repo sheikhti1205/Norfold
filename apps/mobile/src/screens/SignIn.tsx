@@ -9,7 +9,9 @@ import { readRememberedAccounts } from "../services/rememberedAccounts";
  */
 export function SignIn({ email }: { email?: string }) {
   const location = useLocation();
-  const id = (location.state as { rememberedAccountId?: unknown } | null)?.rememberedAccountId;
+  const state = location.state as { rememberedAccountId?: unknown; switchNeedsSignIn?: unknown } | null;
+  const id = state?.rememberedAccountId;
   const remembered = typeof id === "string" ? readRememberedAccounts().find(account => account.id === id) : undefined;
-  return <AuthGateway initialMode="signin" initialEmail={email ?? remembered?.loginEmail ?? ""} />;
+  return <>{state?.switchNeedsSignIn === true && <p role="alert">Please sign in again to switch accounts.</p>}
+    <AuthGateway initialMode="signin" initialEmail={email ?? remembered?.loginEmail ?? ""} /></>;
 }

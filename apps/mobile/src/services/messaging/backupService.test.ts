@@ -725,3 +725,58 @@ describe("restore", () => {
     await expect(anonymous.backup.restore()).resolves.toEqual({ kind: "skipped", reason: "not-ready" });
   });
 });
+
+describe("inspection", () => {
+  it("lists stored backups without importing or writing", async () => {
+    const run = harness({ snapshot: snapshotOf(4) });
+    await run.backup.connect();
+    const files = run.store.names();
+    run.auth.authorize.mockClear();
+
+    const listed = await run.backup.inspect();
+    expect(listed).toMatchObject({ kind: "listed", readAt: NOW });
+    if (listed.kind !== "listed") throw new Error("inventory was not listed");
+    expect(listed.backups).toHaveLength(1);
+    expect(listed.backups[0]).toMatchObject({
+      deviceId: DEVICE, conversations: 1, messages: 4, readable: true, complete: true,
+    });
+    expect(run.store.names()).toEqual(files);
+    // A listing reads manifests; it never restores into history.
+    expect(run.imported).toBeNull();
+    // And it never opens a Google consent window.
+    expect(run.auth.authorize).not.toHaveBeenCalled();
+  });
+
+  it("renews silently and reports a connection need instead of asking for consent", async () => {
+    const run = harness();
+    await run.backup.connect();
+    run.auth.drop();
+    run.auth.authorize.mockClear();
+
+    expect(await run.backup.inspect()).toEqual({ kind: "needs-connection" });
+    expect(run.auth.renew).toHaveBeenCalledTimes(1);
+    expect(run.auth.authorize).not.toHaveBeenCalled();
+  });
+
+  it("refuses to list while another pass owns the transport", async () => {
+    const run = harness();
+    await run.backup.connect();
+    const gate = deferred();
+    const list = run.store.list;
+    run.store.list = async () => { await gate.promise; return list(); };
+    const upload = run.backup.uploadNow();
+    expect(await run.backup.inspect()).toEqual({ kind: "busy" });
+    gate.resolve();
+    await upload;
+    run.store.list = list;
+    expect((await run.backup.inspect()).kind).toBe("listed");
+  });
+
+  it("reports unavailable without a lease or a reachable transport", async () => {
+    const anonymous = harness();
+    anonymous.switchAccount(null);
+    expect(await anonymous.backup.inspect()).toEqual({ kind: "unavailable" });
+    const native = harness({ available: false, reason: "native" });
+    expect(await native.backup.inspect()).toEqual({ kind: "unavailable" });
+  });
+});

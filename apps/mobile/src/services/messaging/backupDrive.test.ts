@@ -7,6 +7,7 @@ import {
   BackupDriveError,
   chunkName,
   downloadBackup,
+  inspectBackups,
   isBackupName,
   legacyChunkName,
   legacyManifestName,
@@ -740,6 +741,85 @@ describe("two installations writing one account", () => {
   });
 });
 
+describe("the read-only backup inventory", () => {
+  const second = { accountId: A, deviceId: OTHER_DEVICE };
+  const NOW = 1_760_000_000_000;
+
+  it("summarises each installation's manifest, newest first, without writing", async () => {
+    const store = memoryStore();
+    await upload(store, snapshotOf([{ chat: CHAT, count: 2, base: 0x1000 }]));
+    await upload(store, snapshotOf([{ chat: CHAT2, count: 3, base: 0x2000 }]),
+      { scope: second, now: NOW + 1 });
+    const writes = store.writes.length;
+
+    const entries = await inspectBackups({ store, key: await key(), scope });
+    expect(store.writes).toHaveLength(writes);
+    expect(entries.map((entry) => entry.deviceId)).toEqual([OTHER_DEVICE, DEVICE]);
+    expect(entries[1]).toMatchObject({
+      name: MANIFEST, version: BACKUP_VERSION, exportedAt: NOW, conversations: 1,
+      messages: 2, attachments: 0, removedMessages: 0, complete: true, readable: true,
+    });
+    expect(entries[1]!.bytes).toBeGreaterThan(0);
+    expect(entries[0]).toMatchObject({ conversations: 1, messages: 3, exportedAt: NOW + 1 });
+  });
+
+  it("restores one chosen installation instead of the whole account", async () => {
+    const store = memoryStore();
+    await upload(store, snapshotOf([{ chat: CHAT, count: 2, base: 0x1000 }]));
+    await upload(store, snapshotOf([{ chat: CHAT2, count: 3, base: 0x2000 }]), { scope: second });
+
+    const mine = await download(store, { deviceId: DEVICE });
+    expect(mine.snapshot.messages).toHaveLength(2);
+    expect(mine.manifest.deviceId).toBe(DEVICE);
+    const theirs = await download(store, { deviceId: OTHER_DEVICE });
+    expect(theirs.snapshot.messages).toHaveLength(3);
+    expect(theirs.manifest.deviceId).toBe(OTHER_DEVICE);
+    // An installation with no manifest cannot be restored by inventing one.
+    await expect(download(store, { deviceId: uuid(0x999) }))
+      .rejects.toMatchObject({ code: "backup: chunk missing" });
+  });
+
+  it("marks a backup incomplete when a chunk it names is gone", async () => {
+    const store = memoryStore();
+    await upload(store, snapshotOf([{ chat: CHAT, count: 2, base: 0x1000 }]));
+    const chunk = (await store.list()).find((file) => file.name.includes(".chunk."))!;
+    await store.remove(chunk.id);
+
+    const [entry] = await inspectBackups({ store, key: await key(), scope });
+    // The manifest is still readable, so its real counts are reported; the row
+    // is flagged because a restore would fail.
+    expect(entry).toMatchObject({ readable: true, complete: false, messages: 2 });
+    await expect(download(store)).rejects.toBeInstanceOf(BackupDriveError);
+  });
+
+  it("keeps a manifest it cannot open as an unreadable row instead of hiding it", async () => {
+    const store = memoryStore();
+    await upload(store, snapshotOf([{ chat: CHAT, count: 2, base: 0x1000 }]));
+    const file = (await store.list()).find((entry) => entry.name === MANIFEST)!;
+    await store.write({ id: file.id, name: file.name, bytes: new Uint8Array([0, 1, 2, 3]).buffer });
+
+    const entries = await inspectBackups({ store, key: await key(), scope });
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      name: MANIFEST, readable: false, complete: false, deviceId: null, messages: 0,
+    });
+  });
+
+  it("reports the legacy manifest only while no installation manifest exists", async () => {
+    const store = memoryStore();
+    await writeLegacyBackup(store, snapshotOf([{ chat: CHAT, count: 2, base: 0x7000 }]));
+
+    const legacy = await inspectBackups({ store, key: await key(), scope });
+    expect(legacy).toHaveLength(1);
+    expect(legacy[0]).toMatchObject({ version: 1, deviceId: DEVICE, messages: 2, readable: true });
+
+    // The first version-2 pass supersedes it, exactly as a restore does.
+    await upload(store, snapshotOf([{ chat: CHAT, count: 2, base: 0x7000 }]));
+    const current = await inspectBackups({ store, key: await key(), scope });
+    expect(current.map((entry) => entry.version)).toEqual([BACKUP_VERSION]);
+  });
+});
+
 describe("media in an encrypted Drive backup", () => {
   const photo = new Uint8Array([0x61, 0x62, 0x63]);
   const voice = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3, 4]);
@@ -771,6 +851,14 @@ describe("media in an encrypted Drive backup", () => {
     expect(restored.snapshot.attachments).toEqual(f.attachments);
     expect(new Uint8Array(restored.media.get(f.attachments[0]!.id)!)).toEqual(photo);
     expect(new Uint8Array(restored.media.get(f.attachments[1]!.id)!)).toEqual(voice);
+  });
+
+  it("reports stored photos and files in the inventory", async () => {
+    const store = memoryStore(), f = await fixture();
+    await upload(store, f.snapshot, { media: f.media });
+    const [entry] = await inspectBackups({ store, key: await key(), scope });
+    expect(entry).toMatchObject({ attachments: 2, messages: 2, readable: true, complete: true });
+    expect(entry!.bytes).toBeGreaterThan(0);
   });
 
   it("keeps uploaded parts when this device has since evicted the bytes", async () => {

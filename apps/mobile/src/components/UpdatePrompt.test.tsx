@@ -95,7 +95,9 @@ describe("update prompt", () => {
     renderPrompt();
     expect(screen.getByRole("dialog")).toBeTruthy();
     expect(screen.getByText("0.15.0-beta.1 is ready")).toBeTruthy();
-    expect(screen.getByText("Faster search and clearer failure messages.")).toBeTruthy();
+    expect(screen.getByText(/The chat update: replies you can jump to/)).toBeTruthy();
+    // The catalogue summary is a CI commit subject and is never shown to a reader.
+    expect(screen.queryByText("Faster search and clearer failure messages.")).toBeNull();
     expect(screen.getByRole("button", { name: "Later" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "See what's new" })).toBeTruthy();
   });

@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { CloudModels, MODEL_LIST_TIMEOUT_MS } from "./CloudModels";
+import { chooseSelectOption, selectValue } from "../test-utils/select";
 import { loadCloudModelPreferences } from "../services/ai/cloudModelPreferences";
 import type { ModelRecord } from "../services/ai/providerContract";
 vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "models-user" } }) }));
@@ -18,7 +19,7 @@ function seedLegacyModelId(id: string) {
 }
 it("loads provider models, filters, favorites and saves a default without price gates", async () => {
   render(<MemoryRouter><CloudModels listModels={async () => rows} /></MemoryRouter>);
-  fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "deepseek" } });
+  await chooseSelectOption(screen.getByLabelText("Provider"), "DeepSeek");
   await screen.findByText("Chat model");
   fireEvent.click(screen.getByRole("button", { name: "Favorite Chat model" }));
   fireEvent.click(screen.getByRole("button", { name: "Set Chat model as default" }));
@@ -28,7 +29,7 @@ it("loads provider models, filters, favorites and saves a default without price 
 });
 it("saves a manual model for the selected provider when listing is unavailable", async () => {
   render(<MemoryRouter><CloudModels listModels={async () => { throw new Error("raw unsafe provider error"); }} /></MemoryRouter>);
-  fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "generic" } });
+  await chooseSelectOption(screen.getByLabelText("Provider"), "OpenAI-compatible");
   fireEvent.change(screen.getByLabelText("Model ID"), { target: { value: "custom/chat" } });
   fireEvent.click(screen.getByRole("button", { name: "Use model" }));
   expect(loadCloudModelPreferences("models-user").defaultModel).toEqual({ provider: "generic", modelId: "custom/chat" });
@@ -62,15 +63,15 @@ it("moves the provider to a legacy default that the catalogue resolves", async (
   // default behind another one.
   seedLegacyModelId("chat-id");
   render(<MemoryRouter><CloudModels listModels={async () => rows} /></MemoryRouter>);
-  await waitFor(() => expect((screen.getByLabelText("Provider") as HTMLSelectElement).value).toBe("deepseek"));
+  await waitFor(() => expect(selectValue("Provider")).toBe("DeepSeek"));
   expect(await screen.findByText("Chat model")).toBeTruthy();
   expect(screen.getByText("Chat model").closest("li")?.textContent).toMatch(/Default/);
 });
 it("keeps a provider's own choice when the reader picks a provider first", async () => {
   seedLegacyModelId("chat-id");
   render(<MemoryRouter><CloudModels listModels={async () => rows} /></MemoryRouter>);
-  fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "mistral" } });
-  await waitFor(() => expect((screen.getByLabelText("Provider") as HTMLSelectElement).value).toBe("mistral"));
+  await chooseSelectOption(screen.getByLabelText("Provider"), "Mistral");
+  await waitFor(() => expect(selectValue("Provider")).toBe("Mistral"));
   expect(screen.queryByText(/couldn’t be matched to a provider/i)).toBeNull();
 });
 it("tells the reader when a previous model could not be matched to a provider", async () => {

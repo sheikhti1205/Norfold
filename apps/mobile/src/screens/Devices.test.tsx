@@ -69,6 +69,36 @@ describe("the devices signed in to an account", () => {
     expect(screen.queryByText(id(2))).toBeNull();
   });
 
+  it("shows the platform and recency in the device sheet", async () => {
+    renderScreen();
+    fireEvent.click(await screen.findByRole("button", { name: "Old tablet" }));
+    expect((await screen.findByTestId("device-facts")).textContent)
+      .toBe("Web browser · Last active 3 days ago");
+  });
+
+  it("replaces a generic stored name with this installation's real one", async () => {
+    const original = navigator.userAgent;
+    Object.defineProperty(navigator, "userAgent", {
+      configurable: true,
+      get: () => "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+    });
+    try {
+      mockListDevices.mockResolvedValue([{ ...phone, name: "Browser" }, tablet]);
+      renderScreen();
+      await waitFor(() => expect(mockRenameDevice).toHaveBeenCalledWith(id(1), "Chrome on Windows"));
+      expect(await screen.findByRole("button", { name: "Chrome on Windows" })).toBeTruthy();
+    } finally {
+      Object.defineProperty(navigator, "userAgent", { configurable: true, get: () => original });
+    }
+  });
+
+  it("leaves a name the reader chose alone", async () => {
+    mockListDevices.mockResolvedValue([{ ...phone, name: "Kitchen phone" }, tablet]);
+    renderScreen();
+    expect(await screen.findByRole("button", { name: "Kitchen phone" })).toBeTruthy();
+    expect(mockRenameDevice).not.toHaveBeenCalled();
+  });
+
   it("renames a device and tells the reader exactly what changed", async () => {
     renderScreen();
     fireEvent.click(await screen.findByRole("button", { name: "My phone" }));

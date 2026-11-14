@@ -5,6 +5,7 @@ import { normalizePhone, USERNAME_CHECK_DEBOUNCE_MS } from "@norfold/shared";
 import { useAuth } from "../auth";
 import { Button } from "../components/Button";
 import { TextField } from "../components/Fields";
+import { UserAvatar } from "../components/UserAvatar";
 import { AuthShell } from "../components/auth/AuthShell";
 import { checkUsername, setAccountPassword } from "../services/auth";
 // S2 (W0-B): READ-ONLY import of the now-landed real service as the seam
@@ -82,12 +83,6 @@ export function buildUsernameSuggestion(name: string | null, email: string): str
 }
 
 type UsernameState = "idle" | "loading" | "available" | "taken" | "invalid" | "failed";
-
-function initialsOf(displayName: string, email: string): string {
-  const source = displayName.trim() || email;
-  const letters = source.replace(/[^a-zA-Z]/g, "");
-  return (letters.slice(0, 2) || "FB").toUpperCase();
-}
 
 export function CompleteProfile({
   seed,
@@ -229,20 +224,12 @@ export function CompleteProfile({
       supporting="Review these suggestions from Google, then choose a password for this account."
     >
       <div className="flex items-center gap-4">
-        {avatarUrl ? (
-          <img
-            src={avatarUrl}
-            alt="Suggested profile photo"
-            className="h-16 w-16 rounded-full border border-outline-variant object-cover"
-          />
-        ) : (
-          <span
-            aria-hidden="true"
-            className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-container-low text-lg font-semibold text-on-surface"
-          >
-            {initialsOf(displayName, seed.email)}
-          </span>
-        )}
+        <UserAvatar
+          avatarUrl={avatarUrl}
+          username={displayName || seed.email}
+          size={64}
+          className="border border-outline-variant"
+        />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <p className="truncate text-sm font-medium text-on-surface">{seed.email}</p>
           {avatarUrl && (

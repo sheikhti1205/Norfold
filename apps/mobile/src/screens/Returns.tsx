@@ -1,5 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
-import { SettingsGroup, SettingsPage, StatusPill } from "../components/settings";
+import {
+  Archive,
+  CloudOff,
+  PackageCheck,
+  RefreshCw,
+  ShieldCheck,
+  Star,
+} from "lucide-react";
+import {
+  SettingIconTile,
+  SettingsGroup,
+  SettingsPage,
+  SettingsRow,
+  StatusPill,
+} from "../components/settings";
 import { announce } from "../components/LiveRegion";
 import { useAuth } from "../auth";
 import { fetchPost } from "../services/posts";
@@ -68,18 +82,23 @@ function refusalSentence(err: unknown): string {
  *   * THE RATING, ELIGIBILITY-BACKED. A rating is written only by a
  *     participant in the recovery relationship, once per direction, and
  *     never about yourself (MC D26). The client never decides who may be
- *     rated — the server derives the other participant (the function has no
+ *     rated: the server derives the other participant (the function has no
  *     rated-user parameter) and refuses a non-participant, a second rating
  *     in the same direction and a self rating. The control is offered only
  *     when the server's own row says there is a counterpart and the reader
  *     has not rated yet; the server still has the last word, and its refusal
  *     is shown as a sentence.
  *
- *   * THE REPUTATION AND THE STANDING. Reputation is DERIVED — a label
+ *   * THE REPUTATION AND THE STANDING. Reputation is DERIVED, a label
  *     computed at call time from the ratings a member received and their
  *     active sanction, never a stored score and never a number (MC D28).
  *     Standing is shown to its subject only; the server refuses to describe
  *     anybody else, so this screen only ever asks about the reader.
+ *
+ * LIST-FIRST. Standing, reputation and every recovery are rows with the shared
+ * icon tile, title and description language. A recovery that can still be
+ * rated carries its five targets under that row rather than in the display-only
+ * value slot, because five 44dp targets cannot share a settings row's width.
  *
  * THE SERVICE IS THE CANONICAL ONE. `services/trust.ts` is owned by the
  * trust-client lane; this screen reads it and adds no second trust service
@@ -114,7 +133,7 @@ function ScopedReturns({ userId }: { userId: string }) {
       if (!alive.current) return;
       if (isTrustUnavailable(err) || isMissingServerFunction(err)) {
         setTrustUnavailable(
-          "Recovered items are not available in this build yet — the server does not have the recovery records yet.",
+          "Recovered items are not available in this build yet. The server does not have the recovery records yet.",
         );
         return;
       }
@@ -138,7 +157,7 @@ function ScopedReturns({ userId }: { userId: string }) {
           readerIsOwner = userId ? post.userId === userId : null;
         } catch {
           // The report may be gone. The recovery still happened, so the row
-          // stays — it just has no title to show.
+          // stays; it just has no title to show.
           title = null;
         }
         return {
@@ -191,7 +210,7 @@ function ScopedReturns({ userId }: { userId: string }) {
         selfUserId: userId,
       });
       if (!alive.current) return;
-      const outcome = "Thanks — your rating was saved.";
+      const outcome = "Thanks. Your rating was saved.";
       setNotice(outcome);
       announce(outcome);
       await load();
@@ -206,6 +225,8 @@ function ScopedReturns({ userId }: { userId: string }) {
     }
   };
 
+  const listUnavailable = listError !== null || trustUnavailable !== null;
+
   return (
     <SettingsPage
       title="Recovered items"
@@ -214,88 +235,167 @@ function ScopedReturns({ userId }: { userId: string }) {
     >
       <SettingsGroup
         title="Your standing"
-        description="Your standing and reputation are worked out from your activity — they are not a score you can raise directly."
+        description="Your standing and reputation are worked out from your activity. They are not a score you can raise directly."
       >
-        {standingError && <div role="alert" data-testid="standing-error"><p>{standingError}</p>
-          <button type="button" className="min-h-[44px] px-3" onClick={() => void loadStanding()}>Retry standing</button></div>}
-        {!standing && !standingError && <p role="status">Loading your standing…</p>}
-        {standing ? (
-          <p data-testid="returns-standing" className="fb-settings-row-description">
-            {STANDING_SENTENCES[standing]}
-          </p>
-        ) : null}
-        {tierError && <div role="alert" data-testid="reputation-error"><p>{tierError}</p>
-          <button type="button" className="min-h-[44px] px-3" onClick={() => void loadTier()}>Retry reputation</button></div>}
-        {!tier && !tierError && <p role="status">Loading your reputation…</p>}
-        {tier ? (
-          <p data-testid="returns-tier" className="fb-settings-row-description">
-            {REPUTATION_TIER_SENTENCES[tier]}
-          </p>
-        ) : null}
+        {standingError ? (
+          <>
+            <p role="alert" data-testid="standing-error" className="fb-return-message" data-tone="error">
+              {standingError}
+            </p>
+            <SettingsRow
+              title="Retry standing"
+              description="Ask the server for your standing again."
+              icon={RefreshCw}
+              onClick={() => void loadStanding()}
+            />
+          </>
+        ) : standing ? (
+          <SettingsRow
+            title="Standing"
+            description={<span data-testid="returns-standing">{STANDING_SENTENCES[standing]}</span>}
+            icon={ShieldCheck}
+            iconTone={standing === "GOOD" ? "success" : "warning"}
+          />
+        ) : (
+          <SettingsRow title="Checking your standing…" icon={ShieldCheck} />
+        )}
+
+        {tierError ? (
+          <>
+            <p role="alert" data-testid="reputation-error" className="fb-return-message" data-tone="error">
+              {tierError}
+            </p>
+            <SettingsRow
+              title="Retry reputation"
+              description="Ask the server for your reputation again."
+              icon={RefreshCw}
+              onClick={() => void loadTier()}
+            />
+          </>
+        ) : tier ? (
+          <SettingsRow
+            title="Reputation"
+            description={<span data-testid="returns-tier">{REPUTATION_TIER_SENTENCES[tier]}</span>}
+            icon={Star}
+            iconTone="brand"
+          />
+        ) : (
+          <SettingsRow title="Checking your reputation…" icon={Star} />
+        )}
       </SettingsGroup>
 
       <SettingsGroup title="Recovered items">
-        {trustUnavailable && <p role="status" data-testid="returns-unavailable">{trustUnavailable}</p>}
-        {listError && <p role="alert" data-testid="returns-list-error">{listError}</p>}
-        {(listError || trustUnavailable) && <button type="button" className="min-h-[44px] px-3" onClick={() => void load()}>Retry recovered items</button>}
         {notice ? (
-          <p role="status" data-testid="returns-notice" className="px-3 py-2 text-sm text-on-surface-variant">
+          <p role="status" data-testid="returns-notice" className="fb-return-message">
             {notice}
           </p>
         ) : null}
         {error ? (
-          <p role="alert" data-testid="returns-error" className="px-3 py-2 text-sm text-error">
+          <p role="alert" data-testid="returns-error" className="fb-return-message" data-tone="error">
             {error}
           </p>
         ) : null}
 
-        {!listError && !trustUnavailable && views === null ? (
-          <p role="status" className="fb-settings-row-description">
-            Loading your recovered items…
-          </p>
+        {trustUnavailable ? (
+          <SettingsRow
+            title="Not available yet"
+            description={<span data-testid="returns-unavailable">{trustUnavailable}</span>}
+            icon={CloudOff}
+          />
         ) : null}
-        {views !== null && views.length === 0 ? (
-          <p className="fb-settings-row-description">Nothing has been recovered yet.</p>
+        {listError ? (
+          <SettingsRow
+            title="Your recovered items couldn't be read"
+            description={<span data-testid="returns-list-error">{listError}</span>}
+            icon={CloudOff}
+          />
+        ) : null}
+        {listUnavailable ? (
+          <SettingsRow
+            title="Retry recovered items"
+            description="Ask the server again."
+            icon={RefreshCw}
+            onClick={() => void load()}
+          />
         ) : null}
 
-        {views?.map((view) => {
-          const { row } = view;
-          const counterpart = view.counterpartName ?? (row.externalHelper ? "someone outside Norfold" : "another member");
-          const canRate = canRateReturn(row);
-          return (
-            <div key={row.returnId} className="fb-settings-row fb-return-row" data-testid="returns-row">
-              <span className="fb-settings-row-copy">
-                <span className="fb-settings-row-title">{view.title ?? "A report you took part in recovering"}</span>
-                <span className="fb-settings-row-description">
-                  {view.readerIsOwner === true
-                    ? "Your item came back"
-                    : view.readerIsOwner === false
-                      ? "You helped an item come back"
-                      : "You took part in a recovery"}{" "}
-                  · recovered {formatSafetyDate(row.recoveredAt)} · with {counterpart}
-                </span>
-              </span>
-              <span className="fb-settings-row-value">
-                {row.myRating !== null ? (
-                  <StatusPill tone="success">You rated {row.myRating} of 5</StatusPill>
-                ) : canRate ? (
-                  <RatingButtons
-                    name={view.counterpartName ?? "this member"}
-                    busy={busy !== null}
-                    onRate={(value) => void rate(view, value)}
-                  />
-                ) : (
-                  <StatusPill tone="neutral">Nothing to rate</StatusPill>
-                )}
-              </span>
-              {row.counterpartRating !== null ? (
-                <span className="fb-settings-row-description">They rated you {row.counterpartRating} of 5.</span>
-              ) : null}
-            </div>
-          );
-        })}
+        {!listUnavailable && views === null ? (
+          <SettingsRow title="Checking your recovered items…" icon={Archive} />
+        ) : null}
+        {!listUnavailable && views !== null && views.length === 0 ? (
+          <SettingsRow
+            title="Nothing has been recovered yet."
+            description="When an item you reported or helped return is recovered, it appears here."
+            icon={PackageCheck}
+          />
+        ) : null}
+
+        {views?.map((view) => (
+          <RecoveryEntry
+            key={view.row.returnId}
+            view={view}
+            busy={busy !== null}
+            onRate={(value) => void rate(view, value)}
+          />
+        ))}
       </SettingsGroup>
     </SettingsPage>
+  );
+}
+
+/**
+ * One recovery as a row: what came back, which side the reader was on, and the
+ * rating state. Five target-width rating buttons sit below the row copy, not
+ * in the value slot, so neither the title nor the targets are squeezed.
+ */
+function RecoveryEntry({
+  view,
+  busy,
+  onRate,
+}: {
+  view: RecoveryView;
+  busy: boolean;
+  onRate: (value: number) => void;
+}) {
+  const { row } = view;
+  const counterpart = view.counterpartName
+    ?? (row.externalHelper ? "someone outside Norfold" : "another member");
+  const canRate = canRateReturn(row);
+  const side = view.readerIsOwner === true
+    ? "Your item came back"
+    : view.readerIsOwner === false
+      ? "You helped an item come back"
+      : "You took part in a recovery";
+  return (
+    <div className="fb-return-row" data-testid="returns-row">
+      <div className="fb-return-head">
+        <SettingIconTile icon={Archive} tone={view.readerIsOwner === true ? "success" : "brand"} />
+        <span className="fb-settings-row-copy">
+          <span className="fb-settings-row-title">
+            {view.title ?? "A report you took part in recovering"}
+          </span>
+          <span className="fb-settings-row-description">
+            {side} · recovered {formatSafetyDate(row.recoveredAt)} · with {counterpart}
+          </span>
+        </span>
+        {row.myRating !== null ? (
+          <StatusPill tone="success">You rated {row.myRating} of 5</StatusPill>
+        ) : canRate ? null : (
+          <StatusPill tone="neutral">Nothing to rate</StatusPill>
+        )}
+      </div>
+
+      {row.counterpartRating !== null ? (
+        <p className="fb-return-note">They rated you {row.counterpartRating} of 5.</p>
+      ) : null}
+
+      {canRate && row.myRating === null ? (
+        <div className="fb-return-rate">
+          <p className="fb-return-rate-label">How was the return?</p>
+          <RatingButtons name={view.counterpartName ?? "this member"} busy={busy} onRate={onRate} />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -303,7 +403,7 @@ function ScopedReturns({ userId }: { userId: string }) {
  * The five-point rating control.
  *
  * Five real buttons, each with its own accessible name ("Rate Sam 4 out of
- * 5"), so a screen reader is not told "button 3" — and each at least 44dp.
+ * 5"), so a screen reader is not told "button 3", and each at least 44dp.
  * The stars are decoration; the number is the label.
  */
 function RatingButtons({
@@ -316,7 +416,7 @@ function RatingButtons({
   onRate: (value: number) => void;
 }) {
   return (
-    <span className="flex flex-wrap items-center gap-1" role="group" aria-label={`Rate ${name}`}>
+    <span className="fb-return-rate-buttons" role="group" aria-label={`Rate ${name}`}>
       {[1, 2, 3, 4, 5].map((value) => (
         <button
           key={value}
@@ -325,7 +425,7 @@ function RatingButtons({
           onClick={() => onRate(value)}
           aria-label={`Rate ${name} ${value} out of 5`}
           data-testid={`rate-${value}`}
-          className="min-h-[44px] min-w-[44px] rounded-m3-sm border border-outline text-sm font-semibold text-on-surface hover:bg-surface-container disabled:opacity-50"
+          className="fb-return-rate-button"
         >
           {value}
         </button>

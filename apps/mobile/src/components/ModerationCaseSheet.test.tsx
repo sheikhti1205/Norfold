@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { chooseSelectOption } from "../test-utils/select";
 
 const { mockFetchModerationTarget, mockApplyModeration, viewer } = vi.hoisted(() => ({
   mockFetchModerationTarget: vi.fn(),
@@ -113,8 +114,8 @@ describe("the case sheet", () => {
     const props = { open: true, entry: ENTRY, capabilities: ["reports_review", "content_hide"], isAdmin: false, onClose: vi.fn(), onApplied: vi.fn() };
     const { rerender } = render(<ModerationCaseSheet {...props} />);
     await screen.findAllByText("Blue backpack");
-    fireEvent.change(screen.getByLabelText(/what to do/i), { target: { value: "HIDE" } });
-    fireEvent.change(screen.getByLabelText(/^reason$/i), { target: { value: "HARASSMENT" } });
+    await chooseSelectOption(screen.getByLabelText(/what to do/i), /^Hide it/);
+    await chooseSelectOption(screen.getByLabelText(/^reason$/i), "Harassment");
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(mockApplyModeration).toHaveBeenCalledOnce();
     if (boundary === "account") viewer.id = "moderator-b";
@@ -163,20 +164,24 @@ describe("the case sheet", () => {
   it("offers only the actions the account's permissions allow", async () => {
     renderSheet(["reports_review", "content_hide"]);
     await screen.findAllByText("Blue backpack");
-    const select = screen.getByLabelText(/what to do/i) as HTMLSelectElement;
-    // The empty first option is the placeholder ("Choose an action"), not an
-    // action a moderator may take.
-    const options = Array.from(select.options)
-      .map((option) => option.value)
-      .filter((value) => value !== "");
-    expect(options).toEqual(["NO_ACTION", "PUBLISH", "HIDE"]);
+    const trigger = screen.getByLabelText(/what to do/i);
+    fireEvent.click(trigger);
+    // The placeholder row is not an action a moderator may take.
+    const options = (await screen.findAllByRole("option"))
+      .map((option) => option.textContent ?? "")
+      .filter((label) => label !== "Choose an action")
+      .map((label) => label.split(" — ")[0]);
+    expect(options).toEqual(["Close without action", "Make it visible again", "Hide it"]);
   });
 
   it("offers every action to an admin", async () => {
     renderSheet([], true);
     await screen.findAllByText("Blue backpack");
-    const select = screen.getByLabelText(/what to do/i) as HTMLSelectElement;
-    const actions = Array.from(select.options).filter((option) => option.value !== "");
+    const trigger = screen.getByLabelText(/what to do/i);
+    fireEvent.click(trigger);
+    const actions = (await screen.findAllByRole("option"))
+      .map((option) => option.textContent ?? "")
+      .filter((label) => label !== "Choose an action");
     expect(actions).toHaveLength(9);
   });
 
@@ -192,8 +197,8 @@ describe("the case sheet", () => {
     const onClose = vi.fn();
     render(<ModerationCaseSheet open entry={ENTRY} capabilities={["reports_review", "content_hide"]} isAdmin={false} onApplied={onApplied} onClose={onClose} />);
     await screen.findAllByText("Blue backpack");
-    fireEvent.change(screen.getByLabelText(/what to do/i), { target: { value: "HIDE" } });
-    fireEvent.change(screen.getByLabelText(/^reason$/i), { target: { value: "HARASSMENT" } });
+    await chooseSelectOption(screen.getByLabelText(/what to do/i), /^Hide it/);
+    await chooseSelectOption(screen.getByLabelText(/^reason$/i), "Harassment");
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 
     await waitFor(() => expect(mockApplyModeration).toHaveBeenCalledTimes(1));
@@ -216,8 +221,8 @@ describe("the case sheet", () => {
     mockApplyModeration.mockRejectedValue(new ApiError("You may not do this", 403, "42501"));
     renderSheet(["reports_review", "content_hide"]);
     await screen.findAllByText("Blue backpack");
-    fireEvent.change(screen.getByLabelText(/what to do/i), { target: { value: "HIDE" } });
-    fireEvent.change(screen.getByLabelText(/^reason$/i), { target: { value: "HARASSMENT" } });
+    await chooseSelectOption(screen.getByLabelText(/what to do/i), /^Hide it/);
+    await chooseSelectOption(screen.getByLabelText(/^reason$/i), "Harassment");
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 
     expect((await screen.findByTestId("moderation-case-error")).textContent).toBe(
@@ -321,7 +326,7 @@ describe("the case sheet", () => {
     );
 
     const bundle = await screen.findByTestId("moderation-case-messages");
-    expect(bundle.textContent).toMatch(/2 messages, not the whole chat/i);
+    expect(bundle.textContent).toMatch(/2 selected messages.*not the whole chat/i);
     expect(bundle.textContent).toContain("Voice note");
     expect(bundle.textContent).toContain("Text");
     expect(bundle.textContent).toContain("You will regret this.");
@@ -392,8 +397,8 @@ describe("single-decider ownership in the case sheet", () => {
     );
     renderSheet(["reports_review", "content_hide"]);
     await screen.findAllByText("Blue backpack");
-    fireEvent.change(screen.getByLabelText(/what to do/i), { target: { value: "HIDE" } });
-    fireEvent.change(screen.getByLabelText(/^reason$/i), { target: { value: "HARASSMENT" } });
+    await chooseSelectOption(screen.getByLabelText(/what to do/i), /^Hide it/);
+    await chooseSelectOption(screen.getByLabelText(/^reason$/i), "Harassment");
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 
     expect((await screen.findByTestId("moderation-case-error")).textContent).toMatch(

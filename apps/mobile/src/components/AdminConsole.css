@@ -199,6 +199,33 @@
   color: var(--fb-on-surface-variant);
 }
 
+/* The way from a log line to the surface that owns the decision. A compact
+   chip keeps the arrow beside its label instead of letting the icon wrap. */
+.fb-admin-log-review {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 999px;
+  color: var(--fb-primary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.2;
+  text-decoration: none;
+}
+
+.fb-admin-log-review:hover {
+  background: var(--fb-surface-container-low);
+}
+
+.fb-admin-log-review:focus-visible {
+  outline: 2px solid var(--fb-focus);
+  outline-offset: 2px;
+}
+
 .fb-admin-warning {
   display: flex;
   flex-direction: column;
@@ -225,3 +252,100 @@
   color: var(--fb-on-surface);
   min-height: 2.75rem;
 }
+
+/* Review case: the subject is a card, each report is a card, and the evidence
+   inside a report is its own labelled block. A reviewer should never have to
+   infer which part of the sheet is the thing and which part is about it. */
+.fb-case-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.85rem 0.9rem;
+  border-radius: 0.9rem;
+  background: var(--fb-surface-container);
+}
+.fb-case-summary-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: none;
+  border-radius: 0.75rem;
+  background: var(--fb-surface);
+  color: var(--fb-primary);
+}
+.fb-case-summary-copy { min-width: 0; }
+.fb-case-summary-title { margin: 0; font-size: 0.9375rem; font-weight: 650; overflow-wrap: anywhere; }
+.fb-case-summary-meta { margin: 0.15rem 0 0; font-size: 0.75rem; color: var(--fb-on-surface-variant); }
+.fb-case-summary-note { margin: 0.4rem 0 0; font-size: 0.8125rem; line-height: 1.45; color: var(--fb-on-surface-variant); }
+.fb-case-summary-status { margin-top: 0.5rem; }
+
+.fb-case-block { display: flex; flex-direction: column; gap: 0.6rem; }
+.fb-case-block-title {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--fb-on-surface-variant);
+}
+.fb-case-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 0.8rem;
+}
+.fb-case-field { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 0.5rem; }
+.fb-case-field dt { font-size: 0.75rem; color: var(--fb-on-surface-variant); }
+.fb-case-field dd { margin: 0; font-size: 0.8125rem; line-height: 1.45; color: var(--fb-on-surface); overflow-wrap: anywhere; }
+@media (max-width: 420px) {
+  .fb-case-field { grid-template-columns: 1fr; gap: 0.1rem; }
+}
+
+.fb-case-reports { display: flex; flex-direction: column; gap: 0.7rem; }
+.fb-case-report {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.85rem;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 0.9rem;
+}
+.fb-case-report-head { display: flex; align-items: center; gap: 0.45rem; }
+.fb-case-report-index {
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: var(--fb-primary-container);
+  color: var(--fb-on-primary-container);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.fb-case-report-kind { font-size: 0.6875rem; color: var(--fb-on-surface-variant); text-transform: uppercase; letter-spacing: 0.05em; }
+.fb-case-report-reason { margin: 0; font-size: 0.9375rem; font-weight: 650; }
+.fb-case-report-detail { margin: 0; font-size: 0.8125rem; line-height: 1.45; color: var(--fb-on-surface); overflow-wrap: anywhere; }
+
+.fb-case-evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+  padding: 0.7rem 0.75rem;
+  border-radius: 0.7rem;
+  background: var(--fb-surface-container);
+}
+.fb-case-evidence-title { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem; font-size: 0.75rem; font-weight: 650; color: var(--fb-on-surface); }
+.fb-case-evidence-note { font-weight: 400; color: var(--fb-on-surface-variant); }
+.fb-case-evidence .fb-case-fields { padding: 0; border: 0; }
+.fb-case-evidence .fb-case-field dt { font-size: 0.6875rem; }
+.fb-case-messages { display: flex; flex-direction: column; gap: 0.35rem; }
+.fb-case-message-list { display: flex; flex-direction: column; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.fb-case-message-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem; padding: 0.4rem 0.5rem; border-radius: 0.5rem; background: var(--fb-surface); font-size: 0.75rem; }
+.fb-case-message-type { font-weight: 650; color: var(--fb-on-surface); }
+.fb-case-message-time { color: var(--fb-on-surface-variant); }
+.fb-case-message-body { flex-basis: 100%; color: var(--fb-on-surface); overflow-wrap: anywhere; }
+.fb-case-media { margin: 0; font-size: 0.75rem; line-height: 1.45; color: var(--fb-on-surface-variant); }
