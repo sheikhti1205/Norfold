@@ -368,12 +368,13 @@ jobs:
       - name: Assert Supabase and Sentry embedded in bundle
         run: |
           node scripts/check-mobile-build-config.mjs --assets apps/mobile/dist/assets
-          JS=$(ls apps/mobile/dist/assets/index-*.js | head -1)
           # M6: also assert the computed release identity reached the bundle, so a
           # CI debug APK can never silently fall back to the native-derived release
           # that Sentry cannot symbolicate. Mirrors release.yml's assertion.
+          # Search every emitted chunk, never just index-*.js: the entry is a
+          # small loader and the SDK lives in a lazily loaded chunk.
           [ -n "${SENTRY_RELEASE:-}" ] || { echo "SENTRY_RELEASE was not computed — the Compute step above must run first"; exit 1; }
-          grep -q "$SENTRY_RELEASE" "$JS" || { echo "Sentry release identity missing from built bundle"; exit 1; }
+          grep -rqF -- "$SENTRY_RELEASE" apps/mobile/dist/assets || { echo "Sentry release identity missing from built bundle"; exit 1; }
           echo "bundle carries required client config and Sentry release identity"
       # SYNC-7 device-proof dispatch path: a downloadable monitored APK MUST have
       # matching symbols in Sentry. This step runs ONLY on workflow_dispatch and

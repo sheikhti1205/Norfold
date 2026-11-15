@@ -87,11 +87,13 @@ jobs:
       - name: Assert Sentry DSN host + release in built JS
         run: |
           set -euo pipefail
-          JS=$(ls apps/mobile/dist/assets/index-*.js | head -1)
+          # Search every emitted chunk, never just index-*.js: the entry is a
+          # small loader and the SDK lives in a lazily loaded chunk.
+          ASSETS=apps/mobile/dist/assets
           [ -n "${SENTRY_RELEASE:-}" ] || { echo "SENTRY_RELEASE was not computed — the Compute step above must run first"; exit 1; }
           DSN_HOST=$(node -e "import('./scripts/check-sentry-config.mjs').then(m=>{const r=m.checkEffectiveSentryDsn({mode:'production'});if(!r.ok){console.error('DSN '+r.reason);process.exit(1)}process.stdout.write(r.host)})")
-          grep -q "$DSN_HOST" "$JS" || { echo "Sentry DSN host missing from built bundle"; exit 1; }
-          grep -q "$SENTRY_RELEASE" "$JS" || { echo "Sentry release identity missing from built bundle"; exit 1; }
+          grep -rqF -- "$DSN_HOST" "$ASSETS" || { echo "Sentry DSN host missing from built bundle"; exit 1; }
+          grep -rqF -- "$SENTRY_RELEASE" "$ASSETS" || { echo "Sentry release identity missing from built bundle"; exit 1; }
           echo "web bundle carries DSN host $DSN_HOST, release $SENTRY_RELEASE, dist web-production"
       # `sourcemaps upload --release` only ASSOCIATES an upload with a release; it
       # does not create one. Without this step no release row ever exists for a

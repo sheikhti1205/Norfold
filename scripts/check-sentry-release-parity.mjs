@@ -13,7 +13,11 @@
  *   4. closed dist set sameness (build-context set vs build-apk variant map);
  *   5. sentry-cli pin sameness (build-apk pin vs every workflow upload);
  *   6. trace-rate default 0.1 (code default + shipped workflow fallbacks);
- *   7. upload-token hygiene (no VITE_SENTRY_AUTH_TOKEN in build surfaces).
+ *   7. upload-token hygiene (no VITE_SENTRY_AUTH_TOKEN in build surfaces);
+ *   8. bundle assertions search every emitted chunk, never entry-only
+ *      `assets/index-*.js` (the entry is a loader; baked config lives in a
+ *      lazily loaded chunk and an entry-only grep would pass while the shipped
+ *      bundle lacked the identity).
  *
  * `checkParity(root)` is exported for tests (inject a fixture root for red
  * cases). CLI: exit 0 all-CURRENT + PASS line, exit 1 any mismatch with
@@ -194,6 +198,19 @@ export function checkParity(root = REPO_ROOT) {
     ];
     for (const rel of surfaces) {
       if (read(rel).includes("VITE_SENTRY_AUTH_TOKEN")) fail(rel, "upload token would bake into the bundle via VITE_ prefix");
+    }
+  }
+
+  // 8. Bundle assertions search every emitted chunk, never entry-only.
+  {
+    for (const wf of ["ci.yml", "release.yml", "web.yml"]) {
+      const rel = `.github/workflows/${wf}`;
+      read(rel).split(/\r?\n/).forEach((line, index) => {
+        if (/^\s*#/.test(line)) return;
+        if (/assets\/index-\*\.js/.test(line)) {
+          fail(`${rel}:${index + 1}`, "bundle assertion scoped to the entry chunk (search every emitted chunk)");
+        }
+      });
     }
   }
 
