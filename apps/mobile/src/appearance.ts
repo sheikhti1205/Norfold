@@ -128,9 +128,8 @@ export interface AppearanceSettings {
   /** Device-local acknowledgement, never an account preference. */
   navLayoutChosen: boolean;
   /**
-   * The wide navigation rail, pinned open as a labelled 224px panel instead of
-   * the icon column (owner order 2026-11-12, R7; `docs/design/NAVIGATION-STUDY.md`
-   * §"Width": 72/80px collapsed, 224px pinned). Local layout habit, not account
+   * The wide navigation rail, pinned open as a labelled panel instead of the
+   * icon column (owner order 2026-11-12, R7). Local layout habit, not account
    * data, so it lives here beside `navLayout` and never syncs.
    */
   railPinned: boolean;
@@ -141,11 +140,27 @@ export interface AppearanceSettings {
   railWidth: number;
 }
 
-/** Pinned-rail width bounds. The account menu follows the same width. */
-export const RAIL_WIDTH_MIN = 200;
+/**
+ * Pinned-rail width bounds. The account menu follows the same width.
+ *
+ * 192px is the narrowest width that still fits the longest destination
+ * ("Liked / Disliked") with a 20px glyph and 20px of row padding: 224px left a
+ * visible dead strip on every shorter label without buying the name any room.
+ * 176px remains usable at the standard text scale, so the reader can tighten
+ * past the default; 360px is the comfortable upper bound for long labels and
+ * large text.
+ */
+export const RAIL_WIDTH_MIN = 176;
 export const RAIL_WIDTH_MAX = 360;
-export const RAIL_WIDTH_DEFAULT = 224;
+export const RAIL_WIDTH_DEFAULT = 192;
 export const RAIL_WIDTH_STEP = 16;
+
+/**
+ * The default before 2026-11-15. A saved width equal to it is treated as "never
+ * resized" so the narrower default reaches existing devices; a width the reader
+ * deliberately dragged to another value is preserved.
+ */
+const RAIL_WIDTH_LEGACY_DEFAULT = 224;
 
 export function clampRailWidth(value: number): number {
   if (!Number.isFinite(value)) return RAIL_WIDTH_DEFAULT;
@@ -197,7 +212,9 @@ export function migrateAppearance(value: unknown): AppearanceSettings {
     navLayoutChosen: typeof parsed.navLayoutChosen === "boolean" ? parsed.navLayoutChosen
       : parsed.navLayoutChosen === undefined && isNavLayout(parsed.navLayout),
     railPinned: typeof parsed.railPinned === "boolean" ? parsed.railPinned : DEFAULT_APPEARANCE.railPinned,
-    railWidth: typeof parsed.railWidth === "number" ? clampRailWidth(parsed.railWidth) : DEFAULT_APPEARANCE.railWidth,
+    railWidth: typeof parsed.railWidth === "number"
+      ? clampRailWidth(parsed.railWidth === RAIL_WIDTH_LEGACY_DEFAULT ? RAIL_WIDTH_DEFAULT : parsed.railWidth)
+      : DEFAULT_APPEARANCE.railWidth,
   };
 }
 

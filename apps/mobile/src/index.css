@@ -149,6 +149,37 @@ body {
   pointer-events: none;
 }
 
+/* Home's visible brand (owner request 2026-11-15). The sidebar owns the
+ * identity wherever a rail exists; on the bottom-bar layout (phones, and
+ * readers who chose the bar) that sign is absent, so the feed's one visible
+ * row carries the mark and wordmark again. 44px hit height, no pill: the brand
+ * is a link home, not a third button competing with Search and Activity. */
+.fb-home-brand {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding-inline-end: 6px;
+  color: var(--fb-on-surface);
+  text-decoration: none;
+  transition: opacity 120ms ease-out;
+}
+.fb-home-brand:hover { opacity: 0.82; }
+.fb-home-brand:focus-visible {
+  outline: 2px solid var(--fb-focus);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.fb-home-brand-name {
+  font-weight: 700;
+  font-size: 0.9375rem;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) { .fb-home-brand { transition: none; } }
+html.fb-reduce-motion .fb-home-brand { transition: none; }
+
 ::selection {
   background: var(--fb-selection);
   color: var(--fb-on-selection);

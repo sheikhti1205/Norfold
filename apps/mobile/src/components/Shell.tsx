@@ -4,6 +4,7 @@ import { Link, UNSAFE_NavigationContext, useLocation, useNavigate } from "react-
 import { AnimatePresence, motion } from "framer-motion";
 import { Archive, BarChart3, Bell, Bookmark, ClipboardList, Heart, Home, MessageCircle, Plus, Search, Settings as SettingsIcon, UserRound, type LucideIcon } from "lucide-react";
 import { Focusable, Tooltip, TooltipTrigger } from "react-aria-components";
+import { createPortal } from "react-dom";
 import { TabTapProvider, useTabTap } from "./TabTap";
 import { LiveRegion } from "./LiveRegion";
 import { MEDIUM_MAX_PX, READABLE_COLUMN_CLASS, useViewportWidth, WIDE_CANVAS_CLASS } from "./responsive";
@@ -30,6 +31,13 @@ import "./Shell.nav.css";
 
 /** Router link with framer press gestures (motion pass: always animated). */
 const MotionLink = motion.create(Link);
+
+/**
+ * Dwell before a rail icon names itself beside the column. 180ms is the
+ * notification action-rail dwell the owner approved (owner finding E9), so the
+ * same "rest to reveal" gesture reads the same across the shell.
+ */
+const RAIL_HOVER_LABEL_MS = 180;
 
 /**
  * The rail's destinations, in the order `docs/design/nav/prototype.html` puts
@@ -446,6 +454,51 @@ export function PrimaryNav({
     if (hoverTimer.current !== null) clearTimeout(hoverTimer.current);
   }, []);
   useEffect(() => { if (railPinned) cancelHoverExpand(); }, [railPinned, cancelHoverExpand]);
+  // Pointer-only name for the icon rail (owner request 2026-11-15). The panel
+  // still expands after two seconds; the label answers "what is this icon?"
+  // immediately, never reflows the page (it is a fixed portal, not a wider
+  // row), and hides the moment the panel names rows in place. Keyboard focus
+  // keeps the in-place expansion, so assistive tech never waits on a hover.
+  const [railLabel, setRailLabel] = useState<{ label: string; top: number; left: number } | null>(null);
+  const railLabelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hideRailLabel = useCallback(() => {
+    if (railLabelTimer.current !== null) {
+      clearTimeout(railLabelTimer.current);
+      railLabelTimer.current = null;
+    }
+    setRailLabel(null);
+  }, []);
+  const showRailLabel = (el: HTMLElement, label: string) => {
+    if (railPinned || hoverExpanded) return;
+    const paint = () => {
+      const rect = el.getBoundingClientRect();
+      const top = Math.min(Math.max(rect.top + rect.height / 2, 24), window.innerHeight - 24);
+      setRailLabel({ label, top, left: rect.right + 10 });
+    };
+    // Once one name is showing, moving down the column swaps it immediately:
+    // the reader has already asked the question the dwell answers.
+    if (railLabel !== null) { paint(); return; }
+    if (railLabelTimer.current !== null) clearTimeout(railLabelTimer.current);
+    railLabelTimer.current = setTimeout(() => {
+      railLabelTimer.current = null;
+      paint();
+    }, RAIL_HOVER_LABEL_MS);
+  };
+  useEffect(() => () => {
+    if (railLabelTimer.current !== null) clearTimeout(railLabelTimer.current);
+  }, []);
+  useEffect(() => { if (railPinned || hoverExpanded) hideRailLabel(); }, [railPinned, hoverExpanded, hideRailLabel]);
+  useEffect(() => {
+    if (railLabel === null) return;
+    const hide = () => setRailLabel(null);
+    // Capture catches the rail's own scroll container, not just the window.
+    window.addEventListener("scroll", hide, true);
+    window.addEventListener("resize", hide);
+    return () => {
+      window.removeEventListener("scroll", hide, true);
+      window.removeEventListener("resize", hide);
+    };
+  }, [railLabel]);
   if (fullscreen || (keyboardOpen && !rail)) return null;
   const renderDestination = (destination: NavRow) => {
     const { label, icon: Icon } = destination;
@@ -501,6 +554,9 @@ export function PrimaryNav({
         aria-label={label}
         aria-expanded={searchOpen}
         onClick={(event) => toggleGlobalSearch(event.currentTarget)}
+        onPointerEnter={(event) => { if (rail) showRailLabel(event.currentTarget, label); }}
+        onPointerLeave={() => { if (rail) hideRailLabel(); }}
+        onPointerDown={() => { if (rail) hideRailLabel(); }}
         whileTap={pressFeedback.iconButton}
         transition={{ duration: motionDurations.instant }}
         className="fb-nav-link text-on-surface-variant"
@@ -513,6 +569,9 @@ export function PrimaryNav({
         to={destination.to}
         aria-label={selected ? undefined : label}
         aria-current={selected ? "page" : undefined}
+        onPointerEnter={(event) => { if (rail) showRailLabel(event.currentTarget, label); }}
+        onPointerLeave={() => { if (rail) hideRailLabel(); }}
+        onPointerDown={() => { if (rail) hideRailLabel(); }}
         onClick={() => {
           if (selected) {
             notifyTabTap();
@@ -526,10 +585,11 @@ export function PrimaryNav({
         {body}
       </MotionLink>
     );
-    // The rail names its destinations in place on hover/focus (and always when
-    // pinned), so a tooltip would repeat a label that is already on screen.
-    // The bottom bar keeps its tooltip: the selected label there is the only
-    // one painted.
+    // The rail names its destinations itself: the fixed hover label above for
+    // pointer dwell, and the in-place expansion on hover/focus (plus every
+    // pinned row), so a second tooltip would repeat a name that is already on
+    // screen. The bottom bar keeps its tooltip: only the selected label there
+    // is painted.
     if (rail) return trigger;
     return <TooltipTrigger key={label} delay={350}>
       <Focusable>{trigger}</Focusable><Tooltip placement={rail ? "right" : "top"} className="fb-nav-tooltip">{label}</Tooltip>
@@ -550,8 +610,8 @@ export function PrimaryNav({
         className="fb-nav-rail shrink-0"
         style={railPinned ? { width: railWidthState } : undefined}
         onPointerEnter={scheduleHoverExpand}
-        onPointerLeave={cancelHoverExpand}
-        onPointerDown={cancelHoverExpand}
+        onPointerLeave={() => { cancelHoverExpand(); hideRailLabel(); }}
+        onPointerDown={() => { cancelHoverExpand(); hideRailLabel(); }}
         variants={fadeVariants}
         initial="hidden"
         animate="visible"
@@ -590,6 +650,11 @@ export function PrimaryNav({
           aria-valuetext={`${railWidthState} pixels`} tabIndex={0} className="fb-nav-rail-resize"
           onPointerDown={onResizeStart} onPointerMove={onResizeMove} onPointerUp={onResizeEnd}
           onPointerCancel={onResizeEnd} onKeyDown={onResizeKey} />}
+        {railLabel !== null && createPortal(
+          <div className="fb-nav-hover-label" aria-hidden="true"
+            style={{ top: railLabel.top, left: railLabel.left }}>{railLabel.label}</div>,
+          document.body,
+        )}
       </motion.nav>
     );
   }

@@ -653,6 +653,31 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     expect(loadAppearance().railPinned).toBe(false);
   });
 
+  it("names a rail destination on pointer dwell without widening the column", () => {
+    vi.useFakeTimers();
+    try {
+      setWidth(800);
+      storeNavLayout("rail");
+      renderShell("/");
+      const nav = screen.getByRole("navigation", { name: "Primary" });
+      expect(nav.getAttribute("data-pinned")).toBe("false");
+      const link = within(nav).getByRole("link", { name: "My Reports" });
+      fireEvent.pointerEnter(link, { pointerType: "mouse" });
+      // Nothing appears on the way in; the dwell is the notification timing.
+      expect(document.querySelector(".fb-nav-hover-label")).toBeNull();
+      act(() => { vi.advanceTimersByTime(180); });
+      const label = document.querySelector(".fb-nav-hover-label");
+      expect(label?.textContent).toBe("My Reports");
+      // The pill is a visual duplicate of the row's accessible name, never a
+      // second announcement.
+      expect(label?.getAttribute("aria-hidden")).toBe("true");
+      fireEvent.pointerLeave(link, { pointerType: "mouse" });
+      expect(document.querySelector(".fb-nav-hover-label")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("takes layout space beside the content instead of overlaying it", () => {
     setWidth(800);
     storeNavLayout("rail");
@@ -747,8 +772,8 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
       // Collapsed rail width lives in a token so the hover expansion can
       // compute the exact negative margin that keeps <main> from reflowing.
       expect(rail.width).toBe("var(--fb-rail-collapsed)");
-      expect(rail.getPropertyValue("--fb-rail-collapsed").trim()).toBe("72px");
-      expect(rail.getPropertyValue("--fb-rail-expanded").trim()).toBe("208px");
+      expect(rail.getPropertyValue("--fb-rail-collapsed").trim()).toBe("64px");
+      expect(rail.getPropertyValue("--fb-rail-expanded").trim()).toBe("196px");
       // Positioned only so the resize handle can anchor to the rail's inner
       // edge. It stays an in-flow flex column (never fixed/absolute), which is
       // what keeps it from covering the content.

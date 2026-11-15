@@ -89,9 +89,11 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
      keyboard focus widens it to name every destination, then it contracts
      (owner order 2026-11-13). The negative inline-end margin cancels the extra
      width, so <main> never reflows while the panel is open - it paints over
-     the page. */
-  --fb-rail-collapsed: 72px;
-  --fb-rail-expanded: 208px;
+     the page. 64px is the narrowest column that still gives the 20px glyph a
+     44px hit box beside the 6px rail inset; it removes the dead strip the
+     72/80px column carried without crowding the rows. */
+  --fb-rail-collapsed: 64px;
+  --fb-rail-expanded: 196px;
   display: flex; flex-direction: column; flex: none;
   width: var(--fb-rail-collapsed); gap: 6px;
   padding: 8px 6px;
@@ -142,7 +144,38 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
 /* Every destination is named in the rail, selected or not. The label wraps
    rather than truncating, so "My Reports" stays readable at large text. */
 .fb-nav-tooltip { z-index: 120; max-width: 16rem; padding: 6px 10px; border-radius: 8px; background: var(--fb-on-surface); color: var(--fb-surface); font-size: .875rem; overflow-wrap: anywhere; }
-@media (min-width: 1200px) { .fb-nav-rail { --fb-rail-collapsed: 80px; } }
+/* Pointer-only name for the icon rail (owner request 2026-11-15). The rail
+   clips its own overflow, so the label must be a body-level fixed element; it
+   never changes the rail's width, so skimming the column cannot reflow the
+   page. 180ms is the notification action-rail dwell the owner approved, so the
+   same "rest to reveal" gesture reads the same everywhere. */
+.fb-nav-hover-label {
+  position: fixed;
+  z-index: 120;
+  transform: translateY(-50%);
+  max-width: 18rem;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: var(--fb-on-surface);
+  color: var(--fb-surface);
+  font-size: .8125rem;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  box-shadow: var(--shadow-md);
+  animation: fb-nav-hover-label-in 120ms ease-out;
+}
+@keyframes fb-nav-hover-label-in {
+  from { opacity: 0; transform: translate(-4px, -50%); }
+  to { opacity: 1; transform: translate(0, -50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fb-nav-hover-label { animation: none; }
+}
+html.fb-reduce-motion .fb-nav-hover-label { animation: none; }
+@media (min-width: 1200px) { .fb-nav-rail { --fb-rail-collapsed: 72px; } }
 
 /* Intent expansion. Scoped to the unpinned rail: a pinned panel is already
    named and user-sized. `data-hover-expanded` is set only after the pointer
@@ -212,7 +245,7 @@ html.fb-reduce-motion .fb-nav-rail { transition: none; }
   border: 0; border-radius: 12px; background: transparent;
   color: var(--fb-on-surface); cursor: pointer;
 }
-.fb-nav-rail[data-pinned="true"] .fb-nav-brand { gap: 12px; padding-inline: 12px; }
+.fb-nav-rail[data-pinned="true"] .fb-nav-brand { gap: 10px; padding-inline: 10px; }
 .fb-nav-brand:hover { background: var(--fb-surface-container); }
 .fb-nav-brand:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: 2px; }
 .fb-nav-brand-mark { flex: none; }
@@ -222,7 +255,7 @@ html.fb-reduce-motion .fb-nav-rail { transition: none; }
 }
 .fb-nav-rail[data-pinned="false"] .fb-nav-wordmark { display: none; }
 .fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-nav-wordmark { display: inline; }
-.fb-nav-rail[data-pinned="true"] { width: 224px; padding: 12px; }
+.fb-nav-rail[data-pinned="true"] { width: var(--fb-rail-w, 192px); padding: 10px; }
 /* Owner order 2026-11-13: the pinned sidebar is resizable. The handle sits on
    the rail's inner edge (the rail clips at `overflow: hidden`), reads as a
    separator to assistive tech, and drags horizontally; arrows move it in 16px
@@ -238,11 +271,11 @@ html.fb-reduce-motion .fb-nav-rail { transition: none; }
 .fb-nav-rail-resize:hover::after, .fb-nav-rail-resize:focus-visible::after { background: var(--fb-primary); }
 .fb-nav-rail-resize:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: -3px; }
 .fb-nav-rail[data-pinned="true"] .fb-nav-link {
-  flex-direction: row; justify-content: flex-start; gap: 12px;
+  flex-direction: row; justify-content: flex-start; gap: 10px;
   /* Horizontal inset only: the vertical padding belongs to the base rule and
      the shallow-window tiers, which is what keeps the pinned column inside its
      height budget instead of forcing the destination list to scroll. */
-  padding-inline: 12px;
+  padding-inline: 10px;
 }
 /* The name and handle are worth showing only when the column has room for them;
    the avatar alone remains the control in the icon rail. Hover/focus expansion

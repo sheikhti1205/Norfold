@@ -8,6 +8,7 @@ import {
   DEFAULT_APPEARANCE,
   PHOTO_QUALITY_HIGH,
   PHOTO_QUALITY_STANDARD,
+  RAIL_WIDTH_DEFAULT,
   TEXT_SCALE_OPTIONS,
   applyAppearance,
   currentPhotoQuality,
@@ -37,7 +38,7 @@ describe("appearance settings module (AI-011 Quick Appearance)", () => {
       navLayout: "bottom",
       navLayoutChosen: false,
       railPinned: false,
-      railWidth: 224,
+      railWidth: RAIL_WIDTH_DEFAULT,
     });
   });
 
@@ -85,7 +86,7 @@ describe("appearance settings module (AI-011 Quick Appearance)", () => {
         navLayout: "rail",
         navLayoutChosen: true,
         railPinned: true,
-        railWidth: 224,
+        railWidth: RAIL_WIDTH_DEFAULT,
       };
       saveAppearance(next);
       expect(loadAppearance()).toEqual(next);
@@ -93,6 +94,20 @@ describe("appearance settings module (AI-011 Quick Appearance)", () => {
     } finally {
       window.removeEventListener(APPEARANCE_EVENT, onChange);
     }
+  });
+
+  it("moves a saved legacy rail width to the narrower default, keeping a deliberate width", () => {
+    localStorage.setItem(
+      APPEARANCE_STORAGE_KEY,
+      JSON.stringify({ ...DEFAULT_APPEARANCE, railWidth: 224 }),
+    );
+    expect(loadAppearance().railWidth).toBe(RAIL_WIDTH_DEFAULT);
+
+    localStorage.setItem(
+      APPEARANCE_STORAGE_KEY,
+      JSON.stringify({ ...DEFAULT_APPEARANCE, railWidth: 240 }),
+    );
+    expect(loadAppearance().railWidth).toBe(240);
   });
 
   it("offers a curated accent set with unique ids and valid hex swatches", () => {
@@ -123,7 +138,7 @@ describe("appearance settings module (AI-011 Quick Appearance)", () => {
       navLayout: "bottom",
       navLayoutChosen: false,
       railPinned: false,
-      railWidth: 224,
+      railWidth: RAIL_WIDTH_DEFAULT,
     });
     const root = document.documentElement;
     const swatch = ACCENT_OPTIONS.find((a) => a.id === "blue")!.swatch;
