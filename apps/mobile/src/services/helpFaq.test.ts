@@ -22,7 +22,8 @@ describe("builtInHelp", () => {
     const reply = builtInHelp("Where is my verification code?");
     expect(reply.toLowerCase()).toContain("one-time code");
     expect(reply).toContain("Phone verification is optional");
-    expect(reply).toContain("when SMS verification is configured");
+    expect(reply).toContain("happens in Telegram");
+    expect(reply).toContain("does not send text messages");
     expect(reply.toLowerCase()).toContain("signup");
   });
 

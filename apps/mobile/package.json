@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "build": "tsc --noEmit -p tsconfig.json && vite build && node scripts/check-build-budget.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
+    "check:build-budget": "node scripts/check-build-budget.mjs",
     "cap:add:android": "cap add android",
     "cap:sync": "cap sync android",
     "apk": "node ../../scripts/check-mobile-build-config.mjs --assets dist/assets && cap sync android && cd android && ./gradlew assembleDebug",

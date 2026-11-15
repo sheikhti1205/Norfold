@@ -100,6 +100,7 @@ const REPO_ROOT = resolve(HERE, "..");
 export const EDGE_FUNCTIONS = [
   "chat-media",
   "chat-wake",
+  "cleanup-chat-files",
   "cleanup-chat-media",
   "cleanup-comment-media",
   "cleanup-report-media",

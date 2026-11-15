@@ -34,12 +34,14 @@ are an owner checklist, not an automatic configuration/deployment script.
    alter native compatibility identities as part of this setup.
 6. Review delivery logs and provider errors without recording codes or credentials.
 
-## Optional SMS
+## Phone verification (Telegram)
 
-Phone verification is not operational until a supported SMS provider is configured
-and delivery is proven. Configure it separately in Authentication → Phone, review
-country support/cost/sender/expiry and keep credentials server-side. The existing
-phone-change flow remains separate from email signup and password recovery.
+Phone verification goes through the Norfold Telegram bot, not SMS. The reader
+starts the link from the Verify screen or the profile editor and shares their own
+contact inside Telegram; the server records the number only after that contact is
+validated. There is no SMS provider to configure, and a typed number on the
+device never verifies anything. Keep the bot token server-side in the Edge
+Function secret, never in the client.
 
 ## Receipt checks after configuration and explicit test consent
 

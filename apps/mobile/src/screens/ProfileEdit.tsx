@@ -1,32 +1,19 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { normalizePhone } from "@norfold/shared";
 import { useAuth } from "../auth";
-import { sendPhoneChangeCode, verifyPhoneChangeCode } from "../services/auth";
-import { ApiError } from "../services/session";
 import { updateMyProfile } from "../services/profile";
-import { announce } from "../components/LiveRegion";
 import { Button } from "../components/Button";
 import { TextField } from "../components/Fields";
 import { ProfileAvatarEditor } from "../components/ProfileAvatarEditor";
-import { OtpField } from "../components/auth/OtpField";
-import { useOtpCountdown } from "../components/auth/useOtpCountdown";
+import { TelegramPhoneVerification } from "../components/TelegramPhoneVerification";
 import {
   SettingsGroup,
   SettingsPage,
   SettingsRow,
-  StatusPill,
 } from "../components/settings";
-import { friendlyError } from "../utils/friendlyErrors";
 
 const MAX_DISPLAY_NAME = 80;
 const MAX_BIO = 280;
 const MAX_LOCATION = 60;
-
-/** Auth's ApiErrors are already written for a person; anything else is mapped. */
-function phoneErrorCopy(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  return friendlyError(error).message;
-}
 
 /**
  * Profile editor (compat route `/profile/edit` stays valid; back link goes to
@@ -43,16 +30,13 @@ function phoneErrorCopy(error: unknown): string {
  *   the self-only `update_my_profile` RPC (migration 20261009020000).
  * - profile photo: edited through the avatar service (canonical media pipeline
  *   → `avatars/{uid}/…` Storage prefix → self-only `update_my_avatar` RPC).
- * - mobile: CHANGED ONLY AFTER A VERIFICATION CODE. The editor sends an SMS to
- *   the number the reader typed, then confirms that code with
- *   `verifyPhoneChangeCode`; the old write-without-proof path is no longer
- *   reachable from here. The server's replacement gate runs before the SMS.
+ * - mobile: numbers are NOT edited or proven here. Phone ownership is verified
+ *   in Telegram through the reader's own shared contact; Norfold has no SMS
+ *   provider. The old typed-number SMS journey is retired.
  */
 export function ProfileEdit() {
   const { user } = useAuth();
-  const [savedFor, setSavedFor] = useState<string | null>(null);
   if (!user) return null;
-  const identity = `${user.id}:${user.phone}`;
   return (
     <SettingsPage title="Edit profile" backTo="/profile" backLabel="Back to Profile">
       <SettingsGroup title="Account information">
@@ -66,13 +50,9 @@ export function ProfileEdit() {
 
       <ProfileAvatarEditor />
 
-      <ProfileIdentityEditor key={user.id} />
+      <ProfileIdentityEditor key={`${user.id}:identity`} />
 
-      <ProfilePhoneEditor
-        key={identity}
-        initialSaved={savedFor === identity}
-        onSaved={(phone) => setSavedFor(`${user.id}:${phone}`)}
-      />
+      <ProfilePhoneEditor key={`${user.id}:phone`} />
     </SettingsPage>
   );
 }
@@ -218,208 +198,24 @@ function ProfileIdentityEditor() {
 }
 
 /**
- * Mobile number: two steps, always.
+ * Mobile number: verified only through Telegram.
  *
- * 1. The reader types the number and asks for a code. `sendPhoneChangeCode`
- *    runs the server's replacement gate first, then has Auth send the SMS.
- * 2. The code is confirmed with `verifyPhoneChangeCode`; only then does the
- *    stored number change and the verified badge appear.
- *
- * There is no path here that writes a number without proof. Editing the number
- * while a code is pending is refused by the disabled field plus an explicit
- * "Change number" reset, so a code can never be verified against a destination
- * the server did not send it to.
+ * Norfold has no SMS provider. The reader starts the existing bot link flow and
+ * shares their own contact inside Telegram; the server records the number only
+ * after that contact is validated. If Telegram is unavailable, the number stays
+ * unverified and the copy says so. There is no local or typed-number shortcut.
  */
-function ProfilePhoneEditor({ initialSaved, onSaved }: { initialSaved: boolean; onSaved: (phone: string) => void }) {
-  const { user, setUser } = useAuth();
-  const [phone, setPhone] = useState(user?.phone ?? "");
-  const [code, setCode] = useState("");
-  const [sentTo, setSentTo] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(initialSaved ? "Mobile number verified." : null);
-  const [sending, setSending] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  const alive = useRef(true);
-  const busy = useRef(false);
-  const { seconds: resendIn, setSeconds: setResendIn } = useOtpCountdown();
-  useEffect(() => {
-    alive.current = true;
-    return () => { alive.current = false; };
-  }, []);
-
+function ProfilePhoneEditor() {
+  const { user } = useAuth();
   if (!user) return null;
-
-  const normalized = normalizePhone(phone);
-  const current = normalizePhone(user.phone);
-  const alreadyVerified = current !== null && normalized === current && user.phoneVerified;
-  const pending = sentTo !== null;
-
-  const resetToEditing = (): void => {
-    setSentTo(null);
-    setCode("");
-    setError(null);
-    setNotice(null);
-  };
-
-  async function sendCode(resend: boolean) {
-    if (busy.current || (resend && resendIn > 0)) return;
-    const destination = sentTo ?? normalized;
-    if (!destination) {
-      setError("Enter a valid Bangladesh mobile number (e.g., 01812345678).");
-      return;
-    }
-    if (!resend && alreadyVerified) {
-      setError("This number is already verified.");
-      return;
-    }
-    busy.current = true;
-    setError(null);
-    setNotice(null);
-    setSending(true);
-    try {
-      await sendPhoneChangeCode(user!.id, destination, resend);
-      if (!alive.current) return;
-      setSentTo(destination);
-      setCode("");
-      setResendIn(60);
-      setNotice(`Code sent to ${destination}. Enter it to confirm the number.`);
-    } catch (err) {
-      if (!alive.current) return;
-      setError(phoneErrorCopy(err));
-      if (err instanceof Error && /too many|several codes/i.test(err.message)) setResendIn(60);
-    } finally {
-      busy.current = false;
-      if (alive.current) setSending(false);
-    }
-  }
-
-  async function verify() {
-    const trimmed = code.trim();
-    if (busy.current || sentTo === null) return;
-    if (!/^\d{6,10}$/.test(trimmed)) {
-      setError("Enter the code from the SMS.");
-      return;
-    }
-    busy.current = true;
-    setError(null);
-    setVerifying(true);
-    try {
-      const profile = await verifyPhoneChangeCode(user!.id, sentTo, trimmed);
-      if (!alive.current || profile.id !== user!.id) return;
-      setUser(profile);
-      setPhone(profile.phone);
-      setSentTo(null);
-      setCode("");
-      setNotice("Mobile number verified.");
-      announce("Mobile number verified.");
-      onSaved(profile.phone);
-    } catch (err) {
-      if (!alive.current) return;
-      setError(phoneErrorCopy(err));
-      if (err instanceof Error && /too many attempts/i.test(err.message)) setResendIn(60);
-    } finally {
-      busy.current = false;
-      if (alive.current) setVerifying(false);
-    }
-  }
-
-  function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    if (sentTo !== null) void verify();
-    else void sendCode(false);
-  }
-
   return (
     <SettingsGroup title="Mobile number">
-      <form
-        className="flex flex-col gap-4 p-4"
-        onSubmit={onSubmit}
-        noValidate
-      >
-        <div className="flex flex-wrap items-center gap-2 text-sm text-on-surface-variant">
-          <span>Current number</span>
-          {user.phone ? (
-            <>
-              <span className="font-medium text-on-surface">{user.phone}</span>
-              <StatusPill tone={user.phoneVerified ? "success" : "neutral"}>
-                {user.phoneVerified ? "Verified" : "Not verified"}
-              </StatusPill>
-            </>
-          ) : (
-            <span>None linked yet</span>
-          )}
-        </div>
+      <div className="flex flex-col gap-3 p-4">
         <p className="text-sm text-on-surface-variant">
-          Changing your number sends a code to the new number. It is saved only after the code is confirmed.
+          Norfold does not send text messages. Verify your number by sharing your own contact with the Norfold Telegram bot.
         </p>
-
-        {error && (
-          <p role="alert" className="rounded-m3-sm border border-error px-3 py-2 text-sm text-error">
-            {error}
-          </p>
-        )}
-        {notice && (
-          <p role="status" className="rounded-m3-sm border border-outline-variant px-3 py-2 text-sm text-on-surface">
-            {notice}
-          </p>
-        )}
-
-        <TextField
-          label="Mobile (Bangladesh)"
-          type="tel"
-          value={phone}
-          onChange={(e) => {
-            if (sentTo !== null) return;
-            setPhone(e.target.value);
-          }}
-          placeholder="01812345678"
-          inputMode="numeric"
-          autoComplete="tel"
-          required
-          disabled={sending || verifying || pending}
-          error={!normalized && phone.trim() !== "" ? "Enter a valid Bangladesh mobile number (e.g., 01812345678)." : undefined}
-        />
-
-        {pending && (
-          <OtpField
-            label="SMS code"
-            value={code}
-            onChange={setCode}
-            maxLength={10}
-            disabled={sending || verifying}
-          />
-        )}
-
-        <Button
-          type="submit"
-          size="lg"
-          loading={pending ? verifying : sending}
-          disabled={pending ? sending : (!normalized || sending || alreadyVerified)}
-        >
-          {pending ? "Verify number" : "Send code"}
-        </Button>
-
-        {pending && (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={sending || verifying || resendIn > 0}
-              onClick={() => void sendCode(true)}
-            >
-              {resendIn > 0 ? `Resend in ${resendIn}s` : "Resend code"}
-            </Button>
-            <Button
-              type="button"
-              variant="text"
-              disabled={sending || verifying}
-              onClick={resetToEditing}
-            >
-              Change number
-            </Button>
-          </>
-        )}
-      </form>
+        <TelegramPhoneVerification savedPhone={user.phone} />
+      </div>
     </SettingsGroup>
   );
 }

@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authMock, pendingMock, servicesMock } = vi.hoisted(() => ({
+const { authMock, pendingMock, servicesMock, telegramMock, browserMock } = vi.hoisted(() => ({
   authMock: {
     user: null as null | Record<string, unknown>,
     booting: false,
@@ -18,16 +18,30 @@ const { authMock, pendingMock, servicesMock } = vi.hoisted(() => ({
   servicesMock: {
     sendPendingEmailCode: vi.fn(),
     verifyPendingEmailCode: vi.fn(),
-    sendPhoneChangeCode: vi.fn(),
-    verifyPhoneChangeCode: vi.fn(),
   },
+  telegramMock: {
+    account: vi.fn(),
+    create: vi.fn(),
+    state: vi.fn(),
+  },
+  browserMock: { open: vi.fn() },
 }));
 
 vi.mock("../auth", () => ({ useAuth: () => authMock }));
 vi.mock("../services/auth", () => servicesMock);
+vi.mock("../services/telegram", () => ({
+  getTelegramAccount: (...args: unknown[]) => telegramMock.account(...args),
+  createTelegramLink: (...args: unknown[]) => telegramMock.create(...args),
+  getTelegramLinkState: (...args: unknown[]) => telegramMock.state(...args),
+}));
+vi.mock("@capacitor/browser", () => ({ Browser: { open: (...args: unknown[]) => browserMock.open(...args) } }));
 vi.mock("../utils/pendingReportLink", () => pendingMock);
 
 import { Verify } from "./Verify";
+
+const TOKEN = "0123456789abcdef0123456789abcdef";
+const UNLINKED = { linked: false, phone: null, username: null };
+const VERIFIED = { linked: true, phone: "+8801812345678", username: "reader" };
 
 function renderVerify(path = "/verify") {
   return render(
@@ -43,6 +57,13 @@ function renderVerify(path = "/verify") {
   );
 }
 
+async function flush() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 beforeEach(() => {
   authMock.user = null;
   authMock.pendingEmail = null;
@@ -52,11 +73,17 @@ beforeEach(() => {
   authMock.refreshUser.mockReset();
   servicesMock.sendPendingEmailCode.mockReset();
   servicesMock.verifyPendingEmailCode.mockReset();
-  servicesMock.sendPhoneChangeCode.mockReset();
-  servicesMock.verifyPhoneChangeCode.mockReset();
   authMock.setUser.mockReset();
   pendingMock.getPendingReportRoute.mockReset();
   pendingMock.getPendingReportRoute.mockReturnValue(null);
+  telegramMock.account.mockReset().mockResolvedValue(UNLINKED);
+  telegramMock.create.mockReset().mockResolvedValue({
+    token: TOKEN,
+    deepLink: `https://t.me/Norfold_auth_bot?start=${TOKEN}`,
+    expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+  });
+  telegramMock.state.mockReset().mockResolvedValue({ state: "pending", phone: null });
+  browserMock.open.mockReset().mockResolvedValue(undefined);
 });
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -169,112 +196,85 @@ describe("Verify signed-in mode", () => {
     await waitFor(() => expect(screen.getByText("Shared report destination")).toBeTruthy());
   });
 
-  it("sends to the displayed normalized phone, verifies and installs the refreshed public profile", async () => {
-    const verified = { ...authMock.user, phoneVerified: true };
-    servicesMock.sendPhoneChangeCode.mockResolvedValue(undefined);
-    servicesMock.verifyPhoneChangeCode.mockResolvedValue(verified);
+  it("offers Telegram phone verification and never an SMS code", async () => {
     renderVerify();
+    await flush();
+    expect(screen.getByRole("button", { name: "Verify with Telegram" })).toBeTruthy();
+    expect(screen.getByText(/not text messages/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /SMS/i })).toBeNull();
+    expect(screen.queryByLabelText(/SMS code/i)).toBeNull();
+  });
+
+  it("starts the Telegram link and shows the own-contact instructions", async () => {
+    renderVerify();
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "Verify with Telegram" }));
+    await waitFor(() => expect(telegramMock.create).toHaveBeenCalledTimes(1));
+    expect(browserMock.open).toHaveBeenCalledWith({
+      url: `https://t.me/Norfold_auth_bot?start=${TOKEN}`,
+    });
+    expect(await screen.findByText(/Open Telegram and press Start/i)).toBeTruthy();
+    expect(screen.getByText(/paperclip/i)).toBeTruthy();
+    expect(screen.getByText(/typed number does not verify/i)).toBeTruthy();
+  });
+
+  it("reflects a Telegram-verified number from the server", async () => {
+    telegramMock.account.mockResolvedValue(VERIFIED);
+    renderVerify();
+    expect(await screen.findByText("Mobile number verified with Telegram")).toBeTruthy();
     expect(screen.getByText("+8801812345678")).toBeTruthy();
-    expect(screen.queryByText(/isn't available yet/i)).toBeNull();
-    const verify = screen.getByRole("button", { name: "Verify phone" }) as HTMLButtonElement;
-    expect(verify.disabled).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Send SMS code" }));
-    await waitFor(() => expect(servicesMock.sendPhoneChangeCode).toHaveBeenCalledWith("u1", "+8801812345678", false));
-    expect((screen.getByRole("button", { name: "Resend in 60s" }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText("Phone verification code"), { target: { value: "12345" } });
-    expect(verify.disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText("Phone verification code"), { target: { value: "123456" } });
-    fireEvent.click(verify);
-    await waitFor(() => expect(servicesMock.verifyPhoneChangeCode).toHaveBeenCalledWith("u1", "+8801812345678", "123456"));
-    await waitFor(() => expect(authMock.setUser).toHaveBeenCalledWith(verified));
+    expect(screen.getByText("@reader")).toBeTruthy();
   });
 
-  it("announces provider failure without pretending SMS was sent", async () => {
-    servicesMock.sendPhoneChangeCode.mockRejectedValue(new Error("SMS verification is not enabled. Contact support."));
+  it("leaves the number unverified when Telegram cannot be checked", async () => {
+    telegramMock.account.mockRejectedValue(new Error("offline"));
     renderVerify();
-    fireEvent.click(screen.getByRole("button", { name: "Send SMS code" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("SMS verification is not enabled");
-    expect(screen.queryByText(/Code sent to/)).toBeNull();
+    expect(await screen.findByText(/could not check Telegram/i)).toBeTruthy();
+    expect(screen.queryByText("Mobile number verified with Telegram")).toBeNull();
+    expect(screen.getByText(/Not verified/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /SMS/i })).toBeNull();
   });
 
-  it("ignores a stale send after the displayed number changes", async () => {
-    let resolve!: () => void;
-    servicesMock.sendPhoneChangeCode.mockReturnValue(new Promise<void>((r) => { resolve = r; }));
-    const view = renderVerify();
-    fireEvent.click(screen.getByRole("button", { name: "Send SMS code" }));
-    authMock.user = { ...authMock.user, phone: "01912345678" };
-    view.rerender(<MemoryRouter><Verify /></MemoryRouter>);
-    await act(async () => resolve());
-    expect(screen.queryByText(/Code sent to/)).toBeNull();
-    expect(screen.getByText("+8801912345678")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Verify phone" }) as HTMLButtonElement).disabled).toBe(true);
+  it("shows connected but unverified until the reader shares a contact", async () => {
+    telegramMock.account.mockResolvedValue({ linked: true, phone: null, username: "reader" });
+    renderVerify();
+    expect(await screen.findByText(/Telegram is connected as @reader/i)).toBeTruthy();
+    expect(screen.getByText(/Share your own contact/i)).toBeTruthy();
+    expect(screen.queryByText("Mobile number verified with Telegram")).toBeNull();
+    expect(screen.getByRole("button", { name: "Check again" })).toBeTruthy();
   });
 
-  it("does not apply a verification result after unmount", async () => {
-    let resolve!: (u: Record<string, unknown>) => void;
-    servicesMock.sendPhoneChangeCode.mockResolvedValue(undefined);
-    servicesMock.verifyPhoneChangeCode.mockReturnValue(new Promise((r) => { resolve = r; }));
-    const view = renderVerify();
-    fireEvent.click(screen.getByRole("button", { name: "Send SMS code" }));
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Resend in 60s" })).not.toBeNull());
-    fireEvent.change(screen.getByLabelText("Phone verification code"), { target: { value: "123456" } });
-    fireEvent.click(screen.getByRole("button", { name: "Verify phone" }));
-    view.unmount();
-    await act(async () => resolve({ ...authMock.user, phoneVerified: true }));
-    expect(authMock.setUser).not.toHaveBeenCalled();
+  it("reports honestly when the email is not verified yet", async () => {
+    telegramMock.create.mockRejectedValue(new Error("verify your email first"));
+    renderVerify();
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "Verify with Telegram" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Verify your email first");
+    expect(browserMock.open).not.toHaveBeenCalled();
   });
 
-  it("resends only after the 60-second cooldown and suppresses duplicate requests", async () => {
+  it("updates to verified after the bot link is consumed and a contact arrives", async () => {
     vi.useFakeTimers();
-    servicesMock.sendPhoneChangeCode.mockResolvedValue(undefined);
-    renderVerify();
-    const send = screen.getByRole("button", { name: "Send SMS code" });
-    await act(async () => { fireEvent.click(send); fireEvent.click(send); });
-    expect(servicesMock.sendPhoneChangeCode).toHaveBeenCalledTimes(1);
-    for (let i = 0; i < 60; i++) await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Resend SMS code" })); });
-    expect(servicesMock.sendPhoneChangeCode).toHaveBeenLastCalledWith("u1", "+8801812345678", true);
-    expect(servicesMock.sendPhoneChangeCode).toHaveBeenCalledTimes(2);
-  });
-
-  it("keeps invalid/expired codes visible for correction", async () => {
-    servicesMock.sendPhoneChangeCode.mockResolvedValue(undefined);
-    servicesMock.verifyPhoneChangeCode.mockRejectedValue(new Error("Invalid or expired verification code"));
-    renderVerify();
-    fireEvent.click(screen.getByRole("button", { name: "Send SMS code" }));
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Resend in 60s" })).not.toBeNull());
-    fireEvent.change(screen.getByLabelText("Phone verification code"), { target: { value: "000000" } });
-    fireEvent.click(screen.getByRole("button", { name: "Verify phone" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("Invalid or expired");
-    expect((screen.getByLabelText("Phone verification code") as HTMLInputElement).value).toBe("000000");
-    expect(authMock.setUser).not.toHaveBeenCalled();
-  });
-
-  it("cools down verification retries when the provider rate-limits attempts", async () => {
-    servicesMock.sendPhoneChangeCode.mockResolvedValue(undefined);
-    servicesMock.verifyPhoneChangeCode.mockRejectedValue(new Error("Too many attempts. Please wait a moment and try again."));
-    renderVerify();
-    fireEvent.click(screen.getByRole("button", { name: "Send SMS code" }));
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Resend in 60s" })).not.toBeNull());
-    fireEvent.change(screen.getByLabelText("Phone verification code"), { target: { value: "123456" } });
-    fireEvent.click(screen.getByRole("button", { name: "Verify phone" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("Too many attempts");
-    expect((screen.getByRole("button", { name: "Verify again in 60s" }) as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it("ignores an in-flight verification result after switching accounts", async () => {
-    let resolve!: (u: Record<string, unknown>) => void;
-    servicesMock.sendPhoneChangeCode.mockResolvedValue(undefined);
-    servicesMock.verifyPhoneChangeCode.mockReturnValue(new Promise((r) => { resolve = r; }));
-    const view = renderVerify();
-    fireEvent.click(screen.getByRole("button", { name: "Send SMS code" }));
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Resend in 60s" })).not.toBeNull());
-    fireEvent.change(screen.getByLabelText("Phone verification code"), { target: { value: "123456" } });
-    fireEvent.click(screen.getByRole("button", { name: "Verify phone" }));
-    const previous = authMock.user!;
-    authMock.user = { ...previous, id: "u2" };
-    view.rerender(<MemoryRouter><Verify /></MemoryRouter>);
-    await act(async () => resolve({ ...previous, phoneVerified: true }));
-    expect(authMock.setUser).not.toHaveBeenCalled();
+    try {
+      telegramMock.account
+        .mockResolvedValueOnce(UNLINKED)
+        .mockResolvedValue(VERIFIED);
+      telegramMock.state
+        .mockResolvedValueOnce({ state: "pending", phone: null })
+        .mockResolvedValueOnce({ state: "linked", phone: VERIFIED.phone });
+      renderVerify();
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      fireEvent.click(screen.getByRole("button", { name: "Verify with Telegram" }));
+      // Let the click's state update commit so the polling effect (and its
+      // timer) exists before the clock advances.
+      await act(async () => { await Promise.resolve(); });
+      expect(screen.getByText(/Open Telegram and press Start/i)).toBeTruthy();
+      // Poll 1 (3s) still sees the pending token; poll 2 (6s) sees it consumed.
+      await act(async () => { await vi.advanceTimersByTimeAsync(6100); });
+      expect(telegramMock.state).toHaveBeenCalled();
+      expect(screen.getByText("Mobile number verified with Telegram")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

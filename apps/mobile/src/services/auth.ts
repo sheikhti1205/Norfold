@@ -11,7 +11,6 @@ import { createOpenRouterClient, OpenRouterError } from "./openRouter";
 import { getConnectedOpenRouterKey } from "./aiCredentials";
 import { builtInHelp } from "./helpFaq";
 import { buildGroundedPrompt, groundAppAnswer } from "./ai/appKnowledge";
-import { requestPhoneChange } from "./profile";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "./buildConfig";
 
 /** Same validated, publishable-only Vite configuration as getSupabase(). */
@@ -653,138 +652,9 @@ async function mapDeletionError(err: unknown, expectedUserId: string): Promise<A
   return new ApiError("Account deletion failed. Check your connection and try again.", 502);
 }
 
-function requirePhone(phone: string): string {
-  const normalized = normalizePhone(phone);
-  if (!normalized) throw new ApiError("Enter a valid Bangladesh mobile number (e.g., 01812345678).", 400);
-  return normalized;
-}
-
-async function phoneAccount(expectedUserId: string): Promise<User> {
-  const { data: { user }, error } = await getSupabase().auth.getUser();
-  if (error || !user || user.id !== expectedUserId) {
-    throw new ApiError("Your account changed. Try again from the current account.", 409);
-  }
-  return user;
-}
-
-let phoneClientSequence = 0;
-
-async function phoneMutation<T>(
-  userId: string,
-  phone: string | undefined,
-  challenge: boolean,
-  run: (auth: SupabaseClient["auth"]) => Promise<T>,
-): Promise<T> {
-  // getSupabase() validates the canonical config. Capture the *current* account
-  // immediately before a mutation. SDK updateUser/verifyOtp save their returned
-  // session; doing that on the shared client can resurrect a signed-out account
-  // or overwrite a newly selected one while the network request is in flight.
-  const { data: { session }, error } = await getSupabase().auth.getSession();
-  if (error || !session || session.user.id !== userId) {
-    throw new ApiError("Your account changed. Try again from the current account.", 409);
-  }
-  const isolated = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-      storageKey: `findback-phone-change-${++phoneClientSequence}`,
-    },
-  });
-  try {
-    const { error: sessionError } = await isolated.auth.setSession({
-      access_token: session.access_token, refresh_token: session.refresh_token,
-    });
-    if (sessionError) throw mapPhoneError(sessionError);
-    const current = await phoneAccount(userId);
-    if (phone) requireDestination(current, phone, challenge);
-    return await run(isolated.auth);
-  } finally {
-    await isolated.auth.dispose();
-  }
-}
-
-function requireDestination(user: User, phone: string, challenge: boolean): void {
-  const metadataPhone = user.user_metadata?.phone;
-  const desired = typeof metadataPhone === "string" ? metadataPhone : user.phone ?? "";
-  if (normalizePhone(desired) !== phone) {
-    throw new ApiError("Your mobile number changed. Send a new code to the current number.", 409);
-  }
-  if (challenge && normalizePhone(user.new_phone ?? "") !== phone) {
-    throw new ApiError("Send a new code to this mobile number before verifying or resending.", 409);
-  }
-}
-
-function mapPhoneError(error: AuthErrorLike): ApiError {
-  const message = (error.message ?? "").toLowerCase();
-  if (error.status === 429 || isRateLimited(error.code ?? "", message)) return new ApiError(RATE_LIMIT_MESSAGE, 429);
-  if (error.code === "phone_provider_disabled" || error.code === "sms_provider_disabled" ||
-      message.includes("phone provider is disabled") || message.includes("sms provider is not configured")) {
-    return new ApiError("SMS verification is not enabled for this app. Contact support to enable it.", 503);
-  }
-  if (error.code === "sms_send_failed" || error.code === "hook_send_sms_error" ||
-      message.includes("error sending") || message.includes("sms provider")) {
-    return new ApiError("The SMS code could not be sent. Check the number and try again later; contact support if this continues.", 503);
-  }
-  if (error.code === "phone_exists") return new ApiError("This mobile number is already linked to an account. Use another number.", 409);
-  const mapped = mapAuthError(error);
-  if (mapped.message === "Authentication failed. Please try again.") {
-    return new ApiError("Phone verification failed. Check your connection and try again.", error.status ?? 400);
-  }
-  return mapped;
-}
-
-/** Saving a display number never sends SMS. The Auth trigger clears its badge. */
-export async function saveProfilePhone(userId: string, phone: string): Promise<PublicUser> {
-  const normalized = requirePhone(phone);
-  await phoneAccount(userId);
-  const { error } = await phoneMutation(userId, undefined, false,
-    (auth) => auth.updateUser({ data: { phone: normalized } }));
-  if (error) throw new ApiError("Could not save your mobile number. Check your connection and try again.", 400);
-  const profile = await fetchMe(userId);
-  await phoneAccount(userId);
-  return profile;
-}
-
-/** Authenticated phone change, not signInWithOtp (which could switch accounts). */
-export async function sendPhoneChangeCode(userId: string, phone: string, resend = false): Promise<void> {
-  const normalized = requirePhone(phone);
-  const user = await phoneAccount(userId);
-  requireDestination(user, normalized, resend);
-  // Server-authoritative replacement gate (spec 25): runs before any SMS
-  // challenge is created or resent. A held gate rejects with a 409 naming the
-  // eligible date; the write below never runs.
-  await requestPhoneChange(normalized);
-  const { error } = await phoneMutation(userId, normalized, resend, async (auth) => resend
-    ? auth.resend({ type: "phone_change", phone: normalized })
-    : auth.updateUser({ phone: normalized }));
-  if (error) throw mapPhoneError(error);
-  const current = await phoneAccount(userId);
-  requireDestination(current, normalized, false);
-  if (normalizePhone(current.new_phone ?? "") !== normalized) {
-    throw new ApiError("No SMS confirmation is pending. Refresh your contact details; contact support to check phone confirmation settings if this continues.", 503);
-  }
-}
-
-export async function verifyPhoneChangeCode(userId: string, phone: string, code: string): Promise<PublicUser> {
-  const normalized = requirePhone(phone);
-  // Supabase SMS OTP length is configurable from 6–10 digits.
-  if (!/^\d{6,10}$/.test(code)) throw new ApiError(INVALID_CODE_MESSAGE, 400);
-  requireDestination(await phoneAccount(userId), normalized, true);
-  const { data, error } = await phoneMutation(userId, normalized, true,
-    (auth) => auth.verifyOtp({ phone: normalized, token: code, type: "phone_change" }));
-  if (error) throw mapPhoneError(error);
-  if (data.user?.id !== userId) throw new ApiError("Your account changed. Try again from the current account.", 409);
-  const current = await phoneAccount(userId);
-  requireDestination(current, normalized, false);
-  if (normalizePhone(current.phone ?? "") !== normalized || !current.phone_confirmed_at) {
-    throw new ApiError("Phone confirmation is incomplete. Send a new code and try again.", 409);
-  }
-  const profile = await fetchMe(userId);
-  requireDestination(await phoneAccount(userId), normalized, false);
-  if (!profile.phoneVerified) throw new ApiError("Your phone was confirmed, but the profile badge could not be refreshed. Try again later or contact support.", 503);
-  return profile;
-}
+// Mobile numbers are no longer written or proven from here. Ownership is
+// confirmed only by the Telegram contact flow, and Norfold has no SMS provider,
+// so there is no local typed-number mutation path to keep.
 
 export async function checkUsername(
   username: string,

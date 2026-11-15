@@ -2,7 +2,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { resolveSupabaseBuildEnv } from "../vite.config";
+import {
+  INITIAL_CHUNK_CEILING_BYTES,
+  resolveChunkGroups,
+  resolveSupabaseBuildEnv,
+} from "../vite.config";
 
 let envDir = "";
 
@@ -73,5 +77,73 @@ describe("resolveSupabaseBuildEnv", () => {
       if (prevKey === undefined) delete process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       else process.env.VITE_SUPABASE_PUBLISHABLE_KEY = prevKey;
     }
+  });
+});
+
+/**
+ * Chunk policy contract. The groups exist so no single output file becomes the
+ * incidental dumping ground Rolldown produced by default (a 2,231 kB `AppBar`
+ * chunk holding React, react-dom, react-router, react-aria, zod, framer-motion,
+ * tiptap, the markdown stack and most of the app code).
+ */
+describe("resolveChunkGroups", () => {
+  const groups = resolveChunkGroups();
+  const id = (path: string) => `D:\\Projects\\Norfold\\apps\\mobile\\node_modules\\${path}`;
+  const groupFor = (moduleId: string) => groups.find((group) => group.test.test(moduleId))?.name;
+
+  it("names each vendor family explicitly", () => {
+    expect(groupFor(id("react\\index.js"))).toBe("vendor-react");
+    expect(groupFor(id("react-dom\\client.js"))).toBe("vendor-react");
+    expect(groupFor(id("react-router\\dist\\index.js"))).toBe("vendor-router");
+    expect(groupFor(id("framer-motion\\dist\\es\\index.mjs"))).toBe("vendor-motion");
+    expect(groupFor(id("zod\\v3\\index.js"))).toBe("vendor-validation");
+    expect(groupFor(id("lucide-react\\dist\\cjs\\lucide-react.js"))).toBe("vendor-icons");
+    expect(groupFor(id("yet-another-react-lightbox\\dist\\index.js"))).toBe("vendor-media");
+    expect(groupFor(id("@supabase\\supabase-js\\dist\\index.js"))).toBe("vendor-supabase");
+    expect(groupFor(id("@tiptap\\core\\dist\\index.js"))).toBe("vendor-editor");
+    expect(groupFor(id("prosemirror-view\\dist\\index.js"))).toBe("vendor-editor");
+    expect(groupFor(id("react-markdown\\index.js"))).toBe("vendor-markdown");
+    expect(groupFor(id("react-aria\\dist\\FocusScope.mjs"))).toBe("vendor-aria");
+    expect(groupFor(id("@internationalized\\date\\dist\\index.js"))).toBe("vendor-aria");
+  });
+
+  it("does not let a long package name fall into a shorter one", () => {
+    // A package must match on its whole path segment, never on a prefix.
+    expect(groupFor(id("@react-aria\\interactions\\dist\\mjs.js"))).toBe("vendor-aria");
+    expect(groupFor(id("react-dom\\client.js"))).not.toBe("vendor-router");
+    expect(groupFor(id("react-markdown\\index.js"))).not.toBe("vendor-react");
+  });
+
+  it("leaves unknown vendors to Rolldown's laziness-aware chunking", () => {
+    // No catch-all on purpose: grouping every remaining package merged
+    // lazy-only code (Sentry replay/feedback, 487 kB measured) into the
+    // eagerly preloaded graph, so an unknown package must stay unmatched.
+    expect(groupFor(id("some-unknown-package\\index.js"))).toBeUndefined();
+    expect(groupFor(id("zustand-extra\\index.js"))).toBeUndefined();
+    expect(groupFor(id("@sentry\\react\\esm\\index.js"))).toBeUndefined();
+    expect(groupFor("D:\\Projects\\Norfold\\apps\\mobile\\src\\screens\\Home.tsx")).toBeUndefined();
+    expect(groupFor("D:\\Projects\\Norfold\\apps\\mobile\\src\\services\\messaging\\runtime.ts")).toBe("app-messaging");
+  });
+
+  it("matches both path separators (Windows builds)", () => {
+    expect(groupFor("D:/Projects/Norfold/apps/mobile/node_modules/react/index.js")).toBe("vendor-react");
+    expect(groupFor("D:/Projects/Norfold/apps/mobile/src/services/messaging/runtime.ts")).toBe("app-messaging");
+  });
+
+  it("publishes unique group names", () => {
+    const names = groups.map((group) => group.name);
+    expect(new Set(names).size).toBe(names.length);
+    expect(names).not.toContain("vendor-misc");
+    expect(names).not.toContain("vendor-sentry");
+  });
+
+  it("does not hide the size warning in the config", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const source = await readFile(join(import.meta.dirname, "..", "vite.config.ts"), "utf8");
+    expect(/chunkSizeWarningLimit\s*:/.test(source)).toBe(false);
+  });
+
+  it("publishes a ceiling the build script enforces", () => {
+    expect(INITIAL_CHUNK_CEILING_BYTES).toBe(1200 * 1024);
   });
 });

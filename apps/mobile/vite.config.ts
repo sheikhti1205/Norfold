@@ -65,11 +65,96 @@ export function resolveMapBuildEnv(
  * emits maps, as `hidden` (files on disk, but no sourceMappingURL comment in the
  * bundle), so they exist solely to be uploaded to Sentry and then stripped before
  * Capacitor sync. Pure and unit-tested (see src/vite.sourcemaps.test.ts).
+ *
+ * FINDBACK_BUILD_SOURCEMAPS=true is the diagnostic twin: same `hidden` output,
+ * no SentryUpload assumption, for investigating production-only failures (for
+ * example a background push handled by the app) on a local build. It is not a
+ * release switch — see docs/BUILD_PERFORMANCE.md.
  */
 export function resolveSourcemapMode(env: {
   SENTRY_UPLOAD_SOURCEMAPS?: string | undefined;
+  FINDBACK_BUILD_SOURCEMAPS?: string | undefined;
 }): "hidden" | false {
-  return env.SENTRY_UPLOAD_SOURCEMAPS === "true" ? "hidden" : false;
+  return env.SENTRY_UPLOAD_SOURCEMAPS === "true" || env.FINDBACK_BUILD_SOURCEMAPS === "true"
+    ? "hidden"
+    : false;
+}
+
+/**
+ * Initial-payload budget. `scripts/check-build-budget.mjs` fails the build when
+ * any chunk reachable from index.html is larger than this, so a regression
+ * cannot be silenced with chunkSizeWarningLimit. Unit-tested against the script.
+ */
+export const INITIAL_CHUNK_CEILING_BYTES = 1200 * 1024;
+
+/** One Rolldown code-splitting group. `test` matches bundled module ids. */
+export interface ChunkGroupRule {
+  name: string;
+  test: RegExp;
+  priority: number;
+  /** Bytes at which Rolldown splits the group into several equal chunks. */
+  maxSize?: number;
+}
+
+/**
+ * Chunk policy for the production build.
+ *
+ * WHY: with one entry (main → dynamic startApp) plus a second dynamic entry
+ * (main → fixture preview), Rolldown's default partitioning produced two
+ * multi-megabyte chunks — `AppBar` (2,231 kB / 644 kB gzip) and `startApp`
+ * (989 kB / 295 kB gzip). AppBar's name was incidental; it held React,
+ * react-dom, react-router, react-aria, zod, framer-motion, tiptap, the
+ * markdown stack and most of the app code. Every boot paid for the whole set
+ * at once and every release invalidated it.
+ *
+ * These groups pin vendor boundaries by package, so a vendor upgrade only
+ * invalidates the chunk it touches and no single file becomes the dumping
+ * ground. Order is significant: the first matching group wins, so the specific
+ * package rules must precede `vendor-misc`.
+ *
+ * `[\\/]` is deliberate — module ids use backslashes on Windows.
+ */
+export function resolveChunkGroups(): ChunkGroupRule[] {
+  return [
+    { name: "vendor-react", test: /node_modules[\\/](?:react|react-dom|scheduler)[\\/]/, priority: 30 },
+    { name: "vendor-router", test: /node_modules[\\/](?:react-router|@remix-run)[\\/]/, priority: 30 },
+    {
+      name: "vendor-aria",
+      test: /node_modules[\\/](?:react-aria|react-aria-components|react-stately|@react-aria|@react-stately|@react-types|@internationalized)[\\/]/,
+      priority: 30,
+    },
+    { name: "vendor-motion", test: /node_modules[\\/](?:framer-motion|motion-dom|motion-utils)[\\/]/, priority: 30 },
+    {
+      name: "vendor-editor",
+      // The tiptap/ProseMirror stack is only reachable from the report and
+      // comment composers; keeping it in one named chunk makes that cost visible.
+      test: /node_modules[\\/](?:@tiptap|prosemirror-[^\\/]+|@floating-ui|linkifyjs)[\\/]/,
+      priority: 25,
+    },
+    {
+      name: "vendor-markdown",
+      test: /node_modules[\\/](?:react-markdown|remark-[^\\/]+|rehype-[^\\/]+|micromark[^\\/]*|mdast-[^\\/]+|hast-[^\\/]+|unist-[^\\/]+|unified|vfile[^\\/]*|property-information|space-separated-tokens|comma-separated-tokens|trim-lines|character-entities[^\\/]*|decode-named-character-reference|html-url-attributes|markdown-table|longest-streak|ccount|zwitch|bail|trough|devlop|is-plain-obj|escape-string-regexp)[\\/]/,
+      priority: 25,
+    },
+    { name: "vendor-media", test: /node_modules[\\/]yet-another-react-lightbox[\\/]/, priority: 25 },
+    { name: "vendor-icons", test: /node_modules[\\/]lucide-react[\\/]/, priority: 25 },
+    { name: "vendor-validation", test: /node_modules[\\/]zod[\\/]/, priority: 25 },
+    {
+      name: "vendor-supabase",
+      test: /node_modules[\\/](?:@supabase|phoenix|iceberg-js)[\\/]/,
+      priority: 20,
+    },
+    // App subsystem: the local messaging/history/backup layer is the single
+    // largest application group and changes independently of the UI, so it gets
+    // its own content-addressed chunk. Nothing under services/messaging imports
+    // a component or a screen, so this boundary adds no chunk cycle.
+    { name: "app-messaging", test: /src[\\/]services[\\/]messaging[\\/]/, priority: 10 },
+    // NO catch-all group on purpose. Grouping every remaining package (or all
+    // of @sentry) merges chunks that are otherwise only reached through a
+    // dynamic import into one eagerly-loaded file: measured, an `@sentry` group
+    // moved 487 kB of replay/feedback code into the preloaded graph. Anything
+    // not named above keeps Rolldown's automatic, laziness-aware chunking.
+  ];
 }
 
 export default defineConfig(({ command, mode }) => {
@@ -112,7 +197,9 @@ export default defineConfig(({ command, mode }) => {
   // Explicit local behavior (S3): say which mode we are in so a missing upload
   // token can never be mistaken for an upload — maps simply do not exist.
   console.info(
-    `[findback] sourcemaps ${sourcemap ? "ENABLED (hidden, for Sentry upload then strip)" : "DISABLED (local build: no .map files emitted)"}`,
+    `[findback] sourcemaps ${sourcemap
+      ? `ENABLED (hidden, ${process.env.SENTRY_UPLOAD_SOURCEMAPS === "true" ? "Sentry upload then strip" : "diagnostic only — do not package dist"})`
+      : "DISABLED (local build: no .map files emitted)"}`,
   );
   return {
     plugins: [react(), tailwindcss()],
@@ -144,6 +231,14 @@ export default defineConfig(({ command, mode }) => {
       // `hidden` omits the sourceMappingURL comment so that even a failed strip
       // can never leave the shipped bundle pointing at map files.
       sourcemap,
+      // Explicit chunk boundaries instead of one incidental mega-chunk; see
+      // resolveChunkGroups for the measured reason. The budget script
+      // (scripts/check-build-budget.mjs) enforces the ceiling afterwards.
+      rolldownOptions: {
+        output: {
+          codeSplitting: { groups: resolveChunkGroups() },
+        },
+      },
     },
     define: {
       // The dev server applies `import.meta.env.*` defines but not bare

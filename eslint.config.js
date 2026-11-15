@@ -56,7 +56,7 @@ export default tseslint.config(
     rules: { "@typescript-eslint/no-require-imports": "off" },
   },
   {
-    files: ["scripts/**/*.mjs", "tools/**/*.mjs", "supabase/tests/**/*.mjs"],
+    files: ["scripts/**/*.mjs", "apps/mobile/scripts/**/*.mjs", "tools/**/*.mjs", "supabase/tests/**/*.mjs"],
     languageOptions: {
       globals: {
         process: "readonly",

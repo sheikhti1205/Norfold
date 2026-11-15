@@ -24,6 +24,11 @@ import { UNAVAILABLE_SENTENCES, formatSafetyDate } from "../utils/safetyCopy";
 import { isMissingServerFunction } from "../utils/safetyService";
 import { useAuth } from "../auth";
 import { useSafetyLifetime } from "../utils/useSafetyLifetime";
+import {
+  joinAppRatingRoom,
+  onRealtime,
+  publishAppRatingAggregate,
+} from "../services/realtime";
 
 /** One line per kind, so a reader picks the right one before writing. */
 const FEEDBACK_CATEGORY_HINTS: Readonly<Record<FeedbackCategory, string>> = {
@@ -94,6 +99,10 @@ function ScopedFeedbackForm() {
     setRatingNotice(null);
     try {
       const result = await rateApp(score);
+      // The aggregate is server-computed and public; publish it so other open
+      // feedback screens update without a refetch. The reader's own score is
+      // never part of this payload.
+      void publishAppRatingAggregate({ average: result.average, count: result.count });
       if (!alive.current) return;
       setRating(result);
       setPendingScore((current) => current === score ? null : current);
@@ -125,6 +134,27 @@ function ScopedFeedbackForm() {
   }, [loadMine]);
 
   useEffect(() => { void loadRating(); }, [loadRating]);
+
+  // Live aggregate while this screen is mounted. The topic carries an average
+  // and a count only — never a score, a user id or a per-user row — so applying
+  // it can update the shared line without touching this reader's own choice.
+  useEffect(() => {
+    const off = onRealtime("app-rating:changed", (payload) => {
+      if (!alive.current) return;
+      const count = payload.count;
+      const average = payload.average;
+      if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 0) return;
+      if (count > 0 && (typeof average !== "number" || !Number.isFinite(average))) return;
+      setRating((current) => current
+        ? { ...current, average: count === 0 ? null : average as number, count }
+        : current);
+    });
+    const leaveRoom = joinAppRatingRoom();
+    return () => {
+      off();
+      leaveRoom();
+    };
+  }, [alive]);
 
   const scalars = useMemo(() => {
     if (!includeTechnical) {

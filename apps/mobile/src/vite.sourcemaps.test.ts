@@ -25,4 +25,17 @@ describe("resolveSourcemapMode", () => {
     expect(resolveSourcemapMode({ SENTRY_UPLOAD_SOURCEMAPS: "1" })).toBe(false);
     expect(resolveSourcemapMode({ SENTRY_UPLOAD_SOURCEMAPS: "TRUE" })).toBe(false);
   });
+
+  // Diagnostic builds (for example investigating a background push the app
+  // handled) need maps without a Sentry upload, and must stay `hidden` so the
+  // shipped bundle never points at a map file.
+  it("emits hidden maps for a diagnostic opt-in too", () => {
+    expect(resolveSourcemapMode({ FINDBACK_BUILD_SOURCEMAPS: "true" })).toBe("hidden");
+  });
+
+  it("keeps a partial or ambiguous diagnostic value off", () => {
+    expect(resolveSourcemapMode({ FINDBACK_BUILD_SOURCEMAPS: "" })).toBe(false);
+    expect(resolveSourcemapMode({ FINDBACK_BUILD_SOURCEMAPS: "yes" })).toBe(false);
+    expect(resolveSourcemapMode({ FINDBACK_BUILD_SOURCEMAPS: "true " })).toBe(false);
+  });
 });

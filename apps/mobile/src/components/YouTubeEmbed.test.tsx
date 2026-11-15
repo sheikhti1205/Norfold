@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { YouTubeEmbed } from "./YouTubeEmbed";
 
@@ -23,5 +23,27 @@ describe("YouTubeEmbed link safety", () => {
     fireEvent.click(screen.getByRole("button", { name: "Play video" }));
     const player = await screen.findByTitle("Embedded YouTube video");
     expect(player.getAttribute("src")).toBe("https://www.youtube.com/embed/dQw4w9WgXcQ");
+  });
+
+  it("opens a larger pop-out player and closes it with Escape", async () => {
+    render(<YouTubeEmbed url="https://www.youtube.com/watch?v=dQw4w9WgXcQ" />);
+    // Nothing is embedded before a deliberate press.
+    expect(screen.queryByTitle("Embedded YouTube video")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Watch larger" }));
+    const dialog = await screen.findByRole("dialog", { name: "Video player" });
+    expect(dialog).toBeTruthy();
+    expect(screen.getByTitle("Embedded YouTube video").getAttribute("src"))
+      .toBe("https://www.youtube.com/embed/dQw4w9WgXcQ");
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Video player" })).toBeNull());
+  });
+
+  it("keeps the external fallback reachable from the pop-out", async () => {
+    render(<YouTubeEmbed url="https://youtu.be/dQw4w9WgXcQ" />);
+    fireEvent.click(screen.getByRole("button", { name: "Watch larger" }));
+    await screen.findByRole("dialog", { name: "Video player" });
+    const links = screen.getAllByRole("link", { name: "Watch on YouTube" });
+    expect(links.at(-1)?.getAttribute("href")).toBe("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    expect(links.at(-1)?.getAttribute("target")).toBe("_blank");
   });
 });

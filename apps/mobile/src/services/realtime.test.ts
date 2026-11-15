@@ -9,6 +9,7 @@ const { clientMock, channels, subscribeState } = vi.hoisted(() => {
     handlers: Array<{ event: string; cb: (message: unknown) => void }>;
     on: (type: string, filter: { event: string }, cb: (message: unknown) => void) => unknown;
     subscribe: (cb?: (status: string) => void) => unknown;
+    send: ReturnType<typeof vi.fn>;
     statusCb?: (status: string) => void;
   }> = [];
   const subscribeState = { status: "SUBSCRIBED" as string };
@@ -27,6 +28,7 @@ const { clientMock, channels, subscribeState } = vi.hoisted(() => {
         cb?.(subscribeState.status);
         return channel;
       },
+      send: vi.fn(async () => "ok"),
     };
     channels.push(channel);
     return channel;
@@ -472,5 +474,108 @@ describe("connection resilience", () => {
     expect(feedCount("notification:user-2")).toBe(1);
     emit(find("notification:user-2"), "notification:added", { op: "insert" });
     expect(seen).toEqual([{ op: "insert" }]);
+  });
+});
+
+describe("app rating aggregate", () => {
+  it("subscribes to the public topic and forwards only the aggregate", async () => {
+    const mod = await load();
+    const seen: unknown[] = [];
+    mod.onRealtime("app-rating:changed", (p) => seen.push(p));
+    const leave = mod.joinAppRatingRoom();
+    await flush();
+
+    const channel = find("app-rating");
+    expect(channel.opts.config?.private).toBeUndefined();
+
+    emit(channel, "rating:changed", { average: 4.25, count: 8 });
+    expect(seen).toEqual([{ average: 4.25, count: 8 }]);
+
+    leave();
+  });
+
+  it("drops malformed or per-user-shaped payloads", async () => {
+    const mod = await load();
+    const seen: unknown[] = [];
+    mod.onRealtime("app-rating:changed", (p) => seen.push(p));
+    const leave = mod.joinAppRatingRoom();
+    await flush();
+
+    const channel = find("app-rating");
+    for (const payload of [
+      { average: 4, count: 2, score: 5 },
+      { average: 4, count: 2, userId: "u1" },
+      { average: 4, count: 2, rows: [{ user: "u1", score: 4 }] },
+      { count: 2 },
+      { average: 9, count: 2 },
+      { average: null, count: 2 },
+      { average: 4, count: -1 },
+      { average: 4, count: 1.5 },
+      { average: "4", count: 2 },
+    ]) {
+      emit(channel, "rating:changed", payload);
+    }
+    expect(seen).toEqual([]);
+
+    leave();
+  });
+
+  it("refcounts subscribers and removes the channel with the last one", async () => {
+    const mod = await load();
+    const leaveA = mod.joinAppRatingRoom();
+    const leaveB = mod.joinAppRatingRoom();
+    await flush();
+    expect(channels.filter((c) => c.topic === "app-rating")).toHaveLength(1);
+
+    leaveA();
+    expect(clientMock.removeChannel).not.toHaveBeenCalled();
+    leaveB();
+    expect(clientMock.removeChannel).toHaveBeenCalledTimes(1);
+
+    const channel = find("app-rating");
+    emit(channel, "rating:changed", { average: 4, count: 1 });
+    expect(clientMock.removeChannel).toHaveBeenCalledWith(channel);
+  });
+
+  it("publishes exactly the aggregate and cleans up the transient channel", async () => {
+    const mod = await load();
+    const published = await mod.publishAppRatingAggregate({ average: 4.5, count: 10 });
+    expect(published).toBe(true);
+
+    const channel = find("app-rating");
+    expect(channel.send).toHaveBeenCalledWith({
+      type: "broadcast",
+      event: "rating:changed",
+      payload: { average: 4.5, count: 10 },
+    });
+    expect(clientMock.removeChannel).toHaveBeenCalledWith(channel);
+  });
+
+  it("publishes the empty aggregate as a null average", async () => {
+    const mod = await load();
+    await mod.publishAppRatingAggregate({ average: null, count: 0 });
+    expect(find("app-rating").send).toHaveBeenCalledWith({
+      type: "broadcast",
+      event: "rating:changed",
+      payload: { average: null, count: 0 },
+    });
+  });
+
+  it("never publishes an invalid aggregate", async () => {
+    const mod = await load();
+    expect(await mod.publishAppRatingAggregate({ average: 9, count: 2 })).toBe(false);
+    expect(await mod.publishAppRatingAggregate({ average: null, count: 3 })).toBe(false);
+    expect(clientMock.channel).not.toHaveBeenCalled();
+  });
+
+  it("tears the channel down on disconnect", async () => {
+    const mod = await load();
+    mod.joinAppRatingRoom();
+    await flush();
+    const channel = find("app-rating");
+
+    mod.disconnectRealtime();
+
+    expect(clientMock.removeChannel).toHaveBeenCalledWith(channel);
   });
 });

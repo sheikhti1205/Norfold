@@ -9,17 +9,19 @@ afterEach(cleanup);
 
 /** Controlled wrapper: the composer's restore rule is a pure function of the
  * draft, so the test must actually clear it the way the screen does. */
-function Harness({ connected = true, voiceAvailable = false, onVoice, onPickKlipy }: {
+function Harness({ connected = true, voiceAvailable = false, onVoice, onPickKlipy, onFiles }: {
   connected?: boolean;
   voiceAvailable?: boolean;
   onVoice?: () => void;
   onPickKlipy?: (item: { mediaUrl: string }) => void;
+  onFiles?: (files: File[]) => void;
 }) {
   const [value, setValue] = useState("Keep draft");
   return <PeerChatComposer value={value} onChange={setValue} onSend={() => setValue("")}
     inputRef={createRef()} busy={false} locked={false} canSend={!!value.trim()}
     photoAllowed={connected} onCamera={() => undefined} onPhotos={() => undefined}
     voiceAvailable={voiceAvailable} onVoice={onVoice}
+    {...(onFiles ? { onFiles } : {})}
     {...(onPickKlipy ? { onPickKlipy: onPickKlipy as never } : {})} />;
 }
 
@@ -135,4 +137,24 @@ it("a deliberate reveal outranks the width and survives leaving the field", () =
   // Blur returns to the width default, not to a hidden cluster.
   expect(document.querySelector(".fb-peer-attachments")?.getAttribute("data-reveal")).toBe("auto");
   expect(screen.getByRole("button", { name: "Take photo" })).toBeTruthy();
+});
+
+it("sends any file type, not only images", () => {
+  const onFiles = vi.fn();
+  render(<Harness onFiles={onFiles} />);
+  const picker = screen.getByLabelText("Choose files") as HTMLInputElement;
+  // No accept filter: the picker must offer documents, video, audio, archives.
+  expect(picker.getAttribute("accept")).toBeNull();
+  expect(picker.multiple).toBe(true);
+  const picked = [
+    new File(["a"], "brief.pdf", { type: "application/pdf" }),
+    new File(["b"], "clip.mp4", { type: "video/mp4" }),
+    new File(["c"], "song.mp3", { type: "audio/mpeg" }),
+    new File(["d"], "layers.psd", { type: "" }),
+  ];
+  fireEvent.change(picker, { target: { files: picked } });
+  expect(onFiles).toHaveBeenCalledTimes(1);
+  expect(onFiles.mock.calls[0]?.[0]).toHaveLength(4);
+  // The input is cleared so the same file can be picked again.
+  expect(picker.value).toBe("");
 });

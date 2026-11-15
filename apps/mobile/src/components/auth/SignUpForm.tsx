@@ -218,6 +218,7 @@ export function SignUpForm({
           placeholder="01812345678"
           inputMode="numeric"
           autoComplete="tel"
+          hint="Saved as unverified. Confirm it with Telegram after you sign in."
           required
         />
         <TextField

@@ -47,4 +47,191 @@
 .fb-chat-file-action:hover { background: var(--fb-surface-container); }
 .fb-chat-file-action:disabled { opacity: 0.6; }
 .fb-chat-file-error { flex-basis: 100%; margin: 0; font-size: 0.75rem; color: var(--fb-error, #b3261e); }
-.fb-chat-file-video, .fb-chat-file-audio { display: block; max-width: min(320px, 100%); border-radius: 14px; }
+
+/* ---------- video: a poster frame that hands off to the global player ---- */
+
+.fb-chat-video {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(320px, 100%);
+  min-width: 0;
+}
+.fb-chat-video-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 14px;
+  background:
+    linear-gradient(155deg, var(--fb-surface-container-high), var(--fb-surface-container-low));
+}
+.fb-chat-video-launch {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.fb-chat-video-launch:disabled { cursor: progress; }
+.fb-chat-video-art {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fb-on-surface-variant);
+  opacity: 0.5;
+}
+.fb-chat-video-play {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--fb-primary);
+  box-shadow: var(--shadow-sm);
+  color: var(--fb-on-primary);
+}
+.fb-chat-video-play svg { margin-left: 2px; }
+.fb-chat-video-launch:hover .fb-chat-video-play { background: var(--fb-primary); filter: brightness(1.08); }
+.fb-chat-video-launch:disabled .fb-chat-video-play { opacity: 0.85; }
+.fb-chat-video-launch:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: -3px; border-radius: 14px; }
+.fb-chat-video-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--fb-on-surface-variant);
+}
+.fb-chat-video-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fb-on-surface);
+}
+.fb-chat-video-size { flex: none; font-size: 0.6875rem; font-variant-numeric: tabular-nums; }
+
+@keyframes fb-chat-file-spin { to { transform: rotate(360deg); } }
+.fb-chat-video-spin { animation: fb-chat-file-spin 1s linear infinite; }
+
+/* ---------- audio: a compact row over the shared playback engine --------- */
+
+.fb-chat-audio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  width: min(320px, 100%);
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 14px;
+  background: var(--fb-surface-container-low);
+}
+.fb-chat-audio-el { display: none; }
+.fb-chat-audio-play {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--fb-primary);
+  color: var(--fb-on-primary);
+  cursor: pointer;
+}
+.fb-chat-audio-play svg { margin-left: 1px; }
+.fb-chat-audio-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.fb-chat-audio-head { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.fb-chat-audio-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fb-on-surface);
+}
+.fb-chat-audio-size { flex: none; font-size: 0.6875rem; color: var(--fb-on-surface-variant); }
+.fb-chat-audio-time { font-size: 0.6875rem; font-variant-numeric: tabular-nums; color: var(--fb-on-surface-variant); }
+.fb-chat-audio-track { position: relative; display: flex; align-items: center; height: 18px; }
+.fb-chat-audio-rail,
+.fb-chat-audio-buffered,
+.fb-chat-audio-played {
+  position: absolute;
+  left: 0;
+  height: 3px;
+  border-radius: 2px;
+  pointer-events: none;
+}
+.fb-chat-audio-rail { right: 0; background: var(--fb-outline-variant); }
+.fb-chat-audio-buffered { background: var(--fb-outline); }
+.fb-chat-audio-played { background: var(--fb-primary); }
+.fb-chat-audio-seek {
+  position: relative;
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+.fb-chat-audio-seek::-webkit-slider-runnable-track { height: 3px; background: transparent; }
+.fb-chat-audio-seek::-moz-range-track { height: 3px; background: transparent; }
+.fb-chat-audio-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  margin-top: -3.5px;
+  border-radius: 50%;
+  background: var(--fb-primary);
+}
+.fb-chat-audio-seek::-moz-range-thumb { width: 10px; height: 10px; border: 0; border-radius: 50%; background: var(--fb-primary); }
+.fb-chat-audio-seek:disabled { opacity: 0.6; cursor: default; }
+.fb-chat-audio-save {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  color: var(--fb-on-surface-variant);
+  background: transparent;
+  cursor: pointer;
+}
+.fb-chat-audio-save:hover { background: var(--fb-surface-container-high); }
+
+.fb-chat-audio button:focus-visible,
+.fb-chat-audio input:focus-visible,
+.fb-chat-file button:focus-visible {
+  outline: 2px solid var(--fb-focus);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-chat-video-spin { animation-duration: 2.4s; }
+}
+html.fb-reduce-motion .fb-chat-video-spin { animation-duration: 2.4s; }

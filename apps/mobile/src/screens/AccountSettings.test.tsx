@@ -4,11 +4,11 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PublicUser } from "@norfold/shared";
 
-const { mockLogout, mockFinishDeletion, mockUser, mockRequestDeletion, mockFetchEligibility, mockSendPasswordCode, mockSavePassword, mockHasPassword, mockRefreshPasswordPresence } = vi.hoisted(() => ({
+const { mockLogout, mockFinishDeletion, mockUser, mockRequestDeletion, mockTelegramAccount, mockSendPasswordCode, mockSavePassword, mockHasPassword, mockRefreshPasswordPresence } = vi.hoisted(() => ({
   mockLogout: vi.fn(),
   mockFinishDeletion: vi.fn(),
   mockRequestDeletion: vi.fn(),
-  mockFetchEligibility: vi.fn(),
+  mockTelegramAccount: vi.fn(),
   mockSendPasswordCode: vi.fn(async (_accountId: string, _email: string) => undefined),
   mockSavePassword: vi.fn(async (_input: { accountId: string; email: string; password: string; code: string }) => undefined),
   mockUser: {
@@ -37,14 +37,17 @@ vi.mock("../services/auth", () => ({
 }));
 
 vi.mock("../services/profile", () => ({
-  fetchPhoneChangeEligibility: (...args: unknown[]) => mockFetchEligibility(...args),
-  formatPhoneChangeEligibleAt: (eligibleAt: string | null | undefined) => {
-    if (!eligibleAt) return "";
-    const date = new Date(eligibleAt);
-    if (Number.isNaN(date.getTime())) return "";
-    return `on ${date.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}`;
-  },
+  updateMyProfile: vi.fn(),
 }));
+
+vi.mock("../services/telegram", () => ({
+  getTelegramAccount: (...args: unknown[]) => mockTelegramAccount(...args),
+  createTelegramLink: vi.fn(),
+  getTelegramLinkState: vi.fn(),
+  unlinkTelegram: vi.fn(),
+}));
+
+vi.mock("@capacitor/browser", () => ({ Browser: { open: vi.fn() } }));
 
 import { AccountSettings } from "./AccountSettings";
 import { aiCredentials } from "../services/aiCredentials";
@@ -94,7 +97,7 @@ beforeEach(() => {
   mockRefreshPasswordPresence.mockResolvedValue(true);
   mockLogout.mockResolvedValue(undefined);
   mockFinishDeletion.mockResolvedValue(undefined);
-  mockFetchEligibility.mockResolvedValue({ eligible: true, eligibleAt: null, phoneVerified: false });
+  mockTelegramAccount.mockReset().mockResolvedValue({ linked: false, phone: null, username: null });
 });
 
 describe("AccountSettings", () => {
@@ -400,41 +403,38 @@ describe("AccountSettings", () => {
     expect(mockLogout).not.toHaveBeenCalled();
   });
 
-  // W5-IDENTITY appended cases: six-month replacement availability (spec 25).
-  it("keeps the default mobile copy while the gate is eligible", async () => {
-    mockFetchEligibility.mockResolvedValue({ eligible: true, eligibleAt: null, phoneVerified: true });
+  // Telegram owns phone verification; the old SMS replacement gate is gone.
+  it("points the mobile row at Telegram without promising text messages", async () => {
     renderAccount();
     const row = await screen.findByRole("link", { name: /mobile number/i });
-    expect(row.textContent).toContain("Bangladesh mobile number.");
-    expect(row.textContent).not.toMatch(/change available/i);
-  });
-
-  it("names the eligible date on the mobile row while the gate holds", async () => {
-    mockFetchEligibility.mockResolvedValue({
-      eligible: false,
-      eligibleAt: "2027-04-12T00:00:00.000Z",
-      phoneVerified: true,
-    });
-    renderAccount();
-    const row = await screen.findByRole("link", { name: /mobile number/i });
-    expect(row.textContent).toMatch(/number change available on .*2027/i);
+    expect(row.textContent).toContain("does not send text messages");
+    expect(row.textContent).toContain("Not verified");
     expect(row.getAttribute("href")).toBe("/profile/edit");
   });
 
-  it("names the block (not the default copy) when the gate holds without a date", async () => {
-    mockFetchEligibility.mockResolvedValue({ eligible: false, eligibleAt: null, phoneVerified: true });
+  it("shows the server-verified Telegram number on the mobile row", async () => {
+    mockTelegramAccount.mockResolvedValue({ linked: true, phone: "+8801912345678", username: "reader" });
     renderAccount();
     const row = await screen.findByRole("link", { name: /mobile number/i });
-    expect(row.textContent).toMatch(/not available yet/i);
-    expect(row.textContent).not.toContain("Bangladesh mobile number.");
-    expect(row.getAttribute("href")).toBe("/profile/edit");
+    await waitFor(() => expect(row.textContent).toContain("Verified with Telegram"));
+    expect(row.textContent).toContain("+8801912345678");
+    expect(row.textContent).toContain("Verified");
   });
 
-  it("keeps the default mobile copy when the availability read fails", async () => {
-    mockFetchEligibility.mockRejectedValue(new Error("offline"));
+  it("keeps the number unverified while Telegram waits for a contact", async () => {
+    mockTelegramAccount.mockResolvedValue({ linked: true, phone: null, username: "reader" });
     renderAccount();
     const row = await screen.findByRole("link", { name: /mobile number/i });
-    expect(row.textContent).toContain("Bangladesh mobile number.");
-    expect(row.textContent).not.toMatch(/change available/i);
+    await waitFor(() => expect(row.textContent).toContain("Share your own contact"));
+    expect(row.textContent).toContain("Not verified");
+  });
+
+  it("stays honest when the Telegram state cannot be checked", async () => {
+    mockTelegramAccount.mockRejectedValue(new Error("offline"));
+    renderAccount();
+    const row = await screen.findByRole("link", { name: /mobile number/i });
+    await waitFor(() => expect(row.textContent).toContain("Could not check Telegram"));
+    expect(row.textContent).toContain("stays unverified");
+    expect(row.textContent).not.toContain("Verified with Telegram");
   });
 });
