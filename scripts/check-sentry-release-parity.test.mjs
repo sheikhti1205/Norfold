@@ -83,6 +83,9 @@ test("fails closed on every tampered contract", () => {
     ["publisher dist outside canonical set", (d) => writeFileSync(join(d, ".github/workflows/android-builds.yml"),
       readFileSync(".github/workflows/android-builds.yml", "utf8").replace(/VITE_SENTRY_DIST:\s*\S+/, "VITE_SENTRY_DIST: android")),
       /android-builds\.yml.*VITE_SENTRY_DIST android outside canonical set/],
+    ["bundle assertion entry-only grep", (d) => writeFileSync(join(d, ".github/workflows/ci.yml"),
+      `${readFileSync(".github/workflows/ci.yml", "utf8")}\n      run: JS=$(ls apps/mobile/dist/assets/index-*.js | head -1)\n`),
+      /ci\.yml:\d+.*entry chunk/],
   ];
   for (const [name, tamper, pattern] of cases) {
     const dir = fixtureRoot(tamper);
