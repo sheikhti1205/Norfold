@@ -93,6 +93,27 @@ npx supabase migration list
 Already-applied migration files are historical record: never edit them to change
 schema. Send RLS/policy changes, new tables, and RPCs as new migrations.
 
+### Production application is push-triggered today (2026-11-15)
+
+The linked Supabase GitHub integration applies every migration in a push to
+`main` within minutes, before CI finishes. That is not this repository's
+workflow: `backend-deploy.yml` stays manual, but the integration runs in
+parallel with it.
+
+Two consequences, both observed on 2026-11-14/15:
+
+- A push that carried a migration plus its dependent code could reach production
+  before the CI gate that proves the pair. The candidate-reader parity break was
+  live for part of that window.
+- `20261112130000_report_views.sql` was amended after it had been applied
+  (feed readers switched to `SECURITY DEFINER`). The live project has the
+  intended definition, but any other environment that applied the earlier bytes
+  will not replay them. Treat the edit as historical, documented drift.
+
+Until the integration is disabled and production migrations move behind a
+protected, CI-gated step, the rule is: a push carrying migrations must already
+be accepted locally, and every repair must be a new forward migration.
+
 ## Auth migration progress (historical — see the cutover section below)
 
 _This section records the earlier step-by-step preparation. Supabase Auth later
