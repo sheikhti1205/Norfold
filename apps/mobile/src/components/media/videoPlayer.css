@@ -339,6 +339,22 @@
   .fb-vp--inline .fb-vp-time { font-size: 0.625rem; }
 }
 
+/* A 320dp phone cannot hold the whole expanded transport on one line: the
+   volume SLIDER collapses (Mute stays), the icons tighten, and each visual box
+   still carries a 44px hit area through the pseudo-element. */
+@media (max-width: 420px) {
+  .fb-vp--expanded .fb-vp-row { gap: 0; }
+  .fb-vp--expanded .fb-vp-icon { width: 36px; height: 36px; }
+  .fb-vp--expanded .fb-vp-rate { min-width: 36px; }
+  .fb-vp--expanded .fb-vp-time { font-size: 0.6875rem; }
+  .fb-vp--expanded .fb-vp-volume { display: none; }
+  .fb-vp--expanded .fb-vp-icon::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+  }
+}
+
 /* ---------- mini transport ---------------------------------------------- */
 
 .fb-vp-mini-progress {
