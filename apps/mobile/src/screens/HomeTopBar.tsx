@@ -1,8 +1,11 @@
 import type { ReactNode, RefObject } from "react";
 import { useEffect, useRef } from "react";
+import { Link } from "react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Search } from "lucide-react";
 import { SearchField } from "../components/SearchField";
+import { BrandMark } from "../components/BrandMark";
+import { useStoredNavLayout } from "../components/navLayout";
 import { motionDurations, motionEasings, pressFeedback, scaleInVariants } from "../components/uiMotion";
 
 /** Shared swap timing for the one-row state change. */
@@ -76,6 +79,11 @@ export function HomeTopBar({
   // focus, so the first paint is never a transition.
   const triggerRef = useRef<HTMLButtonElement>(null);
   const wasExpanded = useRef(expanded);
+  // The rail owns the brand when it is on screen. On the bottom-bar layout
+  // (every phone, plus readers who chose the bar) that sign is absent, so the
+  // feed restores the mark and wordmark here instead of leaving the app
+  // nameless. While search is open the field needs the full row.
+  const showBrand = useStoredNavLayout() === "bottom" && !expanded;
   useEffect(() => {
     if (wasExpanded.current && !expanded) triggerRef.current?.focus();
     wasExpanded.current = expanded;
@@ -96,9 +104,16 @@ export function HomeTopBar({
         if (!(next instanceof Node) || !event.currentTarget.contains(next)) onBlur();
       }}
     >
-      {/* The sidebar owns the visible brand. This keeps the one heading the
-          screen needs without drawing a second wordmark. */}
+      {/* The sidebar owns the visible brand when it is mounted. This keeps the
+          one heading the screen needs in both layouts, and the bottom-bar
+          layout additionally paints the mark plus wordmark below. */}
       <h1 className="sr-only">Norfold</h1>
+      {showBrand && (
+        <Link to="/" aria-label="Norfold home" className="fb-home-brand">
+          <BrandMark size={24} shape="tile" alt="" />
+          <span className="fb-home-brand-name">Norfold</span>
+        </Link>
+      )}
       <AnimatePresence initial={false} mode="popLayout">
         {expanded ? (
           <motion.div
