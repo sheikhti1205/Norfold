@@ -58,7 +58,11 @@ select pg_temp.r4_check('only documented chat RPCs are callable by ordinary acco
    'findback_chat_history_authority','findback_chat_set_pin',
    -- Photo transport participant test: a boolean relationship read for the
    -- signed-in caller only, added by 20261112170000_chat_file_transport.sql.
-   'findback_chat_file_participant')));
+   'findback_chat_file_participant',
+   -- Cumulative 100 MB chat-file budget predicate: the Storage insert policy
+   -- runs as the caller, so 20261115140000_chat_file_budget.sql grants this
+   -- boolean self-check to authenticated. It refuses any id but auth.uid().
+   'findback_chat_file_budget_ok')));
 select pg_temp.r4_check('private chat tables stay closed to clients',
  not has_table_privilege('authenticated','public.chat_conversations','select')
  and not has_table_privilege('authenticated','public.chat_messages','select')

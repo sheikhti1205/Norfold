@@ -180,6 +180,8 @@ jobs:
         run: node --test supabase/tests/roles_capabilities_parity.test.mjs
       - name: Run notification helper preservation guard
         run: node --test supabase/tests/notification_helper_parity.test.mjs
+      - name: Run chat-file budget and sweep guard
+        run: node --test supabase/tests/chat_file_budget_policy.test.mjs
 
   candidate-reader-sql:
     name: Full-chain candidate reader SQL behavior

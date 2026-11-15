@@ -35,6 +35,7 @@ import {
 const FIXTURE_SOURCE = {
   "chat-media": "chat-media source v1",
   "chat-wake": "chat-wake source v1",
+  "cleanup-chat-files": "cleanup-chat-files source v1",
   "cleanup-chat-media": "cleanup-chat-media source v1",
   "cleanup-comment-media": "cleanup-comment-media source v1",
   "cleanup-report-media": "cleanup-report-media source v1",
@@ -89,6 +90,7 @@ describe("check-edge-parity fixtures", () => {
     assert.deepEqual([...EDGE_FUNCTIONS].sort(), [
       "chat-media",
       "chat-wake",
+      "cleanup-chat-files",
       "cleanup-chat-media",
       "cleanup-comment-media",
       "cleanup-report-media",
@@ -180,7 +182,7 @@ describe("check-edge-parity fixtures", () => {
     const results = checkParity({ localHashes, manifestEntries: manifestFor() });
     const report = formatParityReport(results);
     for (const name of EDGE_FUNCTIONS) assert.ok(report.includes(name), `missing ${name}`);
-    assert.match(report, /12 CURRENT, 0 STALE, 0 MISSING/);
+    assert.match(report, new RegExp(`${EDGE_FUNCTIONS.length} CURRENT, 0 STALE, 0 MISSING`));
   });
 });
 
@@ -412,7 +414,7 @@ describe("check-edge-parity verify_jwt contract", () => {
     const rows = checkJwtContract(deployedResults(), expectationsFor());
     assert.ok(rows.every((row) => row.verdict === "MATCH"), JSON.stringify(rows.filter((r) => r.verdict !== "MATCH")));
     assert.equal(summarizeJwtContract(rows).exitCode, 0);
-    assert.match(formatJwtReport(rows), /12 MATCH, 0 MISMATCH, 0 UNKNOWN/);
+    assert.match(formatJwtReport(rows), new RegExp(`${EDGE_FUNCTIONS.length} MATCH, 0 MISMATCH, 0 UNKNOWN`));
   });
 
   it("fails on a mismatch and names the function, expected and deployed value", () => {

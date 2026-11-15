@@ -56,6 +56,27 @@
         }
       ]
     },
+    "cleanup-chat-files": {
+      "verifyJwt": false,
+      "status": "DERIVED",
+      "evidence": [
+        {
+          "class": "source-auth",
+          "source": "supabase/functions/cleanup-chat-files/index.ts",
+          "detail": "\"Deploy with --no-verify-jwt: the canonical wrapper verifies the server secret API key. No anonymous/public/user route may sweep private conversation files.\" Handler uses withSupabase({ auth: \"secret\" }) and refuses any request body."
+        },
+        {
+          "class": "caller",
+          "source": ".github/workflows/chat-media-maintenance.yml",
+          "detail": "curl POST /functions/v1/cleanup-chat-files with only `-H \"apikey: ${SUPABASE_SECRET_KEY}\"` (no Authorization header), empty body, --fail-with-body."
+        },
+        {
+          "class": "deploy",
+          "source": ".github/workflows/backend-deploy.yml",
+          "detail": "supabase functions deploy cleanup-chat-files --no-verify-jwt --yes"
+        }
+      ]
+    },
     "cleanup-chat-media": {
       "verifyJwt": false,
       "status": "DERIVED",

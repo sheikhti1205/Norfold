@@ -34,7 +34,7 @@ const DEFAULT_SCOPE_ANSWER =
   "I can help with Norfold reports, search, status changes, comments, ratings, photos, location, notifications and account verification. Try asking about one of those features.";
 
 const OTP_ANSWER =
-  "Email confirmation is required at signup: use the one-time code sent to your email. Phone verification is optional and available from the verification/account flow when SMS verification is configured.";
+  "Email confirmation is required at signup: use the one-time code sent to your email. Phone verification is optional and happens in Telegram — connect the Norfold bot and share your own contact. Norfold does not send text messages.";
 
 /** The app named outright. Enough on its own, and it lifts the veto below. */
 const APP_NAME_RE = /\b(?:norfold|findback)\b|\b(?:the|this)\s+app\b/i;

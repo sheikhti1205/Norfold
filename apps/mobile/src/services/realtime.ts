@@ -10,8 +10,15 @@ export type RealtimeEvent =
   | "reaction:invalidate"
   | "reaction:changed"
   | "rating:changed"
+  | "app-rating:changed"
   | "chat:invalidate"
   | "notification:added";
+
+/** App-wide rating aggregate. Never a score, user id or per-user row. */
+export interface AppRatingAggregate {
+  average: number | null;
+  count: number;
+}
 
 /**
  * `chat:invalidate` payload. `accountId` is added by this module from the
@@ -38,6 +45,9 @@ let feedChannel: RealtimeChannel | null = null;
 let inboxChannel: RealtimeChannel | null = null;
 let boundInboxUser: string | null = null;
 let desiredInboxUser: string | null = null;
+let appRatingChannel: RealtimeChannel | null = null;
+let appRatingSubscribers = 0;
+let appRatingOpening: Promise<RealtimeChannel | null> | null = null;
 let ready: Promise<void> = Promise.resolve();
 let authUnsubscribe: (() => void) | null = null;
 
@@ -196,6 +206,8 @@ export function disconnectRealtime(): void {
   desiredPosts.clear();
   desiredInboxUser = null;
   boundInboxUser = null;
+  appRatingSubscribers = 0;
+  appRatingOpening = null;
   clearAllRetries();
   if (authUnsubscribe) {
     authUnsubscribe();
@@ -209,6 +221,10 @@ export function disconnectRealtime(): void {
   if (inboxChannel) {
     void client.removeChannel(inboxChannel);
     inboxChannel = null;
+  }
+  if (appRatingChannel) {
+    void client.removeChannel(appRatingChannel);
+    appRatingChannel = null;
   }
   for (const [postId, channel] of postChannels) {
     void client.removeChannel(channel);
@@ -366,4 +382,132 @@ export function leaveInboxRoom(): void {
   if (!client || !inboxChannel) return;
   void client.removeChannel(inboxChannel);
   inboxChannel = null;
+}
+
+/**
+ * The app-rating topic is public. The private receive policy grants only
+ * `feed`, `post:%` and `notification:<uid>`, and this topic carries a global
+ * aggregate that every reader can already see on the feedback screen — never
+ * who rated or what any individual scored.
+ */
+const APP_RATING_TOPIC = "app-rating";
+
+/**
+ * Accept only an aggregate and nothing else: exactly a whole `count`, and
+ * (while someone has rated) a finite `average` between 1 and 5. Any extra key —
+ * a score, a user id, a per-user row — rejects the whole payload instead of
+ * being quietly forwarded alongside the aggregate.
+ */
+function appRatingAggregateFrom(payload: Record<string, unknown>): AppRatingAggregate | null {
+  const keys = Object.keys(payload).sort();
+  if (keys.length !== 2 || keys[0] !== "average" || keys[1] !== "count") return null;
+  const average = payload.average;
+  const count = payload.count;
+  if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 0) return null;
+  if (count === 0) {
+    if (average !== null) return null;
+    return { average: null, count };
+  }
+  if (typeof average !== "number" || !Number.isFinite(average) || average < 1 || average > 5) return null;
+  return { average, count };
+}
+
+/**
+ * Open (or reuse) the shared app-rating channel. Concurrent callers share one
+ * in-flight open, so a mount and a publish never race two channels onto the
+ * same topic. Resolves null when the client is unavailable or the subscribe
+ * failed; callers treat that as "no live aggregate" rather than an error.
+ */
+function openAppRatingChannel(): Promise<RealtimeChannel | null> {
+  if (appRatingChannel) return Promise.resolve(appRatingChannel);
+  if (appRatingOpening) return appRatingOpening;
+  const c = ensureClient();
+  if (!c) return Promise.resolve(null);
+  const opening = ready
+    .then(() => new Promise<RealtimeChannel | null>((resolve) => {
+      if (client !== c || appRatingChannel) {
+        resolve(appRatingChannel);
+        return;
+      }
+      const channel = c.channel(APP_RATING_TOPIC, { config: { broadcast: { self: true } } });
+      channel.on("broadcast", { event: "rating:changed" }, (message) => {
+        if (client !== c || appRatingChannel !== channel) return;
+        const aggregate = appRatingAggregateFrom((message?.payload ?? {}) as Record<string, unknown>);
+        if (!aggregate) return;
+        // Rebuild the object here: an interface has no index signature, and the
+        // listener registry carries plain records. Only these two fields travel.
+        dispatch("app-rating:changed", { average: aggregate.average, count: aggregate.count });
+      });
+      // Slot first (a synchronous subscribe failure must be able to clear it).
+      appRatingChannel = channel;
+      channel.subscribe((status: unknown) => {
+        if (isSubscribedStatus(status)) {
+          clearRetry(APP_RATING_TOPIC);
+          resolve(channel);
+          return;
+        }
+        if (!isFailedStatus(status)) return;
+        if (appRatingChannel === channel) {
+          appRatingChannel = null;
+          void c.removeChannel(channel);
+        }
+        // Only a mounted screen pays for reconnects; a one-off publish just
+        // reports failure to its caller.
+        if (client === c && appRatingSubscribers > 0) {
+          scheduleRetry(APP_RATING_TOPIC, () => { void openAppRatingChannel(); });
+        }
+        resolve(null);
+      });
+    }))
+    .catch(() => null);
+  appRatingOpening = opening.finally(() => {
+    // Only one open can be in flight (guarded above), so clearing is safe.
+    appRatingOpening = null;
+  });
+  return appRatingOpening;
+}
+
+/** Drop the app-rating channel without touching the listener registry. */
+function closeAppRatingChannel(): void {
+  clearRetry(APP_RATING_TOPIC);
+  const channel = appRatingChannel;
+  appRatingChannel = null;
+  if (channel && client) void client.removeChannel(channel);
+}
+
+/**
+ * Subscribe to the aggregate-only app-rating topic while the feedback screen is
+ * mounted. Refcounted: the channel is removed at zero so a background tab does
+ * not keep listening. Returns the matching unsubscribe.
+ */
+export function joinAppRatingRoom(): () => void {
+  appRatingSubscribers += 1;
+  void openAppRatingChannel();
+  let joined = true;
+  return () => {
+    if (!joined) return;
+    joined = false;
+    appRatingSubscribers = Math.max(0, appRatingSubscribers - 1);
+    if (appRatingSubscribers === 0) closeAppRatingChannel();
+  };
+}
+
+/**
+ * Broadcast the server's post-write aggregate so other clients update without a
+ * refetch. Only `average` and `count` are sent — the rater's score stays on
+ * their own screen. Best effort: a miss is repaired by the next screen read.
+ */
+export async function publishAppRatingAggregate(aggregate: AppRatingAggregate): Promise<boolean> {
+  const payload = appRatingAggregateFrom({ average: aggregate.average, count: aggregate.count });
+  if (!payload) return false;
+  const channel = await openAppRatingChannel();
+  if (!channel) return false;
+  try {
+    const result = await channel.send({ type: "broadcast", event: "rating:changed", payload });
+    return result === "ok";
+  } catch {
+    return false;
+  } finally {
+    if (appRatingSubscribers === 0) closeAppRatingChannel();
+  }
 }

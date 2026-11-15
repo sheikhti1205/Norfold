@@ -10,6 +10,31 @@ const { mockSubmitFeedback, mockListMyFeedback, mockRatingContext, mockRateApp }
   mockRateApp: vi.fn(),
 }));
 
+const realtimeMock = vi.hoisted(() => {
+  const handlers = new Set<(payload: Record<string, unknown>) => void>();
+  return {
+    handlers,
+    join: vi.fn(),
+    leave: vi.fn(),
+    publish: vi.fn(async (_aggregate: { average: number | null; count: number }) => true),
+  };
+});
+
+vi.mock("../services/realtime", () => ({
+  joinAppRatingRoom: () => {
+    realtimeMock.join();
+    return realtimeMock.leave;
+  },
+  onRealtime: (event: string, handler: (payload: Record<string, unknown>) => void) => {
+    if (event === "app-rating:changed") realtimeMock.handlers.add(handler);
+    return () => {
+      realtimeMock.handlers.delete(handler);
+    };
+  },
+  publishAppRatingAggregate: (aggregate: { average: number | null; count: number }) =>
+    realtimeMock.publish(aggregate),
+}));
+
 vi.mock("../services/feedback", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/feedback")>();
   return {
@@ -31,6 +56,10 @@ afterEach(cleanup);
 beforeEach(() => {
   viewer.id = "me";
   vi.clearAllMocks();
+  realtimeMock.handlers.clear();
+  realtimeMock.join.mockClear();
+  realtimeMock.leave.mockClear();
+  realtimeMock.publish.mockClear();
   mockSubmitFeedback.mockResolvedValue("feedback-1");
   mockRatingContext.mockReset().mockResolvedValue({ myScore: null, average: null, count: 0 });
   mockRateApp.mockReset();
@@ -286,5 +315,58 @@ describe("app rating", () => {
     expect(radio.closest("fieldset")?.getAttribute("aria-busy")).toBe("true");
     expect((radio as HTMLInputElement).disabled).toBe(false);
     await act(async () => { finish({ myScore: 4, average: 4, count: 1 }); });
+  });
+
+  it("shows a cross-client average without replacing the reader's own score", async () => {
+    mockRatingContext.mockResolvedValue({ myScore: 2, average: 3.5, count: 2 });
+    const view = renderScreen();
+    await screen.findByText(/3\.5 out of 5 from 2 ratings/i);
+    expect(realtimeMock.join).toHaveBeenCalledTimes(1);
+    expect(realtimeMock.handlers.size).toBe(1);
+
+    act(() => {
+      for (const handler of realtimeMock.handlers) handler({ average: 4.25, count: 8 });
+    });
+
+    expect(screen.getByText(/4\.3 out of 5 from 8 ratings/i)).toBeTruthy();
+    // The aggregate is shared; the reader's own choice stays local.
+    expect((screen.getByRole("radio", { name: "2 out of 5" }) as HTMLInputElement).checked).toBe(true);
+
+    view.unmount();
+    expect(realtimeMock.leave).toHaveBeenCalledTimes(1);
+    expect(realtimeMock.handlers.size).toBe(0);
+  });
+
+  it("publishes only the aggregate after this client's rating is saved", async () => {
+    mockRateApp.mockResolvedValue({ myScore: 4, average: 4.5, count: 3 });
+    renderScreen();
+    fireEvent.click(await screen.findByRole("radio", { name: "4 out of 5" }));
+    await screen.findByText(/4\.5 out of 5 from 3 ratings/i);
+
+    expect(realtimeMock.publish).toHaveBeenCalledTimes(1);
+    const payload = realtimeMock.publish.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload).toEqual({ average: 4.5, count: 3 });
+    expect(Object.keys(payload).sort()).toEqual(["average", "count"]);
+  });
+
+  it("publishes nothing when the rating write fails", async () => {
+    mockRateApp.mockRejectedValue(new Error("offline"));
+    renderScreen();
+    fireEvent.click(await screen.findByRole("radio", { name: "3 out of 5" }));
+    await screen.findByText(/could not save your rating/i);
+    expect(realtimeMock.publish).not.toHaveBeenCalled();
+  });
+
+  it("drops the previous account's subscription when the viewer changes", async () => {
+    const view = renderScreen();
+    await screen.findByText(/no ratings yet/i);
+    expect(realtimeMock.join).toHaveBeenCalledTimes(1);
+
+    viewer.id = "other";
+    view.rerender(<MemoryRouter><FeedbackForm /></MemoryRouter>);
+
+    expect(realtimeMock.leave).toHaveBeenCalledTimes(1);
+    expect(realtimeMock.join).toHaveBeenCalledTimes(2);
+    expect(realtimeMock.handlers.size).toBe(1);
   });
 });

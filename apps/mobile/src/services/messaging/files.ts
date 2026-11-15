@@ -2,18 +2,23 @@ import { getSupabase } from "../supabaseClient";
 import { ApiError } from "../session";
 
 /**
- * Conversation files that are not photos (owner order 2026-11-12, R4).
+ * Conversation files (owner order 2026-11-12 R4; widened 2026-11-15).
  *
- * Photos and voice keep the byte-verified media lane. Everything else - a PDF,
- * a document, a video, an audio file, an archive - travels as a private
- * Storage object in `findback-chat-files`, and the message body carries a
- * short marker naming it. The bucket enforces the same MIME allowlist again
- * server-side, and it does not admit executables, scripts, HTML or SVG, so a
- * client that is tricked into trying one is refused by the server as well.
+ * A conversation carries any ordinary file: documents, images, video, audio,
+ * archives and containers this app has never heard of. The bytes travel as a
+ * private Storage object in `findback-chat-files` and the message body carries
+ * a short marker naming it. Video and audio are the only types played inline,
+ * and only after the reader presses Open; everything else - a PDF, a PSD, an
+ * archive, an unknown binary - downloads as a blob, so stored bytes never
+ * become a page in the app's origin.
  *
- * The client decides the type here (the owner's brief) but never invents one:
- * an unknown MIME or an unlisted extension is refused with copy rather than
- * stored and rendered as something it is not.
+ * Refusal is narrow on purpose: a file is refused only when its name or its
+ * declared type is on the executable/script list, when it is empty, or when it
+ * exceeds 20 MB. The type is never a reason to refuse. When the browser cannot
+ * name a format the file travels as `application/octet-stream`, which the
+ * bucket accepts. The client list is the malware guard because Storage only
+ * sees the declared MIME header, never the filename; the bucket stays private
+ * and participant-only, so a stored program is not reachable by strangers.
  */
 
 export const CHAT_FILE_BUCKET = "findback-chat-files";
@@ -22,13 +27,57 @@ export const CHAT_FILE_MARKER_PREFIX = "norfold-file:v1:";
 
 export type ChatFileKind = "video" | "audio" | "pdf" | "document" | "archive" | "file";
 
-/** Mirrors the bucket's `allowed_mime_types`. Keep both lists in step. */
+/**
+ * Mirrors the bucket's `allowed_mime_types` after
+ * `20261115130000_chat_file_type_widening.sql`. Keep both lists in step;
+ * `files.test.ts` parses the migration and fails on drift.
+ */
 export const CHAT_FILE_MIME_ALLOWLIST = [
+  // images (also accepted here; the photo control keeps its own media lane)
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "image/bmp",
+  "image/tiff",
+  "image/heic",
+  "image/heif",
+  "image/avif",
+  // video
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+  "video/x-matroska",
+  "video/x-msvideo",
+  "video/x-m4v",
+  "video/3gpp",
+  // audio
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/ogg",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/flac",
+  "audio/aac",
+  "audio/opus",
+  "audio/webm",
+  // archives
+  "application/zip",
+  "application/x-zip-compressed",
+  "application/x-7z-compressed",
+  "application/x-rar-compressed",
+  "application/vnd.rar",
+  "application/gzip",
+  "application/x-tar",
+  // documents
   "application/pdf",
   "application/rtf",
   "text/plain",
   "text/csv",
   "application/json",
+  "application/xml",
+  "text/xml",
+  "text/markdown",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.ms-excel",
@@ -37,31 +86,38 @@ export const CHAT_FILE_MIME_ALLOWLIST = [
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   "application/vnd.oasis.opendocument.text",
   "application/vnd.oasis.opendocument.spreadsheet",
-  "application/zip",
-  "application/x-zip-compressed",
-  "video/mp4",
-  "video/webm",
-  "video/quicktime",
-  "audio/mpeg",
-  "audio/mp4",
-  "audio/ogg",
-  "audio/wav",
-  "audio/x-wav",
-  "audio/flac",
+  "application/vnd.oasis.opendocument.presentation",
+  "application/epub+zip",
+  "application/x-mobipocket-ebook",
+  // explicit catch-all: a file whose type nothing can name still travels
+  "application/octet-stream",
 ] as const;
 
+/** The type an ordinary file travels as when nothing better is known. */
+export const CHAT_FILE_FALLBACK_MIME = "application/octet-stream";
+
+const CHAT_FILE_MIME_SET: ReadonlySet<string> = new Set(CHAT_FILE_MIME_ALLOWLIST);
+
+/** True when the widened bucket would store this MIME. */
+export function isChatFileMimeAllowed(mime: string): boolean {
+  return CHAT_FILE_MIME_SET.has(mime);
+}
+
 /**
- * Executable and script types, refused before anything is read. These are
- * absent from the bucket allowlist too; the client list exists so the refusal
- * is immediate and explained rather than a failed upload.
+ * Executable, installer and script types, refused before anything is read.
+ * The bucket no longer filters these by MIME (it accepts the octet-stream
+ * catch-all), so this client list is the only place a person gets a clear
+ * refusal instead of sending a program to a contact. It is also a UX guard:
+ * Storage never sees the filename, so it cannot enforce this list itself.
  */
 const REFUSED_EXTENSIONS = new Set([
-  "bat", "cmd", "com", "scr", "pif", "exe", "msi", "dll", "ps1", "psm1", "vbs", "vbe",
-  "jse", "wsf", "wsh", "hta", "jar", "reg", "lnk", "cpl", "inf", "apk", "aab", "dmg",
-  "pkg", "sh", "bash", "zsh", "py", "rb", "php", "pl", "js", "mjs", "cjs", "ts", "html",
+  "bat", "cmd", "com", "scr", "pif", "exe", "msi", "dll", "ps1", "psm1", "psd1", "pssc",
+  "vbs", "vbe", "jse", "wsf", "wsh", "hta", "jar", "reg", "lnk", "cpl", "inf", "apk", "aab",
+  "dmg", "pkg", "sh", "bash", "zsh", "py", "rb", "php", "pl", "js", "mjs", "cjs", "ts", "html",
   "htm", "xhtml", "svg", "svgz", "swf", "iso", "img", "vhd", "vhdx", "scf", "url",
   "application", "gadget", "msc", "csh", "vb", "ws", "drv", "sys", "ocx", "bin",
-  "deb", "rpm", "app",
+  "deb", "rpm", "app", "appx", "appxbundle", "msix", "msixbundle", "wasm", "msh", "msh1",
+  "msh2", "command", "workflow", "action", "desktop", "scpt", "air",
 ]);
 
 const REFUSED_MIME = new Set([
@@ -70,11 +126,21 @@ const REFUSED_MIME = new Set([
   "text/javascript", "text/html", "application/xhtml+xml", "image/svg+xml",
   "application/x-shockwave-flash", "application/vnd.microsoft.portable-executable",
   "application/vnd.android.package-archive", "application/x-apple-diskimage",
+  "application/wasm", "application/x-executable", "application/x-mach-binary",
+  "application/x-msi",
 ]);
 
+/**
+ * The extension fallback used when the browser declares no type, or declares
+ * the octet-stream catch-all. Formats the app has no reason to guess - `.psd`,
+ * `.blend`, `.7z`, `.mkv`, `.epub`, `.ttf`, `.obj` - are deliberately absent,
+ * so they resolve to `application/octet-stream` like any unlisted extension.
+ */
 const EXTENSION_MIME: Record<string, string> = {
+  // documents
   pdf: "application/pdf", rtf: "application/rtf", txt: "text/plain", csv: "text/csv",
-  json: "application/json", doc: "application/msword",
+  json: "application/json", xml: "application/xml", md: "text/markdown", markdown: "text/markdown",
+  doc: "application/msword",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   xls: "application/vnd.ms-excel",
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -82,9 +148,31 @@ const EXTENSION_MIME: Record<string, string> = {
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   odt: "application/vnd.oasis.opendocument.text",
   ods: "application/vnd.oasis.opendocument.spreadsheet",
-  zip: "application/zip", mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime",
-  mp3: "audio/mpeg", m4a: "audio/mp4", ogg: "audio/ogg", wav: "audio/wav", flac: "audio/flac",
+  odp: "application/vnd.oasis.opendocument.presentation",
+  // images
+  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif",
+  webp: "image/webp", bmp: "image/bmp", tif: "image/tiff", tiff: "image/tiff",
+  heic: "image/heic", heif: "image/heif", avif: "image/avif",
+  // video
+  mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime", avi: "video/x-msvideo",
+  m4v: "video/x-m4v", "3gp": "video/3gpp", "3gpp": "video/3gpp",
+  // audio
+  mp3: "audio/mpeg", m4a: "audio/mp4", ogg: "audio/ogg", oga: "audio/ogg", wav: "audio/wav",
+  flac: "audio/flac", aac: "audio/aac", opus: "audio/opus", weba: "audio/webm",
+  // archives
+  zip: "application/zip", rar: "application/vnd.rar", tar: "application/x-tar",
+  gz: "application/gzip",
 };
+
+const ARCHIVE_MIME: ReadonlySet<string> = new Set([
+  "application/zip",
+  "application/x-zip-compressed",
+  "application/x-7z-compressed",
+  "application/x-rar-compressed",
+  "application/vnd.rar",
+  "application/gzip",
+  "application/x-tar",
+]);
 
 export interface ChatFileMeta {
   /** Storage object key, `files/<uid>/<conversation>/<uuid>-<name>`. */
@@ -97,7 +185,9 @@ export interface ChatFileMeta {
 
 export function chatFileExtension(name: string): string {
   const dot = name.lastIndexOf(".");
-  return dot <= 0 || dot === name.length - 1 ? "" : name.slice(dot + 1).toLowerCase();
+  // A leading dot normally marks a hidden file (`.gitignore`), but a name that
+  // is only an extension (`.exe`) must still expose it to the refusal list.
+  return dot < 0 || dot === name.length - 1 ? "" : name.slice(dot + 1).toLowerCase();
 }
 
 /** Strip path separators and control characters from a name used in a key. */
@@ -112,21 +202,36 @@ export function safeChatFileName(name: string): string {
   return cleaned === "" || cleaned === "." || cleaned === ".." ? "file" : cleaned;
 }
 
+/**
+ * The display kind of one file message. An image is a document here, not a
+ * new kind: `ChatFile` renders only video and audio inline, and an image that
+ * arrives through the file lane must download like a file rather than be
+ * trusted to render inside the transcript.
+ */
 export function chatFileKindOf(mime: string): ChatFileKind {
   if (mime.startsWith("video/")) return "video";
   if (mime.startsWith("audio/")) return "audio";
+  if (mime.startsWith("image/")) return "document";
   if (mime === "application/pdf") return "pdf";
-  if (mime === "application/zip" || mime === "application/x-zip-compressed") return "archive";
+  if (ARCHIVE_MIME.has(mime)) return "archive";
   if (mime.startsWith("text/") || mime.includes("document") || mime.includes("sheet")
     || mime.includes("presentation") || mime === "application/msword" || mime === "application/rtf"
-    || mime === "application/json") return "document";
+    || mime === "application/json" || mime === "application/xml"
+    || mime === "application/epub+zip" || mime === "application/x-mobipocket-ebook") return "document";
   return "file";
+}
+
+function normalizeChatFileMime(value: string): string {
+  // `text/plain; charset=utf-8` is still text/plain; Storage compares the bare
+  // type against the bucket allowlist.
+  return value.toLowerCase().split(";")[0]!.trim();
 }
 
 /**
  * Returns the refusal sentence, or null when the file may travel. The caller
- * shows this string as-is; it always names the limit or the reason, never a
- * transport error.
+ * shows this string as-is; it names only the three real refusals - a program,
+ * an empty file, or the 20 MB ceiling - and never a type the transport could
+ * carry.
  */
 export function validateChatFile(file: File): string | null {
   if (file.size <= 0) return "That file is empty. Choose another one.";
@@ -135,25 +240,21 @@ export function validateChatFile(file: File): string | null {
   if (REFUSED_EXTENSIONS.has(extension)) {
     return `.${extension} files can carry a program. Norfold will not send this one.`;
   }
-  const declared = file.type.toLowerCase().split(";")[0]!.trim();
-  if (declared !== "" && REFUSED_MIME.has(declared)) {
+  if (REFUSED_MIME.has(normalizeChatFileMime(file.type))) {
     return "That file type can run code. Norfold will not send this one.";
-  }
-  if (declared.startsWith("image/")) {
-    return "Photos send through the photo control so they stay private. Send the image there.";
-  }
-  const mime = declared !== "" ? declared : EXTENSION_MIME[extension] ?? "";
-  if (mime === "" || !(CHAT_FILE_MIME_ALLOWLIST as readonly string[]).includes(mime)) {
-    return "That file type is not supported in messages yet.";
   }
   return null;
 }
 
-/** The MIME a validated file travels as, honouring the extension when the
- * browser does not declare one. */
+/** The MIME a validated file travels as. A declared type wins only when the
+ * bucket would store it; otherwise the extension decides, and an unknown
+ * format falls back to the explicit octet-stream catch-all. */
 export function chatFileMime(file: File): string {
-  const declared = file.type.toLowerCase().split(";")[0]!.trim();
-  return declared !== "" ? declared : EXTENSION_MIME[chatFileExtension(file.name)] ?? "";
+  const declared = normalizeChatFileMime(file.type);
+  if (declared !== "" && declared !== CHAT_FILE_FALLBACK_MIME && isChatFileMimeAllowed(declared)) {
+    return declared;
+  }
+  return EXTENSION_MIME[chatFileExtension(file.name)] ?? CHAT_FILE_FALLBACK_MIME;
 }
 
 function base64UrlEncode(value: string): string {
@@ -194,7 +295,7 @@ export function parseChatFileMarker(body: string): ChatFileMeta | null {
     const key = parsed.k, name = parsed.n, mime = parsed.m, size = parsed.s;
     if (typeof key !== "string" || !key.startsWith("files/") || key.includes("..")) return null;
     if (typeof name !== "string" || name === "" || name.length > 160) return null;
-    if (typeof mime !== "string" || !(CHAT_FILE_MIME_ALLOWLIST as readonly string[]).includes(mime)) return null;
+    if (typeof mime !== "string" || !isChatFileMimeAllowed(mime)) return null;
     if (typeof size !== "number" || !Number.isSafeInteger(size) || size <= 0 || size > CHAT_FILE_MAX_BYTES) return null;
     return { key, name, mime, byteSize: size, kind: chatFileKindOf(mime) };
   } catch {
@@ -243,7 +344,21 @@ export async function uploadChatFile(file: File, options: UploadChatFileOptions)
     // Private chat transport: a shared or long-lived browser cache would keep
     // the bytes readable after an account switch, so no cache window is offered.
     .upload(key, file, { contentType: mime, upsert: false, cacheControl: "0" });
-  if (error) throw new ApiError("That file could not be uploaded. Try again.", 502);
+  if (error) {
+    // The bucket's insert policy refuses an over-budget upload as a row-level
+    // security rejection (100 MB cumulative per account). That is the only 4xx
+    // a validated upload into a joined conversation can produce, and the server
+    // stays the authority: the client never pre-counts, so a stale count cannot
+    // win a race against another device.
+    const refused = error.status === 400 || error.status === 403;
+    if (refused && /row-level security/i.test(error.message ?? "")) {
+      throw new ApiError(
+        "Your file space is full (100 MB sent across chats). Remove a file to send more.",
+        409,
+      );
+    }
+    throw new ApiError("That file could not be uploaded. Try again.", 502);
+  }
   options.onProgress?.(1);
   return { key, name: safeChatFileName(file.name), mime, byteSize: file.size, kind: chatFileKindOf(mime) };
 }

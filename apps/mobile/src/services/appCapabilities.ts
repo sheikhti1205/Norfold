@@ -33,7 +33,7 @@ export const APP_VERSION: string = packageJson.version;
  * Matches the newest data-contract migration prefix the app was built
  * against; shown in Profile → About for release diagnosis.
  */
-export const BACKEND_SCHEMA_VERSION = "20261115121000";
+export const BACKEND_SCHEMA_VERSION = "20261115140000";
 
 export interface AppCapabilities {
   version: string;
@@ -121,7 +121,7 @@ export const APP_CAPABILITIES: AppCapabilities = {
   emailVerification:
     "After registering, verify your email from the Verify screen with the real one-time code.",
   phoneVerification:
-    "Phone verification is not enabled in this build because no SMS provider is configured.",
+    "Phone verification happens in Telegram: connect the Norfold bot and share your own contact. Norfold does not send text messages, and a typed number does not verify anything.",
   accountDeletion:
     "Delete your account from Settings > Account. Typing your email confirms deletion of the account, reports and photos; limited safety records remain as described in the Privacy policy.",
   unavailable: [

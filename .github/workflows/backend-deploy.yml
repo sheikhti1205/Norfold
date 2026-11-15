@@ -71,6 +71,10 @@ on:
         description: "Deploy the cleanup-chat-media sweeper Edge Function"
         type: boolean
         default: false
+      deploy_cleanup_chat_files:
+        description: "Deploy the cleanup-chat-files sweeper Edge Function (after 20261115140000 chat file budget)"
+        type: boolean
+        default: true
       deploy_copy_chat_evidence:
         description: "Deploy the copy-chat-evidence worker Edge Function"
         type: boolean
@@ -242,6 +246,15 @@ jobs:
           # Internal sweeper only: the canonical wrapper enforces the server
           # secret. No anonymous or user route may sweep private media.
           supabase functions deploy cleanup-chat-media --no-verify-jwt --yes
+      - name: Deploy cleanup-chat-files
+        if: inputs.deploy_cleanup_chat_files
+        run: |
+          supabase link --project-ref "$PROJECT_REF"
+          # Internal sweeper only: the canonical wrapper enforces the server
+          # secret. It fails closed (500, nothing deleted) until the service-only
+          # findback_chat_file_marker_present RPC from 20261115140000 is live, so
+          # deploy it after that migration has been pushed.
+          supabase functions deploy cleanup-chat-files --no-verify-jwt --yes
       - name: Deploy copy-chat-evidence
         if: inputs.deploy_copy_chat_evidence
         run: |

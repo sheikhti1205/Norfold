@@ -1,0 +1,420 @@
+/* The conversation video player and its pop-out presentation.
+   One element, three homes: the transcript bubble, the full overlay and the
+   docked mini-player. Only the host moves; the <video> is never transformed
+   (a transform on a playing video forces a compositor layer the decoder then
+   fights over), and every colour outside the video itself is a --fb-* token. */
+
+/* The host is a zero-box carrier: it is created imperatively so it can be
+   moved between the transcript bubble and <body> without React re-creating the
+   <video> inside it. Presentation positioning lives on the player root. */
+.fb-vp-host {
+  display: contents;
+}
+
+.fb-vp {
+  pointer-events: auto;
+  color: var(--fb-on-media, #fff);
+  -webkit-tap-highlight-color: transparent;
+}
+.fb-vp:focus { outline: none; }
+
+/* ---------- inline: fills the 16:9 frame the transcript tiles reserve ---- */
+
+.fb-vp--inline {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  background: #000;
+}
+
+/* ---------- expanded: the full-viewport overlay ------------------------- */
+
+.fb-vp--expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  /* A video scrim is black in every theme, including light: the same rule the
+     photo viewer follows. */
+  background: rgb(0 0 0 / 92%);
+}
+.fb-vp-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.fb-vp-top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(1100px, 100%);
+}
+.fb-vp-title {
+  order: -1;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The one dismissal sits in the visual top-right corner; it is also the first
+   focusable control, so opening the overlay lands focus on Close. */
+.fb-vp-top-actions {
+  display: flex;
+  gap: 2px;
+}
+
+/* ---------- mini: the docked pop-up player ------------------------------ */
+
+.fb-vp--mini {
+  position: fixed;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: calc(78px + env(safe-area-inset-bottom));
+  z-index: 85;
+  width: min(228px, calc(100vw - 24px));
+  overflow: hidden;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 12px;
+  background: var(--fb-surface-container);
+  box-shadow: var(--shadow-md);
+}
+
+/* ---------- the stage and the picture ----------------------------------- */
+
+.fb-vp-stage {
+  position: relative;
+  overflow: hidden;
+  background: #000;
+}
+.fb-vp--inline .fb-vp-stage {
+  position: absolute;
+  inset: 0;
+  container-type: inline-size;
+}
+.fb-vp--expanded .fb-vp-stage {
+  z-index: 1;
+  width: min(1100px, 100%);
+  max-height: calc(100dvh - 80px);
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+}
+.fb-vp--mini .fb-vp-stage {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  border-radius: 0;
+}
+
+.fb-vp-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+/* Tap-anywhere-on-the-picture toggles playback (real controls opt out). */
+.fb-vp--inline .fb-vp-stage,
+.fb-vp--expanded .fb-vp-stage,
+.fb-vp--mini .fb-vp-stage { cursor: pointer; }
+
+/* ---------- states ------------------------------------------------------- */
+
+.fb-vp-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: var(--fb-on-media, #fff);
+}
+.fb-vp-spin { animation: fb-vp-spin 1s linear infinite; }
+@keyframes fb-vp-spin { to { transform: rotate(360deg); } }
+
+.fb-vp-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: rgb(0 0 0 / 76%);
+  text-align: center;
+}
+.fb-vp-error p {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.fb-vp-error-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgb(255 255 255 / 30%);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--fb-on-media, #fff);
+  background: rgb(255 255 255 / 12%);
+}
+.fb-vp-error-action:hover { background: rgb(255 255 255 / 20%); }
+.fb-vp-error-action,
+.fb-vp-bigplay { cursor: pointer; }
+
+.fb-vp-bigplay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin: -26px 0 0 -26px;
+  padding: 0 0 0 2px;
+  border: 1px solid rgb(255 255 255 / 24%);
+  border-radius: 50%;
+  color: var(--fb-on-media, #fff);
+  background: rgb(0 0 0 / 55%);
+}
+.fb-vp--expanded .fb-vp-bigplay { width: 64px; height: 64px; margin: -32px 0 0 -32px; }
+.fb-vp-bigplay:hover { background: rgb(0 0 0 / 70%); }
+
+/* ---------- the control bar --------------------------------------------- */
+
+.fb-vp-bar {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 6px 4px;
+  background: linear-gradient(transparent, rgb(0 0 0 / 72%));
+  transition: opacity 150ms var(--ease-fb, ease-out);
+}
+.fb-vp--idle .fb-vp-bar { opacity: 0; pointer-events: none; }
+.fb-vp--idle { cursor: none; }
+
+.fb-vp-track {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 22px;
+}
+.fb-vp-rail,
+.fb-vp-buffered,
+.fb-vp-played {
+  position: absolute;
+  left: 0;
+  height: 4px;
+  border-radius: 2px;
+  pointer-events: none;
+}
+.fb-vp-rail { right: 0; background: rgb(255 255 255 / 26%); }
+.fb-vp-buffered { background: rgb(255 255 255 / 44%); }
+.fb-vp-played { background: var(--fb-primary); }
+
+.fb-vp-seek,
+.fb-vp-volume {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.fb-vp-seek { position: relative; width: 100%; height: 22px; }
+.fb-vp-seek::-webkit-slider-runnable-track { height: 4px; background: transparent; }
+.fb-vp-seek::-moz-range-track { height: 4px; background: transparent; }
+.fb-vp-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--fb-on-media, #fff);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 35%);
+}
+.fb-vp-seek::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--fb-on-media, #fff);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 35%);
+}
+.fb-vp-seek:disabled { cursor: default; opacity: 0.55; }
+
+.fb-vp-volume { width: 68px; height: 22px; }
+.fb-vp-volume::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: rgb(255 255 255 / 34%); }
+.fb-vp-volume::-moz-range-track { height: 4px; border-radius: 2px; background: rgb(255 255 255 / 34%); }
+.fb-vp-volume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--fb-on-media, #fff);
+}
+.fb-vp-volume::-moz-range-thumb { width: 10px; height: 10px; border: 0; border-radius: 50%; background: var(--fb-on-media, #fff); }
+
+.fb-vp-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.fb-vp-spacer { flex: 1; min-width: 0; }
+
+.fb-vp-icon {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.fb-vp-icon:hover { background: rgb(255 255 255 / 14%); }
+.fb-vp-icon:disabled { cursor: not-allowed; opacity: 0.55; }
+.fb-vp--expanded .fb-vp-icon { width: 40px; height: 40px; border-radius: 10px; }
+/* The visual box stays compact; the touch target reaches 44px vertically. */
+.fb-vp--inline .fb-vp-icon::after {
+  content: "";
+  position: absolute;
+  inset-block: -5px;
+  inset-inline: -2px;
+}
+
+.fb-vp-time {
+  flex: none;
+  padding-inline: 2px;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0.94;
+}
+.fb-vp--expanded .fb-vp-time { font-size: 0.75rem; }
+
+.fb-vp-rate {
+  width: auto;
+  min-width: 34px;
+  padding-inline: 4px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.fb-vp--expanded .fb-vp-rate { min-width: 40px; font-size: 0.75rem; }
+
+/* A 320dp bubble cannot hold the whole transport: the rate stepper is the one
+   control that stays reachable in the expanded overlay instead. */
+@container (max-width: 300px) {
+  .fb-vp--inline .fb-vp-icon { width: 32px; }
+  .fb-vp--inline .fb-vp-rate { display: none; }
+  .fb-vp--inline .fb-vp-time { font-size: 0.625rem; }
+}
+
+/* ---------- mini transport ---------------------------------------------- */
+
+.fb-vp-mini-progress {
+  height: 2px;
+  background: var(--fb-outline-variant);
+}
+.fb-vp-mini-progress span {
+  display: block;
+  height: 100%;
+  background: var(--fb-primary);
+}
+.fb-vp-mini-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px 2px 2px;
+  color: var(--fb-on-surface);
+}
+.fb-vp-mini-actions .fb-vp-icon { width: 36px; height: 36px; color: var(--fb-on-surface); }
+.fb-vp-mini-actions .fb-vp-icon::after {
+  content: "";
+  position: absolute;
+  inset-block: -4px;
+  inset-inline: -2px;
+}
+.fb-vp-mini-actions .fb-vp-icon:hover { background: var(--fb-surface-container-high); }
+.fb-vp-mini-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  padding-inline: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- focus ------------------------------------------------------- */
+
+.fb-vp button:focus-visible,
+.fb-vp input:focus-visible {
+  outline: 2px solid var(--fb-focus);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+/* Controls over the picture are white in every theme, like the photo viewer. */
+.fb-vp-stage button:focus-visible,
+.fb-vp-stage input:focus-visible { outline-color: var(--fb-on-media, #fff); }
+.fb-vp--expanded .fb-vp-top button:focus-visible { outline-color: var(--fb-on-media, #fff); }
+
+.fb-vp-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The docked player sits above the bottom bar on phones and at the viewport
+   edge once the side rail owns navigation. */
+@media (min-width: 600px) {
+  .fb-vp--mini { bottom: calc(16px + env(safe-area-inset-bottom)); }
+}
+
+@media (max-height: 480px) {
+  .fb-vp--expanded .fb-vp-top { display: none; }
+  .fb-vp--expanded .fb-vp-stage { max-height: calc(100dvh - 16px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-vp-bar { transition: none; }
+  .fb-vp-spin { animation-duration: 2.4s; }
+}
+html.fb-reduce-motion .fb-vp-bar { transition: none; }

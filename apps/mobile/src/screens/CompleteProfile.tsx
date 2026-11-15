@@ -332,6 +332,7 @@ export function CompleteProfile({
           placeholder="01812345678"
           inputMode="numeric"
           autoComplete="tel"
+          hint="Saved as unverified. Confirm it with Telegram from your profile."
           required
         />
 

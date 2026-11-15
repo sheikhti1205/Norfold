@@ -3,7 +3,7 @@ import { LogOut } from "lucide-react";
 import { useAuth } from "../auth";
 import { requestAccountDeletion, sendAccountPasswordCode, saveAccountPasswordWithCode } from "../services/auth";
 import { ApiError } from "../services/session";
-import { fetchPhoneChangeEligibility, formatPhoneChangeEligibleAt } from "../services/profile";
+import { getTelegramAccount, type TelegramAccount } from "../services/telegram";
 import { Button } from "../components/Button";
 import { useOtpCountdown } from "../components/auth/useOtpCountdown";
 import { TelegramSettings } from "../components/settings/TelegramSettings";
@@ -11,6 +11,7 @@ import { Profile } from "./Profile";
 import {
   SettingsGroup,
   SettingsRow,
+  StatusPill,
 } from "../components/settings";
 import { describeCloudConnections } from "../services/aiCredentials";
 import { friendlyError } from "../utils/friendlyErrors";
@@ -40,45 +41,47 @@ export function AccountSettings() {
 
 export function MobileNumberRow() {
   const { user } = useAuth();
-  // Six-month replacement gate (spec 25, W5-IDENTITY): server-read only.
-  // A fetch failure leaves this null and the row keeps its default copy:
-  // availability is never guessed locally and no countdown is fabricated.
-  const [phoneEligibility, setPhoneEligibility] = useState<{
-    eligible: boolean;
-    eligibleAt: string | null;
-  } | null>(null);
-
-  // Server-read replacement availability for the mobile row. Runs once per
-  // account; failures are supplementary (default copy stays). Declared before
-  // the early returns below so hook order stays stable.
+  // The authoritative phone signal is the authenticated Telegram account RPC.
+  // undefined = checking, null = the check failed. A failed check never claims
+  // verification and never invents a number.
+  const [account, setAccount] = useState<TelegramAccount | null | undefined>(undefined);
   const accountId = user?.id ?? null;
+
   useEffect(() => {
     let alive = true;
-    setPhoneEligibility(null);
+    setAccount(undefined);
     if (!accountId) return () => {
       alive = false;
     };
-    void fetchPhoneChangeEligibility()
-      .then((gate) => {
-        if (alive) setPhoneEligibility({ eligible: gate.eligible, eligibleAt: gate.eligibleAt });
-      })
-      .catch(() => {
-        if (alive) setPhoneEligibility(null);
-      });
+    void getTelegramAccount().then(
+      (next) => { if (alive) setAccount(next); },
+      () => { if (alive) setAccount(null); },
+    );
     return () => {
       alive = false;
     };
   }, [accountId]);
 
-  const mobileGateHeld = phoneEligibility !== null && !phoneEligibility.eligible;
-  const mobileCooldown = mobileGateHeld ? formatPhoneChangeEligibleAt(phoneEligibility.eligibleAt) : "";
-  const mobileDescription = mobileCooldown
-    ? `Number change available ${mobileCooldown}.`
-    : mobileGateHeld
-      ? "Number change is not available yet. Try again later."
-      : "Bangladesh mobile number.";
   if (!user) return null;
-  return <SettingsRow title="Mobile number" description={mobileDescription} value={user.phone || "Add a number"} route="/profile/edit" />;
+  const verifiedPhone = account?.linked && account.phone ? account.phone : null;
+  const description = account === undefined
+    ? "Checking Telegram verification."
+    : account === null
+      ? "Could not check Telegram. Your number stays unverified."
+      : verifiedPhone
+        ? "Verified with Telegram."
+        : account.linked
+          ? "Telegram is connected. Share your own contact to verify your number."
+          : "Verify your number with Telegram. Norfold does not send text messages.";
+  return (
+    <SettingsRow
+      title="Mobile number"
+      description={description}
+      value={verifiedPhone ?? user.phone ?? "Not verified"}
+      badge={<StatusPill tone={verifiedPhone ? "success" : "neutral"}>{verifiedPhone ? "Verified" : "Not verified"}</StatusPill>}
+      route="/profile/edit"
+    />
+  );
 }
 
 export function AccountSecuritySections() {

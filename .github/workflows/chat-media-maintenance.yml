@@ -1,19 +1,22 @@
 # Norfold — chat media maintenance scheduler (R4).
 #
-# Every 15 minutes, drain the two internal chat work queues:
+# Every 15 minutes, drain the four internal chat work queues:
 #   1. `cleanup-chat-media` removes bytes of deleted/expired chat attachments and
 #      of expired moderation-evidence copies, through the Storage API only. A
 #      candidate is acked only after absence is verified, so nothing is lost.
 #   2. `copy-chat-evidence` copies a reported photo into the separate private
 #      evidence bucket before the ordinary attachment expires.
-#   3. `trust-maintenance` expires up to100 stale appeals and erases up to100
+#   3. `trust-maintenance` expires up to 100 stale appeals and erases up to 100
 #      expired report evidence snapshots per run. M3 uses this same scheduler,
 #      not a second cron service or a consumer-triggered sweep.
+#   4. `cleanup-chat-files` removes conversation-file objects no live message
+#      references any more (a deleted file message clears its body and leaves
+#      the object behind). Same secret-auth contract, counts-only response.
 #
-# Both functions are internal-only: `auth: "secret"` means the caller must
-# present the project's `default` secret key in the `apikey` header (the SDK
-# validates `apikey`, not the Authorization bearer). This lane therefore needs a
-# dedicated GitHub secret. Names only — the value is never echoed.
+# All four functions in this lane are internal-only: `auth: "secret"` means the
+# caller must present the project's `default` secret key in the `apikey` header
+# (the SDK validates `apikey`, not the Authorization bearer). This lane therefore
+# needs a dedicated GitHub secret. Names only — the value is never echoed.
 #
 # Trigger: schedule + manual dispatch ONLY. Never on push/tag: a code push must
 # not sweep production Storage.
@@ -72,6 +75,23 @@ jobs:
           curl -sS --fail-with-body -X POST "https://${PROJECT_REF}.supabase.co/functions/v1/cleanup-chat-media" \
             -H "apikey: ${SUPABASE_SECRET_KEY}" \
             --retry 2 --retry-all-errors --max-time 90
+      - name: Sweep orphaned chat files
+        env:
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+        run: |
+          # A deleted file message clears its body and leaves the Storage object;
+          # this worker deletes only the objects no live message references. The
+          # response is counts only (scanned/removed/kept/errors), so it is safe
+          # to print and to put in the step summary.
+          RESPONSE=$(curl -sS --fail-with-body -X POST "https://${PROJECT_REF}.supabase.co/functions/v1/cleanup-chat-files" \
+            -H "apikey: ${SUPABASE_SECRET_KEY}" \
+            --retry 2 --retry-all-errors --max-time 90)
+          echo "$RESPONSE"
+          echo "### Chat file sweep" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          echo "$RESPONSE" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
       - name: Copy pending moderation evidence
         env:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}

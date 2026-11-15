@@ -1,23 +1,23 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PublicUser } from "@norfold/shared";
 
 const {
-  mockSendPhone,
-  mockVerifyPhone,
   mockUpdateProfile,
   mockSetUser,
   mockUser,
+  telegramMock,
+  browserMock,
 } = vi.hoisted(() => ({
-  mockSendPhone: vi.fn(),
-  mockVerifyPhone: vi.fn(),
   mockUpdateProfile: vi.fn(),
   mockSetUser: vi.fn(),
   mockUser: {
     value: null as PublicUser | null,
   },
+  telegramMock: { account: vi.fn(), create: vi.fn(), state: vi.fn() },
+  browserMock: { open: vi.fn() },
 }));
 
 vi.mock("../auth", () => ({
@@ -27,14 +27,15 @@ vi.mock("../auth", () => ({
   }),
 }));
 
-vi.mock("../services/auth", () => ({
-  sendPhoneChangeCode: mockSendPhone,
-  verifyPhoneChangeCode: mockVerifyPhone,
-}));
 vi.mock("../services/profile", () => ({ updateMyProfile: mockUpdateProfile }));
+vi.mock("../services/telegram", () => ({
+  getTelegramAccount: (...args: unknown[]) => telegramMock.account(...args),
+  createTelegramLink: (...args: unknown[]) => telegramMock.create(...args),
+  getTelegramLinkState: (...args: unknown[]) => telegramMock.state(...args),
+}));
+vi.mock("@capacitor/browser", () => ({ Browser: { open: (...args: unknown[]) => browserMock.open(...args) } }));
 
 import { ProfileEdit } from "./ProfileEdit";
-import { ApiError } from "../services/session";
 
 const baseUser: PublicUser = {
   id: "u1",
@@ -50,6 +51,8 @@ const baseUser: PublicUser = {
   createdAt: "2026-01-01T00:00:00.000Z",
 };
 
+const TOKEN = "0123456789abcdef0123456789abcdef";
+
 function renderEdit() {
   return render(
     <MemoryRouter>
@@ -58,18 +61,27 @@ function renderEdit() {
   );
 }
 
+async function flush() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 afterEach(cleanup);
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockUser.value = { ...baseUser };
-  mockSendPhone.mockResolvedValue(undefined);
-  mockVerifyPhone.mockResolvedValue({
-    ...baseUser,
-    phone: "+8801912345678",
-    phoneVerified: true,
-  });
   mockUpdateProfile.mockResolvedValue({ ...baseUser, displayName: "New Tester", bio: "hi", locationLabel: "Dhaka" });
+  telegramMock.account.mockReset().mockResolvedValue({ linked: false, phone: null, username: null });
+  telegramMock.create.mockReset().mockResolvedValue({
+    token: TOKEN,
+    deepLink: `https://t.me/Norfold_auth_bot?start=${TOKEN}`,
+    expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+  });
+  telegramMock.state.mockReset().mockResolvedValue({ state: "pending", phone: null });
+  browserMock.open.mockReset().mockResolvedValue(undefined);
 });
 
 describe("ProfileEdit rework", () => {
@@ -88,12 +100,12 @@ describe("ProfileEdit rework", () => {
     expect(screen.queryByRole("textbox", { name: /email/i })).toBeNull();
   });
 
-  it("offers editable display name, bio, location and mobile fields", () => {
+  it("offers editable display name, bio and location fields", () => {
     renderEdit();
     expect(screen.getByRole("textbox", { name: /display name/i })).toBeTruthy();
     expect(screen.getByRole("textbox", { name: /bio/i })).toBeTruthy();
     expect(screen.getByRole("textbox", { name: /location/i })).toBeTruthy();
-    expect(screen.getByRole("textbox", { name: /mobile/i })).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: /mobile/i })).toBeNull();
   });
 
   it("shows a live bio character count against the 280 limit", () => {
@@ -103,11 +115,41 @@ describe("ProfileEdit rework", () => {
     expect(screen.getByText("5/280")).toBeTruthy();
   });
 
-  it("states that a number change is saved only after the code is confirmed", () => {
+  it("says phone verification happens in Telegram and never promises SMS", async () => {
     renderEdit();
-    expect(screen.queryByText(/isn't available in this build/i)).toBeNull();
-    expect(screen.getByText(/saved only after the code is confirmed/i)).toBeTruthy();
-    expect(screen.getByText("Not verified")).toBeTruthy();
+    await flush();
+    expect(screen.getByText(/does not send text messages/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Verify with Telegram" })).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: /mobile/i })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: /SMS code/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Send code/i })).toBeNull();
+  });
+
+  it("shows the server-verified number and badge", async () => {
+    telegramMock.account.mockResolvedValue({ linked: true, phone: "+8801912345678", username: "reader" });
+    renderEdit();
+    expect(await screen.findByText("Mobile number verified with Telegram")).toBeTruthy();
+    expect(screen.getByText("+8801912345678")).toBeTruthy();
+    expect(screen.getByText("@reader")).toBeTruthy();
+  });
+
+  it("starts the existing Telegram bot link flow", async () => {
+    renderEdit();
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "Verify with Telegram" }));
+    await waitFor(() => expect(telegramMock.create).toHaveBeenCalledTimes(1));
+    expect(browserMock.open).toHaveBeenCalledWith({
+      url: `https://t.me/Norfold_auth_bot?start=${TOKEN}`,
+    });
+    expect(await screen.findByText(/Open Telegram and press Start/i)).toBeTruthy();
+  });
+
+  it("leaves the saved number unverified when Telegram cannot be checked", async () => {
+    telegramMock.account.mockRejectedValue(new Error("offline"));
+    renderEdit();
+    expect(await screen.findByText(/could not check Telegram/i)).toBeTruthy();
+    expect(screen.getByText(/Not verified/)).toBeTruthy();
+    expect(screen.queryByText("Mobile number verified with Telegram")).toBeNull();
   });
 
   it("saves identity fields via updateMyProfile and reflects the refreshed user", async () => {
@@ -180,83 +222,6 @@ describe("ProfileEdit rework", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/could not save/i);
     expect(alert.textContent).not.toContain("Network request failed");
-  });
-
-  it("rejects an invalid number without asking the server for a code", () => {
-    renderEdit();
-    fireEvent.change(screen.getByRole("textbox", { name: /mobile/i }), {
-      target: { value: "not-a-number" },
-    });
-    expect(screen.getByText(/valid Bangladesh mobile number/i)).toBeTruthy();
-    const send = screen.getByRole("button", { name: "Send code" }) as HTMLButtonElement;
-    expect(send.disabled).toBe(true);
-    expect(mockSendPhone).not.toHaveBeenCalled();
-    expect(mockVerifyPhone).not.toHaveBeenCalled();
-    expect(mockSetUser).not.toHaveBeenCalled();
-  });
-
-  it("sends a code to the typed number and waits for it before writing anything", async () => {
-    renderEdit();
-    fireEvent.change(screen.getByRole("textbox", { name: /mobile/i }), {
-      target: { value: "01912345678" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
-    await waitFor(() => expect(mockSendPhone).toHaveBeenCalledWith("u1", "+8801912345678", false));
-    expect((await screen.findByRole("status")).textContent).toContain("+8801912345678");
-    expect(screen.getByRole("textbox", { name: "SMS code" })).toBeTruthy();
-    // The number is not stored, and no verification is claimed, by sending.
-    expect(mockSetUser).not.toHaveBeenCalled();
-    expect(mockVerifyPhone).not.toHaveBeenCalled();
-    // The destination cannot drift while its code is pending.
-    expect((screen.getByRole("textbox", { name: /mobile/i }) as HTMLInputElement).disabled).toBe(true);
-  });
-
-  it("verifies the SMS code before storing the new number", async () => {
-    renderEdit();
-    fireEvent.change(screen.getByRole("textbox", { name: /mobile/i }), {
-      target: { value: "01912345678" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
-    await screen.findByRole("textbox", { name: "SMS code" });
-    fireEvent.change(screen.getByRole("textbox", { name: "SMS code" }), {
-      target: { value: "123456" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Verify number" }));
-    await waitFor(() => expect(mockVerifyPhone).toHaveBeenCalledWith("u1", "+8801912345678", "123456"));
-    await waitFor(() =>
-      expect(mockSetUser).toHaveBeenCalledWith(
-        expect.objectContaining({ phone: "+8801912345678", phoneVerified: true }),
-      ),
-    );
-    expect(await screen.findByText("Mobile number verified.")).toBeTruthy();
-  });
-
-  it("shows the server's replacement-gate sentence when a change is held", async () => {
-    mockSendPhone.mockRejectedValueOnce(
-      new ApiError("You cannot change your mobile number yet. Try again later.", 409),
-    );
-    renderEdit();
-    fireEvent.change(screen.getByRole("textbox", { name: /mobile/i }), {
-      target: { value: "01912345678" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
-    expect((await screen.findByRole("alert")).textContent).toBe(
-      "You cannot change your mobile number yet. Try again later.",
-    );
-    expect(mockSetUser).not.toHaveBeenCalled();
-  });
-
-  it("surfaces send failures as human copy in a live alert", async () => {
-    mockSendPhone.mockRejectedValueOnce(new Error("Network request failed"));
-    renderEdit();
-    fireEvent.change(screen.getByRole("textbox", { name: /mobile/i }), {
-      target: { value: "01912345678" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/network problem|could not|try again/i);
-    expect(alert.textContent).not.toContain("Network request failed");
-    expect(mockSetUser).not.toHaveBeenCalled();
   });
 
   it("renders nothing when there is no signed-in user", () => {

@@ -53,6 +53,7 @@ import { MessagingLifecycle } from "./components/MessagingLifecycle";
 import { MessagePillHost } from "./components/MessagePillHost";
 import { PostNavigationProvider, useReportViewerBackground } from "./components/PostNavigation";
 import { PostModal } from "./components/PostModal";
+import { VideoPlayerProvider } from "./components/media/VideoPlayerProvider";
 import { SignedOutEntry } from "./screens/RememberedAccounts";
 import { clearAuthReturnTo, getAuthReturnRoute, peekAuthReturnTo } from "./utils/authReturnTo";
 
@@ -124,7 +125,11 @@ export function App({ router }: { router: ReturnType<typeof createAppRouter> }) 
             all read the same truth. */}
         <SavedReportsProvider>
         <AppMotionConfig>
+        {/* One video player for the whole app: it owns the only <video>
+            element and moves between the transcript bubble and its overlay. */}
+        <VideoPlayerProvider>
         <RouterProvider router={router} />
+        </VideoPlayerProvider>
         </AppMotionConfig>
         </SavedReportsProvider>
       </AuthProvider>
