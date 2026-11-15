@@ -1,6 +1,7 @@
 /**
- * Static guard for the chat-file lifecycle migration
- * (20261115140000_chat_file_budget.sql) and its sweep wiring.
+ * Static guard for the chat-file lifecycle migrations
+ * (20261115140000_chat_file_budget.sql and its fix-forward successor
+ * 20261115150000_chat_file_budget_insert_metadata.sql) and their sweep wiring.
  *
  * No database, no network, no Deno: the migration text is parsed and the
  * properties that keep the lane safe are asserted. The engine proof for the
@@ -21,6 +22,7 @@ import { fileURLToPath } from "node:url";
 const SUPABASE = join(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO = join(SUPABASE, "..");
 const MIGRATION_PATH = join(SUPABASE, "migrations", "20261115140000_chat_file_budget.sql");
+const FIX_MIGRATION_PATH = join(SUPABASE, "migrations", "20261115150000_chat_file_budget_insert_metadata.sql");
 const TRANSPORT_MIGRATION = join(SUPABASE, "migrations", "20261112170000_chat_file_transport.sql");
 const WORKFLOW = join(REPO, ".github", "workflows", "chat-media-maintenance.yml");
 const DEPLOY_WORKFLOW = join(REPO, ".github", "workflows", "backend-deploy.yml");
@@ -31,6 +33,7 @@ const PARITY_EXPECTATIONS = join(REPO, "scripts", "edge-jwt-expectations.json");
 
 const read = (path) => readFileSync(path, "utf8");
 const migration = read(MIGRATION_PATH);
+const fixMigration = read(FIX_MIGRATION_PATH);
 
 /**
  * Remove `--` comments without touching a string literal or a dollar-quoted
@@ -82,18 +85,22 @@ function stripComments(source) {
 
 const code = stripComments(migration);
 const flat = code.replace(/\s+/g, " ");
+const fixCode = stripComments(fixMigration);
 
-/** Header and body of one declared function, split at its dollar-quoted body. */
+/** Header and body of one declared function, latest migration first. */
 function functionParts(name) {
-  const marker = `create or replace function public.${name}(`;
-  const start = code.indexOf(marker);
-  if (start < 0) return null;
-  const asAt = code.indexOf("as $$", start);
-  if (asAt < 0) return null;
-  const bodyStart = asAt + "as $$".length;
-  const bodyEnd = code.indexOf("$$;", bodyStart);
-  if (bodyEnd < 0) return null;
-  return { header: code.slice(start, asAt), body: code.slice(bodyStart, bodyEnd) };
+  for (const source of [fixCode, code]) {
+    const marker = `create or replace function public.${name}(`;
+    const start = source.indexOf(marker);
+    if (start < 0) continue;
+    const asAt = source.indexOf("as $$", start);
+    if (asAt < 0) continue;
+    const bodyStart = asAt + "as $$".length;
+    const bodyEnd = source.indexOf("$$;", bodyStart);
+    if (bodyEnd < 0) continue;
+    return { header: source.slice(start, asAt), body: source.slice(bodyStart, bodyEnd) };
+  }
+  return null;
 }
 
 const BUDGET = 104857600;
@@ -113,6 +120,12 @@ describe("the chat-file budget migration is shaped for the hosted schema", () =>
       "the total is scoped to the account's own prefix",
     );
     assert.match(parts.body, /metadata\s*->>\s*'size'/i, "the size comes from object metadata");
+    assert.match(
+      parts.body,
+      /metadata\s*->>\s*'contentLength'/i,
+      "an in-flight row (no size yet) is measured by its declared content length",
+    );
+    assert.match(parts.body, /else\s+0\b/i, "a row that never completed holds no bucket bytes");
     assert.match(parts.body, /coalesce/i, "an empty account totals zero");
     assert.match(
       flat,
@@ -177,11 +190,14 @@ describe("the chat-file budget migration is shaped for the hosted schema", () =>
   });
 
   it("re-creates the insert policy with the budget AND the unchanged participant check", () => {
-    const dropAt = code.search(/drop policy if exists findback_chat_files_insert_own on storage\.objects;/i);
-    const createAt = code.search(/create policy findback_chat_files_insert_own\s+on storage\.objects for insert to authenticated/i);
+    // The live policy is the one from the fix-forward migration; it must charge
+    // the completed `size`, else the in-flight `contentLength`, and defer to the
+    // completion probe when Storage has not measured the upload yet.
+    const dropAt = fixCode.search(/drop policy if exists findback_chat_files_insert_own on storage\.objects;/i);
+    const createAt = fixCode.search(/create policy findback_chat_files_insert_own\s+on storage\.objects for insert to authenticated/i);
     assert.ok(dropAt >= 0, "the prior policy is dropped first");
     assert.ok(createAt > dropAt, "the policy is re-created after the drop");
-    const policy = code.slice(createAt, code.indexOf(";", createAt));
+    const policy = fixCode.slice(createAt, fixCode.indexOf(";", createAt));
     assert.match(policy, /bucket_id\s*=\s*'findback-chat-files'/);
     assert.match(policy, /\(storage\.foldername\(name\)\)\[1\]\s*=\s*'files'/);
     assert.match(
@@ -196,10 +212,10 @@ describe("the chat-file budget migration is shaped for the hosted schema", () =>
     );
     assert.match(
       policy,
-      /public\.findback_chat_file_budget_ok\(\s*\(select auth\.uid\(\)\)::text,\s*case\s+when\s+\(metadata ->> 'size'\) ~ '\^\[0-9\]\{1,12\}\$'\s+then\s+\(metadata ->> 'size'\)::bigint\s+end\s*\)/,
-      "the incoming size is the row's own metadata, safely cast",
+      /case\s+when\s+\(metadata ->> 'size'\) ~ '\^\[0-9\]\{1,12\}\$'\s+then\s+public\.findback_chat_file_budget_ok\(\s*\(select auth\.uid\(\)\)::text,\s*\(metadata ->> 'size'\)::bigint\s*\)\s+when\s+\(metadata ->> 'contentLength'\) ~ '\^\[0-9\]\{1,12\}\$'\s+then\s+public\.findback_chat_file_budget_ok\(\s*\(select auth\.uid\(\)\)::text,\s*\(metadata ->> 'contentLength'\)::bigint\s*\)\s+else\s+true\s+end/,
+      "size first, then the insert-time content length, else defer to the completion probe",
     );
-    assert.doesNotMatch(code, /create policy (?!findback_chat_files_insert_own)/i,
+    assert.doesNotMatch(fixCode, /create policy (?!findback_chat_files_insert_own)/i,
       "this migration creates no other policy");
   });
 
@@ -213,12 +229,18 @@ describe("the chat-file budget migration is shaped for the hosted schema", () =>
   });
 
   it("is static and forward-only", () => {
-    assert.match(code, /^\s*begin;/im, "the migration opens a transaction");
-    assert.match(code, /commit;\s*$/im, "the migration commits");
-    assert.doesNotMatch(code, /\bdo\s+\$/i, "no DO block");
-    assert.doesNotMatch(code, /\bexecute\s+(?:format\s*\(|'|\$)/i, "no dynamic SQL execution");
-    assert.doesNotMatch(code, /\bformat\s*\(/i, "no format() DDL");
-    assert.doesNotMatch(code, /drop\s+(table|column|function)\s+(if\s+exists\s+)?public\./i, "nothing is dropped");
+    for (const [label, source, literal] of [
+      ["budget", code, flat],
+      ["insert-metadata fix", fixCode, fixCode.replace(/\s+/g, " ")],
+    ]) {
+      assert.match(source, /^\s*begin;/im, `${label}: the migration opens a transaction`);
+      assert.match(source, /commit;\s*$/im, `${label}: the migration commits`);
+      assert.doesNotMatch(source, /\bdo\s+\$/i, `${label}: no DO block`);
+      assert.doesNotMatch(source, /\bexecute\s+(?:format\s*\(|'|\$)/i, `${label}: no dynamic SQL execution`);
+      assert.doesNotMatch(source, /\bformat\s*\(/i, `${label}: no format() DDL`);
+      assert.doesNotMatch(source, /drop\s+(table|column|function)\s+(if\s+exists\s+)?public\./i, `${label}: nothing is dropped`);
+      assert.ok(literal.length > 0, `${label}: body is not empty`);
+    }
   });
 });
 
