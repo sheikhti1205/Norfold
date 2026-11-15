@@ -78,3 +78,10 @@ cce829723299a34ea1a7e3e22cd691767c311c42
 6beccfa1fc4757622ec27d32e73ac0b2bc9ac3dc
 a944ebcc150db37e96132b6ce9694b47d5a47c79
 0961a2134c8af9d04607449eac27283f68c6b30a
+# Exception 2026-11-15 (already-pushed fix): a7da0d6b records its verification
+# under `Guards:` instead of the exact `Gates:` trailer, so the range check
+# rejects it even though every listed check ran. It is merged main history —
+# reverting or rewording it would need a force-push, which the owner forbids —
+# and its subject, body and evidence are otherwise accurate. Grandfathered with
+# reason; the fix-forward commit that records this exception carries `Gates:`.
+a7da0d6ba043e724bbcb9701a90e14406dabe8d8
