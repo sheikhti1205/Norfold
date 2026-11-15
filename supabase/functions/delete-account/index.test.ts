@@ -325,6 +325,7 @@ Deno.test("registry covers every known user-bytes namespace with uid-scoped trai
     "findback-images :: avatars/probe-uid/",
     "findback-comment-media :: probe-uid/",
     "findback-report-media :: probe-uid/",
+    "findback-chat-files :: files/probe-uid/",
   ]);
   // Coverage rule part 2: no entry may sweep (or miss) another account.
   for (const namespace of OWNED_STORAGE_NAMESPACES) {
@@ -336,6 +337,31 @@ Deno.test("registry covers every known user-bytes namespace with uid-scoped trai
     }
     assert(!namespace.prefixFor("victim").includes("attacker"), "prefix leaked another uid");
   }
+});
+
+Deno.test("registry covers every Storage bucket a migration creates", () => {
+  // Discovery, not inventory: the chat-file bucket was added by a migration
+  // after this registry was written, and nothing failed. Read the migrations
+  // and require every user-byte bucket to be either swept here or explicitly
+  // owned by another deletion path.
+  const migrations = new URL("../../migrations/", import.meta.url);
+  const created = new Set<string>();
+  for (const entry of Deno.readDirSync(migrations)) {
+    if (!entry.isFile || !entry.name.endsWith(".sql")) continue;
+    const sql = Deno.readTextFileSync(new URL(entry.name, migrations));
+    for (const block of sql.split(/insert\s+into\s+storage\.buckets/i).slice(1)) {
+      const statement = block.split(";")[0] ?? "";
+      for (const match of statement.matchAll(/'([a-z0-9][a-z0-9-]{2,})'/gi)) created.add(match[1]);
+    }
+  }
+  assert(created.has("findback-chat-files"), "the chat-file bucket is discovered from its migration");
+  const exempt = new Map([
+    ["findback-chat-media", "the M7P chat-media erasure queue deletes these bytes"],
+    ["findback-chat-moderation-evidence", "service-owned moderation copies"],
+  ]);
+  const registered = new Set(OWNED_STORAGE_NAMESPACES.map((namespace) => namespace.bucket));
+  const missing = [...created].filter((bucket) => !registered.has(bucket) && !exempt.has(bucket));
+  assertEquals(missing, [], `a migration creates a bucket no deletion path covers: ${missing.join(", ")}`);
 });
 
 Deno.test(">2000 objects across pages and namespaces are all swept at offset 0", async () => {

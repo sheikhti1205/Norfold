@@ -35,7 +35,7 @@ export interface ReactionKindMeta {
   /**
    * Canonical system-emoji presentation for the kind, rendered by the
    * platform emoji font. THE ONE mapping for historical notification/inbox
-   * rows (the Like-only UI no longer presents reaction art) — never
+   * rows (the post control presents Love and Dislike only) — never
    * per-screen dialects.
    */
   emoji: string;
@@ -83,12 +83,13 @@ export function reactionEmojiForWire(kind: ReactionKind | null): string | null {
 }
 
 /**
- * THE ONE Like rule (packet `08` §2, "reactions become Like-only").
+ * THE ONE Like rule.
  *
+ * The post control presents Love and Dislike; comments stay Love-only.
  * A Like counts LOVE/HELPFUL/SUPPORT/WOW, including LIKE folded into LOVE.
  * DISLIKE does not count as a Like. Any positive historical reaction is mine
- * for the Like control and tapping Like clears it. Post writes may also switch
- * to DISLIKE; comments remain Like-only. Counts derive from the summary.
+ * for the Love control and tapping Love clears it. Post writes may also switch
+ * to DISLIKE. Counts derive from the summary.
  */
 export const LIKE_KINDS: readonly CanonicalReactionKind[] = CANONICAL_REACTION_KINDS;
 

@@ -89,6 +89,10 @@ export const OWNED_STORAGE_NAMESPACES: readonly {
   // the caller can read the owning report. Deletion still sweeps the namespace
   // directly, and the queued report-media sweep covers any object this misses.
   { bucket: "findback-report-media", prefixFor: (uid: string) => `${uid}/` },
+  // 20261112170000: private documents/video/audio per conversation. The object
+  // key is `files/<sender uid>/<conversation id>/<uuid>-<name>`, so the account
+  // sweep uses the uid segment, not the bucket root.
+  { bucket: "findback-chat-files", prefixFor: (uid: string) => `files/${uid}/` },
 ];
 
 export interface TableAdmin {
