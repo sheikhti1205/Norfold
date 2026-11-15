@@ -240,7 +240,9 @@ export async function uploadChatFile(file: File, options: UploadChatFileOptions)
   options.onProgress?.(0);
   const { error } = await getSupabase().storage
     .from(CHAT_FILE_BUCKET)
-    .upload(key, file, { contentType: mime, upsert: false, cacheControl: "300" });
+    // Private chat transport: a shared or long-lived browser cache would keep
+    // the bytes readable after an account switch, so no cache window is offered.
+    .upload(key, file, { contentType: mime, upsert: false, cacheControl: "0" });
   if (error) throw new ApiError("That file could not be uploaded. Try again.", 502);
   options.onProgress?.(1);
   return { key, name: safeChatFileName(file.name), mime, byteSize: file.size, kind: chatFileKindOf(mime) };
@@ -257,6 +259,7 @@ export async function removeChatFile(key: string): Promise<void> {
   try {
     await getSupabase().storage.from(CHAT_FILE_BUCKET).remove([key]);
   } catch {
-    // The bucket's own retention covers a missed delete.
+    // Nothing else retries this: the bucket has no expiry of its own. The
+    // cleanup-chat-files sweep removes objects no live message references.
   }
 }

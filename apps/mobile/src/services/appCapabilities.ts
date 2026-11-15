@@ -33,7 +33,7 @@ export const APP_VERSION: string = packageJson.version;
  * Matches the newest data-contract migration prefix the app was built
  * against; shown in Profile → About for release diagnosis.
  */
-export const BACKEND_SCHEMA_VERSION = "20261114150000";
+export const BACKEND_SCHEMA_VERSION = "20261115121000";
 
 export interface AppCapabilities {
   version: string;
@@ -73,7 +73,7 @@ export const APP_CAPABILITIES: AppCapabilities = {
     "Tapping the active Home tab refreshes and scrolls to top.",
   ],
   social: [
-    "Each post supports one reaction per user: Like only for new reactions; legacy reactions stay readable.",
+    "Each post supports one reaction per user: Love or Dislike; legacy reactions stay readable.",
     "Recovery-linked ratings are available to the participants after a completed return, not to arbitrary report readers.",
     "Private messaging between users is available: requests are text-only; image sharing requires connection. Messages are not end-to-end encrypted.",
     "Comments and reactions update live while viewing a post.",

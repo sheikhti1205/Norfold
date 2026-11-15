@@ -24,8 +24,8 @@ const RETIRED_CLAIMS: Array<[RegExp, string]> = [
 ];
 
 describe("capability docs", () => {
-  it("reflects like-only reactions, recovery ratings and shipped peer messaging", () => {
-    expect(APP_CAPABILITIES.social.join(" ")).toMatch(/Like only/i);
+  it("reflects Love/Dislike reactions, recovery ratings and shipped peer messaging", () => {
+    expect(APP_CAPABILITIES.social.join(" ")).toMatch(/Love or Dislike/i);
     expect(APP_CAPABILITIES.social.join(" ")).toMatch(/recovery/i);
     expect(APP_CAPABILITIES.unavailable).not.toContain("private messaging");
     for (const copy of [mobileCopy]) {

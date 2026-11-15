@@ -1126,6 +1126,10 @@ const NON_FUNCTION_DYNAMIC_DDL = new Set([
   // P11 forward repair: column-level attachment SELECT revocation only.
   // Actual table/column denial is asserted by verify_p11_corrective.sql.
   "b8c31204d048d0420191ebef4cc0c15eb453f4809a9187d2d8e7e95de85a03b8",
+  // Report-view retention: optional pg_cron extension plus the daily prune job.
+  // Touches no function and no application grant; the job itself is verified by
+  // the live readback, and a missing extension only warns.
+  "e7b27ce133d9b7c4cf4406ccc25506999da499314420d1a132c6eb2c573a5d9b",
 ]);
 
 // Immutable applied admission loop: expand all eight concrete declarations and

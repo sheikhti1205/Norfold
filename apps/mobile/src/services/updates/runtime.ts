@@ -23,10 +23,13 @@ import type { Installation } from "./types";
 /**
  * Public metadata for the newest Android build.
  *
- * Owner order 2026-11-06: every push to main publishes an installable APK and
- * the catalogue that offers it. The same-origin read-only endpoint proxies
- * numbered releases so browser CORS and site-deployment timing cannot strand
- * updates. The bundled copy preserves offline history only.
+ * Release path (2026-11-15): a numbered APK is published only when the
+ * android-builds workflow is allowed to publish and the commit carries a new
+ * app version. A push to main alone does not publish anything — with
+ * ANDROID_BUILD_MODE=none the workflow stops at its guard. The same-origin
+ * read-only endpoint proxies numbered releases so browser CORS and
+ * site-deployment timing cannot strand updates. The bundled copy preserves
+ * offline history only.
  */
 export const UPDATE_CATALOGUE_URL =
   "https://findbackapp.social/updates/catalogue.v1.json";
