@@ -308,6 +308,12 @@ export function PrimaryNav({
   const { notifyTabTap } = useTabTap();
   const { pathname, search } = useLocation();
   const searchOpen = useGlobalSearchOpen();
+  // One pointer-only naming gesture for the rail and the phone bar's create
+  // action. The panel still expands after two seconds; the shared pill only
+  // answers "what is this icon?" and hides the moment the panel names rows in
+  // place. Keyboard focus keeps the in-place expansion, so assistive tech never
+  // waits on a hover.
+  const { hoverLabel, dismissHoverLabel } = useHoverLabel();
   // The pin is read once and written on press rather than through
   // `useAppearance`: that hook re-applies the whole stored appearance on every
   // appearance event, which would fight the fixture's page-wide text scale.
@@ -417,7 +423,7 @@ export function PrimaryNav({
     : pathname === "/search" ? (peopleScope ? "/search?scope=people" : "/search") : pathname);
 
   const createAction = (
-    <Link to="/report" aria-label="Create report" className="fb-nav-create bg-primary text-on-primary">
+    <Link to="/report" aria-label="Create report" className="fb-nav-create bg-primary text-on-primary" {...hoverLabel("Create report")}>
       <Plus size={26} aria-hidden="true" />
     </Link>
   );
@@ -447,12 +453,6 @@ export function PrimaryNav({
     if (hoverTimer.current !== null) clearTimeout(hoverTimer.current);
   }, []);
   useEffect(() => { if (railPinned) cancelHoverExpand(); }, [railPinned, cancelHoverExpand]);
-  // Pointer-only name for the icon rail (owner request 2026-11-15). The panel
-  // still expands after two seconds; the shared pill answers "what is this
-  // icon?" immediately, never reflows the page, and hides the moment the panel
-  // names rows in place. Keyboard focus keeps the in-place expansion, so
-  // assistive tech never waits on a hover.
-  const { hoverLabel, dismissHoverLabel } = useHoverLabel();
   useEffect(() => {
     if (railPinned || hoverExpanded) dismissHoverLabel();
   }, [railPinned, hoverExpanded, dismissHoverLabel]);

@@ -9,7 +9,7 @@ function Probe({ label = "Save", placement }: { label?: string; placement?: "top
 }
 
 function pill() {
-  return document.querySelector(".fb-hover-label");
+  return document.querySelector<HTMLElement>(".fb-hover-label");
 }
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -70,6 +70,17 @@ describe("shared hover label", () => {
     fireEvent.pointerEnter(button, { pointerType: "mouse" });
     act(() => { vi.advanceTimersByTime(HOVER_LABEL_MS); });
     expect(pill()?.getAttribute("data-placement")).toBe("right");
+  });
+
+  it("drops below a control that has no room above it", () => {
+    vi.useFakeTimers();
+    render(<HoverLabelProvider><Probe /></HoverLabelProvider>);
+    const button = screen.getByRole("button", { name: "Save" });
+    fireEvent.pointerEnter(button, { pointerType: "mouse" });
+    act(() => { vi.advanceTimersByTime(HOVER_LABEL_MS); });
+    // jsdom reports every rect at 0,0, so the top edge has no room; the pill
+    // must flip under the control instead of running off the viewport.
+    expect(pill()?.style.transform).toBe("translate(-50%, 0)");
   });
 
   it("dismisses on Escape and on scroll", () => {
