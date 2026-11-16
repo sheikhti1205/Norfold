@@ -5,6 +5,7 @@ import { createMemoryRouter, Link, MemoryRouter, Route, RouterProvider, Routes, 
 import { useEffect } from "react";
 import { MotionConfig } from "framer-motion";
 import { PrimaryNav, Shell } from "./Shell";
+import { HoverLabelProvider } from "./HoverLabel";
 import { TabTapProvider } from "./TabTap";
 import { resetBackInterceptors } from "./backNavigation";
 import { APPEARANCE_STORAGE_KEY, DEFAULT_APPEARANCE, loadAppearance } from "../appearance";
@@ -28,6 +29,7 @@ function renderShell(entry = "/") {
     return <button onClick={() => navigate(-1)}>Back</button>;
   }
   return render(
+    <HoverLabelProvider>
     <MemoryRouter initialEntries={[entry]}>
       <GoBack />
       <Routes><Route element={<Shell />}>
@@ -49,7 +51,8 @@ function renderShell(entry = "/") {
         <Route path="/report" element={<p>Report screen</p>} />
         <Route path="/ai-connection" element={<p>AI connection</p>} />
       </Route></Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
+    </HoverLabelProvider>,
   );
 }
 
@@ -664,15 +667,15 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
       const link = within(nav).getByRole("link", { name: "My Reports" });
       fireEvent.pointerEnter(link, { pointerType: "mouse" });
       // Nothing appears on the way in; the dwell is the notification timing.
-      expect(document.querySelector(".fb-nav-hover-label")).toBeNull();
+      expect(document.querySelector(".fb-hover-label")).toBeNull();
       act(() => { vi.advanceTimersByTime(180); });
-      const label = document.querySelector(".fb-nav-hover-label");
+      const label = document.querySelector(".fb-hover-label");
       expect(label?.textContent).toBe("My Reports");
       // The pill is a visual duplicate of the row's accessible name, never a
       // second announcement.
       expect(label?.getAttribute("aria-hidden")).toBe("true");
       fireEvent.pointerLeave(link, { pointerType: "mouse" });
-      expect(document.querySelector(".fb-nav-hover-label")).toBeNull();
+      expect(document.querySelector(".fb-hover-label")).toBeNull();
     } finally {
       vi.useRealTimers();
     }

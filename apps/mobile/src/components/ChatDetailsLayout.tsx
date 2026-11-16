@@ -2,6 +2,7 @@ import { useId, useLayoutEffect, useRef, useState, type CSSProperties, type Reac
 import { Info, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { useContentWidth, useRootFontPx } from "./responsive";
 import { clampPaneWidth, CHAT_DETAILS_PANE, readPanePreference, writePanePreference } from "./panePreference";
+import { useHoverLabel } from "./HoverLabel";
 import "./chatDetailsLayout.css";
 
 /** Drag distance that still counts as a tap on the divider, in pixels. */
@@ -27,6 +28,7 @@ export function ChatDetailsLayout({ children, details, identity, onCompactOpen }
   const container = useRef<HTMLDivElement>(null);
   const sidebar = useRef<HTMLElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
+  const { hoverLabel } = useHoverLabel();
   // Measure the actual detail column, after the conversation list/nav rail,
   // rather than promising three usable panes from viewport width alone.
   const width = useContentWidth(container, 0);
@@ -67,10 +69,12 @@ export function ChatDetailsLayout({ children, details, identity, onCompactOpen }
     persist({ ...pref, collapsed: false });
   }
 
+  const detailToggleLabel = wide ? (expanded ? "Hide conversation details" : "Show conversation details") : "Conversation options";
   const control = <button ref={toggle} type="button" className="fb-chat-icon"
-    aria-label={wide ? expanded ? "Hide conversation details" : "Show conversation details" : "Conversation options"}
+    aria-label={detailToggleLabel}
     aria-expanded={wide ? expanded : undefined} aria-controls={wide ? id : undefined}
-    onClick={wide ? (expanded ? collapse : expand) : onCompactOpen}>
+    onClick={wide ? (expanded ? collapse : expand) : onCompactOpen}
+    {...hoverLabel(detailToggleLabel)}>
     {wide ? expanded ? <PanelRightClose size={21} aria-hidden="true" /> : <PanelRightOpen size={21} aria-hidden="true" /> : <Info size={21} aria-hidden="true" />}
   </button>;
 

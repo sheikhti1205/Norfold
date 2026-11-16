@@ -5,6 +5,7 @@ import { announce, announceQuietly } from "./LiveRegion";
 import { useFeedLove } from "../hooks/useFeedLove";
 import { applyCountDeltas, likeMine, likeState, nextReaction, reactionMoveDeltas } from "../services/reactions";
 import { seedSummaryFromItem, toggleReaction } from "../services/feedReactions";
+import { useHoverLabel } from "./HoverLabel";
 
 export function HomeFeedReactionButtons({ postId, likeCount, dislikeCount }: {
   postId: string;
@@ -79,19 +80,22 @@ export function HomeFeedReactionButtons({ postId, likeCount, dislikeCount }: {
   const likeActive = likeMine(myReaction);
   const dislikeActive = myReaction === "DISLIKE";
   const buttonClass = (active: boolean) => `fb-report-action min-h-[44px] min-w-[44px] gap-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${active ? "bg-surface-container text-on-surface" : "text-on-surface-variant"}`;
+  const { hoverLabel } = useHoverLabel();
 
   return (
     <span className="relative flex min-w-0 flex-col gap-1">
       <span className="flex items-center">
         <button type="button" data-testid="home-feed-love" aria-label={`Like, ${likes} ${likes === 1 ? "like" : "likes"}`} aria-pressed={likeActive}
           aria-describedby={failed ? errorId : undefined} data-pending={pending ? "true" : "false"}
-          disabled={pending} aria-busy={pending} onClick={() => void onToggle("LIKE")} className={buttonClass(likeActive)}>
+          disabled={pending} aria-busy={pending} onClick={() => void onToggle("LIKE")} className={buttonClass(likeActive)}
+          {...hoverLabel("Like")}>
           <ThumbsUp size={18} aria-hidden fill={likeActive ? "currentColor" : "none"} />
           <span className="tabular-nums">{likes}</span>
         </button>
         <button type="button" data-testid="home-feed-dislike" aria-label={`Dislike, ${dislikes} ${dislikes === 1 ? "dislike" : "dislikes"}`} aria-pressed={dislikeActive}
           aria-describedby={failed ? errorId : undefined} data-pending={pending ? "true" : "false"}
-          disabled={pending} aria-busy={pending} onClick={() => void onToggle("DISLIKE")} className={buttonClass(dislikeActive)}>
+          disabled={pending} aria-busy={pending} onClick={() => void onToggle("DISLIKE")} className={buttonClass(dislikeActive)}
+          {...hoverLabel("Dislike")}>
           <ThumbsDown size={18} aria-hidden fill={dislikeActive ? "currentColor" : "none"} />
           <span className="tabular-nums">{dislikes}</span>
         </button>

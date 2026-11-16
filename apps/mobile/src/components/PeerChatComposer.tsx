@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Camera, ChevronRight, Ellipsis, FileUp, ImagePlus, Mic, SendHorizontal, Square, Sticker } from "lucide-react";
 import { hasFinePointer } from "./inputCapabilities";
+import { useHoverLabel } from "./HoverLabel";
 import { convertEmoticonsLive } from "../utils/emoji";
 import { EmojiPickerButton } from "./EmojiPickerButton";
 import { KlipyPicker } from "./KlipyPicker";
@@ -86,6 +87,7 @@ export function PeerChatComposer({
   const caret = useRef<number | null>(null);
   const klipy = isKlipyEnabled() && onPickKlipy !== undefined;
   const attachmentBusy = busy || locked || attachmentsLocked || fileSending;
+  const { hoverLabel } = useHoverLabel();
 
   useLayoutEffect(() => {
     const next = caret.current;
@@ -153,8 +155,8 @@ export function PeerChatComposer({
   }
 
   const button = (label: string, icon: ReactNode, action: () => void, disabled = false) => (
-    <button type="button" className="fb-peer-icon" aria-label={label} title={label}
-      disabled={disabled} onClick={action}>
+    <button type="button" className="fb-peer-icon" aria-label={label}
+      disabled={disabled} onClick={action} {...hoverLabel(label)}>
       {icon}
     </button>
   );
@@ -180,9 +182,10 @@ export function PeerChatComposer({
           {hasMore && (
             <div className="relative" ref={moreRoot}>
               <button type="button" className="fb-peer-icon" aria-label="More attachments"
-                title="More attachments" aria-haspopup="menu" aria-expanded={moreOpen}
+                aria-haspopup="menu" aria-expanded={moreOpen}
                 disabled={attachmentBusy && !voiceActive}
-                onClick={() => setMoreOpen((open) => !open)}>
+                onClick={() => setMoreOpen((open) => !open)}
+                {...hoverLabel("More attachments")}>
                 <Ellipsis size={21} aria-hidden="true" />
               </button>
               {moreOpen && (
@@ -274,6 +277,7 @@ export function PeerChatComposer({
       <EmojiPickerButton onPick={pickEmoji} disabled={busy || locked} align="end"
         className="fb-peer-icon" label="Emoji" />
       <button type="submit" className="fb-peer-icon fb-peer-send" aria-label="Send message" disabled={!available}
+        {...hoverLabel("Send message")}
         onMouseDown={(event) => {
           // Keep the IME open: tapping Send must not blur the field before the
           // draft is admitted and the restore state is applied.

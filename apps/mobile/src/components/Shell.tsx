@@ -4,7 +4,6 @@ import { Link, UNSAFE_NavigationContext, useLocation, useNavigate } from "react-
 import { AnimatePresence, motion } from "framer-motion";
 import { Archive, BarChart3, Bell, Bookmark, ClipboardList, Heart, Home, MessageCircle, Plus, Search, Settings as SettingsIcon, UserRound, type LucideIcon } from "lucide-react";
 import { Focusable, Tooltip, TooltipTrigger } from "react-aria-components";
-import { createPortal } from "react-dom";
 import { TabTapProvider, useTabTap } from "./TabTap";
 import { LiveRegion } from "./LiveRegion";
 import { MEDIUM_MAX_PX, READABLE_COLUMN_CLASS, useViewportWidth, WIDE_CANVAS_CLASS } from "./responsive";
@@ -16,6 +15,7 @@ import { NavigationSetup } from "./NavigationSetup";
 import { RoleOfferNotice } from "./RoleOfferNotice";
 import { AccountMenu } from "./AccountMenu";
 import { BrandMark } from "./BrandMark";
+import { useHoverLabel } from "./HoverLabel";
 import { SettingsWindow } from "./SettingsWindow";
 import { GlobalSearchOverlay } from "./GlobalSearchOverlay";
 import { toggleGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
@@ -31,13 +31,6 @@ import "./Shell.nav.css";
 
 /** Router link with framer press gestures (motion pass: always animated). */
 const MotionLink = motion.create(Link);
-
-/**
- * Dwell before a rail icon names itself beside the column. 180ms is the
- * notification action-rail dwell the owner approved (owner finding E9), so the
- * same "rest to reveal" gesture reads the same across the shell.
- */
-const RAIL_HOVER_LABEL_MS = 180;
 
 /**
  * The rail's destinations, in the order `docs/design/nav/prototype.html` puts
@@ -455,50 +448,14 @@ export function PrimaryNav({
   }, []);
   useEffect(() => { if (railPinned) cancelHoverExpand(); }, [railPinned, cancelHoverExpand]);
   // Pointer-only name for the icon rail (owner request 2026-11-15). The panel
-  // still expands after two seconds; the label answers "what is this icon?"
-  // immediately, never reflows the page (it is a fixed portal, not a wider
-  // row), and hides the moment the panel names rows in place. Keyboard focus
-  // keeps the in-place expansion, so assistive tech never waits on a hover.
-  const [railLabel, setRailLabel] = useState<{ label: string; top: number; left: number } | null>(null);
-  const railLabelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hideRailLabel = useCallback(() => {
-    if (railLabelTimer.current !== null) {
-      clearTimeout(railLabelTimer.current);
-      railLabelTimer.current = null;
-    }
-    setRailLabel(null);
-  }, []);
-  const showRailLabel = (el: HTMLElement, label: string) => {
-    if (railPinned || hoverExpanded) return;
-    const paint = () => {
-      const rect = el.getBoundingClientRect();
-      const top = Math.min(Math.max(rect.top + rect.height / 2, 24), window.innerHeight - 24);
-      setRailLabel({ label, top, left: rect.right + 10 });
-    };
-    // Once one name is showing, moving down the column swaps it immediately:
-    // the reader has already asked the question the dwell answers.
-    if (railLabel !== null) { paint(); return; }
-    if (railLabelTimer.current !== null) clearTimeout(railLabelTimer.current);
-    railLabelTimer.current = setTimeout(() => {
-      railLabelTimer.current = null;
-      paint();
-    }, RAIL_HOVER_LABEL_MS);
-  };
-  useEffect(() => () => {
-    if (railLabelTimer.current !== null) clearTimeout(railLabelTimer.current);
-  }, []);
-  useEffect(() => { if (railPinned || hoverExpanded) hideRailLabel(); }, [railPinned, hoverExpanded, hideRailLabel]);
+  // still expands after two seconds; the shared pill answers "what is this
+  // icon?" immediately, never reflows the page, and hides the moment the panel
+  // names rows in place. Keyboard focus keeps the in-place expansion, so
+  // assistive tech never waits on a hover.
+  const { hoverLabel, dismissHoverLabel } = useHoverLabel();
   useEffect(() => {
-    if (railLabel === null) return;
-    const hide = () => setRailLabel(null);
-    // Capture catches the rail's own scroll container, not just the window.
-    window.addEventListener("scroll", hide, true);
-    window.addEventListener("resize", hide);
-    return () => {
-      window.removeEventListener("scroll", hide, true);
-      window.removeEventListener("resize", hide);
-    };
-  }, [railLabel]);
+    if (railPinned || hoverExpanded) dismissHoverLabel();
+  }, [railPinned, hoverExpanded, dismissHoverLabel]);
   if (fullscreen || (keyboardOpen && !rail)) return null;
   const renderDestination = (destination: NavRow) => {
     const { label, icon: Icon } = destination;
@@ -554,9 +511,7 @@ export function PrimaryNav({
         aria-label={label}
         aria-expanded={searchOpen}
         onClick={(event) => toggleGlobalSearch(event.currentTarget)}
-        onPointerEnter={(event) => { if (rail) showRailLabel(event.currentTarget, label); }}
-        onPointerLeave={() => { if (rail) hideRailLabel(); }}
-        onPointerDown={() => { if (rail) hideRailLabel(); }}
+        {...(rail ? hoverLabel(label, "right") : {})}
         whileTap={pressFeedback.iconButton}
         transition={{ duration: motionDurations.instant }}
         className="fb-nav-link text-on-surface-variant"
@@ -569,9 +524,7 @@ export function PrimaryNav({
         to={destination.to}
         aria-label={selected ? undefined : label}
         aria-current={selected ? "page" : undefined}
-        onPointerEnter={(event) => { if (rail) showRailLabel(event.currentTarget, label); }}
-        onPointerLeave={() => { if (rail) hideRailLabel(); }}
-        onPointerDown={() => { if (rail) hideRailLabel(); }}
+        {...(rail ? hoverLabel(label, "right") : {})}
         onClick={() => {
           if (selected) {
             notifyTabTap();
@@ -610,8 +563,8 @@ export function PrimaryNav({
         className="fb-nav-rail shrink-0"
         style={railPinned ? { width: railWidthState } : undefined}
         onPointerEnter={scheduleHoverExpand}
-        onPointerLeave={() => { cancelHoverExpand(); hideRailLabel(); }}
-        onPointerDown={() => { cancelHoverExpand(); hideRailLabel(); }}
+        onPointerLeave={() => { cancelHoverExpand(); dismissHoverLabel(); }}
+        onPointerDown={() => { cancelHoverExpand(); dismissHoverLabel(); }}
         variants={fadeVariants}
         initial="hidden"
         animate="visible"
@@ -650,11 +603,6 @@ export function PrimaryNav({
           aria-valuetext={`${railWidthState} pixels`} tabIndex={0} className="fb-nav-rail-resize"
           onPointerDown={onResizeStart} onPointerMove={onResizeMove} onPointerUp={onResizeEnd}
           onPointerCancel={onResizeEnd} onKeyDown={onResizeKey} />}
-        {railLabel !== null && createPortal(
-          <div className="fb-nav-hover-label" aria-hidden="true"
-            style={{ top: railLabel.top, left: railLabel.left }}>{railLabel.label}</div>,
-          document.body,
-        )}
       </motion.nav>
     );
   }

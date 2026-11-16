@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject, type TextareaHTMLAttributes } from "react";
 import { SendHorizonal } from "lucide-react";
 import { hasFinePointer } from "./inputCapabilities";
+import { useHoverLabel } from "./HoverLabel";
 import "./adaptiveFoundation.css";
 
 export interface ComposerShellProps {
@@ -45,6 +46,7 @@ export function ComposerShell({ value, onChange, onSend, inputLabel, placeholder
   const composing = useRef(false);
   const hadFocus = useRef(false);
   const available = canSend && !disabled && !busy;
+  const { hoverLabel } = useHoverLabel();
   useLayoutEffect(() => {
     if (!input.current) return;
     input.current.style.height = "auto";
@@ -85,6 +87,7 @@ export function ComposerShell({ value, onChange, onSend, inputLabel, placeholder
       {inputOverlay}
       </div>
       <button type="submit" aria-label={sendLabel} data-testid={sendTestId} disabled={!available} className="fb-icon-control fb-composer-send"
+        {...hoverLabel(sendLabel)}
         onMouseDown={(event) => {
           // Android dispatches compatibility mouse events for a tap. Keep the
           // editor's existing focus before submit; refocusing after an awaited

@@ -6,6 +6,7 @@ import { ArrowLeft, Search } from "lucide-react";
 import { SearchField } from "../components/SearchField";
 import { BrandMark } from "../components/BrandMark";
 import { useStoredNavLayout } from "../components/navLayout";
+import { useHoverLabel } from "../components/HoverLabel";
 import { motionDurations, motionEasings, pressFeedback, scaleInVariants } from "../components/uiMotion";
 
 /** Shared swap timing for the one-row state change. */
@@ -84,6 +85,7 @@ export function HomeTopBar({
   // feed restores the mark and wordmark here instead of leaving the app
   // nameless. While search is open the field needs the full row.
   const showBrand = useStoredNavLayout() === "bottom" && !expanded;
+  const { hoverLabel } = useHoverLabel();
   useEffect(() => {
     if (wasExpanded.current && !expanded) triggerRef.current?.focus();
     wasExpanded.current = expanded;
@@ -181,6 +183,7 @@ export function HomeTopBar({
               data-testid="home-search-open"
               aria-label="Open search"
               onClick={(event) => onOpen(event.currentTarget)}
+              {...hoverLabel("Search")}
               whileTap={pressFeedback.iconButton}
               variants={scaleInVariants}
               initial="hidden"

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { PostLink } from "./PostNavigation";
 import { MessageSquare } from "lucide-react";
+import { useHoverLabel } from "./HoverLabel";
 import "./PostActionRow.css";
 
 /**
@@ -56,6 +57,7 @@ export interface PostActionRowProps {
  */
 export function PostActionRow({ slots, commentCount, className, commentsHref }: PostActionRowProps) {
   const commentLabel = `Comments, ${commentCount}`;
+  const { hoverLabel } = useHoverLabel();
   const commentControl = (
     <>
       <MessageSquare size={18} aria-hidden />
@@ -72,7 +74,7 @@ export function PostActionRow({ slots, commentCount, className, commentsHref }: 
       }`}
     >
       {commentsHref ? (
-        <PostLink to={commentsHref} aria-label={commentLabel} className="fb-report-action">
+        <PostLink to={commentsHref} aria-label={commentLabel} className="fb-report-action" {...hoverLabel("Comments")}>
           {commentControl}
         </PostLink>
       ) : (
@@ -82,6 +84,7 @@ export function PostActionRow({ slots, commentCount, className, commentsHref }: 
           disabled={!slots.onComments}
           aria-label={commentLabel}
           className="fb-report-action"
+          {...hoverLabel("Comments")}
         >
           {commentControl}
         </button>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Smile } from "lucide-react";
 import { EmojiPicker } from "./EmojiPicker";
+import { useHoverLabel } from "./HoverLabel";
 
 export interface EmojiPickerButtonProps {
   onPick: (emoji: string) => void;
@@ -25,6 +26,7 @@ export function EmojiPickerButton({
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const { hoverLabel } = useHoverLabel();
 
   useEffect(() => {
     if (!open) return;
@@ -56,11 +58,11 @@ export function EmojiPickerButton({
         type="button"
         className={className}
         aria-label={label}
-        title={label}
         aria-haspopup="dialog"
         aria-expanded={open}
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
+        {...hoverLabel(label)}
       >
         <Smile size={21} aria-hidden="true" />
       </button>
