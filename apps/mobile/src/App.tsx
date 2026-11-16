@@ -6,6 +6,7 @@ import { ThemeProvider } from "./theme";
 import { motionConfigValueFor, useAppearance } from "./appearance";
 import { GuestOnly, OnboardingRoute, RequireAuth } from "./components/Guards";
 import { Shell } from "./components/Shell";
+import { HoverLabelProvider } from "./components/HoverLabel";
 import { BackButtonHandler } from "./components/BackButtonHandler";
 import { AccountDeletionFeedback } from "./components/AccountDeletionFeedback";
 import { ReportDeletionFeedbackProvider } from "./components/ReportDeletionFeedback";
@@ -128,7 +129,11 @@ export function App({ router }: { router: ReturnType<typeof createAppRouter> }) 
         {/* One video player for the whole app: it owns the only <video>
             element and moves between the transcript bubble and its overlay. */}
         <VideoPlayerProvider>
+        {/* One pointer-only naming pill for the whole app: the provider owns
+            the single portal, so no surface grows its own tooltip. */}
+        <HoverLabelProvider>
         <RouterProvider router={router} />
+        </HoverLabelProvider>
         </VideoPlayerProvider>
         </AppMotionConfig>
         </SavedReportsProvider>

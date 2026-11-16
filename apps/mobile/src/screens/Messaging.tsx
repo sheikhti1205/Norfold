@@ -24,6 +24,7 @@ import { SplitView, type SplitPaneState } from "../components/SplitView";
 import { CHAT_PANE } from "../components/panePreference";
 import { ChatDetailsLayout } from "../components/ChatDetailsLayout";
 import { BlockControl } from "../components/BlockControl";
+import { useHoverLabel } from "../components/HoverLabel";
 import { PreferenceSwitchRow } from "../components/settings";
 import { ActionMenu, type MenuAction } from "../components/ActionMenu";
 import { LongPressArea } from "../components/LongPressArea";
@@ -238,8 +239,10 @@ export function replyPreview(message: StoredHumanMessage): string {
 function RetrySync({ accountId, labelled = false }: { accountId: string; labelled?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const { hoverLabel } = useHoverLabel();
   return <>
     <button className={labelled ? "fb-chat-info-row" : "fb-chat-icon"} type="button" aria-label={labelled ? undefined : "Sync messages"} disabled={busy}
+      {...(labelled ? {} : hoverLabel("Sync messages"))}
       onClick={() => {
         setBusy(true); setError(false);
         void refreshMessaging(accountId).catch(() => setError(true)).finally(() => setBusy(false));
@@ -555,6 +558,7 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
   const heading = useRef<HTMLHeadingElement>(null);
   const paneToggle = useRef<HTMLButtonElement>(null);
   const paneSettled = useRef(false);
+  const { hoverLabel } = useHoverLabel();
   const identities = useLabels(accountId, chat.conversations.map((row) => row.peerId));
   const labels = new Map([...identities].map(([id, person]) => [id, person.displayName || person.username]));
   useEffect(() => { heading.current?.focus(); }, []);
@@ -588,7 +592,7 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
   const sidebar = pane?.wide === true;
   return <section className="fb-chat-page" aria-label="Chats">
     <AppBar title="Chats" autoFocus utilities={!sidebar && !selectedId} actions={sidebar ? (
-      <button ref={paneToggle} type="button" className="fb-chat-icon" aria-label="Collapse conversation list" onClick={pane.toggle}>
+      <button ref={paneToggle} type="button" className="fb-chat-icon" aria-label="Collapse conversation list" onClick={pane.toggle} {...hoverLabel("Collapse conversation list")}>
         <PanelLeftClose size={20} aria-hidden="true" />
       </button>
     ) : <>
@@ -679,6 +683,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   // not in the conversation sidebar. On a phone the list page owns them.
   const wideApp = useViewportWidth() >= MEDIUM_MAX_PX;
   const chat = useMessaging();
+  const { hoverLabel } = useHoverLabel();
   const [cached] = useState(() => getCachedMessagingThreadState(accountId, conversationId));
   const [renderedRevision, setRenderedRevision] = useState(-1);
   const [threadReadFailed, setThreadReadFailed] = useState(false);
@@ -1653,7 +1658,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       <strong dir="auto">{name || "Conversation"}</strong><span className="fb-chat-secondary">{!view ? "Saved chat" : view.mode === "CONNECTED" ? "Connected" : "Message request"}</span></>}>
     {detailsToggle => <section className="fb-chat-page" aria-label="Conversation">
     <header className="fb-chat-header">
-      <Link to="/chats" className="fb-chat-icon" aria-label="Back to chats"><ArrowLeft size={22} aria-hidden="true" /></Link>
+      <Link to="/chats" className="fb-chat-icon" aria-label="Back to chats" {...hoverLabel("Back to chats")}><ArrowLeft size={22} aria-hidden="true" /></Link>
       <ChatIdentity peerId={row?.peerId} name={name} username={person?.username} avatarUrl={person?.avatarUrl} muted={view?.ownMuted === true}
         conversationId={conversationId}
         status={!view ? "Saved chat" : view.mode === "CONNECTED" ? "Connected" : "Message request"} />

@@ -6,6 +6,7 @@ import { NotificationPopover } from "./NotificationPopover";
 import { COMPACT_MAX_PX, useViewportWidth } from "./responsive";
 import { useStoredNavLayout } from "./navLayout";
 import { toggleGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
+import { useHoverLabel } from "./HoverLabel";
 import { fetchUnreadCount } from "../services/notifications";
 import { INBOX_CHANGED_EVENT } from "../services/notificationSignals";
 import { onRealtime } from "../services/realtime";
@@ -61,24 +62,26 @@ function AccountTopUtilities({ showSearch = true, liveBadge, unreadCount, accoun
     };
   }, [liveBadge]);
   const count = unreadCount ?? unread;
+  const { hoverLabel } = useHoverLabel();
   const bell = <><Bell size={20} aria-hidden="true" />
     {count !== null && count > 0 && <span aria-hidden="true" data-testid="notifications-unread-badge" className="fb-notification-badge bg-error text-on-error">{count > 99 ? "99+" : count}</span>}
   </>;
   return <nav aria-label="App utilities" className="fb-top-utilities">
     {showSearch && <button type="button" aria-label="Search" aria-expanded={searchOpen}
-      className="fb-icon-control" onClick={(event) => toggleGlobalSearch(event.currentTarget)}>
+      className="fb-icon-control" onClick={(event) => toggleGlobalSearch(event.currentTarget)}
+      {...hoverLabel("Search")}>
       <Search size={20} aria-hidden="true" />
     </button>}
     {/* The rail has no create button (owner order 2026-11-13). On that layout
         the action lives here, beside the bell, as an icon at the same weight as
         its neighbours; phones keep the floating + in the bottom bar and must
         not show a second one. */}
-    {rail && <Link to="/report" aria-label="Create report" className="fb-icon-control">
+    {rail && <Link to="/report" aria-label="Create report" className="fb-icon-control" {...hoverLabel("Create report")}>
       <Plus size={20} aria-hidden="true" />
     </Link>}
     {allowPreview && width >= COMPACT_MAX_PX && location.pathname !== "/notifications"
       ? <NotificationPopover key={location.key} trigger={bell} />
-      : <Link to="/notifications" aria-label="Notifications" className="fb-icon-control relative">{bell}</Link>}
+      : <Link to="/notifications" aria-label="Notifications" className="fb-icon-control relative" {...hoverLabel("Notifications")}>{bell}</Link>}
     {account}
   </nav>;
 }

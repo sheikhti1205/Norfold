@@ -5,6 +5,7 @@ import { ChevronRight, MoreHorizontal } from "lucide-react";
 import { LayeredPopover } from "./overlayFoundation";
 import { useFinePointer } from "./inputCapabilities";
 import { COMPACT_MAX_PX, useViewportWidth } from "./responsive";
+import { useHoverLabel } from "./HoverLabel";
 
 export interface MenuAction {
   id: string;
@@ -36,7 +37,7 @@ function actionRows(items: readonly MenuAction[]) {
 }
 
 /** Anchored actions on every input/width. Never turns a simple action into a sheet. */
-export function ActionMenu({ label, items, icon, disabled = false, open: controlledOpen, onOpenChange, triggerClassName = "fb-icon-control", anchor = false, feedback, placement }: {
+export function ActionMenu({ label, items, icon, disabled = false, open: controlledOpen, onOpenChange, triggerClassName = "fb-icon-control", anchor = false, feedback, placement, hoverName }: {
   label: string;
   items: readonly (MenuAction | MenuGroup)[];
   icon?: ReactNode;
@@ -51,6 +52,9 @@ export function ActionMenu({ label, items, icon, disabled = false, open: control
   feedback?: ReactNode;
   /** Edge the menu grows from. A right-aligned bubble owns its bottom-end. */
   placement?: "bottom start" | "bottom end";
+  /** Short pointer-only name when the accessible label is longer than the
+   * gesture needs ("Share report" names itself "Share"). */
+  hoverName?: string;
 }) {
   const [localOpen, setLocalOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -66,13 +70,15 @@ export function ActionMenu({ label, items, icon, disabled = false, open: control
   };
   const finePointer = useFinePointer();
   const width = useViewportWidth();
+  const { hoverLabel } = useHoverLabel();
   // Sideways collision flipping cannot fit two 15rem panels into a narrow
   // window. Touch uses a stacked second panel; roomy fine-pointer gets flyout.
   const flyout = finePointer && width >= COMPACT_MAX_PX;
   return <MenuTrigger isOpen={open} onOpenChange={setOpen}>
     <Button ref={trigger} aria-label={label} isDisabled={disabled}
       className={anchor ? `fb-longpress-anchor ${triggerClassName}` : triggerClassName}
-      excludeFromTabOrder={anchor} aria-hidden={anchor || undefined}>
+      excludeFromTabOrder={anchor} aria-hidden={anchor || undefined}
+      {...(anchor ? {} : hoverLabel(hoverName ?? label))}>
       {icon ?? <MoreHorizontal size={20} aria-hidden="true" />}
     </Button>
     <LayeredPopover placement={placement ?? (anchor ? "bottom start" : "bottom end")} offset={4}>

@@ -6,6 +6,7 @@ import { useAuth } from "../auth";
 import { useWideViewport } from "./responsive";
 import { ConfirmDialog } from "./AdaptiveTaskSurface";
 import { LayeredPopover } from "./overlayFoundation";
+import { useHoverLabel } from "./HoverLabel";
 import { UserAvatar } from "./UserAvatar";
 import { VerifiedBadge } from "./VerifiedBadge";
 import {
@@ -51,6 +52,7 @@ export function AccountMenu({ onOpenSettings = () => {} }: { onOpenSettings?: (p
   const name = user?.displayName?.trim() || user?.username || "Account";
   const verification = user as { emailVerified?: boolean; phoneVerified?: boolean; telegramPhoneVerified?: boolean } | null;
   const others = accounts.filter((account) => account.id !== user?.id);
+  const { hoverLabel } = useHoverLabel();
 
   useEffect(() => subscribeRememberedAccounts(() => setAccounts(readRememberedAccounts())), []);
   useEffect(() => { if (!open) setPanel(null); }, [open]);
@@ -112,7 +114,8 @@ export function AccountMenu({ onOpenSettings = () => {} }: { onOpenSettings?: (p
           name, so the label is just "Account" rather than repeating the word. */}
       <Button aria-label={name === "Account" ? "Account" : `Account, ${name}`}
         aria-expanded={open}
-        className="fb-nav-link fb-account-trigger">
+        className="fb-nav-link fb-account-trigger"
+        {...hoverLabel("Account", "right")}>
         <UserAvatar avatarUrl={user?.avatarUrl} username={name} size={32} />
         <span className="fb-account-trigger-text">
           <span className="fb-account-trigger-name">{name}</span>

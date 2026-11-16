@@ -21,6 +21,7 @@ import { SettingsWindowHost, SettingsWindowTitle } from "./settingsWindowHost";
 import { OverlayStackBridge } from "./overlayFoundation";
 import { RouterDepthProvider } from "./routerHistory";
 import { searchSettings } from "../services/settingsIndex";
+import { useHoverLabel } from "./HoverLabel";
 import "./SettingsWindow.css";
 
 /**
@@ -85,6 +86,7 @@ function SettingsWindowSurface({ initialPath, onClose, onExit }: {
   }
   const history = historyRef.current;
   const [state, setState] = useState(() => ({ action: history.action, location: history.location }));
+  const { hoverLabel } = useHoverLabel();
   useLayoutEffect(() => history.listen(setState), [history]);
 
   const goBack = useCallback(() => {
@@ -154,7 +156,7 @@ function SettingsWindowSurface({ initialPath, onClose, onExit }: {
             <Dialog aria-label="Settings" className="fb-settings-dialog">
               <header className="fb-settings-window-head" data-searching={searchOpen || undefined}>
                 {canGoBack && (
-                  <Button aria-label="Back" className="fb-icon-control fb-settings-window-back" onPress={goBack}>
+                  <Button aria-label="Back" className="fb-icon-control fb-settings-window-back" onPress={goBack} {...hoverLabel("Back")}>
                     <ArrowLeft size={18} aria-hidden="true" />
                   </Button>
                 )}
@@ -163,10 +165,10 @@ function SettingsWindowSurface({ initialPath, onClose, onExit }: {
                   {searchOpen
                     ? <SettingsWindowSearch onDismiss={closeSearch} onPicked={() => setSearchOpen(false)} />
                     : <Button ref={searchToggle} aria-label="Search settings" className="fb-icon-control"
-                        onPress={() => setSearchOpen(true)}>
+                        onPress={() => setSearchOpen(true)} {...hoverLabel("Search settings")}>
                         <Search size={18} aria-hidden="true" />
                       </Button>}
-                  <Button aria-label="Close settings" className="fb-icon-control" onPress={onClose}>
+                  <Button aria-label="Close settings" className="fb-icon-control" onPress={onClose} {...hoverLabel("Close settings")}>
                     <X size={18} aria-hidden="true" />
                   </Button>
                 </div>

@@ -109,7 +109,7 @@ export function ReportShareButton({ postId, title }: { postId: string; title: st
 
   return (
     <div className="relative shrink-0" onPointerDown={(event) => event.stopPropagation()}>
-      <ActionMenu label="Share report" open={open} onOpenChange={setOpen} disabled={busy} triggerClassName="fb-report-action"
+      <ActionMenu label="Share report" hoverName="Share" open={open} onOpenChange={setOpen} disabled={busy} triggerClassName="fb-report-action"
         feedback={error && <p role="alert" className="max-w-56 px-3 py-2 text-xs text-error">{error}</p>}
         icon={<><Share2 size={18} aria-hidden /><span>Share</span></>} items={[
           { id: "share", label: "Share report", icon: <Share2 size={18} aria-hidden />, onAction: () => { void onShare(); } },

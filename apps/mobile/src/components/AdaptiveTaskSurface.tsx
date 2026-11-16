@@ -2,6 +2,7 @@ import { useId, type ReactNode } from "react";
 import { Button, Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 import { X } from "lucide-react";
 import { useKeyboardInset } from "../hooks/keyboardInset";
+import { useHoverLabel } from "./HoverLabel";
 import { OverlayDepthProvider, OverlayStackBridge, useOverlayDepth } from "./overlayFoundation";
 
 interface SurfaceProps {
@@ -35,6 +36,7 @@ function DialogSurface({ open, onClose, title, description, children, footer, bu
   const depth = useOverlayDepth();
   const descriptionId = useId();
   const viewport = useKeyboardInset();
+  const { hoverLabel } = useHoverLabel();
   return <ModalOverlay isOpen={open} onOpenChange={(value) => { if (!value && !busy) onClose(); }}
     isDismissable={!confirmation && !busy} isKeyboardDismissDisabled
     className="fb-modal-backdrop" style={{
@@ -53,14 +55,14 @@ function DialogSurface({ open, onClose, title, description, children, footer, bu
           {headerless ? (
             /* Explicit child focus avoids useDialog's delayed dialog refocus
                racing nested-viewer restoration when a task is opened quickly. */
-            <Button autoFocus aria-label="Close" isDisabled={busy} onPress={onClose} className="fb-floating-close">
+            <Button autoFocus aria-label="Close" isDisabled={busy} onPress={onClose} className="fb-floating-close" {...hoverLabel("Close")}>
               <X size={20} aria-hidden="true" />
             </Button>
           ) : (
             <header className="fb-surface-header">
               <Heading slot="title" className="fb-surface-title">{title}</Heading>
               {/* Same explicit focus as the headerless close control. */}
-              {!confirmation && <Button autoFocus aria-label="Close" isDisabled={busy} onPress={onClose} className="fb-icon-control">
+              {!confirmation && <Button autoFocus aria-label="Close" isDisabled={busy} onPress={onClose} className="fb-icon-control" {...hoverLabel("Close")}>
                 <X size={20} aria-hidden="true" />
               </Button>}
             </header>

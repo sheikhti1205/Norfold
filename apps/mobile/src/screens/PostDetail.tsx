@@ -6,6 +6,7 @@ import type { CommentItem, PostItem, PostStatus, ReactionCounts, ReactionKind, R
 import { OWNER_SELECTABLE_STATUSES } from "@norfold/shared";
 import { useAuth } from "../auth";
 import { BackButton } from "../components/BackButton";
+import { useHoverLabel } from "../components/HoverLabel";
 import { CommentIdentityHeader } from "../components/CommentIdentityHeader";
 import { CommentMediaPreview } from "../components/CommentMediaPreview";
 import { Button } from "../components/Button";
@@ -134,6 +135,7 @@ function CommentLikeButton({
 export function PostDetail({ contextual = false }: { contextual?: boolean } = {}) {
   const { id = "" } = useParams();
   const recordedViewId = useRef<string | null>(null);
+  const { hoverLabel } = useHoverLabel();
   useEffect(() => {
     if (!id || recordedViewId.current === id) return;
     recordedViewId.current = id;
@@ -1134,6 +1136,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
                   aria-busy={reactionPending}
                   aria-label={postLikeLabel}
                   aria-pressed={postLike.mine}
+                  {...hoverLabel("Like")}
                 >
                   <ThumbsUp size={20} aria-hidden fill={postLike.mine ? "currentColor" : "none"} />
                   <span className="tabular-nums">{postLike.count}</span>
@@ -1147,6 +1150,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
                   aria-busy={reactionPending}
                   aria-label={postDislikeLabel}
                   aria-pressed={myReaction === "DISLIKE"}
+                  {...hoverLabel("Dislike")}
                 >
                   <ThumbsDown size={20} aria-hidden fill={myReaction === "DISLIKE" ? "currentColor" : "none"} />
                   <span className="tabular-nums">{postDislikeCount}</span>

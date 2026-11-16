@@ -144,37 +144,6 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
 /* Every destination is named in the rail, selected or not. The label wraps
    rather than truncating, so "My Reports" stays readable at large text. */
 .fb-nav-tooltip { z-index: 120; max-width: 16rem; padding: 6px 10px; border-radius: 8px; background: var(--fb-on-surface); color: var(--fb-surface); font-size: .875rem; overflow-wrap: anywhere; }
-/* Pointer-only name for the icon rail (owner request 2026-11-15). The rail
-   clips its own overflow, so the label must be a body-level fixed element; it
-   never changes the rail's width, so skimming the column cannot reflow the
-   page. 180ms is the notification action-rail dwell the owner approved, so the
-   same "rest to reveal" gesture reads the same everywhere. */
-.fb-nav-hover-label {
-  position: fixed;
-  z-index: 120;
-  transform: translateY(-50%);
-  max-width: 18rem;
-  padding: 5px 10px;
-  border-radius: 8px;
-  background: var(--fb-on-surface);
-  color: var(--fb-surface);
-  font-size: .8125rem;
-  font-weight: 500;
-  line-height: 1.25;
-  white-space: nowrap;
-  overflow-wrap: anywhere;
-  pointer-events: none;
-  box-shadow: var(--shadow-md);
-  animation: fb-nav-hover-label-in 120ms ease-out;
-}
-@keyframes fb-nav-hover-label-in {
-  from { opacity: 0; transform: translate(-4px, -50%); }
-  to { opacity: 1; transform: translate(0, -50%); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .fb-nav-hover-label { animation: none; }
-}
-html.fb-reduce-motion .fb-nav-hover-label { animation: none; }
 @media (min-width: 1200px) { .fb-nav-rail { --fb-rail-collapsed: 72px; } }
 
 /* Intent expansion. Scoped to the unpinned rail: a pinned panel is already
