@@ -121,7 +121,7 @@ export const APP_CAPABILITIES: AppCapabilities = {
   emailVerification:
     "After registering, verify your email from the Verify screen with the real one-time code.",
   phoneVerification:
-    "Phone verification happens in Telegram: connect the Norfold bot and share your own contact. Norfold does not send text messages, and a typed number does not verify anything.",
+    "Phone verification happens in Telegram: connect the Norfold bot, then tap Share my number in the chat. Norfold does not send text messages, and a typed number does not verify anything.",
   accountDeletion:
     "Delete your account from Settings > Account. Typing your email confirms deletion of the account, reports and photos; limited safety records remain as described in the Privacy policy.",
   unavailable: [
