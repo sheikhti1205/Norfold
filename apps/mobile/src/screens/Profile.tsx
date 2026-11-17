@@ -366,7 +366,6 @@ export function Profile() {
             className="fb-profile-account-row"
             iconNode={<EmailMark address={user.email} size={16} />}
             value={<span title={user.email}>{user.email}</span>}
-            badge={user.emailVerified ? <StatusPill tone="success">Verified</StatusPill> : undefined}
             route={user.emailVerified ? undefined : "/verify"}
           />
           <MobileNumberRow account={telegram} />

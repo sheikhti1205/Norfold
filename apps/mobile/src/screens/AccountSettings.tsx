@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { LogOut } from "lucide-react";
+import { LogOut, Smartphone } from "lucide-react";
 import { useAuth } from "../auth";
 import { requestAccountDeletion, sendAccountPasswordCode, saveAccountPasswordWithCode } from "../services/auth";
 import { ApiError } from "../services/session";
-import { TelegramMark } from "../components/BrandMarks";
 import type { TelegramAccountState } from "../hooks/useTelegramAccount";
 import { Button } from "../components/Button";
 import { useOtpCountdown } from "../components/auth/useOtpCountdown";
@@ -52,16 +51,22 @@ export function MobileNumberRow({ account }: { account: TelegramAccountState }) 
   const verifiedPhone = account.status === "ready" && account.account.linked
     ? account.account.phone
     : null;
-  const badge = account.status === "loading"
-    ? <StatusPill tone="neutral">Checking…</StatusPill>
-    : account.status === "unavailable"
-      ? <StatusPill tone="neutral">Could not check</StatusPill>
-      : <StatusPill tone={verifiedPhone ? "success" : "neutral"}>{verifiedPhone ? "Verified" : "Not verified"}</StatusPill>;
+  // A verified number is proof enough on its own: the identity hero already
+  // carries the "Mobile verified" chip, so a second badge only squeezed the
+  // row title into two lines at 320dp. The badge survives for the states that
+  // have no number to show.
+  const badge = verifiedPhone
+    ? undefined
+    : account.status === "loading"
+      ? <StatusPill tone="neutral">Checking…</StatusPill>
+      : account.status === "unavailable"
+        ? <StatusPill tone="neutral">Could not check</StatusPill>
+        : <StatusPill tone="neutral">Not verified</StatusPill>;
   return (
     <SettingsRow
       title="Mobile number"
       className="fb-profile-account-row"
-      iconNode={<TelegramMark size={16} />}
+      iconNode={<Smartphone size={16} aria-hidden="true" />}
       value={verifiedPhone ?? undefined}
       badge={badge}
       route="/profile/edit"
