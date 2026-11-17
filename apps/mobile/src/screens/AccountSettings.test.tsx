@@ -45,6 +45,7 @@ vi.mock("../services/telegram", () => ({
   createTelegramLink: vi.fn(),
   getTelegramLinkState: vi.fn(),
   unlinkTelegram: vi.fn(),
+  TELEGRAM_BOT_URL: "https://t.me/Norfold_auth_bot",
 }));
 
 vi.mock("@capacitor/browser", () => ({ Browser: { open: vi.fn() } }));
@@ -425,7 +426,7 @@ describe("AccountSettings", () => {
     mockTelegramAccount.mockResolvedValue({ linked: true, phone: null, username: "reader" });
     renderAccount();
     const row = await screen.findByRole("link", { name: /mobile number/i });
-    await waitFor(() => expect(row.textContent).toContain("Share your own contact"));
+    await waitFor(() => expect(row.textContent).toContain("Share my number"));
     expect(row.textContent).toContain("Not verified");
   });
 

@@ -32,6 +32,7 @@ vi.mock("../services/telegram", () => ({
   getTelegramAccount: (...args: unknown[]) => telegramMock.account(...args),
   createTelegramLink: (...args: unknown[]) => telegramMock.create(...args),
   getTelegramLinkState: (...args: unknown[]) => telegramMock.state(...args),
+  TELEGRAM_BOT_URL: "https://t.me/Norfold_auth_bot",
 }));
 vi.mock("@capacitor/browser", () => ({ Browser: { open: (...args: unknown[]) => browserMock.open(...args) } }));
 

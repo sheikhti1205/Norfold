@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TelegramSettings } from "./TelegramSettings";
 
 const mocks = vi.hoisted(() => ({ account: vi.fn(), create: vi.fn(), state: vi.fn(), unlink: vi.fn(), open: vi.fn() }));
-vi.mock("../../services/telegram", () => ({ getTelegramAccount: mocks.account, createTelegramLink: mocks.create, getTelegramLinkState: mocks.state, unlinkTelegram: mocks.unlink }));
+vi.mock("../../services/telegram", () => ({ getTelegramAccount: mocks.account, createTelegramLink: mocks.create, getTelegramLinkState: mocks.state, unlinkTelegram: mocks.unlink, TELEGRAM_BOT_URL: "https://t.me/Norfold_auth_bot" }));
 vi.mock("@capacitor/browser", () => ({ Browser: { open: mocks.open } }));
 const token = "0123456789abcdef0123456789abcdef";
 const unlinked = { linked: false, phone: null, username: null };
@@ -62,6 +62,13 @@ describe("Telegram settings", () => {
     await start(); await advance(600000);
     expect(screen.getByText(/expired/i)).toBeTruthy();
     const count = mocks.state.mock.calls.length; await advance(60000); expect(mocks.state).toHaveBeenCalledTimes(count);
+  });
+  it("tells a linked account without a number to tap Share my number", async () => {
+    mocks.account.mockResolvedValue({ linked: true, phone: null, username: "reader" });
+    render(<TelegramSettings />); await flush();
+    expect(screen.getByText(/tap Share my number/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open Telegram" }));
+    expect(mocks.open).toHaveBeenCalledWith({ url: "https://t.me/Norfold_auth_bot" });
   });
   it("confirms unlinking and explains the session remains signed in", async () => {
     mocks.account.mockResolvedValue(linked); render(<TelegramSettings />); await flush();

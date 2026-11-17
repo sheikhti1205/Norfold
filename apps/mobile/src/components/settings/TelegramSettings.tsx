@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Browser } from "@capacitor/browser";
 import { Button } from "../Button";
 import { SettingsGroup } from "./SettingsPrimitives";
-import { createTelegramLink, getTelegramAccount, getTelegramLinkState, unlinkTelegram, type TelegramAccount } from "../../services/telegram";
+import { createTelegramLink, getTelegramAccount, getTelegramLinkState, TELEGRAM_BOT_URL, unlinkTelegram, type TelegramAccount } from "../../services/telegram";
 
 type View = { kind: "loading" | "error" | "unlinked" } | { kind: "linked"; account: TelegramAccount } | { kind: "waiting"; token: string; deadline: number };
 
@@ -97,16 +97,26 @@ export function TelegramSettings() {
     finally { if (mounted.current) setBusy(false); }
   }
 
+  async function openBot() {
+    setMessage("");
+    try { await Browser.open({ url: TELEGRAM_BOT_URL }); }
+    catch { if (mounted.current) setMessage("Could not open Telegram. Open @Norfold_auth_bot yourself."); }
+  }
+
   const seconds = view.kind === "waiting" ? Math.max(0, Math.ceil((view.deadline - now) / 1000)) : 0;
   return <SettingsGroup title="Connect Telegram">
     <div className="fb-account-password">
       {view.kind === "loading" && <span aria-hidden="true">…</span>}
       {view.kind === "error" && <><p>Could not check your Telegram connection.</p><Button onClick={reload}>Retry Telegram</Button></>}
       {view.kind === "unlinked" && <><p>Connect Telegram to link your account, verify your phone number, and unlink through the bot.</p><Button loading={busy} onClick={() => { void connect(); }}>Connect Telegram</Button></>}
-      {view.kind === "waiting" && <><p>Open Telegram and press Start.</p><p>Expires in {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}</p><Button variant="text" onClick={() => { setMessage(""); setView({ kind: "unlinked" }); }}>Cancel</Button></>}
+      {view.kind === "waiting" && <><p>Open Telegram and press Start.</p><p>Then tap Share my number.</p><p>Expires in {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}</p><Button variant="text" onClick={() => { setMessage(""); setView({ kind: "unlinked" }); }}>Cancel</Button></>}
       {view.kind === "linked" && <>
         {view.account.username && <p>Connected as @{view.account.username}</p>}
         <p>{view.account.phone || "No number is shared yet."}</p>
+        {!view.account.phone && <>
+          <p>In the bot chat, tap Share my number. If the button is missing, send /start.</p>
+          <Button variant="outline" onClick={() => { void openBot(); }}>Open Telegram</Button>
+        </>}
         {!confirm ? <Button variant="outline" onClick={() => setConfirm(true)}>Unlink</Button> : <><p>Unlinking does not sign you out of the app.</p><div className="fb-account-confirm-row"><Button variant="outline" loading={busy} onClick={() => { void unlink(); }}>Confirm unlink</Button><Button variant="text" disabled={busy} onClick={() => setConfirm(false)}>Cancel</Button></div></>}
       </>}
       {message && <p role="status">{message}</p>}

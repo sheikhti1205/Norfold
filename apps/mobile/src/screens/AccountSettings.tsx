@@ -71,7 +71,7 @@ export function MobileNumberRow() {
       : verifiedPhone
         ? "Verified with Telegram."
         : account.linked
-          ? "Telegram is connected. Share your own contact to verify your number."
+          ? "Telegram is connected. In the bot chat, send /start, then tap Share my number."
           : "Verify your number with Telegram. Norfold does not send text messages.";
   return (
     <SettingsRow

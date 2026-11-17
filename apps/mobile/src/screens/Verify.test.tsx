@@ -33,6 +33,7 @@ vi.mock("../services/telegram", () => ({
   getTelegramAccount: (...args: unknown[]) => telegramMock.account(...args),
   createTelegramLink: (...args: unknown[]) => telegramMock.create(...args),
   getTelegramLinkState: (...args: unknown[]) => telegramMock.state(...args),
+  TELEGRAM_BOT_URL: "https://t.me/Norfold_auth_bot",
 }));
 vi.mock("@capacitor/browser", () => ({ Browser: { open: (...args: unknown[]) => browserMock.open(...args) } }));
 vi.mock("../utils/pendingReportLink", () => pendingMock);
@@ -214,7 +215,7 @@ describe("Verify signed-in mode", () => {
       url: `https://t.me/Norfold_auth_bot?start=${TOKEN}`,
     });
     expect(await screen.findByText(/Open Telegram and press Start/i)).toBeTruthy();
-    expect(screen.getByText(/paperclip/i)).toBeTruthy();
+    expect(screen.getByText(/Share my number/i)).toBeTruthy();
     expect(screen.getByText(/typed number does not verify/i)).toBeTruthy();
   });
 
@@ -239,7 +240,7 @@ describe("Verify signed-in mode", () => {
     telegramMock.account.mockResolvedValue({ linked: true, phone: null, username: "reader" });
     renderVerify();
     expect(await screen.findByText(/Telegram is connected as @reader/i)).toBeTruthy();
-    expect(screen.getByText(/Share your own contact/i)).toBeTruthy();
+    expect(screen.getByText(/Share my number/i)).toBeTruthy();
     expect(screen.queryByText("Mobile number verified with Telegram")).toBeNull();
     expect(screen.getByRole("button", { name: "Check again" })).toBeTruthy();
   });

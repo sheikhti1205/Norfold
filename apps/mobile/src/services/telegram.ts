@@ -13,6 +13,10 @@ function rpcError(error: { message: string; code?: string }): ApiError {
 }
 
 export interface TelegramAccount { linked: boolean; phone: string | null; username: string | null }
+
+/** The one bot address every surface opens. */
+export const TELEGRAM_BOT_URL = "https://t.me/Norfold_auth_bot";
+
 export async function getTelegramAccount(): Promise<TelegramAccount> {
   const { data, error } = await getSupabase().rpc("findback_telegram_account_state");
   if (error) throw rpcError(error);
@@ -26,7 +30,7 @@ export async function createTelegramLink(): Promise<{ token: string; deepLink: s
   if (error) throw rpcError(error);
   const row = record(data);
   if (!row || !validToken(row.token) || typeof row.expires_at !== "string" || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(row.expires_at) || !Number.isFinite(Date.parse(row.expires_at))) throw unexpected();
-  const url = new URL("https://t.me/Norfold_auth_bot");
+  const url = new URL(TELEGRAM_BOT_URL);
   url.searchParams.set("start", row.token);
   if (row.deep_link !== url.toString()) throw unexpected();
   return { token: row.token, deepLink: url.toString(), expiresAt: row.expires_at };

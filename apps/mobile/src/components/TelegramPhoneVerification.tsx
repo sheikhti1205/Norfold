@@ -7,6 +7,7 @@ import {
   createTelegramLink,
   getTelegramAccount,
   getTelegramLinkState,
+  TELEGRAM_BOT_URL,
   type TelegramAccount,
 } from "../services/telegram";
 
@@ -28,7 +29,6 @@ type State =
   | { kind: "connected"; username: string | null }
   | { kind: "verified"; phone: string; username: string | null };
 
-const BOT_URL = "https://t.me/Norfold_auth_bot";
 const POLL_MS = 3_000;
 
 export function telegramPhoneState(account: TelegramAccount): State {
@@ -201,7 +201,7 @@ export function TelegramPhoneVerification({
       const account = await getTelegramAccount();
       applyAccount(account);
       if (telegramPhoneState(account).kind !== "verified") {
-        setNotice("No contact from Telegram yet. Share your own contact in the Telegram chat, then check again.");
+        setNotice("No number from Telegram yet. In the bot chat, send /start, then tap Share my number.");
       }
     } catch {
       if (alive.current) setNotice("Could not check Telegram yet. Your number stays unverified.");
@@ -212,7 +212,7 @@ export function TelegramPhoneVerification({
 
   async function openBot() {
     try {
-      await Browser.open({ url: BOT_URL });
+      await Browser.open({ url: TELEGRAM_BOT_URL });
     } catch {
       if (alive.current) setError("Could not open Telegram. Open it yourself and send /start to @Norfold_auth_bot.");
     }
@@ -247,7 +247,7 @@ export function TelegramPhoneVerification({
       {state.kind === "unlinked" && (
         <div className="flex flex-col gap-2">
           <p className="text-sm text-on-surface-variant">
-            We confirm your mobile number through Telegram, not text messages. Open the Norfold bot and share your own contact.
+            We confirm your mobile number through Telegram, not text messages. Open the Norfold bot, press Start, then tap Share my number.
           </p>
           {savedLine}
           <Button onClick={() => void connect()} loading={busy}>
@@ -260,7 +260,7 @@ export function TelegramPhoneVerification({
         <div className="flex flex-col gap-2">
           <p className="text-sm text-on-surface-variant">Open Telegram and press Start.</p>
           <p className="text-sm text-on-surface-variant">
-            Then tap the paperclip, choose Contact, and share your own number. A typed number does not verify anything.
+            Then tap Share my number in the bot chat. A typed number does not verify anything.
           </p>
           <p className="text-sm text-on-surface-variant" role="status">
             This connection expires in {countdown(seconds)}.
@@ -279,7 +279,7 @@ export function TelegramPhoneVerification({
       {state.kind === "connected" && (
         <div className="flex flex-col gap-2">
           <p className="text-sm text-on-surface-variant">
-            Telegram is connected{state.username ? ` as @${state.username}` : ""}. Share your own contact in the Telegram chat to confirm your number.
+            Telegram is connected{state.username ? ` as @${state.username}` : ""}. In the bot chat, tap Share my number. If the button is missing, send /start.
           </p>
           {savedLine}
           <div className="flex flex-wrap gap-2">
