@@ -64,7 +64,6 @@ vi.mock("./supabaseClient", async (importOriginal) => {
 const REGISTER_INPUT = {
   username: "tester",
   email: "tester@example.com",
-  phone: "01812345678",
   password: "password123",
 };
 
@@ -73,6 +72,7 @@ const PROFILE_ROW = {
   username: "tester",
   email_verified: true,
   phone_verified: false,
+  telegram_phone_verified: false,
   avatar_url: null,
   created_at: "2026-01-01T00:00:00.000Z",
 };
@@ -452,25 +452,27 @@ describe("session lifecycle", () => {
 });
 
 describe("fetchMe", () => {
-  it("uses the confirmed auth phone when metadata is absent, never a metadata verified flag", async () => {
+  it("takes the verified-phone signal from the Telegram-owned column", async () => {
     mockProfile();
-    clientMock.auth.getUser.mockResolvedValue({ data: { user: { ...USER, phone: "8801812345678", phone_confirmed_at: "2026-10-06", user_metadata: { phoneVerified: true } } }, error: null });
-    singleMock.mockResolvedValue({ data: { ...PROFILE_ROW, phone_verified: 1 }, error: null });
-    expect(await fetchMe()).toMatchObject({ phone: "+8801812345678", phoneVerified: true });
+    singleMock.mockResolvedValue({ data: { ...PROFILE_ROW, telegram_phone_verified: true }, error: null });
+    expect(await fetchMe()).toMatchObject({ phone: "", phoneVerified: true });
   });
 
-  it("fails closed for an edited number even if a stale public row says verified", async () => {
+  it("does not treat a legacy typed-number flag as verification", async () => {
     mockProfile();
-    clientMock.auth.getUser.mockResolvedValue({ data: { user: { ...USER, phone: "8801912345678", phone_confirmed_at: "2026-10-06" } }, error: null });
-    singleMock.mockResolvedValue({ data: { ...PROFILE_ROW, phone_verified: 1 }, error: null });
+    // `phone_verified` tracked the retired typed signup number. A row that still
+    // carries it must not advertise a number the account never proved.
+    singleMock.mockResolvedValue({ data: { ...PROFILE_ROW, phone_verified: 1, telegram_phone_verified: false }, error: null });
     expect((await fetchMe()).phoneVerified).toBe(false);
   });
+
   it("reads safe profile columns and sources identity from the session", async () => {
     mockProfile();
     const u = await fetchMe();
     expect(u.username).toBe("tester");
     expect(u.email).toBe("tester@example.com");
-    expect(u.phone).toBe("01812345678");
+    // The typed number is retired; a phone value only comes from Telegram.
+    expect(u.phone).toBe("");
     expect(u.emailVerified).toBe(true);
     expect(u.phoneVerified).toBe(false);
   });

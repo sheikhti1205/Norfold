@@ -414,9 +414,11 @@ function appRatingAggregateFrom(payload: Record<string, unknown>): AppRatingAggr
 
 /**
  * Open (or reuse) the shared app-rating channel. Concurrent callers share one
- * in-flight open, so a mount and a publish never race two channels onto the
- * same topic. Resolves null when the client is unavailable or the subscribe
- * failed; callers treat that as "no live aggregate" rather than an error.
+ * in-flight open, so two mounts never race two channels onto the same topic.
+ * The topic is private: the server emits the aggregate after the rating row is
+ * written, and the receive policy admits authenticated readers only. Resolves
+ * null when the client is unavailable or the subscribe failed; callers treat
+ * that as "no live aggregate" rather than an error.
  */
 function openAppRatingChannel(): Promise<RealtimeChannel | null> {
   if (appRatingChannel) return Promise.resolve(appRatingChannel);
@@ -429,7 +431,7 @@ function openAppRatingChannel(): Promise<RealtimeChannel | null> {
         resolve(appRatingChannel);
         return;
       }
-      const channel = c.channel(APP_RATING_TOPIC, { config: { broadcast: { self: true } } });
+      const channel = c.channel(APP_RATING_TOPIC, { config: { private: true } });
       channel.on("broadcast", { event: "rating:changed" }, (message) => {
         if (client !== c || appRatingChannel !== channel) return;
         const aggregate = appRatingAggregateFrom((message?.payload ?? {}) as Record<string, unknown>);
@@ -451,8 +453,7 @@ function openAppRatingChannel(): Promise<RealtimeChannel | null> {
           appRatingChannel = null;
           void c.removeChannel(channel);
         }
-        // Only a mounted screen pays for reconnects; a one-off publish just
-        // reports failure to its caller.
+        // Only a mounted screen pays for reconnects.
         if (client === c && appRatingSubscribers > 0) {
           scheduleRetry(APP_RATING_TOPIC, () => { void openAppRatingChannel(); });
         }
@@ -490,24 +491,4 @@ export function joinAppRatingRoom(): () => void {
     appRatingSubscribers = Math.max(0, appRatingSubscribers - 1);
     if (appRatingSubscribers === 0) closeAppRatingChannel();
   };
-}
-
-/**
- * Broadcast the server's post-write aggregate so other clients update without a
- * refetch. Only `average` and `count` are sent — the rater's score stays on
- * their own screen. Best effort: a miss is repaired by the next screen read.
- */
-export async function publishAppRatingAggregate(aggregate: AppRatingAggregate): Promise<boolean> {
-  const payload = appRatingAggregateFrom({ average: aggregate.average, count: aggregate.count });
-  if (!payload) return false;
-  const channel = await openAppRatingChannel();
-  if (!channel) return false;
-  try {
-    const result = await channel.send({ type: "broadcast", event: "rating:changed", payload });
-    return result === "ok";
-  } catch {
-    return false;
-  } finally {
-    if (appRatingSubscribers === 0) closeAppRatingChannel();
-  }
 }

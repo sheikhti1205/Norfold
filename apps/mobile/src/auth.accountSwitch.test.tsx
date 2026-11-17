@@ -174,7 +174,7 @@ describe("direct SDK account replacement isolation", () => {
     await act(async () => { seams.callback?.("INITIAL_SESSION", null); });
     await waitFor(() => expect(auth.booting).toBe(false));
     await act(async () => {
-      await expect(auth.register({ username: "alice", email: "a@example.invalid", phone: "", password: "synthetic-password" }))
+      await expect(auth.register({ username: "alice", email: "a@example.invalid", password: "synthetic-password" }))
         .resolves.toEqual({ status: "pending", email: "a@example.invalid" });
     });
     expect(auth.pendingEmail).toBe("a@example.invalid");
@@ -339,7 +339,7 @@ describe("direct SDK account replacement isolation", () => {
   });
 
   it("routes a valid replacement session without a profile to its own completion seed", async () => {
-    const seed = { accountId: B.id, email: B.email, name: null, avatarUrl: null, phone: "", suggestedUsername: "bob" };
+    const seed = { accountId: B.id, email: B.email, name: null, avatarUrl: null, suggestedUsername: "bob" };
     seams.fetchMe.mockRejectedValue(new Error("Profile missing"));
     seams.seed.mockResolvedValue(seed);
     render(<AuthProvider><Probe /></AuthProvider>);
@@ -410,7 +410,7 @@ describe("direct SDK account replacement isolation", () => {
     let rejectBoot!: (error: Error) => void;
     let rejectProfile!: (error: Error) => void;
     let resolveOldSeed!: (seed: null) => void;
-    const seed = { accountId: B.id, email: B.email, name: null, avatarUrl: null, phone: "", suggestedUsername: "bob" };
+    const seed = { accountId: B.id, email: B.email, name: null, avatarUrl: null, suggestedUsername: "bob" };
     seams.restoreSession.mockImplementation(() => new Promise<PublicUser>((_resolve, reject) => { rejectBoot = reject; }));
     seams.fetchMe.mockImplementation(() => new Promise<PublicUser>((_resolve, reject) => { rejectProfile = reject; }));
     seams.seed.mockImplementationOnce(() => new Promise((resolve) => { resolveOldSeed = resolve; })).mockResolvedValue(seed);
@@ -441,7 +441,7 @@ describe("direct SDK account replacement isolation", () => {
     seams.fetchMe.mockResolvedValue(B);
     render(<AuthProvider><Probe /></AuthProvider>);
     await waitFor(() => expect(auth.user?.id).toBe(A.id));
-    const registration = auth.register({ username: "alice", email: "a@example.invalid", phone: "", password: "synthetic-password" });
+    const registration = auth.register({ username: "alice", email: "a@example.invalid", password: "synthetic-password" });
     await act(async () => { event(B); });
     await waitFor(() => expect(auth.user?.id).toBe(B.id));
     await act(async () => {

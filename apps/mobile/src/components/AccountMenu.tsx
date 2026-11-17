@@ -183,9 +183,10 @@ export function AccountMenu({ onOpenSettings = () => {} }: { onOpenSettings?: (p
 }
 
 function PanelShell({ title, onBack, children }: { title: string; onBack: () => void; children: ReactNode }) {
+  const { hoverLabel } = useHoverLabel();
   return <div className="fb-account-panel">
     <div className="fb-account-panel-head">
-      <button type="button" className="fb-account-back" aria-label="Back" onClick={onBack}>
+      <button type="button" className="fb-account-back" aria-label="Back" onClick={onBack} {...hoverLabel("Back")}>
         <ChevronLeft size={18} aria-hidden="true" />
       </button>
       <h2 className="fb-account-panel-title">{title}</h2>

@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import { fetchPost } from "../services/posts";
 import { parseReportLink } from "../utils/reportLinks";
 import { friendlyError } from "../utils/friendlyErrors";
+import { useHoverLabel } from "./HoverLabel";
 
 /** Inline disclosure, not a modal: Tab stays in document order; Escape returns to the trigger. */
 export function CommentReportPicker({ disabled, onPick, onClose }: {
@@ -16,6 +17,7 @@ export function CommentReportPicker({ disabled, onPick, onClose }: {
   const inputRef = useRef<HTMLInputElement>(null);
   const request = useRef(0);
   const inputId = useId();
+  const { hoverLabel } = useHoverLabel();
   useEffect(() => {
     inputRef.current?.focus();
     return () => { request.current += 1; };
@@ -57,7 +59,8 @@ export function CommentReportPicker({ disabled, onPick, onClose }: {
       <div className="flex items-center justify-between gap-2">
         <label htmlFor={inputId} className="text-xs font-medium text-on-surface">Report link</label>
         <button type="button" onClick={onClose} aria-label="Close report picker"
-          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container focus-visible:outline-2 focus-visible:outline-on-surface">
+          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container focus-visible:outline-2 focus-visible:outline-on-surface"
+          {...hoverLabel("Close report picker")}>
           <X size={16} aria-hidden />
         </button>
       </div>

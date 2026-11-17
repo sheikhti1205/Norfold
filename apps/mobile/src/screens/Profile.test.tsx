@@ -25,7 +25,11 @@ vi.mock("../services/telegram", () => ({ getTelegramAccount: mockTelegram }));
 vi.mock("../services/profile", () => ({ updateMyProfile: mockUpdateProfile }));
 vi.mock("./AccountSettings", () => ({
   AccountSecuritySections: () => <section aria-label="Sign-in controls">Password sign-in</section>,
-  MobileNumberRow: () => <a href="/profile/edit">Mobile number</a>,
+  MobileNumberRow: () => (
+    <a href="/profile/edit" className="fb-settings-row fb-profile-account-row">
+      <span className="fb-settings-row-title">Mobile number</span>
+    </a>
+  ),
 }));
 
 import { Profile } from "./Profile";
@@ -138,22 +142,39 @@ describe("Profile landing", () => {
     renderProfile();
     const region = await screen.findByRole("region", { name: "Connected accounts" });
     expect(await within(region).findByText("Connected")).toBeTruthy();
-    expect(within(region).getByText(/Google is linked/i)).toBeTruthy();
+    expect(within(region).queryByText("Not linked")).toBeNull();
   });
 
   it("does not claim Google is linked on an email-only account", async () => {
     renderProfile();
     const region = await screen.findByRole("region", { name: "Connected accounts" });
     expect(await within(region).findByText("Not linked")).toBeTruthy();
-    expect(within(region).getByText(/signs in with email and password/i)).toBeTruthy();
+    expect(within(region).queryByText("Connected")).toBeNull();
   });
 
-  it("shows Telegram status without linking back to the same screen", async () => {
+  it("shows Telegram status and opens the editor that owns verification", async () => {
     mockTelegram.mockResolvedValue({ linked: true, phone: null, username: "tester_tg" });
     renderProfile();
     const region = await screen.findByRole("region", { name: "Connected accounts" });
     expect(await within(region).findByText("@tester_tg")).toBeTruthy();
-    expect(within(region).queryByRole("link", { name: "Telegram" })).toBeNull();
+    expect(within(region).getByRole("link", { name: "Telegram" }).getAttribute("href")).toBe(
+      "/profile/edit",
+    );
+  });
+
+  it("marks the mobile chip verified only from the Telegram account state", async () => {
+    mockTelegram.mockResolvedValue({ linked: true, phone: "+8801912345678", username: "tester_tg" });
+    renderProfile();
+    expect(await screen.findByText("Mobile verified")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Verify mobile" })).toBeNull();
+  });
+
+  it("keeps the action label Verify mobile when Telegram has no number", async () => {
+    mockTelegram.mockResolvedValue({ linked: true, phone: null, username: "tester_tg" });
+    renderProfile();
+    const action = await screen.findByRole("link", { name: "Verify mobile" });
+    expect(action.getAttribute("href")).toBe("/profile/edit");
+    expect(screen.queryByText("Add mobile")).toBeNull();
   });
 
   it("keeps chat-owned controls out of Profile", () => {
@@ -166,14 +187,21 @@ describe("Profile landing", () => {
     expect(screen.queryByText(/who can message you/i)).toBeNull();
   });
 
-  it("gives the email address its own line under the label", () => {
+  it("keeps the email address on one line", () => {
     renderProfile();
     const region = screen.getByRole("region", { name: "Connected accounts" });
     const label = within(region).getByText("Email");
     const row = label.closest(".fb-settings-row");
     expect(row).toBeTruthy();
-    expect(row!.classList.contains("fb-profile-email-row")).toBe(true);
-    expect(within(region).getByText("tester@example.com")).toBeTruthy();
+    // One-line rows replaced the old wrapped address block.
+    expect(row!.classList.contains("fb-profile-email-row")).toBe(false);
+    expect(within(region).getByText("tester@example.com").getAttribute("title")).toBe("tester@example.com");
+    // Every connected row carries the hook the phone-width one-line override
+    // targets, so a future row cannot silently fall back to the wrapped layout.
+    for (const title of ["Google", "Email", "Mobile number", "Telegram"]) {
+      const accountRow = within(region).getByText(title).closest(".fb-settings-row");
+      expect(accountRow?.classList.contains("fb-profile-account-row"), title).toBe(true);
+    }
   });
 
   it("shows security controls and devices without a redundant account link", async () => {

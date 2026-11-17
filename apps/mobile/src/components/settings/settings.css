@@ -174,6 +174,12 @@ a.fb-settings-row:focus-visible, button.fb-settings-row:focus-visible {
 .fb-setting-icon[data-tone="success"] { --fb-icon-bg: var(--fb-found-bg); --fb-icon-ink: var(--fb-found-ink); }
 .fb-setting-icon[data-tone="warning"] { --fb-icon-ink: var(--fb-warning); }
 .fb-setting-icon[data-tone="danger"] { --fb-icon-ink: var(--fb-error); }
+/* A provider's own mark is not a tinted category glyph: it keeps its brand
+   colours and sits in the same 24-28px slot so row rhythm does not shift. */
+.fb-setting-icon--mark {
+  background: transparent;
+  color: inherit;
+}
 .fb-switch-track { position: relative; width: 44px; height: 26px; flex: none; border-radius: 999px; border: 2px solid var(--fb-control-outline); background: var(--fb-surface-container-high); }
 .fb-switch-thumb { position: absolute; inset: 2px auto auto 2px; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: var(--fb-on-surface-variant); }
 .fb-switch-track[data-checked="true"] { background: var(--fb-control-active); border-color: var(--fb-control-active); }

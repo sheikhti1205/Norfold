@@ -234,11 +234,13 @@ describe("AccountSettings", () => {
     expect(screen.queryByText(/isn't available/i)).toBeNull();
   });
 
-  it("links the mobile row to the profile editor with the current number", () => {
+  it("links the mobile row to the profile editor without inventing a number", async () => {
     renderAccount();
-    const row = screen.getByRole("link", { name: /mobile number/i });
+    const row = await screen.findByRole("link", { name: /mobile number/i });
     expect(row.getAttribute("href")).toBe("/profile/edit");
-    expect(row.textContent).toContain("+8801812345678");
+    // The typed signup number is retired: only Telegram can prove a number.
+    await waitFor(() => expect(row.textContent).toContain("Not verified"));
+    expect(row.textContent).not.toContain("+8801812345678");
   });
 
   it("falls back to canonical initials when there is no profile photo", () => {
@@ -408,8 +410,8 @@ describe("AccountSettings", () => {
   it("points the mobile row at Telegram without promising text messages", async () => {
     renderAccount();
     const row = await screen.findByRole("link", { name: /mobile number/i });
-    expect(row.textContent).toContain("does not send text messages");
-    expect(row.textContent).toContain("Not verified");
+    await waitFor(() => expect(row.textContent).toContain("Not verified"));
+    expect(row.textContent).not.toMatch(/text messages/i);
     expect(row.getAttribute("href")).toBe("/profile/edit");
   });
 
@@ -417,8 +419,7 @@ describe("AccountSettings", () => {
     mockTelegramAccount.mockResolvedValue({ linked: true, phone: "+8801912345678", username: "reader" });
     renderAccount();
     const row = await screen.findByRole("link", { name: /mobile number/i });
-    await waitFor(() => expect(row.textContent).toContain("Verified with Telegram"));
-    expect(row.textContent).toContain("+8801912345678");
+    await waitFor(() => expect(row.textContent).toContain("+8801912345678"));
     expect(row.textContent).toContain("Verified");
   });
 
@@ -426,16 +427,15 @@ describe("AccountSettings", () => {
     mockTelegramAccount.mockResolvedValue({ linked: true, phone: null, username: "reader" });
     renderAccount();
     const row = await screen.findByRole("link", { name: /mobile number/i });
-    await waitFor(() => expect(row.textContent).toContain("Share my number"));
-    expect(row.textContent).toContain("Not verified");
+    await waitFor(() => expect(row.textContent).toContain("Not verified"));
+    expect(row.textContent).not.toContain("+8801912345678");
   });
 
   it("stays honest when the Telegram state cannot be checked", async () => {
     mockTelegramAccount.mockRejectedValue(new Error("offline"));
     renderAccount();
     const row = await screen.findByRole("link", { name: /mobile number/i });
-    await waitFor(() => expect(row.textContent).toContain("Could not check Telegram"));
-    expect(row.textContent).toContain("stays unverified");
-    expect(row.textContent).not.toContain("Verified with Telegram");
+    await waitFor(() => expect(row.textContent).toContain("Could not check"));
+    expect(row.textContent).not.toContain("Verified");
   });
 });

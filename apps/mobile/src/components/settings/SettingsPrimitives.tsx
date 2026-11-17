@@ -6,6 +6,7 @@ import type { Theme } from "../../theme";
 import { density } from "../../design/density";
 import { colorTokensFor } from "../../design/colorSystem";
 import { BackButton } from "../BackButton";
+import { useHoverLabel } from "../HoverLabel";
 import { useReportSettingsWindowTitle, useSettingsWindowHosted } from "../settingsWindowHost";
 import "./settings.css";
 
@@ -95,6 +96,8 @@ export interface SettingsRowContentProps {
   title: string;
   description?: ReactNode;
   icon?: LucideIcon;
+  /** A provider mark or other decorative node, rendered in the icon slot. */
+  iconNode?: ReactNode;
   iconTone?: SettingIconTone;
   /** Display-only content; never put an interactive control inside a row. */
   value?: ReactNode;
@@ -108,11 +111,13 @@ export type SettingsRowProps = SettingsRowContentProps & (
   | { route?: never; onClick?: () => void }
 );
 
-export function SettingsRow({ title, description, icon, iconTone, value, badge, route, onClick, destructive = false, disabled = false, className = "" }: SettingsRowProps) {
+export function SettingsRow({ title, description, icon, iconNode, iconTone, value, badge, route, onClick, destructive = false, disabled = false, className = "" }: SettingsRowProps) {
   const id = useId();
   const describedBy = [description && `${id}-description`, value != null && `${id}-value`, badge != null && `${id}-badge`].filter(Boolean).join(" ") || undefined;
   const content = <>
-    {icon && <SettingIconTile icon={icon} tone={destructive ? "danger" : iconTone} />}
+    {iconNode != null
+      ? <span aria-hidden="true" className="fb-setting-icon fb-setting-icon--mark">{iconNode}</span>
+      : icon && <SettingIconTile icon={icon} tone={destructive ? "danger" : iconTone} />}
     <span className="fb-settings-row-copy">
       <span id={`${id}-title`} className="fb-settings-row-title">{title}</span>
       {description && <span id={`${id}-description`} className="fb-settings-row-description">{description}</span>}
@@ -167,13 +172,14 @@ export interface SettingsSearchProps {
 export function SettingsSearch({ query, onQueryChange, results, label = "Search settings", placeholder = "Search settings", className = "" }: SettingsSearchProps) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
+  const { hoverLabel } = useHoverLabel();
   const searching = query.trim().length > 0 && results !== undefined;
   return <div className={`fb-settings-search ${className}`}>
     <label htmlFor={id} className="sr-only">{label}</label>
     <div className="fb-settings-search-field">
       <Search size={20} aria-hidden="true" />
       <input ref={input} id={id} type="search" value={query} placeholder={placeholder} onChange={(event) => onQueryChange(event.target.value)} />
-      {query && <button type="button" aria-label="Clear search" onClick={() => { onQueryChange(""); input.current?.focus(); }}><X size={18} aria-hidden="true" /></button>}
+      {query && <button type="button" aria-label="Clear search" onClick={() => { onQueryChange(""); input.current?.focus(); }} {...hoverLabel("Clear search")}><X size={18} aria-hidden="true" /></button>}
     </div>
     {searching && <>
       <p role="status" className="fb-settings-search-status">{results.length ? `${results.length} ${results.length === 1 ? "setting" : "settings"} found` : "No settings found. Try a different word."}</p>

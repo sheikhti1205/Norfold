@@ -56,9 +56,6 @@ async function fillValidSignup() {
   mockCheckUsername.mockResolvedValue({ available: true, normalized: "qakane" });
   fireEvent.change(screen.getByLabelText("Username"), { target: { value: "qakane" } });
   fireEvent.change(screen.getByLabelText("Email"), { target: { value: "qa-k@example.com" } });
-  fireEvent.change(screen.getByLabelText("Mobile (Bangladesh)"), {
-    target: { value: "01812345678" },
-  });
   fireEvent.change(screen.getByTestId("password-field"), { target: { value: "correct-horse-1" } });
   fireEvent.change(screen.getByLabelText("Confirm password"), {
     target: { value: "correct-horse-1" },

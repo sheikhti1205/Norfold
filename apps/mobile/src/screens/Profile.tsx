@@ -6,13 +6,10 @@ import {
   CircleCheck,
   Copy,
   FileStack,
-  Globe,
   HelpCircle,
-  Mail,
   MessagesSquare,
   MonitorSmartphone,
   Pencil,
-  Send,
   Settings as SettingsIcon,
   Star,
   UserRound,
@@ -22,12 +19,14 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import type { PublicUser } from "@norfold/shared";
 import { useAuth } from "../auth";
+import { EmailMark, GoogleMark, TelegramMark } from "../components/BrandMarks";
 import { announce } from "../components/LiveRegion";
+import { useHoverLabel } from "../components/HoverLabel";
 import { UserAvatar } from "../components/UserAvatar";
 import { SettingsGroup, SettingsPage, SettingsRow, StatusPill } from "../components/settings";
 import { readLinkedProviders } from "../services/accountProviders";
 import { updateMyProfile } from "../services/profile";
-import { getTelegramAccount } from "../services/telegram";
+import { useTelegramAccount } from "../hooks/useTelegramAccount";
 import { AccountSecuritySections, MobileNumberRow } from "./AccountSettings";
 import {
   fetchReputationTier,
@@ -97,42 +96,6 @@ function useLinkedProviders(userId: string | undefined) {
   return scoped(state, userId);
 }
 
-interface TelegramLink {
-  linked: boolean;
-  handle: string | null;
-}
-
-function useTelegramLink(userId: string | undefined) {
-  const [state, setState] = useState<AccountState<TelegramLink>>({
-    accountId: userId ?? "",
-    status: "loading",
-  });
-  useEffect(() => {
-    let cancelled = false;
-    const accountId = userId ?? "";
-    if (!accountId) return;
-    setState({ accountId, status: "loading" });
-    void getTelegramAccount().then(
-      (account) => {
-        if (!cancelled) {
-          setState({
-            accountId,
-            status: "ready",
-            value: { linked: account.linked, handle: account.username },
-          });
-        }
-      },
-      () => {
-        if (!cancelled) setState({ accountId, status: "unavailable" });
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
-  return scoped(state, userId);
-}
-
 /**
  * The account's name, editable in place.
  *
@@ -149,6 +112,7 @@ function ProfileName({ user }: { user: PublicUser }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const { hoverLabel } = useHoverLabel();
 
   useEffect(() => {
     setDraft(user.displayName?.trim() ?? "");
@@ -211,6 +175,7 @@ function ProfileName({ user }: { user: PublicUser }) {
             setError(null);
             setEditing(true);
           }}
+          {...hoverLabel("Edit name")}
         >
           <Pencil size={15} aria-hidden="true" />
         </button>
@@ -230,7 +195,7 @@ function ProfileName({ user }: { user: PublicUser }) {
           disabled={busy}
           onChange={(event) => setDraft(event.target.value)}
         />
-        <button type="submit" className="fb-profile-name-save" aria-label="Save name" disabled={busy}>
+        <button type="submit" className="fb-profile-name-save" aria-label="Save name" disabled={busy} {...hoverLabel("Save name")}>
           <Check size={16} aria-hidden="true" />
         </button>
         <button
@@ -337,7 +302,8 @@ export function Profile() {
   const { user } = useAuth();
   const reputation = useOwnReputation(user?.id);
   const providers = useLinkedProviders(user?.id);
-  const telegram = useTelegramLink(user?.id);
+  const telegram = useTelegramAccount(user?.id);
+  const { hoverLabel } = useHoverLabel();
   if (!user) return null;
 
   const googleLinked = providers.status === "ready" && providers.value.has("google");
@@ -348,18 +314,15 @@ export function Profile() {
       : googleLinked
         ? <StatusPill tone="success"><Check size={12} aria-hidden="true" /> Connected</StatusPill>
         : "Not linked";
-  const googleDescription = providers.status === "unavailable"
-    ? "Linked sign-in methods could not be read on this device."
-    : googleLinked
-      ? "Google is linked, so you can sign in with it."
-      : "This account signs in with email and password.";
 
+  const telegramReady = telegram.status === "ready" ? telegram.account : null;
+  const verifiedPhone = telegramReady?.linked ? telegramReady.phone : null;
   const telegramValue = telegram.status === "loading"
     ? "Checking…"
     : telegram.status === "unavailable"
       ? "Could not check"
-      : telegram.value.linked
-        ? telegram.value.handle ? `@${telegram.value.handle}` : "Connected"
+      : telegramReady?.linked
+        ? telegramReady.username ? `@${telegramReady.username}` : "Connected"
         : "Not connected";
 
   return (
@@ -368,7 +331,7 @@ export function Profile() {
       <section aria-label="Your identity" className="fb-profile-hero">
         <div className="fb-profile-portrait">
           <UserAvatar avatarUrl={user.avatarUrl} username={user.username} size={104} />
-          <Link to="/profile/edit" aria-label="Change profile photo" className="fb-profile-portrait-edit">
+          <Link to="/profile/edit" aria-label="Change profile photo" className="fb-profile-portrait-edit" {...hoverLabel("Change profile photo")}>
             <Camera size={16} aria-hidden="true" />
           </Link>
         </div>
@@ -382,9 +345,9 @@ export function Profile() {
             to="/verify"
           />
           <VerificationChip
-            verified={user.phoneVerified}
+            verified={verifiedPhone !== null}
             label="Mobile verified"
-            actionLabel={user.phone ? "Verify mobile" : "Add mobile"}
+            actionLabel="Verify mobile"
             to="/profile/edit"
           />
         </div>
@@ -394,23 +357,25 @@ export function Profile() {
         <SettingsGroup title="Connected accounts">
           <SettingsRow
             title="Google"
-            icon={Globe}
-            description={googleDescription}
+            className="fb-profile-account-row"
+            iconNode={<GoogleMark size={16} />}
             value={googleValue}
           />
           <SettingsRow
             title="Email"
-            icon={Mail}
-            className="fb-profile-email-row"
-            value={user.email}
+            className="fb-profile-account-row"
+            iconNode={<EmailMark address={user.email} size={16} />}
+            value={<span title={user.email}>{user.email}</span>}
             badge={user.emailVerified ? <StatusPill tone="success">Verified</StatusPill> : undefined}
             route={user.emailVerified ? undefined : "/verify"}
           />
-          <MobileNumberRow />
+          <MobileNumberRow account={telegram} />
           <SettingsRow
             title="Telegram"
-            icon={Send}
+            className="fb-profile-account-row"
+            iconNode={<TelegramMark size={16} />}
             value={telegramValue}
+            route="/profile/edit"
           />
         </SettingsGroup>
 

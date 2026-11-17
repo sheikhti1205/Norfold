@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router";
 import type { PublicUser } from "@norfold/shared";
-import { normalizePhone, USERNAME_CHECK_DEBOUNCE_MS } from "@norfold/shared";
+import { USERNAME_CHECK_DEBOUNCE_MS } from "@norfold/shared";
 import { useAuth } from "../auth";
 import { Button } from "../components/Button";
 import { TextField } from "../components/Fields";
@@ -22,8 +22,10 @@ export type { GoogleProfileSeed };
  * W0-C (S3) — social profile-completion screen (W0.5).
  *
  * Every Google-provided value is a SUGGESTION shown before profile creation:
- * name, username suggestion, avatar preview, and phone prefill are all
- * editable; nothing is silently forced. Email is read-only identity info.
+ * name, username suggestion and avatar preview are all editable; nothing is
+ * silently forced. Email is read-only identity info. A mobile number is not
+ * asked for: only a Telegram contact share proves ownership, so this form
+ * cannot create an unverified number the account would carry forever.
  *
  * Frozen-contract notes (INTERFACES.md S2, W0-B owns the service):
  * - `completeSocialProfile` is consumed via a READ-ONLY import as the seam
@@ -39,8 +41,6 @@ export type { GoogleProfileSeed };
 export interface CompleteSocialProfileInput {
   username: string;
   displayName: string;
-  /** E.164-normalized Bangladesh number. */
-  phone: string;
   avatarUrl: string | null;
 }
 
@@ -96,7 +96,6 @@ export function CompleteProfile({
   const [username, setUsername] = useState(
     seed.suggestedUsername || buildUsernameSuggestion(seed.name, seed.email),
   );
-  const [phone, setPhone] = useState(seed.phone);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(seed.avatarUrl);
   const [usernameState, setUsernameState] = useState<UsernameState>("idle");
   // A Google sign-up arrives with no password. One is required here so the
@@ -178,11 +177,6 @@ export function CompleteProfile({
       setError("The two passwords do not match.");
       return;
     }
-    const phoneNorm = normalizePhone(phone);
-    if (!phoneNorm) {
-      setError("Enter a valid Bangladesh mobile number (e.g., 01812345678).");
-      return;
-    }
     const complete = completeSocialProfileImpl;
     if (!complete) {
       setError("Couldn't save your profile right now. Please try again.");
@@ -197,7 +191,6 @@ export function CompleteProfile({
       const user = await complete({
         username: chosen,
         displayName: name,
-        phone: phoneNorm,
         avatarUrl,
       });
       onCompleted?.(user);
@@ -321,18 +314,6 @@ export function CompleteProfile({
           value={passwordConfirm}
           onChange={(e) => setPasswordConfirm(e.target.value)}
           autoComplete="new-password"
-          required
-        />
-
-        <TextField
-          label="Mobile (Bangladesh)"
-          type="tel"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          placeholder="01812345678"
-          inputMode="numeric"
-          autoComplete="tel"
-          hint="Saved as unverified. Confirm it with Telegram from your profile."
           required
         />
 

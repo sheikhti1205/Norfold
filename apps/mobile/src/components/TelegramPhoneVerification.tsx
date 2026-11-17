@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Browser } from "@capacitor/browser";
 import { CheckCircle2 } from "lucide-react";
 import { Button } from "./Button";
+import { TelegramMark } from "./BrandMarks";
 import { useOtpCountdown } from "./auth/useOtpCountdown";
 import {
   createTelegramLink,
@@ -45,11 +46,8 @@ function countdown(seconds: number): string {
 }
 
 export function TelegramPhoneVerification({
-  savedPhone,
   className = "",
 }: {
-  /** Number from signup, shown as unverified until Telegram confirms one. */
-  savedPhone?: string | null;
   className?: string;
 }) {
   const [state, setState] = useState<State>({ kind: "loading" });
@@ -218,12 +216,6 @@ export function TelegramPhoneVerification({
     }
   }
 
-  const savedLine = savedPhone && state.kind !== "verified" ? (
-    <p className="text-sm text-on-surface-variant">
-      Number on your account: <span className="font-medium text-on-surface">{savedPhone}</span>. Not verified.
-    </p>
-  ) : null;
-
   return (
     <div className={`flex flex-col gap-3 ${className}`}>
       {state.kind === "loading" && (
@@ -237,7 +229,6 @@ export function TelegramPhoneVerification({
           <p className="text-sm text-on-surface-variant">
             We could not check Telegram. Your number stays unverified until the connection works.
           </p>
-          {savedLine}
           <Button variant="outline" onClick={() => void load()}>
             Try again
           </Button>
@@ -249,8 +240,8 @@ export function TelegramPhoneVerification({
           <p className="text-sm text-on-surface-variant">
             We confirm your mobile number through Telegram, not text messages. Open the Norfold bot, press Start, then tap Share my number.
           </p>
-          {savedLine}
           <Button onClick={() => void connect()} loading={busy}>
+            <TelegramMark size={18} />
             Verify with Telegram
           </Button>
         </div>
@@ -267,6 +258,7 @@ export function TelegramPhoneVerification({
           </p>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => void openBot()}>
+              <TelegramMark size={16} />
               Open Telegram
             </Button>
             <Button variant="text" onClick={() => { setState({ kind: "unlinked" }); setError(null); }}>
@@ -281,12 +273,12 @@ export function TelegramPhoneVerification({
           <p className="text-sm text-on-surface-variant">
             Telegram is connected{state.username ? ` as @${state.username}` : ""}. In the bot chat, tap Share my number. If the button is missing, send /start.
           </p>
-          {savedLine}
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" loading={busy} onClick={() => void recheck()}>
               Check again
             </Button>
             <Button variant="text" onClick={() => void openBot()}>
+              <TelegramMark size={16} />
               Open Telegram
             </Button>
           </div>

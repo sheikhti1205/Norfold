@@ -53,12 +53,20 @@ function telegramAdmin(client: TelegramClient): TelegramAdmin {
         p_telegram_id: telegramId,
         p_phone: phone,
       });
-      if (!error && data?.ok === true) return "ok";
+      if (!error && data?.ok === true) {
+        const notify = data.notify_telegram_id;
+        return {
+          status: "ok",
+          moved: data.moved === true,
+          notifyTelegramId: typeof notify === "number" && Number.isSafeInteger(notify) ? notify : null,
+        };
+      }
+      if (!error && data?.conflict === "confirm") return { status: "confirm" };
       if (
         error?.code === "54000" &&
         (error.message === "phone claim account limit" || error.message === "phone claim number limit")
-      ) return "limit";
-      return "error";
+      ) return { status: "limit" };
+      return { status: "error" };
     },
     async unlink(telegramId) {
       const { data, error } = await client.rpc("findback_telegram_unlink_by_telegram", {
@@ -112,19 +120,25 @@ export default {
     }
     if (!handled) return Response.json({ ok: true });
 
-    const body: Record<string, unknown> = { chat_id: handled.chatId, text: handled.reply.text };
-    const markup = replyMarkup(handled.reply.keyboard);
-    if (markup) body.reply_markup = markup;
+    const send = async (chatId: number, text: string, markup?: Record<string, unknown>) => {
+      const body: Record<string, unknown> = { chat_id: chatId, text };
+      if (markup) body.reply_markup = markup;
+      try {
+        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      } catch {
+        // Do not log URLs or Telegram payloads, which may contain secrets or phones.
+      }
+    };
+
+    // The displaced account is told first: it is the only notice whose chat is
+    // not the one that triggered this update.
+    for (const notice of handled.notices ?? []) await send(notice.chatId, notice.text);
+    await send(handled.chatId, handled.reply.text, replyMarkup(handled.reply.keyboard));
     // A committed single-use token cannot safely be retried after a send failure.
-    try {
-      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-    } catch {
-      // Do not log URLs or Telegram payloads, which may contain secrets or phones.
-    }
     return Response.json({ ok: true });
   },
 };

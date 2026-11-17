@@ -17,15 +17,32 @@ export interface TelegramReply {
   keyboard?: Keyboard;
 }
 
+/** A second message this update must deliver, outside the triggering chat. */
+export interface TelegramNotice {
+  chatId: number;
+  text: string;
+}
+
 export interface LinkStatus {
   linked: boolean;
   phoneVerified: boolean;
 }
 
+/**
+ * The claim result. `confirm` is a deliberate stop, not a failure: the number
+ * belongs to another account, and the reader must share again inside ten
+ * minutes before it moves.
+ */
+export type SetPhoneResult =
+  | { status: "ok"; moved: boolean; notifyTelegramId: number | null }
+  | { status: "confirm" }
+  | { status: "limit" }
+  | { status: "error" };
+
 /** Effects the webhook needs. Failures are reported as values, not thrown. */
 export interface TelegramAdmin {
   consume(token: string, telegramId: number, username: string | null): Promise<boolean>;
-  setPhone(telegramId: number, phone: string): Promise<"ok" | "limit" | "error">;
+  setPhone(telegramId: number, phone: string): Promise<SetPhoneResult>;
   unlink(telegramId: number): Promise<boolean>;
   linkStatus(telegramId: number): Promise<LinkStatus | null>;
 }
@@ -33,6 +50,8 @@ export interface TelegramAdmin {
 export interface HandledUpdate {
   chatId: number;
   reply: TelegramReply;
+  /** Extra messages for other chats (the account that lost the number). */
+  notices?: TelegramNotice[];
 }
 
 interface PrivateMessage {
@@ -79,30 +98,55 @@ function readPrivateMessage(update: unknown): PrivateMessage | null {
 async function contactReply(
   message: PrivateMessage,
   admin: TelegramAdmin,
-): Promise<TelegramReply> {
+): Promise<{ reply: TelegramReply; notices?: TelegramNotice[] }> {
   const contact = message.contact;
   if (!contact || contact.userId !== message.sender || contact.phoneNumber === null) {
-    return { text: "Please share your own number, not someone else's.", keyboard: "share" };
+    return { reply: { text: "Please share your own number, not someone else's.", keyboard: "share" } };
   }
   const phone = contact.phoneNumber.startsWith("+")
     ? contact.phoneNumber
     : `+${contact.phoneNumber}`;
   const result = await admin.setPhone(message.sender, phone);
-  if (result === "ok") {
+  if (result.status === "ok") {
+    // The account that lost the number is told once, outside this chat. The
+    // notice carries the number it already knew, never another account's data.
+    const notices = result.moved && result.notifyTelegramId !== null
+      ? [{
+        chatId: result.notifyTelegramId,
+        text: `The number ${phone} was moved to a different Norfold account after its owner confirmed it there. It is no longer verified on your account. If this was not expected, contact support.`,
+      }]
+      : undefined;
     return {
-      text: "Your number is verified. Your Norfold profile now shows it as verified.",
-      keyboard: "remove",
+      reply: {
+        text: result.moved
+          ? "Your number is verified. It was moved from the account that had it before, and that account has been told."
+          : "Your number is verified. Your Norfold profile now shows it as verified.",
+        keyboard: "remove",
+      },
+      notices,
     };
   }
-  if (result === "limit") {
+  if (result.status === "confirm") {
     return {
-      text: "This number has been verified too many times recently. Please try again later.",
-      keyboard: "share",
+      reply: {
+        text: "This number is already verified on another Norfold account. If it is yours, share it again within 10 minutes to move it to this account.",
+        keyboard: "share",
+      },
+    };
+  }
+  if (result.status === "limit") {
+    return {
+      reply: {
+        text: "This number has been verified too many times recently. Please try again later.",
+        keyboard: "share",
+      },
     };
   }
   return {
-    text: "Could not save your number. Connect Norfold in the app first, then try again.",
-    keyboard: "share",
+    reply: {
+      text: "Could not save your number. Connect Norfold in the app first, then try again.",
+      keyboard: "share",
+    },
   };
 }
 
@@ -158,8 +202,9 @@ export async function handleUpdate(
   const message = readPrivateMessage(update);
   if (!message) return null;
   if (!message.contact && message.text === null) return null;
-  const reply = message.contact
-    ? await contactReply(message, admin)
-    : await textReply(message, admin);
-  return { chatId: message.chatId, reply };
+  if (message.contact) {
+    const handled = await contactReply(message, admin);
+    return { chatId: message.chatId, reply: handled.reply, notices: handled.notices };
+  }
+  return { chatId: message.chatId, reply: await textReply(message, admin) };
 }

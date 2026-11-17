@@ -16,7 +16,6 @@ const realtimeMock = vi.hoisted(() => {
     handlers,
     join: vi.fn(),
     leave: vi.fn(),
-    publish: vi.fn(async (_aggregate: { average: number | null; count: number }) => true),
   };
 });
 
@@ -31,8 +30,6 @@ vi.mock("../services/realtime", () => ({
       realtimeMock.handlers.delete(handler);
     };
   },
-  publishAppRatingAggregate: (aggregate: { average: number | null; count: number }) =>
-    realtimeMock.publish(aggregate),
 }));
 
 vi.mock("../services/feedback", async (importOriginal) => {
@@ -59,7 +56,6 @@ beforeEach(() => {
   realtimeMock.handlers.clear();
   realtimeMock.join.mockClear();
   realtimeMock.leave.mockClear();
-  realtimeMock.publish.mockClear();
   mockSubmitFeedback.mockResolvedValue("feedback-1");
   mockRatingContext.mockReset().mockResolvedValue({ myScore: null, average: null, count: 0 });
   mockRateApp.mockReset();
@@ -337,24 +333,14 @@ describe("app rating", () => {
     expect(realtimeMock.handlers.size).toBe(0);
   });
 
-  it("publishes only the aggregate after this client's rating is saved", async () => {
+  it("shows the saved aggregate without publishing it itself", async () => {
     mockRateApp.mockResolvedValue({ myScore: 4, average: 4.5, count: 3 });
     renderScreen();
     fireEvent.click(await screen.findByRole("radio", { name: "4 out of 5" }));
-    await screen.findByText(/4\.5 out of 5 from 3 ratings/i);
-
-    expect(realtimeMock.publish).toHaveBeenCalledTimes(1);
-    const payload = realtimeMock.publish.mock.calls[0]![0] as Record<string, unknown>;
-    expect(payload).toEqual({ average: 4.5, count: 3 });
-    expect(Object.keys(payload).sort()).toEqual(["average", "count"]);
-  });
-
-  it("publishes nothing when the rating write fails", async () => {
-    mockRateApp.mockRejectedValue(new Error("offline"));
-    renderScreen();
-    fireEvent.click(await screen.findByRole("radio", { name: "3 out of 5" }));
-    await screen.findByText(/could not save your rating/i);
-    expect(realtimeMock.publish).not.toHaveBeenCalled();
+    // The server emits the broadcast from the rating row; the screen only reads
+    // back what the RPC returned and never sends a topic message of its own.
+    expect(await screen.findByText(/4\.5 out of 5 from 3 ratings/i)).toBeTruthy();
+    expect(screen.queryByText(/could not save your rating/i)).toBeNull();
   });
 
   it("drops the previous account's subscription when the viewer changes", async () => {

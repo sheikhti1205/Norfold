@@ -343,7 +343,7 @@ describe("consumer route map", () => {
   it.each(["/", "/onboarding"])("resumes an incomplete profile from %s before onboarding or pending links", route => {
     native.platform = false;
     signedIn(); rememberAccount(auth.user!); auth.user = null;
-    auth.needsProfile = { accountId: "u1", email: "route@test.example", name: null, avatarUrl: null, phone: "", suggestedUsername: "route_user" };
+    auth.needsProfile = { accountId: "u1", email: "route@test.example", name: null, avatarUrl: null, suggestedUsername: "route_user" };
     sessionStorage.setItem("findback.pendingReportLink", JSON.stringify({ url: `${origin}/r/${postId}`, expiresAt: Date.now() + 60_000 }));
     renderAt(route);
     expect(screen.getByText("CompleteProfile screen")).toBeTruthy();

@@ -13,6 +13,7 @@ import { AdaptiveTaskSurface } from "./AdaptiveTaskSurface";
 import { Button } from "./Button";
 import { PossibleMatches } from "./PossibleMatches";
 import { announce } from "./LiveRegion";
+import { useHoverLabel } from "./HoverLabel";
 
 interface Props { accountId: string | null; post: PostItem; onChanged: () => void }
 type Action = { kind: "propose"; candidate: PossibleMatch } | { kind: "confirm" | "handover" | "cancel"; match: MyMatch };
@@ -33,6 +34,7 @@ function ScopedReportMatches({ accountId, post, onChanged }: Props) {
   const owner = !!accountId && accountId === post.userId;
   const alive = useSafetyLifetime();
   const sequence = useRef(0);
+  const { hoverLabel } = useHoverLabel();
   const writing = useRef(false);
   const [matches, setMatches] = useState<MyMatch[]>([]);
   const [hasMore, setHasMore] = useState(false);
@@ -117,7 +119,8 @@ function ScopedReportMatches({ accountId, post, onChanged }: Props) {
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-medium">Your match activity</h3>
         <button type="button" aria-label="Refresh matches" disabled={loading || sending}
-          onClick={() => void load()} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full disabled:opacity-40">
+          onClick={() => void load()} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full disabled:opacity-40"
+          {...hoverLabel("Refresh matches")}>
           <RefreshCw size={18} aria-hidden className={loading ? "animate-spin motion-reduce:animate-none" : ""} />
         </button>
       </div>

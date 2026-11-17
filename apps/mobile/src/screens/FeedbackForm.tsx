@@ -27,7 +27,6 @@ import { useSafetyLifetime } from "../utils/useSafetyLifetime";
 import {
   joinAppRatingRoom,
   onRealtime,
-  publishAppRatingAggregate,
 } from "../services/realtime";
 
 /** One line per kind, so a reader picks the right one before writing. */
@@ -99,10 +98,9 @@ function ScopedFeedbackForm() {
     setRatingNotice(null);
     try {
       const result = await rateApp(score);
-      // The aggregate is server-computed and public; publish it so other open
-      // feedback screens update without a refetch. The reader's own score is
-      // never part of this payload.
-      void publishAppRatingAggregate({ average: result.average, count: result.count });
+      // The server broadcasts the new aggregate on the private app-rating topic
+      // when the row is written, so this screen updates from the same event the
+      // other open screens receive instead of publishing its own copy.
       if (!alive.current) return;
       setRating(result);
       setPendingScore((current) => current === score ? null : current);

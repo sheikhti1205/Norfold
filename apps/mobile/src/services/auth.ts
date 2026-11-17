@@ -5,7 +5,6 @@ import { ApiError, cacheSessionToken, getTokenRevision } from "./session";
 import { BootTimeoutError, withTimeout } from "./timeout";
 import { recordBootEvent } from "./bootDiagnostics";
 import type { PublicUser } from "@norfold/shared";
-import { normalizePhone } from "@norfold/shared";
 import { publicShareOrigin } from "../utils/reportLinks";
 import { createOpenRouterClient, OpenRouterError } from "./openRouter";
 import { getConnectedOpenRouterKey } from "./aiCredentials";
@@ -115,8 +114,8 @@ function mapAuthError(error: AuthErrorLike, recoverySend = false): ApiError {
   if (code === "user_already_exists" || code === "email_exists" || code === "phone_exists") {
     return new ApiError(DUPLICATE_ACCOUNT_MESSAGE, 409);
   }
-  if (message.includes("invalid username") || message.includes("invalid phone")) {
-    return new ApiError("Please check your username and phone number.", 400);
+  if (message.includes("invalid username")) {
+    return new ApiError("Please check your username.", 400);
   }
   if (
     message.includes("unique constraint") ||
@@ -163,12 +162,12 @@ function mapAuthError(error: AuthErrorLike, recoverySend = false): ApiError {
   return new ApiError("Authentication failed. Please try again.", error.status ?? 400);
 }
 
-function pendingUser(user: User | null, input: { username: string; email: string; phone: string }): PublicUser {
+function pendingUser(user: User | null, input: { username: string; email: string }): PublicUser {
   return {
     id: user?.id ?? "",
     username: input.username,
     email: user?.email ?? input.email,
-    phone: input.phone,
+    phone: "",
     emailVerified: false,
     phoneVerified: false,
     avatarUrl: null,
@@ -184,6 +183,7 @@ interface ProfileRow {
   username: string;
   email_verified: boolean | null;
   phone_verified: boolean | null;
+  telegram_phone_verified: boolean | number | null;
   avatar_url: string | null;
   created_at: string;
   display_name: string | null;
@@ -194,14 +194,13 @@ interface ProfileRow {
 export async function register(input: {
   username: string;
   email: string;
-  phone: string;
   password: string;
 }): Promise<RegisterResult> {
   const tokenRevision = getTokenRevision();
   const { data, error } = await getSupabase().auth.signUp({
     email: input.email,
     password: input.password,
-    options: { data: { username: input.username, phone: input.phone } },
+    options: { data: { username: input.username } },
   });
 
   if (error) throw mapAuthError(error);
@@ -260,25 +259,22 @@ export async function fetchMe(expectedUserId?: string): Promise<PublicUser> {
 
   // public.users no longer exposes email/phone to the authenticated role (both
   // are private). Read only the safe public columns here; the signed-in user's
-  // own email comes from Auth. Metadata holds the desired display phone;
-  // auth.phone + phone_confirmed_at alone prove ownership of that number.
+  // own email comes from Auth. The verified-phone signal is the Telegram-owned
+  // column, not `phone_verified`: the typed-number path is retired.
   const { data: row, error } = await getSupabase()
     .from("users")
-    .select("id,username,email_verified,phone_verified,avatar_url,created_at,display_name,bio,location_label")
+    .select("id,username,email_verified,telegram_phone_verified,avatar_url,created_at,display_name,bio,location_label")
     .eq("id", user.id)
     .single<ProfileRow>();
   if (error || !row) throw new ApiError(error?.message ?? "Could not load profile", 400);
 
-  const metadataPhone = user.user_metadata?.phone;
-  const phone = typeof metadataPhone === "string" ? metadataPhone : normalizePhone(user.phone ?? "") ?? "";
   return {
     id: row.id,
     username: row.username,
     email: user.email ?? "",
-    phone,
+    phone: "",
     emailVerified: Boolean(row.email_verified),
-    phoneVerified: Boolean(row.phone_verified) && Boolean(user.phone_confirmed_at) &&
-      normalizePhone(phone) !== null && normalizePhone(phone) === normalizePhone(user.phone ?? ""),
+    phoneVerified: Boolean(row.telegram_phone_verified),
     avatarUrl: row.avatar_url ?? null,
     createdAt: row.created_at,
     displayName: row.display_name ?? null,

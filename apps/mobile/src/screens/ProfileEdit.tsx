@@ -214,7 +214,7 @@ function ProfilePhoneEditor() {
         <p className="text-sm text-on-surface-variant">
           Norfold does not send text messages. Verify your number by sharing your own contact with the Norfold Telegram bot.
         </p>
-        <TelegramPhoneVerification savedPhone={user.phone} />
+        <TelegramPhoneVerification />
       </div>
     </SettingsGroup>
   );

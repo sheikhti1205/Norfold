@@ -244,7 +244,6 @@ describe("AuthGateway stage C (explicit signup gating)", () => {
     renderGateway(<AuthGateway initialMode="signup" />);
     fireEvent.change(screen.getByLabelText("Username"), { target: { value: "new_user" } });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "synthetic@example.invalid" } });
-    fireEvent.change(screen.getByLabelText("Mobile (Bangladesh)"), { target: { value: "01812345678" } });
     fireEvent.change(screen.getByLabelText("Password", { exact: true }), { target: { value: "synthetic-password" } });
     fireEvent.change(screen.getByLabelText("Confirm password", { exact: true }), { target: { value: "synthetic-password" } });
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
@@ -307,7 +306,9 @@ describe("AuthGateway compat entry points", () => {
       </MemoryRouter>,
     );
     expect(screen.getByLabelText("Username")).toBeTruthy();
-    expect(screen.getByLabelText("Mobile (Bangladesh)")).toBeTruthy();
+    expect(screen.getByLabelText("Email")).toBeTruthy();
+    // The typed mobile field is retired; only Telegram can verify a number.
+    expect(screen.queryByLabelText(/mobile/i)).toBeNull();
     expect(screen.getByRole("button", { name: "Create account" })).toBeTruthy();
   });
 });
@@ -326,7 +327,6 @@ const GOOGLE_SEED: GoogleProfileSeed = {
   email: "google.new@example.com",
   name: "Google New",
   avatarUrl: null,
-  phone: "",
   suggestedUsername: "google_new",
   accountId: "google-new",
 };

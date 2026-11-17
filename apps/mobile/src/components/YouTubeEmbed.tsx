@@ -4,6 +4,7 @@ import { FocusScope } from "react-aria/FocusScope";
 import { AnimatePresence, motion } from "framer-motion";
 import { extractYouTubeId } from "@norfold/shared";
 import { ExternalLink, Maximize2, PlayCircle, X } from "lucide-react";
+import { useHoverLabel } from "./HoverLabel";
 import { motionDurations, motionEasings } from "./uiMotion";
 
 /** Poster fades out as the player fades in, inside the reserved aspect-video box. */
@@ -53,6 +54,7 @@ export function YouTubeEmbed({ url }: { url: string }) {
   const [expanded, setExpanded] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
+  const { hoverLabel } = useHoverLabel();
 
   // A different video (or a cleared field) returns to the poster state.
   useEffect(() => {
@@ -105,7 +107,11 @@ export function YouTubeEmbed({ url }: { url: string }) {
     <div className="overflow-hidden rounded-m3-md border border-outline-variant">
       <div className="relative aspect-video w-full bg-black">
         <AnimatePresence initial={false}>
-          {playing ? (
+          {/* The overlay owns playback while it is open. Keeping the inline
+              iframe mounted would stream the same video twice: YouTube has no
+              cross-frame pause, so both players keep audio running. It unmounts
+              instead and comes back from the poster when the overlay closes. */}
+          {playing && !expanded && (
             <motion.div
               key="player"
               className="absolute inset-0"
@@ -117,7 +123,8 @@ export function YouTubeEmbed({ url }: { url: string }) {
             >
               <EmbedFrame videoId={videoId} title="Embedded YouTube video" />
             </motion.div>
-          ) : (
+          )}
+          {!playing && (
             <motion.button
               key="poster"
               type="button"
@@ -153,8 +160,8 @@ export function YouTubeEmbed({ url }: { url: string }) {
             setExpanded(true);
           }}
           aria-label="Watch larger"
-          title="Watch larger"
           className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          {...hoverLabel("Watch larger")}
         >
           <Maximize2 size={18} aria-hidden />
         </button>
@@ -185,6 +192,7 @@ export function YouTubeEmbed({ url }: { url: string }) {
                     onClick={() => setExpanded(false)}
                     aria-label="Close video"
                     className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-white hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                    {...hoverLabel("Close video")}
                   >
                     <X size={22} aria-hidden />
                   </button>

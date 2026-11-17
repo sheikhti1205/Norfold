@@ -3,6 +3,7 @@ import {
   handleUpdate,
   SHARE_CONTACT_LABEL,
   type LinkStatus,
+  type SetPhoneResult,
   type TelegramAdmin,
 } from "./handler.ts";
 
@@ -18,7 +19,7 @@ interface Calls {
 
 function fixture(options: {
   consume?: boolean;
-  setPhone?: "ok" | "limit" | "error";
+  setPhone?: SetPhoneResult;
   unlink?: boolean;
   linkStatus?: LinkStatus | null;
 } = {}) {
@@ -30,7 +31,7 @@ function fixture(options: {
     },
     async setPhone(telegramId, phone) {
       calls.setPhone.push([telegramId, phone]);
-      return options.setPhone ?? "ok";
+      return options.setPhone ?? { status: "ok", moved: false, notifyTelegramId: null };
     },
     async unlink(telegramId) {
       calls.unlink.push(telegramId);
@@ -87,12 +88,36 @@ Deno.test("an invalid token does not offer the keyboard", async () => {
 });
 
 Deno.test("the user's own contact is saved with a plus prefix and clears the keyboard", async () => {
-  const { admin, calls } = fixture({ setPhone: "ok" });
+  const { admin, calls } = fixture({ setPhone: { status: "ok", moved: false, notifyTelegramId: null } });
   const handled = await handleUpdate(contactUpdate(SENDER), admin);
   ok(handled);
   equal(calls.setPhone, [[SENDER, "+8801812345678"]]);
   equal(handled.reply.keyboard, "remove");
   ok(handled.reply.text.includes("verified"));
+  equal(handled.notices, undefined);
+});
+
+Deno.test("a taken number is not moved on the first share", async () => {
+  const { admin, calls } = fixture({ setPhone: { status: "confirm" } });
+  const handled = await handleUpdate(contactUpdate(SENDER), admin);
+  ok(handled);
+  equal(calls.setPhone, [[SENDER, "+8801812345678"]]);
+  ok(shareKeyboard(handled.reply));
+  ok(handled.reply.text.includes("share it again within 10 minutes"));
+  equal(handled.notices, undefined);
+});
+
+Deno.test("the confirmed share moves the number and tells the old account", async () => {
+  const { admin } = fixture({
+    setPhone: { status: "ok", moved: true, notifyTelegramId: OTHER },
+  });
+  const handled = await handleUpdate(contactUpdate(SENDER), admin);
+  ok(handled);
+  equal(handled.reply.keyboard, "remove");
+  ok(handled.reply.text.includes("moved from the account"));
+  equal(handled.notices?.length, 1);
+  equal(handled.notices?.[0]?.chatId, OTHER);
+  ok(handled.notices?.[0]?.text.includes("+8801812345678"));
 });
 
 Deno.test("someone else's contact is rejected and the keyboard stays", async () => {
@@ -104,7 +129,7 @@ Deno.test("someone else's contact is rejected and the keyboard stays", async () 
 });
 
 Deno.test("a claim limit keeps the keyboard so the reader can retry later", async () => {
-  const { admin } = fixture({ setPhone: "limit" });
+  const { admin } = fixture({ setPhone: { status: "limit" } });
   const handled = await handleUpdate(contactUpdate(SENDER), admin);
   ok(handled);
   ok(shareKeyboard(handled.reply));

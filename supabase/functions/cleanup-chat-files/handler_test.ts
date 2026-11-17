@@ -30,22 +30,53 @@ const OLD = "2026-01-01T00:00:00.000Z";
 
 type FixtureObject = { key: string; updated: string };
 type FixtureEntry = { name: string; id: string | null; updated_at: string | null; metadata: null };
+type FixtureState = { queue: string[]; folder: string | null; offset: number };
 
 function fixture(
   objects: FixtureObject[],
-  options: { markers?: string[]; probeFailure?: boolean; listFailure?: boolean; declineDelete?: boolean } = {},
+  options: {
+    markers?: string[];
+    probeFailure?: boolean;
+    listFailure?: boolean;
+    declineDelete?: boolean;
+    stateFailure?: boolean;
+  } = {},
 ) {
   const paths: string[] = [];
   const lists: string[] = [];
   const probes: string[] = [];
   const deletes: string[][] = [];
+  const stateWrites: FixtureState[] = [];
   const markers = options.markers ?? [];
   const remaining = [...objects];
+  // The one-row cursor the worker persists between capped runs.
+  let state: FixtureState | null = null;
   const transport: typeof fetch = async (input, init) => {
     const req = new Request(input, init);
     const path = new URL(req.url).pathname;
     paths.push(`${req.method} ${path}`);
     ok(req.signal instanceof AbortSignal);
+    if (path === "/rest/v1/rpc/findback_chat_file_sweep_state" && req.method === "POST") {
+      if (options.stateFailure) return Response.json({ message: "boom" }, { status: 500 });
+      const body = await req.json() as {
+        p_action?: string;
+        p_queue?: string[];
+        p_folder?: string | null;
+        p_offset?: number;
+      };
+      if (body.p_action === "read") return Response.json(state);
+      if (body.p_action === "clear") {
+        state = null;
+        return Response.json({ ok: true });
+      }
+      state = {
+        queue: body.p_queue ?? [],
+        folder: body.p_folder ?? null,
+        offset: body.p_offset ?? 0,
+      };
+      stateWrites.push(state);
+      return Response.json({ ok: true });
+    }
     if (path === "/storage/v1/object/list/findback-chat-files" && req.method === "POST") {
       if (options.listFailure) return Response.json({ message: "boom" }, { status: 503 });
       const body = await req.json() as { prefix?: string; limit?: number; offset?: number };
@@ -92,7 +123,16 @@ function fixture(
     }
     throw new Error(`Unexpected SDK operation ${req.method} ${path}`);
   };
-  return { transport, paths, lists, probes, deletes, remaining };
+  return {
+    transport,
+    paths,
+    lists,
+    probes,
+    deletes,
+    remaining,
+    stateWrites,
+    get state() { return state; },
+  };
 }
 
 const request = () => new Request("https://edge.example.invalid/cleanup-chat-files", {
@@ -124,9 +164,20 @@ Deno.test("an old orphan is removed and a referenced object is kept", async () =
   const res = await createChatFileCleanupEndpoint(env, f.transport)(request());
   equal(res.status, 200);
   equal(await res.json(), { scanned: 2, removed: 1, kept: 1, errors: 0 });
-  equal(f.probes, [chatFileMarkerFragment(REFERENCED_KEY)]);
+  equal(f.probes, [
+    chatFileMarkerFragment(REFERENCED_KEY),
+    chatFileMarkerFragment(ORPHAN_KEY),
+  ]);
   equal(f.deletes, [[ORPHAN_KEY]]);
   equal(f.remaining.map((object) => object.key), [REFERENCED_KEY]);
+});
+
+Deno.test("a cursor write failure does not undo or block completed removals", async () => {
+  const f = fixture([{ key: ORPHAN_KEY, updated: OLD }], { stateFailure: true });
+  const res = await createChatFileCleanupEndpoint(env, f.transport)(request());
+  equal(res.status, 200);
+  equal(await res.json(), { scanned: 1, removed: 1, kept: 0, errors: 0 });
+  equal(f.remaining.length, 0);
 });
 
 Deno.test("an object younger than the threshold is never probed or removed", async () => {
@@ -254,11 +305,38 @@ Deno.test("the sweep is bounded: past the cap it stops and leaves the tail", asy
   }
   const f = fixture(objects);
   const res = await createChatFileCleanupEndpoint(env, f.transport)(request());
-  equal(res.status, 200);
+  // A capped run still has work left, so it reports a retry to the scheduler.
+  equal(res.status, 503);
   const body = await res.json() as { scanned: number; removed: number; kept: number; errors: number };
   equal(body.scanned, 500);
   equal(body.removed, 500);
   equal(f.remaining.length, 100);
+  // The cap must leave a cursor, otherwise the next run re-reads page one.
+  equal(f.state?.folder, DIR);
+  equal(f.state?.offset, 0);
+});
+
+Deno.test("the next capped run resumes at the saved cursor and finishes the cycle", async () => {
+  const objects: FixtureObject[] = [];
+  for (let index = 0; index < 600; index += 1) {
+    objects.push({ key: `${DIR}/${String(index).padStart(4, "0")}-orphan.pdf`, updated: OLD });
+  }
+  const f = fixture(objects);
+  const endpoint = createChatFileCleanupEndpoint(env, f.transport);
+
+  equal((await endpoint(request())).status, 503);
+  equal(f.remaining.length, 100);
+  const listsAfterFirst = f.lists.length;
+
+  const second = await endpoint(request());
+  equal(second.status, 200);
+  const body = await second.json() as { scanned: number; removed: number };
+  // It starts in the conversation folder, never at the bucket root again.
+  equal(f.lists[listsAfterFirst], DIR);
+  equal(body.scanned, 100);
+  equal(body.removed, 100);
+  equal(f.remaining.length, 0);
+  equal(f.state, null);
 });
 
 Deno.test("an expired work budget stops the run and reports a retry", async () => {
@@ -274,6 +352,11 @@ Deno.test("an expired work budget stops the run and reports a retry", async () =
     async remove() {
       return { removed: 0, failed: 0 };
     },
+    async loadState() {
+      return null;
+    },
+    async saveState() {},
+    async clearState() {},
   };
   // First read sets the deadline, every later read is past it.
   let reads = 0;

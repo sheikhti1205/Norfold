@@ -13,7 +13,6 @@ const { servicesMock, pendingMock, authMock, supabaseMock } = vi.hoisted(() => (
       email: string;
       name: string | null;
       avatarUrl: string | null;
-      phone: string;
       suggestedUsername: string;
     } | null,
   },
@@ -63,7 +62,6 @@ const SEED = {
   email: "google.user@example.com",
   name: "Google User",
   avatarUrl: "https://lh3.googleusercontent.com/a/avatar",
-  phone: "",
   suggestedUsername: "google_user",
   accountId: "user-new",
 };
@@ -121,13 +119,13 @@ describe("CompleteProfile seeds (W0.5)", () => {
   it("keeps protected intent through profile completion", async () => {
     rememberAuthReturnTo("/chats/c1");
     __setCompleteSocialProfile(vi.fn(async () => FAKE_USER));
-    renderProfile({ ...SEED, phone: "01812345678" });
+    renderProfile();
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
     fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByText("Protected conversation destination")).toBeTruthy();
   });
-  it("prefills name, username suggestion, email (read-only) and blank phone — all editable", async () => {
+  it("prefills name, username suggestion and read-only email, then submits the chosen values", async () => {
     const complete = vi.fn(async () => FAKE_USER);
     __setCompleteSocialProfile(complete);
     renderProfile();
@@ -135,21 +133,19 @@ describe("CompleteProfile seeds (W0.5)", () => {
     const name = screen.getByLabelText("Name") as HTMLInputElement;
     const username = screen.getByLabelText("Username") as HTMLInputElement;
     const email = screen.getByLabelText("Email") as HTMLInputElement;
-    const phone = screen.getByLabelText("Mobile (Bangladesh)") as HTMLInputElement;
 
     expect(name.value).toBe("Google User");
     expect(username.value).toBe("google_user");
     expect(email.value).toBe("google.user@example.com");
     expect(email.readOnly).toBe(true);
-    expect(phone.value).toBe("");
+    expect(screen.queryByLabelText(/mobile/i)).toBeNull();
 
-    // Every seed is editable: change all three and the submitted payload follows.
+    // Every seed is editable: change both and the submitted payload follows.
     fireEvent.change(name, { target: { value: "Chosen Name" } });
     fireEvent.change(username, { target: { value: "chosen_name" } });
     mockCheckUsername.mockResolvedValue({ available: true, normalized: "chosen_name" });
     fireEvent.change(username, { target: { value: "chosen_name2" } });
     mockCheckUsername.mockResolvedValue({ available: true, normalized: "chosen_name2" });
-    fireEvent.change(phone, { target: { value: "01812345678" } });
 
     await waitFor(() => expect(screen.queryByText(/checking/i)).toBeNull());
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
@@ -159,38 +155,20 @@ describe("CompleteProfile seeds (W0.5)", () => {
     expect(complete).toHaveBeenCalledWith({
       username: "chosen_name2",
       displayName: "Chosen Name",
-      phone: "+8801812345678",
       avatarUrl: "https://lh3.googleusercontent.com/a/avatar",
     });
   });
 
-  it("prefills a legitimately returned phone but keeps it editable", async () => {
-    const complete = vi.fn(async () => FAKE_USER);
-    __setCompleteSocialProfile(complete);
-    renderProfile({ ...SEED, phone: "01712345678" });
-    const phone = screen.getByLabelText("Mobile (Bangladesh)") as HTMLInputElement;
-    expect(phone.value).toBe("01712345678");
-    fireEvent.change(phone, { target: { value: "01912345678" } });
-    await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
-    fillPassword();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await waitFor(() => expect(complete).toHaveBeenCalledTimes(1));
-    expect((complete.mock.calls[0] as unknown as [Record<string, unknown>])[0]).toMatchObject({
-      phone: "+8801912345678",
-    });
-  });
-
-  it("prompts for a missing phone: blank cannot finalize", async () => {
+  it("completes without any phone value", async () => {
     const complete = vi.fn(async () => FAKE_USER);
     __setCompleteSocialProfile(complete);
     renderProfile();
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
     fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await waitFor(() =>
-      expect(screen.getByText(/valid Bangladesh mobile number/i)).toBeTruthy(),
-    );
-    expect(complete).not.toHaveBeenCalled();
+    await waitFor(() => expect(complete).toHaveBeenCalledTimes(1));
+    const call = complete.mock.calls[0] as unknown as [Record<string, unknown>] | undefined;
+    expect(call?.[0]).not.toHaveProperty("phone");
   });
 
   it("offers the Google avatar with a preview but never forces it (remove → null)", async () => {
@@ -201,9 +179,6 @@ describe("CompleteProfile seeds (W0.5)", () => {
     expect(avatarImage()).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Remove photo" }));
     expect(avatarImage()).toBeNull();
-    fireEvent.change(screen.getByLabelText("Mobile (Bangladesh)"), {
-      target: { value: "01812345678" },
-    });
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
     fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -226,9 +201,6 @@ describe("CompleteProfile seeds (W0.5)", () => {
     fireEvent.change(screen.getByLabelText("Username"), { target: { value: "checking_name" } });
     // Let the debounced oracle fire (promise stays pending) before submitting.
     await waitFor(() => expect(mockCheckUsername).toHaveBeenCalled());
-    fireEvent.change(screen.getByLabelText("Mobile (Bangladesh)"), {
-      target: { value: "01812345678" },
-    });
     fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() =>
@@ -261,9 +233,6 @@ describe("CompleteProfile seeds (W0.5)", () => {
     await waitFor(() =>
       expect(screen.getAllByText(/already (taken|exists)/i).length).toBeGreaterThan(0),
     );
-    fireEvent.change(screen.getByLabelText("Mobile (Bangladesh)"), {
-      target: { value: "01812345678" },
-    });
     fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() =>
@@ -276,9 +245,6 @@ describe("CompleteProfile seeds (W0.5)", () => {
     const complete = vi.fn(async () => FAKE_USER);
     __setCompleteSocialProfile(complete);
     renderProfile(SEED, "/posts/abc123");
-    fireEvent.change(screen.getByLabelText("Mobile (Bangladesh)"), {
-      target: { value: "01812345678" },
-    });
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
     fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -289,9 +255,6 @@ describe("CompleteProfile seeds (W0.5)", () => {
     const complete = vi.fn(async () => FAKE_USER);
     __setCompleteSocialProfile(complete);
     renderProfile(SEED, null);
-    fireEvent.change(screen.getByLabelText("Mobile (Bangladesh)"), {
-      target: { value: "01812345678" },
-    });
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
     fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -303,9 +266,6 @@ describe("CompleteProfile seeds (W0.5)", () => {
       throw new Error("23505 duplicate key");
     });
     renderProfile();
-    fireEvent.change(screen.getByLabelText("Mobile (Bangladesh)"), {
-      target: { value: "01812345678" },
-    });
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
     fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -313,17 +273,12 @@ describe("CompleteProfile seeds (W0.5)", () => {
     expect(alert.textContent).toMatch(/couldn't save|try again/i);
     expect(alert.textContent).not.toContain("23505");
     // Form state is preserved for retry.
-    expect((screen.getByLabelText("Mobile (Bangladesh)") as HTMLInputElement).value).toBe(
-      "01812345678",
-    );
+    expect((screen.getByLabelText("Username") as HTMLInputElement).value).toBe("google_user");
   });
 
   it("surfaces a human error when the wired service cannot save (unconfigured backend)", async () => {
     __resetCompleteSocialProfile();
     renderProfile();
-    fireEvent.change(screen.getByLabelText("Mobile (Bangladesh)"), {
-      target: { value: "01812345678" },
-    });
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
     fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -340,12 +295,9 @@ describe("CompleteProfile seeds (W0.5)", () => {
     const { container } = renderProfile();
     const form = container.querySelector("form");
     expect(form).toBeTruthy();
-    for (const label of ["Name", "Username", "Mobile (Bangladesh)"]) {
+    for (const label of ["Name", "Username"]) {
       expect(screen.getByLabelText(label)).toBeTruthy();
     }
-    fireEvent.change(screen.getByLabelText("Mobile (Bangladesh)"), {
-      target: { value: "01812345678" },
-    });
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
     fillPassword();
     fireEvent.submit(form!);
@@ -400,9 +352,6 @@ describe("CompleteProfileRoute (W0-QA defect 2)", () => {
     __setCompleteSocialProfile(async () => FAKE_USER);
     authMock.needsProfile = { ...SEED, avatarUrl: null };
     renderRoute();
-    fireEvent.change(screen.getByLabelText("Mobile (Bangladesh)"), {
-      target: { value: "01812345678" },
-    });
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());
     fillPassword();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
