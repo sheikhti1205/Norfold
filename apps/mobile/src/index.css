@@ -63,6 +63,20 @@ body,
   }
 }
 
+/* Native buttons keep the desktop arrow, so an icon-only control reads as
+ * inert on the web build. One base rule covers every native and ARIA control;
+ * a disabled control says so instead of inviting the press. */
+@media (pointer: fine) {
+  :where(a[href], button, select, summary, label[for], [role="button"], [role="tab"], [role="switch"]):not(:disabled):not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  :where(button, select, [role="button"], [role="tab"], [role="switch"]):disabled,
+  :where(button, [role="button"], [role="tab"], [role="switch"])[aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+}
+
 /* P1: exactly one app-level viewport/safe-area owner. The Capacitor config
  * has no StatusBar/SystemBars inset plugin, so this CSS env() fallback is
  * the SOLE inset provider — never also apply native insets on top of it. */
