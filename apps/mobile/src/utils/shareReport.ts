@@ -64,7 +64,12 @@ async function writeToClipboard(text: string): Promise<boolean> {
 }
 
 /**
- * The one share path: native system sheet → web share API → clipboard.
+ * The one share path: copy the canonical link AND open the platform sheet.
+ *
+ * The owner asked for both in one tap: the link is on the clipboard if the
+ * share is cancelled, and the sheet still opens on Android/web. Both actions
+ * start in the same tick so the web share call keeps its transient user
+ * activation while the clipboard write runs alongside it.
  *
  * Cancellation is not a failure; a failed sheet is not a dismissal. The
  * returned sentence is the consumer-facing outcome and is announced as-is.
@@ -74,24 +79,26 @@ export async function shareReport(postId: string, _title: string): Promise<strin
   // The report's raw title may contain contact/address details. The server
   // supplies safe item-specific metadata; system share payloads stay generic.
   const title = "Norfold report";
+  const copiedPromise = writeToClipboard(url);
   const native =
     nativeShareOverride ?? (Capacitor.isNativePlatform() ? shareThroughNativeSheet : null);
+  let outcome: NativeShareOutcome | "unsupported" = "unsupported";
   if (native) {
-    const outcome = await native({ title, url });
-    if (outcome === "shared") return "Link shared.";
-    if (outcome === "dismissed") return "Share dismissed.";
-    // A failed native sheet is neither a success nor a dismissal: fall
-    // through so the link still reaches the user.
+    outcome = await native({ title, url });
   }
-  if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+  if (outcome !== "shared" && typeof navigator !== "undefined" && typeof navigator.share === "function") {
     try {
       await navigator.share({ title, url });
-      return "Link shared.";
+      outcome = "shared";
     } catch (error) {
-      if ((error as DOMException)?.name === "AbortError") return "Share dismissed.";
+      if ((error as DOMException)?.name === "AbortError") outcome = "dismissed";
+      else if (outcome === "unsupported") outcome = "failed";
     }
   }
-  if (await writeToClipboard(url)) return "Link copied to clipboard.";
+  const copied = await copiedPromise;
+  if (outcome === "shared") return copied ? "Link copied and shared." : "Link shared.";
+  if (outcome === "dismissed") return copied ? "Link copied." : "Share dismissed.";
+  if (copied) return "Link copied to clipboard.";
   throw new Error("Sharing is not supported on this device.");
 }
 

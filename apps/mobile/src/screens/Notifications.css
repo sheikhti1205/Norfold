@@ -72,3 +72,12 @@ a.fb-notification-body:hover { background:var(--fb-surface-container); }
 .fb-notifications--preview .fb-notification-copy { font-size:.8125rem; }
 /* Skeletons follow the same row rhythm as resolved activity. */
 .fb-notifications [data-testid="inbox-skeleton-row"] { border:0; border-radius:0; }
+.fb-notification-rail .fb-notification-rail-action {
+  width: 44px;
+  height: 44px;
+  flex: none;
+}
+.fb-notification-rail .fb-notification-rail-action:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}

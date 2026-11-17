@@ -117,6 +117,12 @@ afterEach(() => {
 });
 
 function chooseAttachment(name: "GIF" | "Photo" | "Sticker") {
+  // GIF and stickers are their own visible control (they must not hide behind
+  // the attachment menu); Photo still lives in the menu.
+  if (name !== "Photo") {
+    fireEvent.click(screen.getByRole("button", { name: /stickers and gifs/i }));
+    return;
+  }
   fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
   fireEvent.click(screen.getByRole("menuitem", { name }));
 }
@@ -567,6 +573,7 @@ describe("CommentComposer attachment tiling (display_order + provenance)", () =>
 });
 
 describe("CommentComposer Klipy", () => {  it("hides the GIF control when the key is absent (graceful)", () => {    render(<CommentComposer {...baseProps()} />);
+    expect(screen.queryByRole("button", { name: /stickers and gifs/i })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
     expect(screen.queryByRole("menuitem", { name: "GIF" })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: "Sticker" })).toBeNull();
@@ -675,8 +682,7 @@ describe("CommentComposer Klipy picker feel", () => {
     render(<CommentComposer {...baseProps()} />);
     chooseAttachment("GIF");
     await waitFor(() => expect(klipyMock.searchGifs).toHaveBeenCalled());
-    // Progress is announced for assistive tech but not shown as visible text.
-    expect(screen.getByText("Searching GIFs")).toBeTruthy();
+    expect(screen.getByRole("status", { name: "" }).textContent).toContain("Loading GIFs");
     expect(screen.getByTestId("comment-gif-panel").querySelectorAll(".animate-pulse").length).toBeGreaterThan(0);
     resolve([sized("resolved-1", 400, 300)]);
     expect(await screen.findByTestId("comment-gif-result-resolved-1")).toBeTruthy();

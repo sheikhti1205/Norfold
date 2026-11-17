@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import type { Category } from "@norfold/shared";
 import { CATEGORY_GROUPS, isReleasedCategory, RELEASED_CATEGORIES, searchCategoryCatalog } from "@norfold/shared";
 import { Check, ChevronDown, Lock, Search, X } from "lucide-react";
-import { BottomSheet } from "./BottomSheet";
+import { Dialog, Popover } from "react-aria-components";
+import { OverlayDepthProvider, OverlayStackBridge, useOverlayDepth, useOverlayPortalContainer } from "./overlayFoundation";
 import { AnimatedNote } from "./Fields";
 import { fadeUpVariants, listItemVariants, motionDurations, motionEasings, motionSprings } from "./uiMotion";
+import "./CategoryField.css";
 
 /** Released canonical options only — safe to submit to the deployed validator. */
 export const CATEGORY_OPTIONS = RELEASED_CATEGORIES.map((canonical) => ({
@@ -24,7 +26,13 @@ interface CategoryFieldProps {
 
 export function CategoryField({ value, onChange, error, disabled = false }: CategoryFieldProps) {
   const [open, setOpen] = useState(false);
+  const depth = useOverlayDepth();
+  // Inside another popover (the search filters), the panel must stay in that
+  // popover's DOM tree or the parent closes as soon as this one takes focus.
+  const portalContainer = useOverlayPortalContainer();
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const [query, setQuery] = useState("");
+  const [activeOption, setActiveOption] = useState("");
   useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
   const errorId = error ? "category-error" : undefined;
 
@@ -41,8 +49,13 @@ export function CategoryField({ value, onChange, error, disabled = false }: Cate
   function commit(canonical: string) {
     if (disabled || !isReleasedCategory(canonical)) return;
     onChange(canonical as Category);
-    setOpen(false);
+    closePopover();
     setQuery("");
+  }
+
+  function closePopover() {
+    setOpen(false);
+    requestAnimationFrame(() => triggerRef.current?.focus());
   }
 
   const matchCount = results.filter((option) => isReleasedCategory(option.canonical)).length;
@@ -67,6 +80,7 @@ export function CategoryField({ value, onChange, error, disabled = false }: Cate
       />
       <input
         type="search"
+        autoFocus
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search categories"
@@ -90,8 +104,9 @@ export function CategoryField({ value, onChange, error, disabled = false }: Cate
     <div className="flex flex-col gap-2">
       <span className="text-sm font-medium text-on-surface">Category</span>
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => setOpen((current) => !current)}
         aria-haspopup="dialog"
         aria-expanded={open && !disabled}
         aria-label="Category"
@@ -108,20 +123,12 @@ export function CategoryField({ value, onChange, error, disabled = false }: Cate
         </span>
         <ChevronDown aria-hidden="true" size={18} className="shrink-0 text-on-surface-variant" />
       </button>
-      {error && (
-        <AnimatedNote id={errorId} role="alert" className="text-sm text-error">
-          {error}
-        </AnimatedNote>
-      )}
 
-      <BottomSheet
-        open={open && !disabled}
-        onClose={() => setOpen(false)}
-        title="Choose a category"
-        description="Pick the group that best matches the item."
-        header={searchField}
-        contentScrollable={false}
-      >
+      <Popover triggerRef={triggerRef} isOpen={open && !disabled} onOpenChange={(next) => next ? setOpen(true) : closePopover()} placement="bottom start" offset={8} UNSTABLE_portalContainer={portalContainer ?? undefined} className="fb-popover fb-category-popover" style={{ zIndex: 70 + depth * 10 }} data-testid="category-popover">
+        <OverlayDepthProvider depth={depth}>
+        <OverlayStackBridge onClose={closePopover} />
+        <Dialog aria-label="Choose a category" className="fb-category-dialog">
+        <div className="shrink-0 p-2" data-testid="category-search-header">{searchField}</div>
         {grouped.length === 0 ? (
           <motion.div
             variants={fadeUpVariants}
@@ -174,6 +181,16 @@ export function CategoryField({ value, onChange, error, disabled = false }: Cate
                       type="button"
                       layout
                       disabled={!released}
+                      tabIndex={released && (activeOption === option.canonical || (!results.some((item) => item.canonical === activeOption && isReleasedCategory(item.canonical)) && results.find((item) => isReleasedCategory(item.canonical))?.canonical === option.canonical)) ? 0 : -1}
+                      onFocus={() => setActiveOption(option.canonical)}
+                      onKeyDown={(event) => {
+                        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+                        event.preventDefault();
+                        const rows = Array.from(event.currentTarget.closest('[data-testid="category-results"]')?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? []);
+                        const index = rows.indexOf(event.currentTarget);
+                        const next = event.key === "Home" ? 0 : event.key === "End" ? rows.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length;
+                        rows[next]?.focus();
+                      }}
                       aria-pressed={selected}
                       aria-label={option.canonical}
                       title={released ? option.examples : UNRELEASED_HINT}
@@ -215,7 +232,14 @@ export function CategoryField({ value, onChange, error, disabled = false }: Cate
             ))}
           </motion.div>
         )}
-      </BottomSheet>
+        </Dialog>
+        </OverlayDepthProvider>
+      </Popover>
+      {error && (
+        <AnimatedNote id={errorId} role="alert" className="text-sm text-error">
+          {error}
+        </AnimatedNote>
+      )}
     </div>
   );
 }

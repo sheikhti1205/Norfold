@@ -5,29 +5,33 @@ import { useHoverLabel } from "./HoverLabel";
 import "./PostActionRow.css";
 
 /**
- * The compact flat action row (owner reference: a single row of icon-only
- * actions: comments, reactions, views when available, save and share.
+ * The one flat action row: like, dislike, comments, views/insights and share,
+ * evenly distributed across the full width of the card.
  *
  * WHY SLOTS AND NOT PROPS: the reaction state owner differs per surface. The
- * home feed's reaction controls live in `HomeFeedReactionButtons` (feed reaction
- * provider), the detail screen owns its own. This component therefore NEVER
- * owns, fetches or re-implements reaction state — it only lays the controls
- * out flat and guarantees the row's own affordances (the comment control with
- * its visible + announced count).
+ * home feed's reaction controls live in `HomeFeedReactionButtons` (feed
+ * reaction provider), the detail screen owns its own. This component therefore
+ * NEVER owns, fetches or re-implements reaction state — it only lays the
+ * controls out evenly and guarantees the row's own affordances (the comment
+ * control with its visible + announced count).
  *
- * WHY THE CSS FILE: `.fb-report-action` is unlayered plain CSS in
- * `index.css`, and unlayered rules beat every Tailwind utility regardless of
- * specificity (Tailwind utilities live in `@layer utilities`). The flat look
- * — no border, no fill, no button card, the count inline with the icon —
- * therefore cannot be expressed with utilities on the slotted controls; it
- * needs one scoped, higher-specificity rule instead of an `!important` pile.
+ * ORDER IS PART OF THE CONTRACT (owner direction): reactions first, comments
+ * third, the views/insights metric fourth, share last. A reactions pair keeps
+ * its two controls in one slot so the shared pending/rollback state stays
+ * atomic; that slot takes two equal columns.
  */
 export interface PostActionRowSlots {
-  /** The caller's own Like control (its state owner stays with the caller). */
-  like: ReactNode;
-  /** Optional view count supplied by the caller when available. */
+  /** Like + dislike as one state owner. Spans two equal columns. */
+  reactions?: ReactNode;
+  /** A single reaction control, when a surface has no dislike. */
+  like?: ReactNode;
+  /** A separate dislike control, when a surface does not use `reactions`. */
+  dislike?: ReactNode;
+  /** The views/insights metric (an informational slot, never a fake button). */
+  insights?: ReactNode;
+  /** Legacy alias for `insights`. */
   views?: ReactNode;
-  /** Optional Save/bookmark control — another lane owns that component and slots it in. */
+  /** Optional Save/bookmark control — another lane owns that component. */
   save?: ReactNode;
   /** Called when the comment affordance is activated. */
   onComments?: () => void;
@@ -64,17 +68,32 @@ export function PostActionRow({ slots, commentCount, className, commentsHref }: 
       <span className="tabular-nums">{commentCount}</span>
     </>
   );
+  const insights = slots.insights ?? slots.views;
   return (
     <div
       data-testid="post-action-row"
       role="group"
       aria-label="Report actions"
-      className={`fb-post-action-row flex min-w-0 flex-nowrap items-center gap-0.5${
+      className={`fb-post-action-row flex w-full min-w-0 flex-nowrap items-center gap-0.5${
         className ? ` ${className}` : ""
       }`}
     >
+      {slots.reactions ? (
+        <span className="fb-post-action-reactions" data-testid="post-action-reactions">
+          {slots.reactions}
+        </span>
+      ) : (
+        slots.like
+      )}
+      {slots.dislike}
       {commentsHref ? (
-        <PostLink to={commentsHref} aria-label={commentLabel} className="fb-report-action" {...hoverLabel("Comments")}>
+        <PostLink
+          to={commentsHref}
+          aria-label={commentLabel}
+          className="fb-report-action"
+          data-action="comment"
+          {...hoverLabel("Comments")}
+        >
           {commentControl}
         </PostLink>
       ) : (
@@ -84,13 +103,13 @@ export function PostActionRow({ slots, commentCount, className, commentsHref }: 
           disabled={!slots.onComments}
           aria-label={commentLabel}
           className="fb-report-action"
+          data-action="comment"
           {...hoverLabel("Comments")}
         >
           {commentControl}
         </button>
       )}
-      {slots.like}
-      {slots.views}
+      {insights}
       {slots.save}
       {slots.share}
     </div>

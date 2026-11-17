@@ -170,7 +170,7 @@ describe("PostDetail inline comment threads", () => {
     expect(rootLi?.contains(three)).toBe(true);
     expect(rootLi?.contains(four)).toBe(true);
     // No navigation: the post shell is untouched.
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Found keys");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("Found keys");
     expect(screen.getByRole("button", { name: /hide replies/i })).toBeTruthy();
   });
 
@@ -342,7 +342,7 @@ describe("PostDetail inline comment threads", () => {
     // The deepest @target jumps focus to its true parent, no navigation.
     fireEvent.click(screen.getByRole("button", { name: /jump to parent comment by dU/i }));
     expect(document.getElementById("detail-comment-cd")).toBe(document.activeElement);
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Found keys");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("Found keys");
     expect(deepest).toBeTruthy();
     // Replying from the deepest flat row still writes the true parent id.
     const scope = document.getElementById("detail-comment-ce") as HTMLElement;

@@ -133,6 +133,11 @@
 .fb-split-resize:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: -2px; }
 .fb-split-list:focus-visible, .fb-split-detail:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: -2px; }
 .fb-composer-shell { container: composer / inline-size; min-width: 0; width: 100%; border: 1px solid var(--fb-outline-variant); background: var(--fb-surface); border-radius: 20px; }
+/* The comment composer's avatar belongs to the first text line, not to the
+ * top edge of a shell that grows with the draft. The offset is derived from
+ * the inherited line height so large text keeps the same optical centre. */
+.fb-comment-composer { display: flex; align-items: flex-start; gap: .5rem; min-width: 0; }
+.fb-comment-composer-avatar { display: flex; flex: none; margin-top: calc(.75em - 1px); }
 .fb-composer-shell:focus-within { border-color: var(--fb-focus); }
 .fb-composer-row { display: flex; align-items: flex-end; gap: 4px; padding: 4px; }
 .fb-composer-field { position: relative; flex: 1; min-width: 0; }

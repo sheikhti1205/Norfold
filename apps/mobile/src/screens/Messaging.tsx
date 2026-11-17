@@ -712,7 +712,12 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const name = person?.displayName || person?.username;
   // Long-press is the phone's way into the message actions; the visible
   // ellipsis is a desktop affordance and is hidden from coarse pointers.
-  const [messages, setMessages] = useState<StoredHumanMessage[]>(cached?.messages ?? []);
+  const [storedMessages, setMessages] = useState<StoredHumanMessage[]>(cached?.messages ?? []);
+  const [localEchoes, setLocalEchoes] = useState<Array<{ message: StoredHumanMessage; failed: boolean }>>([]);
+  const messages = useMemo(() => {
+    const ids = new Set(storedMessages.map(message => message.id));
+    return [...storedMessages, ...localEchoes.filter(entry => !ids.has(entry.message.id)).map(entry => entry.message)];
+  }, [storedMessages, localEchoes]);
   const [outbox, setOutbox] = useState<OutboxEntry[]>(cached?.outbox ?? []);
   const [media, setMedia] = useState<MediaAttachment[]>(cached?.media ?? []);
   const [loaded, setLoaded] = useState(!!cached);
@@ -1081,6 +1086,8 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     void readMessagingThreadState(accountId, conversationId).then((state) => {
       if (cancelled) return;
       setMessages(state.messages); setOutbox(state.outbox); setMedia(state.media); setLoaded(true);
+      const ids = new Set(state.messages.map(message => message.id));
+      setLocalEchoes(previous => previous.filter(entry => !ids.has(entry.message.id)));
       setRenderedRevision(chat.revision); setThreadReadFailed(false);
     }).catch(() => { if (!cancelled) setThreadReadFailed(true); });
     void readMessagingUnsentHoldIds(accountId, conversationId).then((ids) => {
@@ -1396,6 +1403,24 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
    * message, the draft clears, and the next message can start immediately. Only
    * authority/destructive actions take `busy`.
    */
+  async function admitText(message: StoredHumanMessage) {
+    setLocalEchoes(previous => {
+      const entry = { message, failed: false };
+      return previous.some(item => item.message.id === message.id)
+        ? previous.map(item => item.message.id === message.id ? entry : item)
+        : [...previous, entry];
+    });
+    nearBottom.current = true;
+    try {
+      return await sendMessagingText(accountId, conversationId, message.recipientId, message.body,
+        message.contextReportId, message.replyToId, message.id);
+    } catch (error) {
+      if (alive.current) setLocalEchoes(previous => previous.map(item =>
+        item.message.id === message.id ? { ...item, failed: true } : item));
+      throw error;
+    }
+  }
+
   async function send() {
     if (!runtimeOpen || !row || photoSending) return;
     const ready = photos.filter((item): item is StagedChatPhoto & { prepared: PreparedMessagingPhoto } => !!item.prepared);
@@ -1413,7 +1438,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       if (ready.length === 0) {
         const messageId = textAttempts.current.get(sendingRevision) ?? crypto.randomUUID();
         textAttempts.current.set(sendingRevision, messageId);
-        const result = await sendMessagingText(accountId, conversationId, row.peerId, body, reportContext ?? undefined, replyTargetId, messageId);
+        const result = await admitText({ id: messageId, conversationId, authorId: accountId, recipientId: row.peerId,
+          body, messageType: "TEXT", createdAt: Date.now(),
+          ...(reportContext ? { contextReportId: reportContext } : {}), ...(replyTargetId ? { replyToId: replyTargetId } : {}) });
         textAttempts.current.delete(sendingRevision);
         if (alive.current) {
           nearBottom.current = true;
@@ -1465,7 +1492,14 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     } catch {
       if (alive.current) {
         if (photos.length > 0) { setAdmissionFailed(true); setError("Those photos could not all be saved. The unsent ones are still here."); }
-        else setError("Your message was not sent. Your draft is still here.");
+        else {
+          // The optimistic bubble IS the draft now: it stays in the transcript
+          // marked "Not sent" with Retry, so the field must not also hold a
+          // second copy of the same words. Typing that arrived while the send
+          // was in flight (a newer revision) is untouched.
+          if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+          setError("Your message was not sent. Tap Retry on it.");
+        }
       }
     } finally {
       if (ready.length === 0) textInFlight.current.delete(sendingRevision);
@@ -1485,7 +1519,8 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     setError(null); setSendStatus(null);
     void (async () => {
       try {
-        await sendMessagingText(accountId, conversationId, row.peerId, item.mediaUrl, undefined, replyTargetId);
+        await admitText({ id: crypto.randomUUID(), conversationId, authorId: accountId, recipientId: row.peerId,
+          body: item.mediaUrl, messageType: "TEXT", createdAt: Date.now(), ...(replyTargetId ? { replyToId: replyTargetId } : {}) });
         if (!alive.current) return;
         nearBottom.current = true;
         setReplyTo(null);
@@ -1715,6 +1750,8 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
           const statusMembers = [message];
           const statusMessage = statusMembers[statusMembers.length - 1]!;
           const statusPending = outbox.find((entry) => entry.messageId === statusMessage.id);
+          const localFailed = !storedMessages.some(entry => entry.id === message.id)
+            && localEchoes.some(entry => entry.message.id === message.id && entry.failed);
           const statusAttachment = media.find((entry) => entry.messageId === statusMessage.id);
           const reviewMember = statusMembers.find((entry) => outbox.some((entryPending) => entryPending.messageId === entry.id && entryPending.status === "NEEDS_REVIEW"));
           const failedMember = statusMembers.find((entry) => {
@@ -1797,7 +1834,8 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
               {statusMessage.createdAt ? <time className="fb-chat-time" dateTime={new Date(statusMessage.createdAt).toISOString()}>
                 {new Date(statusMessage.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
               </time> : null}
-              {own && <>{reviewMember ? "Needs review"
+              {own && <>{localFailed ? "Not sent"
+                : reviewMember ? "Needs review"
                 : failedMember ? (failedMember.messageType === "VOICE" ? "Voice saved" : failedMember.messageType === "MEDIA" ? "Photo saved" : "Message saved")
                 : statusMessage.messageType === "MEDIA" && !statusAttachment ? "Photo pending"
                 : statusMessage.messageType === "VOICE" && !statusAttachment ? "Voice pending"
@@ -1805,6 +1843,19 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
                   ? (statusAttachment.state === "FAILED" ? (statusMessage.messageType === "VOICE" ? "Voice saved" : "Photo saved") : "Sending…")
                 : statusMessage.server ? <ReceiptTicks read={!!(statusMessage.readByPeer || readIds.has(statusMessage.id))} />
                 : statusPending?.status === "FAILED" ? "Message saved" : "Sending…"}
+              {localFailed && <button type="button" onClick={() => {
+                void admitText(message).then(() => {
+                  if (!alive.current) return;
+                  const revision = [...textAttempts.current].find(([, id]) => id === message.id)?.[0];
+                  if (revision !== undefined) {
+                    textAttempts.current.delete(revision);
+                    if (draftRevision.current === revision) { draftRevision.current++; setDraft(""); }
+                  }
+                  if (message.contextReportId) clearReportContext(message.contextReportId);
+                  setReplyTo(previous => previous?.id === message.replyToId ? null : previous);
+                  setError(null);
+                }).catch(() => setError("Could not retry. Try again."));
+              }}>Retry</button>}
               {failedMember && <button type="button" onClick={() => {
               // A refused send keeps its original boundary; re-flushing it can only
               // fail again. The message-level retry rebinds that boundary because a

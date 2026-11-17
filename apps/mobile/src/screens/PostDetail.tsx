@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { motion } from "framer-motion";
-import { BarChart3, CalendarDays, CircleCheck, CornerDownRight, ExternalLink, MapPin, Pencil, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { CalendarDays, CircleCheck, CornerDownRight, ExternalLink, MapPin, Pencil, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import type { CommentItem, PostItem, PostStatus, ReactionCounts, ReactionKind, ReactionSummary } from "@norfold/shared";
 import { OWNER_SELECTABLE_STATUSES } from "@norfold/shared";
 import { useAuth } from "../auth";
@@ -15,7 +15,7 @@ import { YouTubeEmbed } from "../components/YouTubeEmbed";
 import { InteractiveLocationMap } from "../components/InteractiveLocationMap";
 import { EmptyState } from "../components/PostCard";
 import { CommentSkeleton, DetailSkeleton } from "../components/uiPrimitives";
-import { PostIdentityHeader, PostStatusTitle, PostFacts } from "../components/PostAnatomy";
+import { PostIdentityHeader, PostStatusTitle, PostFacts, PostInsightsMetric } from "../components/PostAnatomy";
 import { DetailHeroGallery } from "../components/detail/DetailHeroGallery";
 import { MediaViewer } from "../components/MediaViewer";
 import { MarkdownView } from "../components/MarkdownView";
@@ -145,7 +145,9 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
   const navigate = useNavigate();
   const requestedComment = new URLSearchParams(search).get("comment");
   const linkedComment = requestedComment && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestedComment) ? requestedComment : null;
+  const replyRequested = new URLSearchParams(search).get("reply") === "1";
   const focusedLink = useRef<string | null>(null);
+  const composerAnchorRef = useRef<HTMLDivElement | null>(null);
   const { user } = useAuth();
   const [post, setPost] = useState<PostItem | null>(null);
   const viewerRevealKey = `${user?.id ?? "guest"}:${id}`;
@@ -465,6 +467,22 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
     return () => cancelAnimationFrame(frame);
   }, [loading, post?.id, id, hash, locationKey, linkedComment, commentsLoading, comments, contextual, wideViewport]);
 
+  // A notification's Reply action opens the report with `reply=1`: put the
+  // caret in the comment field once the thread and composer are mounted.
+  useEffect(() => {
+    if (!replyRequested || loading || !post || commentsLoading) return;
+    const focusKey = `${id}:${locationKey}:reply`;
+    if (focusedLink.current === focusKey) return;
+    const frame = requestAnimationFrame(() => {
+      focusedLink.current = focusKey;
+      const field = composerAnchorRef.current?.querySelector<HTMLTextAreaElement>('[data-testid="comment-input"]');
+      if (!field) return;
+      field.focus({ preventScroll: true });
+      field.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [replyRequested, loading, post, commentsLoading, id, locationKey]);
+
   // Live updates while viewing this post (no refresh).
   useEffect(() => {
     joinPostRoom(id);
@@ -575,7 +593,6 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
    *
    * Above the `if (!post)` guard: hooks must stay unconditional.
    */
-  const composerAnchorRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!replyTo) return;
     const el = composerAnchorRef.current;
@@ -696,14 +713,52 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
   async function postCommentBody(body: string, attachments?: readonly CommentAttachmentDescriptor[]) {
     if ((!body.trim() && !attachments?.length) || body.length > 1000) return;
     const snap = { postId: current.id, viewer: user?.id };
-    const created = attachments && attachments.length > 0
-      ? await addComment(current.id, body, replyTo?.id ?? null, attachments)
-      : await addComment(current.id, body, replyTo?.id ?? null);
-    if (isStaleMutation(snap)) return;
-    setComments(prev => prev.some(comment => comment.id === created.id) ? prev : [...prev, created]);
-    // A writer's response is not the list/topology/media authority. A concurrent
-    // report/hide may have changed eligibility before the write completed.
-    void reconcileComments(false);
+    const parentId = replyTo?.id ?? null;
+    const tempId = `pending-comment-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const now = new Date().toISOString();
+    // Local echo first: the row exists on screen in the same tick. The
+    // composer still awaits admission, so a failed write keeps the draft (and
+    // the composer's own error copy) while the echo is removed. The server row
+    // replaces the echo by id.
+    const optimistic: CommentItem = {
+      id: tempId,
+      postId: current.id,
+      parentId,
+      depth: replyTo ? (replyTo.depth ?? 0) + 1 : 0,
+      author: {
+        id: user?.id ?? "",
+        username: user?.username ?? "",
+        emailVerified: user?.emailVerified === true,
+        phoneVerified: user?.phoneVerified === true,
+        avatarUrl: user?.avatarUrl ?? null,
+        createdAt: user?.createdAt ?? now,
+        displayName: user?.displayName ?? null,
+      },
+      body,
+      createdAt: now,
+      updatedAt: now,
+    };
+    setComments((prev) => [...prev, optimistic]);
+    try {
+      const created = attachments && attachments.length > 0
+        ? await addComment(current.id, body, parentId, attachments)
+        : await addComment(current.id, body, parentId);
+      if (isStaleMutation(snap)) return;
+      // A writer's response is not the list/topology/media authority. A
+      // concurrent report/hide may have changed eligibility before the write
+      // completed.
+      setComments((prev) => {
+        const next = prev.filter((comment) => comment.id !== tempId);
+        return next.some((comment) => comment.id === created.id) ? next : [...next, created];
+      });
+      void reconcileComments(false);
+    } catch (error) {
+      if (isStaleMutation(snap)) return;
+      setComments((prev) => prev.filter((comment) => comment.id !== tempId));
+      // The composer owns the failure copy and keeps the draft; rethrow so it
+      // can do that instead of announcing a generic message twice.
+      throw error;
+    }
   }
 
   function commentFailed(message: string) {
@@ -992,7 +1047,9 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
         animate="visible"
         variants={listItemVariants}
         transition={{ duration: motionDurations.fast }}
-        className={`scroll-mt-4 focus:outline-2 focus:outline-offset-2 focus:outline-on-surface ${highlighted ? "rounded-m3-sm bg-surface-container/60" : ""}`}
+        data-pending={c.id.startsWith("pending-comment-") || undefined}
+        aria-busy={c.id.startsWith("pending-comment-") || undefined}
+        className={`scroll-mt-4 focus:outline-2 focus:outline-offset-2 focus:outline-on-surface ${c.id.startsWith("pending-comment-") ? "opacity-70" : ""} ${highlighted ? "rounded-m3-sm bg-surface-container/60" : ""}`}
       >
         {showTarget && parentName && c.parentId && (
           <button
@@ -1117,20 +1174,21 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
   const metaBlock = <PostFacts post={post} />;
 
   const actionsBlock = <div id="detail-activity" tabIndex={-1} className="scroll-mt-4 border-t border-outline-variant pt-1">
-        <PostActionRow
+      <PostActionRow
           commentCount={comments.length}
           slots={{
             onComments: () => {
               if (contextual && !wideViewport) { setCommentsOpen(true); return; }
               scrollToSection("detail-comments");
             },
-            like: (
-              <span className="flex items-center">
+            reactions: (
+              <span className="fb-reaction-pair">
                 <button
                   type="button"
                   id="detail-love"
                   data-testid="detail-like"
-                  className={`fb-report-action min-h-[44px] min-w-[44px] gap-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${postLike.mine ? "bg-surface-container text-on-surface" : "text-on-surface-variant"}`}
+                  data-action="like"
+                  className={`fb-report-action min-h-[44px] gap-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${postLike.mine ? "bg-surface-container text-on-surface" : "text-on-surface-variant"}`}
                   onClick={() => toggleLike("LIKE")}
                   disabled={reactionPending}
                   aria-busy={reactionPending}
@@ -1144,7 +1202,8 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
                 <button
                   type="button"
                   data-testid="detail-dislike"
-                  className={`fb-report-action min-h-[44px] min-w-[44px] gap-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${myReaction === "DISLIKE" ? "bg-surface-container text-on-surface" : "text-on-surface-variant"}`}
+                  data-action="dislike"
+                  className={`fb-report-action min-h-[44px] gap-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${myReaction === "DISLIKE" ? "bg-surface-container text-on-surface" : "text-on-surface-variant"}`}
                   onClick={() => toggleLike("DISLIKE")}
                   disabled={reactionPending}
                   aria-busy={reactionPending}
@@ -1157,12 +1216,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
                 </button>
               </span>
             ),
-            views: typeof post.viewCount === "number" && post.viewCount > 0 ? (
-              <span aria-label={`Views, ${post.viewCount} views`} className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1 px-1.5 text-on-surface-variant">
-                <BarChart3 size={20} aria-hidden />
-                <span className="tabular-nums">{post.viewCount}</span>
-              </span>
-            ) : undefined,
+            insights: <PostInsightsMetric views={post.viewCount ?? 0} />,
             share: <ReportShareButton postId={post.id} title={post.title} />,
           }}
         />
@@ -1293,10 +1347,6 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
         {/* Overview: compact lazy heavy sections. */}
         <section data-testid="detail-overview" id="detail-overview" aria-label="Overview" className="flex flex-col gap-2">
           <dl className="grid grid-cols-2 gap-x-3 gap-y-2 rounded-m3-lg border border-outline-variant bg-surface-container-low p-3 text-sm">
-            <div>
-              <dt className="text-xs text-on-surface-variant">Status</dt>
-              <dd className="font-medium">{statusLabel(post.status)}</dd>
-            </div>
             <div>
               <dt className="flex items-center gap-1 text-xs text-on-surface-variant"><CalendarDays size={14} aria-hidden />{post.type === "LOST" ? "Lost on" : "Found on"}</dt>
               <dd className="font-medium">{formatEventDate(post.eventDate)}</dd>

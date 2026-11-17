@@ -197,7 +197,10 @@ describe("PostDetail overflow", () => {
   it("breaks long titles and location labels instead of overflowing", async () => {
     const { container } = renderDetail();
     const heading = await screen.findByRole("heading", { level: 1 });
-    expect(heading.textContent).toBe(LONG);
+    // The heading carries the title plus its compact (found) (unrecovered)
+    // facts; the title itself must still be the intact long word.
+    expect(heading.textContent).toContain(LONG);
+    expect(heading.textContent).toContain("(found)");
     expect(heading.className).toContain("break-words");
     const locationValue = container.querySelector(".col-span-2 dd");
     expect(locationValue?.textContent).toBe(LONG);
@@ -673,7 +676,7 @@ describe("PostDetail progressive loading", () => {
 
     // Fast post must not wait behind ~2s secondaries.
     const heading = await screen.findByRole("heading", { level: 1 }, { timeout: 3000 });
-    expect(heading.textContent).toBe(LONG);
+    expect(heading.textContent).toContain(LONG);
     // Secondary pending state is announced (stable skeleton rows hold the
     // shape); delayed comment is absent.
     expect(await screen.findByRole("status", { name: "Loading comments" })).toBeTruthy();
@@ -696,7 +699,7 @@ describe("PostDetail progressive loading", () => {
     renderDetail();
 
     const heading = await screen.findByRole("heading", { level: 1 }, { timeout: 3000 });
-    expect(heading.textContent).toBe(LONG);
+    expect(heading.textContent).toContain(LONG);
     expect(await screen.findByText(/could not load comments/i)).toBeTruthy();
   });
 });
@@ -747,7 +750,8 @@ describe("PostDetail shared card → detail element (Wave A)", () => {
       </MotionConfig>,
     );
     const heading = await screen.findByRole("heading", { level: 1 });
-    expect(heading.textContent).toBe("Lost camera");
+    expect(heading.textContent).toContain("Lost camera");
+    expect(heading.textContent).toContain("(found)");
     expect(await screen.findByRole("img", { name: "Photo for Lost camera" })).toBeTruthy();
   });
 });

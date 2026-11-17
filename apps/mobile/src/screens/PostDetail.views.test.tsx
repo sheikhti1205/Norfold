@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { StrictMode } from "react";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -44,19 +44,21 @@ describe("PostDetail views", () => {
   });
   afterEach(() => { cleanup(); vi.unstubAllEnvs(); });
 
-  it("omits zero views", async () => {
+  it("keeps the insights slot visible at zero views instead of collapsing the row", async () => {
     posts.fetchPost.mockResolvedValue({ ...post, viewCount: 0 });
     renderDetail();
     await screen.findByTestId("post-action-row");
-    expect(screen.queryByLabelText(/^Views,/)).toBeNull();
+    const views = await screen.findByTestId("post-views");
+    // The visible count is decorative; the full sentence is the announced one.
+    expect(within(views).getByText("0 views").classList.contains("sr-only")).toBe(true);
   });
 
-  it("shows the full view count in the accessible name", async () => {
+  it("announces the full view count with the metric", async () => {
     posts.fetchPost.mockResolvedValue({ ...post, viewCount: 1200 });
     renderDetail();
-    const views = await screen.findByLabelText("Views, 1200 views");
+    const views = await screen.findByTestId("post-views");
     expect(views.tagName).toBe("SPAN");
-    expect(views.textContent).toBe("1200");
+    expect(within(views).getByText("1200 views").classList.contains("sr-only")).toBe(true);
   });
 
   it("records once per report, including in-place navigation and StrictMode", async () => {

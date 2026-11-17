@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FileText, Film, ImagePlus, Plus, Sticker, X } from "lucide-react";
+import { FileText, Film, ImagePlus, Plus, X } from "lucide-react";
 import { ActionMenu, type MenuAction } from "./ActionMenu";
 import { ComposerShell } from "./ComposerShell";
 import { CommentReportPicker } from "./CommentReportPicker";
@@ -51,8 +51,9 @@ import { interactionRefusalCopy } from "../utils/interactionRefusal";
  *   own folder (same RLS path as report photos) with progress / retry /
  *   remove and the shared `COMMENT_ATTACH_MAX` cap. The comment body carries
  *   only `https://` remote URLs — never base64.
- * - GIF/Sticker through the shared `KlipyPicker` behind the
- *   `VITE_KLIPY_API_KEY` config flag: stable customer_id, high content filter,
+ * - GIF/Sticker through the shared `KlipyPicker` on its own visible
+ *   "Stickers and GIFs" control (never buried in the attachment menu) behind
+ *   the `VITE_KLIPY_API_KEY` config flag: stable customer_id, high content filter,
  *   "Search KLIPY" placeholder, provider URLs/data preserved and loaded
  *   directly, share-tracking only after the comment posts, "Powered by
  *   KLIPY" attribution. The control is hidden entirely when the key is
@@ -505,18 +506,16 @@ export function CommentComposer({
   const placeholder = replyToUsername ? "Reply…" : "Write…";
   const attachmentActions: MenuAction[] = [
     { id: "photo", label: "Photo", icon: <ImagePlus size={18} aria-hidden />, onAction: () => void handleAttachClick() },
-    ...(gifEnabled ? [
-      { id: "gif", label: "GIF", icon: <Film size={18} aria-hidden />, onAction: () => { setGifTab("gifs"); setGifOpen(true); setReportOpen(false); } },
-      { id: "sticker", label: "Sticker", icon: <Sticker size={18} aria-hidden />, onAction: () => { setGifTab("stickers"); setGifOpen(true); setReportOpen(false); } },
-    ] : []),
     ...(COMMENT_REPORTS_ENABLED ? [{ id: "report", label: "Report", icon: <FileText size={18} aria-hidden />,
       disabled: attachments.length >= COMMENT_ATTACH_MAX,
       onAction: () => { setReportOpen(true); setGifOpen(false); } }] : []),
   ];
 
   return (
-    <div data-testid="comment-composer" className="flex items-start gap-2">
-      <UserAvatar avatarUrl={currentUser?.avatarUrl} username={currentUser?.username} size={32} />
+    <div data-testid="comment-composer" className="fb-comment-composer">
+      <span className="fb-comment-composer-avatar">
+        <UserAvatar avatarUrl={currentUser?.avatarUrl} username={currentUser?.username} size={32} />
+      </span>
       <div className="relative min-w-0 flex-1">
           <input
             ref={fileInputRef}
@@ -568,6 +567,11 @@ export function CommentComposer({
           actions={<div ref={attachmentActionsRef} className="flex items-center">
             <ActionMenu label="Add attachment" icon={<Plus size={20} aria-hidden />}
               disabled={disabled || sending || preparingPhotos} items={attachmentActions} />
+            {gifEnabled && <button type="button" aria-label="Stickers and GIFs"
+              className="fb-icon-control" disabled={disabled || sending || preparingPhotos || attachments.length >= COMMENT_ATTACH_MAX}
+              onClick={() => { setGifTab("gifs"); setGifOpen(true); setReportOpen(false); }}>
+              <Film size={20} aria-hidden="true" />
+            </button>}
             <EmojiPickerButton onPick={handleEmojiPick} disabled={disabled || sending} />
           </div>}
           attachments={attachments.length > 0 && (

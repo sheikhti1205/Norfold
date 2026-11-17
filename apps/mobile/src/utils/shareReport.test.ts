@@ -42,16 +42,23 @@ describe("shareReport", () => {
     expect(share).toHaveBeenCalledWith({ title: "Norfold report", url });
   });
 
-  it("treats a user-dismissed sheet as a cancellation, not a failure", async () => {
+  it("copies the link even when the user dismisses the sheet", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     stubNavigator({
       share: vi.fn().mockRejectedValue(new DOMException("cancelled", "AbortError")),
       writeText,
     });
 
-    await expect(shareReport(id, "Lost keys")).resolves.toBe("Share dismissed.");
+    await expect(shareReport(id, "Lost keys")).resolves.toBe("Link copied.");
 
-    expect(writeText).not.toHaveBeenCalled();
+    expect(writeText).toHaveBeenCalledWith(url);
+  });
+
+  it("reports both outcomes when the link was copied and the sheet opened", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubNavigator({ share: vi.fn().mockResolvedValue(undefined), writeText });
+
+    await expect(shareReport(id, "Lost keys")).resolves.toBe("Link copied and shared.");
   });
 
   it("falls back to the clipboard when sharing fails for any other reason", async () => {
@@ -98,13 +105,13 @@ describe("shareReport on a device (native system sheet)", () => {
     expect(Share.share).toHaveBeenCalledWith({ title: "Norfold report", url });
   });
 
-  it("recognizes the installed Android plugin's cancellation error without copying", async () => {
+  it("recognizes the installed Android plugin's cancellation error and still copies", async () => {
     vi.spyOn(Capacitor, "isNativePlatform").mockReturnValue(true);
     vi.mocked(Share.share).mockRejectedValue(new Error("Share canceled"));
-    const writeText = vi.fn();
+    const writeText = vi.fn().mockResolvedValue(undefined);
     stubNavigator({ writeText });
-    await expect(shareReport(id, "Lost keys")).resolves.toBe("Share dismissed.");
-    expect(writeText).not.toHaveBeenCalled();
+    await expect(shareReport(id, "Lost keys")).resolves.toBe("Link copied.");
+    expect(writeText).toHaveBeenCalledWith(url);
   });
   it("opens the native sheet with the canonical link and reports the share", async () => {
     const native = vi.fn().mockResolvedValue("shared");
@@ -116,15 +123,15 @@ describe("shareReport on a device (native system sheet)", () => {
     expect(native).toHaveBeenCalledWith({ title: "Norfold report", url });
   });
 
-  it("reports a dismissed native sheet as a cancellation and copies nothing", async () => {
+  it("reports a dismissed native sheet as a cancellation and keeps the copied link", async () => {
     const native = vi.fn().mockResolvedValue("dismissed");
     __setNativeShare(native);
     const writeText = vi.fn().mockResolvedValue(undefined);
     stubNavigator({ writeText });
 
-    await expect(shareReport(id, "Lost keys")).resolves.toBe("Share dismissed.");
+    await expect(shareReport(id, "Lost keys")).resolves.toBe("Link copied.");
 
-    expect(writeText).not.toHaveBeenCalled();
+    expect(writeText).toHaveBeenCalledWith(url);
   });
 
   it("falls back to the clipboard when the native sheet fails", async () => {

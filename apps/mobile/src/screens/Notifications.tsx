@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { createPortal } from "react-dom";
 import { motion, type PanInfo } from "framer-motion";
 import { Heading } from "react-aria-components";
-import { Bell, Check, CheckCheck, Flag, Inbox, Mail, MoreVertical, RotateCcw, Settings, Trash2 } from "lucide-react";
+import { Bell, Check, CheckCheck, Flag, Inbox, Mail, MessageCircle, MoreVertical, RotateCcw, Settings, Trash2 } from "lucide-react";
 import { BackButton } from "../components/BackButton";
 import { registerBackInterceptor } from "../components/backNavigation";
 import { useAuth } from "../auth";
@@ -11,7 +11,8 @@ import { BlockedByViewerShield } from "../components/BlockedByViewerShield";
 import { UserAvatar } from "../components/UserAvatar";
 import { announce } from "../components/LiveRegion";
 import { ErrorView, InboxSkeleton, StateSwap } from "../components/uiPrimitives";
-import { PostLink } from "../components/PostNavigation";
+import { PostLink, useReportNavigation } from "../components/PostNavigation";
+import { fetchPost, updatePostStatus } from "../services/posts";
 import {
   deleteNotifications,
   fetchNotifications,
@@ -69,6 +70,15 @@ export function notificationRoute(item: {
   }
   if (item.type === "STATUS") return `/posts/${item.postId}#detail-manage`;
   return `/posts/${item.postId}`;
+}
+
+/** Reply keeps the notification's target and asks the report to focus its composer. */
+function replyRouteFor(route: string): string {
+  const hashIndex = route.indexOf("#");
+  const pathAndQuery = hashIndex === -1 ? route : route.slice(0, hashIndex);
+  const hash = hashIndex === -1 ? "" : route.slice(hashIndex);
+  const separator = pathAndQuery.includes("?") ? "&" : "?";
+  return `${pathAndQuery}${separator}reply=1${hash}`;
 }
 
 export function typeLabel(type: NotificationType): string {
@@ -139,6 +149,10 @@ export function Notifications({ preview = false, onNavigate }: NotificationsProp
 }
 
 function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
+  const { user } = useAuth();
+  const navigateReport = useReportNavigation();
+  const [postActions, setPostActions] = useState<Record<string, { status: "OPEN" | "CLOSED"; pending: boolean }>>({});
+  const requestedPosts = useRef(new Set<string>());
   const finePointer = useFinePointer();
   const [reportId, setReportId] = useState<string | null>(null);
   const [card, setCard] = useState<{ item: NotificationItem; top: number; left: number } | null>(null);
@@ -505,6 +519,43 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
   const sortedItems = [...filteredItems].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const visibleItems = preview ? sortedItems.slice(0, 8) : sortedItems;
   const railItem = rail ? items?.find((item) => item.id === rail.id) ?? null : null;
+  useEffect(() => {
+    const postId = railItem?.postId;
+    // Ownership is decided against the signed-in viewer; before the viewer is
+    // known the probe would fail the owner check and the id would stay marked
+    // as requested, hiding the action forever. Wait for the viewer.
+    if (view !== "inbox" || !postId || !user?.id || railItem?.blockedActor) return;
+    // Key the probe by viewer + post: switching accounts in one session must
+    // not inherit the previous viewer's probed reports.
+    const probeKey = `${user.id}:${postId}`;
+    if (requestedPosts.current.has(probeKey)) return;
+    requestedPosts.current.add(probeKey);
+    void fetchPost(postId).then((post) => {
+      if (!alive.current || !post || post.userId !== user?.id ||
+          (post.type !== "LOST" && post.type !== "FOUND") ||
+          (post.status !== "OPEN" && post.status !== "CLOSED")) return;
+      setPostActions((current) => ({ ...current, [postId]: { status: post.status as "OPEN" | "CLOSED", pending: false } }));
+    }).catch(() => undefined);
+  }, [railItem, view, user?.id]);
+  const changePostStatus = async (postId: string) => {
+    const previous = postActions[postId];
+    if (!previous || previous.pending) return;
+    const status = previous.status === "OPEN" ? "CLOSED" : "OPEN";
+    setPostActions((current) => ({ ...current, [postId]: { status, pending: true } }));
+    setActionError(null);
+    try {
+      await updatePostStatus(postId, status);
+      if (!alive.current) return;
+      setPostActions((current) => ({ ...current, [postId]: { status, pending: false } }));
+      announce(status === "CLOSED" ? "Report marked resolved" : "Report reopened");
+    } catch (err) {
+      if (!alive.current) return;
+      setPostActions((current) => ({ ...current, [postId]: previous }));
+      const message = friendlyError(err).message;
+      setActionError(message);
+      announce(`Could not update report. ${message}`);
+    }
+  };
   // The list owns the gesture guard: a pointer-down that starts inside a
   // shield never reaches the row's drag surface, so it can never commit a
   // swipe. The list is mounted only when there is something to show, so the
@@ -805,6 +856,32 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
               <span className="fb-notification-rail-label" aria-hidden="true">Restore</span>
             </button>
           ) : <>
+            {railItem.postId && !railItem.blockedActor && (railItem.type === "COMMENT" || railItem.type === "MENTION") && <button
+              type="button"
+              className="fb-notification-rail-action"
+              aria-label="Reply"
+              onClick={() => {
+                const route = notificationRoute(railItem);
+                if (!route) return;
+                if (!railItem.read) void handleMarkRead(railItem.id);
+                closeRail();
+                onNavigate?.();
+                navigateReport(replyRouteFor(route));
+              }}
+            >
+              <MessageCircle size={16} aria-hidden />
+              <span className="fb-notification-rail-label" aria-hidden="true">Reply</span>
+            </button>}
+            {railItem.postId && !railItem.blockedActor && postActions[railItem.postId] && <button
+              type="button"
+              className="fb-notification-rail-action"
+              aria-label={postActions[railItem.postId]?.status === "OPEN" ? "Mark resolved" : "Reopen"}
+              disabled={postActions[railItem.postId]?.pending ?? true}
+              onClick={() => { const postId = railItem.postId; if (postId) void changePostStatus(postId); }}
+            >
+              {postActions[railItem.postId]?.status === "OPEN" ? <CheckCheck size={16} aria-hidden /> : <RotateCcw size={16} aria-hidden />}
+              <span className="fb-notification-rail-label" aria-hidden="true">{postActions[railItem.postId]?.status === "OPEN" ? "Mark resolved" : "Reopen"}</span>
+            </button>}
             <button
               type="button"
               className="fb-notification-rail-action"

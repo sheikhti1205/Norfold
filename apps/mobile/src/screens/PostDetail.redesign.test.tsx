@@ -149,7 +149,7 @@ describe("PostDetail redesign (UXN-3)", () => {
     renderDetail();
     const summary = await screen.findByRole("region", { name: "Report summary" });
     const identity = within(summary).getByRole("link", { name: "Open owner's profile" });
-    const title = within(summary).getByRole("heading", { level: 1, name: "Lost wallet" });
+    const title = within(summary).getByRole("heading", { level: 1, name: /Lost wallet/ });
     expect(identity.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const description = screen.getByTestId("post-description");
     const photo = screen.getByRole("button", { name: "Open photo 1 of 2 fullscreen" });
@@ -178,7 +178,7 @@ describe("PostDetail redesign (UXN-3)", () => {
     expect(await screen.findByRole("alertdialog")).toBeTruthy();
     await act(async () => { await router.navigate("/posts/p2"); });
     expect(screen.queryByRole("alertdialog")).toBeNull();
-    expect(screen.getByRole("heading", { level: 1, name: "Second report" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: /Second report/ })).toBeTruthy();
     expect(postsMock.updatePostStatus).not.toHaveBeenCalled();
   });
 
@@ -337,10 +337,8 @@ describe("PostDetail redesign (UXN-3)", () => {
     await waitFor(() => expect(postsMock.reactToPost).toHaveBeenCalledWith("p1", "LIKE"));
     const share = screen.getByRole("button", { name: /share/i });
     expect(share.textContent).not.toMatch(/\d/);
-    // One icon slot, an explicit menu: the row button never guesses whether
-    // the reader wants the system sheet or the link.
+    // One tap copies the link and opens the sheet; there is no copy menu.
     fireEvent.click(share);
-    fireEvent.click(await screen.findByRole("menuitem", { name: /copy link/i }));
     await waitFor(() => expect(clipboard.writeText).toHaveBeenCalled());
   });
 

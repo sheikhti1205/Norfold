@@ -112,7 +112,7 @@ describe("PostDetail stale mutation guard (W8-STATIC)", () => {
     // Same component instance serves the new post (the route carries no key).
     fireEvent.click(screen.getByTestId("go-p2"));
     const p2Love = await screen.findByRole("button", { name: /Like, 5 likes/ });
-    expect(await screen.findByRole("heading", { name: "P2 title" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: /P2 title/ })).toBeTruthy();
 
     await act(async () => reaction.resolve({ postId: "p1", likeCount: 99, dislikeCount: 0, myReaction: "LIKE" }));
 

@@ -163,7 +163,7 @@ export function KlipyPicker({
           </div>
         ) : loading ? (
           <div>
-            <p role="status" className="sr-only">Searching GIFs</p>
+            <p role="status" className="fb-klipy-status">Loading {tab === "gifs" ? "GIFs" : "stickers"}...</p>
             <div className="fb-klipy-grid" aria-hidden="true">
               {SKELETON_HEIGHTS.map((height, index) => (
                 <span key={index} className="fb-klipy-skeleton animate-pulse" style={{ height }} />
@@ -173,7 +173,7 @@ export function KlipyPicker({
         ) : items.length === 0 ? (
           <div role="status" className="fb-klipy-status">
             <ImageOff size={20} aria-hidden="true" />
-            <p>No results. Try another search.</p>
+            <p>{query.trim() ? "No results. Try another search." : "Nothing to show right now. Try a search."}</p>
           </div>
         ) : (
           <div>

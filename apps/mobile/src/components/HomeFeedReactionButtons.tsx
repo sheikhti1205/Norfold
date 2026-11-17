@@ -83,16 +83,16 @@ export function HomeFeedReactionButtons({ postId, likeCount, dislikeCount }: {
   const { hoverLabel } = useHoverLabel();
 
   return (
-    <span className="relative flex min-w-0 flex-col gap-1">
-      <span className="flex items-center">
-        <button type="button" data-testid="home-feed-love" aria-label={`Like, ${likes} ${likes === 1 ? "like" : "likes"}`} aria-pressed={likeActive}
+    <span className="fb-reaction-pair-root relative flex min-w-0 flex-col gap-1">
+      <span className="fb-reaction-pair flex items-center">
+        <button type="button" data-testid="home-feed-love" data-action="like" aria-label={`Like, ${likes} ${likes === 1 ? "like" : "likes"}`} aria-pressed={likeActive}
           aria-describedby={failed ? errorId : undefined} data-pending={pending ? "true" : "false"}
           disabled={pending} aria-busy={pending} onClick={() => void onToggle("LIKE")} className={buttonClass(likeActive)}
           {...hoverLabel("Like")}>
           <ThumbsUp size={18} aria-hidden fill={likeActive ? "currentColor" : "none"} />
           <span className="tabular-nums">{likes}</span>
         </button>
-        <button type="button" data-testid="home-feed-dislike" aria-label={`Dislike, ${dislikes} ${dislikes === 1 ? "dislike" : "dislikes"}`} aria-pressed={dislikeActive}
+        <button type="button" data-testid="home-feed-dislike" data-action="dislike" aria-label={`Dislike, ${dislikes} ${dislikes === 1 ? "dislike" : "dislikes"}`} aria-pressed={dislikeActive}
           aria-describedby={failed ? errorId : undefined} data-pending={pending ? "true" : "false"}
           disabled={pending} aria-busy={pending} onClick={() => void onToggle("DISLIKE")} className={buttonClass(dislikeActive)}
           {...hoverLabel("Dislike")}>
