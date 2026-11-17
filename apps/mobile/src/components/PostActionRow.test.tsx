@@ -149,6 +149,33 @@ describe("PostActionRow (compact flat action row)", () => {
     expect(screen.getByRole("button", { name: /share report/i }).textContent).toBe("Share");
   });
 
+  it("keeps the owner's action order: reactions, comments, insights, share", () => {
+    renderRow({
+      slots: {
+        reactions: <LikeSlot />,
+        insights: <span data-testid="slotted-insights">12</span>,
+        share: <ShareSlot />,
+      },
+    });
+    const row = screen.getByTestId("post-action-row");
+    const order = [...row.children].map((child) =>
+      child.getAttribute("data-testid") === "slotted-insights" ? "insights"
+        : child.getAttribute("data-testid") === "post-action-reactions" ? "reactions"
+        : (child.textContent ?? "").includes("Share") ? "share"
+        : child.getAttribute("data-action") === "comment" ? "comments" : "other",
+    );
+    expect(order).toEqual(["reactions", "comments", "insights", "share"]);
+  });
+
+  it("spreads every slot across the full width with equal columns", () => {
+    renderRow({ slots: { reactions: <LikeSlot />, insights: <span>12</span>, share: <ShareSlot /> } });
+    // The row owns the width; each slot takes one equal share and the reaction
+    // pair takes two, so like/dislike stay separate columns.
+    expect(rowCssRules).toMatch(/\.fb-post-action-row\s*\{[^}]*width:\s*100%/);
+    expect(rowCssRules).toMatch(/\.fb-post-action-row\s*>\s*\*\s*\{[^}]*flex:\s*1 1 0%/);
+    expect(rowCssRules).toMatch(/\.fb-post-action-row\s*>\s*\.fb-post-action-reactions\s*\{[^}]*flex:\s*2 1 0%/);
+  });
+
   it("keeps a >=44px hit area on every control", () => {
     renderRow({ slots: { like: <LikeSlot />, share: <ShareSlot />, save: <SaveSlot /> } });
     // The house token already guarantees the width; the row's own rule keeps

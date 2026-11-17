@@ -42,10 +42,10 @@ export interface PeerChatComposerProps {
 /**
  * Human-to-human composer.
  *
- * The row at rest is Camera, Photos, and an overflow menu; the text field
- * follows; the emoji trigger and Send stay on the far right. The overflow
- * menu holds the less frequent controls (File, Voice, Stickers and GIFs) so
- * five 44px controls never squeeze the field.
+ * The row at rest is Camera, Photos, Stickers/GIFs, and an overflow menu; the
+ * text field follows; the emoji trigger and Send stay on the far right. The
+ * overflow menu holds the less frequent controls (File, Voice) so five 44px
+ * controls never squeeze the field.
  *
  * Attachment expansion is explicit state, not `document.activeElement`:
  *   - opening an idle conversation shows the controls;
@@ -161,7 +161,7 @@ export function PeerChatComposer({
     </button>
   );
 
-  const hasMore = onFiles !== undefined || voiceAvailable || klipy;
+  const hasMore = onFiles !== undefined || voiceAvailable;
   const revealState = reveal === null ? "auto" : reveal ? "on" : "off";
   // Typing removes the cluster from the DOM; the width default is left to the
   // container query, so the two states can coexist without guessing.
@@ -201,12 +201,6 @@ export function PeerChatComposer({
                       onClick={() => { setMoreOpen(false); onVoice(); }}>
                       {voiceActive ? <Square size={18} aria-hidden="true" /> : <Mic size={20} aria-hidden="true" />}
                       {voiceActive ? "Stop recording" : "Voice message"}
-                    </button>
-                  )}
-                  {klipy && (
-                    <button type="button" role="menuitem" disabled={!photoAllowed || attachmentBusy}
-                      onClick={() => { setMoreOpen(false); setGifOpen(true); }}>
-                      <Sticker size={20} aria-hidden="true" /> Stickers and GIFs
                     </button>
                   )}
                 </div>
@@ -274,6 +268,7 @@ export function PeerChatComposer({
             if (hasFinePointer()) { event.preventDefault(); if (!event.repeat) send(); }
           }} />
       </div>
+      {klipy && button("Stickers and GIFs", <Sticker size={20} aria-hidden="true" />, () => setGifOpen(true), !photoAllowed || attachmentBusy)}
       <EmojiPickerButton onPick={pickEmoji} disabled={busy || locked} align="end"
         className="fb-peer-icon" label="Emoji" />
       <button type="submit" className="fb-peer-icon fb-peer-send" aria-label="Send message" disabled={!available}

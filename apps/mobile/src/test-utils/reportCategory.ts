@@ -20,7 +20,8 @@ export function categoryValue(): string {
  */
 export async function chooseCategory(canonical: string): Promise<void> {
   fireEvent.click(categoryTrigger());
-  fireEvent.click(screen.getByRole("button", { name: canonical }));
+  // The anchored popover mounts after the trigger press (React Aria portal).
+  fireEvent.click(await screen.findByRole("button", { name: canonical }));
   await waitFor(() =>
     expect(screen.queryByRole("dialog", { name: /choose a category/i })).toBeNull(),
   );

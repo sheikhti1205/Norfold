@@ -11,7 +11,9 @@ const { fetchMock, markReadMock, markUnreadMock, deleteMock, restoreMock } = vi.
   restoreMock: vi.fn(),
 }));
 const { authState } = vi.hoisted(() => ({ authState: { user: { id: "owner-a" } as { id: string } | null } }));
+const { fetchPostMock, updateStatusMock } = vi.hoisted(() => ({ fetchPostMock: vi.fn(), updateStatusMock: vi.fn() }));
 vi.mock("../auth", () => ({ useAuth: () => authState }));
+vi.mock("../services/posts", () => ({ fetchPost: fetchPostMock, updatePostStatus: updateStatusMock }));
 
 vi.mock("../services/notifications", () => ({
   fetchNotifications: fetchMock,
@@ -82,6 +84,8 @@ beforeEach(() => {
   markUnreadMock.mockReset();
   deleteMock.mockReset();
   restoreMock.mockReset();
+  fetchPostMock.mockReset().mockRejectedValue(new Error("unavailable"));
+  updateStatusMock.mockReset().mockResolvedValue({});
   markReadMock.mockResolvedValue(1);
   markUnreadMock.mockResolvedValue(1);
   deleteMock.mockResolvedValue(1);
@@ -93,6 +97,36 @@ afterEach(() => {
 });
 
 describe("Notifications inbox", () => {
+  it("shows status actions only after confirming report ownership and supported status", async () => {
+    fetchMock.mockResolvedValue([item()]);
+    fetchPostMock.mockResolvedValue({ userId: "owner-a", type: "LOST", status: "OPEN" });
+    renderNotifications();
+    await openRowActions();
+    expect(await screen.findByRole("button", { name: "Mark resolved" })).toBeTruthy();
+    expect(fetchPostMock).toHaveBeenCalledTimes(1);
+  });
+  it("does not show a status action for another owner", async () => {
+    fetchMock.mockResolvedValue([item()]);
+    fetchPostMock.mockResolvedValue({ userId: "other", type: "FOUND", status: "OPEN" });
+    renderNotifications();
+    await openRowActions();
+    await waitFor(() => expect(fetchPostMock).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("button", { name: "Mark resolved" })).toBeNull();
+  });
+  it("optimistically changes status and rolls back a failed write", async () => {
+    const write = deferred<unknown>();
+    fetchMock.mockResolvedValue([item()]);
+    fetchPostMock.mockResolvedValue({ userId: "owner-a", type: "LOST", status: "OPEN" });
+    updateStatusMock.mockReturnValue(write.promise);
+    renderNotifications();
+    await openRowActions();
+    fireEvent.click(await screen.findByRole("button", { name: "Mark resolved" }));
+    expect(updateStatusMock).toHaveBeenCalledWith("p1", "CLOSED");
+    expect((screen.getByRole("button", { name: "Reopen" }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => write.reject(new Error("network down")));
+    expect(screen.getByRole("button", { name: "Mark resolved" })).toBeTruthy();
+    expect(screen.getByRole("alert")).toBeTruthy();
+  });
   it("filters unread activity locally without losing deleted/restore access", async () => {
     fetchMock.mockResolvedValue([item(), item({ id: "n2", read: true, actorUsername: "cara" })]);
     renderNotifications();

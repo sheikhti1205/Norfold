@@ -1,4 +1,4 @@
-/* Compact flat action row (owner reference: one row of icon-only actions).
+/* The one flat action row: equal-width slots across the full card width.
  *
  * The slotted controls keep the house `.fb-report-action` token — the 44px
  * hit area, the focus-visible ring, the disabled state — but lose the button
@@ -8,17 +8,64 @@
  * WHY A DEDICATED FILE AND NOT UTILITIES: `.fb-report-action` is unlayered
  * plain CSS in `index.css`, and an unlayered rule beats every Tailwind utility
  * regardless of specificity (utilities live in `@layer utilities`). The flat
- * look therefore cannot be reached with utilities on the slotted controls; it
- * needs one scoped, higher-specificity rule (`0,2,0` beats `0,1,0`) instead of
+ * look and the equal columns therefore cannot be reached with utilities on the
+ * slotted controls; they need one scoped, higher-specificity rule instead of
  * the `!important` utility pile the grid used to carry.
  */
+.fb-post-action-row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0;
+}
+
+/* Equal columns: every direct slot takes the same share of the row, and the
+ * reaction pair takes two shares so like/dislike stay separate columns. */
+.fb-post-action-row > * {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+.fb-post-action-row > .fb-post-action-reactions {
+  flex: 2 1 0%;
+  display: block;
+  min-width: 0;
+}
+.fb-post-action-row > .fb-post-action-reactions > * {
+  width: 100%;
+}
+.fb-post-action-row .fb-reaction-pair-root {
+  width: 100%;
+  min-width: 0;
+}
+.fb-post-action-row .fb-reaction-pair {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+}
+.fb-post-action-row .fb-reaction-pair > * {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+/* The share control is a positioning wrapper around one button. */
+.fb-post-action-row > .fb-post-action-share {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.fb-post-action-row > .fb-post-action-share > .fb-report-action {
+  flex: 1 1 0%;
+}
+
 .fb-post-action-row .fb-report-action {
   flex-direction: row;
   align-items: center;
   justify-content: center;
   gap: 0.25rem;
-  width: auto;
-  min-width: 44px;
+  width: 100%;
+  min-width: 0;
   min-height: 44px;
   padding: 0;
   /* Anchors the visually hidden caption below to its own control. */
@@ -46,6 +93,47 @@
 .fb-post-action-row .fb-report-action[aria-pressed="true"] {
   color: var(--fb-on-surface);
 }
+
+/* Functional colour per action (owner direction: the row is not all black).
+ * Semantic tokens only; each is a text tone already contrast-checked on the
+ * neutral surfaces. */
+.fb-post-action-row .fb-report-action[data-action="like"] {
+  color: var(--fb-success);
+}
+.fb-post-action-row .fb-report-action[data-action="dislike"] {
+  color: var(--fb-error);
+}
+.fb-post-action-row .fb-report-action[data-action="comment"] {
+  color: var(--fb-link);
+}
+.fb-post-action-row .fb-report-action[data-action="share"] {
+  color: var(--fb-primary);
+}
+.fb-post-action-row .fb-report-action[aria-pressed="true"][data-action="like"] {
+  color: var(--fb-success);
+}
+.fb-post-action-row .fb-report-action[aria-pressed="true"][data-action="dislike"] {
+  color: var(--fb-error);
+}
+
+/* The views/insights metric is information, not a control: same column, same
+ * rhythm, no hover fill and no pressed state. */
+.fb-post-action-row .fb-report-metric {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  color: var(--fb-warning);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.fb-post-action-row .fb-report-metric > svg {
+  flex-shrink: 0;
+}
+
 /* Slotted controls may carry a redundant visible label (the share control
  * ships a "Share" caption). The flat row is icon-only: the caption is kept
  * for assistive tech but taken out of the visual flow. Counts carry the

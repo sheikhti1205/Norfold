@@ -8,7 +8,7 @@ import { MASONRY_FALLBACK_RATIO, masonryAspectRatio } from "./masonryLayout";
 import { HomeFeedReactionButtons } from "./HomeFeedReactionButtons";
 import { PostActionRow } from "./PostActionRow";
 import { ReportShareButton } from "./ReportShareButton";
-import { PostIdentityHeader, PostStatusTitle, PostFacts, sharedMediaLayoutId, sharedElementTransition } from "./PostAnatomy";
+import { PostIdentityHeader, PostStatusTitle, PostFacts, PostInsightsMetric, sharedMediaLayoutId, sharedElementTransition } from "./PostAnatomy";
 import { useReportNavigation } from "./PostNavigation";
 import { PostDescription } from "./PostDescription";
 import { FeedMediaCarousel } from "./FeedMediaCarousel";
@@ -124,7 +124,8 @@ export function PostCardContent({ post, layout = "classic", enableSharedMedia = 
     <div data-testid="post-footer">
       <div data-testid={layout === "home-feed" ? "home-feed-actions" : undefined}>
         <PostActionRow commentCount={post.commentCount} commentsHref={`/posts/${post.id}#detail-comments`} slots={{
-          like: <HomeFeedReactionButtons postId={post.id} likeCount={post.likeCount} dislikeCount={post.dislikeCount} />,
+          reactions: <HomeFeedReactionButtons postId={post.id} likeCount={post.likeCount} dislikeCount={post.dislikeCount} />,
+          insights: <PostInsightsMetric views={post.viewCount ?? 0} />,
           share: <ReportShareButton postId={post.id} title={post.title} />,
         }} />
       </div>

@@ -295,16 +295,15 @@ async function searchKlipy(
   let res: Response;
   try {
     res = await impl(url, { signal: options.signal });
-  } catch {
-    return [];
+  } catch (error) {
+    // A cancelled search is not a failure: the picker superseded it or left
+    // the screen. Only a real transport error reaches the error state.
+    if (error instanceof DOMException && error.name === "AbortError") return [];
+    if (typeof error === "object" && error !== null && (error as { name?: unknown }).name === "AbortError") return [];
+    throw error;
   }
-  if (!res.ok) return [];
-  let payload: unknown = null;
-  try {
-    payload = await res.json();
-  } catch {
-    return [];
-  }
+  if (!res.ok) throw new Error("Klipy request failed");
+  const payload: unknown = await res.json();
   const out: KlipyItem[] = [];
   for (const raw of contentItemsOf(payload)) {
     const item = normalizeKlipyItem(kind, raw);

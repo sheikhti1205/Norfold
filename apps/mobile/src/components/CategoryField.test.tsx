@@ -7,6 +7,30 @@ import { categoryTrigger, categoryValue } from "../test-utils/reportCategory";
 afterEach(cleanup);
 
 describe("CategoryField (P3 searchable grouped sheet)", () => {
+  it("opens an anchored popover, focuses search, and restores focus on Escape", async () => {
+    render(<CategoryField value="" onChange={() => {}} />);
+    const trigger = categoryTrigger();
+    fireEvent.click(trigger);
+    const search = screen.getByRole("searchbox", { name: "Search categories" });
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    expect(screen.queryByTestId("bottom-sheet-content")).toBeNull();
+    expect(screen.getByTestId("category-popover")).toBeTruthy();
+    fireEvent.keyDown(search, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+  it("keeps one category in the tab order and moves it with arrow keys", () => {
+    render(<CategoryField value="" onChange={() => {}} />);
+    fireEvent.click(categoryTrigger());
+    const results = screen.getByTestId("category-results");
+    expect(results.querySelectorAll('button[tabindex="0"]')).toHaveLength(1);
+    const first = screen.getByRole("button", { name: "Electronics" });
+    const next = screen.getByRole("button", { name: "Phones & Tablets" });
+    first.focus();
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(next);
+    expect(results.querySelectorAll('button[tabindex="0"]')).toHaveLength(1);
+  });
   it("dismisses an open sheet when locked and does not reopen on unlock", async () => {
     const onChange = vi.fn();
     const { rerender } = render(<CategoryField value="Electronics" onChange={onChange} />);
@@ -128,10 +152,9 @@ describe("CategoryField (P3 searchable grouped sheet)", () => {
   it("keeps search in a fixed header outside the scrolling results", () => {
     render(<CategoryField value="" onChange={() => {}} />);
     fireEvent.click(categoryTrigger());
-    const header = screen.getByTestId("bottom-sheet-header");
+    const header = screen.getByTestId("category-search-header");
     expect(header.contains(screen.getByPlaceholderText(/search categories/i))).toBe(true);
-    // The outer sheet content must not scroll; only the results region does.
-    expect(screen.getByTestId("bottom-sheet-content").style.overflowY).toBe("hidden");
+    expect(screen.queryByTestId("bottom-sheet-content")).toBeNull();
     const results = screen.getByTestId("category-results");
     expect(results.className).toMatch(/overflow-y-auto/);
   });
@@ -146,9 +169,9 @@ describe("CategoryField (P3 searchable grouped sheet)", () => {
   });
 
   it("separates groups with dividers and tints the selected row", () => {
-    const { container } = render(<CategoryField value="Keys" onChange={() => {}} />);
+    render(<CategoryField value="Keys" onChange={() => {}} />);
     fireEvent.click(categoryTrigger());
-    const sections = container.querySelectorAll("section[aria-label]");
+    const sections = screen.getByTestId("category-results").querySelectorAll("section[aria-label]");
     expect(sections.length).toBeGreaterThan(1);
     const second = sections[1];
     expect(second).toBeTruthy();
@@ -180,10 +203,10 @@ describe("CategoryField (P3 searchable grouped sheet)", () => {
   });
 
   it("staggers result rows in and leaves them steady once settled", async () => {
-    const { container } = render(<CategoryField value="" onChange={() => {}} />);
+    render(<CategoryField value="" onChange={() => {}} />);
     fireEvent.click(categoryTrigger());
     const rows = Array.from(
-      container.querySelectorAll('[data-testid="category-results"] button'),
+      screen.getByTestId("category-results").querySelectorAll("button"),
     ) as HTMLButtonElement[];
     expect(rows.length).toBeGreaterThan(9);
     const lastRow = rows[rows.length - 1]!;

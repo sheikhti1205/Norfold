@@ -14,9 +14,16 @@
 .fb-post-facts { display: flex; flex-wrap: wrap; gap: .25rem .75rem; color: var(--fb-on-surface-variant); font-size: .75rem; }
 .fb-post-facts p { display: flex; align-items: center; gap: .25rem; min-width: 0; overflow-wrap: anywhere; }
 .fb-post-facts svg { flex-shrink: 0; }
+/* Report-surface heading facts: type + lifecycle read beside the title, not as
+   a second chip line above it (owner direction 2026-11-17). */
+.fb-title-meta { display: inline-flex; flex-wrap: wrap; gap: .15rem .35rem; margin-inline-start: .45rem; color: var(--fb-on-surface-variant); font-size: .55em; font-weight: 500; letter-spacing: 0; vertical-align: .12em; }
+.fb-title-meta > span { white-space: nowrap; }
 .fb-post-photo { display: block; min-width: 44px; min-height: 44px; padding: 0; text-align: start; }
 .fb-post-photo > .fb-thumb { display: block; }
-.fb-post-home-feed .fb-post-heading, .fb-post-home-feed > .fb-post-identity, .fb-post-home-feed > .fb-post-description, .fb-post-home-feed > .fb-post-facts, .fb-post-home-feed > [data-testid="post-footer"] { margin-inline: .5rem; }
+.fb-post-home-feed .fb-post-heading, .fb-post-home-feed > .fb-post-identity, .fb-post-home-feed > .fb-post-description, .fb-post-home-feed > .fb-post-facts { margin-inline: .5rem; }
+/* The action row spans the full width of the home card's media, edge to edge
+   (owner direction 2026-11-17): no gutter, equal slots. */
+.fb-post-home-feed > [data-testid="post-footer"] { margin-inline: 0; }
 .fb-post-compact { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: .625rem; }
 .fb-post-compact .fb-post-identity { grid-column: 1 / -1; }
 .fb-post-compact .fb-post-heading { grid-column: 1; grid-row: 2; }

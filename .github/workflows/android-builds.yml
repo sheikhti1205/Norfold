@@ -44,6 +44,7 @@ env:
   VITE_PUBLIC_SHARE_ORIGIN: ${{ vars.VITE_PUBLIC_SHARE_ORIGIN }}
   VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
   VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+  VITE_KLIPY_API_KEY: ${{ secrets.VITE_KLIPY_API_KEY }}
   VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
   VITE_SENTRY_ENVIRONMENT: production
   VITE_SENTRY_DIST: android-release
@@ -174,6 +175,8 @@ jobs:
           SENTRY_UPLOAD_SOURCEMAPS: "true"
       - name: Assert client config in the bundle
         run: node scripts/check-mobile-build-config.mjs --assets apps/mobile/dist/assets
+      - name: Report GIF and sticker configuration
+        run: node scripts/check-klipy-config.mjs
       - name: Upload matching symbols and remove maps before packaging
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}

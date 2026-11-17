@@ -198,21 +198,21 @@ describe("PostCardContent home-feed (content-first Home layout)", () => {
     expect(screen.queryByText("4.5")).toBeNull();
   });
 
-  it("shares the selected report URL, not the feed URL", async () => {
+  it("shares the selected report URL in the same tap, with no menu detour", async () => {
     const share = vi.fn().mockResolvedValue(undefined);
+    const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "share", { configurable: true, value: share });
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
     renderHomeFeed(imagePost());
-    // One icon slot, an explicit menu: the row button never guesses whether
-    // the reader wants the system sheet or the link.
     fireEvent.click(screen.getByRole("button", { name: /share report/i }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: /share report/i }));
+    expect(screen.queryByRole("menu")).toBeNull();
     await waitFor(() => expect(share).toHaveBeenCalledWith({
       title: "Norfold report",
       url: "https://findback.test/api/share/p1",
     }));
   });
 
-  it("copies the report link when Web Share fails, but not on dismissal", async () => {
+  it("copies the report link on every share tap, whatever the sheet does", async () => {
     const share = vi.fn().mockRejectedValueOnce(new Error("unavailable"))
       .mockRejectedValueOnce(new DOMException("dismissed", "AbortError"));
     const writeText = vi.fn().mockResolvedValue(undefined);
@@ -220,16 +220,13 @@ describe("PostCardContent home-feed (content-first Home layout)", () => {
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
     renderHomeFeed(imagePost());
     fireEvent.click(screen.getByRole("button", { name: /share report/i }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: /share report/i }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(
       "https://findback.test/api/share/p1",
     ));
-    // A dismissal is not a failure: the sheet's own AbortError must not fall
-    // back to the clipboard, so the retry opens the menu again.
     fireEvent.click(screen.getByRole("button", { name: /share report/i }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: /share report/i }));
     await waitFor(() => expect(share).toHaveBeenCalledTimes(2));
-    expect(writeText).toHaveBeenCalledTimes(1);
+    // The link is on the clipboard even when the reader dismisses the sheet.
+    expect(writeText).toHaveBeenCalledTimes(2);
   });
 
   it("keeps the author as quiet metadata without competing with the title", () => {

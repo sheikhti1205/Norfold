@@ -106,12 +106,11 @@ it("inserts a picked emoji at the caret (owner order 2026-11-12, R5)", () => {
 it("offers the shared sticker/GIF picker only with a provider key", () => {
   vi.stubEnv("VITE_KLIPY_API_KEY", "");
   const withoutKey = render(<Harness onPickKlipy={() => undefined} />);
-  expect(screen.queryByRole("menuitem", { name: "Stickers and GIFs" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Stickers and GIFs" })).toBeNull();
   withoutKey.unmount();
   vi.stubEnv("VITE_KLIPY_API_KEY", "testing-key");
   render(<Harness onPickKlipy={() => undefined} />);
-  fireEvent.click(screen.getByRole("button", { name: "More attachments" }));
-  expect(screen.getByRole("menuitem", { name: "Stickers and GIFs" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Stickers and GIFs" })).toBeTruthy();
   vi.unstubAllEnvs();
 });
 

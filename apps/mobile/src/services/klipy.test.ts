@@ -118,13 +118,13 @@ describe("searchKlipy", () => {
     expect(seen[0]).toContain("/test-key/stickers/trending");
   });
 
-  it("never throws on provider failures (empty results, no error surface)", async () => {
+  it("rejects provider failures so the picker can show an error", async () => {
     const failing = (async () => {
       throw new Error("offline");
     }) as unknown as typeof fetch;
-    expect(await searchKlipyGifs("x", { env: { VITE_KLIPY_API_KEY: "k" }, fetchImpl: failing })).toEqual([]);
+    await expect(searchKlipyGifs("x", { env: { VITE_KLIPY_API_KEY: "k" }, fetchImpl: failing })).rejects.toThrow();
     const bad = (async () => ({ ok: false, json: async () => ({}) }) as Response) as unknown as typeof fetch;
-    expect(await searchKlipyGifs("x", { env: { VITE_KLIPY_API_KEY: "k" }, fetchImpl: bad })).toEqual([]);
+    await expect(searchKlipyGifs("x", { env: { VITE_KLIPY_API_KEY: "k" }, fetchImpl: bad })).rejects.toThrow();
   });
 });
 

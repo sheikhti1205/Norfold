@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import type { PostItem } from "@norfold/shared";
+import { POST_STATUS_LABELS } from "@norfold/shared";
 import { motion } from "framer-motion";
-import { MapPin, Tag } from "lucide-react";
+import { BarChart3, MapPin, Tag } from "lucide-react";
 import { timeAgo } from "../utils/dates";
 import { UserIdentityTrigger } from "./UserIdentityTrigger";
 import { VerifiedBadge } from "./VerifiedBadge";
@@ -28,15 +29,51 @@ export function PostIdentityHeader({ post, overflow, contextReportId }: { post: 
   </header>;
 }
 
+/**
+ * The views metric that sits in the action row's insights slot.
+ *
+ * It is information, not a button: same column rhythm and colour as the row,
+ * no hover fill, no pressed state. `data-action="insights"` gives it the one
+ * shared tone (see PostActionRow.css).
+ */
+export function PostInsightsMetric({ views }: { views: number }) {
+  return <span
+    data-testid="post-views"
+    data-action="insights"
+    className="fb-report-metric"
+  >
+    <BarChart3 size={18} aria-hidden />
+    <span className="tabular-nums" aria-hidden>{views}</span>
+    <span className="sr-only">{views === 1 ? "1 view" : `${views} views`}</span>
+  </span>;
+}
+
+/**
+ * On the report surface the title IS the heading, with its type and lifecycle
+ * state reading as compact parenthetical facts beside it ("Laptop (found)
+ * (unrecovered)") instead of a separate chip line above. Feed cards keep the
+ * chip: they need the status to survive a two-line clamp.
+ */
+function detailTitleMeta(post: PostItem): string[] {
+  const type = post.type === "LOST" ? "lost" : "found";
+  const status = post.status === "OPEN" ? "unrecovered" : POST_STATUS_LABELS[post.status].toLowerCase();
+  return [type, status];
+}
+
 export function PostStatusTitle({ post, detail = false, titleClassName = "fb-feed-title", linkTestId, enableSharedMedia = false }: {
   post: PostItem; detail?: boolean; titleClassName?: string; linkTestId?: string; enableSharedMedia?: boolean;
 }) {
   const Title = detail ? motion.h1 : motion.h3;
   const title = <Title className={`break-words ${titleClassName}`} {...(enableSharedMedia ? {
     layoutId: sharedTitleLayoutId(post.id), "data-shared-title": sharedTitleLayoutId(post.id), transition: sharedElementTransition,
-  } : {})}>{post.title}</Title>;
+  } : {})}>{post.title}{detail && (<>
+    {" "}
+    <span className="fb-title-meta" data-testid="post-title-meta">
+      {detailTitleMeta(post).map((word) => <span key={word}>({word})</span>)}
+    </span>
+  </>)}</Title>;
   return <div className="fb-post-heading">
-    <div className="fb-post-status"><StatusChip post={post} />{post.status !== "OPEN" && <span>{post.type === "LOST" ? "Lost" : "Found"}</span>}</div>
+    {!detail && <div className="fb-post-status"><StatusChip post={post} />{post.status !== "OPEN" && <span>{post.type === "LOST" ? "Lost" : "Found"}</span>}</div>}
     <div data-testid="post-title">{detail ? title : <PostLink to={`/posts/${post.id}`} data-testid={linkTestId} className="fb-post-title-link">{title}</PostLink>}</div>
   </div>;
 }

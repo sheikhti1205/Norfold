@@ -1,17 +1,16 @@
 // @vitest-environment jsdom
 /**
- * The one share control: the system share sheet and the copy action.
+ * The one share control: one tap copies the public link AND opens the platform
+ * sheet. No intermediate Share/Copy menu.
  *
- * The contract is honesty: an outcome is announced as it happened, a
- * platform without a clipboard gets a selectable link instead of a fake
- * "copied", and an impossible share is reported rather than swallowed.
+ * The contract is honesty: an outcome is announced as it happened, a platform
+ * without a clipboard gets a selectable link instead of a fake "copied", and
+ * an impossible share is reported rather than swallowed.
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __resetNativeShare, __setNativeShare } from "../utils/shareReport";
 import { ReportShareButton } from "./ReportShareButton";
-import { AdaptiveTaskSurface } from "./AdaptiveTaskSurface";
-import { consumeBackIntercept } from "./backNavigation";
 
 const origin = "https://findbackapp.social";
 const id = "5b6f7c8d-1234-4abc-8def-123456789012";
@@ -46,113 +45,71 @@ afterEach(() => {
 });
 
 describe("ReportShareButton", () => {
-  it("consumes Back in a nested share menu instead of closing the report", async () => {
-    const close = vi.fn();
-    render(<AdaptiveTaskSurface open title="Report" onClose={close}><ReportShareButton postId={id} title="Lost keys" /></AdaptiveTaskSurface>);
-    fireEvent.click(screen.getByRole("button", { name: "Share report" }));
-    expect(await screen.findByRole("menu")).toBeTruthy();
-    act(() => { expect(consumeBackIntercept()).toBe(true); });
-    expect(close).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
-  });
-
-  function choose(name: string) {
-    fireEvent.click(screen.getByRole("button", { name: "Share report" }));
-    fireEvent.click(screen.getByRole("menuitem", { name }));
-  }
-
-  it("occupies one share slot and exposes both explicit actions in a nonmodal menu", () => {
+  it("is one button with no menu detour", () => {
+    stubNavigator();
     render(<ReportShareButton postId={id} title="Lost keys" />);
     expect(screen.getAllByRole("button")).toHaveLength(1);
-    const trigger = screen.getByRole("button", { name: "Share report" });
-    expect(["true", "menu"]).toContain(trigger.getAttribute("aria-haspopup"));
-    fireEvent.click(trigger);
-    expect(screen.getByRole("menuitem", { name: "Share report" })).toBeTruthy();
-    expect(screen.getByRole("menuitem", { name: "Copy link" })).toBeTruthy();
-    expect(screen.queryByRole("dialog")?.getAttribute("aria-modal")).not.toBe("true");
-  });
-
-  it("supports keyboard navigation, Escape focus return and non-trapping Tab", async () => {
-    render(<ReportShareButton postId={id} title="Lost keys" />);
-    const trigger = screen.getByRole("button", { name: "Share report" });
-    trigger.focus();
-    fireEvent.keyDown(trigger, { key: "ArrowDown" });
-    const share = screen.getByRole("menuitem", { name: "Share report" });
-    const copy = screen.getByRole("menuitem", { name: "Copy link" });
-    expect(document.activeElement).toBe(share);
-    fireEvent.keyDown(share, { key: "ArrowDown" });
-    expect(document.activeElement).toBe(copy);
-    fireEvent.keyDown(copy, { key: "Home" });
-    expect(document.activeElement).toBe(share);
-    fireEvent.keyDown(share, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "Share report" }));
     expect(screen.queryByRole("menu")).toBeNull();
-    await waitFor(() => expect(document.activeElement).toBe(trigger));
-    fireEvent.keyDown(trigger, { key: "ArrowUp" });
-    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Copy link" }));
-    fireEvent.keyDown(document.activeElement!, { key: "Tab" });
-    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
   });
 
-  it("dismisses the native sheet honestly and does not copy", async () => {
-    __setNativeShare(vi.fn().mockResolvedValue("dismissed"));
-    const writeText = vi.fn();
-    stubNavigator({ writeText });
-    const { heard, stop } = listenForAnnouncements();
-    try {
-      render(<ReportShareButton postId={id} title="Lost keys" />);
-      choose("Share report");
-      await waitFor(() => expect(heard).toContain("Share dismissed."));
-      expect(writeText).not.toHaveBeenCalled();
-    } finally { stop(); }
-  });
-  it("copies the public report link and announces the copy", async () => {
+  it("copies and shares in the same tap", async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
     const writeText = vi.fn().mockResolvedValue(undefined);
-    stubNavigator({ writeText });
+    stubNavigator({ share, writeText });
     const { heard, stop } = listenForAnnouncements();
     try {
       render(<ReportShareButton postId={id} title="Lost keys" />);
-
-      choose("Copy link");
-
-      await waitFor(() => expect(writeText).toHaveBeenCalledWith(url));
-      await waitFor(() => expect(heard).toContain("Link copied."));
-      // A copy that happened must not leave the manual field on screen.
-      expect(screen.queryByLabelText("Report link")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Share report" }));
+      await waitFor(() => expect(share).toHaveBeenCalledWith({ title: "Norfold report", url }));
+      expect(writeText).toHaveBeenCalledWith(url);
+      await waitFor(() => expect(heard).toContain("Link copied and shared."));
     } finally {
       stop();
     }
   });
 
-  it("offers the link in a selectable field when the platform has no clipboard", async () => {
+  it("still copies when the reader dismisses the sheet", async () => {
+    const share = vi.fn().mockRejectedValue(new DOMException("cancelled", "AbortError"));
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubNavigator({ share, writeText });
+    const { heard, stop } = listenForAnnouncements();
+    try {
+      render(<ReportShareButton postId={id} title="Lost keys" />);
+      fireEvent.click(screen.getByRole("button", { name: "Share report" }));
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(url));
+      await waitFor(() => expect(heard).toContain("Link copied."));
+    } finally {
+      stop();
+    }
+  });
+
+  it("copies when the platform has no share sheet", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubNavigator({ writeText });
+    const { heard, stop } = listenForAnnouncements();
+    try {
+      render(<ReportShareButton postId={id} title="Lost keys" />);
+      fireEvent.click(screen.getByRole("button", { name: "Share report" }));
+      await waitFor(() => expect(heard).toContain("Link copied to clipboard."));
+      expect(writeText).toHaveBeenCalledWith(url);
+    } finally {
+      stop();
+    }
+  });
+
+  it("offers the link in a selectable field when there is no clipboard", async () => {
     stubNavigator();
     const { heard, stop } = listenForAnnouncements();
     try {
       render(<ReportShareButton postId={id} title="Lost keys" />);
-
-      choose("Copy link");
-
+      fireEvent.click(screen.getByRole("button", { name: "Share report" }));
       const field = (await screen.findByLabelText("Report link")) as HTMLInputElement;
       expect(field.value).toBe(url);
       expect(field.readOnly).toBe(true);
       // It must never claim a copy that did not happen.
       await waitFor(() => expect(heard.join(" ")).toMatch(/isn't available/i));
       expect(heard).not.toContain("Link copied.");
-    } finally {
-      stop();
-    }
-  });
-
-  it("shares through the system sheet and announces the outcome", async () => {
-    const share = vi.fn().mockResolvedValue(undefined);
-    stubNavigator({ share });
-    const { heard, stop } = listenForAnnouncements();
-    try {
-      render(<ReportShareButton postId={id} title="Lost keys" />);
-
-      choose("Share report");
-
-      await waitFor(() => expect(share).toHaveBeenCalledWith({ title: "Norfold report", url }));
-      await waitFor(() => expect(heard).toContain("Link shared."));
     } finally {
       stop();
     }
@@ -165,27 +122,9 @@ describe("ReportShareButton", () => {
     const { heard, stop } = listenForAnnouncements();
     try {
       render(<ReportShareButton postId={id} title="Lost keys" />);
-
-      choose("Share report");
-
+      fireEvent.click(screen.getByRole("button", { name: "Share report" }));
       await waitFor(() => expect(native).toHaveBeenCalledWith({ title: "Norfold report", url }));
       await waitFor(() => expect(heard).toContain("Link shared."));
-    } finally {
-      stop();
-    }
-  });
-
-  it("reports an impossible share instead of pretending it worked", async () => {
-    stubNavigator();
-    const { heard, stop } = listenForAnnouncements();
-    try {
-      render(<ReportShareButton postId={id} title="Lost keys" />);
-
-      choose("Share report");
-
-      await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
-      expect(screen.getByRole("alert").textContent).toMatch(/couldn't share/i);
-      await waitFor(() => expect(heard.join(" ")).toMatch(/couldn't share/i));
     } finally {
       stop();
     }
@@ -195,11 +134,6 @@ describe("ReportShareButton", () => {
 describe("ReportShareButton lifetime", () => {
   const first = "aaaaaaaa-1111-4111-8111-111111111111";
   const second = "bbbbbbbb-2222-4222-8222-222222222222";
-
-  function chooseShare(name: string) {
-    fireEvent.click(screen.getByRole("button", { name: "Share report" }));
-    fireEvent.click(screen.getByRole("menuitem", { name }));
-  }
 
   function deferred() {
     let resolve!: () => void;
@@ -214,7 +148,7 @@ describe("ReportShareButton lifetime", () => {
     const { heard, stop } = listenForAnnouncements();
     try {
       const view = render(<ReportShareButton postId={first} title="A" />);
-      chooseShare("Copy link");
+      fireEvent.click(screen.getByRole("button", { name: "Share report" }));
       view.rerender(<ReportShareButton postId={second} title="B" />);
       await act(async () => pending.reject(new Error("clipboard refused")));
       expect(screen.queryByLabelText("Report link")).toBeNull();
@@ -228,7 +162,7 @@ describe("ReportShareButton lifetime", () => {
     const { heard, stop } = listenForAnnouncements();
     try {
       const view = render(<ReportShareButton postId={first} title="A" />);
-      chooseShare("Share report");
+      fireEvent.click(screen.getByRole("button", { name: "Share report" }));
       view.unmount();
       await act(async () => pending.resolve());
       expect(heard).toEqual([]);
@@ -241,7 +175,7 @@ describe("ReportShareButton lifetime", () => {
     const { heard, stop } = listenForAnnouncements();
     try {
       const view = render(<ReportShareButton postId={first} title="A" />);
-      chooseShare("Share report");
+      fireEvent.click(screen.getByRole("button", { name: "Share report" }));
       view.rerender(<ReportShareButton postId={second} title="B" />);
       await act(async () => pending.resolve());
       expect(heard).toEqual([]);
@@ -249,12 +183,12 @@ describe("ReportShareButton lifetime", () => {
     } finally { stop(); }
   });
 
-  it("never reopens a menu or announces a failure that lands after unmount", async () => {
+  it("announces nothing when the fallback lands after unmount", async () => {
     stubNavigator();
     const { heard, stop } = listenForAnnouncements();
     try {
       const view = render(<ReportShareButton postId={first} title="A" />);
-      chooseShare("Share report");
+      fireEvent.click(screen.getByRole("button", { name: "Share report" }));
       view.unmount();
       await act(async () => {});
       expect(heard).toEqual([]);
@@ -262,15 +196,12 @@ describe("ReportShareButton lifetime", () => {
     } finally { stop(); }
   });
 
-  it("drops the previous report's error when the control now shows another report", async () => {
+  it("closes the previous report's manual-link surface when the identity changes", async () => {
     stubNavigator();
     const view = render(<ReportShareButton postId={first} title="A" />);
-    chooseShare("Share report");
-    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
-    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
-    view.rerender(<ReportShareButton postId={second} title="B" />);
     fireEvent.click(screen.getByRole("button", { name: "Share report" }));
-    expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByRole("menuitem", { name: "Share report" })).toBeTruthy();
+    await screen.findByLabelText("Report link");
+    view.rerender(<ReportShareButton postId={second} title="B" />);
+    await waitFor(() => expect(screen.queryByLabelText("Report link")).toBeNull());
   });
 });

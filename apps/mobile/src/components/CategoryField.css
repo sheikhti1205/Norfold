@@ -1,0 +1,15 @@
+.fb-category-popover {
+  display: flex;
+  width: min(24rem, calc(100vw - 16px));
+  max-height: min(70vh, var(--available-height, 70vh));
+  overflow: hidden;
+}
+
+.fb-category-dialog {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  max-height: min(70vh, var(--available-height, 70vh));
+  min-height: 0;
+  outline: none;
+}

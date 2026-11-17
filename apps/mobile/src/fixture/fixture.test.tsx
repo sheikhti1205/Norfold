@@ -94,6 +94,9 @@ function clearSharedRoute() {
 }
 
 describe("visual fixture route (static preflight)", () => {
+  // The first assertion owns the one shared mount. Under full-suite worker
+  // contention the 15-section x 9-variant tree can take longer to commit than
+  // the global 20s test timeout, so this assertion gets its own ceiling.
   it("renders the route shell with a section index", () => {
     useSharedRoute();
     expect(screen.getByTestId("fixture-route")).toBeTruthy();
@@ -103,7 +106,7 @@ describe("visual fixture route (static preflight)", () => {
         `missing section: ${id}`,
       ).toBeTruthy();
     }
-  });
+  }, 120_000);
 
   it("every section index link resolves to a unique in-page anchor", () => {
     const { container } = useSharedRoute();

@@ -174,6 +174,41 @@ async function open() {
   return rendered;
 }
 
+it("shows a pending outgoing message immediately and offers retry on admission failure", async () => {
+  let reject!: (error: Error) => void;
+  m.text.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail; }));
+  await open();
+  fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Instant hello" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  expect(within(screen.getByRole("list", { name: "Messages" })).getAllByText("Instant hello")).toHaveLength(1);
+  expect(screen.getByText("Sending…")).toBeTruthy();
+  await act(async () => reject(new Error("offline")));
+  expect(within(screen.getByRole("list", { name: "Messages" })).getAllByText("Instant hello")).toHaveLength(1);
+  expect(screen.getByText("Not sent")).toBeTruthy();
+  m.text.mockResolvedValueOnce("saved");
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await waitFor(() => expect(m.text).toHaveBeenCalledTimes(2));
+  expect(m.text.mock.calls[1]?.[6]).toBe(m.text.mock.calls[0]?.[6]);
+  expect(within(screen.getByRole("list", { name: "Messages" })).getAllByText("Instant hello")).toHaveLength(1);
+});
+
+it("reconciles the local echo with the durable server row without duplication", async () => {
+  let finish!: (value: string) => void;
+  m.text.mockReturnValueOnce(new Promise<string>(resolve => { finish = resolve; }));
+  const rendered = await open();
+  fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Reconciled" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  const id = m.text.mock.calls[0]?.[6];
+  m.messages = [{ id, conversationId: "chat", authorId: "account", recipientId: "peer",
+    body: "Reconciled", messageType: "TEXT", createdAt: Date.now(), server: { eventId: "event", sequence: 1 } }];
+  m.chat.revision++;
+  rendered.rerender(thread());
+  await screen.findByLabelText("Sent");
+  expect(document.querySelectorAll(`[data-chat-message="${id}"]`)).toHaveLength(1);
+  await act(async () => finish(id));
+  expect(within(screen.getByRole("list", { name: "Messages" })).getAllByText("Reconciled")).toHaveLength(1);
+});
+
 it("clears an admitted draft and reports a stale view without inviting a resend", async () => {
   m.text.mockResolvedValue({ id: "saved", viewStale: true });
   await open();
@@ -186,18 +221,21 @@ it("clears an admitted draft and reports a stale view without inviting a resend"
   expect(screen.getByText(/view may be out of date/i)).toBeTruthy();
 });
 
-it("retains a failed draft and retries with the same message identity", async () => {
+it("keeps a failed message on screen and retries it with the same identity", async () => {
   m.text.mockRejectedValueOnce(new Error("admission failed")).mockResolvedValueOnce("saved");
   await open();
   const field = screen.getByRole("textbox", { name: "Message" });
   fireEvent.change(field, { target: { value: "Try again" } });
   fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-  await screen.findByText(/not sent/i);
-  expect(field).toHaveProperty("value", "Try again");
-  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await screen.findByText("Your message was not sent. Tap Retry on it.");
+  // The bubble owns the text now; the field does not keep a second copy.
+  expect(field).toHaveProperty("value", "");
+  expect(within(screen.getByRole("list", { name: "Messages" })).getAllByText("Try again")).toHaveLength(1);
+  expect(screen.getByText("Not sent")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   await waitFor(() => expect(m.text).toHaveBeenCalledTimes(2));
   expect(m.text.mock.calls[0]?.[6]).toBe(m.text.mock.calls[1]?.[6]);
-  await waitFor(() => expect(field).toHaveProperty("value", ""));
+  await waitFor(() => expect(screen.queryByText("Not sent")).toBeNull());
 });
 
 it("ignores two synchronous sends of the same draft", async () => {

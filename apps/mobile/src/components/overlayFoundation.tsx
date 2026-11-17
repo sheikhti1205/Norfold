@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { OverlayTriggerStateContext, Popover, type PopoverProps } from "react-aria-components";
 import { isTopModalLayer, useModalLayer } from "../hooks/modalLayers";
 import { registerBackInterceptor } from "./backNavigation";
@@ -12,6 +12,22 @@ export function useOverlayDepth() { return useContext(OverlayDepth) + 1; }
 
 export function OverlayDepthProvider({ depth, children }: { depth: number; children: ReactNode }) {
   return <OverlayDepth.Provider value={depth}>{children}</OverlayDepth.Provider>;
+}
+
+/**
+ * Where a popover opened from inside another popover should portal its panel.
+ *
+ * React Aria closes a popover when focus leaves its DOM subtree. A nested
+ * popover that portals to `document.body` therefore steals focus out of its
+ * parent and the parent closes under it. Portaling into the parent's own
+ * panel keeps focus inside, keeps the parent's aria-hiding from swallowing
+ * the child, and lets outside-interaction checks see one overlay tree. This
+ * is the same containment React Aria uses for submenus.
+ */
+const OverlayPortalContainer = createContext<HTMLElement | null>(null);
+
+export function useOverlayPortalContainer(): HTMLElement | null {
+  return useContext(OverlayPortalContainer);
 }
 
 /** Bridge React Aria surfaces into the existing legacy Escape/Android Back stack.
@@ -69,10 +85,15 @@ function PopoverStackBridge() {
 /** Collision-aware positioning and nested portal grouping remain React Aria's. */
 export function LayeredPopover({ children, className = "", ...props }: PopoverProps) {
   const depth = useOverlayDepth();
+  const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
   return <Popover {...props} className={`fb-popover ${className}`} style={{ zIndex: 70 + depth * 10 }}>
     {(values) => <OverlayDepthProvider depth={depth}>
       <PopoverStackBridge />
-      {typeof children === "function" ? children(values) : children}
+      <OverlayPortalContainer.Provider value={portalContainer}>
+        <div ref={setPortalContainer} style={{ display: "contents" }}>
+          {typeof children === "function" ? children(values) : children}
+        </div>
+      </OverlayPortalContainer.Provider>
     </OverlayDepthProvider>}
   </Popover>;
 }
