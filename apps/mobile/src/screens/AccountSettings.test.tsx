@@ -214,14 +214,14 @@ describe("AccountSettings", () => {
 
   it("shows a verified status for a verified email and no verify action", () => {
     renderAccount();
-    expect(screen.getByText("Verified")).toBeTruthy();
+    expect(screen.getByText("Email verified")).toBeTruthy();
     expect(screen.queryByRole("link", { name: /verify email/i })).toBeNull();
   });
 
   it("offers the real verify-email action only while the email is unverified", () => {
     mockUser.value = { ...verifiedUser, emailVerified: false };
     renderAccount();
-    expect(screen.queryByText("Verified")).toBeNull();
+    expect(screen.queryByText("Email verified")).toBeNull();
     const action = screen.getByRole("link", { name: /verify email/i });
     expect(action.getAttribute("href")).toBe("/verify");
   });
@@ -415,12 +415,15 @@ describe("AccountSettings", () => {
     expect(row.getAttribute("href")).toBe("/profile/edit");
   });
 
-  it("shows the server-verified Telegram number on the mobile row", async () => {
+  it("shows the server-verified Telegram number on the mobile row, verified once", async () => {
     mockTelegramAccount.mockResolvedValue({ linked: true, phone: "+8801912345678", username: "reader" });
     renderAccount();
     const row = await screen.findByRole("link", { name: /mobile number/i });
     await waitFor(() => expect(row.textContent).toContain("+8801912345678"));
-    expect(row.textContent).toContain("Verified");
+    // The identity chip says "Mobile verified"; a second badge in the row
+    // squeezed the title onto three lines at 320dp, so it is not repeated.
+    expect(row.textContent).not.toContain("Verified");
+    expect(screen.getByText("Mobile verified")).toBeTruthy();
   });
 
   it("keeps the number unverified while Telegram waits for a contact", async () => {

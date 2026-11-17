@@ -323,11 +323,19 @@
    address is data, so it truncates with an ellipsis and keeps the full value in
    its title instead of wrapping the row into a second line. */
 .fb-profile .fb-settings-row-value {
+  flex: 0 1 auto;
   max-width: 55%;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* The row title is the label, so it keeps its intrinsic width; the value is
+   data and gives way first. Without this the flexible copy absorbed the whole
+   squeeze and "Mobile number" wrapped to three lines on desktop. */
+.fb-profile .fb-settings-row-copy {
+  flex: 1 0 auto;
 }
 
 /* The settings list gives a text value its own full-width line below 480px.
