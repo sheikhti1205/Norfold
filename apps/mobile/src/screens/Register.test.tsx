@@ -29,7 +29,6 @@ function getInputs() {
   return {
     username: screen.getByLabelText("Username"),
     email: screen.getByLabelText("Email"),
-    phone: screen.getByLabelText("Mobile (Bangladesh)"),
     password: screen.getByTestId("password-field"),
     confirm: screen.getByLabelText("Confirm password"),
     submit: screen.getByRole("button", { name: "Create account" }),
@@ -120,7 +119,7 @@ describe("Register username race condition", () => {
     authMock.checkUsername.mockImplementation(() => promise);
 
     renderRegister();
-    const { username, email, phone, password, confirm, submit } = getInputs();
+    const { username, email, password, confirm, submit } = getInputs();
 
     // Type valid username
     fireEvent.change(username, { target: { value: "validuser" } });
@@ -134,7 +133,6 @@ describe("Register username race condition", () => {
 
     // Fill other fields
     fireEvent.change(email, { target: { value: "test@example.com" } });
-    fireEvent.change(phone, { target: { value: "01812345678" } });
     fireEvent.change(password, { target: { value: "password123" } });
     fireEvent.change(confirm, { target: { value: "password123" } });
 
@@ -149,7 +147,7 @@ describe("Register username race condition", () => {
     authMock.checkUsername.mockImplementation(() => promise);
 
     renderRegister();
-    const { username, email, phone, password, confirm, submit } = getInputs();
+    const { username, email, password, confirm, submit } = getInputs();
 
     // Type valid username that passes live check
     fireEvent.change(username, { target: { value: "validuser" } });
@@ -166,7 +164,6 @@ describe("Register username race condition", () => {
     fireEvent.change(username, { target: { value: "invalid user" } });
     // The live check would now show invalid, but let's test submit directly
     fireEvent.change(email, { target: { value: "test@example.com" } });
-    fireEvent.change(phone, { target: { value: "01812345678" } });
     fireEvent.change(password, { target: { value: "password123" } });
     fireEvent.change(confirm, { target: { value: "password123" } });
 
@@ -177,7 +174,7 @@ describe("Register username race condition", () => {
   });
 });
 
-describe("Register Bangladesh phone validation", () => {
+describe("Register never asks for a typed mobile number", () => {
   beforeEach(() => {
     authMock.checkUsername.mockReset();
     authMock.register.mockReset();
@@ -185,88 +182,37 @@ describe("Register Bangladesh phone validation", () => {
 
   afterEach(cleanup);
 
-  it("accepts valid Bangladesh phone: 01812345678", async () => {
+  it("has no mobile field at all", () => {
     renderRegister();
-    const { phone } = getInputs();
-    fireEvent.change(phone, { target: { value: "01812345678" } });
-    // Should not show error immediately (validation on submit)
-    expect(screen.queryByText(/invalid|error/i)).not.toBeTruthy();
+    expect(screen.queryByLabelText(/mobile/i)).toBeNull();
+    expect(screen.queryByRole("textbox", { name: /mobile/i })).toBeNull();
+    expect(screen.queryByText(/Bangladesh mobile/i)).toBeNull();
   });
 
-  it("accepts valid Bangladesh phone with +88 prefix: +8801812345678", async () => {
-    renderRegister();
-    const { phone } = getInputs();
-    fireEvent.change(phone, { target: { value: "+8801812345678" } });
-    expect(screen.queryByText(/invalid|error/i)).not.toBeTruthy();
-  });
-
-  it("accepts valid Bangladesh phone with 88 prefix: 8801812345678", async () => {
-    renderRegister();
-    const { phone } = getInputs();
-    fireEvent.change(phone, { target: { value: "8801812345678" } });
-    expect(screen.queryByText(/invalid|error/i)).not.toBeTruthy();
-  });
-
-  it("rejects invalid Bangladesh phone: wrong prefix 012", async () => {
+  it("registers with the username, email and password only", async () => {
     const { promise, resolve } = createCheckUsernamePromise();
     authMock.checkUsername.mockImplementation(() => promise);
+    authMock.register.mockResolvedValue({ status: "authenticated" });
 
     renderRegister();
-    const { username, email, phone, password, confirm, submit } = getInputs();
-    fireEvent.change(phone, { target: { value: "01212345678" } });
-    // Fill other required fields
+    const { username, email, password, confirm, submit } = getInputs();
     fireEvent.change(username, { target: { value: "validuser" } });
     await waitFor(() => expect(screen.getByText("Checking availability…")).toBeTruthy());
     await waitForDebounce();
     resolve({ available: true, normalized: "validuser" });
     await waitForDebounce();
     await waitFor(() => expect(screen.getByText("✓ Username available")).toBeTruthy());
+
     fireEvent.change(email, { target: { value: "test@example.com" } });
     fireEvent.change(password, { target: { value: "password123" } });
     fireEvent.change(confirm, { target: { value: "password123" } });
     fireEvent.click(submit);
-    await waitFor(() => expect(screen.getByText(/Enter a valid Bangladesh mobile number/)).toBeTruthy());
-  });
 
-  it("rejects invalid Bangladesh phone: too short", async () => {
-    const { promise, resolve } = createCheckUsernamePromise();
-    authMock.checkUsername.mockImplementation(() => promise);
-
-    renderRegister();
-    const { username, email, phone, password, confirm, submit } = getInputs();
-    fireEvent.change(phone, { target: { value: "018123456" } });
-    // Fill other required fields
-    fireEvent.change(username, { target: { value: "validuser" } });
-    await waitFor(() => expect(screen.getByText("Checking availability…")).toBeTruthy());
-    await waitForDebounce();
-    resolve({ available: true, normalized: "validuser" });
-    await waitForDebounce();
-    await waitFor(() => expect(screen.getByText("✓ Username available")).toBeTruthy());
-    fireEvent.change(email, { target: { value: "test@example.com" } });
-    fireEvent.change(password, { target: { value: "password123" } });
-    fireEvent.change(confirm, { target: { value: "password123" } });
-    fireEvent.click(submit);
-    await waitFor(() => expect(screen.getByText(/Enter a valid Bangladesh mobile number/)).toBeTruthy());
-  });
-
-  it("rejects invalid Bangladesh phone: non-numeric", async () => {
-    const { promise, resolve } = createCheckUsernamePromise();
-    authMock.checkUsername.mockImplementation(() => promise);
-
-    renderRegister();
-    const { username, email, phone, password, confirm, submit } = getInputs();
-    fireEvent.change(phone, { target: { value: "01812345abc" } });
-    // Fill other required fields
-    fireEvent.change(username, { target: { value: "validuser" } });
-    await waitFor(() => expect(screen.getByText("Checking availability…")).toBeTruthy());
-    await waitForDebounce();
-    resolve({ available: true, normalized: "validuser" });
-    await waitForDebounce();
-    await waitFor(() => expect(screen.getByText("✓ Username available")).toBeTruthy());
-    fireEvent.change(email, { target: { value: "test@example.com" } });
-    fireEvent.change(password, { target: { value: "password123" } });
-    fireEvent.change(confirm, { target: { value: "password123" } });
-    fireEvent.click(submit);
-    await waitFor(() => expect(screen.getByText(/Enter a valid Bangladesh mobile number/)).toBeTruthy());
+    await waitFor(() => expect(authMock.register).toHaveBeenCalledTimes(1));
+    expect(authMock.register).toHaveBeenCalledWith({
+      username: "validuser",
+      email: "test@example.com",
+      password: "password123",
+    });
   });
 });

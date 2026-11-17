@@ -232,7 +232,7 @@ describe("Verify signed-in mode", () => {
     renderVerify();
     expect(await screen.findByText(/could not check Telegram/i)).toBeTruthy();
     expect(screen.queryByText("Mobile number verified with Telegram")).toBeNull();
-    expect(screen.getByText(/Not verified/)).toBeTruthy();
+    expect(screen.getByText(/stays unverified/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /SMS/i })).toBeNull();
   });
 

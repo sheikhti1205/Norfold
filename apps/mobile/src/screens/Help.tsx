@@ -10,6 +10,7 @@ import { ChatComposer } from "../components/ChatComposer";
 import { ChatTranscript, type TranscriptMessage } from "../components/ChatTranscript";
 import { HistorySheet, type HistoryChatSummary } from "../components/HistorySheet";
 import { announce } from "../components/LiveRegion";
+import { useHoverLabel } from "../components/HoverLabel";
 import { ChatController, ControllerError, consumerSendErrorCopy, type ControllerState } from "../services/ai/chatController";
 import { createStreamingPaint } from "../services/ai/streamingPaint";
 import { ChatStore } from "../services/ai/chatStore";
@@ -52,6 +53,7 @@ export function Help({ deps }: { deps?: HelpAssistantDeps }) {
 
 function AccountHelp({ accountId, store, deps }: { accountId: string; store: ChatStore; deps?: HelpAssistantDeps }) {
   const navigate = useNavigate();
+  const { hoverLabel } = useHoverLabel();
   const [selected, setSelected] = useState<CloudModel>(() => loadCloudModelPreferences(accountId).defaultModel ?? CLOUD_DEFAULT_ROUTE);
   // Consumer-facing label for the chip: a provider name, never a raw model id.
   const [selectedTitle, setSelectedTitle] = useState<string>(() => {
@@ -326,7 +328,7 @@ function AccountHelp({ accountId, store, deps }: { accountId: string; store: Cha
       <div className="flex min-w-0 items-center gap-1">
         <BackButton fallbackTo="/profile" label="Back to profile" />
         <h1 className="min-w-0 flex-1 truncate text-base font-semibold">Chat</h1>
-        <button type="button" onClick={() => setHistoryOpen(true)} aria-label="Open chat history" className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-m3-xs hover:bg-surface-container"><History size={20} aria-hidden /></button>
+        <button type="button" onClick={() => setHistoryOpen(true)} aria-label="Open chat history" className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-m3-xs hover:bg-surface-container" {...hoverLabel("Chat history")}><History size={20} aria-hidden /></button>
         <ActionMenu
           label="More options"
           icon={<MoreVertical size={20} aria-hidden />}

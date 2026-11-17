@@ -319,20 +319,45 @@
   font-size: 0.9375rem;
 }
 
-/* The email address is data, not a label: it takes its own line under "Email"
-   so the label never gets squeezed into a mid-word break and a long address
-   wraps as a unit instead of colliding with the Verified pill. */
-.fb-profile-email-row {
-  flex-wrap: wrap;
+/* Connected accounts are one line each (owner request 2026-11-17). A long
+   address is data, so it truncates with an ellipsis and keeps the full value in
+   its title instead of wrapping the row into a second line. */
+.fb-profile .fb-settings-row-value {
+  max-width: 55%;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.fb-profile-email-row .fb-settings-row-value {
-  order: 3;
-  flex: 1 0 100%;
-  max-width: 100%;
-  padding-inline-start: 34px;
-  text-align: start;
-  overflow-wrap: anywhere;
+/* The settings list gives a text value its own full-width line below 480px.
+   That is right for a settings page and wrong here: these four rows are the
+   connected accounts, and the owner asked for one line each on a phone. The
+   selector deliberately outranks the shared `:has()` rule. */
+@media (max-width: 480px) {
+  .fb-profile .fb-settings-row.fb-profile-account-row:has(.fb-settings-row-value) {
+    flex-wrap: nowrap;
+    align-items: center;
+    row-gap: normal;
+  }
+
+  .fb-profile .fb-settings-row.fb-profile-account-row:has(.fb-settings-row-value) .fb-settings-row-value[data-text] {
+    order: 0;
+    flex: 0 1 auto;
+    max-width: 50%;
+    padding-inline-start: 0;
+    text-align: end;
+    white-space: nowrap;
+    overflow: hidden;
+    overflow-wrap: normal;
+    text-overflow: ellipsis;
+  }
+
+  .fb-profile .fb-settings-row.fb-profile-account-row .fb-settings-row-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 @media (max-width: 360px) {

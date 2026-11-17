@@ -478,7 +478,7 @@ describe("connection resilience", () => {
 });
 
 describe("app rating aggregate", () => {
-  it("subscribes to the public topic and forwards only the aggregate", async () => {
+  it("subscribes to the private topic and forwards only the aggregate", async () => {
     const mod = await load();
     const seen: unknown[] = [];
     mod.onRealtime("app-rating:changed", (p) => seen.push(p));
@@ -486,7 +486,7 @@ describe("app rating aggregate", () => {
     await flush();
 
     const channel = find("app-rating");
-    expect(channel.opts.config?.private).toBeUndefined();
+    expect(channel.opts.config?.private).toBe(true);
 
     emit(channel, "rating:changed", { average: 4.25, count: 8 });
     expect(seen).toEqual([{ average: 4.25, count: 8 }]);
@@ -537,34 +537,9 @@ describe("app rating aggregate", () => {
     expect(clientMock.removeChannel).toHaveBeenCalledWith(channel);
   });
 
-  it("publishes exactly the aggregate and cleans up the transient channel", async () => {
-    const mod = await load();
-    const published = await mod.publishAppRatingAggregate({ average: 4.5, count: 10 });
-    expect(published).toBe(true);
-
-    const channel = find("app-rating");
-    expect(channel.send).toHaveBeenCalledWith({
-      type: "broadcast",
-      event: "rating:changed",
-      payload: { average: 4.5, count: 10 },
-    });
-    expect(clientMock.removeChannel).toHaveBeenCalledWith(channel);
-  });
-
-  it("publishes the empty aggregate as a null average", async () => {
-    const mod = await load();
-    await mod.publishAppRatingAggregate({ average: null, count: 0 });
-    expect(find("app-rating").send).toHaveBeenCalledWith({
-      type: "broadcast",
-      event: "rating:changed",
-      payload: { average: null, count: 0 },
-    });
-  });
-
-  it("never publishes an invalid aggregate", async () => {
-    const mod = await load();
-    expect(await mod.publishAppRatingAggregate({ average: 9, count: 2 })).toBe(false);
-    expect(await mod.publishAppRatingAggregate({ average: null, count: 3 })).toBe(false);
+  it("publishes nothing from the client", async () => {
+    const mod = await load() as unknown as Record<string, unknown>;
+    expect(mod.publishAppRatingAggregate).toBeUndefined();
     expect(clientMock.channel).not.toHaveBeenCalled();
   });
 

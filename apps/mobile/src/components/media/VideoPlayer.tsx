@@ -7,6 +7,7 @@ import {
   TriangleAlert, Volume1, Volume2, VolumeX, X,
 } from "lucide-react";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
+import { useHoverLabel } from "../HoverLabel";
 import { registerBackInterceptor } from "../backNavigation";
 
 /**
@@ -237,6 +238,7 @@ const CONTROL_SELECTOR = "button, a, [role='button']";
  */
 export function VideoPlayer({ src, name, poster, mode, onMinimize, onExpand, onClose }: VideoPlayerProps) {
   const engine = useMediaEngine();
+  const { hoverLabel } = useHoverLabel();
   const {
     setElement, element, playing, ready, failed, time, duration, buffered, volume, muted, rate,
     play, toggle, seek, seekBy, setVolume, toggleMute, cycleRate,
@@ -479,13 +481,14 @@ export function VideoPlayer({ src, name, poster, mode, onMinimize, onExpand, onC
         </div>
         <div className="fb-vp-row">
           <button ref={playButtonRef} type="button" className="fb-vp-icon" onClick={toggle}
-            aria-label={playing ? "Pause" : "Play"}>
+            aria-label={playing ? "Pause" : "Play"} {...hoverLabel(playing ? "Pause" : "Play")}>
             {playing ? <Pause size={expanded ? 20 : 18} aria-hidden="true" />
               : <Play size={expanded ? 20 : 18} aria-hidden="true" />}
           </button>
           <span className="fb-vp-time" aria-hidden="true">{formatTime(time)} / {formatTime(duration)}</span>
           <span className="fb-vp-spacer" />
-          <button type="button" className="fb-vp-icon" onClick={toggleMute} aria-label={volumeLabel}>
+          <button type="button" className="fb-vp-icon" onClick={toggleMute} aria-label={volumeLabel}
+            {...hoverLabel(volumeLabel)}>
             {muted || volume === 0 ? <VolumeX size={18} aria-hidden="true" />
               : volume < 0.5 ? <Volume1 size={18} aria-hidden="true" />
                 : <Volume2 size={18} aria-hidden="true" />}
@@ -501,24 +504,29 @@ export function VideoPlayer({ src, name, poster, mode, onMinimize, onExpand, onC
             aria-label={`Volume for ${name}`}
           /> : null}
           <button type="button" className="fb-vp-icon fb-vp-rate" onClick={cycleRate}
-            aria-label={`Playback speed ${rate}×`}>{rate}×</button>
+            aria-label={`Playback speed ${rate}×`} {...hoverLabel(`Playback speed ${rate}×`)}>{rate}×</button>
           {canPictureInPicture ? <button type="button" className="fb-vp-icon"
-            onClick={enterPictureInPicture} aria-label="Picture in picture">
+            onClick={enterPictureInPicture} aria-label="Picture in picture"
+            {...hoverLabel("Picture in picture")}>
             <PictureInPicture2 size={18} aria-hidden="true" />
           </button> : null}
           {expanded ? <button type="button" className="fb-vp-icon"
-            onClick={() => downloadMedia(src, name)} aria-label={`Download ${name}`}>
+            onClick={() => downloadMedia(src, name)} aria-label={`Download ${name}`}
+            {...hoverLabel(`Download ${name}`)}>
             <Download size={18} aria-hidden="true" />
           </button> : null}
           {expanded
-            ? <button type="button" className="fb-vp-icon" onClick={onMinimize} aria-label="Minimize player">
+            ? <button type="button" className="fb-vp-icon" onClick={onMinimize} aria-label="Minimize player"
+              {...hoverLabel("Minimize player")}>
               <Minimize2 size={18} aria-hidden="true" />
             </button>
             : <>
-              <button type="button" className="fb-vp-icon" onClick={onExpand} aria-label="Expand video">
+              <button type="button" className="fb-vp-icon" onClick={onExpand} aria-label="Expand video"
+                {...hoverLabel("Expand video")}>
                 <Maximize2 size={18} aria-hidden="true" />
               </button>
-              <button type="button" className="fb-vp-icon" onClick={onClose} aria-label="Close video">
+              <button type="button" className="fb-vp-icon" onClick={onClose} aria-label="Close video"
+                {...hoverLabel("Close video")}>
                 <X size={18} aria-hidden="true" />
               </button>
             </>}
@@ -532,14 +540,17 @@ export function VideoPlayer({ src, name, poster, mode, onMinimize, onExpand, onC
       </div>
       <div className="fb-vp-mini-actions">
         <button type="button" className="fb-vp-icon" onClick={toggle}
-          aria-label={playing ? `Pause ${name}` : `Play ${name}`}>
+          aria-label={playing ? `Pause ${name}` : `Play ${name}`}
+          {...hoverLabel(playing ? `Pause ${name}` : `Play ${name}`)}>
           {playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
         </button>
         <span className="fb-vp-mini-name" title={name}>{name}</span>
-        <button type="button" className="fb-vp-icon" onClick={onExpand} aria-label="Expand video">
+        <button type="button" className="fb-vp-icon" onClick={onExpand} aria-label="Expand video"
+          {...hoverLabel("Expand video")}>
           <Maximize2 size={16} aria-hidden="true" />
         </button>
-        <button type="button" className="fb-vp-icon" onClick={onClose} aria-label="Close video">
+        <button type="button" className="fb-vp-icon" onClick={onClose} aria-label="Close video"
+          {...hoverLabel("Close video")}>
           <X size={16} aria-hidden="true" />
         </button>
       </div>

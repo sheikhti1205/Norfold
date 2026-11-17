@@ -149,8 +149,10 @@ describe("ProfileEdit rework", () => {
     telegramMock.account.mockRejectedValue(new Error("offline"));
     renderEdit();
     expect(await screen.findByText(/could not check Telegram/i)).toBeTruthy();
-    expect(screen.getByText(/Not verified/)).toBeTruthy();
+    expect(screen.getByText(/stays unverified/i)).toBeTruthy();
     expect(screen.queryByText("Mobile number verified with Telegram")).toBeNull();
+    // The retired typed signup number is never presented as verified or proven.
+    expect(screen.queryByText("+8801812345678")).toBeNull();
   });
 
   it("saves identity fields via updateMyProfile and reflects the refreshed user", async () => {

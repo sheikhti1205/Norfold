@@ -3,7 +3,8 @@ import { LogOut } from "lucide-react";
 import { useAuth } from "../auth";
 import { requestAccountDeletion, sendAccountPasswordCode, saveAccountPasswordWithCode } from "../services/auth";
 import { ApiError } from "../services/session";
-import { getTelegramAccount, type TelegramAccount } from "../services/telegram";
+import { TelegramMark } from "../components/BrandMarks";
+import type { TelegramAccountState } from "../hooks/useTelegramAccount";
 import { Button } from "../components/Button";
 import { useOtpCountdown } from "../components/auth/useOtpCountdown";
 import { TelegramSettings } from "../components/settings/TelegramSettings";
@@ -39,46 +40,30 @@ export function AccountSettings() {
   return <Profile />;
 }
 
-export function MobileNumberRow() {
+/**
+ * One compact line for the phone lane. The number and its badge come from the
+ * same Telegram read the Profile chip uses, never from the retired typed
+ * `users.phone` field: a typed number was never proof of ownership, so showing
+ * it here would advertise a verification the account does not have.
+ */
+export function MobileNumberRow({ account }: { account: TelegramAccountState }) {
   const { user } = useAuth();
-  // The authoritative phone signal is the authenticated Telegram account RPC.
-  // undefined = checking, null = the check failed. A failed check never claims
-  // verification and never invents a number.
-  const [account, setAccount] = useState<TelegramAccount | null | undefined>(undefined);
-  const accountId = user?.id ?? null;
-
-  useEffect(() => {
-    let alive = true;
-    setAccount(undefined);
-    if (!accountId) return () => {
-      alive = false;
-    };
-    void getTelegramAccount().then(
-      (next) => { if (alive) setAccount(next); },
-      () => { if (alive) setAccount(null); },
-    );
-    return () => {
-      alive = false;
-    };
-  }, [accountId]);
-
   if (!user) return null;
-  const verifiedPhone = account?.linked && account.phone ? account.phone : null;
-  const description = account === undefined
-    ? "Checking Telegram verification."
-    : account === null
-      ? "Could not check Telegram. Your number stays unverified."
-      : verifiedPhone
-        ? "Verified with Telegram."
-        : account.linked
-          ? "Telegram is connected. In the bot chat, send /start, then tap Share my number."
-          : "Verify your number with Telegram. Norfold does not send text messages.";
+  const verifiedPhone = account.status === "ready" && account.account.linked
+    ? account.account.phone
+    : null;
+  const badge = account.status === "loading"
+    ? <StatusPill tone="neutral">Checking…</StatusPill>
+    : account.status === "unavailable"
+      ? <StatusPill tone="neutral">Could not check</StatusPill>
+      : <StatusPill tone={verifiedPhone ? "success" : "neutral"}>{verifiedPhone ? "Verified" : "Not verified"}</StatusPill>;
   return (
     <SettingsRow
       title="Mobile number"
-      description={description}
-      value={verifiedPhone ?? user.phone ?? "Not verified"}
-      badge={<StatusPill tone={verifiedPhone ? "success" : "neutral"}>{verifiedPhone ? "Verified" : "Not verified"}</StatusPill>}
+      className="fb-profile-account-row"
+      iconNode={<TelegramMark size={16} />}
+      value={verifiedPhone ?? undefined}
+      badge={badge}
       route="/profile/edit"
     />
   );

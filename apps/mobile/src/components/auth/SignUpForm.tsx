@@ -7,16 +7,18 @@ import { TextField } from "../Fields";
 import { motionDurations, motionEasings } from "../uiMotion";
 import { checkUsername } from "../../services/auth";
 import { getAuthReturnRoute } from "../../utils/authReturnTo";
-import { USERNAME_CHECK_DEBOUNCE_MS, normalizePhone } from "@norfold/shared";
+import { USERNAME_CHECK_DEBOUNCE_MS } from "@norfold/shared";
 
 type UsernameState = "idle" | "loading" | "available" | "taken" | "invalid" | "failed";
 
 /**
  * Stage C signup form. Backend behavior is byte-for-byte the pre-existing
  * Register flow: live debounced username availability against the safe
- * boolean RPC, Bangladesh phone normalization, and the shared `register()`
- * call with its safe duplicate semantics. Only the presentation is new
- * (email prefilled from the user-chosen address, signup expansion motion).
+ * boolean RPC and the shared `register()` call with its safe duplicate
+ * semantics. Only the presentation is new (email prefilled from the user-chosen
+ * address, signup expansion motion). A mobile number is deliberately absent:
+ * only a Telegram contact share proves ownership, so the app never asks for a
+ * typed number it cannot verify.
  */
 export function SignUpForm({
   initialEmail,
@@ -29,7 +31,6 @@ export function SignUpForm({
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState(initialEmail);
-  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [usernameState, setUsernameState] = useState<UsernameState>("idle");
@@ -111,11 +112,6 @@ export function SignUpForm({
       setError("Enter a valid email address.");
       return;
     }
-    const phoneNorm = normalizePhone(phone);
-    if (!phoneNorm) {
-      setError("Enter a valid Bangladesh mobile number (e.g., 01812345678).");
-      return;
-    }
     if (password.length < 8) {
       setError("Password must be at least 8 characters.");
       return;
@@ -130,7 +126,6 @@ export function SignUpForm({
       const outcome = await register({
         username: name,
         email: email.trim(),
-        phone: phoneNorm,
         password,
       });
       if (outcome?.status === "pending") {
@@ -208,17 +203,6 @@ export function SignUpForm({
           autoComplete="email"
           inputMode="email"
           placeholder="you@example.com"
-          required
-        />
-        <TextField
-          label="Mobile (Bangladesh)"
-          type="tel"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          placeholder="01812345678"
-          inputMode="numeric"
-          autoComplete="tel"
-          hint="Saved as unverified. Confirm it with Telegram after you sign in."
           required
         />
         <TextField

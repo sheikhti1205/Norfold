@@ -28,6 +28,7 @@ import { POST_TYPE_OPTIONS, STATUS_OPTIONS, statusLabel } from "./Segmented";
 import { UserAvatar } from "./UserAvatar";
 import { PostLink } from "./PostNavigation";
 import { SearchField } from "./SearchField";
+import { useHoverLabel } from "./HoverLabel";
 import { closeGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
 import { motionDurations, motionEasings } from "./uiMotion";
 import "./GlobalSearchOverlay.css";
@@ -1047,6 +1048,7 @@ function DateCalendar({
   const [year, setYear] = useState(start.year);
   const [month, setMonth] = useState(start.month);
   const [yearPage, setYearPage] = useState(Math.floor(start.year / 12) * 12);
+  const { hoverLabel } = useHoverLabel();
   const daysRef = useRef<HTMLDivElement>(null);
   const monthsRef = useRef<HTMLDivElement>(null);
   const yearsRef = useRef<HTMLDivElement>(null);
@@ -1091,7 +1093,8 @@ function DateCalendar({
 
   return <div className="fb-search-calendar">
     <div className="fb-search-calendar-top">
-      <button type="button" className="fb-search-calendar-navbtn" aria-label="Back to date options" onClick={onBack}>
+      <button type="button" className="fb-search-calendar-navbtn" aria-label="Back to date options" onClick={onBack}
+        {...hoverLabel("Back to date options")}>
         <ChevronLeft size={18} aria-hidden="true" />
       </button>
       <p>{bound === "from" ? "Start date" : "End date"}</p>
@@ -1100,7 +1103,8 @@ function DateCalendar({
 
     {view === "days" && <>
       <div className="fb-search-calendar-nav">
-        <button type="button" className="fb-search-calendar-navbtn" aria-label="Previous month" onClick={() => shiftMonth(-1)}>
+        <button type="button" className="fb-search-calendar-navbtn" aria-label="Previous month" onClick={() => shiftMonth(-1)}
+          {...hoverLabel("Previous month")}>
           <ChevronLeft size={18} aria-hidden="true" />
         </button>
         <div className="fb-search-calendar-title">
@@ -1111,7 +1115,8 @@ function DateCalendar({
             {year}
           </button>
         </div>
-        <button type="button" className="fb-search-calendar-navbtn" aria-label="Next month" onClick={() => shiftMonth(1)}>
+        <button type="button" className="fb-search-calendar-navbtn" aria-label="Next month" onClick={() => shiftMonth(1)}
+          {...hoverLabel("Next month")}>
           <ChevronRight size={18} aria-hidden="true" />
         </button>
       </div>
@@ -1138,7 +1143,8 @@ function DateCalendar({
 
     {view === "months" && <>
       <div className="fb-search-calendar-nav">
-        <button type="button" className="fb-search-calendar-navbtn" aria-label="Previous year" onClick={() => setYear((value) => value - 1)}>
+        <button type="button" className="fb-search-calendar-navbtn" aria-label="Previous year" onClick={() => setYear((value) => value - 1)}
+          {...hoverLabel("Previous year")}>
           <ChevronLeft size={18} aria-hidden="true" />
         </button>
         <div className="fb-search-calendar-title">
@@ -1146,7 +1152,8 @@ function DateCalendar({
             {year}
           </button>
         </div>
-        <button type="button" className="fb-search-calendar-navbtn" aria-label="Next year" onClick={() => setYear((value) => value + 1)}>
+        <button type="button" className="fb-search-calendar-navbtn" aria-label="Next year" onClick={() => setYear((value) => value + 1)}
+          {...hoverLabel("Next year")}>
           <ChevronRight size={18} aria-hidden="true" />
         </button>
       </div>
@@ -1163,13 +1170,15 @@ function DateCalendar({
 
     {view === "years" && <>
       <div className="fb-search-calendar-nav">
-        <button type="button" className="fb-search-calendar-navbtn" aria-label="Previous years" onClick={() => setYearPage((value) => value - 12)}>
+        <button type="button" className="fb-search-calendar-navbtn" aria-label="Previous years" onClick={() => setYearPage((value) => value - 12)}
+          {...hoverLabel("Previous years")}>
           <ChevronLeft size={18} aria-hidden="true" />
         </button>
         <div className="fb-search-calendar-title">
           <span className="fb-search-calendar-range">{yearPage} – {yearPage + 11}</span>
         </div>
-        <button type="button" className="fb-search-calendar-navbtn" aria-label="Next years" onClick={() => setYearPage((value) => value + 12)}>
+        <button type="button" className="fb-search-calendar-navbtn" aria-label="Next years" onClick={() => setYearPage((value) => value + 12)}
+          {...hoverLabel("Next years")}>
           <ChevronRight size={18} aria-hidden="true" />
         </button>
       </div>

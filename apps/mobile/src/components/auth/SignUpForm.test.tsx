@@ -29,7 +29,6 @@ it("retries a failed username check on submit without editing the username", asy
   </Routes></MemoryRouter>);
 
   fireEvent.change(screen.getByLabelText("Username"), { target: { value: "testuser" } });
-  fireEvent.change(screen.getByLabelText("Mobile (Bangladesh)"), { target: { value: "01812345678" } });
   fireEvent.change(screen.getByLabelText("Password", { exact: true }), { target: { value: "password123" } });
   fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "password123" } });
   await screen.findByText(/could not check availability/i);

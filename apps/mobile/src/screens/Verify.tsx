@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { CheckCircle2 } from "lucide-react";
-import { normalizePhone } from "@norfold/shared";
 import { useAuth } from "../auth";
 import { Button } from "../components/Button";
 import { motionDurations, motionEasings } from "../components/uiMotion";
@@ -265,10 +264,7 @@ export function Verify() {
       <div className="flex flex-col gap-3">
         <EmailVerifyRow key={`${user!.id}:email:${user!.email}`} />
         <div className="rounded-m3-md bg-surface-container-low p-4">
-          <TelegramPhoneVerification
-            key={`${user!.id}:telegram`}
-            savedPhone={normalizePhone(user!.phone) ?? user!.phone}
-          />
+          <TelegramPhoneVerification key={`${user!.id}:telegram`} />
         </div>
       </div>
       <Button size="lg" onClick={() => navigate(getPendingReportRoute() ?? "/", { replace: true })}>

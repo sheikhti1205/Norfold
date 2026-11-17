@@ -215,6 +215,7 @@ function SettingsWindowSearch({ onDismiss, onPicked }: {
   const [query, setQuery] = useState("");
   const input = useRef<HTMLInputElement>(null);
   const area = useRef<HTMLDivElement>(null);
+  const { hoverLabel } = useHoverLabel();
   const resultsId = useId();
   const trimmed = query.trim();
   const results = useMemo(() => {
@@ -257,7 +258,7 @@ function SettingsWindowSearch({ onDismiss, onPicked }: {
       }}
     />
     {query && <button type="button" aria-label="Clear search" className="fb-settings-searchclear"
-      onClick={() => { setQuery(""); input.current?.focus(); }}>
+      onClick={() => { setQuery(""); input.current?.focus(); }} {...hoverLabel("Clear search")}>
       <X size={16} aria-hidden="true" />
     </button>}
     {results && <div className="fb-settings-window-searchpanel">

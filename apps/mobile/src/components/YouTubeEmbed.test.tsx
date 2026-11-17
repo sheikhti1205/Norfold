@@ -46,4 +46,16 @@ describe("YouTubeEmbed link safety", () => {
     expect(links.at(-1)?.getAttribute("href")).toBe("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
     expect(links.at(-1)?.getAttribute("target")).toBe("_blank");
   });
+
+  it("unmounts the inline player while the pop-out is open", async () => {
+    render(<YouTubeEmbed url="https://youtube.com/watch?v=dQw4w9WgXcQ" />);
+    fireEvent.click(screen.getByRole("button", { name: "Play video" }));
+    await screen.findByTitle("Embedded YouTube video");
+
+    fireEvent.click(screen.getByRole("button", { name: "Watch larger" }));
+    await screen.findByRole("dialog", { name: "Video player" });
+
+    // Two frames would mean two downloads and two audio tracks.
+    await waitFor(() => expect(screen.getAllByTitle("Embedded YouTube video")).toHaveLength(1));
+  });
 });

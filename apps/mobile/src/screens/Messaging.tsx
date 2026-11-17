@@ -520,10 +520,11 @@ export function ChatRail({ rows, labels, identities, selectedId, onExpand, headi
   headingRef?: RefObject<HTMLHeadingElement | null>;
   toggleRef?: RefObject<HTMLButtonElement | null>;
 }) {
+  const { hoverLabel } = useHoverLabel();
   return <section className="fb-chat-page fb-chat-rail" aria-label="Chats">
     <header className="fb-chat-header fb-chat-rail-header">
       <h1 ref={headingRef} tabIndex={-1} className="sr-only">Chats</h1>
-      <button ref={toggleRef} type="button" className="fb-chat-icon" aria-label="Expand conversation list" onClick={onExpand}>
+      <button ref={toggleRef} type="button" className="fb-chat-icon" aria-label="Expand conversation list" onClick={onExpand} {...hoverLabel("Expand conversation list")}>
         <PanelLeftOpen size={20} aria-hidden="true" />
       </button>
     </header>
@@ -1863,7 +1864,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       const area = scroll.current;
       if (area) area.scrollTo({ top: area.scrollHeight, behavior: shouldReduceMotion() ? "auto" : "smooth" });
       nearBottom.current = true; setShowJump(false);
-    }}><ChevronDown size={20} aria-hidden="true" /></button>}
+    }} {...hoverLabel("Jump to latest")}><ChevronDown size={20} aria-hidden="true" /></button>}
     {error && !sheet && <p className="fb-chat-error" role="alert">{error}</p>}
     {photos.length > 0 && <div className="fb-chat-photo-draft" role="group"
       aria-label={`${photos.length} photo${photos.length === 1 ? "" : "s"} to send`}>
@@ -1881,7 +1882,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
                 <span className="sr-only">{item.error ? "Could not prepare photo" : "Preparing photo"}</span>
               </span>}
           <button type="button" className="fb-chat-photo-remove" aria-label={`Remove photo ${index + 1}`}
-            disabled={photoSending || admissionFailed} onClick={() => removeStaged(item.key)}><X size={14} aria-hidden="true" /></button>
+            disabled={photoSending || admissionFailed} onClick={() => removeStaged(item.key)} {...hoverLabel("Remove photo")}><X size={14} aria-hidden="true" /></button>
         </li>)}
       </ul>
       <div className="fb-chat-photo-options">
@@ -1927,7 +1928,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
               <span className="fb-chat-reply-author">{replyTo.label}</span>
               <span className="fb-chat-reply-preview" dir="auto">{replyTo.preview}</span>
             </span>
-            <button type="button" aria-label="Cancel reply" onClick={() => setReplyTo(null)}>
+            <button type="button" aria-label="Cancel reply" onClick={() => setReplyTo(null)} {...hoverLabel("Cancel reply")}>
               <X size={16} aria-hidden="true" />
             </button>
           </div>}

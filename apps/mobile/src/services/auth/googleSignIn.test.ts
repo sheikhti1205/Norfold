@@ -191,7 +191,6 @@ describe("signInWithGoogleIdToken — missing profile (path B)", () => {
       expect(outcome.seed.email).toBe("new.person@example.com");
       expect(outcome.seed.name).toBe("New Person");
       expect(outcome.seed.avatarUrl).toBe("https://lh3.googleusercontent.com/a/avatar123");
-      expect(outcome.seed.phone).toBe("");
       expect(outcome.seed.suggestedUsername).toBe("new_person");
     }
     // Session is KEPT: never signed out, never wiped for a missing row.
@@ -275,7 +274,6 @@ describe("completeSocialProfile", () => {
   const VALID = {
     username: "new_person",
     displayName: "New Person",
-    phone: "01812345678",
     avatarUrl: "https://lh3.googleusercontent.com/a/avatar123",
   };
 
@@ -289,12 +287,11 @@ describe("completeSocialProfile", () => {
 
     expect(hoisted.rpc).toHaveBeenCalledWith("complete_social_profile", {
       p_username: "new_person",
-      p_phone: "01812345678",
       p_display_name: "New Person",
       p_avatar_url: "https://lh3.googleusercontent.com/a/avatar123",
     });
     expect(user.username).toBe("new_person");
-    // Google phone is prefill only: phoneVerified stays false without Supabase SMS proof.
+    // No typed number exists, so the profile never carries a verified phone.
     expect(user.phoneVerified).toBe(false);
   });
 
@@ -311,9 +308,12 @@ describe("completeSocialProfile", () => {
     expect(hoisted.rpc).not.toHaveBeenCalled();
   });
 
-  it("rejects a non-BD phone locally without calling the RPC", async () => {
-    await expect(completeSocialProfile({ ...VALID, phone: "+14155552671" })).rejects.toMatchObject({ name: "ApiError", status: 400 });
-    expect(hoisted.rpc).not.toHaveBeenCalled();
+  it("never forwards a typed phone even from an untyped caller", async () => {
+    const input = { ...VALID, phone: "+14155552671" } as unknown as Parameters<typeof completeSocialProfile>[0];
+    await completeSocialProfile(input);
+    const args = hoisted.rpc.mock.calls.at(-1)?.[1] as Record<string, unknown>;
+    expect(args).not.toHaveProperty("p_phone");
+    expect(Object.keys(args).sort()).toEqual(["p_avatar_url", "p_display_name", "p_username"]);
   });
 
   it("maps a taken username to the human duplicate message (unavailable cannot finalize)", async () => {
@@ -407,7 +407,6 @@ describe("privacy guards", () => {
       await completeSocialProfile({
         username: "new_person",
         displayName: "New Person",
-        phone: "01812345678",
         avatarUrl: null,
       }).catch(() => {});
     } finally {

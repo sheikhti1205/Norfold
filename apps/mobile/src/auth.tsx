@@ -105,7 +105,6 @@ interface AuthContextValue {
   register: (input: {
     username: string;
     email: string;
-    phone: string;
     password: string;
   }) => Promise<RegisterOutcome>;
   /** Verify a pending-signup email OTP; establishes the first session. */
@@ -560,7 +559,7 @@ export function AuthProvider({ children, boot = true }: { children: ReactNode; b
   }, []);
 
   const register = useCallback(
-    async (input: { username: string; email: string; phone: string; password: string }) => {
+    async (input: { username: string; email: string; password: string }) => {
       const epoch = authEpoch.current;
       const result = await apiRegister(input);
       if (result.emailVerificationRequired) {

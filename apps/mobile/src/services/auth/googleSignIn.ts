@@ -8,13 +8,14 @@
  * - existing Norfold profile (including identity-linked same-email password
  *   accounts) → `authenticated`, profile preserved untouched;
  * - valid session but no public.users row (the trigger skips creation when
- *   username+phone metadata are absent) → `needsProfile` with an editable
+ *   username metadata is absent) → `needsProfile` with an editable
  *   SEED, session KEPT (never signed out for this);
  * - provider/SDK failures → human ApiError messages, never raw internals.
  *
- * Google-supplied phone is PREFILL ONLY: it never derives `phoneVerified`
- * (fetchMe semantics are unchanged). Google avatar URLs persist only when
- * they point at Google hosts, else null. The idToken is never logged.
+ * No phone number is part of the seed or the completion call: only a Telegram
+ * contact share proves ownership, so the app never stages a typed number that
+ * could not be verified. Google avatar URLs persist only when they point at
+ * Google hosts, else null. The idToken is never logged.
  */
 import type { PublicUser } from "@norfold/shared";
 import { Capacitor } from "@capacitor/core";
@@ -37,9 +38,6 @@ import {
 /** Same username syntax the registration trigger enforces. */
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,20}$/;
 
-/** Bangladesh mobile rule shared with the auth trigger + phone forms. */
-const BD_PHONE_PATTERN = /^(\+?88)?01[3-9][0-9]{8}$/;
-
 /**
  * Google-hosted avatar persistence allowlist. Anything else persists as null
  * (never an arbitrary remote URL).
@@ -57,8 +55,6 @@ export interface GoogleProfileSeed {
   name: string | null;
   /** Avatar SEED only (Google host or null). Persistence allowlists Google hosts. */
   avatarUrl: string | null;
-  /** Verified-phone prefill ONLY ("" when not provided). Never proof. */
-  phone: string;
   /** Local suggestion, NOT claimed — completion UI checks via checkUsername. */
   suggestedUsername: string;
 }
@@ -134,8 +130,7 @@ function seedFromAuthUser(authUser: BridgeAuthUser): GoogleProfileSeed {
   const email = typeof authUser.email === "string" ? authUser.email : "";
   const name = metadataString(meta, "name") ?? metadataString(meta, "full_name");
   const avatarUrl = sanitizeAvatarUrl(meta["avatar_url"] ?? meta["picture"] ?? null);
-  const phone = metadataString(meta, "phone") ?? "";
-  return { accountId: authUser.id, email, name, avatarUrl, phone, suggestedUsername: suggestUsername(name, email) };
+  return { accountId: authUser.id, email, name, avatarUrl, suggestedUsername: suggestUsername(name, email) };
 }
 
 /**
@@ -440,9 +435,6 @@ function mapCompletionError(error: { message?: string; code?: string; status?: n
   if (message.includes("invalid username")) {
     return new ApiError("Enter a valid username (3–20 letters, numbers, or underscores).", 400);
   }
-  if (message.includes("invalid phone")) {
-    return new ApiError("Enter a valid Bangladesh mobile number (e.g., 01812345678).", 400);
-  }
   if (message.includes("display name")) {
     return new ApiError("Enter your name (up to 80 characters).", 400);
   }
@@ -460,7 +452,6 @@ function mapCompletionError(error: { message?: string; code?: string; status?: n
 export async function completeSocialProfile(input: {
   username: string;
   displayName: string;
-  phone: string;
   avatarUrl: string | null;
 }): Promise<PublicUser> {
   const username = input.username.trim().toLowerCase();
@@ -471,13 +462,8 @@ export async function completeSocialProfile(input: {
   if (!displayName || displayName.length > MAX_DISPLAY_NAME_LENGTH) {
     throw new ApiError("Enter your name (up to 80 characters).", 400);
   }
-  const phone = input.phone.trim();
-  if (!BD_PHONE_PATTERN.test(phone)) {
-    throw new ApiError("Enter a valid Bangladesh mobile number (e.g., 01812345678).", 400);
-  }
   const { error } = await getSupabase().rpc("complete_social_profile", {
     p_username: username,
-    p_phone: phone,
     p_display_name: displayName,
     p_avatar_url: sanitizeAvatarUrl(input.avatarUrl),
   });
