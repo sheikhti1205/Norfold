@@ -332,9 +332,11 @@
 }
 
 /* The row title is the label, so it keeps its intrinsic width; the value is
-   data and gives way first. Without this the flexible copy absorbed the whole
-   squeeze and "Mobile number" wrapped to three lines on desktop. */
-.fb-profile .fb-settings-row-copy {
+   data and gives way first. Scoped to the connected rows: a settings row with
+   a paragraph still needs its copy to shrink and wrap. Without this the
+   flexible copy absorbed the whole squeeze and "Mobile number" wrapped to
+   three lines on desktop. */
+.fb-profile .fb-settings-row.fb-profile-account-row .fb-settings-row-copy {
   flex: 1 0 auto;
 }
 
@@ -376,6 +378,16 @@
   .fb-profile-portrait-edit {
     width: 30px;
     height: 30px;
+  }
+}
+
+/* At 320dp the 18px chevron is the last thing keeping the full phone number
+   off the row. It is an affordance, not information: the row is already a
+   link, and the Google and Email rows have no chevron at all. Hiding it here
+   makes all four connected rows consistent and leaves the number intact. */
+@media (max-width: 340px) {
+  .fb-profile .fb-settings-row.fb-profile-account-row .fb-settings-chevron {
+    display: none;
   }
 }
 
