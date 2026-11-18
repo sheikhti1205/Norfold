@@ -102,7 +102,9 @@ describe("W7B-HOME home-feed shell (separators over chrome)", () => {
   it("separates reports with a hairline + whitespace instead of a box", () => {
     renderShell();
     const card = screen.getByTestId("post-card");
-    const shell = card.firstElementChild as HTMLElement;
+    // The block sits inside the shake wrapper, so the card's hover moves the
+    // report without moving its put-away control.
+    const shell = card.firstElementChild?.firstElementChild as HTMLElement;
     expect(shell.className).toMatch(/border-b/);
     expect(shell.className).toMatch(/border-outline-variant/);
     // Density: the trailing whitespace is tight (`pb-3`, was `pb-5`) — the

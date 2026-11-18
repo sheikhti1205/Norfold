@@ -309,7 +309,7 @@ export function PostList({
                 renderItem={(post) => rowFor(post, indexById.get(post.id) ?? 0)}
               />
             ) : (
-              <AnimatePresence initial={false} mode="popLayout">{visibleItems.map(rowFor)}</AnimatePresence>
+              <>{visibleItems.map(rowFor)}</>
             )}
             <div ref={sentinelRef} aria-hidden />
             {/* CF-010 §10: the load-more identity is the compact Morph capsule,

@@ -82,15 +82,17 @@ it("keeps an incoming request as View request, with safety available", async () 
   state.projections = { chat: { ...connected, mode: "REQUEST", request: "INCOMING" } };
   mount();
   expect(screen.getByText("This person asked to message you.")).toBeTruthy();
+  // Safety is the profile's, so it is checked before the button replaces this
+  // route with the conversation.
+  expect(screen.getByRole("button", { name: "More profile actions" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "View request River Lee" }));
   await screen.findByRole("heading", { name: "Chat opened" });
-  expect(screen.getByRole("button", { name: "More profile actions" })).toBeTruthy();
 });
 
 it("offers Message plus an explicit, confirmed Remove friend on a connected profile", () => {
   state.projections = { chat: connected };
   mount();
-  fireEvent.click(screen.getByRole("button", { name: "Message River Lee" }));
+  expect(screen.getByRole("button", { name: "Message River Lee" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Remove friend" }));
   const confirm = screen.getByRole("group", { name: "Remove friend" });
   expect(confirm.textContent).toContain("Your messages stay in the conversation.");

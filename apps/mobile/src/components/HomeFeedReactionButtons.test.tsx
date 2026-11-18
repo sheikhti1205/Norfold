@@ -22,6 +22,9 @@ vi.mock("../services/supabaseClient", () => ({
   getSupabase: () => ({ rpc: rpcMock }),
 }));
 
+/** The control's text is the count; the emoji is an aria-hidden glyph beside it. */
+const countOf = (el: Element | null) => el?.querySelector(".tabular-nums")?.textContent ?? null;
+
 function post(): PostItem {
   const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
   return {
@@ -110,7 +113,7 @@ describe("HomeFeedReactionButtons (Like and Dislike)", () => {
     if (provider) renderButton(item);
     else render(<HomeFeedReactionButtons postId="p1" likeCount={2} dislikeCount={0} />);
     fireEvent.click(screen.getByTestId("home-feed-love"));
-    expect(screen.getByTestId("home-feed-love").textContent).toBe("3");
+    expect(countOf(screen.getByTestId("home-feed-love"))).toBe("3");
     expect(quiet).not.toHaveBeenCalled();
     await act(async () => release({ postId: "p1", likeCount: 4, dislikeCount: 0, myReaction: "LIKE", reactionCounts: { counts: { LOVE: 4 }, myReaction: "LIKE", total: 4 } }));
     await waitFor(() => expect(quiet).toHaveBeenCalledTimes(1));
@@ -134,7 +137,7 @@ describe("HomeFeedReactionButtons (Like and Dislike)", () => {
     await waitFor(() => expect(screen.getByTestId("home-feed-love").getAttribute("aria-pressed")).toBe("true"));
     await waitFor(() => expect(screen.getByTestId("home-feed-love").getAttribute("aria-busy")).toBe("false"));
     rendered.rerender(view({ ...original, reactionSummary: { counts: { LOVE: 26, DISLIKE: 1 }, total: 27, myReaction: "LIKE" } } as PostItem));
-    expect(screen.getByTestId("home-feed-love").textContent).toBe("26");
+    expect(countOf(screen.getByTestId("home-feed-love"))).toBe("26");
     expect(screen.getByTestId("home-feed-love").getAttribute("aria-pressed")).toBe("true");
   });
   it("keeps the like testid, flat styling and 44px target, and offers no picker", () => {
@@ -155,7 +158,7 @@ describe("HomeFeedReactionButtons (Like and Dislike)", () => {
     renderButton();
     const like = screen.getByTestId("home-feed-love");
     expect(like.getAttribute("aria-pressed")).toBe("false");
-    expect(like.textContent).toBe("24");
+    expect(countOf(like)).toBe("24");
     expect(like.getAttribute("aria-label")).toBe("Like, 24 likes");
 
     fireEvent.click(like);
@@ -164,7 +167,7 @@ describe("HomeFeedReactionButtons (Like and Dislike)", () => {
     await waitFor(() => expect(like.getAttribute("aria-pressed")).toBe("true"));
     expect(like.getAttribute("aria-label")).toBe("Like, 25 likes");
 
-    expect(like.textContent).toBe("25");
+    expect(countOf(like)).toBe("25");
 
     // The second tap sees the written LIKE and clears the caller's row.
     fireEvent.click(like);
@@ -188,7 +191,7 @@ describe("HomeFeedReactionButtons (Like and Dislike)", () => {
 
     fireEvent.click(like);
 
-    await waitFor(() => expect(like.textContent).toBe("23"));
+    await waitFor(() => expect(countOf(like)).toBe("23"));
   });
 
   it("treats a hydrated canonical-era kind as mine and clears it on the next tap", async () => {
@@ -197,7 +200,7 @@ describe("HomeFeedReactionButtons (Like and Dislike)", () => {
 
     await waitFor(() => expect(like.getAttribute("aria-pressed")).toBe("true"));
     expect(like.getAttribute("aria-label")).toBe("Like, 24 likes");
-    expect(like.textContent).toBe("24");
+    expect(countOf(like)).toBe("24");
 
     fireEvent.click(like);
 
@@ -260,7 +263,7 @@ describe("HomeFeedReactionButtons (Like and Dislike)", () => {
     render(<HomeFeedReactionButtons postId="p1" likeCount={3} dislikeCount={1} />);
     const like = screen.getByTestId("home-feed-love");
     expect(like.getAttribute("aria-label")).toBe("Like, 3 likes");
-    expect(like.textContent).toBe("3");
+    expect(countOf(like)).toBe("3");
 
     fireEvent.click(like);
 
@@ -274,15 +277,15 @@ describe("HomeFeedReactionButtons (Like and Dislike)", () => {
     const like = screen.getByRole("button", { name: "Like, 24 likes" });
     const dislike = screen.getByRole("button", { name: "Dislike, 1 dislike" });
     await waitFor(() => expect(like.getAttribute("aria-pressed")).toBe("true"));
-    expect(dislike.textContent).toBe("1");
+    expect(countOf(dislike)).toBe("1");
     expect(dislike.className).toContain("min-h-[44px]");
     expect(dislike.className).toContain("min-w-[44px]");
     fireEvent.click(dislike);
     await waitFor(() => expect(likeToggleMock).toHaveBeenCalledWith("p1", "LIKE", "DISLIKE"));
     await waitFor(() => expect(dislike.getAttribute("aria-pressed")).toBe("true"));
     expect(like.getAttribute("aria-pressed")).toBe("false");
-    expect(like.textContent).toBe("23");
-    expect(dislike.textContent).toBe("2");
+    expect(countOf(like)).toBe("23");
+    expect(countOf(dislike)).toBe("2");
   });
 
   it("rolls back a failed local Dislike and both counts", async () => {
@@ -290,8 +293,8 @@ describe("HomeFeedReactionButtons (Like and Dislike)", () => {
     render(<HomeFeedReactionButtons postId="p1" likeCount={3} dislikeCount={1} />);
     fireEvent.click(screen.getByRole("button", { name: "Dislike, 1 dislike" }));
     await screen.findByTestId("home-feed-love-error");
-    expect(screen.getByRole("button", { name: "Like, 3 likes" }).textContent).toBe("3");
-    expect(screen.getByRole("button", { name: "Dislike, 1 dislike" }).textContent).toBe("1");
+    expect(countOf(screen.getByRole("button", { name: "Like, 3 likes" }))).toBe("3");
+    expect(countOf(screen.getByRole("button", { name: "Dislike, 1 dislike" }))).toBe("1");
     expect(screen.getByRole("button", { name: "Dislike, 1 dislike" }).getAttribute("aria-pressed")).toBe("false");
   });
 

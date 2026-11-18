@@ -162,11 +162,21 @@
  * ships a "Share" caption). The flat row is icon-only: the caption is kept
  * for assistive tech but taken out of the visual flow. Counts carry the
  * `.tabular-nums` class and stay visible. */
-.fb-post-action-row .fb-report-action > span:not(.tabular-nums):not(.fb-reaction-emoji) {
+.fb-post-action-row .fb-report-action > span:not(.tabular-nums) {
   position: absolute;
   width: 1px;
   height: 1px;
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+/* The reaction glyph is also a span, but it is the control's visible icon, not
+ * a redundant caption: put it back in the flat row. */
+.fb-post-action-row .fb-report-action > span.fb-reaction-emoji {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
 }

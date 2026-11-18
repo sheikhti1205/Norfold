@@ -492,7 +492,8 @@ describe("PostDetail mutation locks", () => {
     postsMock.fetchSocialState.mockResolvedValue({ myReaction: "DISLIKE", myRating: null });
     renderDetail();
     await screen.findByTestId("detail-like");
-    expect(screen.getByRole("button", { name: "Dislike, 2 dislikes" }).textContent).toBe("2");
+    // The count is its own span; the emoji beside it is an aria-hidden glyph.
+    expect(screen.getByTestId("detail-dislike").querySelector(".tabular-nums")?.textContent).toBe("2");
     expect(screen.getByRole("button", { name: "Dislike, 2 dislikes" }).getAttribute("aria-pressed")).toBe("true");
     expect(postsMock.reactToPost).not.toHaveBeenCalled();
   });
