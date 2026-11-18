@@ -19,6 +19,7 @@ import { PostIdentityHeader, PostStatusTitle, PostFacts, PostInsightsMetric } fr
 import { DetailHeroGallery } from "../components/detail/DetailHeroGallery";
 import { MediaViewer } from "../components/MediaViewer";
 import { MarkdownView } from "../components/MarkdownView";
+import "../components/expressiveText.css";
 import { PostDescription } from "../components/PostDescription";
 import { BlockedByViewerShield } from "../components/BlockedByViewerShield";
 import { ReportReferenceCard } from "../components/ReportReferenceCard";
@@ -39,6 +40,7 @@ import { ReportMatches } from "../components/ReportMatches";
 import { announce, announceQuietly } from "../components/LiveRegion";
 import { listItemVariants, motionDurations, shouldReduceMotion } from "../components/uiMotion";
 import { friendlyError } from "../utils/friendlyErrors";
+import { isEmojiOnly } from "../utils/emoji";
 import { recordLoadTiming } from "../utils/loadTiming";
 import { openInMaps } from "../utils/location";
 import { formatEventDate } from "../utils/dates";
@@ -1019,6 +1021,12 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
     // C3 body media: `https://` attachment lines lift out into a gallery;
     // the remaining text keeps the existing markdown path untouched.
     const bodyParts = parseCommentBody(c.body);
+    // Only the body's own decoded text decides this. A body that is only emoji
+    // is the whole expression, so it reads at the canonical chat size; a
+    // caption beside media, or a body attached to a shared report, is not that
+    // and keeps the normal reading size.
+    const emojiOnly = bodyParts.media.length === 0 && !c.attachments?.length
+      && isEmojiOnly(bodyParts.text);
     const children = childrenByParent.get(c.id) ?? [];
     const { visible, remaining } = visibleRepliesFor(c);
     const expandedBeyondDefault = visible.length > COMMENT_FIRST_REPLIES;
@@ -1104,7 +1112,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
         <BlockedByViewerShield rowId={c.id} blocked={c.blockedAuthor} mode="row"
           className={c.blockedAuthor ? "pe-11" : undefined} contentClassName="flex flex-col">
         <CommentIdentityHeader comment={c} isAuthor={c.author.id === post.userId} overflow={!c.blockedAuthor ? overflow : undefined} />
-        <div className="mt-0.5 text-sm leading-relaxed">
+        <div className={emojiOnly ? "fb-emoji-only mt-0.5" : "mt-0.5 text-sm leading-relaxed"}>
           <MarkdownView text={bodyParts.text || c.body} linkMentions unfurlReports />
         </div>
         {bodyParts.media.length > 0 && (

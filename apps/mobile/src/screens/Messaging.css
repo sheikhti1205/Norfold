@@ -1,3 +1,4 @@
+@import "../components/expressiveText.css";
 .fb-chat-page { position:relative; display:flex; flex-direction:column; height:100%; min-height:0; background:var(--fb-surface); color:var(--fb-on-surface); }
 .fb-chat-details-heading h2 { margin:0; font-size:.8rem; font-weight:600; color:var(--fb-on-surface-variant); }
 .fb-chat-details-person { display:flex; flex-direction:column; align-items:center; gap:.45rem; padding:1.25rem 0; text-align:center; overflow-wrap:anywhere; }
@@ -375,5 +376,6 @@ a.fb-chat-context:hover, a.fb-chat-context:focus-visible { text-decoration:under
 }
 .fb-chat-jump:focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }
 /* Emoji-only messages scale the glyphs, not the bubble or the surrounding row.
-   `.fb-chat-message p` is (0,1,1) and would otherwise discard both declarations. */
-.fb-chat-message p.fb-chat-emoji-only { font-size: 2em; line-height: 1.15; }
+   `.fb-chat-message p` is (0,1,1) and would otherwise discard both declarations.
+   The values live in components/expressiveText.css so comments read the same. */
+.fb-chat-message p.fb-chat-emoji-only { font-size: var(--fb-emoji-only-size, 2em); line-height: var(--fb-emoji-only-line, 1.15); }
