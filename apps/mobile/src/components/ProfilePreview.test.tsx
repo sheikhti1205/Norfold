@@ -73,7 +73,7 @@ it("opens after a rest and shows the facts, the action and both destinations", a
   // so in words.
   expect(within(card).getByRole("link", { name: "Open Samira's profile" }).getAttribute("href")).toBe("/u/samira");
   expect(within(card).getByRole("link", { name: "View full profile" }).getAttribute("href")).toBe("/u/samira");
-  expect(within(card).getByRole("button", { name: "Add friend Samira" })).toBeTruthy();
+  expect(within(card).getByRole("button", { name: "Message Samira" })).toBeTruthy();
   expect(within(card).getByRole("button", { name: "Close profile preview" })).toBeTruthy();
   await waitFor(() => expect(mocks.fetch).toHaveBeenCalledWith("samira"));
 });

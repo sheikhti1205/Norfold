@@ -32,14 +32,18 @@ function PeerActionsSession({ accountId, person }: { accountId: string; person: 
   // offline projection is not current authority, so it never offers the quiet
   // way out of a friendship it cannot prove.
   const ready = chat.accountId === accountId && chat.status === "ready";
-  const projection = ready
+  const live = ready
     ? Object.values(chat.currentProjections ?? {}).find((row) => row.peerId === person.id)
     : undefined;
+  const projection = live ?? (chat.conversations ?? [])
+    .map((summary) => summary.cachedProjection)
+    .find((row) => row?.peerId === person.id) ?? undefined;
   const name = person.displayName?.trim() || person.username;
 
   // A blocked pair is an honest state, not an empty space: say what is true
-  // and leave unblock/report to the canonical safety owner.
-  if (projection?.ownBlocked) return <div className="fb-peer-actions">
+  // and leave unblock/report to the canonical safety owner. The cache cannot
+  // settle a block; only the live snapshot can.
+  if (live?.ownBlocked) return <div className="fb-peer-actions">
     <p className="fb-identity-relationship">You blocked this account. Unblock it to message.</p>
     <SafetyActions reportPerson person={{ userId: person.id, name }} />
   </div>;

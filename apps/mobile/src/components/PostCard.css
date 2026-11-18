@@ -1,6 +1,6 @@
 /*
- * Report block shell: the put-away cross and the shake the owner asked for
- * (2026-11-18).
+ * Report block shell: the put-away cross and the physical toss the owner asked
+ * for (2026-11-18).
  *
  * The cross is the card's sibling, never its child, so the report moves and the
  * control stays still under the pointer. The control is a fine-pointer
@@ -47,37 +47,50 @@
 }
 
 /*
- * The report itself shakes while the pointer rests on it: a small horizontal
- * wobble, not a bounce, so the movement reads as "this can be put away"
- * instead of as a broken layout. The cross never shakes.
+ * The report is a physical card. Resting the pointer on the cross flicks it up
+ * a little and lets it fall back with one damped bounce, so the control's
+ * meaning ("put this away") is felt before it is pressed. The cross itself
+ * never moves, and the movement belongs to the control, not to reading the
+ * report: the card is still until the cross is hovered, and the toss plays once
+ * per hover entry rather than looping.
  */
-@keyframes fb-report-shake {
-  0%,
+@keyframes fb-report-toss {
+  0% {
+    transform: translate3d(0, 0, 0);
+    animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+  16% {
+    transform: translate3d(0, -8px, 0);
+    animation-timing-function: cubic-bezier(0.55, 0.06, 0.68, 0.19);
+  }
+  42% {
+    transform: translate3d(0, 0, 0);
+    animation-timing-function: cubic-bezier(0.16, 0.84, 0.44, 1);
+  }
+  58% {
+    transform: translate3d(0, -2.5px, 0);
+    animation-timing-function: cubic-bezier(0.55, 0.06, 0.68, 0.19);
+  }
+  76% {
+    transform: translate3d(0, 0, 0);
+    animation-timing-function: cubic-bezier(0.16, 0.84, 0.44, 1);
+  }
+  88% {
+    transform: translate3d(0, -0.75px, 0);
+  }
   100% {
     transform: translate3d(0, 0, 0);
-  }
-  20% {
-    transform: translate3d(-1.5px, 0, 0);
-  }
-  40% {
-    transform: translate3d(1.5px, 0, 0);
-  }
-  60% {
-    transform: translate3d(-1px, 0, 0);
-  }
-  80% {
-    transform: translate3d(1px, 0, 0);
   }
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .fb-report-card[data-hideable="true"]:hover .fb-report-shake {
-    animation: fb-report-shake 360ms linear infinite;
+  .fb-report-card[data-hideable="true"]:has(.fb-report-hide:hover) .fb-report-toss {
+    animation: fb-report-toss 560ms 1;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fb-report-card[data-hideable="true"]:hover .fb-report-shake {
+  .fb-report-card[data-hideable="true"]:has(.fb-report-hide:hover) .fb-report-toss {
     animation: none;
   }
   .fb-report-hide {
@@ -85,7 +98,7 @@
   }
 }
 
-html.fb-reduce-motion .fb-report-card[data-hideable="true"]:hover .fb-report-shake {
+html.fb-reduce-motion .fb-report-card[data-hideable="true"]:has(.fb-report-hide:hover) .fb-report-toss {
   animation: none;
 }
 

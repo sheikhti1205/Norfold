@@ -24,6 +24,7 @@ import { BlockedByViewerShield } from "../components/BlockedByViewerShield";
 import { ReportReferenceCard } from "../components/ReportReferenceCard";
 import { ReportPreviewProvider } from "../components/CommentReportPreviews";
 import { CommentComposer } from "../components/CommentComposer";
+import { ReactionGlyph } from "../components/ReactionGlyph";
 import { commentMediaProvenance, parseCommentBody } from "../services/commentBodyMedia";
 import { ReportShareButton } from "../components/ReportShareButton";
 import { ReportSharingSettings } from "../components/ReportSharingSettings";
@@ -125,7 +126,7 @@ function CommentLikeButton({
       onClick={onToggle}
       className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1 rounded-full px-1.5 text-xs font-medium ${state.mine ? "text-primary" : "text-on-surface-variant"}`}
     >
-      <span className="fb-reaction-emoji" aria-hidden="true">👍</span>
+      <ReactionGlyph kind="LIKE" mine={state.mine} size={18} />
       <span>{state.mine ? "Liked" : "Like"}</span>
       {state.count > 0 && <span aria-hidden className="tabular-nums">{state.count}</span>}
     </button>
@@ -1236,7 +1237,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
                   aria-pressed={postLike.mine}
                   {...hoverLabel("Like")}
                 >
-                  <span className="fb-reaction-emoji" aria-hidden="true">👍</span>
+                  <ReactionGlyph kind="LIKE" mine={postLike.mine} size={34} />
                   <span className="tabular-nums">{postLike.count}</span>
                 </button>
                 <button
@@ -1251,7 +1252,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
                   aria-pressed={myReaction === "DISLIKE"}
                   {...hoverLabel("Dislike")}
                 >
-                  <span className="fb-reaction-emoji" aria-hidden="true">👎</span>
+                  <ReactionGlyph kind="DISLIKE" mine={myReaction === "DISLIKE"} size={34} />
                   <span className="tabular-nums">{postDislikeCount}</span>
                 </button>
               </span>

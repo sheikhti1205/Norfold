@@ -98,10 +98,10 @@ describe("PostCard put-away cross (owner direction 2026-11-18)", () => {
     const card = screen.getByTestId("post-card");
     expect(card.dataset.hideable).toBe("true");
     const button = screen.getByRole("button", { name: "Hide report" });
-    // The report shakes (the body wrapper) and the control stands still.
+    // The report tosses (the body wrapper) and the control stands still.
     expect(button.parentElement).toBe(card);
-    expect(button.previousElementSibling?.className).toBe("fb-report-shake");
-    expect(button.querySelector(".fb-report-shake")).toBeNull();
+    expect(button.previousElementSibling?.className).toBe("fb-report-toss");
+    expect(button.querySelector(".fb-report-toss")).toBeNull();
     fireEvent.click(button);
     expect(onHide).toHaveBeenCalledTimes(1);
   });

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { MessageCircle, UserPlus } from "lucide-react";
+import { MessageSquareText, UserCheck } from "lucide-react";
 import { useOptionalAuth } from "../auth";
 import { useMessaging } from "../services/messaging/useMessaging";
 import { refreshMessaging, requestMessagingConversation } from "../services/messaging/runtime";
@@ -8,14 +8,12 @@ import { useSafetyLifetime } from "../utils/useSafetyLifetime";
 import type { PublicIdentity } from "./identity";
 
 /**
- * The one people action: add a friend, or message a friend.
+ * The one people action: message this person.
  *
- * Owner direction 2026-11-18: a single button, never a connect form. A person
- * you have no relationship with gets "Add friend", which sends the request and
- * opens the conversation straight away. Once accepted the same button reads
- * "Message" and opens that conversation. A request that is waiting reads
- * "Request sent", and one that reached you reads "View request"; both open the
- * conversation, which is the canonical owner of accepting or declining.
+ * Owner direction 2026-11-18: messaging anyone starts the conversation, and a
+ * person who is not a friend yet receives it as a message request they can
+ * accept or decline. There is no second "connect" action to get wrong, and a
+ * friend is a designed state (check + Friends), not another text button.
  *
  * The live snapshot is the authority. Before it is ready the button falls back
  * to this account's own cached index for the label and destination, because a
@@ -55,18 +53,16 @@ function PeerChatSession({ accountId, person, className }: { accountId: string; 
   }
 
   const connected = projection?.mode === "CONNECTED";
+  const incoming = projection?.mode === "REQUEST" && projection.request === "INCOMING";
+  const outgoing = projection?.mode === "REQUEST" && projection.request === "OUTGOING";
   const reportQuery = person.contextReportId ? `?report=${encodeURIComponent(person.contextReportId)}` : "";
   const href = projection
     ? `/chats/${encodeURIComponent(projection.conversationId)}${reportQuery}`
     : null;
-  const label = connected ? "Message"
-    : projection?.request === "OUTGOING" ? "Open chat"
-      : projection?.request === "INCOMING" ? "View request"
-        : "Add friend";
-  const Icon = href ? MessageCircle : UserPlus;
+  const label = incoming ? "View request" : outgoing ? "Open chat" : "Message";
   const relationshipNote = connected ? null
-    : projection?.request === "OUTGOING" ? "Request sent. You can still message."
-      : projection?.request === "INCOMING" ? "This person asked to message you."
+    : outgoing ? "Request sent. You can still message."
+      : incoming ? "This person asked to message you. Accept or decline in the chat."
         : null;
 
   async function run() {
@@ -108,9 +104,15 @@ function PeerChatSession({ accountId, person, className }: { accountId: string; 
         aria-busy={busy}
         aria-label={`${label} ${person.displayName?.trim() || person.username}`}
       >
-        <Icon size={17} aria-hidden="true" />
+        <MessageSquareText size={17} aria-hidden="true" />
         <span>{busy ? "Opening…" : label}</span>
       </button>
+      {connected && (
+        <span className="fb-peer-chat-friends">
+          <UserCheck size={16} aria-hidden="true" />
+          Friends
+        </span>
+      )}
       {(relationshipNote || note) && (
         <p className="fb-peer-chat-note" role="status">{note ?? relationshipNote}</p>
       )}

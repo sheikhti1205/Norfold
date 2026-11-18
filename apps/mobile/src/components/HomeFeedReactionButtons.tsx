@@ -5,6 +5,7 @@ import { useFeedLove } from "../hooks/useFeedLove";
 import { applyCountDeltas, likeMine, likeState, nextReaction, reactionMoveDeltas } from "../services/reactions";
 import { seedSummaryFromItem, toggleReaction } from "../services/feedReactions";
 import { useHoverLabel } from "./HoverLabel";
+import { ReactionGlyph } from "./ReactionGlyph";
 
 export function HomeFeedReactionButtons({ postId, likeCount, dislikeCount }: {
   postId: string;
@@ -88,14 +89,14 @@ export function HomeFeedReactionButtons({ postId, likeCount, dislikeCount }: {
           aria-describedby={failed ? errorId : undefined} data-pending={pending ? "true" : "false"}
           disabled={pending} aria-busy={pending} onClick={() => void onToggle("LIKE")} className={buttonClass(likeActive)}
           {...hoverLabel("Like")}>
-          <span className="fb-reaction-emoji" aria-hidden="true">👍</span>
+          <ReactionGlyph kind="LIKE" mine={likeActive} size={34} />
           <span className="tabular-nums">{likes}</span>
         </button>
         <button type="button" data-testid="home-feed-dislike" data-action="dislike" aria-label={`Dislike, ${dislikes} ${dislikes === 1 ? "dislike" : "dislikes"}`} aria-pressed={dislikeActive}
           aria-describedby={failed ? errorId : undefined} data-pending={pending ? "true" : "false"}
           disabled={pending} aria-busy={pending} onClick={() => void onToggle("DISLIKE")} className={buttonClass(dislikeActive)}
           {...hoverLabel("Dislike")}>
-          <span className="fb-reaction-emoji" aria-hidden="true">👎</span>
+          <ReactionGlyph kind="DISLIKE" mine={dislikeActive} size={34} />
           <span className="tabular-nums">{dislikes}</span>
         </button>
       </span>

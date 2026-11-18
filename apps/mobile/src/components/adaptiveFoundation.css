@@ -131,6 +131,14 @@
 .fb-peer-chat-primary:not(:disabled):active { filter: brightness(.9); }
 .fb-peer-chat-primary:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; }
 .fb-peer-chat-primary:disabled { opacity: .6; cursor: not-allowed; }
+/* A friend is a state, not a second action: the check and the word sit in a
+   quiet pill beside Message, with no pressed or pointer affordance. */
+.fb-peer-chat-friends {
+  display: inline-flex; align-items: center; gap: .25rem;
+  min-height: 40px; padding: 0 .6875rem;
+  border: 1px solid var(--fb-outline-variant); border-radius: 999px;
+  color: var(--fb-on-surface); font-size: .8125rem; font-weight: 600;
+}
 .fb-peer-chat-note { flex-basis: 100%; margin: 0; color: var(--fb-on-surface-variant); font-size: .8125rem; line-height: 1.4; }
 .fb-split-view { min-height: 0; min-width: 0; height: 100%; }
 .fb-split-wide { display: grid; grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr); }
@@ -184,7 +192,7 @@
 /* No spatial entrance travel: effective reduced motion has no hidden animation
    path. Feedback is local background/focus state, not springing whole panels. */
 
-/* Inline disconnect confirmation on the full-screen profile (no bottom sheet). */
+/* Inline remove-friend confirmation on the full-screen profile (no bottom sheet). */
 .fb-peer-actions-confirm { display: flex; flex-direction: column; gap: .5rem; margin-block: .5rem; }
 .fb-peer-actions-confirm p { margin: 0; font-size: .8125rem; color: var(--fb-on-surface-variant); }
 .fb-peer-actions-confirm > div { display: flex; flex-wrap: wrap; gap: .5rem; }

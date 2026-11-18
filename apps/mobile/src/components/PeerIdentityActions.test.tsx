@@ -55,15 +55,15 @@ afterEach(cleanup);
 
 it("supplies the §9 safety rows in a stranger card", async () => {
   mount();
-  expect(screen.getByRole("button", { name: "Add friend River Lee" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Message River Lee" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "More profile actions" }));
   expect(await screen.findByRole("menuitem", { name: "Report user" })).toBeTruthy();
   expect(screen.getByRole("menuitem", { name: "Block account" })).toBeTruthy();
 });
 
-it("sends the friend request and opens the conversation in one action", async () => {
+it("starts the conversation and opens it in one action", async () => {
   mount();
-  fireEvent.click(screen.getByRole("button", { name: "Add friend River Lee" }));
+  fireEvent.click(screen.getByRole("button", { name: "Message River Lee" }));
   await screen.findByRole("heading", { name: "Chat opened" });
   expect(state.create).toHaveBeenCalledExactlyOnceWith("viewer", "peer");
   // The request flow never composes a hidden first message: the conversation is
@@ -83,7 +83,7 @@ it("keeps an outgoing request as one button that opens its conversation", async 
 it("keeps an incoming request as View request, with safety available", async () => {
   state.projections = { chat: { ...connected, mode: "REQUEST", request: "INCOMING" } };
   mount();
-  expect(screen.getByText("This person asked to message you.")).toBeTruthy();
+  expect(screen.getByText("This person asked to message you. Accept or decline in the chat.")).toBeTruthy();
   // Safety is the profile's, so it is checked before the button replaces this
   // route with the conversation.
   expect(screen.getByRole("button", { name: "More profile actions" })).toBeTruthy();
@@ -91,10 +91,11 @@ it("keeps an incoming request as View request, with safety available", async () 
   await screen.findByRole("heading", { name: "Chat opened" });
 });
 
-it("offers Message plus an explicit, confirmed Remove friend on a connected profile", () => {
+it("offers Message plus a designed Friends state and an explicit, confirmed Remove friend", () => {
   state.projections = { chat: connected };
   mount();
   expect(screen.getByRole("button", { name: "Message River Lee" })).toBeTruthy();
+  expect(screen.getByText("Friends")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Remove friend" }));
   const confirm = screen.getByRole("group", { name: "Remove friend" });
   expect(confirm.textContent).toContain("Your messages stay in the conversation.");
@@ -104,12 +105,12 @@ it("offers Message plus an explicit, confirmed Remove friend on a connected prof
 
 it("keeps a friend labelled as a friend while the live snapshot is still opening", () => {
   // The Connect directory already knows this person is a friend from its own
-  // cached index; the card must not briefly offer a second friend request.
+  // cached index; the card must not briefly offer a second request.
   state.status = "opening"; state.projections = null;
   state.conversations = [{ peerId: "peer", cachedProjection: connected }];
   mount();
-  expect(screen.getByRole("button", { name: "Message River Lee" })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "Add friend River Lee" })).toBeNull();
+  expect(screen.getAllByRole("button", { name: "Message River Lee" })).toHaveLength(1);
+  expect(screen.getByText("Friends")).toBeTruthy();
 });
 
 it("renders the identity as a direct profile link with no card until it is asked for", () => {
@@ -131,7 +132,7 @@ it("carries the report subject into an existing conversation without sending", a
 
 it("opens report-origin first contact on that report", async () => {
   mount({ ...person, contextReportId: "report-id" });
-  fireEvent.click(screen.getByRole("button", { name: "Add friend River Lee" }));
+  fireEvent.click(screen.getByRole("button", { name: "Message River Lee" }));
   await screen.findByRole("heading", { name: "Chat opened" });
   expect(state.create).toHaveBeenCalledExactlyOnceWith("viewer", "peer");
   expect(screen.getByTestId("here").textContent).toBe("/chats/chat?report=report-id");
@@ -141,9 +142,9 @@ it("opens report-origin first contact on that report", async () => {
 it("says why a new request cannot start yet instead of failing silently", async () => {
   state.status = "offline"; state.projections = null;
   mount();
-  const add = screen.getByRole("button", { name: "Add friend River Lee" });
-  expect(add).toHaveProperty("disabled", false);
-  fireEvent.click(add);
+  const message = screen.getByRole("button", { name: "Message River Lee" });
+  expect(message).toHaveProperty("disabled", false);
+  fireEvent.click(message);
   expect(await screen.findByText("You're offline. Check your connection, then tap again.")).toBeTruthy();
   expect(state.refresh).toHaveBeenCalledWith("viewer");
   expect(state.create).not.toHaveBeenCalled();
@@ -151,7 +152,7 @@ it("says why a new request cannot start yet instead of failing silently", async 
 
 it("shows no contact action for self or a locally blocked peer", () => {
   state.account = "peer"; const view = mount();
-  expect(screen.queryByRole("button", { name: /Add friend/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: /Message/ })).toBeNull();
   state.account = "viewer"; state.projections = { chat: { ...connected, ownBlocked: true } };
   view.rerender(<MemoryRouter><PeerIdentityActions person={person} /></MemoryRouter>);
   expect(screen.queryByRole("button", { name: "Message River Lee" })).toBeNull();
@@ -162,7 +163,7 @@ it("drops a pending first-contact navigation across an account replacement", asy
   let resolve!: (id: string) => void;
   state.create.mockReturnValue(new Promise<string>(done => { resolve = done; }));
   const view = mount();
-  fireEvent.click(screen.getByRole("button", { name: "Add friend River Lee" }));
+  fireEvent.click(screen.getByRole("button", { name: "Message River Lee" }));
   state.account = "replacement";
   view.rerender(<MemoryRouter><PeerIdentityActions person={person} /></MemoryRouter>);
   await act(async () => { resolve("old-chat"); });

@@ -83,11 +83,11 @@ export function PostCard({ children, index = 0, variant = "default", onHide, hid
         {children}
       </div>
     );
-  // The cross is a sibling of the shaking body, so the report moves and the
+  // The cross is a sibling of the tossing body, so the report moves and the
   // control stays still under the pointer (owner direction 2026-11-18).
   const shell = (
     <>
-      <div className="fb-report-shake">{body}</div>
+      <div className="fb-report-toss">{body}</div>
       {onHide && (
         <button
           type="button"
