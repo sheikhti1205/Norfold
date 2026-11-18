@@ -69,7 +69,7 @@ import { CreateReport } from "./CreateReport";
 import { clearDraft, loadDraft, saveDraft } from "../services/reportDraft";
 import { clearPhotoStore } from "../services/photoStore";
 import { todayInputValue } from "../utils/dates";
-import { chooseCategory } from "../test-utils/reportCategory";
+import { categoryValue, chooseCategory } from "../test-utils/reportCategory";
 
 /** The discard is destructive, so it asks through the canonical dialog. */
 function confirmDiscardDraft() {
@@ -338,6 +338,19 @@ describe("CreateReport suggestion failure — Manage local tools affordance (MIN
     // give the publish call its own explicit headroom.
     const publishButton = screen.getByRole("button", { name: /publish/i }) as HTMLButtonElement;
     await waitFor(() => expect(publishButton.disabled).toBe(false), { timeout: 15_000 });
+    // Publish validates the values in the form, not the ones this test typed
+    // into React state. Tiptap mounts after the first paint and the category
+    // sheet closes asynchronously, so on a loaded runner a submit can arrive
+    // before either holds the value and then fail as "fix the highlighted
+    // fields", which is a different scenario from the helper sentence this
+    // test owns. Wait for every required value to be visible in the form
+    // itself, which also names the field if this ever regresses again.
+    await waitFor(() => {
+      expect((screen.getByLabelText(/what did you lose/i) as HTMLInputElement).value).toBe("Lost umbrella");
+      expect(categoryValue()).toBe("Electronics");
+      expect(screen.getByRole("textbox", { name: "Description" }).textContent ?? "")
+        .toContain("a black umbrella lost near the market");
+    }, { timeout: 15_000 });
     fireEvent.submit(publishButton.closest("form")!);
     await waitFor(() => expect(publishReportMock).toHaveBeenCalled(), { timeout: 15_000 });
 
