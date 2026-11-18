@@ -13,6 +13,11 @@
    chips wrap underneath in the same grid, never in a second bar. */
 .fb-search-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:.5rem; }
 .fb-search-row > .fb-search-filter-chips { grid-column:1 / -1; }
+/* The trigger and the Clear button share the grid's action column. Without
+   this wrapper a third child would auto-place on a new grid row and push the
+   chips down. */
+.fb-search-filter-actions { display:flex; align-items:center; gap:.4rem; min-width:0; }
+.fb-search-filter-clear { white-space:nowrap; }
 .fb-filter-trigger { position:relative; flex:none; }
 .fb-filter-count { position:absolute; right:0; top:0; min-width:18px; border-radius:1rem; background:var(--fb-on-surface); color:var(--fb-surface); font-size:.6875rem; padding:0 .2rem; }
 .fb-popover.fb-search-filter-popover { display:flex; flex-direction:column; width:380px; overflow:hidden; }
