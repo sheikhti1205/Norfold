@@ -51,7 +51,7 @@ export function NavigationSetup() {
     aria-describedby="fb-nav-setup-body"
   >
     <h2 id="fb-nav-setup-title">Choose your navigation</h2>
-    <p id="fb-nav-setup-body">You can change this later in Settings, under Appearance.</p>
+    <p id="fb-nav-setup-body">You can change this later in Settings, under Personalization.</p>
     <fieldset className="fb-choice-fieldset fb-nav-setup-choices" aria-label="Navigation layout">
       <div className="fb-preview-grid fb-preview-grid-nav">
         {(["auto", "bottom", "rail"] as const).map(value => (

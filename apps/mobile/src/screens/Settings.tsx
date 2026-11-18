@@ -73,7 +73,7 @@ export const ROW_PRESENTATION: Record<string, { title: string; icon: LucideIcon;
   "recovered-items": { title: "Recovered items", icon: RotateCcw, iconTone: "success", detail: true },
   devices: { title: "Devices", icon: MonitorSmartphone, iconTone: "teal", detail: true },
   "chat-preferences": { title: "Chat", icon: MessageSquare, iconTone: "neutral", detail: true },
-  appearance: { title: "Appearance", icon: Palette, iconTone: "appearance" },
+  appearance: { title: "Personalization", icon: Palette, iconTone: "appearance" },
   notifications: { title: "Notification preferences", icon: Bell, iconTone: "notifications" },
   accessibility: { title: "Accessibility", icon: Accessibility, iconTone: "accessibility" },
   "feed-layout": { title: "Feed layout", icon: LayoutGrid, iconTone: "teal" },

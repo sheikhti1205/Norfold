@@ -247,6 +247,7 @@ describe("updates screen", () => {
     const feature = note.features.find((entry) => entry.destinationId);
     expect(feature).toBeTruthy();
     const destination = destinationFor(feature!.destinationId!)!;
+    expect(feature!.summary).toContain("Personalization");
     const link = screen.getByRole("link", { name: destination.title });
     expect(link.getAttribute("href")).toBe(destination.route);
   });

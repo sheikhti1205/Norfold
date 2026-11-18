@@ -195,17 +195,19 @@ describe("Settings home", () => {
   it("keeps category search mounted while routed details change and exposes one primary heading", async () => {
     render(<MemoryRouter initialEntries={["/settings"]}><Routes>
       <Route element={<RouteTransition />}><Route path="/settings" element={<Settings />}>
-        <Route path="appearance" element={<SettingsPage title="Appearance detail" backTo="/settings">Theme choices</SettingsPage>} />
+        <Route path="appearance" element={<SettingsPage title="Personalization detail" backTo="/settings">Theme choices</SettingsPage>} />
       </Route></Route>
     </Routes></MemoryRouter>);
     const search = screen.getByRole("searchbox", { name: "Search settings" });
-    fireEvent.change(search, { target: { value: "appearance" } });
-    fireEvent.click(screen.getByRole("link", { name: "Appearance" }));
-    await screen.findByRole("heading", { level: 1, name: "Appearance detail" });
+    fireEvent.change(search, { target: { value: "personalization" } });
+    const row = screen.getByRole("link", { name: "Personalization" });
+    expect(row.getAttribute("href")).toBe("/settings/appearance");
+    fireEvent.click(row);
+    await screen.findByRole("heading", { level: 1, name: "Personalization detail" });
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("searchbox", { name: "Search settings" })).toBe(search);
-    expect((search as HTMLInputElement).value).toBe("appearance");
-    expect(screen.getByRole("link", { name: "Appearance" }).getAttribute("aria-current")).toBe("page");
+    expect((search as HTMLInputElement).value).toBe("personalization");
+    expect(screen.getByRole("link", { name: "Personalization" }).getAttribute("aria-current")).toBe("page");
     fireEvent.click(screen.getByRole("button", { name: "Back to Settings" }));
     await screen.findByRole("heading", { level: 1, name: "Settings" });
     expect(screen.getByRole("searchbox", { name: "Search settings" })).toBe(search);
@@ -413,9 +415,16 @@ describe("Settings home", () => {
     const search = screen.getByRole("searchbox", { name: "Search settings" });
     fireEvent.change(search, { target: { value: "theme" } });
     await waitFor(() => {
-      expect(screen.getByRole("link", { name: /appearance/i })).toBeTruthy();
+      const row = screen.getByRole("link", { name: /personalization/i });
+      expect(row.getAttribute("href")).toBe("/settings/appearance");
     });
     expect(screen.queryByRole("region", { name: "Preferences" })).toBeNull();
+
+    fireEvent.change(search, { target: { value: "appearance" } });
+    await waitFor(() => {
+      const legacyRow = screen.getByRole("link", { name: /personalization/i });
+      expect(legacyRow.getAttribute("href")).toBe("/settings/appearance");
+    });
 
     fireEvent.change(search, { target: { value: "text size" } });
     await waitFor(() => {

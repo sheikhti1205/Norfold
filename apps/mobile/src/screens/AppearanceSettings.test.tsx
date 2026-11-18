@@ -41,7 +41,7 @@ describe("AppearanceSettings", () => {
   it("renders one heading, three theme options, and eight curated accents as native radios", () => {
     renderScreen();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    expect(screen.getByRole("heading", { level: 1, name: "Appearance" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Personalization" })).toBeTruthy();
     for (const name of ["System", "Light", "Dark"]) {
       expect(screen.getByRole("radio", { name: new RegExp(`^${name}`) })).toBeTruthy();
     }

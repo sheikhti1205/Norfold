@@ -48,6 +48,7 @@ describe("first use device navigation choice", () => {
     expect(prompt()?.textContent).toContain(
       "Recommended: Automatic. The rail appears when the screen has room; the bottom bar stays on phones.",
     );
+    expect(prompt()?.textContent).toContain("in Settings, under Personalization.");
   });
 
   it("offers no separate control that picks for the reader", () => {
