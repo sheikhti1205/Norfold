@@ -141,6 +141,31 @@ export function objectKeyFromAvatarUrl(url: string | null | undefined): string |
 }
 
 /**
+ * A public avatar address safe to render: either an object this deployment
+ * stores under `avatars/{uid}/`, or the Google profile picture a social sign-in
+ * seeded. Those are the only two shapes the write paths ever produce, so
+ * discovery can reject anything else without inventing a third policy.
+ *
+ * The previous discovery filter accepted only an object *key*, which silently
+ * erased every real profile picture (a Google URL or our own public URL) and
+ * rendered colorless initials beside a person who had a photo.
+ */
+export function isDisplayableAvatarUrl(url: string, uid: string): boolean {
+  if (isAvatarStorageUrl(url, uid)) return true;
+  const trimmed = url.trim();
+  if (!trimmed || trimmed.length > MAX_AVATAR_URL_LENGTH) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:") return false;
+  const host = parsed.hostname.toLowerCase();
+  return host === "googleusercontent.com" || host.endsWith(".googleusercontent.com");
+}
+
+/**
  * True when a Supabase error means "this RPC does not exist on the backend"
  * (PostgREST PGRST202 / HTTP 404). Only this narrow case may fall back to the
  * legacy direct-URL avatar RPC in uploadAvatar.

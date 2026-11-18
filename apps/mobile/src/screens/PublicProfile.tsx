@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { MapPin } from "lucide-react";
+import { MapPin, Users } from "lucide-react";
 import { useParams, useSearchParams } from "react-router";
 import type { PostItem, PublicProfile as PublicProfileShape } from "@norfold/shared";
 import { fetchPublicProfile, appendReportPage, hasMoreReports } from "../services/profile";
+import { connectionCountLabel, fetchConnectionCount } from "../services/connections";
 import { fetchFeed } from "../services/posts";
 import { fetchReputationTier, REPUTATION_TIER_LABELS } from "../services/trust";
 import { UserAvatar } from "../components/UserAvatar";
@@ -62,6 +63,7 @@ function PublicProfileSession({ username }: { username: string }) {
   const [retry, setRetry] = useState(0);
   const [reputationTier, setReputationTier] = useState<string | null>(null);
   const [reputationLoading, setReputationLoading] = useState(false);
+  const [connections, setConnections] = useState<number | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -71,11 +73,15 @@ function PublicProfileSession({ username }: { username: string }) {
     setProfile(null);
     setReports([]);
     setNextCursor(null);
+    setConnections(null);
     (async () => {
       try {
         const found = await fetchPublicProfile(username);
         if (!alive) return;
         setProfile(found);
+        void fetchConnectionCount(found.id).then((count) => {
+          if (alive) setConnections(count);
+        }).catch(() => undefined);
         setReputationTier(null);
         setReputationLoading(true);
         void fetchReputationTier(found.id).then((tier) => {
@@ -179,6 +185,12 @@ function PublicProfileSession({ username }: { username: string }) {
                 )}
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-on-surface-variant">
                   <span>{formatJoined(profile.createdAt)}</span>
+                  {connectionCountLabel(connections) && (
+                    <span className="inline-flex items-center gap-1" data-testid="public-profile-connections">
+                      <Users size={12} aria-hidden="true" />
+                      {connectionCountLabel(connections)}
+                    </span>
+                  )}
                   {reputationLoading && <span role="status">Checking reputation…</span>}
                   {reputationTier && (
                     <StatusPill tone={reputationTier === "TRUSTED" ? "success" : reputationTier === "NORMAL" ? "accent" : "neutral"}>
@@ -188,8 +200,14 @@ function PublicProfileSession({ username }: { username: string }) {
                 </div>
               </div>
             </div>
-            {profile.bio && (
+            {profile.bio ? (
               <p className="whitespace-pre-line break-words text-[0.9375rem] leading-relaxed text-on-surface">{profile.bio}</p>
+            ) : (
+              // Owner direction 2026-11-18: an absent bio is a stated tag.
+              <p data-testid="public-profile-no-bio"
+                className="inline-flex max-w-max items-center rounded-full border border-outline-variant px-2 py-0.5 text-xs text-on-surface-variant">
+                No bio
+              </p>
             )}
             {user && <PeerIdentityActions person={{ ...profile, contextReportId }} />}
           </section>

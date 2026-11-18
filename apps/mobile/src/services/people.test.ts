@@ -48,6 +48,19 @@ it("propagates server refusal and rejects oversized search input", async () => {
   await expect(searchPeople("river")).rejects.toThrow();
   await expect(searchPeople("r".repeat(81))).rejects.toThrow();
 });
+it("keeps a real profile picture: our uploaded avatar URL or a Google-seeded one", async () => {
+  state.response.data={items:[
+    {id:"peer",username:"river",display_name:null,avatar_url:"https://lh3.googleusercontent.com/a/abc"},
+    {id:"peer2",username:"sam",display_name:null,avatar_url:"https://ref.supabase.co/storage/v1/object/public/findback-images/avatars/peer2/a.jpg"},
+    {id:"peer3",username:"bad",display_name:null,avatar_url:"https://evil.example.test/a.jpg"},
+  ],nextCursor:null};
+  const page = await searchPeople("river");
+  expect(page.items.map(item => item.avatarUrl)).toEqual([
+    "https://lh3.googleusercontent.com/a/abc",
+    "https://ref.supabase.co/storage/v1/object/public/findback-images/avatars/peer2/a.jpg",
+    null,
+  ]);
+});
 it("discards a response that resolves after cancellation", async () => {
   let resolve!:(value:{data:unknown;error:null})=>void;
   const result=new Promise<{data:unknown;error:null}>(done=>{resolve=done;});
