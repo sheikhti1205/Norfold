@@ -572,11 +572,18 @@ describe("CommentComposer attachment tiling (display_order + provenance)", () =>
   });
 });
 
-describe("CommentComposer Klipy", () => {  it("hides the GIF control when the key is absent (graceful)", () => {    render(<CommentComposer {...baseProps()} />);
-    expect(screen.queryByRole("button", { name: /stickers and gifs/i })).toBeNull();
+describe("CommentComposer Klipy", () => {
+  it("keeps the GIF control visible when the key is absent and explains the unavailable provider", () => {
+    render(<CommentComposer {...baseProps()} />);
+    fireEvent.click(screen.getByRole("button", { name: /stickers and gifs/i }));
+    expect(screen.getByTestId("comment-gif-panel")).toBeTruthy();
+    expect(screen.getByTestId("comment-gif-unavailable")).toBeTruthy();
+    expect(screen.queryByTestId("comment-gif-search")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
     expect(screen.queryByRole("menuitem", { name: "GIF" })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: "Sticker" })).toBeNull();
+    // The camera is a real capture path in the menu, not a gallery alias.
+    expect(screen.getByRole("menuitem", { name: "Camera" })).toBeTruthy();
   });
 
   it("searches Klipy, picks a result, and tracks the share only on post", async () => {

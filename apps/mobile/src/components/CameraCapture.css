@@ -1,0 +1,73 @@
+/* Real web camera surface. The stage is deliberately dark in every theme: a
+   viewfinder is a neutral frame, not another app-coloured card. */
+
+.fb-camera-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fb-camera-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  max-height: min(58dvh, 28rem);
+  overflow: hidden;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 14px;
+  background: #0b0b0c;
+}
+
+.fb-camera-video,
+.fb-camera-stage img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.fb-camera-video[data-hidden="true"] {
+  display: none;
+}
+
+.fb-camera-video[data-mirror="true"],
+.fb-camera-stage img[data-mirror="true"] {
+  transform: scaleX(-1);
+}
+
+.fb-camera-status {
+  margin: 0;
+  max-width: 26rem;
+  padding: 1.25rem;
+  color: rgb(255 255 255 / 0.82);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.fb-camera-take {
+  gap: 6px;
+}
+
+.fb-camera-switch {
+  align-self: flex-start;
+  min-height: 44px;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fb-on-surface-variant);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.fb-camera-switch:hover {
+  background: var(--fb-surface-container);
+}
+
+.fb-camera-switch:focus-visible {
+  outline: 2px solid var(--fb-focus);
+  outline-offset: -2px;
+}

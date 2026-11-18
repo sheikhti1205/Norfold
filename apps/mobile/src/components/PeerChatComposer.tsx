@@ -6,7 +6,7 @@ import { convertEmoticonsLive } from "../utils/emoji";
 import { EmojiPickerButton } from "./EmojiPickerButton";
 import { KlipyPicker } from "./KlipyPicker";
 import { insertEmoji } from "./EmojiPicker";
-import { isKlipyEnabled, type KlipyItem } from "../services/klipy";
+import { type KlipyItem } from "../services/klipy";
 import "./peerComposer.css";
 
 export interface PeerChatComposerProps {
@@ -85,7 +85,7 @@ export function PeerChatComposer({
   // Live conversion changes the value, so the caret it produced is restored
   // after React commits instead of being left wherever the browser guessed.
   const caret = useRef<number | null>(null);
-  const klipy = isKlipyEnabled() && onPickKlipy !== undefined;
+  const gifEnabled = onPickKlipy !== undefined;
   const attachmentBusy = busy || locked || attachmentsLocked || fileSending;
   const { hoverLabel } = useHoverLabel();
 
@@ -268,7 +268,7 @@ export function PeerChatComposer({
             if (hasFinePointer()) { event.preventDefault(); if (!event.repeat) send(); }
           }} />
       </div>
-      {klipy && button("Stickers and GIFs", <Sticker size={20} aria-hidden="true" />, () => setGifOpen(true), !photoAllowed || attachmentBusy)}
+      {gifEnabled && button("Stickers and GIFs", <Sticker size={20} aria-hidden="true" />, () => setGifOpen(true), !photoAllowed || attachmentBusy)}
       <EmojiPickerButton onPick={pickEmoji} disabled={busy || locked} align="end"
         className="fb-peer-icon" label="Emoji" />
       <button type="submit" className="fb-peer-icon fb-peer-send" aria-label="Send message" disabled={!available}
@@ -281,7 +281,7 @@ export function PeerChatComposer({
         <SendHorizontal size={20} aria-hidden="true" />
       </button>
     </div>
-    {klipy && gifOpen && (
+    {gifEnabled && gifOpen && (
       <div className="fb-picker-layer" style={{ left: 4 }}>
         <KlipyPicker
           testIdPrefix="chat-klipy"

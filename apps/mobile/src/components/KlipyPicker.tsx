@@ -106,7 +106,29 @@ export function KlipyPicker({
 
   useEffect(() => { searchRef.current?.focus(); }, []);
 
-  if (!enabled) return null;
+  if (!enabled) {
+    // The owner wants the control to exist even when the deployment has no
+    // provider key. It opens a real panel that says so; it never renders fake
+    // tiles or a search field that cannot search.
+    return (
+      <div ref={root} className="fb-klipy-picker" data-testid={testId("panel")} role="dialog" aria-label="GIF and sticker picker">
+        <div className="fb-klipy-search-row fb-klipy-search-row-plain">
+          <p className="fb-klipy-unavailable-title">GIFs and stickers</p>
+          <button type="button" className="fb-klipy-clear min-h-[44px]" aria-label="Close"
+            onClick={onDismiss ?? onClose}>
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="fb-klipy-body">
+          <div role="status" data-testid={testId("unavailable")} className="fb-klipy-status">
+            <ImageOff size={20} aria-hidden="true" />
+            <p>GIFs and stickers aren't available right now.</p>
+            <p>Try again later.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
   const loading = state.status === "loading";
   const items = state.items;
 

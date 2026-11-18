@@ -102,6 +102,13 @@
 /* Klipy sticker/GIF panel: same layer, its own search and waterfall. */
 .fb-klipy-picker { display: flex; flex-direction: column; max-height: 20rem; }
 .fb-klipy-search-row { padding: 8px 8px 0; }
+.fb-klipy-search-row-plain {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 4px 4px 0 12px;
+}
+.fb-klipy-unavailable-title {
+  margin: 0; font-size: 0.875rem; font-weight: 600; color: var(--fb-on-surface);
+}
 .fb-klipy-search-wrap { position: relative; }
 .fb-klipy-search-wrap svg {
   position: absolute; left: 12px; top: 50%; transform: translateY(-50%);

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { FileText, Film, ImagePlus, Plus, X } from "lucide-react";
+import { Camera, FileText, ImagePlus, Plus, Sticker, X } from "lucide-react";
 import { ActionMenu, type MenuAction } from "./ActionMenu";
 import { ComposerShell } from "./ComposerShell";
 import { CommentReportPicker } from "./CommentReportPicker";
 import { EmojiPickerButton } from "./EmojiPickerButton";
 import { insertEmoji } from "./EmojiPicker";
 import { KlipyPicker } from "./KlipyPicker";
+import { CameraCapture } from "./CameraCapture";
 import { UserAvatar } from "./UserAvatar";
 import { MentionAutocomplete, type MentionCandidate } from "./MentionAutocomplete";
 import {
@@ -21,7 +22,7 @@ import {
   validateAttachableFile,
   type CommentAttachment,
 } from "../services/commentAttachments";
-import { isKlipyEnabled, klipyCustomerId, trackKlipyShare, type KlipyItem, type KlipyKind } from "../services/klipy";
+import { klipyCustomerId, trackKlipyShare, type KlipyItem, type KlipyKind } from "../services/klipy";
 import {
   appendBodyMedia,
   bodyHasInlineData,
@@ -203,13 +204,13 @@ export function CommentComposer({
   const photoIntakeRef = useRef(false);
   const [gifOpen, setGifOpen] = useState(false);
   const [gifTab, setGifTab] = useState<KlipyKind>("gifs");
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [attachNotice, setAttachNotice] = useState<string | null>(null);
   const fieldRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const filesRef = useRef(new Map<string, File>());
   const attachmentsRef = useRef<ComposerAttachment[]>([]);
   const submittedRef = useRef(false);
-  const gifEnabled = isKlipyEnabled();
 
   // Mirror staged entries for the abandon sweep below (an unmount cleanup
   // closure cannot read state at unmount time).
@@ -395,6 +396,43 @@ export function CommentComposer({
     }
   }
 
+  async function handleCameraClick() {
+    if (disabled || sending || photoIntakeRef.current) return;
+    if (attachments.length >= COMMENT_ATTACH_MAX) {
+      setAttachNotice(`Comments hold up to ${COMMENT_ATTACH_MAX} attachments. Remove one first.`);
+      return;
+    }
+    setAttachNotice(null);
+    setReportOpen(false);
+    setGifOpen(false);
+    photoIntakeRef.current = true;
+    setPreparingPhotos(true);
+    try {
+      if (await isNativeCommentPhotoIntakeAvailable()) {
+        const { chooseNativeImage, importedImageToFile } = await import("../services/media/nativeMedia");
+        const imported = await chooseNativeImage({ source: "camera" });
+        if (imported) {
+          const file = importedImageToFile(imported);
+          // `addFiles` is the intake owner and refuses while a picker owns the
+          // tray; the native capture has just completed, so hand ownership
+          // back before the shared validation/upload path runs.
+          photoIntakeRef.current = false;
+          setPreparingPhotos(false);
+          addFiles([file]);
+        }
+      } else {
+        // Desktop browsers ignore `capture` on a file input; the shared
+        // surface opens the real camera and returns a normal File.
+        setCameraOpen(true);
+      }
+    } catch (err) {
+      setAttachNotice(friendlyError(err).message);
+    } finally {
+      photoIntakeRef.current = false;
+      setPreparingPhotos(false);
+    }
+  }
+
   async function handleAttachClick() {
     if (disabled || sending || photoIntakeRef.current) return;
     // Reserve the tray during native chooser/preparation, before any awaits.
@@ -545,6 +583,7 @@ export function CommentComposer({
   // enough to remain readable at large text; its accessible name stays full.
   const placeholder = replyToUsername ? "Reply…" : "Write…";
   const attachmentActions: MenuAction[] = [
+    { id: "camera", label: "Camera", icon: <Camera size={18} aria-hidden />, disabled: attachments.length >= COMMENT_ATTACH_MAX, onAction: () => void handleCameraClick() },
     { id: "photo", label: "Photo", icon: <ImagePlus size={18} aria-hidden />, onAction: () => void handleAttachClick() },
     ...(COMMENT_REPORTS_ENABLED ? [{ id: "report", label: "Report", icon: <FileText size={18} aria-hidden />,
       disabled: attachments.length >= COMMENT_ATTACH_MAX,
@@ -607,11 +646,11 @@ export function CommentComposer({
           actions={<div ref={attachmentActionsRef} className="flex items-center">
             <ActionMenu label="Add attachment" icon={<Plus size={20} aria-hidden />}
               disabled={disabled || sending || preparingPhotos} items={attachmentActions} />
-            {gifEnabled && <button type="button" aria-label="Stickers and GIFs"
+            <button type="button" aria-label="Stickers and GIFs"
               className="fb-icon-control" disabled={disabled || sending || preparingPhotos || attachments.length >= COMMENT_ATTACH_MAX}
               onClick={() => { setGifTab("gifs"); setGifOpen(true); setReportOpen(false); }}>
-              <Film size={20} aria-hidden="true" />
-            </button>}
+              <Sticker size={20} aria-hidden="true" />
+            </button>
             <EmojiPickerButton onPick={handleEmojiPick} disabled={disabled || sending} />
           </div>}
           attachments={attachments.length > 0 && (
@@ -726,7 +765,7 @@ export function CommentComposer({
           </div>
         )} />
 
-        {gifEnabled && gifOpen && (
+        {gifOpen && (
           <div className="fb-picker-layer">
             <KlipyPicker
               userId={currentUser?.id}
@@ -739,6 +778,9 @@ export function CommentComposer({
           </div>
         )}
       </div>
+      <CameraCapture open={cameraOpen} onClose={() => setCameraOpen(false)}
+        onCapture={(file) => addFiles([file])}
+        onChoosePhoto={() => void handleAttachClick()} />
     </div>
   );
 }
