@@ -15,6 +15,7 @@ import { NavigationSetup } from "./NavigationSetup";
 import { RoleOfferNotice } from "./RoleOfferNotice";
 import { AccountMenu } from "./AccountMenu";
 import { BrandMark } from "./BrandMark";
+import { NavOutsideBrand } from "./NavOutsideBrand";
 import { useHoverLabel } from "./HoverLabel";
 import { SettingsWindow } from "./SettingsWindow";
 import { GlobalSearchOverlay } from "./GlobalSearchOverlay";
@@ -294,10 +295,19 @@ export function Shell() {
             container: one paint, one nav, no intermediate geometry. Route
             hide/show inside a layout still animates because that key is
             stable. */}
-        <AnimatePresence key={`fb-rail-boundary-${navLayout}`} initial={false}>
-          {showNav && inlineRail && <PrimaryNav key="fb-rail-nav" layout="rail" onOpenSettings={openSettingsWindow} />}
-        </AnimatePresence>
+        {/* The rail and the app name that reads just outside it are one
+            shell-owned box. The anchor is the flex item, so the name adds no
+            column, no row and no height; it is positioned from the rail's own
+            box instead of a route header's padding and therefore cannot move
+            between screens (owner direction 2026-11-18). */}
+        <div className="fb-rail-anchor">
+          <AnimatePresence key={`fb-rail-boundary-${navLayout}`} initial={false}>
+            {showNav && inlineRail && <PrimaryNav key="fb-rail-nav" layout="rail" onOpenSettings={openSettingsWindow} />}
+          </AnimatePresence>
+          <NavOutsideBrand />
+        </div>
         <main
+          data-canvas={wideCanvas ? "wide" : "readable"}
           className={`relative min-h-0 flex-1 ${inlineRail ? `min-w-0 ${column}` : ""} ${
             ownsInternalScroll ? "overflow-hidden" : "overflow-y-auto"
           }`}
@@ -307,7 +317,8 @@ export function Shell() {
             {showNav && <RoleOfferNotice />}
             {/* One top bar per route: the route owns it (AppBar / HomeTopBar /
                 SettingsPage / the conversation header). The shell never stacks
-                a second global utility strip above it. */}
+                a second global utility strip above it; the only brand it paints
+                is the name beside the rail. */}
             <div className="min-h-0 flex-1"><RouteTransition /></div>
           </div>
         </main>
@@ -688,10 +699,10 @@ export function PrimaryNav({
           </> : <>
             {/* The app mark is the expand/collapse control (owner order 2026-11-13)
                 and sits in the head at every width. The wordmark joins it only
-                when the panel is named; collapsed, the app name reads outside
-                the rail through `NavOutsideBrand` in the route's own top row
-                (Home's feed row, the shared app bar, the Notifications and Saved
-                reports headers, owner direction 2026-11-18).
+                when the panel is named; collapsed, the shell paints the app
+                name once just outside this column (`NavOutsideBrand` inside
+                `Shell`'s rail anchor), never in a route header and never
+                squeezed into the icon rail (owner direction 2026-11-18).
                 aria-pressed keeps the control a stateful toggle for assistive
                 tech and existing tests. */}
             <button

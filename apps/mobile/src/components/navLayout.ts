@@ -70,14 +70,13 @@ export function useStoredNavLayout(): NavLayout {
 /**
  * Whether the shell is currently painting an in-flow side rail.
  *
- * The rail's own chrome (Home's row, the shared app bar, and the headers that
- * render `NavOutsideBrand`) needs to know this without repeating the
- * breakpoint, and it must be false wherever a rail is not actually on screen:
- * a phone drawer, a chrome-free route, the dev fixture, or any surface rendered
- * outside the shell. `Shell` owns the answer, so it publishes one value from
- * the same expression that mounts the rail: the outside wordmark cannot outlive
- * the column it belongs to. The default is `false`, which is why a bar rendered
- * on its own never grows a stray brand.
+ * The shell's chrome (Home's row, the name anchored beside the rail) needs to
+ * know this without repeating the breakpoint, and it must be false wherever a
+ * rail is not actually on screen: a phone drawer, a chrome-free route, the dev
+ * fixture, or any surface rendered outside the shell. `Shell` owns the answer,
+ * so it publishes one value from the same expression that mounts the rail: the
+ * outside wordmark cannot outlive the column it belongs to. The default is
+ * `false`, which is why a header rendered on its own never grows a stray brand.
  */
 const InlineRailContext = createContext(false);
 

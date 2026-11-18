@@ -16,12 +16,12 @@ const swap = { duration: motionDurations.fast, ease: motionEasings.out } as cons
  * Home's app bar: ONE compact row with the essential actions trailing.
  *
  * The rail's head carries the app mark at every width. While that column is
- * collapsed the wordmark reads outside it: this row paints the name on Home and
- * the shared top bars paint the same copy elsewhere (the app bar, Notifications,
- * Saved reports), so the rule is not Home-only. Shell.nav.css yields the name
- * back to the rail the moment the panel is expanded (owner direction
- * 2026-11-18). The screen keeps one visually hidden `h1` so the document still
- * has its heading, and the row's height does not move when search opens.
+ * collapsed the shell paints the app name once, just outside the rail and
+ * anchored to it, so this row does not repeat the name; with no rail in flow
+ * this row is the only brand surface and keeps the full lockup (owner
+ * direction 2026-11-18). The screen keeps one visually hidden `h1` so the
+ * document still has its heading, and the row's height does not move when
+ * search opens.
  *
  * The search field is deliberately not resident. The row holds either the field
  * or nothing but its trailing actions, never both, so an idle Home spends its
@@ -42,7 +42,9 @@ const swap = { duration: motionDurations.fast, ease: motionEasings.out } as cons
  * change swaps the row rather than resizing it and the chips row below never
  * moves. The pill's 1px border sits inside that 48px (border-box) and every
  * child stays under it. The focus ring is drawn on the pill, not on the input —
- * see `index.css` `.fb-home-search-field`.
+ * see `index.css` `.fb-search-field-pill`. The field wrapper carries
+ * `fb-home-search-field` so the shell can yield the outside app name while the
+ * field occupies the row.
  */
 export function HomeTopBar({
   expanded,
@@ -83,11 +85,11 @@ export function HomeTopBar({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const wasExpanded = useRef(expanded);
   // The shell publishes whether an in-flow rail is on screen. That rail's head
-  // carries the mark, so this row paints the wordmark alone beside it; with no
-  // rail (the bottom bar, or a phone where the chosen rail is a drawer) this row
-  // is the only brand surface and keeps the full lockup. While search is open
-  // the field needs the full row.
-  const wordmarkOnly = useInlineRail();
+  // carries the mark and the shell paints the one app name just outside it, so
+  // this row must not paint a second name. With no rail (the bottom bar, or a
+  // phone where the chosen rail is a drawer) this row is the only brand surface
+  // and keeps the full lockup.
+  const inlineRail = useInlineRail();
   const showBrand = !expanded;
   const { hoverLabel } = useHoverLabel();
   useEffect(() => {
@@ -110,15 +112,13 @@ export function HomeTopBar({
         if (!(next instanceof Node) || !event.currentTarget.contains(next)) onBlur();
       }}
     >
-      {/* One heading is always present. The visible brand follows the layout:
-          beside a collapsed rail it is the wordmark alone (the head already
-          carries the mark), and anywhere the rail is absent it is the full
-          lockup. `fb-nav-outside-brand` opts this copy into the rail's shared
-          hide contract, which also covers the app bar's copy on other routes. */}
+      {/* One heading is always present. The shell paints the app name while a
+          rail is in flow, anchored beside the rail head; this row keeps the
+          full lockup only when there is no rail. */}
       <h1 className="sr-only">Norfold</h1>
-      {showBrand && (
-        <Link to="/" aria-label="Norfold home" className="fb-home-brand fb-nav-outside-brand">
-          {!wordmarkOnly && <BrandMark size={24} shape="tile" alt="" />}
+      {showBrand && !inlineRail && (
+        <Link to="/" aria-label="Norfold home" className="fb-home-brand">
+          <BrandMark size={24} shape="tile" alt="" />
           <span className="fb-home-brand-name">Norfold</span>
         </Link>
       )}
@@ -134,7 +134,7 @@ export function HomeTopBar({
             // (box-border) and every child stays at or below 44px, so opening
             // search never moves the feed. The focus ring belongs to the pill,
             // see `index.css` `.fb-search-field-pill`.
-            className="flex min-h-[48px] min-w-0 flex-1"
+            className="fb-home-search-field flex min-h-[48px] min-w-0 flex-1"
             data-testid="home-search-field"
           >
             <SearchField

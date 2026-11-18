@@ -5,7 +5,6 @@ import { motion, type PanInfo } from "framer-motion";
 import { Heading } from "react-aria-components";
 import { Bell, Check, CheckCheck, Flag, Inbox, Mail, MessageCircle, MoreVertical, RotateCcw, Settings, Trash2 } from "lucide-react";
 import { BackButton } from "../components/BackButton";
-import { NavOutsideBrand } from "../components/NavOutsideBrand";
 import { registerBackInterceptor } from "../components/backNavigation";
 import { useAuth } from "../auth";
 import { BlockedByViewerShield } from "../components/BlockedByViewerShield";
@@ -578,10 +577,6 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
     <div className={`fb-notifications ${preview ? "fb-notifications--preview" : "fb-notifications--full"}`}>
       <header className="fb-notification-header">
         {!preview && <BackButton fallbackTo="/" label="Back to home" />}
-        {/* The route header is where the app name reads while the side rail is
-            an icon column. The settings preview is a padded excerpt, not a
-            route surface, so it stays unnamed. */}
-        {!preview && <NavOutsideBrand />}
         {preview ? <Heading slot="title" className="fb-notification-title">Notifications</Heading>
           : <h1 className="fb-notification-title">Notifications</h1>}
         <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">

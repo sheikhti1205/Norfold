@@ -723,7 +723,13 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     const nav = screen.getByRole("navigation", { name: "Primary" });
     const main = screen.getByRole("main");
     expect(nav.className).not.toMatch(/fixed|absolute/);
-    expect(nav.parentElement?.className).toContain("flex-row");
+    // The rail and the shell-owned name share one anchor box, and that box is
+    // the rail's flex item: the name takes no column of its own and no height.
+    const anchor = nav.parentElement;
+    expect(anchor?.className).toContain("fb-rail-anchor");
+    expect(anchor?.parentElement?.className).toContain("flex-row");
+    expect(anchor?.nextElementSibling).toBe(main);
+    expect(main.getAttribute("data-canvas")).toBe("wide");
     // Rail first, content after it: the DOM order matches the visual order.
     expect(
       nav.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -740,47 +746,80 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     expect(screen.queryByRole("button", { name: "Open navigation" })).toBeNull();
   });
 
-  it("paints the app name outside a collapsed rail on an ordinary route", () => {
+  it("anchors the app name to the rail head instead of a route's own top row", () => {
     setWidth(800);
     stubMatchMedia(true);
     storeNavLayout("rail");
     renderShell("/brand");
-    const bar = screen.getByTestId("app-bar");
-    const brand = bar.querySelector(".fb-nav-outside-brand");
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    const anchor = document.querySelector(".fb-rail-anchor");
+    const brand = document.querySelector(".fb-nav-outside-brand");
+    expect(anchor).not.toBeNull();
     expect(brand?.textContent).toBe("Norfold");
-    // The name belongs to the content's own top row, not to a second head
-    // stacked inside the icon column (owner direction 2026-11-18).
-    expect(screen.getByRole("navigation", { name: "Primary" }).contains(brand)).toBe(false);
-    // One name in the bar, and the route heading is still the bar's own title.
-    expect(bar.querySelectorAll(".fb-nav-outside-brand")).toHaveLength(1);
+    // One physical owner: the name is the rail's sibling inside the shell's
+    // anchor, not a copy a route header positions with its own padding.
+    expect(anchor!.querySelector(".fb-nav-rail")).toBe(nav);
+    expect(anchor!.contains(brand)).toBe(true);
+    expect(screen.getByRole("main").contains(brand)).toBe(false);
+    // The route still owns its one top row, and that row carries no copy.
+    const bar = screen.getByTestId("app-bar");
+    expect(bar.querySelector(".fb-nav-outside-brand")).toBeNull();
     expect(within(bar).getByRole("heading", { name: "Brand route" })).toBeTruthy();
   });
 
-  it("keeps the outside name on a rail route that also offers a back path", () => {
-    setWidth(800);
+  it("keeps the same name node through a route change", () => {
+    // 900px keeps the rail on a chat thread too (`showNav` needs the medium
+    // breakpoint there), so the chat state is observable without a drawer.
+    setWidth(900);
     stubMatchMedia(true);
     storeNavLayout("rail");
-    renderShell("/brand-back");
-    const bar = screen.getByTestId("app-bar");
-    // The back control stays first; the label follows it rather than replacing
-    // it, so detail surfaces keep the way out and still carry the app name.
-    expect(bar.querySelector(".fb-nav-outside-brand")?.textContent).toBe("Norfold");
-    expect(within(bar).getByRole("button", { name: "Back" })).toBeTruthy();
-    expect(within(bar).getByRole("heading", { name: "Brand back" })).toBeTruthy();
+    render(
+      <HoverLabelProvider>
+        <MemoryRouter initialEntries={["/"]}>
+          <Routes><Route element={<Shell />}>
+            <Route index element={<Link to="/brand">Open brand route</Link>} />
+            <Route path="/brand" element={<><AppBar title="Brand route" utilities={false} /><Link to="/chats/c-1">Open thread</Link></>} />
+            {/* A matched chat route keeps the shell layout mounted, so the
+                name's node identity can be observed across both screens. */}
+            <Route path="/chats/:id" element={<p>Chat thread</p>} />
+          </Route></Routes>
+        </MemoryRouter>
+      </HoverLabelProvider>,
+    );
+    const brand = document.querySelector(".fb-nav-outside-brand");
+    expect(brand?.textContent).toBe("Norfold");
+    fireEvent.click(screen.getByRole("link", { name: "Open brand route" }));
+    // The shell anchor is outside the routed tree, so navigation cannot move,
+    // remount or duplicate the name.
+    expect(document.querySelector(".fb-nav-outside-brand")).toBe(brand);
+    expect(document.querySelectorAll(".fb-nav-outside-brand")).toHaveLength(1);
+    // The chat routes keep that same one name; only their secondary chrome
+    // reserves the band.
+    fireEvent.click(screen.getByRole("link", { name: "Open thread" }));
+    expect(document.querySelector(".fb-nav-outside-brand")).toBe(brand);
+    expect(document.querySelectorAll(".fb-nav-outside-brand")).toHaveLength(1);
   });
 
-  it("keeps the outside name out of a phone drawer's route bar", () => {
+  it("renders no outside name without an in-flow rail", () => {
+    setWidth(800);
+    stubMatchMedia(true);
+    storeNavLayout("bottom");
+    renderShell("/");
+    expect(document.querySelector(".fb-nav-outside-brand")).toBeNull();
+  });
+
+  it("never duplicates the name in a phone drawer", () => {
     setWidth(390);
     stubMatchMedia(false);
     storeNavLayout("rail");
     renderShell("/brand");
-    expect(screen.getByTestId("app-bar").querySelector(".fb-nav-outside-brand")).toBeNull();
+    expect(document.querySelector(".fb-nav-outside-brand")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Open navigation" }));
     const drawer = screen.getByRole("dialog", { name: "Navigation" });
-    // The temporary drawer names the app in its own head; the route bar stays
-    // bare, so the open overlay does not show the name twice.
+    // The drawer's own head names the app; the shell anchor stays empty.
     expect(within(drawer).getByText("Norfold")).toBeTruthy();
-    expect(screen.getByTestId("app-bar").querySelector(".fb-nav-outside-brand")).toBeNull();
+    expect(document.querySelector(".fb-nav-outside-brand")).toBeNull();
+    expect(screen.getByTestId("app-bar").textContent).not.toContain("Norfold");
   });
 
   it("hides the rail on chrome-free routes", () => {
@@ -857,6 +896,9 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
       expect(collapsedMark).toBeTruthy();
       expect(getComputedStyle(collapsedWordmark as HTMLElement).display).toBe("none");
       expect(getComputedStyle(collapsedMark as HTMLElement).display).not.toBe("none");
+      // The outside name reads its vertical anchor from the same head geometry:
+      // 8px rail padding plus half of the 40px head, declared once.
+      expect(rail.getPropertyValue("--fb-rail-head-center").trim()).toBe("28px");
       // Positioned only so the resize handle can anchor to the rail's inner
       // edge. It stays an in-flow flex column (never fixed/absolute), which is
       // what keeps it from covering the content.

@@ -24,7 +24,6 @@ vi.mock("../services/notifications", () => ({
 }));
 
 import { Notifications, typeLabel } from "./Notifications";
-import { InlineRailProvider } from "../components/navLayout";
 
 function item(overrides: Record<string, unknown> = {}) {
   return {
@@ -98,27 +97,6 @@ afterEach(() => {
 });
 
 describe("Notifications inbox", () => {
-  it("paints the shared app name outside the rail's header", async () => {
-    fetchMock.mockResolvedValue([item()]);
-    const { container } = render(
-      <InlineRailProvider show>
-        {notificationsTree()}
-      </InlineRailProvider>,
-    );
-    await screen.findByText("bob");
-    const header = container.querySelector(".fb-notification-header") as HTMLElement;
-    expect(header.querySelector(".fb-nav-outside-brand")?.textContent).toBe("Norfold");
-    // The route heading stays the header's own title; the name is a quiet label.
-    expect(within(header).getByRole("heading", { level: 1, name: "Notifications" })).toBeTruthy();
-  });
-
-  it("stays unnamed when no in-flow rail is on screen", async () => {
-    fetchMock.mockResolvedValue([item()]);
-    const { container } = render(notificationsTree());
-    await screen.findByText("bob");
-    expect(container.querySelector(".fb-notification-header .fb-nav-outside-brand")).toBeNull();
-  });
-
   it("shows status actions only after confirming report ownership and supported status", async () => {
     fetchMock.mockResolvedValue([item()]);
     fetchPostMock.mockResolvedValue({ userId: "owner-a", type: "LOST", status: "OPEN" });
