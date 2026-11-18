@@ -281,23 +281,34 @@ export function AdvancedSearchFilters({
 
   return (
     <>
-      {!hideSheet && !hideTrigger && <DialogTrigger isOpen={sheetOpen} onOpenChange={setSheetOpen}>
-        <Button aria-label={compactTrigger ? activeCount > 0 ? `Filters, ${activeCount} active` : "Filters" : undefined}
-          className={compactTrigger ? "fb-icon-control fb-filter-trigger" : "fb-surface-button gap-2"}>
-          <SlidersHorizontal size={18} aria-hidden />
-          {!compactTrigger && <>Filters{activeCount > 0 ? ` (${activeCount})` : ""}</>}
-          {compactTrigger && activeCount > 0 && <span aria-hidden="true" data-testid="filters-active-count" className="fb-filter-count">{activeCount}</span>}
-        </Button>
-        {width >= COMPACT_MAX_PX ? <LayeredPopover placement="bottom end" maxHeight={680} className="fb-search-filter-popover">
-          <Dialog className="fb-search-filter-dialog">
-            <header className="fb-surface-header"><Heading slot="title" className="fb-surface-title">Filters</Heading>
-              <Button autoFocus aria-label="Close" className="fb-icon-control" onPress={() => setSheetOpen(false)}><X size={20} aria-hidden /></Button>
-            </header>
-            <div className="fb-search-filter-body"><p className="fb-surface-description">{description}</p>{fields}</div>
-            <footer className="fb-surface-footer">{done}</footer>
-          </Dialog>
-        </LayeredPopover> : task}
-      </DialogTrigger>}
+      {!hideSheet && !hideTrigger && (
+        <div className="fb-search-filter-actions">
+          <DialogTrigger isOpen={sheetOpen} onOpenChange={setSheetOpen}>
+            <Button aria-label={compactTrigger ? activeCount > 0 ? `Filters, ${activeCount} active` : "Filters" : undefined}
+              className={compactTrigger ? "fb-icon-control fb-filter-trigger" : "fb-surface-button gap-2"}>
+              <SlidersHorizontal size={18} aria-hidden />
+              {!compactTrigger && <>Filters{activeCount > 0 ? ` (${activeCount})` : ""}</>}
+              {compactTrigger && activeCount > 0 && <span aria-hidden="true" data-testid="filters-active-count" className="fb-filter-count">{activeCount}</span>}
+            </Button>
+            {width >= COMPACT_MAX_PX ? <LayeredPopover placement="bottom end" maxHeight={680} className="fb-search-filter-popover">
+              <Dialog className="fb-search-filter-dialog">
+                <header className="fb-surface-header"><Heading slot="title" className="fb-surface-title">Filters</Heading>
+                  <Button autoFocus aria-label="Close" className="fb-icon-control" onPress={() => setSheetOpen(false)}><X size={20} aria-hidden /></Button>
+                </header>
+                <div className="fb-search-filter-body"><p className="fb-surface-description">{description}</p>{fields}</div>
+                <footer className="fb-surface-footer">{done}</footer>
+              </Dialog>
+            </LayeredPopover> : task}
+          </DialogTrigger>
+          {/* Owner direction 2026-11-13: the way to clear every filter is a real
+              button beside Filters, not a second underlined text link in the
+              chip row. The panel keeps its own Clear all as well. */}
+          {activeCount > 0 && <button type="button" onClick={clearAll} aria-label="Clear all filters"
+            className="fb-surface-button fb-search-filter-clear">
+            {compactTrigger ? "Clear" : "Clear all filters"}
+          </button>}
+        </div>
+      )}
       {!hideSheet && hideTrigger && task}
 
       {/* The chips row.
@@ -357,11 +368,6 @@ export function AdvancedSearchFilters({
                 </motion.button>
               ))}
             </AnimatePresence>
-          )}
-          {activeCount > 0 && (
-            <button type="button" onClick={clearAll} className="inline-flex min-h-[48px] items-center rounded-full px-3 text-sm font-medium text-on-surface underline">
-              Clear all filters
-            </button>
           )}
         </motion.div>
       )}
