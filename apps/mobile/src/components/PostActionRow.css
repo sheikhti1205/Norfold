@@ -19,6 +19,16 @@
   flex-wrap: nowrap;
   align-items: center;
   gap: 0;
+  /* One glyph size for every control in the row: reactions, comment, views
+   * and share. The outlined reaction and the committed emoji occupy the same
+   * 24px square, so a press never changes the row's geometry. */
+  --fb-report-glyph-size: 24px;
+}
+
+.fb-post-action-row .fb-report-action > svg,
+.fb-post-action-row .fb-report-metric > svg {
+  inline-size: var(--fb-report-glyph-size);
+  block-size: var(--fb-report-glyph-size);
 }
 
 /* Equal columns: every direct slot takes the same share of the row, and the
@@ -174,8 +184,16 @@
  * a redundant caption: put it back in the flat row. */
 .fb-post-action-row .fb-report-action > span.fb-reaction-emoji {
   position: static;
-  width: auto;
-  height: auto;
+  /* The emoji occupies exactly the same square as the outlined glyph it
+     replaces. Both `inline-size`/`block-size` and `width`/`height` are set
+     because the caption rule above uses the physical pair, and the winning
+     declaration is the one the cascade resolves — spelling both keeps the
+     box at one size instead of trusting which pair wins. */
+  inline-size: var(--fb-report-glyph-size);
+  block-size: var(--fb-report-glyph-size);
+  width: var(--fb-report-glyph-size);
+  height: var(--fb-report-glyph-size);
+  font-size: calc(var(--fb-report-glyph-size) * 0.8);
   overflow: visible;
   clip-path: none;
   white-space: normal;

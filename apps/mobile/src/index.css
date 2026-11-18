@@ -221,10 +221,20 @@ html.fb-reduce-motion .fb-home-brand { transition: none; }
   flex: none;
 }
 .fb-reaction-emoji {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
+  /* Same square as the outlined glyph it replaces. A colour emoji is wider
+     and heavier than a 1.75px outline at the same nominal size, so it is
+     drawn at 80% of that box while the box itself stays identical. */
+  inline-size: var(--fb-reaction-size, 1.2em);
+  block-size: var(--fb-reaction-size, 1.2em);
   font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-  font-size: 1.0625em;
+  font-size: calc(var(--fb-reaction-size, 1.5em) * 0.8);
   line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
 }
 :root[data-reaction-appearance="monochrome"] .fb-reaction-emoji { filter: grayscale(1); }
 

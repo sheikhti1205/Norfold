@@ -89,14 +89,14 @@ export function HomeFeedReactionButtons({ postId, likeCount, dislikeCount }: {
           aria-describedby={failed ? errorId : undefined} data-pending={pending ? "true" : "false"}
           disabled={pending} aria-busy={pending} onClick={() => void onToggle("LIKE")} className={buttonClass(likeActive)}
           {...hoverLabel("Like")}>
-          <ReactionGlyph kind="LIKE" mine={likeActive} size={34} />
+          <ReactionGlyph kind="LIKE" mine={likeActive} size={24} />
           <span className="tabular-nums">{likes}</span>
         </button>
         <button type="button" data-testid="home-feed-dislike" data-action="dislike" aria-label={`Dislike, ${dislikes} ${dislikes === 1 ? "dislike" : "dislikes"}`} aria-pressed={dislikeActive}
           aria-describedby={failed ? errorId : undefined} data-pending={pending ? "true" : "false"}
           disabled={pending} aria-busy={pending} onClick={() => void onToggle("DISLIKE")} className={buttonClass(dislikeActive)}
           {...hoverLabel("Dislike")}>
-          <ReactionGlyph kind="DISLIKE" mine={dislikeActive} size={34} />
+          <ReactionGlyph kind="DISLIKE" mine={dislikeActive} size={24} />
           <span className="tabular-nums">{dislikes}</span>
         </button>
       </span>
