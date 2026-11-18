@@ -4,7 +4,7 @@ import { Check, ChevronRight, Search, X, type LucideIcon } from "lucide-react";
 import { ACCENT_OPTIONS, type AccentId, type NavLayout } from "../../appearance";
 import type { Theme } from "../../theme";
 import { density } from "../../design/density";
-import { colorTokensFor } from "../../design/colorSystem";
+import { colorTokensFor, type ColorMode } from "../../design/colorSystem";
 import { BackButton } from "../BackButton";
 import { useHoverLabel } from "../HoverLabel";
 import { useReportSettingsWindowTitle, useSettingsWindowHosted } from "../settingsWindowHost";
@@ -205,9 +205,19 @@ export function ThemeCard({ name, value, checked, onChange, disabled = false }: 
   const modes = value === "system" ? ["light", "dark"] as const : [value];
   return <label className="fb-preview-choice" data-checked={checked} data-disabled={disabled}>
     <input className="fb-choice-input" type="radio" name={name} value={value} checked={checked} disabled={disabled} onChange={() => onChange(value)} aria-labelledby={`${id}-label`} />
-    <span className="fb-preview-frame fb-theme-window" aria-hidden="true">{modes.map(mode => <span className="fb-theme-window-half" key={mode} style={colorTokensFor(mode) as CSSProperties}><span /><span /><span /></span>)}</span>
+    <span className="fb-preview-frame fb-theme-window" aria-hidden="true">{modes.map(mode => <span className="fb-theme-window-half" key={mode} style={themeWindowStyle(mode)}><span /><span /><span /></span>)}</span>
     <span className="fb-preview-label" id={`${id}-label`}>{THEME_LABELS[value]}</span>
   </label>;
+}
+
+/**
+ * React style objects reject the hyphenated `color-scheme` key and drop the
+ * token with a warning. Split it into the camelCase property the style prop
+ * understands; every `--fb-*` custom property passes through unchanged.
+ */
+function themeWindowStyle(mode: ColorMode): CSSProperties {
+  const { "color-scheme": colorScheme, ...tokens } = colorTokensFor(mode);
+  return { ...tokens, colorScheme } as CSSProperties;
 }
 
 /**
