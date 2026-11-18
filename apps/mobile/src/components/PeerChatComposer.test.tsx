@@ -103,14 +103,14 @@ it("inserts a picked emoji at the caret (owner order 2026-11-12, R5)", () => {
   expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe("Hi🎉 there");
 });
 
-it("offers the shared sticker/GIF picker only with a provider key", () => {
+it("always offers the shared sticker/GIF control and explains an unconfigured provider", () => {
   vi.stubEnv("VITE_KLIPY_API_KEY", "");
-  const withoutKey = render(<Harness onPickKlipy={() => undefined} />);
-  expect(screen.queryByRole("button", { name: "Stickers and GIFs" })).toBeNull();
-  withoutKey.unmount();
-  vi.stubEnv("VITE_KLIPY_API_KEY", "testing-key");
   render(<Harness onPickKlipy={() => undefined} />);
-  expect(screen.getByRole("button", { name: "Stickers and GIFs" })).toBeTruthy();
+  const control = screen.getByRole("button", { name: "Stickers and GIFs" });
+  fireEvent.click(control);
+  expect(screen.getByTestId("chat-klipy-panel")).toBeTruthy();
+  expect(screen.getByTestId("chat-klipy-unavailable")).toBeTruthy();
+  expect(screen.queryByTestId("chat-klipy-search")).toBeNull();
   vi.unstubAllEnvs();
 });
 

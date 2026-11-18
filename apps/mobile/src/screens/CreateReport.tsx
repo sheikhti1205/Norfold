@@ -18,6 +18,7 @@ import { ClientError } from "../utils/clientErrors";
 import { ACCEPTED_STILL_FORMATS_LABEL, ACCEPTED_STILL_MIME_TYPES, isAcceptedStillMime, UPLOAD_MAX_BYTES } from "../services/media/mediaPolicy";
 import { AnimatePresence, motion } from "framer-motion";
 import { ReportMediaPicker } from "../components/ReportMediaPicker";
+import { CameraCapture } from "../components/CameraCapture";
 import { MediaViewer } from "../components/MediaViewer";
 import { AdaptiveTaskSurface, ConfirmDialog } from "../components/AdaptiveTaskSurface";
 import { historyDepth } from "../components/backNavigation";
@@ -326,6 +327,7 @@ function ReportForm() {
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [confirmRemovePhotos, setConfirmRemovePhotos] = useState(false);
   const [previewPhotoId, setPreviewPhotoId] = useState<string | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const hashRegistryRef = useRef(createHashRegistry());
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Serializes overlapping picker work (R-073): a second action queues behind
@@ -1125,7 +1127,7 @@ function ReportForm() {
    * Async-safe: the work runs on the pick queue, and publish awaits the queue
    * before snapshotting, so a fast "pick then publish" never drops a photo.
    */
-  function onPickFiles(files: FileList | null): void {
+  function onPickFiles(files: FileList | File[] | null): void {
     if (!files || files.length === 0) return;
     const list = Array.from(files);
     setError(null);
@@ -1231,7 +1233,9 @@ function ReportForm() {
 
   async function onAddCamera(): Promise<void> {
     if (!isNativeCameraAvailable()) {
-      fileInputRef.current?.click();
+      // Desktop browsers ignore `capture` on a file input, so the old fallback
+      // was a gallery dialog wearing a camera label. Open the real camera.
+      setCameraOpen(true);
       return;
     }
     try {
@@ -1800,6 +1804,9 @@ function ReportForm() {
                 }}
               />
             )}
+            <CameraCapture open={cameraOpen} onClose={() => setCameraOpen(false)}
+              onCapture={(file) => onPickFiles([file])}
+              onChoosePhoto={() => fileInputRef.current?.click()} />
           </section>
           </>
         }

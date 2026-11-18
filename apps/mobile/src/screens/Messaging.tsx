@@ -33,6 +33,7 @@ import { TopUtilities } from "../components/TopUtilities";
 import { MEDIUM_MAX_PX, useViewportWidth } from "../components/responsive";
 import { PeopleSearch } from "../components/PeopleSearch";
 import { PeerChatComposer } from "../components/PeerChatComposer";
+import { CameraCapture } from "../components/CameraCapture";
 import { ChatLocationComposer } from "../components/ChatLocationComposer";
 import { AdaptiveTaskSurface, ConfirmDialog } from "../components/AdaptiveTaskSurface";
 import { ReportSheet } from "../components/ReportSheet";
@@ -814,7 +815,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   // composer must let that retry be sent without letting the attachment change.
   const [admissionFailed, setAdmissionFailed] = useState(false);
   const photoInput = useRef<HTMLInputElement>(null);
-  const cameraInput = useRef<HTMLInputElement>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sendStatus, setSendStatus] = useState<string | null>(null);
@@ -1032,7 +1033,11 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   }
   async function choosePhoto(source: "photos" | "camera") {
     if (Capacitor.getPlatform() !== "android") {
-      (source === "camera" ? cameraInput : photoInput).current?.click();
+      // A camera capture is a real camera on the web too. The old `capture`
+      // file input was a gallery dialog on desktop, which is exactly what the
+      // owner rejected; the shared camera surface opens the device instead.
+      if (source === "camera") setCameraOpen(true);
+      else photoInput.current?.click();
       return;
     }
     picking.current = true;
@@ -2007,10 +2012,6 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = "";
             if (files.length > 0 && Capacitor.getPlatform() !== "android") void stageLocalFiles(files);
           }} />
-          <input ref={cameraInput} type="file" accept="image/*" capture="environment" aria-label="Camera file input" hidden onChange={(event) => {
-            const source = event.currentTarget.files?.[0]; event.currentTarget.value = "";
-            if (source && Capacitor.getPlatform() !== "android") void stageLocalFiles([source]);
-          }} />
         </>}
       <PeerChatComposer value={draft} onChange={value => { draftRevision.current++; setDraft(value); }} onSend={() => void send()} inputRef={composer}
         busy={false} locked={!runtimeOpen || requestAccepting || photoSending || voiceSending} attachmentsLocked={photoSending || admissionFailed}
@@ -2038,6 +2039,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     </>}
     {sheet === "location" && locationAllowed && <ChatLocationComposer key={locationAuthority.current}
       onClose={() => setSheet(null)} onSend={shareLocation} />}
+    <CameraCapture open={cameraOpen} onClose={() => setCameraOpen(false)}
+      onCapture={(file) => void stageLocalFiles([file])}
+      onChoosePhoto={() => photoInput.current?.click()} />
     <MediaViewer items={viewerItems} index={activeViewer ? viewerItems.findIndex((item) => item.id === activeViewer.id) : null}
       onIndexChange={(index) => { if (viewer && viewerItems[index]) setViewer({ ...viewer, id: viewerItems[index].id }); }} onClose={closePhoto} />
     <MediaViewer items={draftViewerItems} index={draftViewerIndex < 0 ? null : draftViewerIndex}
