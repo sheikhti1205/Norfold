@@ -733,7 +733,7 @@ const CLIENT_EXECUTE_ROLES = ["public", "authenticated"];
  * suffix filter used to miss are pinned too (REVIEW-M1-ACL-CLOSURE A4).
  * Any change here is a security-model change and should be deliberate.
  */
-// M4: 85 names independently verified against the real full-chain PostgreSQL
+// M4: 86 names independently verified against the real full-chain PostgreSQL
 // catalog (has_function_privilege), not copied from a partially parsed chain.
 // The two app-rating additions are verified against their migration, not the catalog.
 const CLIENT_REACHABLE_DEFINERS = Object.freeze([
@@ -815,6 +815,7 @@ const CLIENT_REACHABLE_DEFINERS = Object.freeze([
   "findback_post_limit",
   "findback_post_social_state_client",
   "findback_propose_match",
+  "findback_public_connection_count_client",
   "findback_query_posts_client",
   "findback_query_posts_nearby_client",
   "findback_rate_app_client",
