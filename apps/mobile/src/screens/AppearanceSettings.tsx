@@ -113,7 +113,7 @@ export function AppearanceSettings() {
 
       <SettingsGroup
         title="Navigation"
-        description="Automatic uses the side rail when there is room and the bottom bar on phones. Choosing Bottom bar keeps the floating bar even on a wide screen."
+        description="Automatic uses the side rail when there is room and the bottom bar on phones. Side rail keeps your choice on every screen; on a phone it opens as a temporary panel over the page."
       >
         <fieldset className="fb-choice-fieldset">
           {/* The group already announces "Navigation" from the section title;

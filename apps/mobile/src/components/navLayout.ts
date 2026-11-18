@@ -1,17 +1,21 @@
 /**
  * Primary-navigation layout (owner ruling 4(e), three-way preference
- * 2026-11-18).
+ * 2026-11-18; phone-rail correction 2026-11-18).
  *
  * `auto` uses the rail where a side column fits and the bottom bar otherwise.
- * `rail` asks for the side rail but still falls back to the bar on a phone, so
- * it can never become a narrow column or a drawer. `bottom` always keeps the
- * bar, floating over a wide canvas instead of turning into a rail. The stored
- * preference is never rewritten by a resize; it only decides what renders.
+ * `rail` is the reader's choice on every width: it renders the in-flow column
+ * where there is room and a temporary overlay drawer on a phone. It is no
+ * longer silently exchanged for the bottom bar — the navigation style is the
+ * reader's decision, not one this module makes for them. `bottom` always keeps
+ * the bar, floating over a wide canvas instead of turning into a rail. The
+ * stored preference is never rewritten by a resize; it only decides what
+ * renders.
  *
  * The width gate is `useWideViewport` (the single owner of the rail breakpoint,
  * derived from `COMPACT_MAX_PX` in `responsive.ts`); this module only decides
  * how the stored preference resolves against it. One resolver, no second media
- * query, no parallel nav system.
+ * query, no parallel nav system. `Shell` turns a rail on a narrow viewport into
+ * the drawer; the resolver itself only names the chosen style.
  */
 import { useSyncExternalStore } from "react";
 import { APPEARANCE_EVENT, APPEARANCE_STORAGE_KEY, loadAppearance, useAppearance, type NavLayout } from "../appearance";
@@ -22,8 +26,8 @@ export function resolveNavLayout(
   preference: NavLayout,
   wideViewport: boolean,
 ): NavLayout {
-  if (preference === "bottom") return "bottom";
-  return wideViewport ? "rail" : "bottom";
+  if (preference === "auto") return wideViewport ? "rail" : "bottom";
+  return preference;
 }
 
 /** The layout the shell should render right now. */

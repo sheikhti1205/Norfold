@@ -22,8 +22,8 @@ function setWidth(width: number) {
 }
 
 describe("resolveNavLayout", () => {
-  it("keeps the bottom bar on narrow viewports even when a rail or Automatic is stored", () => {
-    expect(resolveNavLayout("rail", false)).toBe("bottom");
+  it("keeps a chosen rail on a narrow viewport (Shell renders the drawer)", () => {
+    expect(resolveNavLayout("rail", false)).toBe("rail");
     expect(resolveNavLayout("auto", false)).toBe("bottom");
     expect(resolveNavLayout("bottom", false)).toBe("bottom");
   });
@@ -54,11 +54,11 @@ describe("useNavLayout", () => {
     expect(result.current).toBe("bottom");
   });
 
-  it("resolves a stored rail to the bottom bar below the breakpoint", () => {
+  it("resolves a stored rail to the rail below the breakpoint", () => {
     setWidth(COMPACT_MAX_PX - 1);
     storeNavLayout("rail");
     const { result } = renderHook(() => useNavLayout());
-    expect(result.current).toBe("bottom");
+    expect(result.current).toBe("rail");
   });
 
   it("resolves a stored rail to the rail at the breakpoint", () => {
@@ -68,9 +68,8 @@ describe("useNavLayout", () => {
     expect(result.current).toBe("rail");
   });
 
-  it("re-resolves when the viewport crosses the breakpoint, without a reload", () => {
+  it("re-resolves Automatic when the viewport crosses the breakpoint, without a reload", () => {
     setWidth(COMPACT_MAX_PX - 1);
-    storeNavLayout("rail");
     const { result } = renderHook(() => useNavLayout());
     expect(result.current).toBe("bottom");
     setWidth(COMPACT_MAX_PX);

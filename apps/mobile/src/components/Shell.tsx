@@ -2,11 +2,11 @@ import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, u
 import { Capacitor } from "@capacitor/core";
 import { Link, UNSAFE_NavigationContext, useLocation, useNavigate } from "react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { Archive, BarChart3, Bell, Bookmark, ClipboardList, Heart, Home, MessageCircle, Plus, Search, Settings as SettingsIcon, UserRound, type LucideIcon } from "lucide-react";
+import { Archive, BarChart3, Bell, Bookmark, ClipboardList, Heart, Home, Menu, MessageCircle, Plus, Search, Settings as SettingsIcon, UserRound, X, type LucideIcon } from "lucide-react";
 import { Focusable, Tooltip, TooltipTrigger } from "react-aria-components";
 import { TabTapProvider, useTabTap } from "./TabTap";
 import { LiveRegion } from "./LiveRegion";
-import { MEDIUM_MAX_PX, READABLE_COLUMN_CLASS, useViewportWidth, WIDE_CANVAS_CLASS } from "./responsive";
+import { MEDIUM_MAX_PX, READABLE_COLUMN_CLASS, useViewportWidth, useWideViewport, WIDE_CANVAS_CLASS } from "./responsive";
 import { useNavLayout } from "./navLayout";
 import { clampRailWidth, loadAppearance, RAIL_WIDTH_MAX, RAIL_WIDTH_MIN, RAIL_WIDTH_STEP, saveAppearance, type NavLayout } from "../appearance";
 import { RouteTransition } from "./RouteTransition";
@@ -57,7 +57,7 @@ const NAV: readonly NavRow[] = [
 
 /** The prototype's `Others` group. Every row lands on a surface that exists. */
 const NAV_OTHERS = [
-  { to: "/search?scope=people", label: "Connect", icon: UserRound },
+  { to: "/search?scope=people", label: "People", icon: UserRound },
   { to: "/reactions", label: "Liked / Disliked", icon: Heart },
   { to: "/saved", label: "Saved", icon: Bookmark },
   { to: "/settings/returns", label: "Recovered", icon: Archive },
@@ -124,11 +124,37 @@ export function Shell() {
   const wideCanvas = WIDE_CANVAS.includes(pathname) || chatThread;
   const ownsInternalScroll =
     pathname === "/" || pathname === "/search" || pathname.startsWith("/help") || pathname.startsWith("/connections") || pathname.startsWith("/chats");
-  // Owner ruling 4(e): the stored preference only becomes a side rail at the
-  // compact breakpoint and up. The rail is an in-flow sibling of the content,
-  // so it takes layout space and never covers what the reader is reading.
+  // Owner ruling 4(e): the stored preference is the reader's navigation style.
+  // `auto` turns into the rail only where a side column fits. A chosen rail is
+  // honoured on a phone too, where `Shell` renders it as a temporary overlay
+  // drawer instead of a permanently open column.
   const navLayout = useNavLayout();
+  const wideViewport = useWideViewport();
   const rail = navLayout === "rail";
+  const railDrawer = rail && !wideViewport;
+  const inlineRail = rail && !railDrawer;
+  const [railOpen, setRailOpen] = useState(false);
+  const railTrigger = useRef<HTMLButtonElement>(null);
+  const closeRail = useCallback((restoreFocus = true) => {
+    setRailOpen(false);
+    if (restoreFocus) railTrigger.current?.focus({ preventScroll: true });
+  }, []);
+  // A temporary drawer is open for one decision, not for a session: following a
+  // destination, changing route, Escape or a backdrop press closes it.
+  useEffect(() => { setRailOpen(false); }, [pathname]);
+  useEffect(() => {
+    if (!railOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeRail();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [railOpen, closeRail]);
+  useEffect(() => {
+    if (!railOpen) return;
+    const first = document.querySelector<HTMLElement>("[data-nav-drawer-close]");
+    first?.focus({ preventScroll: true });
+  }, [railOpen]);
   const column = wideCanvas ? WIDE_CANVAS_CLASS : READABLE_COLUMN_CLASS;
   const navigate = useNavigate();
   // `null` = closed. A string is the settings section the window opens at, so a
@@ -249,7 +275,7 @@ export function Shell() {
       <div
         data-global-search={searchOpen ? "true" : undefined}
         className={`fb-app-viewport flex w-full bg-surface text-on-surface ${
-          rail ? "flex-row" : `mx-auto flex-col ${column}`
+          inlineRail ? "flex-row" : `mx-auto flex-col ${column}`
         }`}
       >
         {/* Wave A: route-driven nav hide/show slides+fades (short, transform/
@@ -268,10 +294,10 @@ export function Shell() {
             hide/show inside a layout still animates because that key is
             stable. */}
         <AnimatePresence key={`fb-rail-boundary-${navLayout}`} initial={false}>
-          {showNav && rail && <PrimaryNav key="fb-rail-nav" layout="rail" onOpenSettings={openSettingsWindow} />}
+          {showNav && inlineRail && <PrimaryNav key="fb-rail-nav" layout="rail" onOpenSettings={openSettingsWindow} />}
         </AnimatePresence>
         <main
-          className={`relative min-h-0 flex-1 ${rail ? `min-w-0 ${column}` : ""} ${
+          className={`relative min-h-0 flex-1 ${inlineRail ? `min-w-0 ${column}` : ""} ${
             ownsInternalScroll ? "overflow-hidden" : "overflow-y-auto"
           }`}
         >
@@ -284,6 +310,52 @@ export function Shell() {
             <div className="min-h-0 flex-1"><RouteTransition /></div>
           </div>
         </main>
+        {/* A chosen side rail on a phone is a temporary drawer, never a column
+            that steals width from a 320px screen. The trigger stays available
+            at the bottom edge (where the bottom bar would sit) and the panel
+            closes on a destination, Escape, the backdrop or a route change. */}
+        {showNav && railDrawer && (
+          <>
+            <button
+              ref={railTrigger}
+              type="button"
+              className="fb-nav-drawer-trigger"
+              aria-label="Open navigation"
+              aria-haspopup="dialog"
+              aria-expanded={railOpen}
+              onClick={() => setRailOpen(true)}
+            >
+              <Menu size={22} aria-hidden="true" />
+            </button>
+            <AnimatePresence>
+              {railOpen && (
+                <motion.div
+                  key="fb-rail-drawer"
+                  className="fb-nav-drawer"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: motionDurations.fast }}
+                >
+                  <div className="fb-nav-drawer-backdrop" aria-hidden="true" onClick={() => closeRail()} />
+                  <motion.div
+                    className="fb-nav-drawer-panel"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Navigation"
+                    initial={{ x: "-100%" }}
+                    animate={{ x: 0 }}
+                    exit={{ x: "-100%" }}
+                    transition={{ duration: motionDurations.standard, ease: motionEasings.out }}
+                  >
+                    <PrimaryNav layout="rail" drawer onCloseDrawer={() => closeRail()}
+                      onOpenSettings={openSettingsWindow} />
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
+        )}
         <AnimatePresence key={`fb-bottom-boundary-${navLayout}`} initial={false}>
           {showNav && !rail && <PrimaryNav key="fb-bottom-nav" layout="bottom" onOpenSettings={openSettingsWindow} />}
         </AnimatePresence>
@@ -311,7 +383,9 @@ export function PrimaryNav({
   layout = "bottom",
   activePath,
   layoutScope = "shell",
+  drawer = false,
   onOpenSettings,
+  onCloseDrawer,
 }: {
   layout?: NavLayout;
   activePath?: string;
@@ -323,8 +397,12 @@ export function PrimaryNav({
    * gives each demo its own.
    */
   layoutScope?: string;
+  /** Narrow-viewport overlay: named rows, a close control and no resize grip. */
+  drawer?: boolean;
   /** Opens the floating settings window from the account menu, at `path`. */
   onOpenSettings?: (path?: string) => void;
+  /** Closes the temporary drawer; the shell owns focus restoration. */
+  onCloseDrawer?: () => void;
 }) {
   const { notifyTabTap } = useTabTap();
   const { pathname, search } = useLocation();
@@ -449,7 +527,7 @@ export function PrimaryNav({
     </Link>
   );
 
-  const railPinned = rail && railPinnedState;
+  const railPinned = rail && (drawer || railPinnedState);
   // Owner order 2026-11-13: hovering the icon rail must not open the named
   // panel instantly. A press is usually navigation, not a request to see the
   // overlay expanded, so the pointer has to rest for two seconds before the
@@ -579,10 +657,11 @@ export function PrimaryNav({
       <motion.nav
         aria-label="Primary"
         data-layout="rail"
+        data-drawer={drawer ? "true" : undefined}
         data-pinned={railPinned ? "true" : "false"}
         data-hover-expanded={hoverExpanded ? "true" : "false"}
         className="fb-nav-rail shrink-0"
-        style={railPinned ? { width: railWidthState } : undefined}
+        style={railPinned && !drawer ? { width: railWidthState } : undefined}
         onPointerEnter={scheduleHoverExpand}
         onPointerLeave={() => { cancelHoverExpand(); dismissHoverLabel(); }}
         onPointerDown={() => { cancelHoverExpand(); dismissHoverLabel(); }}
@@ -593,20 +672,34 @@ export function PrimaryNav({
         transition={{ duration: motionDurations.fast, ease: motionEasings.out }}
       >
         <div className="fb-nav-rail-head">
-          {/* The app mark is the expand/collapse control (owner order 2026-11-13):
-              the name sits beside it whenever the column has room, and the mark
-              alone identifies the app in the icon rail. aria-pressed keeps the
-              control a stateful toggle for assistive tech and existing tests. */}
-          <button
-            type="button"
-            className="fb-nav-brand"
-            aria-pressed={railPinned}
-            aria-label={railPinned ? "Collapse navigation" : "Expand navigation"}
-            onClick={toggleRailPin}
-          >
-            <BrandMark size={28} shape="tile" alt="" className="fb-nav-brand-mark" />
-            <span className="fb-nav-wordmark">Norfold</span>
-          </button>
+          {drawer ? <>
+            {/* A temporary drawer is already named: its head identifies the app
+                and offers the one control it needs, a close button. */}
+            <span className="fb-nav-brand fb-nav-brand-static">
+              <BrandMark size={28} shape="tile" alt="" className="fb-nav-brand-mark" />
+              <span className="fb-nav-wordmark">Norfold</span>
+            </span>
+            <button type="button" className="fb-nav-drawer-close" data-nav-drawer-close
+              aria-label="Close navigation" onClick={onCloseDrawer}>
+              <X size={20} aria-hidden="true" />
+            </button>
+          </> : <>
+            {/* The app mark is the expand/collapse control (owner order 2026-11-13):
+                the collapsed rail carries the wordmark, and the expanded panel
+                carries the mark — one identity, not two competing ones.
+                aria-pressed keeps the control a stateful toggle for assistive
+                tech and existing tests. */}
+            <button
+              type="button"
+              className="fb-nav-brand"
+              aria-pressed={railPinned}
+              aria-label={railPinned ? "Collapse navigation" : "Expand navigation"}
+              onClick={toggleRailPin}
+            >
+              <BrandMark size={28} shape="tile" alt="" className="fb-nav-brand-mark" />
+              <span className="fb-nav-wordmark">Norfold</span>
+            </button>
+          </>}
         </div>
         {/* The rail scrolls, the identity control never does: Settings lives
             inside that control (R1), so it has to stay reachable however many
@@ -619,7 +712,7 @@ export function PrimaryNav({
           </div>
         </div>
         <AccountMenu onOpenSettings={onOpenSettings} />
-        {railPinned && <div role="separator" aria-orientation="vertical" aria-label="Resize navigation"
+        {railPinned && !drawer && <div role="separator" aria-orientation="vertical" aria-label="Resize navigation"
           aria-valuenow={railWidthState} aria-valuemin={RAIL_WIDTH_MIN} aria-valuemax={RAIL_WIDTH_MAX}
           aria-valuetext={`${railWidthState} pixels`} tabIndex={0} className="fb-nav-rail-resize"
           onPointerDown={onResizeStart} onPointerMove={onResizeMove} onPointerUp={onResizeEnd}

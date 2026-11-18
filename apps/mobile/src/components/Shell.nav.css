@@ -101,12 +101,13 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
 }
 /* Adaptive navigation (owner ruling 4(e)): at the compact breakpoint and up a
    reader who picks "Side rail" gets a vertical column that takes layout space
-   as a flex sibling of <main>. It is never fixed, absolute or a drawer, so it
-   cannot cover content. Below the breakpoint this element is not rendered at
-   all — the bottom bar above owns phones. Width is in rem so the rail grows
-   with the reader's text scale instead of clipping the labels.
-   Safe-area insets belong to `.fb-app-viewport` alone (index.css): the rail is
-   inside that box, so it pads by its own 12px and never repeats env(). */
+   as a flex sibling of <main>. Below the breakpoint the same choice renders as
+   the temporary drawer at the end of this file, never an always-open column.
+   Width is in rem so the rail grows with the reader's text scale instead of
+   clipping the labels: 5.25rem is the narrowest column that still fits the
+   collapsed wordmark at every scale. Safe-area insets belong to
+   `.fb-app-viewport` alone (index.css): the in-flow rail is inside that box, so
+   it pads by its own 12px and never repeats env(). */
 .fb-nav-rail {
   /* Collapsed rail names nothing but its icons; a resting pointer (2s) or
      keyboard focus widens it to name every destination, then it contracts
@@ -115,7 +116,7 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
      the page. 64px is the narrowest column that still gives the 20px glyph a
      44px hit box beside the 6px rail inset; it removes the dead strip the
      72/80px column carried without crowding the rows. */
-  --fb-rail-collapsed: 64px;
+  --fb-rail-collapsed: 5.25rem;
   --fb-rail-expanded: 196px;
   display: flex; flex-direction: column; flex: none;
   width: var(--fb-rail-collapsed); gap: 6px;
@@ -167,7 +168,6 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
 /* Every destination is named in the rail, selected or not. The label wraps
    rather than truncating, so "My Reports" stays readable at large text. */
 .fb-nav-tooltip { z-index: 120; max-width: 16rem; padding: 6px 10px; border-radius: 8px; background: var(--fb-on-surface); color: var(--fb-surface); font-size: .875rem; overflow-wrap: anywhere; }
-@media (min-width: 1200px) { .fb-nav-rail { --fb-rail-collapsed: 72px; } }
 
 /* Intent expansion. Scoped to the unpinned rail: a pinned panel is already
    named and user-sized. `data-hover-expanded` is set only after the pointer
@@ -245,8 +245,17 @@ html.fb-reduce-motion .fb-nav-rail { transition: none; }
   font-weight: 700; font-size: 1rem; letter-spacing: -0.02em;
   color: var(--fb-on-surface); white-space: nowrap;
 }
-.fb-nav-rail[data-pinned="false"] .fb-nav-wordmark { display: none; }
-.fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-nav-wordmark { display: inline; }
+/* Icon rail: the collapsed column carries the Norfold wordmark, and the
+   expanded panel carries the app mark instead of the text (owner direction
+   2026-11-18). The toggle still names its state for assistive tech. */
+.fb-nav-rail[data-pinned="false"] .fb-nav-brand-mark { display: none; }
+.fb-nav-rail[data-pinned="false"] .fb-nav-wordmark { display: inline; font-size: 0.8125rem; }
+.fb-nav-rail[data-pinned="true"] .fb-nav-wordmark { display: none; }
+.fb-nav-rail[data-pinned="true"] .fb-nav-brand-mark { display: block; }
+/* An intent-expanded rail is the named panel for as long as it is open, so it
+   carries the same mark-not-wordmark inversion as the pinned column. */
+.fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-nav-brand-mark { display: block; }
+.fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-nav-wordmark { display: none; }
 .fb-nav-rail[data-pinned="true"] { width: var(--fb-rail-w, 192px); padding: 10px; }
 /* Owner order 2026-11-13: the pinned sidebar is resizable. The handle sits on
    the rail's inner edge (the rail clips at `overflow: hidden`), reads as a
@@ -282,3 +291,69 @@ html.fb-reduce-motion .fb-nav-rail { transition: none; }
 .fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-account-trigger .fb-verified-badge { display: inline-flex; }
 body:has(#report-editor-overlay) .fb-nav-slot,
 body:has(#report-editor-overlay) .fb-nav-rail { display: none; }
+
+/* Phone rail (owner direction 2026-11-18): the reader who chose "Side rail"
+   keeps that choice on a phone, where it is a temporary overlay drawer rather
+   than a column that eats the screen. The bottom-left trigger occupies the
+   place the bottom bar's pill would start from, so it never lands on top of a
+   route's own header. The drawer is modal: backdrop, Escape, a destination, or
+   a route change closes it and focus returns to the trigger. */
+.fb-nav-drawer-trigger {
+  position: fixed;
+  inset-inline-start: max(14px, env(safe-area-inset-left));
+  inset-block-end: calc(14px + env(safe-area-inset-bottom));
+  z-index: 45;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 50%;
+  background: var(--fb-surface-container-high);
+  color: var(--fb-on-surface);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+}
+.fb-nav-drawer-trigger:hover { background: var(--fb-surface-container); }
+.fb-nav-drawer-trigger:active { transform: scale(0.96); }
+.fb-nav-drawer-trigger:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: 2px; }
+html.fb-reduce-motion .fb-nav-drawer-trigger:active { transform: none; }
+.fb-nav-drawer { position: fixed; inset: 0; z-index: 100; }
+.fb-nav-drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.48);
+}
+.fb-nav-drawer-panel {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  display: flex;
+  width: min(20rem, 86vw);
+  max-width: calc(100vw - 2.5rem);
+  min-height: 0;
+}
+.fb-nav-drawer-panel > .fb-nav-rail {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  padding: 10px;
+  padding-block-start: calc(10px + env(safe-area-inset-top));
+  padding-block-end: calc(10px + env(safe-area-inset-bottom));
+  border-inline-end: 1px solid var(--fb-outline-variant);
+  box-shadow: var(--shadow-lg, 0 16px 40px rgb(0 0 0 / 0.28));
+}
+.fb-nav-drawer-panel .fb-nav-brand-static { pointer-events: none; }
+.fb-nav-drawer-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-inline-start: auto;
+  border-radius: 999px;
+  color: var(--fb-on-surface-variant);
+}
+.fb-nav-drawer-close:hover { background: var(--fb-surface-container); }
+.fb-nav-drawer-close:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; }
