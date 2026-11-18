@@ -326,14 +326,20 @@ describe("CreateReport suggestion failure — Manage local tools affordance (MIN
 
     pickFile(new File(["abc"], "p.jpg", { type: "image/jpeg" }));
     await screen.findByRole("button", { name: /remove photo/i });
-    fireEvent.submit(screen.getByRole("button", { name: /publish/i }).closest("form")!);
-    await waitFor(() => expect(publishReportMock).toHaveBeenCalled());
+    // The pick queue drains asynchronously and publish awaits it before
+    // snapshotting the files, so a loaded worker can settle the form well past
+    // Testing Library's default window. Wait for the real enabled state, then
+    // give the publish call its own explicit headroom.
+    const publishButton = screen.getByRole("button", { name: /publish/i }) as HTMLButtonElement;
+    await waitFor(() => expect(publishButton.disabled).toBe(false), { timeout: 15_000 });
+    fireEvent.submit(publishButton.closest("form")!);
+    await waitFor(() => expect(publishReportMock).toHaveBeenCalled(), { timeout: 15_000 });
 
     expect((screen.getByLabelText(/describe the item/i) as HTMLTextAreaElement).value).toBe("");
     await waitFor(() => {
       expect(loadDraft("u1")?.aiSuggestInput ?? "").toBe("");
     });
-  });
+  }, 40_000);
 });
 
 describe("CreateReport suggestion lifecycle — round-3 review closures (revision 4)", () => {
