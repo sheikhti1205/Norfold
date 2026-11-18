@@ -1,7 +1,8 @@
 /* Peer composer: independent floating controls, no enclosing capsule.
-   Owner direction 2026-11-18: four targets at every width — one attachment
-   control, the field, one emoji/GIF/sticker control and Send. The chevron
-   cluster is gone, so nothing here needs a width rule that hides controls. */
+   Owner direction 2026-11-18: the field, one attachment control, one
+   emoji/GIF/sticker control, one voice control when the conversation can
+   record, and Send. The chevron cluster is gone, so nothing here needs a width
+   rule that hides controls. */
 .fb-peer-composer {
   position: relative;
   display: flex; flex-direction: column; min-width: 0; width: 100%;
@@ -39,8 +40,8 @@
 .fb-peer-field textarea:focus-visible,
 .fb-peer-composer .fb-peer-field textarea:focus-visible { outline: none; }
 .fb-peer-send { color: var(--fb-primary); }
-/* 320dp: three 44px controls and the field still fit; the field keeps its own
-   placeholder readable because there are no other controls to make room for. */
+/* 320dp: four 40px controls plus the field (`min-width: 0`) still fit; the
+   field is the only element that gives ground, so the row never overflows. */
 @container composer (max-width: 20rem) {
   .fb-peer-icon { min-width: 40px; min-height: 44px; }
 }

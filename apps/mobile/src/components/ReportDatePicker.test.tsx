@@ -372,6 +372,169 @@ describe("ReportDatePicker", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  /**
+   * The explicit future-date opt-in. Report and filter dates keep the default
+   * past-only ceiling; a sanction's end date must be able to move ahead of
+   * today's UTC day without weakening that default anywhere else.
+   */
+  describe("future date domain", () => {
+    function utcDay(offsetDays: number): { iso: string; label: string } {
+      const date = new Date(`${todayInputValue()}T00:00:00Z`);
+      date.setUTCDate(date.getUTCDate() + offsetDays);
+      return {
+        iso: date.toISOString().slice(0, 10),
+        label: date.toLocaleDateString("en-US", {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+          timeZone: "UTC",
+        }),
+      };
+    }
+
+    /** 15th of next month: always ahead of today and always mid-month. */
+    function nextMonthFifteenth(): { iso: string; label: string } {
+      const now = new Date();
+      const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 15));
+      return {
+        iso: date.toISOString().slice(0, 10),
+        label: date.toLocaleDateString("en-US", {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+          timeZone: "UTC",
+        }),
+      };
+    }
+
+    it("opens on a selected future value and commits it", async () => {
+      const tomorrow = utcDay(1);
+      render(<ReportDatePicker value={tomorrow.iso} onChange={onChange} allowFuture />);
+      fireEvent.click(screen.getByRole("button", { name: /date of event/i }));
+      await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+
+      const cell = screen.getByRole("button", {
+        name: new RegExp(`${escapeRegex(tomorrow.label)} selected`, "i"),
+      });
+      expect(cell.getAttribute("aria-disabled")).not.toBe("true");
+      expect(cell.getAttribute("data-selected")).toBe("true");
+
+      fireEvent.click(screen.getByRole("button", { name: /^confirm$/i }));
+      expect(onChange).toHaveBeenCalledWith(tomorrow.iso);
+    });
+
+    it("allows moving to future months and years", async () => {
+      // `onChange` is shared with every test above; only this test's own
+      // commits may satisfy the assertion below.
+      onChange.mockClear();
+      render(<ReportDatePicker value="" onChange={onChange} allowFuture />);
+      fireEvent.click(screen.getByRole("button", { name: /date of event/i }));
+      await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+
+      const nextMonth = screen.getByRole("button", { name: /next month/i }) as HTMLButtonElement;
+      expect(nextMonth.disabled).toBe(false);
+      fireEvent.click(nextMonth);
+
+      const now = today("UTC");
+      // CalendarDate.month is 1-based and Date's month index is 0-based, so
+      // `now.month` is exactly next month's index.
+      const nextMonthDate = new Date(now.year, now.month, 15);
+      await waitFor(() =>
+        expect(
+          screen.getByRole("heading", {
+            name: new RegExp(escapeRegex(MONTH_YEAR_LABEL.format(nextMonthDate)), "i"),
+          }),
+        ).toBeTruthy(),
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /choose month and year/i }));
+      const panel = screen.getByTestId("calendar-jump-panel");
+      expect(
+        (within(panel).getByRole("button", { name: /next year/i }) as HTMLButtonElement).disabled,
+      ).toBe(false);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it("still respects an explicit maxValue in the future domain", async () => {
+      const max = nextMonthFifteenth();
+      const after = new Date(`${max.iso}T00:00:00Z`);
+      after.setUTCDate(after.getUTCDate() + 1);
+      const afterLabel = after.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+        timeZone: "UTC",
+      });
+
+      render(
+        <ReportDatePicker
+          value={max.iso}
+          onChange={onChange}
+          allowFuture
+          maxValue={max.iso}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /date of event/i }));
+      await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+
+      expect(
+        screen.getByRole("button", { name: new RegExp(escapeRegex(max.label), "i") })
+          .getAttribute("aria-disabled"),
+      ).not.toBe("true");
+      expect(
+        screen.getByRole("button", { name: new RegExp(escapeRegex(afterLabel), "i") })
+          .getAttribute("aria-disabled"),
+      ).toBe("true");
+      // The month after an explicit ceiling is unreachable too.
+      expect((screen.getByRole("button", { name: /next month/i }) as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("still respects an explicit minValue in the future domain", async () => {
+      const min = nextMonthFifteenth();
+      const before = new Date(`${min.iso}T00:00:00Z`);
+      before.setUTCDate(before.getUTCDate() - 1);
+      const beforeLabel = before.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+        timeZone: "UTC",
+      });
+
+      render(
+        <ReportDatePicker
+          value={min.iso}
+          onChange={onChange}
+          allowFuture
+          minValue={min.iso}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /date of event/i }));
+      await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+
+      expect(
+        screen.getByRole("button", { name: new RegExp(escapeRegex(min.label), "i") })
+          .getAttribute("aria-disabled"),
+      ).not.toBe("true");
+      expect(
+        screen.getByRole("button", { name: new RegExp(escapeRegex(beforeLabel), "i") })
+          .getAttribute("aria-disabled"),
+      ).toBe("true");
+    });
+
+    it("treats an unparseable stored value as empty", async () => {
+      render(<ReportDatePicker value="not-a-date" onChange={onChange} allowFuture />);
+      const trigger = screen.getByRole("button", { name: /date of event/i });
+      expect(trigger.textContent).toBe("Select date");
+      fireEvent.click(trigger);
+      await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+      expect((screen.getByRole("button", { name: /^confirm$/i }) as HTMLButtonElement).disabled).toBe(true);
+    });
+  });
+
   it("keyboard navigation: arrows move day selection", async () => {
     render(<ReportDatePicker value="2026-09-26" onChange={onChange} />);
     const trigger = screen.getByRole("button", { name: /date of event/i });

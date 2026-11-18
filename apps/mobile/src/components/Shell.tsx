@@ -7,7 +7,7 @@ import { Focusable, Tooltip, TooltipTrigger } from "react-aria-components";
 import { TabTapProvider, useTabTap } from "./TabTap";
 import { LiveRegion } from "./LiveRegion";
 import { MEDIUM_MAX_PX, READABLE_COLUMN_CLASS, useViewportWidth, useWideViewport, WIDE_CANVAS_CLASS } from "./responsive";
-import { useNavLayout } from "./navLayout";
+import { InlineRailProvider, useNavLayout } from "./navLayout";
 import { clampRailWidth, loadAppearance, RAIL_WIDTH_MAX, RAIL_WIDTH_MIN, RAIL_WIDTH_STEP, saveAppearance, type NavLayout } from "../appearance";
 import { RouteTransition } from "./RouteTransition";
 import { requestHistorySuppression } from "./backNavigation";
@@ -270,6 +270,7 @@ export function Shell() {
   }, [settingsDeepLink, navigate, openSettingsWindow]);
 
   return (
+    <InlineRailProvider show={inlineRail && showNav}>
     <UNSAFE_NavigationContext.Provider value={windowNavigation}>
     <TabTapProvider>
       <div
@@ -367,6 +368,7 @@ export function Shell() {
       </div>
     </TabTapProvider>
     </UNSAFE_NavigationContext.Provider>
+    </InlineRailProvider>
   );
 }
 
@@ -684,9 +686,12 @@ export function PrimaryNav({
               <X size={20} aria-hidden="true" />
             </button>
           </> : <>
-            {/* The app mark is the expand/collapse control (owner order 2026-11-13):
-                the collapsed rail carries the wordmark, and the expanded panel
-                carries the mark — one identity, not two competing ones.
+            {/* The app mark is the expand/collapse control (owner order 2026-11-13)
+                and sits in the head at every width. The wordmark joins it only
+                when the panel is named; collapsed, the app name reads outside
+                the rail through `NavOutsideBrand` in the route's own top row
+                (Home's feed row, the shared app bar, the Notifications and Saved
+                reports headers, owner direction 2026-11-18).
                 aria-pressed keeps the control a stateful toggle for assistive
                 tech and existing tests. */}
             <button

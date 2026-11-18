@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  ImageOff,
   Search,
   SlidersHorizontal,
   X,
@@ -22,11 +23,13 @@ import {
 import { useAuth } from "../auth";
 import { fetchFeed } from "../services/posts";
 import { searchPeople } from "../services/people";
+import { useMediaUrl } from "../services/media/privateMedia";
 import { friendlyError } from "../utils/friendlyErrors";
 import { CATEGORY_OPTIONS } from "./CategoryField";
 import { POST_TYPE_OPTIONS, STATUS_OPTIONS, statusLabel } from "./Segmented";
 import { UserAvatar } from "./UserAvatar";
 import { PostLink } from "./PostNavigation";
+import { ReportPhotoPreview } from "./ReportPhotoPreview";
 import { SearchField } from "./SearchField";
 import { useHoverLabel } from "./HoverLabel";
 import { closeGlobalSearch, takeGlobalSearchSeed, useGlobalSearchOpen } from "./globalSearch";
@@ -763,9 +766,9 @@ function SearchSurface() {
             ? <p className="fb-search-note">No recent searches</p>
             : <ul className="fb-search-list">
               {recent.map((value) => <li key={value}>
-                <button type="button" className="fb-search-row" onClick={() => pickRecent(value)}>
-                  <Clock size={18} aria-hidden="true" className="fb-search-row-icon" />
-                  <span className="fb-search-row-copy"><span className="fb-search-row-title">{value}</span></span>
+                <button type="button" className="fb-gsearch-row" onClick={() => pickRecent(value)}>
+                  <Clock size={18} aria-hidden="true" className="fb-gsearch-row-icon" />
+                  <span className="fb-gsearch-row-copy"><span className="fb-gsearch-row-title">{value}</span></span>
                 </button>
               </li>)}
             </ul>}
@@ -779,22 +782,14 @@ function SearchSurface() {
           </div>}
           {resultCount > 0 && <ul className="fb-search-list" id={resultsId} aria-label="Search results">
             {reports.map((report) => <li key={`report-${report.id}`}>
-              <PostLink to={`/posts/${report.id}`} className="fb-search-row" onClick={pickResult}>
-                <Search size={18} aria-hidden="true" className="fb-search-row-icon" />
-                <span className="fb-search-row-copy">
-                  <span className="fb-search-row-title">{report.title}</span>
-                  <span className="fb-search-row-meta">
-                    {report.type === "LOST" ? "Lost" : "Found"} · {report.category} · {statusLabel(report.status)}
-                  </span>
-                </span>
-              </PostLink>
+              <SearchReportRow report={report} onPick={pickResult} />
             </li>)}
             {people.map((person) => <li key={`person-${person.id}`}>
-              <Link to={`/u/${encodeURIComponent(person.username)}`} className="fb-search-row" onClick={pickResult}>
+              <Link to={`/u/${encodeURIComponent(person.username)}`} className="fb-gsearch-row" onClick={pickResult}>
                 <UserAvatar username={person.displayName?.trim() || person.username} avatarUrl={person.avatarUrl} size={32} />
-                <span className="fb-search-row-copy">
-                  <span className="fb-search-row-title">{person.displayName?.trim() || person.username}</span>
-                  <span className="fb-search-row-meta">@{person.username}</span>
+                <span className="fb-gsearch-row-copy">
+                  <span className="fb-gsearch-row-title">{person.displayName?.trim() || person.username}</span>
+                  <span className="fb-gsearch-row-meta">@{person.username}</span>
                 </span>
               </Link>
             </li>)}
@@ -808,6 +803,45 @@ function SearchSurface() {
       </div>}
     </motion.div>
   </>;
+}
+
+/**
+ * One report result. The report's own photo sits in a fixed, avatar-sized box
+ * beside the left-aligned title (never a magnifier pinned to the far end), and
+ * the one shared hover card from `ReportPhotoPreview` is the only preview on
+ * this row. Recent searches and people keep their own rows.
+ */
+function SearchReportRow({ report, onPick }: { report: PostItem; onPick: () => void }) {
+  return <ReportPhotoPreview post={report}>
+    <PostLink to={`/posts/${report.id}`} className="fb-gsearch-row" onClick={onPick}>
+      <SearchReportThumb report={report} />
+      <span className="fb-gsearch-row-copy">
+        <span className="fb-gsearch-row-title">{report.title}</span>
+        <span className="fb-gsearch-row-meta">
+          {report.type === "LOST" ? "Lost" : "Found"} · {report.category} · {statusLabel(report.status)}
+        </span>
+      </span>
+    </PostLink>
+  </ReportPhotoPreview>;
+}
+
+/**
+ * The row's photo, resolved through the same private-media path as every other
+ * report image. The box keeps its geometry while a key is being signed, when a
+ * report has no photo, and after a failed load, so the row never shifts and a
+ * missing image is never faked.
+ */
+function SearchReportThumb({ report }: { report: PostItem }) {
+  const image = report.attachments.find((item) => item.mimeType.startsWith("image/"));
+  const src = useMediaUrl(image?.fileUrl);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const failed = image !== undefined && failedUrl === image.fileUrl;
+  const state = !image ? "none" : failed ? "failed" : src ? "ready" : "loading";
+  return <span className="fb-gsearch-row-thumb" data-testid="search-report-thumb" data-state={state} aria-hidden="true">
+    {image && src && !failed
+      ? <img src={src} alt="" width={32} height={32} loading="lazy" onError={() => setFailedUrl(image.fileUrl)} />
+      : failed ? <ImageOff size={16} aria-hidden="true" /> : null}
+  </span>;
 }
 
 function FilterPill({

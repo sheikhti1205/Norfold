@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Popover } from "react-aria-components";
 import type { Attachment, PostItem } from "@norfold/shared";
 import { useFinePointer } from "./inputCapabilities";
@@ -13,9 +13,25 @@ import "./ReportPhotoPreview.css";
  * the few facts that identify the report. It never replaces the tap — the
  * card is not interactive, and the photograph underneath still opens the
  * report. Touch has no hover, so phones keep the direct tap.
+ *
+ * Hover previews belong to SEARCH only (owner direction 2026-11-18): the
+ * ordinary Home/feed/list cards are not wrapped. A surface opts in explicitly
+ * with {@link ReportPhotoPreviewScope}; shared feed content never infers it
+ * from the route.
  */
 const OPEN_MS = 220;
 const CLOSE_MS = 140;
+
+const ReportPhotoPreviewContext = createContext(false);
+
+/** Marks a search surface: every report card inside may own one hover preview. */
+export function ReportPhotoPreviewScope({ enabled = false, children }: { enabled?: boolean; children: ReactNode }) {
+  return <ReportPhotoPreviewContext.Provider value={enabled}>{children}</ReportPhotoPreviewContext.Provider>;
+}
+
+export function useReportPhotoPreviewOptIn() {
+  return useContext(ReportPhotoPreviewContext);
+}
 
 export function ReportPhotoPreview({ post, children }: { post: PostItem; children: ReactNode }) {
   const finePointer = useFinePointer();

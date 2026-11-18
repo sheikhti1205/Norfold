@@ -7,6 +7,7 @@ import { AppBar } from "../components/AppBar";
 import { SearchField } from "../components/SearchField";
 import { EmptyState } from "../components/PostCard";
 import { PostList } from "../components/PostList";
+import { ReportPhotoPreviewScope } from "../components/ReportPhotoPreview";
 import {
   MASONRY_CANVAS_CLASS,
   READABLE_COLUMN_CLASS,
@@ -386,20 +387,22 @@ function ReportSearch(props: SearchScreenProps) {
             }
           />
         ) : (
-          <PostList
-            items={visibleItems}
-            loading={loading}
-            loadingMore={loadingMore}
-            error={error}
-            failedOperation={failedOperation}
-            hasMore={hasMore}
-            onLoadMore={loadMoreReports}
-            onRetry={refreshReports}
-            density={feedDensity(resolvedLayout)}
-            masonryColumns={masonryColumns(resultsWidth)}
-            emptyTitle="No matches"
-            emptySubtitle="Try different filters or a broader search."
-          />
+          <ReportPhotoPreviewScope enabled>
+            <PostList
+              items={visibleItems}
+              loading={loading}
+              loadingMore={loadingMore}
+              error={error}
+              failedOperation={failedOperation}
+              hasMore={hasMore}
+              onLoadMore={loadMoreReports}
+              onRetry={refreshReports}
+              density={feedDensity(resolvedLayout)}
+              masonryColumns={masonryColumns(resultsWidth)}
+              emptyTitle="No matches"
+              emptySubtitle="Try different filters or a broader search."
+            />
+          </ReportPhotoPreviewScope>
         )}
         </div>
       </div>

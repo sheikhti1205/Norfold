@@ -103,9 +103,9 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
    reader who picks "Side rail" gets a vertical column that takes layout space
    as a flex sibling of <main>. Below the breakpoint the same choice renders as
    the temporary drawer at the end of this file, never an always-open column.
-   Width is in rem so the rail grows with the reader's text scale instead of
-   clipping the labels: 5.25rem is the narrowest column that still fits the
-   collapsed wordmark at every scale. Safe-area insets belong to
+   The collapsed column is exactly wide enough for one 44px icon hit box beside
+   the 6px rail inset - no strip is reserved for text it does not carry
+   (owner direction 2026-11-18). Safe-area insets belong to
    `.fb-app-viewport` alone (index.css): the in-flow rail is inside that box, so
    it pads by its own 12px and never repeats env(). */
 .fb-nav-rail {
@@ -116,7 +116,7 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
      the page. 64px is the narrowest column that still gives the 20px glyph a
      44px hit box beside the 6px rail inset; it removes the dead strip the
      72/80px column carried without crowding the rows. */
-  --fb-rail-collapsed: 5.25rem;
+  --fb-rail-collapsed: 64px;
   --fb-rail-expanded: 196px;
   display: flex; flex-direction: column; flex: none;
   width: var(--fb-rail-collapsed); gap: 6px;
@@ -127,6 +127,8 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
   position: relative; z-index: 30;
   transition: width 140ms ease, margin-inline-end 140ms ease, box-shadow 140ms ease;
 }
+/* Wide windows keep a little more air in the icon column without naming it. */
+@media (min-width: 1200px) { .fb-nav-rail { --fb-rail-collapsed: 72px; } }
 /* Destinations scroll; the identity control below them does not. Settings is
    reached from inside that control (R1), so it must stay on screen however
    many rows the rail carries. */
@@ -219,8 +221,8 @@ html.fb-reduce-motion .fb-nav-rail { transition: none; }
 /* The unread badge stays next to the bell icon rather than the far edge. */
 /* Fullscreen editor is a body-level portal: never leave shell chrome behind it
    as an extra tab stop, even though the editor itself lives outside Shell. */
-/* Pinned rail (owner order 2026-11-12, R7): the same in-flow column, 224px,
-   with every destination named. `NAVIGATION-STUDY.md` fixes both widths, so the
+/* Pinned rail (owner order 2026-11-12, R7): the same in-flow column, 192px by
+   default and resizable from its handle, with every destination named. The
    panel is a width change on the existing column rather than a drawer or an
    overlay: nothing covers the page and <main> reflows in the same frame. */
 .fb-nav-rail-head {
@@ -245,17 +247,34 @@ html.fb-reduce-motion .fb-nav-rail { transition: none; }
   font-weight: 700; font-size: 1rem; letter-spacing: -0.02em;
   color: var(--fb-on-surface); white-space: nowrap;
 }
-/* Icon rail: the collapsed column carries the Norfold wordmark, and the
-   expanded panel carries the app mark instead of the text (owner direction
-   2026-11-18). The toggle still names its state for assistive tech. */
-.fb-nav-rail[data-pinned="false"] .fb-nav-brand-mark { display: none; }
-.fb-nav-rail[data-pinned="false"] .fb-nav-wordmark { display: inline; font-size: 0.8125rem; }
-.fb-nav-rail[data-pinned="true"] .fb-nav-wordmark { display: none; }
-.fb-nav-rail[data-pinned="true"] .fb-nav-brand-mark { display: block; }
-/* An intent-expanded rail is the named panel for as long as it is open, so it
-   carries the same mark-not-wordmark inversion as the pinned column. */
-.fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-nav-brand-mark { display: block; }
-.fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-nav-wordmark { display: none; }
+/* The head carries the app mark at every width. The wordmark only joins it in
+   a panel wide enough to hold both: collapsed, the app name is painted outside
+   this column by the route's own top row, never squeezed into the icon rail
+   (owner direction 2026-11-18). The toggle still names its state for
+   assistive tech. */
+.fb-nav-rail[data-pinned="false"] .fb-nav-wordmark { display: none; }
+.fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-nav-wordmark { display: inline; }
+/* Outside wordmark: while the rail is an unnamed icon column the app name reads
+   just past its head. Home's feed row, the shared app bar, and the
+   Notifications and Saved reports headers all render `NavOutsideBrand`, so this
+   contract belongs to the rail rather than to one screen; a bespoke header opts
+   in with the same component instead of growing its own copy. Once the panel
+   names itself - pinned, hover- or focus-expanded - the wordmark sits inside it
+   beside the mark and every outside copy yields, so the name is never on screen
+   twice. Hover and focus already widen the column over the page, so that copy
+   only becomes invisible: keeping its box means the route title does not jump
+   while the pointer crosses the rail. */
+.fb-app-viewport:has(.fb-nav-rail[data-hover-expanded="true"]) .fb-nav-outside-brand,
+.fb-app-viewport:has(.fb-nav-rail[data-pinned="false"] :focus-visible) .fb-nav-outside-brand {
+  visibility: hidden;
+}
+/* Pinned is a real column change: <main> has already reflowed beside the wider
+   panel, so the space the outside copy held goes back to the route title. The
+   phone drawer is named the same way, and dropping the copy behind its backdrop
+   keeps the open overlay from showing the name twice. */
+.fb-app-viewport:has(.fb-nav-rail[data-pinned="true"]) .fb-nav-outside-brand {
+  display: none;
+}
 .fb-nav-rail[data-pinned="true"] { width: var(--fb-rail-w, 192px); padding: 10px; }
 /* Owner order 2026-11-13: the pinned sidebar is resizable. The handle sits on
    the rail's inner edge (the rail clips at `overflow: hidden`), reads as a

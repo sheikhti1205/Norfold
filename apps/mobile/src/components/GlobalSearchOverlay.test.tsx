@@ -10,10 +10,17 @@ const io = vi.hoisted(() => ({
   fetchFeed: vi.fn(),
   searchPeople: vi.fn(),
   user: { id: "searcher" } as { id: string } | null,
+  pointer: { fine: false },
 }));
 vi.mock("../auth", () => ({ useAuth: () => ({ user: io.user }) }));
 vi.mock("../services/posts", () => ({ fetchFeed: io.fetchFeed }));
 vi.mock("../services/people", () => ({ searchPeople: io.searchPeople }));
+// Hover previews exist only on a fine pointer; jsdom has none. The switch is
+// explicit so the hover contract is tested without pretending jsdom can hover.
+vi.mock("./inputCapabilities", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./inputCapabilities")>();
+  return { ...actual, useFinePointer: () => io.pointer.fine };
+});
 
 import { GlobalSearchOverlay } from "./GlobalSearchOverlay";
 import { resetGlobalSearch, toggleGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
@@ -29,6 +36,21 @@ const report = {
   type: "LOST",
   category: "WALLETS",
   status: "OPEN",
+  attachments: [],
+} as unknown as PostItem;
+const photoReport = {
+  ...report,
+  id: "report-photo",
+  title: "Blue wallet with a photo",
+  attachments: [{
+    id: "a1",
+    postId: "report-photo",
+    fileUrl: "https://cdn.example/wallet.jpg",
+    mimeType: "image/jpeg",
+    fileName: "wallet.jpg",
+    fileSize: 10,
+    createdAt: "2026-11-18T00:00:00.000Z",
+  }],
 } as unknown as PostItem;
 const person = {
   id: "person-1",
@@ -86,6 +108,7 @@ async function openFilters() {
 
 beforeEach(() => {
   io.user = { id: "searcher" };
+  io.pointer.fine = false;
   io.fetchFeed.mockReset();
   io.searchPeople.mockReset();
   io.fetchFeed.mockResolvedValue({ items: [], nextCursor: null, total: 0 });
@@ -93,7 +116,7 @@ beforeEach(() => {
   localStorage.clear();
   resetGlobalSearch();
 });
-afterEach(() => { cleanup(); resetGlobalSearch(); });
+afterEach(() => { cleanup(); resetGlobalSearch(); vi.unstubAllGlobals(); });
 
 describe("app-wide search", () => {
   it("keeps a visible focus ring on the filter pills", () => {
@@ -137,6 +160,92 @@ describe("app-wide search", () => {
     expect(within(overlay).queryByText("Recent searches")).toBeNull();
     expect(io.fetchFeed).toHaveBeenCalledWith(expect.objectContaining({ q: "wallet" }));
     expect(io.searchPeople).toHaveBeenCalledWith("wallet", expect.objectContaining({ limit: 5 }));
+  });
+
+  it("keeps a photo report's real thumbnail beside its left-aligned title", async () => {
+    io.fetchFeed.mockResolvedValue({ items: [photoReport], nextCursor: null, total: 1 });
+    render(<Harness />);
+    const { overlay } = await openSearch();
+    fireEvent.change(within(overlay).getByRole("searchbox"), { target: { value: "wallet" } });
+
+    const row = await within(overlay).findByRole("link", { name: /Blue wallet with a photo/ });
+    // The overlay row owns its own names: the /search toolbar's
+    // `.fb-search-row` grid must never reach it (that grid pinned the copy to
+    // the far-right column).
+    expect(row.classList.contains("fb-gsearch-row")).toBe(true);
+    expect(row.classList.contains("fb-search-row")).toBe(false);
+
+    const thumb = within(row).getByTestId("search-report-thumb");
+    expect(row.firstElementChild).toBe(thumb);
+    expect(thumb.getAttribute("data-state")).toBe("ready");
+    const image = thumb.querySelector("img")!;
+    expect(image.getAttribute("src")).toBe("https://cdn.example/wallet.jpg");
+    // The title beside it names the report; the thumbnail stays decorative.
+    expect(image.getAttribute("alt")).toBe("");
+
+    const copy = row.querySelector(".fb-gsearch-row-copy")!;
+    const title = copy.querySelector(".fb-gsearch-row-title")!;
+    const meta = copy.querySelector(".fb-gsearch-row-meta")!;
+    expect(title.textContent).toBe("Blue wallet with a photo");
+    expect(title.nextElementSibling).toBe(meta);
+    // Thumbnail first, then the copy: nothing can sit between them or push
+    // the title across the row.
+    expect(thumb.compareDocumentPosition(copy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("keeps a fixed neutral box for a report without a photo", async () => {
+    io.fetchFeed.mockResolvedValue({ items: [report], nextCursor: null, total: 1 });
+    render(<Harness />);
+    const { overlay } = await openSearch();
+    fireEvent.change(within(overlay).getByRole("searchbox"), { target: { value: "wallet" } });
+    const row = await within(overlay).findByRole("link", { name: /Blue wallet near the library/ });
+    const thumb = within(row).getByTestId("search-report-thumb");
+    expect(thumb.getAttribute("data-state")).toBe("none");
+    expect(thumb.querySelector("img")).toBeNull();
+    // The reserved geometry lives on the row, not on a fabricated image.
+    expect(thumb.classList.contains("fb-gsearch-row-thumb")).toBe(true);
+    expect(within(row).getByText("Blue wallet near the library")).toBeTruthy();
+  });
+
+  it("falls back inside the same box when a report photo fails", async () => {
+    io.fetchFeed.mockResolvedValue({ items: [photoReport], nextCursor: null, total: 1 });
+    render(<Harness />);
+    const { overlay } = await openSearch();
+    fireEvent.change(within(overlay).getByRole("searchbox"), { target: { value: "wallet" } });
+    const row = await within(overlay).findByRole("link", { name: /Blue wallet with a photo/ });
+    fireEvent.error(within(row).getByTestId("search-report-thumb").querySelector("img")!);
+    const failed = within(row).getByTestId("search-report-thumb");
+    expect(failed.getAttribute("data-state")).toBe("failed");
+    expect(failed.querySelector("img")).toBeNull();
+    expect(within(row).getByText("Blue wallet with a photo")).toBeTruthy();
+  });
+
+  it("uses the shared hover preview once per report result on a fine pointer", async () => {
+    io.pointer.fine = true;
+    io.fetchFeed.mockResolvedValue({ items: [photoReport], nextCursor: null, total: 1 });
+    render(<Harness />);
+    const { overlay } = await openSearch();
+    fireEvent.change(within(overlay).getByRole("searchbox"), { target: { value: "wallet" } });
+
+    const row = await within(overlay).findByRole("link", { name: /Blue wallet with a photo/ });
+    const trigger = row.parentElement!;
+    expect(trigger.classList.contains("fb-report-preview-trigger")).toBe(true);
+    expect(trigger.parentElement?.tagName).toBe("LI");
+    // One shared wrapper per result, and no interactive element was added
+    // around the row link.
+    expect(overlay.querySelectorAll(".fb-report-preview-trigger")).toHaveLength(1);
+    expect(trigger.querySelector("button")).toBeNull();
+  });
+
+  it("opens the picked report and closes the floating search", async () => {
+    io.fetchFeed.mockResolvedValue({ items: [report], nextCursor: null, total: 1 });
+    render(<Harness />);
+    const { overlay } = await openSearch();
+    fireEvent.change(within(overlay).getByRole("searchbox"), { target: { value: "wallet" } });
+    const row = await within(overlay).findByRole("link", { name: /Blue wallet near the library/ });
+    fireEvent.click(row);
+    await waitFor(() => expect(screen.getByTestId("route").textContent).toBe("/posts/report-1"));
+    await waitFor(() => expect(screen.queryByRole("search")).toBeNull());
   });
 
   it("says so and offers to start over when nothing matches", async () => {

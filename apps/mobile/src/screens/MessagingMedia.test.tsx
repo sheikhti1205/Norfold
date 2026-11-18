@@ -90,8 +90,8 @@ it("replaces the composer with recording/review, resumes, and sends only the fin
   m.voice.mockReset().mockResolvedValue("voice-saved");
   await open();
   fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Keep my text draft" } });
-  // Attachments now live under one control: `+` opens the real capabilities.
-  chooseAttachment("Voice message");
+  // Voice is its own control beside the expression picker, not a menu row.
+  fireEvent.click(screen.getByRole("button", { name: "Voice message" }));
   await screen.findByRole("button", { name: "Pause recording" });
   expect(screen.queryByRole("textbox", { name: "Message" })).toBeNull();
   now += 3_000;

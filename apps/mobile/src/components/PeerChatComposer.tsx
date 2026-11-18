@@ -6,6 +6,7 @@ import { convertEmoticonsLive } from "../utils/emoji";
 import { ExpressionPickerButton } from "./ExpressionPickerButton";
 import { insertEmoji } from "./EmojiPicker";
 import { type KlipyItem } from "../services/klipy";
+import { registerBackInterceptor } from "./backNavigation";
 import "./peerComposer.css";
 
 /** The type a hidden picker offers. Each row opens exactly one kind. */
@@ -47,7 +48,7 @@ export interface PeerChatComposerProps {
   /** Opens the screen's location composer; absent where location is not a
    * capability, so no dead row is ever shown. */
   onLocation?: () => void;
-  /** Voice is a real capability flag: when false the row is not offered at
+  /** Voice is a real capability flag: when false the control is not offered at
    * all instead of pretending to record. */
   voiceAvailable?: boolean;
   onVoice?: () => void;
@@ -62,15 +63,17 @@ export interface PeerChatComposerProps {
 /**
  * Human-to-human composer.
  *
- * One attachment control opens a sheet of real capabilities — photos, camera,
- * video, document, audio, location and voice — and each row starts a picker
+ * One attachment control opens a sheet of real file capabilities (photos,
+ * camera, video, document, audio, location) and each row starts a picker
  * narrowed to that type (owner direction 2026-11-18). One control carries
- * emoji, GIFs and stickers. The row at rest is therefore `+`, the field, the
- * expression picker and Send: four targets at any width, no chevron and no
- * cluster of five 44px controls squeezing the field at 320dp.
+ * emoji, GIFs and stickers. Voice is a first-class control of its own: when the
+ * conversation can record, a mic sits between that expression trigger and Send,
+ * so recording never needs a menu first, and the sheet keeps no second copy of
+ * it (owner direction 2026-11-18).
  *
  * The field keeps its own rounded surface; every other control floats
- * independently. There is no enclosing capsule.
+ * independently. There is no enclosing capsule. The field is `min-width: 0`, so
+ * the controls never overflow at 320dp: the field absorbs the difference.
  */
 export function PeerChatComposer({
   value, onChange, onSend, inputRef, busy, locked, canSend, attachmentsLocked = false,
@@ -116,20 +119,25 @@ export function PeerChatComposer({
     element.style.overflowY = focused && element.scrollHeight > cap ? "auto" : "hidden";
   }, [value, field, focused]);
 
-  // Close the attachment sheet on an outside press or Escape.
+  // Close the attachment sheet on an outside press, Escape or Android Back.
+  // Escape is consumed here, and the sheet registers as the topmost Back layer
+  // while open, so the conversation's own leave gesture never runs on the same
+  // press after this layer has already handled it.
   useEffect(() => {
     if (!attachOpen) return;
     const onPointerDown = (event: PointerEvent) => {
       if (attachRoot.current && !attachRoot.current.contains(event.target as Node)) setAttachOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setAttachOpen(false);
+      if (event.key === "Escape") { event.preventDefault(); setAttachOpen(false); }
     };
     window.addEventListener("pointerdown", onPointerDown, true);
     window.addEventListener("keydown", onKeyDown, true);
+    const offBack = registerBackInterceptor(() => { setAttachOpen(false); return true; });
     return () => {
       window.removeEventListener("pointerdown", onPointerDown, true);
       window.removeEventListener("keydown", onKeyDown, true);
+      offBack();
     };
   }, [attachOpen]);
 
@@ -163,7 +171,7 @@ export function PeerChatComposer({
       <div className="relative" ref={attachRoot}>
         <button type="button" className="fb-peer-icon" aria-label="Add attachment"
           aria-haspopup="menu" aria-expanded={attachOpen}
-          disabled={attachmentBusy && !voiceAvailable}
+          disabled={attachmentBusy}
           onClick={() => setAttachOpen((open) => !open)}
           {...hoverLabel("Add attachment")}>
           <Plus size={22} aria-hidden="true" />
@@ -194,12 +202,6 @@ export function PeerChatComposer({
             {onLocation && (
               <button type="button" role="menuitem" onClick={() => { setAttachOpen(false); onLocation(); }}>
                 <MapPin size={20} aria-hidden="true" /> Location
-              </button>
-            )}
-            {voiceAvailable && onVoice && (
-              <button type="button" role="menuitem" disabled={busy || locked || attachmentsLocked}
-                onClick={() => { setAttachOpen(false); onVoice(); }}>
-                <Mic size={20} aria-hidden="true" /> Voice message
               </button>
             )}
           </div>
@@ -256,6 +258,10 @@ export function PeerChatComposer({
       <ExpressionPickerButton onPickEmoji={pickEmoji} onPickKlipy={pickKlipy}
         userId={userId} disabled={busy || locked} align="end"
         className="fb-peer-icon" testIdPrefix="chat-expression" />
+      {voiceAvailable && onVoice && <button type="button" className="fb-peer-icon" aria-label="Voice message"
+        disabled={busy || locked || attachmentsLocked} onClick={onVoice} {...hoverLabel("Voice message")}>
+        <Mic size={20} aria-hidden="true" />
+      </button>}
       <button type="submit" className="fb-peer-icon fb-peer-send" aria-label="Send message" disabled={!available}
         {...hoverLabel("Send message")}
         onMouseDown={(event) => {

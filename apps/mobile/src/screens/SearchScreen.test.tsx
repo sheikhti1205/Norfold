@@ -146,6 +146,49 @@ describe("SearchScreen URL filters", () => {
     expect((screen.getByLabelText("Search posts") as HTMLInputElement).value).toBe("phone");
   });
 
+  it("opts report results into the shared search-only photo hover preview", async () => {
+    const original = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(hover: hover) and (pointer: fine)",
+      media: query,
+      onchange: null,
+      addEventListener() {},
+      removeEventListener() {},
+      addListener() {},
+      removeListener() {},
+      dispatchEvent() { return false; },
+    })) as unknown as typeof window.matchMedia;
+    try {
+      fetchFeedMock.mockResolvedValue({
+        items: [makePost("photo-result", {
+          title: "Photo result",
+          attachments: [{
+            id: "a1",
+            postId: "photo-result",
+            fileUrl: "https://cdn.example/photo.jpg",
+            mimeType: "image/jpeg",
+            fileName: "photo.jpg",
+            fileSize: 10,
+            createdAt: "2026-11-18T00:00:00.000Z",
+          }],
+        })],
+        nextCursor: null,
+        total: 1,
+      });
+      renderSearch("/search?q=photo");
+      expect(await screen.findByText("Photo result")).toBeTruthy();
+      // Exactly one shared preview wrapper, and the canonical feed media is
+      // still the report's own tap target inside it.
+      const triggers = document.querySelectorAll(".fb-report-preview-trigger");
+      expect(triggers).toHaveLength(1);
+      expect(triggers[0]?.querySelector("[data-testid='masonry-media']")).toBeTruthy();
+      // The card itself still renders beside its wrapped media.
+      expect(triggers[0]?.parentElement?.textContent).toContain("Photo result");
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
   it("hides the result count until a first request succeeds", async () => {
     let resolve!: (value: { items: never[]; nextCursor: null; total: number }) => void;
     fetchFeedMock.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
