@@ -4,7 +4,6 @@ import { motion } from "framer-motion";
 import { BarChart3, MapPin, Tag } from "lucide-react";
 import { timeAgo } from "../utils/dates";
 import { UserIdentityTrigger } from "./UserIdentityTrigger";
-import { ProfilePreview } from "./ProfilePreview";
 import { VerifiedBadge } from "./VerifiedBadge";
 import { StatusChip, StatusBadge, detailStatusBadges } from "./StatusChip";
 import { PostLink } from "./PostNavigation";
@@ -39,14 +38,14 @@ export function PostMetaIcons({ post }: { post: PostItem }) {
 }
 
 /** Public presentation only; overflow and relationship state stay with features. */
-export function PostIdentityHeader({ post, overflow, meta, contextReportId, preview = false }: {
-  post: PostItem; overflow?: ReactNode; meta?: ReactNode; contextReportId?: string; preview?: boolean;
+export function PostIdentityHeader({ post, overflow, meta, contextReportId }: {
+  post: PostItem; overflow?: ReactNode; meta?: ReactNode; contextReportId?: string;
 }) {
   const person = contextReportId ? { ...post.author, contextReportId } : post.author;
   const identity = <UserIdentityTrigger person={person} />;
   return <header className="fb-post-identity">
     <div className="fb-post-identity-line">
-      <span className="fb-post-name-badge">{preview ? <ProfilePreview person={person}>{identity}</ProfilePreview> : identity}<VerifiedBadge emailVerified={post.author.emailVerified} phoneVerified={post.author.phoneVerified} telegramPhoneVerified={(post.author as { telegramPhoneVerified?: boolean }).telegramPhoneVerified} /></span>
+      <span className="fb-post-name-badge">{identity}<VerifiedBadge emailVerified={post.author.emailVerified} phoneVerified={post.author.phoneVerified} telegramPhoneVerified={(post.author as { telegramPhoneVerified?: boolean }).telegramPhoneVerified} /></span>
       <span className="fb-post-time"><time data-testid="post-time" dateTime={post.createdAt} title={new Date(post.createdAt).toLocaleString()}>{timeAgo(post.createdAt)}</time></span>
     </div>
     {meta}

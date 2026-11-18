@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { motionDurations, snackbarVariants } from "./uiMotion";
 import "./LiveRegion.css";
@@ -32,18 +32,23 @@ export function Snackbar({
   open,
   message,
   live = true,
+  action,
 }: {
   open: boolean;
   message: string;
   live?: boolean;
+  /** One reversible decision, never a second action row. */
+  action?: ReactNode;
 }) {
+  const actionable = action !== undefined && action !== null;
   return (
     <AnimatePresence>
       {open && message !== "" && (
         <motion.div
           key="fb-snackbar"
-          role={live ? "status" : undefined}
-          aria-hidden={live ? undefined : true}
+          role={live && !actionable ? "status" : undefined}
+          aria-live={live && actionable ? "polite" : undefined}
+          aria-hidden={live || actionable ? undefined : true}
           initial="hidden"
           animate="visible"
           exit="hidden"
@@ -51,12 +56,13 @@ export function Snackbar({
           transition={{ duration: motionDurations.fast }}
           className="fb-snackbar pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4"
         >
-          <span
+          <div
             data-testid="snackbar-message"
-            className="fb-snackbar-pill rounded-full bg-on-surface px-4 py-2 text-sm text-surface"
+            className={`fb-snackbar-pill flex items-center gap-3 rounded-full bg-on-surface px-4 py-2 text-sm text-surface${actionable ? " pointer-events-auto" : ""}`}
           >
-            {message}
-          </span>
+            <span>{message}</span>
+            {action}
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

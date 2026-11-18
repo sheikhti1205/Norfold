@@ -10,6 +10,7 @@ import { normalizePeopleQuery, searchPeople, type PeopleSearchCursor, type Peopl
 import { fetchFeed } from "../services/posts";
 import { EmptyState } from "./PostCard";
 import { UserAvatar } from "./UserAvatar";
+import { ProfilePreview } from "./ProfilePreview";
 
 /** Enough to prove the place is populated without becoming a directory dump. */
 const SUGGESTION_LIMIT = 12;
@@ -49,7 +50,7 @@ function normalizePerson(person: {
 function relationshipFor(view: ConversationProjection | undefined): string | null {
   if (!view) return null;
   if (view.ownBlocked) return "Blocked by you";
-  if (view.mode === "CONNECTED") return "Connected";
+  if (view.mode === "CONNECTED") return "Friends";
   if (view.request === "INCOMING") return "Message request";
   if (view.request === "OUTGOING") return "Request sent";
   return null;
@@ -59,17 +60,22 @@ function PersonRow({ person, relationship }: { person: SearchedProfile; relation
   const name = person.displayName?.trim() || person.username;
   return (
     <li>
-      <Link
-        to={`/u/${encodeURIComponent(person.username)}`}
-        className="flex min-h-[56px] min-w-0 items-center gap-3 rounded-m3-sm px-1 py-3 hover:bg-surface-container focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-      >
-        <UserAvatar username={name} avatarUrl={person.avatarUrl} size={36} />
-        <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
-          <span className="block font-semibold">{name}</span>{" "}
-          <span className="block text-sm text-on-surface-variant">@{person.username}</span>
-          {relationship && <span className="block text-xs text-on-surface-variant">{relationship}</span>}
-        </span>
-      </Link>
+      {/* The row stays the destination under the pointer; on a phone the same
+          tap opens the one person card, whose explicit action reaches the
+          profile. */}
+      <ProfilePreview person={person} className="w-full" openOnFocus={false}>
+        <Link
+          to={`/u/${encodeURIComponent(person.username)}`}
+          className="flex min-h-[56px] w-full min-w-0 flex-1 items-center gap-3 rounded-m3-sm px-1 py-3 hover:bg-surface-container focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+        >
+          <UserAvatar username={name} avatarUrl={person.avatarUrl} size={36} />
+          <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+            <span className="block font-semibold">{name}</span>{" "}
+            <span className="block text-sm text-on-surface-variant">@{person.username}</span>
+            {relationship && <span className="block text-xs text-on-surface-variant">{relationship}</span>}
+          </span>
+        </Link>
+      </ProfilePreview>
     </li>
   );
 }

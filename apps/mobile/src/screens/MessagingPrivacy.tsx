@@ -56,10 +56,10 @@ function MessagingPrivacySession({ accountId }: { accountId: string }) {
     } finally { if (alive.current) setBusy(false); }
   }
   return <SettingsPage title="Chat" backTo="/settings">
-    <SettingsGroup title="Who can message you" description="New people send a request first. Choose who may start one, and whether an allowed request connects right away.">
+    <SettingsGroup title="Who can message you" description="New people send a request first. Choose who may start one, and whether an allowed request is accepted right away.">
       <ContactRules />
-      {preferences && <PreferenceSwitchRow title="Connect new people automatically" icon={MessagesSquare}
-        description="When someone is allowed to message you, connect right away instead of waiting for you to accept. This won’t accept requests you already have."
+      {preferences && <PreferenceSwitchRow title="Accept new requests automatically" icon={MessagesSquare}
+        description="When someone is allowed to message you, accept the request right away instead of waiting. This won’t accept requests you already have."
         checked={preferences.openMessages} disabled={busy || !!error || chat.status !== "ready"}
         onChange={(enabled) => void change("openMessages", enabled)} />}
     </SettingsGroup>
@@ -67,12 +67,12 @@ function MessagingPrivacySession({ accountId }: { accountId: string }) {
         above the same label read as a duplicated control. */}
     {preferences && <SettingsGroup>
       <PreferenceSwitchRow title="Read receipts" icon={CheckCheck}
-        description="In connected chats, both people must enable receipts to see when messages are read. Never shared for message requests."
+        description="In accepted chats, both people must enable receipts to see when messages are read. Never shared for message requests."
         checked={preferences.readReceipts} disabled={busy || !!error || chat.status !== "ready"}
         onChange={(enabled) => void change("readReceipts", enabled)} />
     </SettingsGroup>}
     {!preferences && !error && <p role="status" className="text-sm text-on-surface-variant">{chat.status === "error"
-      ? "Your chats could not open. Go to Connections to try syncing again." : "Loading message settings…"}</p>}
+      ? "Your chats could not open. Go to Chats to try syncing again." : "Loading message settings…"}</p>}
     {busy && <p role="status" className="text-sm text-on-surface-variant">Saving…</p>}
     {saved && <p role="status" className="text-sm text-on-surface-variant">Settings saved.</p>}
     {error && <div><p role="alert" className="text-sm text-error">{error}</p>
@@ -84,7 +84,7 @@ function MessagingPrivacySession({ accountId }: { accountId: string }) {
 
 const CONTACT_RULE_QUESTION = "Who can start a conversation with you";
 const CONTACT_RULE_HINT =
-  "Applies to new conversations. People you have connected with can always reach you.";
+  "Applies to new conversations. People you are friends with can always reach you.";
 
 /**
  * The account's contact rules belong to Chat: they decide whether a stranger may

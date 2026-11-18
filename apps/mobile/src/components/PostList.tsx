@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PostItem } from "@norfold/shared";
 import { AnimatePresence, motion } from "framer-motion";
 import { FileQuestion } from "lucide-react";
@@ -13,6 +13,8 @@ import { FeedSkeleton } from "./uiPrimitives";
 import { FeedMasonry } from "./FeedMasonry";
 import { estimateMasonryCardHeight } from "./masonryLayout";
 import { MASONRY_GUTTER_PX } from "./responsive";
+import { Snackbar, SNACKBAR_AUTO_EXIT_MS } from "./LiveRegion";
+import { hideFeedPost, unhideFeedPost, useHiddenFeedPosts } from "../services/feedHidden";
 import { fadeVariants, listItemVariants, motionDurations, motionEasings } from "./uiMotion";
 
 interface PostListProps {
@@ -56,6 +58,16 @@ export function PostList({
 }: PostListProps) {
   const sentinelRef = useRef<HTMLDivElement>(null);
 
+  // A put-away report is a reading decision for this visit: the row leaves every
+  // feed at once, the server copy is untouched, and Undo brings it straight back.
+  const hidden = useHiddenFeedPosts();
+  const [undo, setUndo] = useState<{ id: string } | null>(null);
+  useEffect(() => {
+    if (!undo) return;
+    const timer = setTimeout(() => setUndo(null), SNACKBAR_AUTO_EXIT_MS);
+    return () => clearTimeout(timer);
+  }, [undo]);
+
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el) return;
@@ -79,6 +91,17 @@ export function PostList({
   // own component and never alters the mappings below.
   const isOwnerFeed = density === "owner-feed";
   const isMasonry = density === "masonry" && !isOwnerFeed;
+  // Own reports are not put away from their own list; the cross never appears
+  // there and the menu has no hide row.
+  const canHide = !isOwnerFeed;
+  const visibleItems = useMemo(
+    () => (canHide ? items.filter((post) => !hidden.has(post.id)) : items),
+    [items, hidden, canHide],
+  );
+  const hideReport = useCallback((post: PostItem) => {
+    hideFeedPost(post.id);
+    setUndo({ id: post.id });
+  }, []);
   const layout: PostCardLayout =
     density === "masonry"
       ? "masonry"
@@ -110,7 +133,7 @@ export function PostList({
   // crossfade within the fast token budget. Opacity is preserved under
   // reduced motion by the root MotionConfig.
   const stateTransition = { duration: motionDurations.fast, ease: motionEasings.inOut };
-  const state = loading && items.length === 0 ? "loading" : error && items.length === 0 ? "error" : items.length === 0 ? "empty" : "content";
+  const state = loading && visibleItems.length === 0 ? "loading" : error && visibleItems.length === 0 ? "error" : visibleItems.length === 0 ? "empty" : "content";
 
   // Refresh reconcile (C4): rows the reader has already seen stay exactly
   // in place; rows that arrive after the first paint (a refresh that found
@@ -138,8 +161,14 @@ export function PostList({
       <PostCard
         index={index}
         variant={layout === "home-feed" || layout === "masonry" ? layout : "default"}
+        onHide={canHide ? () => hideReport(post) : undefined}
       >
-        <PostCardContent post={post} layout={layout} enableSharedMedia overflow={<ReportOverflow post={post} />} />
+        <PostCardContent
+          post={post}
+          layout={layout}
+          enableSharedMedia
+          overflow={<ReportOverflow post={post} onHide={canHide ? () => hideReport(post) : undefined} />}
+        />
       </PostCard>
     );
     // O5 mount (CF-060 R10): the shield wraps the whole card from OUTSIDE, so
@@ -153,21 +182,28 @@ export function PostList({
     );
   };
 
-  /** One row: fades in only when it arrived after the first paint. */
+  /**
+   * One row. Already-seen rows do not replay the entrance; a row that arrived
+   * after the first paint fades in once. Every row can leave: putting a report
+   * away closes the gap with a short exit instead of snapping the list.
+   */
   const rowFor = (post: PostItem, index: number) => {
     const card = cardFor(post, index);
-    // Already-seen rows render untouched (no remount, no flash).
-    if (seenIdsRef.current!.has(post.id)) {
+    const seen = seenIdsRef.current!.has(post.id);
+    if (isMasonry) {
+      // The grid places by measured transform, so its rows keep the plain
+      // wrapper and re-pack instantly (CF-010 §9).
       return <div key={post.id} data-feed-post-id={post.id}>{card}</div>;
     }
     return (
       <motion.div
         key={post.id}
         data-feed-post-id={post.id}
-        data-reconcile="enter"
+        data-reconcile={seen ? "seen" : "enter"}
         variants={listItemVariants}
-        initial="hidden"
+        initial={seen ? false : "hidden"}
         animate="visible"
+        exit="exit"
         transition={stateTransition}
       >
         {card}
@@ -244,7 +280,7 @@ export function PostList({
           animate="visible"
           transition={stateTransition}
         >
-          <div className={listClass}
+          <div className={`relative ${listClass}`}
             style={ownerColumns > 1 ? { gridTemplateColumns: `repeat(${ownerColumns}, minmax(0, 1fr))` } : undefined}>
             {error && (
               <div className="flex items-center justify-between gap-2 rounded-m3-sm border border-error px-3 py-2 text-sm text-error">
@@ -263,7 +299,7 @@ export function PostList({
                  pure model. The sentinel/spinner stay outside the grid so
                  pagination keeps one scroll container. */
               <FeedMasonry
-                items={items}
+                items={visibleItems}
                 getKey={(post) => post.id}
                 columns={masonryColumns}
                 gap={MASONRY_GUTTER_PX}
@@ -273,14 +309,14 @@ export function PostList({
                 renderItem={(post) => rowFor(post, indexById.get(post.id) ?? 0)}
               />
             ) : (
-              items.map(rowFor)
+              <AnimatePresence initial={false} mode="popLayout">{visibleItems.map(rowFor)}</AnimatePresence>
             )}
             <div ref={sentinelRef} aria-hidden />
             {/* CF-010 §10: the load-more identity is the compact Morph capsule,
                 not a spinner; the next page appends below whatever is already
                 on screen, so nothing the reader is looking at is replaced. */}
             {loadingMore && <MorphLoader label="Loading more…" size="sm" className="py-6" />}
-            {!hasMore && items.length > 0 && (
+            {!hasMore && visibleItems.length > 0 && (
               <p className="py-3 text-center text-xs text-on-surface-variant">
                 You are all caught up.
               </p>
@@ -289,6 +325,22 @@ export function PostList({
         </motion.div>
       )}
     </AnimatePresence>
+    <Snackbar
+      open={undo !== null}
+      message="Report hidden"
+      action={
+        <button
+          type="button"
+          className="min-h-[40px] shrink-0 rounded-full px-2 text-sm font-semibold underline"
+          onClick={() => {
+            if (undo) unhideFeedPost(undo.id);
+            setUndo(null);
+          }}
+        >
+          Undo
+        </button>
+      }
+    />
     </div>
   );
 }

@@ -47,7 +47,7 @@ it("wide windows expose both panes and resizing away from the list relocates foc
   expect(document.activeElement).not.toBe(document.body);
 });
 
-it("identity is a direct profile link, not a quick-card popover", () => {
+it("identity is a direct profile link, with no card until it is asked for", () => {
   render(<MemoryRouter><UserIdentityTrigger person={{ id: "u-river", username: "river", displayName: "River Lee" }} /></MemoryRouter>);
   const link = screen.getByRole("link", { name: "Open River Lee's profile" });
   expect(link.getAttribute("href")).toBe("/u/river");

@@ -18,7 +18,7 @@ import { BrandMark } from "./BrandMark";
 import { useHoverLabel } from "./HoverLabel";
 import { SettingsWindow } from "./SettingsWindow";
 import { GlobalSearchOverlay } from "./GlobalSearchOverlay";
-import { toggleGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
+import { openGlobalSearch, toggleGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
 import {
   fadeUpVariants,
   fadeVariants,
@@ -162,6 +162,27 @@ export function Shell() {
     };
   }, [navigationContext, openSettingsWindow]);
   const searchOpen = useGlobalSearchOpen();
+
+  // Typing anywhere that is not a field opens the one search surface with that
+  // first character, so search never needs the reader to aim at an icon first.
+  // A report surface takes the keystroke for its comment box before this runs
+  // (its capture handler calls preventDefault), and an open layer keeps its own
+  // typing.
+  useEffect(() => {
+    if (searchOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.keyCode === 229 || event.key === "Process") return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key.length !== 1 || event.key === " ") return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      if (document.querySelector('[role="dialog"], [role="menu"], [role="listbox"]')) return;
+      event.preventDefault();
+      openGlobalSearch(document.activeElement, event.key);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [searchOpen]);
 
   // A breakpoint flip replaces the whole navigation. The element that had focus
   // unmounts, so focus would otherwise fall to <body> and the next Tab would

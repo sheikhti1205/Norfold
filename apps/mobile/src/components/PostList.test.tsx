@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import type { PostItem } from "@norfold/shared";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { PostList } from "./PostList";
+import { resetHiddenFeedPosts } from "../services/feedHidden";
 vi.mock("../auth", () => ({ useAuth: () => ({ user: null }) }));
 
 beforeAll(() => {
@@ -19,6 +20,7 @@ beforeAll(() => {
 
 afterEach(() => {
   cleanup();
+  resetHiddenFeedPosts();
 });
 
 function post(id: string, title: string, overrides: Partial<PostItem> = {}): PostItem {
@@ -101,6 +103,31 @@ describe("PostList refresh contract", () => {
     // Same items again: everything is seen, nothing enters.
     rerender(list([post("p1", "Keys"), post("p2", "Wallet")]));
     expect(container.querySelector('[data-reconcile="enter"]')).toBeNull();
+  });
+});
+
+describe("PostList put-away cross (owner direction 2026-11-18)", () => {
+  it("hides only the report whose cross was pressed and offers Undo", async () => {
+    render(list([post("p1", "Keys"), post("p2", "Wallet")]));
+    const crosses = screen.getAllByRole("button", { name: "Hide report" });
+    expect(crosses).toHaveLength(2);
+
+    fireEvent.click(crosses[0]!);
+    await waitFor(() => expect(screen.queryByText("Keys")).toBeNull());
+    expect(screen.getByText("Wallet")).toBeTruthy();
+    expect(screen.getByTestId("snackbar-message").textContent).toContain("Report hidden");
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(screen.getByText("Keys")).toBeTruthy();
+  });
+
+  it("keeps own reports free of the cross and the hide action", () => {
+    render(
+      <MemoryRouter>
+        <PostList items={[post("p1", "My report")]} {...base} density="owner-feed" />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole("button", { name: "Hide report" })).toBeNull();
   });
 });
 

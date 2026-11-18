@@ -496,7 +496,7 @@ export function Connections() {
     list={(pane) => <ConnectionsSession key={user.id} accountId={user.id} selectedId={conversationId} pane={pane} />}
     detail={conversationId ? <Outlet /> : <div className="fb-chat-empty">
       {showAppUtilities && <div className="fb-chat-empty-utilities"><TopUtilities /></div>}
-      <h2>Choose a conversation</h2><p>Open a chat, or search for someone to connect with.</p>
+      <h2>Choose a conversation</h2><p>Open a chat, or search for someone to message.</p>
     </div>} /> : null;
 }
 
@@ -621,7 +621,7 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
           const name = labels.get(row.peerId);
           const view = chat.currentProjections?.[row.conversationId] ?? row.cachedProjection;
           const state = view?.ownBlocked ? "Blocked by you" : view?.ownHidden ? (view.mode === "CONNECTED" ? "Archived" : "Hidden request")
-            : view?.ownDeclined ? "Dismissed" : view?.mode === "CONNECTED" ? "Connected"
+            : view?.ownDeclined ? "Dismissed" : view?.mode === "CONNECTED" ? "Friends"
               : view?.request === "INCOMING" ? "Message request" : view?.request === "OUTGOING" ? "Request sent" : "Conversation";
           const person = identities.get(row.peerId);
           // One hit target: the name and avatar open the conversation, exactly
@@ -1540,7 +1540,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   async function sendFiles(picked: File[]) {
     if (!runtimeOpen || !row || filesSending || photoSending) return;
     if (view?.mode !== "CONNECTED" || view.ownBlocked) {
-      setError("Files send once you are connected.");
+      setError("Files send once you're friends.");
       return;
     }
     const sendingRevision = draftRevision.current;
@@ -1666,7 +1666,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const gallery = photoAllowed ? messages.filter(message => message.messageType === "MEDIA" && message.unsentAt === undefined)
     .flatMap(message => { const attachment = media.find(item => item.messageId === message.id); return attachment ? [attachment] : []; }) : [];
   const confirming = sheet === "end" || sheet === "delete" || sheet === "unsend" || sheet === "clear";
-  const confirmationTitle = sheet === "end" ? "End connection?" : sheet === "unsend" ? "Unsend message?" : sheet === "clear" ? "Clear chat for me?" : "Delete for me?";
+  const confirmationTitle = sheet === "end" ? "Remove friend?" : sheet === "unsend" ? "Unsend message?" : sheet === "clear" ? "Clear chat for me?" : "Delete for me?";
   // One action list, rendered in the wide third pane and in the compact sheet.
   const conversationInfo = <div className="fb-chat-sheet">
     {person?.username && <Link className="fb-chat-info-row" to={`/u/${encodeURIComponent(person.username)}`}><UserRound size={20} aria-hidden="true" /><span>View profile</span></Link>}
@@ -1681,7 +1681,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     <Link className="fb-chat-info-row" to="/settings/privacy/messages"><Settings2 size={20} aria-hidden="true" /><span>Message settings</span></Link>
     <hr className="fb-chat-info-divider" />
     <button type="button" className="fb-chat-info-row" disabled={busy || !current} onClick={() => void relationship(view?.ownHidden ? "unhide" : "hide")}><Archive size={20} aria-hidden="true" /><span>{view?.ownHidden ? "Move to inbox" : view?.mode === "CONNECTED" ? "Archive" : "Hide request"}</span></button>
-    {view?.mode === "CONNECTED" && <button type="button" className="fb-chat-info-row" disabled={busy || !current} onClick={() => setSheet("end")}><LogOut size={20} aria-hidden="true" /><span>End connection</span></button>}
+    {view?.mode === "CONNECTED" && <button type="button" className="fb-chat-info-row" disabled={busy || !current} onClick={() => setSheet("end")}><LogOut size={20} aria-hidden="true" /><span>Remove friend</span></button>}
     <button type="button" className="fb-chat-info-row" disabled={busy || !current || highest === 0 || outbox.length > 0} onClick={() => setSheet("clear")}><Trash2 size={20} aria-hidden="true" /><span>Clear chat for me</span></button>
     {outbox.length > 0 && <p className="fb-chat-secondary">Wait for messages still sending before clearing this chat.</p>}
     <hr className="fb-chat-info-divider" />
@@ -1691,13 +1691,13 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   </div>;
   return <ChatDetailsLayout details={conversationInfo} onCompactOpen={() => setSheet("actions")}
     identity={<><UserAvatar username={name || person?.username} avatarUrl={person?.avatarUrl} size={72} shape="squircle" />
-      <strong dir="auto">{name || "Conversation"}</strong><span className="fb-chat-secondary">{!view ? "Saved chat" : view.mode === "CONNECTED" ? "Connected" : "Message request"}</span></>}>
+      <strong dir="auto">{name || "Conversation"}</strong><span className="fb-chat-secondary">{!view ? "Saved chat" : view.mode === "CONNECTED" ? "Friends" : "Message request"}</span></>}>
     {detailsToggle => <section className="fb-chat-page" aria-label="Conversation">
     <header className="fb-chat-header">
       <Link to="/chats" className="fb-chat-icon" aria-label="Back to chats" {...hoverLabel("Back to chats")}><ArrowLeft size={22} aria-hidden="true" /></Link>
       <ChatIdentity peerId={row?.peerId} name={name} username={person?.username} avatarUrl={person?.avatarUrl} muted={view?.ownMuted === true}
         conversationId={conversationId}
-        status={!view ? "Saved chat" : view.mode === "CONNECTED" ? "Connected" : "Message request"} />
+        status={!view ? "Saved chat" : view.mode === "CONNECTED" ? "Friends" : "Message request"} />
       {detailsToggle}
       {wideApp && <><RetrySync accountId={accountId} /><TopUtilities /></>}
     </header>
@@ -1733,9 +1733,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       <p className="fb-chat-sync" role="status">{sendStatus ?? (chat.status === "offline" ? "Messages are saved here and will send when you reconnect." : "")}</p>
       {!loaded && <p role="status" className="fb-chat-secondary">Opening messages…</p>}
       {loaded && messages.length === 0 && <p className="fb-chat-empty">{view?.request === "INCOMING" ? "A new message request."
-        : "Say hello and explain why you’d like to connect."}</p>}
+        : "Say hello and explain why you’d like to message."}</p>}
       {view?.mode === "REQUEST" && <div className="fb-chat-request">
-        <p>{view.request === "INCOMING" ? "Accept to reply. Photos and read receipts stay off until you connect."
+        <p>{view.request === "INCOMING" ? "Accept to reply. Photos and read receipts stay off until you accept."
           : view.request === "OUTGOING" ? "Request sent. You can add another message while you wait."
             : "Send a text message to start a request."}</p>
         {view.request === "INCOMING" && <div className="fb-chat-actions">
@@ -1810,10 +1810,10 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             </button>}
             {message.unsentAt !== undefined ? <p>Message unsent</p> : <>
             {message.messageType === "MEDIA" && attachment && photoAllowed && <ChatPhoto key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} onOpen={openPhoto} onReady={rememberPhoto} />}
-            {message.messageType === "MEDIA" && attachment && !photoAllowed && <p>Photos are available when connected.</p>}
+            {message.messageType === "MEDIA" && attachment && !photoAllowed && <p>Photos are available when you're friends.</p>}
             {message.messageType === "VOICE" && attachment && photoAllowed && <ChatVoice key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} playback={voice.player} snapshot={playbackSnapshot}
               authorName={own ? user?.displayName || user?.username : name} avatarUrl={own ? user?.avatarUrl : person?.avatarUrl} />}
-            {message.messageType === "VOICE" && attachment && !photoAllowed && <p>Voice messages are available when connected.</p>}
+            {message.messageType === "VOICE" && attachment && !photoAllowed && <p>Voice messages are available when you're friends.</p>}
             {message.contextReportId && <ChatReportContext reportId={message.contextReportId} safetyKey={view?.ownBlocked ? "blocked" : "clear"} />}
             {message.location && <ChatLocation location={message.location} />}
             {file ? <>
@@ -1938,7 +1938,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       </ul>
       <div className="fb-chat-photo-options">
         <p role="status" className="fb-chat-secondary">
-          {!photoAllowed ? "Photos are available when connected."
+          {!photoAllowed ? "Photos are available when you're friends."
             : photoSending ? "Sending photos…"
             : photos.some(item => item.preparing) ? "Preparing photos…"
             : photos.some(item => item.error) ? "Some photos could not be prepared. Retry or remove them."
@@ -1997,8 +1997,8 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       onIndexChange={(index) => { const item = draftViewerItems[index]; if (item) setDraftViewer({ key: item.id }); }}
       onClose={() => setDraftViewer(null)} />
     <ConfirmDialog open={confirming} onClose={() => setSheet(null)} title={confirmationTitle} busy={busy}
-      confirmLabel={sheet === "end" ? "End connection" : sheet === "unsend" ? "Unsend" : sheet === "clear" ? "Clear for me" : "Delete for me"}
-      cancelLabel={sheet === "end" ? "Keep connection" : "Cancel"}
+      confirmLabel={sheet === "end" ? "Remove friend" : sheet === "unsend" ? "Unsend" : sheet === "clear" ? "Clear for me" : "Delete for me"}
+      cancelLabel="Cancel"
       confirmDisabled={!current || (sheet === "end" ? current.mode !== "CONNECTED" : sheet === "clear" ? highest === 0 || outbox.length > 0
         : !selectedMessage?.server || (sheet === "unsend" && (selectedMessage.authorId !== accountId || selectedMessage.unsentAt !== undefined)))}
       onConfirm={() => { if (sheet === "end") void relationship("end"); else if (sheet === "delete" || sheet === "unsend" || sheet === "clear") void erase(sheet); }}>
@@ -2015,7 +2015,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         <ul className="fb-chat-search-results">{searchMatches.slice(0, 100).map(message => <li key={message.id}>
           <button type="button" onClick={() => { nearBottom.current = false; setJumpTo(message.id); setSheet(null); }}><span className="fb-chat-secondary">{message.authorId === accountId ? "You" : name || "Member"}</span><span dir="auto">{message.body}</span></button>
         </li>)}</ul>
-      </div> : sheet === "media" ? !photoAllowed ? <p>Photos are available when connected.</p> : gallery.length === 0 ? <p>No photos in this conversation yet.</p> : <ul className="fb-chat-gallery" aria-label="Conversation photos">
+      </div> : sheet === "media" ? !photoAllowed ? <p>Photos are available when you're friends.</p> : gallery.length === 0 ? <p>No photos in this conversation yet.</p> : <ul className="fb-chat-gallery" aria-label="Conversation photos">
         {gallery.map(attachment => <li key={attachment.id}><ChatPhoto accountId={accountId} conversationId={conversationId} attachment={attachment} onOpen={openPhoto} onReady={ignorePhotoReadiness} /></li>)}
       </ul> : sheet === "review" ? <div className="fb-chat-sheet">
         <p>We couldn’t confirm this older message. Send the text shown here only, or remove your copy. This won’t recall anything already delivered.</p>

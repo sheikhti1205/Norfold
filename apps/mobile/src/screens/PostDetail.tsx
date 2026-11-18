@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { motion } from "framer-motion";
-import { CalendarDays, CircleCheck, CornerDownRight, ExternalLink, MapPin, Pencil, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { CalendarDays, CircleCheck, CornerDownRight, ExternalLink, MapPin, Pencil, Star, X } from "lucide-react";
 import type { CommentItem, PostItem, PostStatus, ReactionCounts, ReactionKind, ReactionSummary } from "@norfold/shared";
 import { OWNER_SELECTABLE_STATUSES } from "@norfold/shared";
 import { useAuth } from "../auth";
@@ -125,7 +125,7 @@ function CommentLikeButton({
       onClick={onToggle}
       className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1 rounded-full px-1.5 text-xs font-medium ${state.mine ? "text-primary" : "text-on-surface-variant"}`}
     >
-      <ThumbsUp size={15} aria-hidden fill={state.mine ? "currentColor" : "none"} />
+      <span className="fb-reaction-emoji" aria-hidden="true">👍</span>
       <span>{state.mine ? "Liked" : "Like"}</span>
       {state.count > 0 && <span aria-hidden className="tabular-nums">{state.count}</span>}
     </button>
@@ -203,6 +203,11 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
    */
   const wideViewport = useViewportWidth() >= 900;
   const [commentsOpen, setCommentsOpen] = useState(false);
+  // The comment action and a first keystroke both hand the caret to the
+  // composer; the signals are counters so repeated requests stay distinct.
+  const [composerFocus, setComposerFocus] = useState(0);
+  const [composerTyping, setComposerTyping] = useState<{ char: string; nonce: number } | null>(null);
+  const composerTypingSeq = useRef(0);
 
   // This route component is reused for in-place report navigation. A new
   // report (or a new type/owner for the same id) or a new account is a new
@@ -217,6 +222,35 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
   useEffect(() => {
     setCommentsOpen(false);
   }, [id, post?.id, wideViewport]);
+
+  // Typing on an open report belongs to its comment field, never to search:
+  // the conversation is already on screen and the reader's intent is to reply.
+  // Capture phase, so the shell's type-to-search never sees the key.
+  useEffect(() => {
+    if (!contextual) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.keyCode === 229 || event.key === "Process") return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key.length !== 1 || event.key === " ") return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      // A menu, picker or true modal owns the next keystroke.
+      if (document.querySelector('[role="menu"], [role="listbox"], [aria-modal="true"]')) return;
+      const field = document.querySelector<HTMLTextAreaElement>('[data-testid="comment-input"]');
+      const hiddenField = !field || field.offsetParent === null;
+      // On a phone the conversation is a sheet; the first keystroke opens it
+      // and becomes the first character, so the reader never has to find the
+      // comment box with the keyboard hidden behind the phone's own panel.
+      if (hiddenField && wideViewport) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (hiddenField) setCommentsOpen(true);
+      composerTypingSeq.current += 1;
+      setComposerTyping({ char: event.key, nonce: composerTypingSeq.current });
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [contextual, wideViewport]);
 
   // W3.3 multi-kind reaction UI state. The post summary override holds
   // server-truth counts/total once a write or realtime event delivers them;
@@ -1176,10 +1210,16 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
   const actionsBlock = <div id="detail-activity" tabIndex={-1} className="scroll-mt-4 border-t border-outline-variant pt-1">
       <PostActionRow
           commentCount={comments.length}
+          hideComments={contextual && wideViewport}
           slots={{
             onComments: () => {
-              if (contextual && !wideViewport) { setCommentsOpen(true); return; }
+              if (contextual && !wideViewport) {
+                setCommentsOpen(true);
+                setComposerFocus((n) => n + 1);
+                return;
+              }
               scrollToSection("detail-comments");
+              setComposerFocus((n) => n + 1);
             },
             reactions: (
               <span className="fb-reaction-pair">
@@ -1196,7 +1236,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
                   aria-pressed={postLike.mine}
                   {...hoverLabel("Like")}
                 >
-                  <ThumbsUp size={20} aria-hidden fill={postLike.mine ? "currentColor" : "none"} />
+                  <span className="fb-reaction-emoji" aria-hidden="true">👍</span>
                   <span className="tabular-nums">{postLike.count}</span>
                 </button>
                 <button
@@ -1211,7 +1251,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
                   aria-pressed={myReaction === "DISLIKE"}
                   {...hoverLabel("Dislike")}
                 >
-                  <ThumbsDown size={20} aria-hidden fill={myReaction === "DISLIKE" ? "currentColor" : "none"} />
+                  <span className="fb-reaction-emoji" aria-hidden="true">👎</span>
                   <span className="tabular-nums">{postDislikeCount}</span>
                 </button>
               </span>
@@ -1416,6 +1456,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
     ) : null}
     <CommentComposer postId={current.id} replyToUsername={replyTo?.author.username ?? null} currentUser={user} participants={mentionParticipants}
       owner={{ username: current.author.username, displayName: current.author.displayName ?? null, avatarUrl: current.author.avatarUrl ?? null }}
+      focusSignal={composerFocus} typingSeed={composerTyping}
       onSubmit={(body, attachments) => postCommentBody(body, attachments)} onError={commentFailed} onSent={() => setReplyTo(null)} />
   </div>;
   const commentsBlock = <section data-testid="detail-comments" id="detail-comments" tabIndex={-1} aria-label="Comments" className="fb-comment-thread flex scroll-mt-4 flex-col gap-3">

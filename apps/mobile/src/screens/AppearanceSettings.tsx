@@ -1,4 +1,4 @@
-import { BadgeCheck, MapPin, MessageCircle, Search, Share2, ThumbsDown, ThumbsUp } from "lucide-react";
+import { BadgeCheck, MapPin, MessageCircle, Search, Share2 } from "lucide-react";
 import { ACCENT_OPTIONS, REACTION_APPEARANCE_OPTIONS, useAppearance, useSystemColorsSupported } from "../appearance";
 import { useTheme, type Theme } from "../theme";
 import {
@@ -181,8 +181,8 @@ export function AppearanceSettings() {
             </div>
             <p className="fb-appearance-report-place"><MapPin size={13} /> Central Library</p>
             <div className="fb-appearance-report-actions">
-              <span className="fb-appearance-preview-action" data-kind="like" data-selected="true"><ThumbsUp size={15} fill="currentColor" /> 8</span>
-              <span className="fb-appearance-preview-action" data-kind="dislike"><ThumbsDown size={15} /></span>
+              <span className="fb-appearance-preview-action" data-kind="like" data-selected="true"><span className="fb-reaction-emoji" aria-hidden="true">👍</span> 8</span>
+              <span className="fb-appearance-preview-action" data-kind="dislike"><span className="fb-reaction-emoji" aria-hidden="true">👎</span></span>
               <span className="fb-appearance-preview-action" data-kind="comment"><MessageCircle size={15} /> 3</span>
               <span className="fb-appearance-preview-action" data-kind="share"><Share2 size={15} /></span>
             </div>

@@ -5,6 +5,8 @@ import { MemoryRouter } from "react-router";
 import { Updates } from "./Updates";
 import { UpdateChanges } from "../components/UpdateChanges";
 import { APP_VERSION } from "../services/appCapabilities";
+import { RELEASE_NOTES } from "../services/updates/releaseNotes";
+import { destinationFor } from "../services/destinations";
 
 // SettingsPage renders the shared TopUtilities, whose unread-badge owner is
 // auth-scoped. This suite exercises update state, not sign-in state.
@@ -223,13 +225,17 @@ describe("updates screen", () => {
       lastCheck: { attemptedAt: 2_000, status: "ok", checkedAt: 1_000 },
       history: [release()],
     });
+    const note = RELEASE_NOTES.find((entry) => entry.versionName === APP_VERSION);
+    expect(note).toBeTruthy();
     renderScreen();
     const featured = screen.getByTestId("updates-featured");
     expect(featured.textContent).toContain(APP_VERSION);
     expect(featured.textContent).toContain("What changed");
     expect(featured.textContent).toContain("New features");
-    expect(featured.textContent).toContain("Send documents, video and audio files in a chat.");
-    expect(featured.textContent).toContain("Settings opens in a floating window");
+    // The featured story is the written note for the build that is running,
+    // not a note from another version and not the catalogue summary.
+    expect(featured.textContent).toContain(note!.changes[0]!);
+    expect(featured.textContent).toContain(note!.features[0]!.summary);
     // The catalogue summary is a CI commit subject, not reader copy.
     expect(screen.queryByText("Faster search and clearer failure messages.")).toBeNull();
   });
@@ -237,8 +243,12 @@ describe("updates screen", () => {
   it("links a new feature only when its destination exists for this platform", () => {
     runtime.snapshot = snapshot();
     renderScreen();
-    const link = screen.getByRole("link", { name: "Search reports" });
-    expect(link.getAttribute("href")).toBe("/search");
+    const note = RELEASE_NOTES.find((entry) => entry.versionName === APP_VERSION)!;
+    const feature = note.features.find((entry) => entry.destinationId);
+    expect(feature).toBeTruthy();
+    const destination = destinationFor(feature!.destinationId!)!;
+    const link = screen.getByRole("link", { name: destination.title });
+    expect(link.getAttribute("href")).toBe(destination.route);
   });
 
   it("opens an earlier version to its written notes", () => {

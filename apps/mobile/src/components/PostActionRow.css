@@ -162,7 +162,7 @@
  * ships a "Share" caption). The flat row is icon-only: the caption is kept
  * for assistive tech but taken out of the visual flow. Counts carry the
  * `.tabular-nums` class and stay visible. */
-.fb-post-action-row .fb-report-action > span:not(.tabular-nums) {
+.fb-post-action-row .fb-report-action > span:not(.tabular-nums):not(.fb-reaction-emoji) {
   position: absolute;
   width: 1px;
   height: 1px;

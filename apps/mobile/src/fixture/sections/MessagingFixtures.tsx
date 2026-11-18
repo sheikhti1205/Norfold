@@ -47,12 +47,12 @@ function Thread({ variant }: { variant: FixtureVariant }) {
     <div className="fb-chat-page" data-testid="fixture-chat-thread" style={{ height: 460 }}>
       <header className="fb-chat-header">
         <button type="button" className="fb-chat-icon" aria-label="Back to chats"><ArrowLeft size={22} aria-hidden="true" /></button>
-        <ChatIdentity peerId="fixture-peer" name={name} status="Connected" muted />
+        <ChatIdentity peerId="fixture-peer" name={name} status="Friends" muted />
         <button type="button" className="fb-chat-icon" aria-label="Conversation options"><Info size={21} aria-hidden="true" /></button>
       </header>
       <div className="fb-chat-messages">
         {variant === "loading" && <p role="status" className="fb-chat-secondary">Opening messages…</p>}
-        {variant === "empty" && <p className="fb-chat-empty">Say hello and explain why you’d like to connect.</p>}
+        {variant === "empty" && <p className="fb-chat-empty">Say hello and explain why you’d like to message.</p>}
         {variant === "error" && <p className="fb-chat-error" role="alert">Chat could not sync. Try again.</p>}
         {long && <p className="fb-chat-sync" role="status">A very long status line that has to wrap without pushing the composer or the identity header out of the frame at 320dp.</p>}
         <ol className="fb-chat-transcript" aria-label="Messages">

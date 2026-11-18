@@ -1,41 +1,24 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import type { SearchedProfile } from "@norfold/shared";
 import { UserAvatar } from "./UserAvatar";
+import { ProfilePreview } from "./ProfilePreview";
+import { identityDisplayName, identityHref, type PublicIdentity } from "./identity";
 import "./UserIdentityTrigger.css";
 
-export type PublicIdentity = Pick<SearchedProfile, "id" | "username"> & Partial<Pick<SearchedProfile, "displayName" | "avatarUrl">> & {
-  /** Present when this identity was opened from a report: the first message may
-   * carry that live report reference so the recipient knows the subject. */
-  contextReportId?: string;
-  /** Present when opened from a conversation: the canonical profile route then
-   * also shows the conversation-information sections after server revalidation. */
-  contextConversationId?: string;
-};
-
-/** The one canonical person destination. Context travels in the query string
- * so the profile page can revalidate it; nothing private is in the URL. */
-export function identityHref(person: Pick<PublicIdentity, "username" | "contextReportId" | "contextConversationId">): string {
-  const params = new URLSearchParams();
-  if (person.contextReportId) params.set("report", person.contextReportId);
-  if (person.contextConversationId) params.set("conversation", person.contextConversationId);
-  const query = params.toString();
-  return `/u/${encodeURIComponent(person.username)}${query ? `?${query}` : ""}`;
-}
-
-export function identityDisplayName(person: Pick<PublicIdentity, "username" | "displayName">): string {
-  return person.displayName?.trim() || person.username;
-}
+export { identityDisplayName, identityHref };
+export type { PublicIdentity };
 
 /**
- * A person's avatar and name are ONE direct link to their full-screen profile.
+ * A person's avatar and name are ONE link to their full-screen profile.
  *
- * The link is the destination on every input. There is no bottom sheet or
- * intermediate step on touch. On a fine pointer the feed and comment identity
- * may also answer a rest or a key focus with `ProfilePreview`, which is a
- * read-only card over the same public facts; the link itself still opens the
- * profile. Rows that also do something else (a chat row, a helper picker) split
- * their hit targets instead of making the identity a selector.
+ * The link is still the destination on every input. Around it sits the one
+ * profile card (`ProfilePreview`), so every surface that names a person answers
+ * "who is this?" in place: a gentle rest or key focus on a computer, and a tap
+ * on a phone. The card's own avatar, name and View full profile button open the
+ * same canonical destination.
+ *
+ * Rows that also do something else (a chat row, a helper picker) split their hit
+ * targets instead of making the identity a selector.
  */
 export function UserIdentityTrigger({ person, trigger, className = "" }: {
   person: PublicIdentity;
@@ -44,11 +27,13 @@ export function UserIdentityTrigger({ person, trigger, className = "" }: {
 }) {
   const name = identityDisplayName(person);
   return (
-    <Link to={identityHref(person)} className={`fb-identity-link ${className}`} aria-label={`Open ${name}'s profile`}>
-      {trigger ?? <>
-        <UserAvatar username={name} avatarUrl={person.avatarUrl} size={28} />
-        <span className="fb-identity-name">{name}</span>
-      </>}
-    </Link>
+    <ProfilePreview person={person}>
+      <Link to={identityHref(person)} className={`fb-identity-link ${className}`} aria-label={`Open ${name}'s profile`}>
+        {trigger ?? <>
+          <UserAvatar username={name} avatarUrl={person.avatarUrl} size={28} />
+          <span className="fb-identity-name">{name}</span>
+        </>}
+      </Link>
+    </ProfilePreview>
   );
 }

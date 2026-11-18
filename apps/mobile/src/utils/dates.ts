@@ -57,3 +57,10 @@ export function timeAgo(iso: string): string {
   if (days < 7) return `${days}d ago`;
   return formatEventDate(iso.slice(0, 10));
 }
+
+/** Month and year a member joined, for a profile's one meta line. */
+export function formatJoinedMonth(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "Joined recently";
+  return `Joined ${date.toLocaleDateString(undefined, { year: "numeric", month: "long" })}`;
+}

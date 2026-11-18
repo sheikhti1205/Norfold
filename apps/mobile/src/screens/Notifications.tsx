@@ -9,6 +9,7 @@ import { registerBackInterceptor } from "../components/backNavigation";
 import { useAuth } from "../auth";
 import { BlockedByViewerShield } from "../components/BlockedByViewerShield";
 import { UserAvatar } from "../components/UserAvatar";
+import { ProfilePreview } from "../components/ProfilePreview";
 import { announce } from "../components/LiveRegion";
 import { ErrorView, InboxSkeleton, StateSwap } from "../components/uiPrimitives";
 import { PostLink, useReportNavigation } from "../components/PostNavigation";
@@ -957,7 +958,11 @@ export function NotificationBody({ item }: { item: NotificationItem }) {
   return (
     <>
       <span className="fb-notification-avatar">
-        <UserAvatar username={item.actorUsername} size={32} />
+        {item.actorId && item.actorUsername && item.blockedActor !== true
+          ? <ProfilePreview person={{ id: item.actorId, username: item.actorUsername }} openOnFocus={false}>
+              <UserAvatar username={item.actorUsername} size={32} />
+            </ProfilePreview>
+          : <UserAvatar username={item.actorUsername} size={32} />}
       </span>
       <div className="fb-notification-copy">
         <p className="fb-notification-summary">

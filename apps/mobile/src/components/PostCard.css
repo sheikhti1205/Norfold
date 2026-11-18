@@ -1,0 +1,94 @@
+/*
+ * Report block shell: the put-away cross and the shake the owner asked for
+ * (2026-11-18).
+ *
+ * The cross is the card's sibling, never its child, so the report moves and the
+ * control stays still under the pointer. The control is a fine-pointer
+ * affordance: touch readers put a report away from the report menu, where the
+ * same action is a labelled row.
+ */
+
+.fb-report-card {
+  position: relative;
+}
+
+.fb-report-hide {
+  position: absolute;
+  top: -0.5rem;
+  inset-inline-end: -0.5rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgb(0 0 0 / 0.62);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.28);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+  transform: scale(0.9);
+}
+
+.fb-report-card:hover .fb-report-hide,
+.fb-report-hide:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+
+.fb-report-hide:focus-visible {
+  outline: 2px solid var(--fb-focus);
+  outline-offset: 2px;
+}
+
+/*
+ * The report itself shakes while the pointer rests on it: a small horizontal
+ * wobble, not a bounce, so the movement reads as "this can be put away"
+ * instead of as a broken layout. The cross never shakes.
+ */
+@keyframes fb-report-shake {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  20% {
+    transform: translate3d(-1.5px, 0, 0);
+  }
+  40% {
+    transform: translate3d(1.5px, 0, 0);
+  }
+  60% {
+    transform: translate3d(-1px, 0, 0);
+  }
+  80% {
+    transform: translate3d(1px, 0, 0);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .fb-report-card[data-hideable="true"]:hover .fb-report-shake {
+    animation: fb-report-shake 360ms linear infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-report-card[data-hideable="true"]:hover .fb-report-shake {
+    animation: none;
+  }
+  .fb-report-hide {
+    transition: none;
+  }
+}
+
+html.fb-reduce-motion .fb-report-card[data-hideable="true"]:hover .fb-report-shake {
+  animation: none;
+}
+
+html.fb-reduce-motion .fb-report-hide {
+  transition: none;
+}

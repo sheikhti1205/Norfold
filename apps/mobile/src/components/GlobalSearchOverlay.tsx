@@ -29,7 +29,7 @@ import { UserAvatar } from "./UserAvatar";
 import { PostLink } from "./PostNavigation";
 import { SearchField } from "./SearchField";
 import { useHoverLabel } from "./HoverLabel";
-import { closeGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
+import { closeGlobalSearch, takeGlobalSearchSeed, useGlobalSearchOpen } from "./globalSearch";
 import { motionDurations, motionEasings } from "./uiMotion";
 import "./GlobalSearchOverlay.css";
 
@@ -328,6 +328,13 @@ function SearchSurface() {
   });
   const resultsId = useId();
   const filtersId = useId();
+
+  // A printable keystroke elsewhere in the app opens search with that
+  // character already in the field, so the reader never types it twice.
+  useEffect(() => {
+    const seeded = takeGlobalSearchSeed();
+    if (seeded) setQuery(seeded);
+  }, []);
 
   const trimmed = query.trim();
   const deferred = useDebounced(trimmed, 220);

@@ -36,12 +36,12 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
     changes: [
       "Report cards show the status beside the title, and category and location sit with the author as icons. Hover, focus or tap an icon to read its label.",
       "A report's page puts its type and recovery state in badges under the title, so both are read at a glance instead of as notes in the heading.",
-      "On a computer, resting on a name or avatar opens a short public profile preview. Clicking still opens the profile page, and touch is unchanged.",
+      "Every name opens a person card with their photo, username, a short bio and one clear action: Add friend, or Message once you are friends. Tap a name on a phone, or rest on it with a mouse.",
       "Appearance offers Automatic, bottom bar and side rail navigation, with adaptive, colorful and monochrome reactions. A report preview shows each choice.",
       "Menus, popovers and toasts share one lifted surface style, and a toast clears the phone's home indicator.",
     ],
     features: [
-      { summary: "Preview a public profile without leaving the feed." },
+      { summary: "Open a person card anywhere a name appears, then their profile, their chat or a friend request from it." },
       { summary: "Choose the navigation layout and the reaction style in Appearance.", destinationId: "appearance" },
     ],
   },
