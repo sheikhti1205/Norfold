@@ -75,6 +75,16 @@
 .fb-profile-preview-fact span { min-width: 0; overflow-wrap: anywhere; }
 
 .fb-profile-preview-bio-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 0.125rem; min-width: 0; }
+/* A person without a bio gets a stated tag, not an empty gap. */
+.fb-profile-preview-empty {
+  align-self: flex-start;
+  margin: 0;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 999px;
+  color: var(--fb-on-surface-variant);
+  font-size: 0.75rem; line-height: 1.4;
+}
 .fb-profile-preview-bio {
   margin: 0;
   color: var(--fb-on-surface);

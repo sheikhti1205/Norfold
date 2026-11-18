@@ -1,6 +1,6 @@
 import type { SearchedProfile } from "@norfold/shared";
 import { getSupabase } from "./supabaseClient";
-import { isValidAvatarObjectKey } from "./avatar";
+import { isDisplayableAvatarUrl } from "./avatar";
 
 export interface PeopleSearchCursor { query: string; rank: number; username: string; id: string }
 export interface PeopleSearchPage { items: SearchedProfile[]; nextCursor: PeopleSearchCursor | null }
@@ -32,7 +32,7 @@ export async function searchPeople(query: string, options: { cursor?: PeopleSear
       || !(row.display_name === null || typeof row.display_name === "string")
       || !(row.avatar_url === null || typeof row.avatar_url === "string")) throw new Error("Invalid public identity");
     return { id: row.id, username: row.username, displayName: row.display_name,
-      avatarUrl: typeof row.avatar_url === "string" && isValidAvatarObjectKey(row.avatar_url, row.id) ? row.avatar_url : null };
+      avatarUrl: typeof row.avatar_url === "string" && isDisplayableAvatarUrl(row.avatar_url, row.id) ? row.avatar_url : null };
   });
   return { items, nextCursor: cursorFor(data.nextCursor, normalized) };
 }

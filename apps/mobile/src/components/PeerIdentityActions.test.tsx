@@ -55,7 +55,7 @@ afterEach(cleanup);
 
 it("supplies the §9 safety rows in a stranger card", async () => {
   mount();
-  expect(screen.getByRole("button", { name: "Message River Lee" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Connect River Lee" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "More profile actions" }));
   expect(await screen.findByRole("menuitem", { name: "Report user" })).toBeTruthy();
   expect(screen.getByRole("menuitem", { name: "Block account" })).toBeTruthy();
@@ -63,7 +63,7 @@ it("supplies the §9 safety rows in a stranger card", async () => {
 
 it("starts the conversation and opens it in one action", async () => {
   mount();
-  fireEvent.click(screen.getByRole("button", { name: "Message River Lee" }));
+  fireEvent.click(screen.getByRole("button", { name: "Connect River Lee" }));
   await screen.findByRole("heading", { name: "Chat opened" });
   expect(state.create).toHaveBeenCalledExactlyOnceWith("viewer", "peer");
   // The request flow never composes a hidden first message: the conversation is
@@ -132,7 +132,7 @@ it("carries the report subject into an existing conversation without sending", a
 
 it("opens report-origin first contact on that report", async () => {
   mount({ ...person, contextReportId: "report-id" });
-  fireEvent.click(screen.getByRole("button", { name: "Message River Lee" }));
+  fireEvent.click(screen.getByRole("button", { name: "Connect River Lee" }));
   await screen.findByRole("heading", { name: "Chat opened" });
   expect(state.create).toHaveBeenCalledExactlyOnceWith("viewer", "peer");
   expect(screen.getByTestId("here").textContent).toBe("/chats/chat?report=report-id");
@@ -142,7 +142,7 @@ it("opens report-origin first contact on that report", async () => {
 it("says why a new request cannot start yet instead of failing silently", async () => {
   state.status = "offline"; state.projections = null;
   mount();
-  const message = screen.getByRole("button", { name: "Message River Lee" });
+  const message = screen.getByRole("button", { name: "Connect River Lee" });
   expect(message).toHaveProperty("disabled", false);
   fireEvent.click(message);
   expect(await screen.findByText("You're offline. Check your connection, then tap again.")).toBeTruthy();
@@ -163,7 +163,7 @@ it("drops a pending first-contact navigation across an account replacement", asy
   let resolve!: (id: string) => void;
   state.create.mockReturnValue(new Promise<string>(done => { resolve = done; }));
   const view = mount();
-  fireEvent.click(screen.getByRole("button", { name: "Message River Lee" }));
+  fireEvent.click(screen.getByRole("button", { name: "Connect River Lee" }));
   state.account = "replacement";
   view.rerender(<MemoryRouter><PeerIdentityActions person={person} /></MemoryRouter>);
   await act(async () => { resolve("old-chat"); });

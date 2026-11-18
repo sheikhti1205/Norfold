@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { MessageSquareText, UserCheck } from "lucide-react";
+import { MessageSquareText, UserCheck, UserPlus } from "lucide-react";
 import { useOptionalAuth } from "../auth";
 import { useMessaging } from "../services/messaging/useMessaging";
 import { refreshMessaging, requestMessagingConversation } from "../services/messaging/runtime";
@@ -59,7 +59,11 @@ function PeerChatSession({ accountId, person, className }: { accountId: string; 
   const href = projection
     ? `/chats/${encodeURIComponent(projection.conversationId)}${reportQuery}`
     : null;
-  const label = incoming ? "View request" : outgoing ? "Open chat" : "Message";
+  // Owner direction 2026-11-18: a stranger is offered the friend action by
+  // name. Sending the first message still starts a normal message request;
+  // "Connect" is the label for that one action, not a second flow.
+  const label = incoming ? "View request" : outgoing ? "Open chat" : connected ? "Message" : "Connect";
+  const Icon = projection ? MessageSquareText : UserPlus;
   const relationshipNote = connected ? null
     : outgoing ? "Request sent. You can still message."
       : incoming ? "This person asked to message you. Accept or decline in the chat."
@@ -104,7 +108,7 @@ function PeerChatSession({ accountId, person, className }: { accountId: string; 
         aria-busy={busy}
         aria-label={`${label} ${person.displayName?.trim() || person.username}`}
       >
-        <MessageSquareText size={17} aria-hidden="true" />
+        <Icon size={17} aria-hidden="true" />
         <span>{busy ? "Opening…" : label}</span>
       </button>
       {connected && (

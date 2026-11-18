@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useId, useRef, useState, type FocusEvent as ReactFocusEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Popover } from "react-aria-components";
-import { CalendarDays, MapPin, X } from "lucide-react";
+import { CalendarDays, MapPin, Users, X } from "lucide-react";
 import type { PublicProfile } from "@norfold/shared";
 import { fetchPublicProfile } from "../services/profile";
+import { connectionCountLabel, fetchConnectionCount } from "../services/connections";
 import { useFinePointer } from "./inputCapabilities";
 import { UserAvatar } from "./UserAvatar";
 import { VerifiedBadge } from "./VerifiedBadge";
@@ -120,6 +121,7 @@ function PreviewCard({ person, className, finePointer, openOnFocus, children }: 
     const cached = cachedProfile(person);
     return cached ? { status: "ready", profile: cached } : { status: "loading" };
   });
+  const [connections, setConnections] = useState<number | null>(null);
 
   const name = identityDisplayName(person);
   const nameId = useId();
@@ -232,6 +234,18 @@ function PreviewCard({ person, className, finePointer, openOnFocus, children }: 
     setState((current) => current.status === "error" ? { status: "loading" } : current);
   }, [open]);
 
+  // The friend count is a public number, read only while the card is open. A
+  // failed read omits the line instead of printing a zero it cannot prove.
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    setConnections(null);
+    void fetchConnectionCount(personId)
+      .then((count) => { if (alive) setConnections(count); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, [open, personId]);
+
   const onPointerEnter = (event: ReactPointerEvent) => {
     if (!finePointer || event.pointerType === "touch") return;
     keyboardOpened.current = false;
@@ -295,6 +309,7 @@ function PreviewCard({ person, className, finePointer, openOnFocus, children }: 
   const location = profile?.locationLabel?.trim() || "";
   const bio = profile?.bio?.trim() || "";
   const longBio = bio.length > BIO_CLAMP_CHARS;
+  const connectionsLabel = connectionCountLabel(connections);
 
   return (
     <span
@@ -370,8 +385,14 @@ function PreviewCard({ person, className, finePointer, openOnFocus, children }: 
                 <span>{formatJoinedMonth(profile.createdAt)}</span>
               </p>
             )}
+            {connectionsLabel && (
+              <p className="fb-profile-preview-fact" data-testid="profile-preview-connections">
+                <Users size={15} aria-hidden="true" />
+                <span>{connectionsLabel}</span>
+              </p>
+            )}
 
-            {bio && (
+            {bio ? (
               <div className="fb-profile-preview-bio-wrap">
                 <p id={bioId} className="fb-profile-preview-bio" data-expanded={expanded ? "true" : undefined}>{bio}</p>
                 {longBio && (
@@ -386,7 +407,11 @@ function PreviewCard({ person, className, finePointer, openOnFocus, children }: 
                   </button>
                 )}
               </div>
-            )}
+            ) : state.status === "ready" ? (
+              // Owner direction 2026-11-18: a missing bio is stated, not left
+              // as a blank gap that reads like a failed load.
+              <p className="fb-profile-preview-empty" data-testid="profile-preview-no-bio">No bio</p>
+            ) : null}
 
             <div className="fb-profile-preview-actions">
               <PeerChatButton person={person} />
