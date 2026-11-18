@@ -174,3 +174,16 @@ describe("settings foundation semantics", () => {
     expect(screen.getByRole("button", { name: "Reset" }).tagName).toBe("BUTTON");
   });
 });
+
+describe("theme card preview", () => {
+  it("applies the native color scheme to each preview half", () => {
+    render(<ThemeCard name="theme" value="system" checked={false} onChange={() => {}} />);
+    const halves = [...document.querySelectorAll<HTMLElement>(".fb-theme-window-half")];
+    expect(halves).toHaveLength(2);
+    for (const half of halves) {
+      const style = half.getAttribute("style") ?? "";
+      expect(style).toContain("color-scheme:");
+      expect(style).toContain("--fb-surface:");
+    }
+  });
+});
