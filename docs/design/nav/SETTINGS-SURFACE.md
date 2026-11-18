@@ -123,7 +123,7 @@ one short sentence ending in a full stop. Never both in one row.
 
 | Page | Content | Data status |
 | --- | --- | --- |
-| Updates and version history | current version, build, dated list of changes | version read from `package.json` (0.16.0-beta.1), not hardcoded |
+| Updates and version history | current version, build, dated list of changes | version read from `package.json` (0.16.0-beta.2), not hardcoded |
 | Recovered items | returned count, rating, standing, link to the Recovered surface | product data missing |
 | Account and verification | email, phone, password, Google sign-in state | synthetic only |
 | Devices | this device, other sessions, sign out other sessions | needs session data |
