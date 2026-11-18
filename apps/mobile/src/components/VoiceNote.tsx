@@ -69,7 +69,7 @@ export function VoiceRecordingPanel({ phase, peaks, elapsedMs, percent, playing,
         : <button type="button" className="fb-voice-panel-resume" aria-label="Pause recording" onClick={onPause}
           disabled={phase === "pausing"}><Pause size={24} aria-hidden="true" /></button>}
       <button type="button" className="fb-voice-panel-send" aria-label={sending ? "Sending voice message" : "Send voice message"}
-        onClick={onSend} disabled={!review || !allowed || sending}>
+        onClick={onSend} disabled={phase === "pausing" || !allowed || sending}>
         {sending ? <LoaderCircle className="fb-voice-sending" size={25} aria-hidden="true" /> : <SendHorizontal size={25} fill="currentColor" aria-hidden="true" />}
       </button>
     </div>

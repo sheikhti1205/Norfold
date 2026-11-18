@@ -22,6 +22,8 @@ export interface KlipyPickerProps {
   initialTab?: KlipyKind;
   /** Prefix for the test ids this panel renders, e.g. `comment-gif`. */
   testIdPrefix?: string;
+  /** The unified expression picker owns the tab row; hide this one's. */
+  showTabs?: boolean;
   onPick: (item: KlipyItem) => void;
   onClose: () => void;
   /** Close when Escape is pressed and hand focus back to the caller. */
@@ -54,7 +56,7 @@ function tileAspect(item: KlipyItem): string {
  * attribution line and one set of test ids (`testIdPrefix`).
  */
 export function KlipyPicker({
-  userId = null, initialTab = "gifs", testIdPrefix = "klipy", onPick, onClose, onDismiss,
+  userId = null, initialTab = "gifs", testIdPrefix = "klipy", showTabs = true, onPick, onClose, onDismiss,
 }: KlipyPickerProps) {
   const [tab, setTab] = useState<KlipyKind>(initialTab);
   const [query, setQuery] = useState("");
@@ -87,7 +89,12 @@ export function KlipyPicker({
     current().search(query, tab);
   }, [enabled, tab, query]);
 
+  // Standalone, this panel owns Escape and outside presses. Embedded in the
+  // unified expression picker it must not: the tab row and the close button
+  // live outside this component, and its own listener would treat a tab press
+  // as a dismiss and close the whole picker (owner direction 2026-11-18).
   useEffect(() => {
+    if (!showTabs) return;
     const onPointerDown = (event: PointerEvent) => {
       if (root.current && !root.current.contains(event.target as Node)) onClose();
     };
@@ -102,7 +109,7 @@ export function KlipyPicker({
       window.removeEventListener("pointerdown", onPointerDown, true);
       window.removeEventListener("keydown", onKeyDown, true);
     };
-  }, [onClose, onDismiss]);
+  }, [onClose, onDismiss, showTabs]);
 
   useEffect(() => { searchRef.current?.focus(); }, []);
 
@@ -111,7 +118,7 @@ export function KlipyPicker({
     // provider key. It opens a real panel that says so; it never renders fake
     // tiles or a search field that cannot search.
     return (
-      <div ref={root} className="fb-klipy-picker" data-testid={testId("panel")} role="dialog" aria-label="GIF and sticker picker">
+      <div ref={root} className="fb-klipy-picker" data-testid={testId("panel")} role={showTabs ? "dialog" : "group"} aria-label="GIF and sticker picker">
         <div className="fb-klipy-search-row fb-klipy-search-row-plain">
           <p className="fb-klipy-unavailable-title">GIFs and stickers</p>
           <button type="button" className="fb-klipy-clear min-h-[44px]" aria-label="Close"
@@ -133,7 +140,7 @@ export function KlipyPicker({
   const items = state.items;
 
   return (
-    <div ref={root} className="fb-klipy-picker" data-testid={testId("panel")} role="dialog" aria-label="GIF and sticker picker">
+    <div ref={root} className="fb-klipy-picker" data-testid={testId("panel")} role={showTabs ? "dialog" : "group"} aria-label="GIF and sticker picker">
       <div className="fb-klipy-search-row">
         <div className="fb-klipy-search-wrap">
           <Search size={16} aria-hidden="true" />
@@ -157,22 +164,24 @@ export function KlipyPicker({
         </div>
       </div>
 
-      <div role="tablist" aria-label="GIF or stickers" className="fb-klipy-tabs">
-        {(["gifs", "stickers"] as const).map((value) => (
-          <button
-            key={value}
-            type="button"
-            role="tab"
-            aria-selected={tab === value}
-            data-testid={testId(`tab-${value}`)}
-            onClick={() => setTab(value)}
-            className="fb-klipy-tab min-h-[44px]"
-          >
-            {value === "gifs" ? <Film size={14} aria-hidden="true" /> : <Sticker size={14} aria-hidden="true" />}
-            {value === "gifs" ? "GIFs" : "Stickers"}
-          </button>
-        ))}
-      </div>
+      {showTabs && (
+        <div role="tablist" aria-label="GIF or stickers" className="fb-klipy-tabs">
+          {(["gifs", "stickers"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={tab === value}
+              data-testid={testId(`tab-${value}`)}
+              onClick={() => setTab(value)}
+              className="fb-klipy-tab min-h-[44px]"
+            >
+              {value === "gifs" ? <Film size={14} aria-hidden="true" /> : <Sticker size={14} aria-hidden="true" />}
+              {value === "gifs" ? "GIFs" : "Stickers"}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="fb-klipy-body">
         {state.status === "error" ? (

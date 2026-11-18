@@ -163,6 +163,26 @@ export function createVoiceRecorder(deps: VoiceRecordingDeps) {
     ticker = deps.setTimeout(tick, PEAK_INTERVAL_MS);
   };
 
+  /** Flush the final trailer before send; keep review intact for retry. */
+  const finalizeNow = (): Promise<VoiceRecording | null> => {
+    if (state.status !== "review") return Promise.resolve(null);
+    if (!recorder) return Promise.resolve(state.recording);
+    return new Promise(resolve => {
+      settleFinalization = resolve;
+      try { recorder?.stop(); } catch { fail(VOICE_RECORD_FAILED); }
+    });
+  };
+
+  /** The next settled take after a stop: review, idle (too short) or error. */
+  const settleAfterStop = (): Promise<VoiceRecorderState> => new Promise((resolve) => {
+    const listener: Listener = (next) => {
+      if (next.status !== "review" && next.status !== "idle" && next.status !== "error") return;
+      listeners.delete(listener);
+      resolve(next);
+    };
+    listeners.add(listener);
+  });
+
   return {
     get state(): VoiceRecorderState {
       return state;
@@ -276,12 +296,27 @@ export function createVoiceRecorder(deps: VoiceRecordingDeps) {
     },
     /** Flush the final trailer before send; keep review intact for retry. */
     finalize(): Promise<VoiceRecording | null> {
-      if (state.status !== "review") return Promise.resolve(null);
-      if (!recorder) return Promise.resolve(state.recording);
-      return new Promise(resolve => {
-        settleFinalization = resolve;
-        try { recorder?.stop(); } catch { fail(VOICE_RECORD_FAILED); }
-      });
+      return finalizeNow();
+    },
+    /**
+     * Send while the microphone is still open (owner direction 2026-11-18):
+     * stop the live take, wait for its container to settle, then flush the
+     * trailer exactly like a review send. One press sends what was recorded so
+     * far instead of making the reader stop first. Null when the take was too
+     * short, failed, or there was nothing to stop.
+     */
+    async stopAndFinalize(): Promise<VoiceRecording | null> {
+      const current = snapshot();
+      if (current.status === "review") return finalizeNow();
+      if (current.status !== "recording" && current.status !== "pausing") return null;
+      const settled = settleAfterStop();
+      if (current.status === "recording") {
+        stopTimers();
+        try { recorder?.stop(); } catch { fail(VOICE_RECORD_FAILED); return null; }
+      }
+      const next = await settled;
+      if (next.status !== "review") return null;
+      return finalizeNow();
     },
     /** Throws the note away: nothing is uploaded and the microphone closes. */
     discard(): void {

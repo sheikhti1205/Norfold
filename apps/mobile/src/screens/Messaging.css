@@ -142,6 +142,13 @@
 .fb-chat-message-emoji { padding:0 .1rem; background:transparent; border-radius:0; }
 .fb-chat-message-emoji.fb-chat-message-own { background:transparent; }
 .fb-chat-message-emoji.fb-chat-flash-a, .fb-chat-message-emoji.fb-chat-flash-b { border-radius:.85rem; }
+/* A GIF or sticker is the message: the same rule as a bare emoji, so the
+   content is not wrapped in a second surface. The receipt line keeps the
+   reader's own text colour, because the bubble no longer supplies it. */
+.fb-chat-message-klipy { padding:0 .1rem; background:transparent; border-radius:0; }
+.fb-chat-message-klipy.fb-chat-message-own { background:transparent; color:var(--fb-on-surface); }
+.fb-chat-message-klipy .fb-chat-message-status { color:var(--fb-on-surface-variant); }
+.fb-chat-message-klipy.fb-chat-flash-a, .fb-chat-message-klipy.fb-chat-flash-b { border-radius:.85rem; }
 .fb-chat-message p { white-space:pre-wrap; margin:0; line-height:1.45; font-size:.95rem; }
 .fb-chat-message-status { display:block; font-size:.75rem; text-align:end; margin-top:.25rem;
   color:var(--fb-on-surface-variant); }

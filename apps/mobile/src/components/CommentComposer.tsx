@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, FileText, ImagePlus, Plus, Sticker, X } from "lucide-react";
+import { Camera, FileText, ImagePlus, Plus, X } from "lucide-react";
 import { ActionMenu, type MenuAction } from "./ActionMenu";
 import { ComposerShell } from "./ComposerShell";
 import { CommentReportPicker } from "./CommentReportPicker";
-import { EmojiPickerButton } from "./EmojiPickerButton";
+import { ExpressionPickerButton } from "./ExpressionPickerButton";
 import { insertEmoji } from "./EmojiPicker";
-import { KlipyPicker } from "./KlipyPicker";
 import { CameraCapture } from "./CameraCapture";
 import { UserAvatar } from "./UserAvatar";
 import { MentionAutocomplete, type MentionCandidate } from "./MentionAutocomplete";
@@ -22,7 +21,7 @@ import {
   validateAttachableFile,
   type CommentAttachment,
 } from "../services/commentAttachments";
-import { klipyCustomerId, trackKlipyShare, type KlipyItem, type KlipyKind } from "../services/klipy";
+import { klipyCustomerId, trackKlipyShare, type KlipyItem } from "../services/klipy";
 import {
   appendBodyMedia,
   bodyHasInlineData,
@@ -40,9 +39,9 @@ import { interactionRefusalCopy } from "../utils/interactionRefusal";
  * - `@` mentions through the shared `MentionAutocomplete` (ranked
  *   participants > owner > server fallback, keyboard nav, caret insertion),
  *   anchored to the composer, keyboard/touch safe.
- * - Emoji through the shared `EmojiPicker` inside `EmojiPickerButton` (owner
- *   order 2026-11-12, R5), inserted at the caret. The panel is the same one
- *   the conversation and assistant composers mount.
+ * - Emoji through the shared `EmojiPicker` inside `ExpressionPickerButton`
+ *   (owner order 2026-11-12, R5), inserted at the caret. The panel is the same
+ *   one the conversation composer mounts.
  * - Photo attach only (packet `08` §7): new video intake is stopped at the
  *   picker's accept list and the client gate, while every stored video row
  *   keeps rendering. On Android photos come through the canonical native
@@ -52,13 +51,12 @@ import { interactionRefusalCopy } from "../utils/interactionRefusal";
  *   own folder (same RLS path as report photos) with progress / retry /
  *   remove and the shared `COMMENT_ATTACH_MAX` cap. The comment body carries
  *   only `https://` remote URLs — never base64.
- * - GIF/Sticker through the shared `KlipyPicker` on its own visible
- *   "Stickers and GIFs" control (never buried in the attachment menu) behind
- *   the `VITE_KLIPY_API_KEY` config flag: stable customer_id, high content filter,
- *   "Search KLIPY" placeholder, provider URLs/data preserved and loaded
- *   directly, share-tracking only after the comment posts, "Powered by
- *   KLIPY" attribution. The control is hidden entirely when the key is
- *   absent.
+ * - GIF/Sticker on the same unified picker, as its own tab (owner direction
+ *   2026-11-18) behind the `VITE_KLIPY_API_KEY` config flag: stable
+ *   customer_id, high content filter, "Search KLIPY" placeholder, provider
+ *   URLs/data preserved and loaded directly, share-tracking only after the
+ *   comment posts, "Powered by KLIPY" attribution. The tab states honestly
+ *   when the deployment has no provider key; it never shows invented tiles.
  */
 
 /**
@@ -202,8 +200,6 @@ export function CommentComposer({
   const [sending, setSending] = useState(false);
   const [preparingPhotos, setPreparingPhotos] = useState(false);
   const photoIntakeRef = useRef(false);
-  const [gifOpen, setGifOpen] = useState(false);
-  const [gifTab, setGifTab] = useState<KlipyKind>("gifs");
   const [cameraOpen, setCameraOpen] = useState(false);
   const [attachNotice, setAttachNotice] = useState<string | null>(null);
   const fieldRef = useRef<HTMLTextAreaElement | null>(null);
@@ -404,7 +400,6 @@ export function CommentComposer({
     }
     setAttachNotice(null);
     setReportOpen(false);
-    setGifOpen(false);
     photoIntakeRef.current = true;
     setPreparingPhotos(true);
     try {
@@ -440,7 +435,6 @@ export function CommentComposer({
     photoIntakeRef.current = true;
     setPreparingPhotos(true);
     setReportOpen(false);
-    setGifOpen(false);
     try {
       if (await isNativeCommentPhotoIntakeAvailable()) {
         await pickNativePhotos();
@@ -490,7 +484,6 @@ export function CommentComposer({
       title: item.title,
     });
     setAttachments((prev) => [...prev, entry]);
-    setGifOpen(false);
     fieldRef.current?.focus();
   }
 
@@ -587,7 +580,7 @@ export function CommentComposer({
     { id: "photo", label: "Photo", icon: <ImagePlus size={18} aria-hidden />, onAction: () => void handleAttachClick() },
     ...(COMMENT_REPORTS_ENABLED ? [{ id: "report", label: "Report", icon: <FileText size={18} aria-hidden />,
       disabled: attachments.length >= COMMENT_ATTACH_MAX,
-      onAction: () => { setReportOpen(true); setGifOpen(false); } }] : []),
+      onAction: () => { setReportOpen(true); } }] : []),
   ];
 
   return (
@@ -646,12 +639,14 @@ export function CommentComposer({
           actions={<div ref={attachmentActionsRef} className="flex items-center">
             <ActionMenu label="Add attachment" icon={<Plus size={20} aria-hidden />}
               disabled={disabled || sending || preparingPhotos} items={attachmentActions} />
-            <button type="button" aria-label="Stickers and GIFs"
-              className="fb-icon-control" disabled={disabled || sending || preparingPhotos || attachments.length >= COMMENT_ATTACH_MAX}
-              onClick={() => { setGifTab("gifs"); setGifOpen(true); setReportOpen(false); }}>
-              <Sticker size={20} aria-hidden="true" />
-            </button>
-            <EmojiPickerButton onPick={handleEmojiPick} disabled={disabled || sending} />
+            <ExpressionPickerButton
+              onPickEmoji={handleEmojiPick}
+              onPickKlipy={pickGif}
+              userId={currentUser?.id}
+              disabled={disabled || sending || preparingPhotos}
+              onOpen={() => { setReportOpen(false); }}
+              testIdPrefix="comment-gif"
+            />
           </div>}
           attachments={attachments.length > 0 && (
           <div
@@ -764,19 +759,6 @@ export function CommentComposer({
             })}
           </div>
         )} />
-
-        {gifOpen && (
-          <div className="fb-picker-layer">
-            <KlipyPicker
-              userId={currentUser?.id}
-              initialTab={gifTab}
-              testIdPrefix="comment-gif"
-              onPick={pickGif}
-              onClose={() => setGifOpen(false)}
-              onDismiss={() => { setGifOpen(false); attachmentActionsRef.current?.querySelector("button")?.focus(); }}
-            />
-          </div>
-        )}
       </div>
       <CameraCapture open={cameraOpen} onClose={() => setCameraOpen(false)}
         onCapture={(file) => addFiles([file])}

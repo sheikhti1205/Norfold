@@ -1,20 +1,20 @@
 // @vitest-environment jsdom
 import { useState } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createRef } from "react";
 import { afterEach, expect, it, vi } from "vitest";
-import { PeerChatComposer } from "./PeerChatComposer";
+import { PeerChatComposer, type ChatFileKind } from "./PeerChatComposer";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllEnvs(); });
 
-/** Controlled wrapper: the composer's restore rule is a pure function of the
- * draft, so the test must actually clear it the way the screen does. */
-function Harness({ connected = true, voiceAvailable = false, onVoice, onPickKlipy, onFiles }: {
+/** Controlled wrapper: the composer always owns only a draft and callbacks. */
+function Harness({ connected = true, voiceAvailable = false, onVoice, onPickKlipy, onFiles, onLocation }: {
   connected?: boolean;
   voiceAvailable?: boolean;
   onVoice?: () => void;
   onPickKlipy?: (item: { mediaUrl: string }) => void;
-  onFiles?: (files: File[]) => void;
+  onFiles?: (files: File[], kind: ChatFileKind) => void;
+  onLocation?: () => void;
 }) {
   const [value, setValue] = useState("Keep draft");
   return <PeerChatComposer value={value} onChange={setValue} onSend={() => setValue("")}
@@ -22,138 +22,112 @@ function Harness({ connected = true, voiceAvailable = false, onVoice, onPickKlip
     photoAllowed={connected} onCamera={() => undefined} onPhotos={() => undefined}
     voiceAvailable={voiceAvailable} onVoice={onVoice}
     {...(onFiles ? { onFiles } : {})}
+    {...(onLocation ? { onLocation } : {})}
     {...(onPickKlipy ? { onPickKlipy: onPickKlipy as never } : {})} />;
 }
 
-it("shows exactly camera and photos on the left while voice is unavailable", () => {
+function openAttachments() {
+  fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
+  return screen.getByRole("menu", { name: "Add attachment" });
+}
+
+it("keeps four targets in one row: attachment, field, expressions and send", () => {
   render(<Harness />);
-  const camera = screen.getByRole("button", { name: "Take photo" });
-  const photos = screen.getByRole("button", { name: "Choose photo" });
+  const attach = screen.getByRole("button", { name: "Add attachment" });
   const field = screen.getByRole("textbox", { name: "Message" });
+  const expressions = screen.getByRole("button", { name: "Emoji, GIFs and stickers" });
   const send = screen.getByRole("button", { name: "Send message" });
-  for (const control of [camera, photos]) {
-    expect(control.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(attach.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(field.compareDocumentPosition(expressions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(expressions.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // The old cluster of camera/photos/more/sticker/emoji controls is gone.
+  expect(screen.queryByRole("button", { name: "Take photo" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Choose photo" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Stickers and GIFs" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Show attachments" })).toBeNull();
+});
+
+it("opens every real capability from the one attachment sheet", () => {
+  const onFiles = vi.fn();
+  const onLocation = vi.fn();
+  render(<Harness onFiles={onFiles} onLocation={onLocation} />);
+  const menu = openAttachments();
+  for (const name of ["Photos", "Camera", "Video", "Document", "Audio", "Location"]) {
+    expect(within(menu).getByRole("menuitem", { name })).toBeTruthy();
   }
-  expect(field.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "Voice message" })).toBeNull();
-  // Owner order 2026-11-12 (R5): emoji is reachable while composing; there is
-  // still no general "attach" or "add to message" plus-menu.
-  expect(screen.getByRole("button", { name: "Emoji" })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: /add to message/i })).toBeNull();
-});
-
-// Owner rule 2026-11-08: reaching the field is not a reason to hide the
-// attachments. Only text in the field does that; `>` brings them back.
-it("keeps the attachments on focus, collapses them once text exists, and reopens on request", async () => {
-  render(<Harness />);
-  const field = screen.getByRole("textbox", { name: "Message" });
-  const attachments = () => document.querySelector(".fb-peer-attachments")?.getAttribute("data-reveal");
-  fireEvent.focus(field);
-  // Focus never hides the cluster; it stays on the width default.
-  expect(attachments()).toBe("auto");
-  expect(screen.getByRole("button", { name: "Take photo" })).toBeTruthy();
-  fireEvent.change(field, { target: { value: "and more" } });
-  const reveal = await screen.findByRole("button", { name: "Show attachments" });
-  await waitFor(() => expect(screen.queryByRole("button", { name: "Take photo" })).toBeNull());
-  expect(attachments()).toBe("off");
-  fireEvent.click(reveal);
-  await waitFor(() => expect(screen.getByRole("button", { name: "Take photo" })).toBeTruthy());
-  expect(attachments()).toBe("on");
-});
-
-it("collapses again when typing and restores after the draft is cleared or sent", async () => {
-  render(<Harness />);
-  const field = screen.getByRole("textbox", { name: "Message" });
-  fireEvent.change(field, { target: { value: "and more" } });
-  await screen.findByRole("button", { name: "Show attachments" });
-  fireEvent.change(field, { target: { value: "" } });
-  await waitFor(() => expect(screen.getByRole("button", { name: "Take photo" })).toBeTruthy());
-  fireEvent.change(field, { target: { value: "Hello" } });
-  await screen.findByRole("button", { name: "Show attachments" });
-  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Take photo" })).toBeTruthy());
+  fireEvent.click(within(menu).getByRole("menuitem", { name: "Location" }));
+  expect(onLocation).toHaveBeenCalledOnce();
 });
 
 it("offers voice only when a real recording path is present", () => {
-  const unavailable = vi.fn();
-  const first = render(<Harness voiceAvailable={false} onVoice={unavailable} />);
-  expect(screen.queryByRole("button", { name: "Voice message" })).toBeNull();
+  const first = render(<Harness voiceAvailable={false} onVoice={() => undefined} />);
+  expect(within(openAttachments()).queryByRole("menuitem", { name: "Voice message" })).toBeNull();
   first.unmount();
   const onVoice = vi.fn();
   render(<Harness voiceAvailable onVoice={onVoice} />);
-  fireEvent.click(screen.getByRole("button", { name: "More attachments" }));
-  fireEvent.click(screen.getByRole("menuitem", { name: "Voice message" }));
-  expect(onVoice).toHaveBeenCalledTimes(1);
-  expect(unavailable).not.toHaveBeenCalled();
+  fireEvent.click(within(openAttachments()).getByRole("menuitem", { name: "Voice message" }));
+  expect(onVoice).toHaveBeenCalledOnce();
 });
 
-it("withdraws camera and photos from a request", () => {
-  render(<Harness connected={false} />);
-  expect((screen.getByRole("button", { name: "Take photo" }) as HTMLButtonElement).disabled).toBe(true);
-  expect((screen.getByRole("button", { name: "Choose photo" }) as HTMLButtonElement).disabled).toBe(true);
+it("withdraws camera and photos from a request without hiding the sheet", () => {
+  render(<Harness connected={false} onFiles={() => undefined} />);
+  const menu = openAttachments();
+  expect((within(menu).getByRole("menuitem", { name: "Photos" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((within(menu).getByRole("menuitem", { name: "Camera" }) as HTMLButtonElement).disabled).toBe(true);
+  // File types are still reachable: a request can carry a document.
+  expect((within(menu).getByRole("menuitem", { name: "Document" }) as HTMLButtonElement).disabled).toBe(false);
 });
 
-it("inserts a picked emoji at the caret (owner order 2026-11-12, R5)", () => {
+it("opens a picker narrowed to each file type and forwards the kind", () => {
+  const onFiles = vi.fn();
+  render(<Harness onFiles={onFiles} />);
+  const cases: Array<[string, ChatFileKind, string]> = [
+    ["Document", "document", "application/pdf"],
+    ["Audio", "audio", "audio/*"],
+    ["Video", "video", "video/*"],
+  ];
+  for (const [label, kind, accept] of cases) {
+    fireEvent.click(within(openAttachments()).getByRole("menuitem", { name: label }));
+    const picker = screen.getByLabelText(`Choose ${kind}`) as HTMLInputElement;
+    if (kind === "document") expect(picker.getAttribute("accept")).toContain(accept);
+    else expect(picker.getAttribute("accept")).toBe(accept);
+    expect(picker.multiple).toBe(true);
+    const picked = [new File(["a"], `one.${kind}`, { type: accept })];
+    fireEvent.change(picker, { target: { files: picked } });
+    expect(onFiles).toHaveBeenCalledTimes(1);
+    expect(onFiles.mock.calls.at(-1)?.[1]).toBe(kind);
+    expect(picker.value).toBe("");
+  }
+});
+
+it("inserts a picked emoji at the caret through the unified picker", () => {
+  vi.stubEnv("VITE_KLIPY_API_KEY", "");
   render(<Harness />);
   const field = screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement;
   fireEvent.change(field, { target: { value: "Hi there" } });
   field.setSelectionRange(2, 2);
-  fireEvent.click(screen.getByRole("button", { name: "Emoji" }));
+  fireEvent.click(screen.getByRole("button", { name: "Emoji, GIFs and stickers" }));
+  expect(screen.getByRole("tab", { name: "Emoji" }).getAttribute("aria-selected")).toBe("true");
   fireEvent.click(screen.getByRole("button", { name: "party popper" }));
   expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe("Hi🎉 there");
 });
 
-it("always offers the shared sticker/GIF control and explains an unconfigured provider", () => {
+it("remembers a used emoji on this device and offers it as a recent", () => {
+  localStorage.clear();
+  render(<Harness />);
+  fireEvent.click(screen.getByRole("button", { name: "Emoji, GIFs and stickers" }));
+  fireEvent.click(screen.getByRole("button", { name: "party popper" }));
+  fireEvent.click(screen.getByRole("button", { name: "Close picker" }));
+  fireEvent.click(screen.getByRole("button", { name: "Emoji, GIFs and stickers" }));
+  expect(screen.getByRole("button", { name: "Recent 🎉" })).toBeTruthy();
+});
+
+it("keeps GIFs and stickers honest when the provider is not configured", () => {
   vi.stubEnv("VITE_KLIPY_API_KEY", "");
   render(<Harness onPickKlipy={() => undefined} />);
-  const control = screen.getByRole("button", { name: "Stickers and GIFs" });
-  fireEvent.click(control);
-  expect(screen.getByTestId("chat-klipy-panel")).toBeTruthy();
-  expect(screen.getByTestId("chat-klipy-unavailable")).toBeTruthy();
-  expect(screen.queryByTestId("chat-klipy-search")).toBeNull();
-  vi.unstubAllEnvs();
-});
-
-// The width decision itself is a container query in `peerComposer.css` (it
-// cannot race layout, which a measured state could). What is testable here is
-// the state it reads: the cluster and `>` coexist on "auto", so either can be
-// displayed without the other being unmounted on a guess.
-it("renders both attachment states while the width decides which one shows", () => {
-  render(<Harness />);
-  const attachments = document.querySelector(".fb-peer-attachments");
-  expect(attachments?.getAttribute("data-reveal")).toBe("auto");
-  expect(screen.getByRole("button", { name: "Take photo" })).toBeTruthy();
-  expect(screen.getByRole("button", { name: "Show attachments" })).toBeTruthy();
-});
-
-it("a deliberate reveal outranks the width and survives leaving the field", () => {
-  render(<Harness />);
-  const field = screen.getByRole("textbox", { name: "Message" });
-  fireEvent.change(field, { target: { value: "Hello" } });
-  fireEvent.click(screen.getByRole("button", { name: "Show attachments" }));
-  expect(document.querySelector(".fb-peer-attachments")?.getAttribute("data-reveal")).toBe("on");
-  fireEvent.blur(field);
-  // Blur returns to the width default, not to a hidden cluster.
-  expect(document.querySelector(".fb-peer-attachments")?.getAttribute("data-reveal")).toBe("auto");
-  expect(screen.getByRole("button", { name: "Take photo" })).toBeTruthy();
-});
-
-it("sends any file type, not only images", () => {
-  const onFiles = vi.fn();
-  render(<Harness onFiles={onFiles} />);
-  const picker = screen.getByLabelText("Choose files") as HTMLInputElement;
-  // No accept filter: the picker must offer documents, video, audio, archives.
-  expect(picker.getAttribute("accept")).toBeNull();
-  expect(picker.multiple).toBe(true);
-  const picked = [
-    new File(["a"], "brief.pdf", { type: "application/pdf" }),
-    new File(["b"], "clip.mp4", { type: "video/mp4" }),
-    new File(["c"], "song.mp3", { type: "audio/mpeg" }),
-    new File(["d"], "layers.psd", { type: "" }),
-  ];
-  fireEvent.change(picker, { target: { files: picked } });
-  expect(onFiles).toHaveBeenCalledTimes(1);
-  expect(onFiles.mock.calls[0]?.[0]).toHaveLength(4);
-  // The input is cleared so the same file can be picked again.
-  expect(picker.value).toBe("");
+  fireEvent.click(screen.getByRole("button", { name: "Emoji, GIFs and stickers" }));
+  fireEvent.click(screen.getByRole("tab", { name: "GIFs" }));
+  expect(screen.getByTestId("chat-expression-unavailable")).toBeTruthy();
+  expect(screen.getByTestId("chat-expression-unavailable").textContent).toMatch(/aren't available/i);
+  expect(screen.queryByTestId("chat-expression-search")).toBeNull();
 });

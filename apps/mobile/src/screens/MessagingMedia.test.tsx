@@ -90,10 +90,8 @@ it("replaces the composer with recording/review, resumes, and sends only the fin
   m.voice.mockReset().mockResolvedValue("voice-saved");
   await open();
   fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Keep my text draft" } });
-  // Attachments are collapsed while typing: reveal them through the real composer.
-  fireEvent.click(screen.getByRole("button", { name: "Show attachments" }));
-  fireEvent.click(screen.getByRole("button", { name: "More attachments" }));
-  fireEvent.click(screen.getByRole("menuitem", { name: "Voice message" }));
+  // Attachments now live under one control: `+` opens the real capabilities.
+  chooseAttachment("Voice message");
   await screen.findByRole("button", { name: "Pause recording" });
   expect(screen.queryByRole("textbox", { name: "Message" })).toBeNull();
   now += 3_000;
@@ -172,6 +170,12 @@ async function open() {
   const rendered = render(thread());
   await waitFor(() => expect(screen.queryByText("Opening messages…")).toBeNull());
   return rendered;
+}
+
+/** The composer's one attachment control opens every real capability. */
+function chooseAttachment(name: string) {
+  fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
+  fireEvent.click(within(screen.getByRole("menu", { name: "Add attachment" })).getByRole("menuitem", { name }));
 }
 
 it("shows a pending outgoing message immediately and offers retry on admission failure", async () => {
@@ -716,12 +720,17 @@ it("sends desktop Enter once but preserves Shift+Enter and IME composition", asy
 });
 it("offers an accessible photo picker in a connected conversation", async () => {
   await open();
-  expect((screen.getByRole("button", { name: "Choose photo" }) as HTMLButtonElement).disabled).toBe(false);
-  expect((screen.getByRole("button", { name: "Take photo" }) as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
+  const menu = screen.getByRole("menu", { name: "Add attachment" });
+  expect((within(menu).getByRole("menuitem", { name: "Photos" }) as HTMLButtonElement).disabled).toBe(false);
+  expect((within(menu).getByRole("menuitem", { name: "Camera" }) as HTMLButtonElement).disabled).toBe(false);
 });
 it("does not offer an active photo picker in a request", async () => {
   m.view.mode = "REQUEST"; await open();
-  expect((screen.getByRole("button", { name: "Choose photo" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
+  const menu = screen.getByRole("menu", { name: "Add attachment" });
+  expect((within(menu).getByRole("menuitem", { name: "Photos" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((within(menu).getByRole("menuitem", { name: "Camera" }) as HTMLButtonElement).disabled).toBe(true);
 });
 it("prepares a selected web photo and allows removing the draft", async () => {
   m.prepare.mockResolvedValue({ bytes: new Uint8Array([1]).buffer, sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 1, height: 1 });
@@ -911,7 +920,9 @@ it("does not allow replacing or silently discarding an uncertain admission", asy
   await waitFor(() => expect(screen.getByText("1 photo ready. Tap one to review.")).toBeTruthy());
   fireEvent.click(screen.getByRole("button", { name: "Send message" }));
   await waitFor(() => expect(m.send).toHaveBeenCalledTimes(1));
-  expect((screen.getByRole("button", { name: "Choose photo" }) as HTMLButtonElement).disabled).toBe(true);
+  // An uncertain admission owns the attachment controls: neither the sheet nor
+  // the staged photo can be used to replace or discard it.
+  expect((screen.getByRole("button", { name: "Add attachment" }) as HTMLButtonElement).disabled).toBe(true);
   expect((screen.getByRole("button", { name: /remove photo/i }) as HTMLButtonElement).disabled).toBe(true);
 });
 it("does not show a deleted photo caption, image or send status", async () => {
@@ -1056,7 +1067,7 @@ it("uses the canonical Android URI import before preparing a selected photo", as
   const imported = { uri: "synthetic-import" }, source = new File(["x"], "photo.jpg");
   m.choose.mockResolvedValue(["content://synthetic-photo"]); m.import.mockResolvedValue(imported); m.file.mockReturnValue(source);
   m.prepare.mockResolvedValue({ bytes: new ArrayBuffer(1), sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
-  await open(); fireEvent.click(screen.getByRole("button", { name: "Choose photo" }));
+  await open(); chooseAttachment("Photos");
   await screen.findByRole("button", { name: /^Review photo 1 of 1$/ });
   expect(m.choose).toHaveBeenCalledWith({ source: "photos", limit: 10 });
   // No abort signal: a projection refresh on resume used to cancel the very
@@ -1073,7 +1084,7 @@ it("stages a bulk pick, reviews it in the shared viewer, and sends one message p
   m.prepare.mockImplementation(async (source: File) => ({
     bytes: new ArrayBuffer(1), sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 2, height: 1, name: source.name }));
   await open();
-  fireEvent.click(screen.getByRole("button", { name: "Choose photo" }));
+  chooseAttachment("Photos");
   await screen.findByRole("button", { name: "Review photo 3 of 3" });
   // The picker is asked for a real bulk selection, and the tray keeps order.
   expect(m.choose).toHaveBeenCalledWith({ source: "photos", limit: 10 });
@@ -1094,7 +1105,7 @@ it("survives a projection refresh while the native picker is open", async () => 
   m.choose.mockReturnValue(new Promise((done) => { grant = done; }));
   m.import.mockResolvedValue(imported); m.file.mockReturnValue(source);
   m.prepare.mockResolvedValue({ bytes: new ArrayBuffer(1), sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
-  await open(); fireEvent.click(screen.getByRole("button", { name: "Choose photo" }));
+  await open(); chooseAttachment("Photos");
   // The app backgrounds while the picker is up, and the projection refresh
   // that runs on resume drops the cached view. The selection must survive it.
   await act(async () => { m.view = { ...m.view, mode: "REQUEST" }; });
