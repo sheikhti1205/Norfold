@@ -11,7 +11,7 @@ const { fetchPublicProfileMock, fetchFeedMock, authState, submitReport, fetchRep
   submitReport: vi.fn(),
   fetchReputationTierMock: vi.fn().mockResolvedValue("NORMAL"),
 }));
-vi.mock("../auth", () => ({ useAuth: () => ({ user: authState.user }) }));
+vi.mock("../auth", () => ({ useAuth: () => ({ user: authState.user }), useOptionalAuth: () => ({ user: authState.user }) }));
 vi.mock("../services/moderation", async (original) => ({
   ...await original<typeof import("../services/moderation")>(), submitReport,
 }));

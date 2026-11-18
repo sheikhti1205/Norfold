@@ -10,7 +10,7 @@ vi.mock("../services/profile", async (original) => ({
   ...await original<typeof import("../services/profile")>(), fetchPublicProfile: api.profile,
 }));
 vi.mock("../services/posts", () => ({ fetchFeed: api.feed }));
-vi.mock("../auth", () => ({ useAuth: () => ({ user: useContext(Viewer) }) }));
+vi.mock("../auth", () => ({ useAuth: () => ({ user: useContext(Viewer) }), useOptionalAuth: () => ({ user: useContext(Viewer) }) }));
 const Viewer = createContext<{ id: string } | null>({ id: "viewer-a" });
 import { PublicProfile } from "./PublicProfile";
 

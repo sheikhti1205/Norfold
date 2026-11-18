@@ -22,8 +22,17 @@ import type { PublicIdentity } from "./identity";
  * ready the button asks the runtime to open instead of guessing a state.
  */
 export function PeerChatButton({ person, className = "" }: { person: PublicIdentity; className?: string }) {
+  // The card that hosts this button can be opened outside the signed-in shell
+  // (a public profile page, a test harness). The optional session decides
+  // whether there is an action at all; everything below needs a real session,
+  // so it mounts only for a signed-in viewer.
   const auth = useOptionalAuth();
   const user = auth?.user ?? null;
+  if (!user || user.id === person.id) return null;
+  return <PeerChatSession key={JSON.stringify([user.id, person.id, person.contextReportId])} accountId={user.id} person={person} className={className} />;
+}
+
+function PeerChatSession({ accountId, person, className }: { accountId: string; person: PublicIdentity; className: string }) {
   const chat = useMessaging();
   const navigate = useNavigate();
   const alive = useSafetyLifetime();
@@ -31,14 +40,11 @@ export function PeerChatButton({ person, className = "" }: { person: PublicIdent
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
-  const accountId = user?.id ?? null;
-  const own = accountId !== null && person.id === accountId;
-  const ready = !own && chat.accountId === accountId && chat.status === "ready";
+  const ready = chat.accountId === accountId && chat.status === "ready";
   const projection = ready
     ? Object.values(chat.currentProjections ?? {}).find((row) => row.peerId === person.id)
     : undefined;
 
-  if (!user || own) return null;
   if (projection?.ownBlocked) {
     return <p className="fb-peer-chat-note">You blocked this account. Unblock it to message.</p>;
   }
@@ -71,13 +77,13 @@ export function PeerChatButton({ person, className = "" }: { person: PublicIdent
       setNote(chat.status === "offline"
         ? "You're offline. Check your connection, then tap again."
         : "Opening your messages. Tap again in a moment.");
-      void refreshMessaging(accountId!).catch(() => undefined);
+      void refreshMessaging(accountId).catch(() => undefined);
       return;
     }
     pending.current = true;
     setBusy(true);
     try {
-      const conversationId = await requestMessagingConversation(accountId!, person.id);
+      const conversationId = await requestMessagingConversation(accountId, person.id);
       if (alive.current) navigate(`/chats/${encodeURIComponent(conversationId)}${reportQuery}`);
     } catch {
       if (alive.current) setNote("Couldn't start this conversation. Check your connection and try again.");
