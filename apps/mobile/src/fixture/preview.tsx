@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "../auth";
 import { ThemeProvider } from "../theme";
+import { HoverLabelProvider } from "../components/HoverLabel";
 import { FixtureRoute } from "./FixtureRoute";
 import { ChromeFixtureRoute } from "./ChromeFixtureRoute";
 
@@ -25,16 +26,18 @@ export function mountFixturePreview(host: HTMLElement, initialEntry = "/"): void
   createRoot(host).render(
     <StrictMode>
       <ThemeProvider>
-        <AuthProvider boot={false}>
-          <MemoryRouter initialEntries={[initialEntry]}>
-            <Routes>
-              <Route path="/__fixture" element={<FixtureRoute />} />
-              <Route path="/__fixture/chrome" element={<ChromeFixtureRoute />} />
-              {/* Any other reviewer flag keeps the catalogue, as before. */}
-              <Route path="*" element={<FixtureRoute />} />
-            </Routes>
-          </MemoryRouter>
-        </AuthProvider>
+        <HoverLabelProvider>
+          <AuthProvider boot={false}>
+            <MemoryRouter initialEntries={[initialEntry]}>
+              <Routes>
+                <Route path="/__fixture" element={<FixtureRoute />} />
+                <Route path="/__fixture/chrome" element={<ChromeFixtureRoute />} />
+                {/* Any other reviewer flag keeps the catalogue, as before. */}
+                <Route path="*" element={<FixtureRoute />} />
+              </Routes>
+            </MemoryRouter>
+          </AuthProvider>
+        </HoverLabelProvider>
       </ThemeProvider>
     </StrictMode>,
   );

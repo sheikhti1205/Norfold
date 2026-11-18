@@ -8,6 +8,7 @@ import { UserIdentityTrigger } from "./UserIdentityTrigger";
 import { VerifiedBadge } from "./VerifiedBadge";
 import { StatusChip } from "./StatusChip";
 import { PostLink } from "./PostNavigation";
+import { useInfoLabel } from "./HoverLabel";
 import { motionDurations, motionEasings, motionSprings } from "./uiMotion";
 import "./PostAnatomy.css";
 
@@ -17,14 +18,36 @@ export const sharedElementTransition = {
   layout: motionSprings.soft, duration: motionDurations.fast, ease: motionEasings.inOut,
 } as const;
 
+/**
+ * Category and location are words, not a second text row: each one is a
+ * compact control in the author row whose label appears on rest, focus or tap.
+ * The row keeps the reader's eye on the title and the photo.
+ */
+function PostMetaButton({ label, text, icon }: { label: string; text: string; icon: ReactNode }) {
+  const { infoLabel } = useInfoLabel();
+  return <button type="button" className="fb-icon-control fb-post-meta-icon"
+    aria-label={label} {...infoLabel(text)}>
+    {icon}
+  </button>;
+}
+
+export function PostMetaIcons({ post }: { post: PostItem }) {
+  return <div data-testid="post-meta" className="fb-post-meta">
+    <PostMetaButton label={`Category: ${post.category}`} text={post.category} icon={<Tag size={16} aria-hidden />} />
+    {post.locationLabel && <PostMetaButton label={`Location: ${post.locationLabel}`} text={post.locationLabel} icon={<MapPin size={16} aria-hidden />} />}
+  </div>;
+}
+
 /** Public presentation only; overflow and relationship state stay with features. */
-export function PostIdentityHeader({ post, overflow, contextReportId }: { post: PostItem; overflow?: ReactNode; contextReportId?: string }) {
+export function PostIdentityHeader({ post, overflow, meta, contextReportId }: {
+  post: PostItem; overflow?: ReactNode; meta?: ReactNode; contextReportId?: string;
+}) {
   return <header className="fb-post-identity">
     <div className="fb-post-identity-line">
       <span className="fb-post-name-badge"><UserIdentityTrigger person={contextReportId ? { ...post.author, contextReportId } : post.author} /><VerifiedBadge emailVerified={post.author.emailVerified} phoneVerified={post.author.phoneVerified} telegramPhoneVerified={(post.author as { telegramPhoneVerified?: boolean }).telegramPhoneVerified} /></span>
-      <span data-testid="post-author" className="fb-post-handle">@{post.author.username}</span>
       <span className="fb-post-time"><time data-testid="post-time" dateTime={post.createdAt} title={new Date(post.createdAt).toLocaleString()}>{timeAgo(post.createdAt)}</time></span>
     </div>
+    {meta}
     {overflow && <div className="fb-post-overflow">{overflow}</div>}
   </header>;
 }
@@ -32,19 +55,23 @@ export function PostIdentityHeader({ post, overflow, contextReportId }: { post: 
 /**
  * The views metric that sits in the action row's insights slot.
  *
- * It is information, not a button: same column rhythm and colour as the row,
- * no hover fill, no pressed state. `data-action="insights"` gives it the one
- * shared tone (see PostActionRow.css).
+ * It is information, not a button: no pressed state and no navigation. But it
+ * sits between real controls, so it answers the same way they do: the row's
+ * hover tint, and the one floating pill naming it ("0 views"). Without that
+ * the bar-chart glyph read as an unlabelled, dead button.
  */
 export function PostInsightsMetric({ views }: { views: number }) {
+  const { infoLabel } = useInfoLabel();
+  const label = views === 1 ? "1 view" : `${views} views`;
   return <span
     data-testid="post-views"
     data-action="insights"
     className="fb-report-metric"
+    {...infoLabel(label)}
   >
     <BarChart3 size={18} aria-hidden />
     <span className="tabular-nums" aria-hidden>{views}</span>
-    <span className="sr-only">{views === 1 ? "1 view" : `${views} views`}</span>
+    <span className="sr-only">{label}</span>
   </span>;
 }
 
@@ -60,8 +87,8 @@ function detailTitleMeta(post: PostItem): string[] {
   return [type, status];
 }
 
-export function PostStatusTitle({ post, detail = false, titleClassName = "fb-feed-title", linkTestId, enableSharedMedia = false }: {
-  post: PostItem; detail?: boolean; titleClassName?: string; linkTestId?: string; enableSharedMedia?: boolean;
+export function PostStatusTitle({ post, detail = false, inlineStatus = false, titleClassName = "fb-feed-title", linkTestId, enableSharedMedia = false }: {
+  post: PostItem; detail?: boolean; inlineStatus?: boolean; titleClassName?: string; linkTestId?: string; enableSharedMedia?: boolean;
 }) {
   const Title = detail ? motion.h1 : motion.h3;
   const title = <Title className={`break-words ${titleClassName}`} {...(enableSharedMedia ? {
@@ -73,8 +100,17 @@ export function PostStatusTitle({ post, detail = false, titleClassName = "fb-fee
     </span>
   </>)}</Title>;
   return <div className="fb-post-heading">
-    {!detail && <div className="fb-post-status"><StatusChip post={post} />{post.status !== "OPEN" && <span>{post.type === "LOST" ? "Lost" : "Found"}</span>}</div>}
-    <div data-testid="post-title">{detail ? title : <PostLink to={`/posts/${post.id}`} data-testid={linkTestId} className="fb-post-title-link">{title}</PostLink>}</div>
+    {detail ? <div data-testid="post-title">{title}</div> : inlineStatus ? (
+      <div className="fb-post-title-row">
+        <div data-testid="post-title" className="fb-post-title-main">
+          <PostLink to={`/posts/${post.id}`} data-testid={linkTestId} className="fb-post-title-link">{title}</PostLink>
+        </div>
+        <StatusChip post={post} />
+      </div>
+    ) : <>
+      <div className="fb-post-status"><StatusChip post={post} />{post.status !== "OPEN" && <span>{post.type === "LOST" ? "Lost" : "Found"}</span>}</div>
+      <div data-testid="post-title"><PostLink to={`/posts/${post.id}`} data-testid={linkTestId} className="fb-post-title-link">{title}</PostLink></div>
+    </>}
   </div>;
 }
 

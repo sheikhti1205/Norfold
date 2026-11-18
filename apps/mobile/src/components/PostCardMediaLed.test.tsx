@@ -140,10 +140,8 @@ describe("W7B-HOME home-feed content (media-led block)", () => {
       "home-feed-detail-link",
       "post-title",
       "post-description",
-      "post-author",
-      "post-location",
+      "post-meta",
       "post-footer",
-      "post-category",
       "home-feed-actions",
       "post-action-row",
     ]) {

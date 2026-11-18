@@ -47,18 +47,24 @@ interface ActiveLabel {
   label: string;
   placement: HoverLabelPlacement;
   rect: DOMRect;
+  anchor: HTMLElement;
+  pinned: boolean;
 }
 
 interface HoverLabelApi {
-  show(anchor: HTMLElement, label: string, placement: HoverLabelPlacement): void;
+  show(anchor: HTMLElement, label: string, placement: HoverLabelPlacement, options?: { pinned?: boolean; immediate?: boolean }): void;
+  /** Pointer-left: a tapped label stays until the reader dismisses it. */
   hide(): void;
+  /** Force it away (scroll, resize, blur, Escape, outside press). */
   dismiss(): void;
+  isPinned(anchor: HTMLElement): boolean;
 }
 
 const HoverLabelContext = createContext<HoverLabelApi | null>(null);
 
 export function HoverLabelProvider({ children }: { children: ReactNode }) {
   const [active, setActive] = useState<ActiveLabel | null>(null);
+  const activeRef = useRef<ActiveLabel | null>(null);
   const pill = useRef<HTMLDivElement | null>(null);
   const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const visible = useRef(false);
@@ -74,19 +80,36 @@ export function HoverLabelProvider({ children }: { children: ReactNode }) {
   const hide = useCallback(() => {
     clearShow();
     if (!visible.current) return;
+    // A label the reader tapped open belongs to them until they dismiss it.
+    if (activeRef.current?.pinned) return;
     // Hiding is immediate: the name belongs to the control under the pointer,
     // not to the space it just left.
     visible.current = false;
+    activeRef.current = null;
     lastHiddenAt.current = Date.now();
     setActive(null);
   }, [clearShow]);
 
-  const show = useCallback((anchor: HTMLElement, label: string, placement: HoverLabelPlacement) => {
+  const dismiss = useCallback(() => {
     clearShow();
+    if (!visible.current) return;
+    visible.current = false;
+    activeRef.current = null;
+    lastHiddenAt.current = Date.now();
+    setActive(null);
+  }, [clearShow]);
+
+  const show = useCallback((anchor: HTMLElement, label: string, placement: HoverLabelPlacement, options?: { pinned?: boolean; immediate?: boolean }) => {
+    clearShow();
+    const next: ActiveLabel = { label, placement, rect: anchor.getBoundingClientRect(), anchor, pinned: options?.pinned === true };
     const paint = () => {
       visible.current = true;
-      setActive({ label, placement, rect: anchor.getBoundingClientRect() });
+      activeRef.current = next;
+      setActive(next);
     };
+    // A deliberate tap or keyboard focus shows at once; a resting pointer keeps
+    // the dwell that stops labels flashing as the pointer crosses a cluster.
+    if (next.pinned || options?.immediate) { paint(); return; }
     if (visible.current) { paint(); return; }
     if (Date.now() - lastHiddenAt.current < HOVER_LABEL_REENTER_MS) { paint(); return; }
     showTimer.current = setTimeout(() => {
@@ -95,14 +118,20 @@ export function HoverLabelProvider({ children }: { children: ReactNode }) {
     }, HOVER_LABEL_MS);
   }, [clearShow]);
 
-  const api = useMemo<HoverLabelApi>(() => ({ show, hide, dismiss: hide }), [show, hide]);
+  const isPinned = useCallback((anchor: HTMLElement) => {
+    const current = activeRef.current;
+    return current?.pinned === true && current.anchor === anchor;
+  }, []);
+
+  const api = useMemo<HoverLabelApi>(() => ({ show, hide, dismiss, isPinned }), [show, hide, dismiss, isPinned]);
 
   // A name that outlives its anchor is a lie: scrolling, resizing or leaving
-  // the app hides it before it can point at the wrong row.
+  // the app hides it before it can point at the wrong row. A pinned label is
+  // dismissed too: it must not float free of the control it describes.
   useEffect(() => {
     if (!active) return;
-    const hide = () => api.hide();
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") api.hide(); };
+    const hide = () => api.dismiss();
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") api.dismiss(); };
     window.addEventListener("scroll", hide, true);
     window.addEventListener("resize", hide);
     window.addEventListener("blur", hide);
@@ -113,6 +142,19 @@ export function HoverLabelProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("blur", hide);
       window.removeEventListener("keydown", onKey, true);
     };
+  }, [active, api]);
+
+  // Tapping anywhere but the control closes a pinned label. The press that
+  // pinned it is already over, so this never fights the opening gesture.
+  useEffect(() => {
+    if (!active?.pinned) return;
+    const onDown = (event: Event) => {
+      const target = event.target as Node | null;
+      if (target && active.anchor.contains(target)) return;
+      api.dismiss();
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
   }, [active, api]);
 
   useEffect(() => () => clearShow(), [clearShow]);
@@ -199,4 +241,50 @@ export function useHoverLabel() {
   );
   const dismissHoverLabel = useCallback(() => api?.hide(), [api]);
   return { hoverLabel, dismissHoverLabel };
+}
+
+export interface InfoLabelHandlers {
+  onPointerEnter?: (event: ReactPointerEvent<HTMLElement>) => void;
+  onPointerLeave?: (event: ReactPointerEvent<HTMLElement>) => void;
+  onPointerUp?: (event: ReactPointerEvent<HTMLElement>) => void;
+  onFocus?: (event: React.FocusEvent<HTMLElement>) => void;
+  onBlur?: () => void;
+}
+
+/**
+ * The same one pill, but answering every way a reader can ask: rest, focus,
+ * or tap. Used by the small metadata controls whose whole content is a word
+ * that has no room in the row. On touch the tap pins the pill until the
+ * reader presses elsewhere; nothing opens a sheet.
+ */
+export function useInfoLabel() {
+  const api = useContext(HoverLabelContext);
+  const infoLabel = useCallback(
+    (label: string, placement: HoverLabelPlacement = "top"): InfoLabelHandlers => {
+      if (!api) return {};
+      return {
+        onPointerEnter: (event) => {
+          if (event.pointerType === "touch") return;
+          if (api.isPinned(event.currentTarget)) return;
+          api.show(event.currentTarget, label, placement);
+        },
+        onPointerLeave: (event) => {
+          if (api.isPinned(event.currentTarget)) return;
+          api.hide();
+        },
+        onPointerUp: (event) => {
+          if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+          if (api.isPinned(event.currentTarget)) api.dismiss();
+          else api.show(event.currentTarget, label, placement, { pinned: true });
+        },
+        onFocus: (event) => {
+          if (api.isPinned(event.currentTarget)) return;
+          api.show(event.currentTarget, label, placement, { immediate: true });
+        },
+        onBlur: () => api.dismiss(),
+      };
+    },
+    [api],
+  );
+  return { infoLabel };
 }
