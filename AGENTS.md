@@ -1,5 +1,23 @@
 # Norfold — Agent Rules (always loaded)
 
+## No local builds or heavy runs — owner order 2026-11-18 (absolute)
+
+- Do not run npm install, build, test, typecheck or lint, Gradle, Vite dev
+  servers, Vitest, Playwright, emulators, or any other CPU-heavy project job on
+  this machine. The owner's PC is not a build server.
+- GitHub Actions is the only build and test environment. Push to `main` and use
+  the CI, Web and Android workflows as the gates; read the run results instead
+  of reproducing them locally. A local-heavy-command habit is a rule violation,
+  not caution.
+- Web may deploy from every accepted commit. Android builds stay build-only:
+  never publish an APK release unless the owner explicitly asks for it.
+- Visual verification uses the deployed Web build in the owner's real Chrome at
+  the required widths, themes and text scales, not a local dev server.
+- When the owner calls for the end-of-work APK, bump the version as its own
+  commit first, then dispatch a build-only Android run.
+- `heavy-run` is kept only for an explicitly owner-authorized local exception.
+  Clean up build and test caches after any accidental run.
+
 ## Browser verification — owner order 2026-11-14
 
 - For every UI or visual claim in this repository, use the `browser` skill and the owner's real, logged-in Chrome tab through the `browse` MCP tools. The owner has explicitly authorized this session to use that tab.
@@ -54,7 +72,7 @@
 6. **Device feedback outranks host assumptions.** A physical-device defect reopens the relevant host-complete item. Reproduce, root-cause, fix-forward, and add regression coverage; never dismiss it because tests were green.
 7. **Reuse canonical systems.** One photo viewer, one avatar renderer, one reaction model, one auth/session owner, one theme system, one media-preparation pipeline. Repair shared ownership instead of cloning it.
 8. **Consumer first.** Hide diagnostics, internal model IDs, schema terms, capability jargon, privacy implementation detail, and developer state from ordinary users unless they explicitly open Advanced/Diagnostics.
-9. **Resource discipline (owner order 2026-10-20).** Parallel subagents are allowed; parallel heavy commands are not. Run every npm/npx/vitest/tsc/eslint/gradle/build/Playwright command through `~/.config/opencode/bin/heavy-run` (machine-wide `heavy.lock`, vitest pools capped at 3, heap capped, niced); at most one heavy command machine-wide across all sessions; device proofs and heavy gates never overlap; children never fan out their own subagents; check `uptime`/`free -g` before launching. This machine has ~11 GiB RAM and 18 cores, and an unthrottled `vitest run <one file>` has already driven load past 24 and rebooted it.
+9. **Resource discipline (owner order 2026-10-20; superseded by the no-local-builds order 2026-11-18).** Do not run npm install/build/test/typecheck/lint, Gradle, Vite, Vitest, Playwright, or any project build/test gate on this machine at all. GitHub Actions is the build and test environment: push and read the runs. `heavy-run` remains only for an explicit owner-authorized local exception, and then at most one heavy command machine-wide across sessions. This machine has ~11 GiB RAM and 18 cores; a local `vitest run <one file>` has already driven load past 24 and rebooted it, so the ban is absolute by default.
 10. **No migration-bearing WIP push.** Migration-bearing WIP must not be pushed to main before milestone acceptance because linked Supabase automation may apply migrations on push. Keep the entire backend-dependent milestone local until migration + dependent code acceptance is green. Applied migrations are immutable; fix forward. After an accepted push, immediately verify the live migration state and relevant behavior. Pushing source does not deploy Edge Functions; verify their inventory/version and smoke separately.
 
 ## Stabilization — source/synthetic accepted 2026-11-05
