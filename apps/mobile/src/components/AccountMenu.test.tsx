@@ -88,7 +88,7 @@ describe("account menu", () => {
     const panel = await within(dialog).findByRole("group", { name: "Personalization" });
     expect(within(panel).getByRole("group", { name: "Theme" })).toBeTruthy();
     expect(within(panel).getByRole("group", { name: "Accent" })).toBeTruthy();
-    expect(within(panel).getAllByRole("radio")).toHaveLength(5);
+    expect(within(panel).getAllByRole("radio")).toHaveLength(6);
     expect(within(panel).getByRole("button", { name: /Open Personalization/ })).toBeTruthy();
     // The rows are replaced, not painted beside: no Settings row while the panel is open.
     expect(within(dialog).queryByRole("button", { name: /^Settings$/ })).toBeNull();

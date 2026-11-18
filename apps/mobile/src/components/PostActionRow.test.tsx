@@ -216,4 +216,28 @@ describe("PostActionRow (compact flat action row)", () => {
     // Counts are never hidden.
     expect(hidden).toMatch(/not\(\.tabular-nums\)/);
   });
+
+  it("implements all three reaction appearances without making color the only state", () => {
+    const modes = ["colorful", "monochrome"] as const;
+    const modeBlock = (mode: typeof modes[number]) => {
+      const start = rowCssRules.indexOf(`:root[data-reaction-appearance="${mode}"]`);
+      if (start < 0) return "";
+      const next = modes
+        .filter(other => other !== mode)
+        .map(other => rowCssRules.indexOf(`:root[data-reaction-appearance="${other}"]`, start + 1))
+        .filter(index => index > start);
+      return rowCssRules.slice(start, next.length ? Math.min(...next) : undefined);
+    };
+    // Adaptive is the base: neutral by default, semantic only once pressed.
+    expect(rowCssRules).toMatch(/\[data-action="like"\],\s*\.fb-post-action-row \.fb-report-action\[data-action="dislike"\][^}]*--fb-on-surface-variant/);
+    expect(rowCssRules).toMatch(/\[aria-pressed="true"\]\[data-action="like"\][^}]*--fb-success/);
+    expect(rowCssRules).toMatch(/\[aria-pressed="true"\]\[data-action="dislike"\][^}]*--fb-error/);
+    // Colorful: the tone is present while unselected too.
+    expect(modeBlock("colorful")).toMatch(/data-action="like"/);
+    expect(modeBlock("colorful")).toMatch(/--fb-success/);
+    // Monochrome: no hue at all, selected state moves to on-surface.
+    expect(modeBlock("monochrome")).toMatch(/aria-pressed="true"/);
+    expect(modeBlock("monochrome")).toMatch(/--fb-on-surface\)/);
+    expect(rowCssRules).toMatch(/\[aria-pressed="true"\]/);
+  });
 });

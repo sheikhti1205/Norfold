@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { motionDurations, snackbarVariants } from "./uiMotion";
+import "./LiveRegion.css";
 
 const EVENT = "findback:announce";
 const QUIET_EVENT = "findback:announce-quietly";
@@ -23,6 +24,9 @@ export function announceQuietly(message: string): void {
  * the LiveRegion toast and the back-handler exit toast. Transform/opacity
  * only. With `live` (default) it IS the polite live status; LiveRegion sets
  * `live={false}` because its sr-only region already announces (no doubles).
+ *
+ * The surface uses the shared elevated shadow and clears the home indicator:
+ * a toast that sits under the gesture bar cannot be read.
  */
 export function Snackbar({
   open,
@@ -45,11 +49,11 @@ export function Snackbar({
           exit="hidden"
           variants={snackbarVariants}
           transition={{ duration: motionDurations.fast }}
-          className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex justify-center px-4"
+          className="fb-snackbar pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4"
         >
           <span
             data-testid="snackbar-message"
-            className="rounded-full bg-on-surface px-4 py-2 text-sm text-surface shadow-lg"
+            className="fb-snackbar-pill rounded-full bg-on-surface px-4 py-2 text-sm text-surface"
           >
             {message}
           </span>

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { CommentItem } from "@norfold/shared";
 import { UserIdentityTrigger } from "./UserIdentityTrigger";
+import { ProfilePreview } from "./ProfilePreview";
 import { UserAvatar } from "./UserAvatar";
 import { VerifiedBadge } from "./VerifiedBadge";
 import { timeAgo } from "../utils/dates";
@@ -12,9 +13,11 @@ export function CommentIdentityHeader({ comment, isAuthor, overflow }: {
 }) {
   const exact = new Date(comment.createdAt).toLocaleString();
   return <header className="fb-comment-header">
-    <UserIdentityTrigger person={comment.author}
-      trigger={<><UserAvatar username={comment.author.username} avatarUrl={comment.author.avatarUrl} size={28} />
-        <span className="fb-identity-name">@{comment.author.username}</span></>} />
+    <ProfilePreview person={comment.author}>
+      <UserIdentityTrigger person={comment.author}
+        trigger={<><UserAvatar username={comment.author.username} avatarUrl={comment.author.avatarUrl} size={28} />
+          <span className="fb-identity-name">@{comment.author.username}</span></>} />
+    </ProfilePreview>
     <VerifiedBadge emailVerified={comment.author.emailVerified} phoneVerified={comment.author.phoneVerified} telegramPhoneVerified={(comment.author as { telegramPhoneVerified?: boolean }).telegramPhoneVerified} />
     {isAuthor && <span className="fb-comment-author">Author</span>}
     <time dateTime={comment.createdAt} title={exact} aria-label={exact}>{timeAgo(comment.createdAt)}</time>

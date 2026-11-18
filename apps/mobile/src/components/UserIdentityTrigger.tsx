@@ -30,10 +30,12 @@ export function identityDisplayName(person: Pick<PublicIdentity, "username" | "d
 /**
  * A person's avatar and name are ONE direct link to their full-screen profile.
  *
- * There is deliberately no quick-card popover, mini profile, bottom sheet or
- * intermediate step: a person is a destination. Rows that also do something
- * else (a chat row, a helper picker) split their hit targets instead of making
- * the identity a selector.
+ * The link is the destination on every input. There is no bottom sheet or
+ * intermediate step on touch. On a fine pointer the feed and comment identity
+ * may also answer a rest or a key focus with `ProfilePreview`, which is a
+ * read-only card over the same public facts; the link itself still opens the
+ * profile. Rows that also do something else (a chat row, a helper picker) split
+ * their hit targets instead of making the identity a selector.
  */
 export function UserIdentityTrigger({ person, trigger, className = "" }: {
   person: PublicIdentity;

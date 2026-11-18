@@ -52,6 +52,12 @@
   padding: 0;
   border: 0;
 }
+/* Three tiles share the row, so the third never dangles under an empty column.
+   The card is wide enough for three previews at every text scale; each label
+   still fits its column. */
+.fb-nav-setup-choices .fb-preview-grid-nav {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 /*
  * The recommendation is text, not a control (§5). It sits where the removed
  * `Use recommended` button was: same slot, so the card keeps its rhythm.

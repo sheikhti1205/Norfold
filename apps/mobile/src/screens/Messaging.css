@@ -171,7 +171,7 @@
 .fb-chat-reply-chip > button { flex:none; width:44px; min-width:44px; height:44px; border-radius:50%; }
 .fb-chat-ticks { display:inline-flex; align-items:center; vertical-align:-1px; color:inherit; }
 .fb-chat-ticks svg { fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
-.fb-chat-ticks.is-read { color:var(--fb-receipt-read, #56c8f5); }
+.fb-chat-ticks.is-read { color:var(--fb-link); }
 
 /* Floating message actions. A menu annotates the message you pressed; it is
    never a second screen. One portal layer, above every task surface (70+). */

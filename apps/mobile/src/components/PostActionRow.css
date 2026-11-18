@@ -94,20 +94,16 @@
   color: var(--fb-on-surface);
 }
 
-/* Functional colour per action (owner direction: the row is not all black).
- * Semantic tokens only; each is a text tone already contrast-checked on the
- * neutral surfaces. */
-.fb-post-action-row .fb-report-action[data-action="like"] {
-  color: var(--fb-success);
-}
+/* Reaction appearance (Appearance -> Reactions). The default is adaptive:
+ * a reaction is neutral until it carries your choice, then it shows its own
+ * semantic tone. Colorful keeps the tone on the unselected control too;
+ * monochrome never uses hue. Filled glyphs, the pressed fill and aria-pressed
+ * carry the same state in every mode, so color is never the only signal.
+ * Comment and share are separate destinations, not reactions, and keep their
+ * reading/accent tones. */
+.fb-post-action-row .fb-report-action[data-action="like"],
 .fb-post-action-row .fb-report-action[data-action="dislike"] {
-  color: var(--fb-error);
-}
-.fb-post-action-row .fb-report-action[data-action="comment"] {
-  color: var(--fb-link);
-}
-.fb-post-action-row .fb-report-action[data-action="share"] {
-  color: var(--fb-primary);
+  color: var(--fb-on-surface-variant);
 }
 .fb-post-action-row .fb-report-action[aria-pressed="true"][data-action="like"] {
   color: var(--fb-success);
@@ -115,10 +111,32 @@
 .fb-post-action-row .fb-report-action[aria-pressed="true"][data-action="dislike"] {
   color: var(--fb-error);
 }
+/* Adaptive is the default and needs no mode block: the two pressed rules
+ * above are its whole appearance. Colorful and monochrome override them. */
+:root[data-reaction-appearance="colorful"] .fb-post-action-row .fb-report-action[data-action="like"] {
+  color: var(--fb-success);
+}
+:root[data-reaction-appearance="colorful"] .fb-post-action-row .fb-report-action[data-action="dislike"] {
+  color: var(--fb-error);
+}
+:root[data-reaction-appearance="monochrome"] .fb-post-action-row .fb-report-action[data-action="like"],
+:root[data-reaction-appearance="monochrome"] .fb-post-action-row .fb-report-action[data-action="dislike"] {
+  color: var(--fb-on-surface-variant);
+}
+:root[data-reaction-appearance="monochrome"] .fb-post-action-row .fb-report-action[aria-pressed="true"][data-action="like"],
+:root[data-reaction-appearance="monochrome"] .fb-post-action-row .fb-report-action[aria-pressed="true"][data-action="dislike"] {
+  color: var(--fb-on-surface);
+}
+.fb-post-action-row .fb-report-action[data-action="comment"] {
+  color: var(--fb-link);
+}
+.fb-post-action-row .fb-report-action[data-action="share"] {
+  color: var(--fb-primary);
+}
 
 /* The views/insights metric is information, not a control: no pressed state,
- * no navigation. It still answers the pointer like its neighbours — the same
- * circular tint, and the shared pill naming it (see PostAnatomy.tsx) — so the
+ * no navigation. It still answers the pointer like its neighbours (the same
+ * circular tint, and the shared pill naming it; see PostAnatomy.tsx), so the
  * bar-chart glyph never reads as an unlabelled, dead button. */
 .fb-post-action-row .fb-report-metric {
   display: inline-flex;

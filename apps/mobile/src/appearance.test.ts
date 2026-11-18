@@ -25,18 +25,20 @@ afterEach(() => {
   document.documentElement.removeAttribute("style");
   document.documentElement.classList.remove("fb-reduce-motion");
   delete document.documentElement.dataset.reduceMotionOverride;
+  delete document.documentElement.dataset.reactionAppearance;
 });
 
 describe("appearance settings module (AI-011 Quick Appearance)", () => {
-  it("exposes defaults: Blue, standard scale, system motion, standard photo, bottom bar", () => {
+  it("exposes defaults: Blue, standard scale, system motion, standard photo, automatic navigation, adaptive reactions", () => {
     expect(DEFAULT_APPEARANCE).toEqual({
       accent: "blue",
       accentSource: "preset",
       textScale: "standard",
       reduceMotion: "system",
       highQualityPhoto: false,
-      navLayout: "bottom",
+      navLayout: "auto",
       navLayoutChosen: false,
+      reactionAppearance: "adaptive",
       railPinned: false,
       railWidth: RAIL_WIDTH_DEFAULT,
     });
@@ -59,7 +61,9 @@ describe("appearance settings module (AI-011 Quick Appearance)", () => {
     expect(loaded.textScale).toBe(DEFAULT_APPEARANCE.textScale);
     expect(loaded.reduceMotion).toBe(DEFAULT_APPEARANCE.reduceMotion);
     expect(loaded.highQualityPhoto).toBe(false);
-    expect(loaded.navLayout).toBe("bottom");
+    expect(loaded.navLayout).toBe("auto");
+    // Junk fields alone are not an old device, so every default applies.
+    expect(loaded.reactionAppearance).toBe("adaptive");
   });
 
   it("persists the chosen navigation layout and falls back on unknown values", () => {
@@ -70,7 +74,31 @@ describe("appearance settings module (AI-011 Quick Appearance)", () => {
       APPEARANCE_STORAGE_KEY,
       JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout: "drawer" }),
     );
-    expect(loadAppearance().navLayout).toBe("bottom");
+    expect(loadAppearance().navLayout).toBe("auto");
+  });
+
+  it("migrates the old unchosen bottom default to Automatic and keeps a deliberate choice", () => {
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ navLayout: "bottom", navLayoutChosen: false }));
+    expect(loadAppearance()).toMatchObject({ navLayout: "auto", navLayoutChosen: false });
+
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ navLayout: "bottom", navLayoutChosen: true }));
+    expect(loadAppearance()).toMatchObject({ navLayout: "bottom", navLayoutChosen: true });
+
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ navLayout: "side" }));
+    expect(loadAppearance()).toMatchObject({ navLayout: "rail", navLayoutChosen: true });
+  });
+
+  it("gives a fresh install adaptive reactions and preserves an existing colorful preference", () => {
+    expect(loadAppearance().reactionAppearance).toBe("adaptive");
+
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ accent: "teal" }));
+    expect(loadAppearance().reactionAppearance).toBe("colorful");
+
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_APPEARANCE, reactionAppearance: "monochrome" }));
+    expect(loadAppearance().reactionAppearance).toBe("monochrome");
+
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ reactionAppearance: "neon" }));
+    expect(loadAppearance().reactionAppearance).toBe("adaptive");
   });
 
   it("round-trips save/load and notifies listeners immediately (no Save button)", () => {
@@ -85,6 +113,7 @@ describe("appearance settings module (AI-011 Quick Appearance)", () => {
         highQualityPhoto: true,
         navLayout: "rail",
         navLayoutChosen: true,
+        reactionAppearance: "monochrome",
         railPinned: true,
         railWidth: RAIL_WIDTH_DEFAULT,
       };
@@ -137,6 +166,7 @@ describe("appearance settings module (AI-011 Quick Appearance)", () => {
       highQualityPhoto: false,
       navLayout: "bottom",
       navLayoutChosen: false,
+      reactionAppearance: "adaptive",
       railPinned: false,
       railWidth: RAIL_WIDTH_DEFAULT,
     });
@@ -148,6 +178,7 @@ describe("appearance settings module (AI-011 Quick Appearance)", () => {
     const large = TEXT_SCALE_OPTIONS.find((t) => t.id === "large")!.percent;
     expect(root.style.fontSize).toBe(`${large}%`);
     expect(root.dataset.reduceMotionOverride).toBe("reduce");
+    expect(root.dataset.reactionAppearance).toBe("adaptive");
     expect(root.classList.contains("fb-reduce-motion")).toBe(true);
   });
 

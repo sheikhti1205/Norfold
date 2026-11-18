@@ -43,7 +43,7 @@ export function PersonalizationPanel({ onOpenPage }: { onOpenPage: () => void })
     <fieldset className="fb-choice-fieldset fb-account-layout">
       <legend>Navigation</legend>
       <div className="fb-preview-grid fb-preview-grid-nav">
-        {(["bottom", "rail"] as const).map((value) => (
+        {(["auto", "bottom", "rail"] as const).map((value) => (
           <NavLayoutCard key={value} name="fb-account-nav" value={value}
             checked={settings.navLayout === value} onChange={chooseLayout} />
         ))}

@@ -1,0 +1,11 @@
+/* Toast: one floating surface, clear of the home indicator and the nav row. */
+.fb-snackbar {
+  bottom: calc(6rem + env(safe-area-inset-bottom));
+}
+
+.fb-snackbar-pill {
+  max-width: min(36rem, calc(100vw - 2rem));
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
