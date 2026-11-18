@@ -444,16 +444,44 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
   });
 
   it.each([320, 500, COMPACT_MAX_PX - 1])(
-    "keeps the bottom bar at %ipx even when a rail is stored",
+    "keeps a chosen rail on %ipx as a temporary drawer, not an always-open column",
     (width) => {
       setWidth(width);
       storeNavLayout("rail");
       renderShell("/");
-      const nav = screen.getByRole("navigation", { name: "Primary" });
-      expect(nav.getAttribute("data-layout")).toBe("bottom");
+      // Nothing navigational is painted until the reader asks for it.
+      expect(navLayouts()).toEqual([]);
       expect(document.querySelector(".fb-nav-rail")).toBeNull();
+      expect(document.querySelector(".fb-nav-slot")).toBeNull();
+      expect(screen.getByRole("button", { name: "Open navigation" })).toBeTruthy();
     },
   );
+
+  it("opens a chosen rail as a modal drawer and closes it when a destination is followed", async () => {
+    setWidth(390);
+    storeNavLayout("rail");
+    renderShell("/");
+    const trigger = screen.getByRole("button", { name: "Open navigation" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(trigger);
+    const drawer = screen.getByRole("dialog", { name: "Navigation" });
+    expect(within(drawer).getByRole("button", { name: "Close navigation" })).toBeTruthy();
+    expect(within(drawer).getByRole("link", { name: "My Reports" })).toBeTruthy();
+    fireEvent.click(within(drawer).getByRole("link", { name: "My Reports" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull());
+    expect(screen.getByText("My Reports screen")).toBeTruthy();
+  });
+
+  it("closes the phone drawer on Escape without changing the route", async () => {
+    setWidth(390);
+    storeNavLayout("rail");
+    renderShell("/");
+    fireEvent.click(screen.getByRole("button", { name: "Open navigation" }));
+    expect(screen.getByRole("dialog", { name: "Navigation" })).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull());
+    expect(screen.getByText("Home screen")).toBeTruthy();
+  });
 
   it("renders the stored rail at the breakpoint", () => {
     setWidth(COMPACT_MAX_PX);
@@ -474,7 +502,7 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
   it("follows a width change without a reload", async () => {
     setWidth(COMPACT_MAX_PX);
     const setWide = stubMatchMedia(false);
-    storeNavLayout("rail");
+    storeNavLayout("auto");
     renderShell("/");
     expect(navLayouts()).toEqual(["bottom"]);
 
@@ -487,7 +515,7 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
 
   it("flips rail↔bottom atomically: one nav, in its own flex context, from the first commit", () => {
     setWidth(800);
-    storeNavLayout("rail");
+    storeNavLayout("auto");
     const setWide = stubMatchMedia(true);
     renderShell("/");
     expect(navLayouts()).toEqual(["rail"]);
@@ -549,7 +577,7 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
 
   it("hands focus to the same destination when the layout flips", () => {
     setWidth(800);
-    storeNavLayout("rail");
+    storeNavLayout("auto");
     const setWide = stubMatchMedia(true);
     renderShell("/");
     const before = within(screen.getByRole("navigation", { name: "Primary" })).getByRole(
@@ -576,7 +604,7 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
   it.each<[string, string[]]>([
     // Search is an overlay button now, so `/search` highlights no rail row.
     ["/search", []],
-    ["/search?scope=people", ["Connect"]],
+    ["/search?scope=people", ["People"]],
     ["/saved", ["Saved"]],
     ["/settings/returns", ["Recovered"]],
     ["/reactions", ["Liked / Disliked"]],
@@ -611,7 +639,7 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
       links.map((link) => link.getAttribute("aria-label") ?? link.textContent?.trim()),
     ).toEqual([
       "Home", "My Reports", "Chats", "Activity", "Insights",
-      "Connect", "Liked / Disliked", "Saved", "Recovered",
+      "People", "Liked / Disliked", "Saved", "Recovered",
     ]);
     const searchRow = within(nav).getByRole("button", { name: "Search" });
     expect(searchRow.getAttribute("aria-expanded")).toBe("false");
@@ -650,7 +678,7 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     expect(pinned.getAttribute("data-pinned")).toBe("true");
     expect(loadAppearance().railPinned).toBe(true);
     // Every destination is named in place, and the pin now collapses it again.
-    for (const label of ["Home", "My Reports", "Search", "Chats", "Activity", "Insights", "Others", "Connect", "Liked / Disliked", "Saved", "Recovered"]) {
+    for (const label of ["Home", "My Reports", "Search", "Chats", "Activity", "Insights", "Others", "People", "Liked / Disliked", "Saved", "Recovered"]) {
       expect(within(pinned).getByText(label)).toBeTruthy();
     }
     fireEvent.click(within(pinned).getByRole("button", { name: "Collapse navigation" }));
@@ -699,18 +727,12 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     expect(main.className).toContain("flex-1");
   });
 
-  it.each([320, 600, 900])("never renders a drawer at %ipx", (width) => {
+  it.each([320, 500])("honours a chosen bottom bar on a phone instead of forcing a rail", (width) => {
     setWidth(width);
-    storeNavLayout("rail");
+    storeNavLayout("bottom");
     renderShell("/");
-    expect(document.querySelector('[class*="drawer"]')).toBeNull();
-    expect(screen.queryByRole("button", { name: /menu|drawer/i })).toBeNull();
-    // The first-use navigation chooser is a non-modal popover, so "no dialog"
-    // would be the wrong proxy for "no drawer": what a drawer would be is a
-    // modal sheet. The two assertions above already rule out a drawer control.
-    expect(document.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
-    const nav = screen.getByRole("navigation", { name: "Primary" });
-    expect(nav.className).not.toMatch(/fixed|absolute/);
+    expect(navLayouts()).toEqual(expect.arrayContaining(["bottom"]));
+    expect(screen.queryByRole("button", { name: "Open navigation" })).toBeNull();
   });
 
   it("hides the rail on chrome-free routes", () => {

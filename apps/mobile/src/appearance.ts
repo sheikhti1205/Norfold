@@ -114,9 +114,9 @@ export const REDUCE_MOTION_OPTIONS: readonly {
  * Reader choice for the primary navigation:
  * `"auto"` uses the side rail when the viewport has room and the bottom bar
  * otherwise, `"bottom"` always keeps the bar (floating on a wide canvas), and
- * `"rail"` keeps the rail when it fits, falling back to the bar on phones.
- * The viewport gate lives in `components/navLayout.ts`; a stored choice is
- * never rewritten by a resize, so the rail returns when the room does.
+ * `"rail"` keeps the side rail on every screen — in flow where it fits, as a
+ * temporary overlay drawer on a phone. The resolver lives in
+ * `components/navLayout.ts`; a stored choice is never rewritten by a resize.
  */
 export type NavLayout = "auto" | "bottom" | "rail";
 
