@@ -93,6 +93,8 @@ describe("Notifications identity (W7)", () => {
     const avatars = screen.getAllByTestId("user-avatar");
     expect(avatars).toHaveLength(1);
     expect(avatars[0]!.textContent).toBe("BO");
+    // The actor is a person like anywhere else: the avatar opens the one card.
+    expect(avatars[0]!.closest(".fb-profile-preview-trigger")).toBeTruthy();
   });
 
   it("falls back to the generic glyph for system rows with no actor", async () => {

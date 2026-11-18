@@ -20,6 +20,7 @@ type Listener = () => void;
 const listeners = new Set<Listener>();
 let open = false;
 let origin: HTMLElement | null = null;
+let seed: string | null = null;
 
 function emit() {
   for (const listener of listeners) listener();
@@ -30,14 +31,26 @@ function focusInput() {
 }
 
 /** Open the overlay, remembering the control that owns focus return. */
-export function openGlobalSearch(trigger?: Element | null) {
+export function openGlobalSearch(trigger?: Element | null, query?: string) {
   if (trigger instanceof HTMLElement) origin = trigger;
+  if (typeof query === "string" && query !== "") seed = query;
   if (open) {
     focusInput();
     return;
   }
   open = true;
   emit();
+}
+
+/**
+ * A character typed on a non-editable surface opens search with that character
+ * already in the field, so the reader does not type twice. Reading is a
+ * one-shot: a later open starts empty.
+ */
+export function takeGlobalSearchSeed() {
+  const value = seed;
+  seed = null;
+  return value;
 }
 
 /** The magnifier and the Search nav row behave as one toggle. */
@@ -70,5 +83,6 @@ export function useGlobalSearchOpen() {
 export function resetGlobalSearch() {
   open = false;
   origin = null;
+  seed = null;
   emit();
 }

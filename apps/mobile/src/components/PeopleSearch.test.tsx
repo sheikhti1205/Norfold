@@ -39,6 +39,9 @@ it("does not search empty input and debounces before showing public-profile rows
   const mount=render(view(" @ "));await tick();expect(state.search).not.toHaveBeenCalled();
   mount.rerender(view(" @River "));expect(state.search).not.toHaveBeenCalled();await tick();
   expect(screen.getByRole("link",{name:/River Lee @river/}).getAttribute("href")).toBe("/u/river");
+  // The people directory carries the one person card too, so a tap on a phone
+  // opens it here as well.
+  expect(screen.getByRole("link",{name:/River Lee @river/}).closest(".fb-profile-preview-trigger")).toBeTruthy();
   expect(screen.queryByRole("button",{name:"Connect"})).toBeNull();
 });
 it("aborts stale queries and never paints a response that ignores abort",async()=>{
@@ -74,8 +77,8 @@ it("shows viewer-authorized relationship state without exposing the counterpart'
   state.projections={chat:{peerId:"peer",mode:"REQUEST",request:"OUTGOING",ownBlocked:false}};
   const mount=render(view("river"));await tick();expect(screen.getByText("Request sent")).toBeTruthy();
   state.projections={chat:{peerId:"peer",mode:"CONNECTED",request:"NONE",ownBlocked:false}};
-  mount.rerender(view("river"));expect(screen.getByText("Connected")).toBeTruthy();
-  state.chatAccount="other";mount.rerender(view("river"));expect(screen.queryByText("Connected")).toBeNull();
+  mount.rerender(view("river"));expect(screen.getByText("Friends")).toBeTruthy();
+  state.chatAccount="other";mount.rerender(view("river"));expect(screen.queryByText("Friends")).toBeNull();
 });
 it("suggests chat peers and report authors when the query is empty",async()=>{
   state.projections={chat:{conversationId:"c1",peerId:"peer",mode:"CONNECTED",request:"NONE",ownBlocked:false}};
@@ -89,7 +92,7 @@ it("suggests chat peers and report authors when the query is empty",async()=>{
   render(view(""));await flushed();
   expect(screen.getByRole("heading",{name:"Suggested people"})).toBeTruthy();
   expect(screen.getByRole("link",{name:/River Lee @river/}).getAttribute("href")).toBe("/u/river");
-  expect(screen.getByText("Connected")).toBeTruthy();
+  expect(screen.getByText("Friends")).toBeTruthy();
   expect(screen.getByText("@sam_r")).toBeTruthy();
   expect(screen.queryByText("@me")).toBeNull();
   expect(screen.queryByText("@blocked_person")).toBeNull();
@@ -115,7 +118,7 @@ it("suggests a cached chat peer before the live projection set arrives",async()=
   ]));
   render(view(""));await flushed();
   expect(screen.getByRole("link",{name:/River Lee @river/})).toBeTruthy();
-  expect(screen.getByText("Connected")).toBeTruthy();
+  expect(screen.getByText("Friends")).toBeTruthy();
   expect(screen.queryByText("@gone")).toBeNull();
 });
 it("waits for the chat runtime instead of claiming there is nobody",async()=>{

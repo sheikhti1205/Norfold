@@ -114,6 +114,18 @@ export interface CommentComposerProps {  postId: string;
   onError: (message: string) => void;
   /** Parent clears reply affordances after a successful post. */
   onSent?: () => void;
+  /**
+   * Increment to put the caret in the field. The report's comment action uses
+   * it after opening or scrolling to the conversation, so the reader can type
+   * at once instead of hunting for the box.
+   */
+  focusSignal?: number;
+  /**
+   * A printable character typed while the report surface had focus. The report
+   * viewer hands the first keystroke to the comment field instead of letting it
+   * start a global search (owner direction 2026-11-18).
+   */
+  typingSeed?: { char: string; nonce: number } | null;
 }
 
 /**
@@ -179,6 +191,8 @@ export function CommentComposer({
   onSubmit,
   onError,
   onSent,
+  focusSignal = 0,
+  typingSeed = null,
 }: CommentComposerProps) {
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
@@ -222,6 +236,32 @@ export function CommentComposer({
     },
     [],
   );
+
+  // The report's comment action owns the intent, so the field takes the caret
+  // even when the composer just mounted inside the phone's conversation sheet.
+  const handledFocus = useRef(0);
+  useEffect(() => {
+    if (focusSignal <= 0 || focusSignal === handledFocus.current) return;
+    handledFocus.current = focusSignal;
+    fieldRef.current?.focus();
+  }, [focusSignal]);
+
+  // Typing anywhere on the report surface starts the comment, never a search.
+  const handledTyping = useRef(0);
+  useEffect(() => {
+    const seed = typingSeed;
+    if (!seed || seed.nonce === handledTyping.current) return;
+    handledTyping.current = seed.nonce;
+    const field = fieldRef.current;
+    if (!field) return;
+    const wasFocused = document.activeElement === field;
+    field.focus();
+    const start = wasFocused ? field.selectionStart ?? text.length : text.length;
+    const end = wasFocused ? field.selectionEnd ?? start : text.length;
+    const inserted = insertEmoji(text, start, end, seed.char);
+    setText(inserted.text);
+    focusAt(inserted.caret);
+  }, [typingSeed, text]);
 
   function focusAt(caret: number) {
     requestAnimationFrame(() => {

@@ -54,7 +54,7 @@ describe("Chat settings", () => {
     expect(screen.queryByRole("link", { name: "Chats" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Blocked accounts" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Privacy policy" })).toBeNull();
-    fireEvent.click(await screen.findByRole("switch", { name: /Connect new people automatically/ }));
+    fireEvent.click(await screen.findByRole("switch", { name: /Accept new requests automatically/ }));
     await waitFor(() => expect(mocks.setPreference).toHaveBeenCalledWith("reader", "openMessages", true));
     expect(screen.getByRole("button", { name: "Connect Google Drive" })).toBeTruthy();
     fireEvent.click(screen.getByRole("switch", { name: /High quality photos/ }));

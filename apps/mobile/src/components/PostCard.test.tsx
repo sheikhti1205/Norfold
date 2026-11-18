@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
 import { MotionConfig } from "framer-motion";
 import { __resetFeedEntranceForTests, PostCard } from "./PostCard";
@@ -76,5 +76,33 @@ describe("PostCard motion (P6)", () => {
     expect(card.textContent).toContain("card body");
     // Content stays reachable: the link keeps its destination.
     expect(card.querySelector('a[href="/posts/p1"]')).toBeTruthy();
+  });
+});
+
+describe("PostCard put-away cross (owner direction 2026-11-18)", () => {
+  it("offers no cross when the list owns no put-away action", () => {
+    renderCard(0);
+    expect(screen.queryByRole("button", { name: "Hide report" })).toBeNull();
+    expect(screen.getByTestId("post-card").dataset.hideable).toBe("false");
+  });
+
+  it("puts the cross beside the shaking body, not inside it", () => {
+    const onHide = vi.fn();
+    render(
+      <MemoryRouter>
+        <PostCard index={0} onHide={onHide}>
+          <span>card body</span>
+        </PostCard>
+      </MemoryRouter>,
+    );
+    const card = screen.getByTestId("post-card");
+    expect(card.dataset.hideable).toBe("true");
+    const button = screen.getByRole("button", { name: "Hide report" });
+    // The report shakes (the body wrapper) and the control stands still.
+    expect(button.parentElement).toBe(card);
+    expect(button.previousElementSibling?.className).toBe("fb-report-shake");
+    expect(button.querySelector(".fb-report-shake")).toBeNull();
+    fireEvent.click(button);
+    expect(onHide).toHaveBeenCalledTimes(1);
   });
 });

@@ -1042,3 +1042,12 @@ export function useAuth(): AuthContextValue {
   if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
   return ctx;
 }
+
+/**
+ * For surfaces that may render where the signed-in shell is not mounted yet,
+ * such as an identity card inside a test or a public page. Absent means signed
+ * out; it never invents a session.
+ */
+export function useOptionalAuth(): AuthContextValue | null {
+  return useContext(AuthContext);
+}

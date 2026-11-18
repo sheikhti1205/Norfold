@@ -1,23 +1,22 @@
 // @vitest-environment jsdom
-import type { PostItem } from "@norfold/shared";
+import type { PostItem, PostStatus, PostType } from "@norfold/shared";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { StatusBadge, detailStatusBadges } from "./StatusChip";
 
 afterEach(cleanup);
 
-const post = (fields: Pick<PostItem, "type" | "status">) => fields as PostItem;
+function badgesFor(type: PostType, status: PostStatus) {
+  return detailStatusBadges({ type, status } as PostItem).map(({ kind, label }) => `${kind}:${label}`);
+}
 
 describe("report-surface status badges", () => {
-  it.each([
-    { type: "LOST", status: "OPEN", badges: ["lost:Lost", "unrecovered:Unrecovered"] },
-    { type: "FOUND", status: "OPEN", badges: ["found:Found", "unrecovered:Unrecovered"] },
-    { type: "LOST", status: "MATCHED", badges: ["lost:Lost", "matched:Matched"] },
-    { type: "FOUND", status: "RECOVERED", badges: ["found:Found", "recovered:Recovered"] },
-    { type: "LOST", status: "CLOSED", badges: ["lost:Lost", "closed:Closed"] },
-  ] as const)("$status $type reads as $badges", ({ type, status, badges }) => {
-    expect(detailStatusBadges(post({ type, status })).map(({ kind, label }) => `${kind}:${label}`))
-      .toEqual([...badges]);
+  it("reads the type and lifecycle as two separate facts", () => {
+    expect(badgesFor("FOUND", "OPEN")).toEqual(["found:Found", "unrecovered:Unrecovered"]);
+    expect(badgesFor("LOST", "OPEN")).toEqual(["lost:Lost", "unrecovered:Unrecovered"]);
+    expect(badgesFor("LOST", "MATCHED")).toEqual(["lost:Lost", "matched:Matched"]);
+    expect(badgesFor("FOUND", "RECOVERED")).toEqual(["found:Found", "recovered:Recovered"]);
+    expect(badgesFor("LOST", "CLOSED")).toEqual(["lost:Lost", "closed:Closed"]);
   });
 
   it("renders a tone class, an icon and the label as text", () => {

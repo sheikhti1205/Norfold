@@ -213,6 +213,18 @@ html.fb-reduce-motion .fb-home-brand { transition: none; }
   color: var(--fb-on-selection);
 }
 
+/* Reactions are the platform's own emoji glyphs, never drawn art: the reader
+   already recognises them, and the system renders them at every text size.
+   The one exception is the reader's own Monochrome reaction choice, which
+   drops hue so the state is carried by the pressed control instead. */
+.fb-reaction-emoji {
+  flex: none;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  font-size: 1.0625em;
+  line-height: 1;
+}
+:root[data-reaction-appearance="monochrome"] .fb-reaction-emoji { filter: grayscale(1); }
+
 /* Enabled primary state layers modify only the background, never label or
  * whole-element opacity. Black deepens light swatches; white lifts dark ones.
  * The underlying primary remains opaque and the existing press motion stays. */

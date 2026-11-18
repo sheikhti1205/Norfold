@@ -1,6 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
+import { X } from "lucide-react";
+import { useHoverLabel } from "./HoverLabel";
 import { listItemVariants, motionDurations, motionEasings } from "./uiMotion";
+import "./PostCard.css";
 
 interface PostCardProps {
   children: ReactNode;
@@ -22,6 +25,13 @@ interface PostCardProps {
    * detail link as siblings).
    */
   variant?: "default" | "home-feed" | "masonry";
+  /**
+   * Puts this report away for the visit. The cross appears on a fine pointer
+   * and the same action is offered in the report menu, so touch and keyboard
+   * readers have a way in. Undo belongs to the list that owns the rows.
+   */
+  onHide?: () => void;
+  hideLabel?: string;
 }
 
 /**
@@ -46,7 +56,7 @@ export function __resetFeedEntranceForTests(): void {
   feedEntrancePlayed = false;
 }
 
-export function PostCard({ children, index = 0, variant = "default" }: PostCardProps) {
+export function PostCard({ children, index = 0, variant = "default", onHide, hideLabel = "Hide report" }: PostCardProps) {
   // Entrance eligibility belongs to this mount. Recomputing after the session
   // flag flips swaps motion.article for article and remounts all controls,
   // invalidating open viewers and modal return-focus targets on a refetch.
@@ -54,6 +64,7 @@ export function PostCard({ children, index = 0, variant = "default" }: PostCardP
   useEffect(() => {
     if (animated) feedEntrancePlayed = true;
   }, [animated]);
+  const { hoverLabel } = useHoverLabel();
   // Every density uses sibling identity/media/navigation/action targets.
   // A wrapping link would invalidate their native keyboard/assistive semantics.
   const body =
@@ -72,10 +83,28 @@ export function PostCard({ children, index = 0, variant = "default" }: PostCardP
         {children}
       </div>
     );
+  // The cross is a sibling of the shaking body, so the report moves and the
+  // control stays still under the pointer (owner direction 2026-11-18).
+  const shell = (
+    <>
+      <div className="fb-report-shake">{body}</div>
+      {onHide && (
+        <button
+          type="button"
+          className="fb-report-hide"
+          aria-label={hideLabel}
+          onClick={onHide}
+          {...hoverLabel(hideLabel)}
+        >
+          <X size={17} aria-hidden="true" />
+        </button>
+      )}
+    </>
+  );
   if (!animated) {
     return (
-      <article data-testid="post-card" data-animated="false">
-        {body}
+      <article data-testid="post-card" data-animated="false" className="fb-report-card" data-hideable={onHide ? "true" : "false"}>
+        {shell}
       </article>
     );
   }
@@ -83,6 +112,8 @@ export function PostCard({ children, index = 0, variant = "default" }: PostCardP
     <motion.article
       data-testid="post-card"
       data-animated="true"
+      className="fb-report-card"
+      data-hideable={onHide ? "true" : "false"}
       variants={listItemVariants}
       initial="hidden"
       animate="visible"
@@ -95,7 +126,7 @@ export function PostCard({ children, index = 0, variant = "default" }: PostCardP
         delay: Math.min(index * motionDurations.instant * 0.3, motionDurations.instant),
       }}
     >
-      {body}
+      {shell}
     </motion.article>
   );
 }

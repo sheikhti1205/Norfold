@@ -6,9 +6,9 @@ import { ChatIdentity } from "./Messaging";
 
 afterEach(cleanup);
 
-it("is one direct link to the full-screen profile, with no popover step", () => {
+it("is one direct link to the full-screen profile, with no card until it is asked for", () => {
   const name = "a-very-long-participant-name-that-needs-to-remain-readable";
-  render(<MemoryRouter><ChatIdentity peerId="peer" username="peer_name" name={name} status="Connected" /></MemoryRouter>);
+  render(<MemoryRouter><ChatIdentity peerId="peer" username="peer_name" name={name} status="Friends" /></MemoryRouter>);
   const link = screen.getByRole("link", { name: `Open ${name}'s profile` });
   expect(link.getAttribute("href")).toBe("/u/peer_name");
   expect(screen.queryByRole("dialog")).toBeNull();
@@ -16,13 +16,13 @@ it("is one direct link to the full-screen profile, with no popover step", () => 
 });
 
 it("does not offer participant details before a name is available", () => {
-  render(<ChatIdentity status="Connected" />);
+  render(<ChatIdentity status="Friends" />);
   expect(screen.getByText("Conversation")).toBeTruthy();
   expect(screen.queryByRole("link")).toBeNull();
 });
 
 it("treats the avatar and name as one identity link without a dropdown chevron", () => {
-  render(<MemoryRouter><ChatIdentity peerId="peer" username="peer_name" name="peer_name" status="Connected" /></MemoryRouter>);
+  render(<MemoryRouter><ChatIdentity peerId="peer" username="peer_name" name="peer_name" status="Friends" /></MemoryRouter>);
   const link = screen.getByRole("link", { name: "Open peer_name's profile" });
   const avatar = link.querySelector('[data-testid="user-avatar"]') as HTMLElement | null;
   expect(avatar).toBeTruthy();
@@ -34,7 +34,7 @@ it("treats the avatar and name as one identity link without a dropdown chevron",
 });
 
 it("carries the conversation context the profile page revalidates", () => {
-  render(<MemoryRouter><ChatIdentity peerId="peer" name="Sam Rivera" username="sam_r" status="Connected" conversationId="c1" /></MemoryRouter>);
+  render(<MemoryRouter><ChatIdentity peerId="peer" name="Sam Rivera" username="sam_r" status="Friends" conversationId="c1" /></MemoryRouter>);
   const link = screen.getByRole("link", { name: "Open Sam Rivera's profile" });
   expect(link.textContent).toContain("Sam Rivera");
   expect(link.textContent).not.toContain("@sam_r");

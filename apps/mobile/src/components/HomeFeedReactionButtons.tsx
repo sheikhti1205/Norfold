@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { ThumbsDown, ThumbsUp } from "lucide-react";
 import type { ReactionKind, ReactionSummary } from "@norfold/shared";
 import { announce, announceQuietly } from "./LiveRegion";
 import { useFeedLove } from "../hooks/useFeedLove";
@@ -89,14 +88,14 @@ export function HomeFeedReactionButtons({ postId, likeCount, dislikeCount }: {
           aria-describedby={failed ? errorId : undefined} data-pending={pending ? "true" : "false"}
           disabled={pending} aria-busy={pending} onClick={() => void onToggle("LIKE")} className={buttonClass(likeActive)}
           {...hoverLabel("Like")}>
-          <ThumbsUp size={18} aria-hidden fill={likeActive ? "currentColor" : "none"} />
+          <span className="fb-reaction-emoji" aria-hidden="true">👍</span>
           <span className="tabular-nums">{likes}</span>
         </button>
         <button type="button" data-testid="home-feed-dislike" data-action="dislike" aria-label={`Dislike, ${dislikes} ${dislikes === 1 ? "dislike" : "dislikes"}`} aria-pressed={dislikeActive}
           aria-describedby={failed ? errorId : undefined} data-pending={pending ? "true" : "false"}
           disabled={pending} aria-busy={pending} onClick={() => void onToggle("DISLIKE")} className={buttonClass(dislikeActive)}
           {...hoverLabel("Dislike")}>
-          <ThumbsDown size={18} aria-hidden fill={dislikeActive ? "currentColor" : "none"} />
+          <span className="fb-reaction-emoji" aria-hidden="true">👎</span>
           <span className="tabular-nums">{dislikes}</span>
         </button>
       </span>

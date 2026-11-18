@@ -1,37 +1,44 @@
-import { useCallback, useEffect, useRef, useState, type FocusEvent as ReactFocusEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type FocusEvent as ReactFocusEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Popover } from "react-aria-components";
-import { MapPin } from "lucide-react";
+import { CalendarDays, MapPin, X } from "lucide-react";
 import type { PublicProfile } from "@norfold/shared";
 import { fetchPublicProfile } from "../services/profile";
 import { useFinePointer } from "./inputCapabilities";
 import { UserAvatar } from "./UserAvatar";
 import { VerifiedBadge } from "./VerifiedBadge";
-import { identityDisplayName, identityHref, type PublicIdentity } from "./UserIdentityTrigger";
+import { PeerChatButton } from "./PeerChatButton";
+import { identityDisplayName, identityHref, type PublicIdentity } from "./identity";
+import { formatJoinedMonth } from "../utils/dates";
 import "./ProfilePreview.css";
 
 /**
- * Contextual profile preview for a fine pointer (owner scope 2026-11-12,
- * refined 2026-11-18).
+ * The person card: who this is, and the one thing to do about it.
  *
- * A person stays a destination: clicking the identity still opens the full
- * profile on every input. On a fine pointer the identity also answers a rest or
- * a key focus with the public facts the profile already owns, so a reader can
- * recognise the author without leaving the feed. Touch is unchanged and gets no
- * card at all.
+ * Owner direction 2026-11-18 (reference: the Facebook hover card). Every place
+ * a person appears carries the same card, not only desktop:
+ * - fine pointer: a short rest or a key focus opens it;
+ * - touch: a tap opens it, and the card is the way to the profile, the friend
+ *   action and the conversation. A keyboard or screen-reader activation still
+ *   follows the identity link directly (`detail === 0`), so assistive tech is
+ *   never asked to open a card to reach a destination that exists.
+ *
+ * Inside the card the avatar and name are links, the friend/message action is
+ * one button that also opens the chat, and "View full profile" is the explicit
+ * second destination. The bio stays partial with See more, because a card that
+ * grows to a full profile stops being a card.
  *
  * WHY NOT `LayeredPopover`: that wrapper registers a modal layer for Escape and
- * hardware Back. A hover card is not a modal step over the page, so it must not
- * take the top Escape slot from a dialog underneath. It still uses the one
- * shared surface (`fb-popover`) and React Aria's collision engine, so it
- * flips, clamps and stays inside the viewport like every other floating
- * surface, and it portals to the body so a masonry tile's transform cannot
- * clip it.
+ * hardware Back. A profile card is not a modal step over the page, so it must
+ * not take the top Escape slot from a dialog underneath. It still uses the one
+ * shared surface (`fb-popover`) and React Aria's collision engine, so it flips,
+ * clamps and stays inside the viewport.
  */
 
 const PREVIEW_OPEN_MS = 200;
 const PREVIEW_CLOSE_MS = 160;
 const PROFILE_CACHE_TTL_MS = 300_000;
+const BIO_CLAMP_CHARS = 150;
 
 interface CacheEntry {
   at: number;
@@ -77,21 +84,26 @@ type PreviewState =
   | { status: "ready"; profile: PublicProfile }
   | { status: "error" };
 
-export function ProfilePreview({ person, className = "", children }: {
+export function ProfilePreview({ person, className = "", openOnFocus = true, children }: {
   person: PublicIdentity;
   className?: string;
+  /**
+   * Open when the wrapped control receives keyboard focus. True where the
+   * wrapped control IS the identity link; false where the card wraps a row or
+   * avatar inside a larger navigation target, whose focus must not be hijacked.
+   */
+  openOnFocus?: boolean;
   children: ReactNode;
 }) {
   const finePointer = useFinePointer();
-  // The coarse path is exactly the old link: no wrapper listeners, no panel,
-  // no data request. This is what ships on every phone.
-  if (!finePointer) return <>{children}</>;
-  return <FinePointerPreview person={person} className={className}>{children}</FinePointerPreview>;
+  return <PreviewCard person={person} className={className} finePointer={finePointer} openOnFocus={openOnFocus}>{children}</PreviewCard>;
 }
 
-function FinePointerPreview({ person, className, children }: {
+function PreviewCard({ person, className, finePointer, openOnFocus, children }: {
   person: PublicIdentity;
   className?: string;
+  finePointer: boolean;
+  openOnFocus: boolean;
   children: ReactNode;
 }) {
   const triggerRef = useRef<HTMLSpanElement>(null);
@@ -103,13 +115,15 @@ function FinePointerPreview({ person, className, children }: {
   const suppressFocusOpen = useRef(false);
   const keyboardOpened = useRef(false);
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [state, setState] = useState<PreviewState>(() => {
     const cached = cachedProfile(person);
     return cached ? { status: "ready", profile: cached } : { status: "loading" };
   });
 
   const name = identityDisplayName(person);
-  const nameId = `fb-profile-preview-name-${person.id}`;
+  const nameId = useId();
+  const bioId = useId();
   const personId = person.id;
   const personUsername = person.username;
   const personRef = useRef(person);
@@ -128,8 +142,7 @@ function FinePointerPreview({ person, className, children }: {
     if (restoreFocus) {
       // Focus the identity before the panel unmounts. The overlay's teardown
       // otherwise parks focus on the body, and a later rAF races the browser's
-      // own focus change (the Shift+Tab exit used to land on the page's last
-      // control). suppressFocusOpen stops this same focus from reopening it.
+      // own focus change. suppressFocusOpen stops this same focus reopening it.
       const link = triggerRef.current?.querySelector<HTMLElement>("a") ?? null;
       suppressFocusOpen.current = true;
       link?.focus();
@@ -141,7 +154,11 @@ function FinePointerPreview({ person, className, children }: {
 
   useEffect(() => () => { cancelOpen(); cancelClose(); }, [cancelOpen, cancelClose]);
 
-  // The preview belongs to the row under the pointer, not to a scroll position.
+  // A new person is a new card: a bio expanded for one author must not stay
+  // expanded for the next.
+  useEffect(() => { setExpanded(false); }, [personId]);
+
+  // The card belongs to the row under the pointer, not to a scroll position.
   useEffect(() => {
     if (!open) return;
     const dismiss = () => close(false);
@@ -153,11 +170,23 @@ function FinePointerPreview({ person, className, children }: {
     };
   }, [open, close]);
 
+  // A touch card is dismissed by pressing anywhere outside it. The press that
+  // opened it is already over, so this never fights the opening gesture.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+      close(false);
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [open, close]);
+
   // Escape closes the card and gives the identity its focus back. Shift+Tab on
   // the card's first action does the same. Capture runs ahead of the page and
-  // of the overlay's own key handling, so one key closes one layer; the panel
-  // is portalled to the end of the body, so a native backward Tab would
-  // otherwise jump to the last control on the page.
+  // of the overlay's own key handling, so one key closes one layer.
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
@@ -183,7 +212,7 @@ function FinePointerPreview({ person, className, children }: {
     return () => document.removeEventListener("keydown", onKey, true);
   }, [open, close]);
 
-  // Load on open; the cache serves the next four minutes. Keyed by account id,
+  // Load on open; the cache serves the next five minutes. Keyed by account id,
   // so a renamed handle cannot split one person into two entries.
   useEffect(() => {
     if (!open || state.status !== "loading") return;
@@ -204,7 +233,7 @@ function FinePointerPreview({ person, className, children }: {
   }, [open]);
 
   const onPointerEnter = (event: ReactPointerEvent) => {
-    if (event.pointerType === "touch") return;
+    if (!finePointer || event.pointerType === "touch") return;
     keyboardOpened.current = false;
     cancelClose();
     if (open) return;
@@ -213,6 +242,7 @@ function FinePointerPreview({ person, className, children }: {
   };
 
   const onPointerLeave = () => {
+    if (!finePointer) return;
     cancelOpen();
     // A pointer that leaves a card the reader has focused (or is using) must
     // not pull it out from under them.
@@ -221,17 +251,28 @@ function FinePointerPreview({ person, className, children }: {
     closeTimer.current = setTimeout(() => { closeTimer.current = null; setOpen(false); keyboardOpened.current = false; }, PREVIEW_CLOSE_MS);
   };
 
-  // A key focus hands focus to the card's one action once the portalled panel
-  // has committed. The old rAF here raced the portal: it often ran before the
-  // panel existed, so focus stayed on the link and the card was unreachable by
-  // Tab. An effect runs after commit, which is the first moment the ref is real.
+  /**
+   * Touch has no hover, so the tap opens the card. Keyboard and assistive
+   * activation carry no pointer detail and keep the link's direct destination.
+   */
+  const onTriggerClick = (event: ReactMouseEvent) => {
+    if (finePointer) return;
+    if (event.detail === 0) return;
+    event.preventDefault();
+    cancelClose();
+    setOpen(true);
+  };
+
+  // A key focus hands focus to the card once the portalled panel has committed.
   useEffect(() => {
     if (!open || !keyboardOpened.current) return;
-    panelRef.current?.querySelector<HTMLElement>("a, button")?.focus();
+    panelRef.current?.querySelector<HTMLElement>("a[href], button:not([disabled])")?.focus();
   }, [open]);
 
-  // Keyboard focus opens at once, as the metadata labels do.
+  // Keyboard focus opens at once, as the metadata labels do. Touch focus is the
+  // tap itself, which has its own path above.
   const onFocus = (event: ReactFocusEvent) => {
+    if (!finePointer || !openOnFocus) return;
     if (panelRef.current?.contains(event.target as Node)) return;
     if (suppressFocusOpen.current) { suppressFocusOpen.current = false; return; }
     keyboardOpened.current = true;
@@ -250,8 +291,10 @@ function FinePointerPreview({ person, className, children }: {
   const shownName = profile?.displayName?.trim() || name;
   const shownAvatar = profile?.avatarUrl ?? person.avatarUrl ?? null;
   const handle = profile?.username || person.username;
+  const href = identityHref(person);
   const location = profile?.locationLabel?.trim() || "";
   const bio = profile?.bio?.trim() || "";
+  const longBio = bio.length > BIO_CLAMP_CHARS;
 
   return (
     <span
@@ -261,6 +304,7 @@ function FinePointerPreview({ person, className, children }: {
       onPointerLeave={onPointerLeave}
       onFocus={onFocus}
       onBlur={onBlur}
+      onClickCapture={onTriggerClick}
     >
       {children}
       {open && (
@@ -282,16 +326,27 @@ function FinePointerPreview({ person, className, children }: {
             onPointerLeave={onPointerLeave}
             className="fb-profile-preview"
           >
+            <button
+              type="button"
+              className="fb-profile-preview-close"
+              aria-label="Close profile preview"
+              onClick={() => close(true)}
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
             <div className="fb-profile-preview-top">
-              <UserAvatar username={shownName} avatarUrl={shownAvatar} size={64} />
+              <Link to={href} className="fb-profile-preview-avatar" aria-label={`Open ${shownName}'s profile`}>
+                <UserAvatar username={shownName} avatarUrl={shownAvatar} size={64} />
+              </Link>
               <div className="fb-profile-preview-identity">
-                <p id={nameId} className="fb-profile-preview-name">
-                  {shownName}
+                <Link id={nameId} to={href} className="fb-profile-preview-name">
+                  <span className="fb-profile-preview-name-text">{shownName}</span>
                   {profile && <VerifiedBadge emailVerified={profile.emailVerified} phoneVerified={profile.phoneVerified} />}
-                </p>
+                </Link>
                 <p className="fb-profile-preview-handle" data-testid="profile-preview-handle">@{handle}</p>
               </div>
             </div>
+
             {state.status === "loading" && (
               <div className="fb-profile-preview-placeholder" aria-hidden="true">
                 <span /><span />
@@ -302,14 +357,43 @@ function FinePointerPreview({ person, className, children }: {
                 Profile details could not load. The profile page still opens.
               </p>
             )}
-            {bio && <p className="fb-profile-preview-bio">{bio}</p>}
+
             {location && (
-              <p className="fb-profile-preview-location">
-                <MapPin size={14} aria-hidden />
+              <p className="fb-profile-preview-fact">
+                <MapPin size={15} aria-hidden="true" />
                 <span>{location}</span>
               </p>
             )}
-            <Link to={identityHref(person)} className="fb-profile-preview-action">View profile</Link>
+            {profile?.createdAt && (
+              <p className="fb-profile-preview-fact">
+                <CalendarDays size={15} aria-hidden="true" />
+                <span>{formatJoinedMonth(profile.createdAt)}</span>
+              </p>
+            )}
+
+            {bio && (
+              <div className="fb-profile-preview-bio-wrap">
+                <p id={bioId} className="fb-profile-preview-bio" data-expanded={expanded ? "true" : undefined}>{bio}</p>
+                {longBio && (
+                  <button
+                    type="button"
+                    className="fb-profile-preview-more"
+                    aria-expanded={expanded}
+                    aria-controls={bioId}
+                    onClick={() => setExpanded((value) => !value)}
+                  >
+                    {expanded ? "Show less" : "See more"}
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="fb-profile-preview-actions">
+              <PeerChatButton person={person} />
+              <Link to={href} className="fb-profile-preview-action" aria-label="View full profile">
+                View full profile
+              </Link>
+            </div>
           </div>
         </Popover>
       )}

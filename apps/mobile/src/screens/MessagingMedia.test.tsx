@@ -1179,7 +1179,7 @@ it("opens the available photo sequence from Media and removes the gallery on rel
   expect(screen.getByRole("dialog",{name:"Conversation media"})).toBeTruthy();
   m.view.mode="REQUEST";rendered.rerender(thread());
   expect(within(panel).queryByRole("button",{name:"View photo"})).toBeNull();
-  expect(within(panel).getByText("Photos are available when connected.")).toBeTruthy();
+  expect(within(panel).getByText("Photos are available when you're friends.")).toBeTruthy();
   expect(m.read).not.toHaveBeenCalledWith("account","photo-removed");
 });
 

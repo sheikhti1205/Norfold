@@ -102,10 +102,14 @@ Three regions, top to bottom, in one scroll.
 2. **Author line.** Avatar, display name with the verification badge, `@handle`,
    relative age, the existing `Connect` control when the reader is not the
    author, and the overflow menu at the right.
-3. **Title, description and meta.** The report title at heading size, then the
+3. **Title, description and meta.** The report title at heading size, then its
+   type and lifecycle as semantic badges directly under it (`Found` /
+   `Lost`, and `Unrecovered` / `Matched` / `Recovered` / `Closed`), then the
    description body, then the facts row: absolute date, category, location. The
    absolute date lives here now, not under the action row, because it describes
-   the report and not the conversation.
+   the report and not the conversation. The badges carry an icon and a label,
+   so state never depends on colour alone; they reuse the feed's status tones
+   with a hairline border and a filled neutral `Unrecovered` badge.
 
 A long description scrolls inside this pane. It never pushes the media out of
 view permanently, because the media is the first thing in the same scroll.

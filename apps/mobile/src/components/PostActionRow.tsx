@@ -52,6 +52,13 @@ export interface PostActionRowProps {
    * its own comment box uses.
    */
   commentsHref?: string;
+  /**
+   * A surface that already shows the conversation beside the report does not
+   * need a second control that only scrolls to it (owner direction
+   * 2026-11-18). The control stays on every surface where comments are not
+   * already on screen.
+   */
+  hideComments?: boolean;
 }
 
 /**
@@ -59,7 +66,7 @@ export interface PostActionRowProps {
  * chip or a text label: the icons carry the meaning, the counts are visible
  * next to their icon, and every control keeps a >=44px hit area.
  */
-export function PostActionRow({ slots, commentCount, className, commentsHref }: PostActionRowProps) {
+export function PostActionRow({ slots, commentCount, className, commentsHref, hideComments = false }: PostActionRowProps) {
   const commentLabel = `Comments, ${commentCount}`;
   const { hoverLabel } = useHoverLabel();
   const commentControl = (
@@ -86,7 +93,7 @@ export function PostActionRow({ slots, commentCount, className, commentsHref }: 
         slots.like
       )}
       {slots.dislike}
-      {commentsHref ? (
+      {!hideComments && (commentsHref ? (
         <PostLink
           to={commentsHref}
           aria-label={commentLabel}
@@ -108,7 +115,7 @@ export function PostActionRow({ slots, commentCount, className, commentsHref }: 
         >
           {commentControl}
         </button>
-      )}
+      ))}
       {insights}
       {slots.save}
       {slots.share}

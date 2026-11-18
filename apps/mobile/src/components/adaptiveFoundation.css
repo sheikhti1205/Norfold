@@ -117,6 +117,21 @@
 .fb-identity-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 8px; }
 .fb-peer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .375rem; }
 .fb-peer-actions .fb-identity-relationship { margin: 0; }
+/* The one people action. Filled because it is the one thing the surface asks
+   the reader to do; every other control on the row stays a quiet outline. */
+.fb-peer-chat-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: .375rem;
+  min-height: 40px; padding: 0 1rem;
+  border-radius: .625rem;
+  background: var(--fb-primary); color: var(--fb-on-primary);
+  font-size: .875rem; font-weight: 600;
+  cursor: pointer;
+}
+.fb-peer-chat-primary:not(:disabled):hover { filter: brightness(.95); }
+.fb-peer-chat-primary:not(:disabled):active { filter: brightness(.9); }
+.fb-peer-chat-primary:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; }
+.fb-peer-chat-primary:disabled { opacity: .6; cursor: not-allowed; }
+.fb-peer-chat-note { flex-basis: 100%; margin: 0; color: var(--fb-on-surface-variant); font-size: .8125rem; line-height: 1.4; }
 .fb-split-view { min-height: 0; min-width: 0; height: 100%; }
 .fb-split-wide { display: grid; grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr); }
 /* A pane scrolls vertically; it is never a second horizontal viewport. With
@@ -138,7 +153,8 @@
  * the inherited line height so large text keeps the same optical centre. */
 .fb-comment-composer { display: flex; align-items: flex-start; gap: .5rem; min-width: 0; }
 .fb-comment-composer-avatar { display: flex; flex: none; margin-top: calc(.75em - 1px); }
-.fb-composer-shell:focus-within { border-color: var(--fb-focus); }
+/* The focus ring belongs to the field the reader types in (the textarea rule
+   below), never to the shell that also holds attach, emoji and send. */
 .fb-composer-row { display: flex; align-items: flex-end; gap: 4px; padding: 4px; }
 .fb-composer-field { position: relative; flex: 1; min-width: 0; }
 .fb-composer-row textarea { display: block; width: 100%; min-width: 0; min-height: 44px; max-height: 208px; resize: none; padding: 10px 8px; font: inherit; line-height: 1.5; color: inherit; background: transparent; }

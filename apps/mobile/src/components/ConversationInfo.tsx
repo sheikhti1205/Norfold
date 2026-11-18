@@ -109,10 +109,10 @@ export function ConversationInfo({ accountId, conversationId, peer }: {
       </button>
       {current?.mode === "CONNECTED" && (confirming === "end"
         ? <InlineConfirm text="Your messages stay here. Either of you can send a new request."
-            confirm="End connection" busy={busy}
+            confirm="Remove friend" busy={busy}
             onCancel={() => setConfirming(null)}
-            onConfirm={() => void act(async () => { await changeMessagingRelationship(accountId, conversationId, "end"); setConfirming(null); }, "Connection ended.")} />
-        : <button type="button" disabled={busy || !live} onClick={() => setConfirming("end")}><LogOut size={20} aria-hidden="true" /><span>End connection</span></button>)}
+            onConfirm={() => void act(async () => { await changeMessagingRelationship(accountId, conversationId, "end"); setConfirming(null); }, "Removed from friends.")} />
+        : <button type="button" disabled={busy || !live} onClick={() => setConfirming("end")}><LogOut size={20} aria-hidden="true" /><span>Remove friend</span></button>)}
       {(confirming === "clear"
         ? <InlineConfirm text="This clears your copy on your devices, not theirs."
             confirm="Clear for me" busy={busy}
