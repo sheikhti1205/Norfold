@@ -1,13 +1,12 @@
 import type { ReactNode } from "react";
 import type { PostItem } from "@norfold/shared";
-import { POST_STATUS_LABELS } from "@norfold/shared";
 import { motion } from "framer-motion";
 import { BarChart3, MapPin, Tag } from "lucide-react";
 import { timeAgo } from "../utils/dates";
 import { UserIdentityTrigger } from "./UserIdentityTrigger";
 import { ProfilePreview } from "./ProfilePreview";
 import { VerifiedBadge } from "./VerifiedBadge";
-import { StatusChip } from "./StatusChip";
+import { StatusChip, StatusBadge, detailStatusBadges } from "./StatusChip";
 import { PostLink } from "./PostNavigation";
 import { useInfoLabel } from "./HoverLabel";
 import { motionDurations, motionEasings, motionSprings } from "./uiMotion";
@@ -79,31 +78,24 @@ export function PostInsightsMetric({ views }: { views: number }) {
 }
 
 /**
- * On the report surface the title IS the heading, with its type and lifecycle
- * state reading as compact parenthetical facts beside it ("Laptop (found)
- * (unrecovered)") instead of a separate chip line above. Feed cards keep the
- * chip: they need the status to survive a two-line clamp.
+ * On the report surface the title IS the heading, and its type and lifecycle
+ * state sit directly under it as bordered semantic badges. The feed keeps the
+ * single collapsed chip: there the state has to survive a two-line clamp.
  */
-function detailTitleMeta(post: PostItem): string[] {
-  const type = post.type === "LOST" ? "lost" : "found";
-  const status = post.status === "OPEN" ? "unrecovered" : POST_STATUS_LABELS[post.status].toLowerCase();
-  return [type, status];
-}
-
 export function PostStatusTitle({ post, detail = false, inlineStatus = false, titleClassName = "fb-feed-title", linkTestId, enableSharedMedia = false }: {
   post: PostItem; detail?: boolean; inlineStatus?: boolean; titleClassName?: string; linkTestId?: string; enableSharedMedia?: boolean;
 }) {
   const Title = detail ? motion.h1 : motion.h3;
   const title = <Title className={`break-words ${titleClassName}`} {...(enableSharedMedia ? {
     layoutId: sharedTitleLayoutId(post.id), "data-shared-title": sharedTitleLayoutId(post.id), transition: sharedElementTransition,
-  } : {})}>{post.title}{detail && (<>
-    {" "}
-    <span className="fb-title-meta" data-testid="post-title-meta">
-      {detailTitleMeta(post).map((word) => <span key={word}>({word})</span>)}
-    </span>
-  </>)}</Title>;
+  } : {})}>{post.title}</Title>;
   return <div className="fb-post-heading">
-    {detail ? <div data-testid="post-title">{title}</div> : inlineStatus ? (
+    {detail ? <>
+      <div data-testid="post-title">{title}</div>
+      <div className="fb-title-status" data-testid="post-title-status">
+        {detailStatusBadges(post).map(({ kind, label }) => <StatusBadge key={kind} kind={kind} label={label} />)}
+      </div>
+    </> : inlineStatus ? (
       <div className="fb-post-title-row">
         <div data-testid="post-title" className="fb-post-title-main">
           <PostLink to={`/posts/${post.id}`} data-testid={linkTestId} className="fb-post-title-link">{title}</PostLink>

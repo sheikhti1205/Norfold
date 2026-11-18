@@ -197,11 +197,14 @@ describe("PostDetail overflow", () => {
   it("breaks long titles and location labels instead of overflowing", async () => {
     const { container } = renderDetail();
     const heading = await screen.findByRole("heading", { level: 1 });
-    // The heading carries the title plus its compact (found) (unrecovered)
-    // facts; the title itself must still be the intact long word.
-    expect(heading.textContent).toContain(LONG);
-    expect(heading.textContent).toContain("(found)");
+    // The heading is the title alone; type and lifecycle are sibling badges.
+    expect(heading.textContent).toBe(LONG);
     expect(heading.className).toContain("break-words");
+    const status = screen.getByTestId("post-title-status");
+    expect(within(status).getByText("Found")).toBeTruthy();
+    expect(within(status).getByText("Unrecovered")).toBeTruthy();
+    expect([...status.querySelectorAll("[data-status]")].map(badge => badge.getAttribute("data-status")))
+      .toEqual(["found", "unrecovered"]);
     const locationValue = container.querySelector(".col-span-2 dd");
     expect(locationValue?.textContent).toBe(LONG);
     expect(locationValue?.className).toContain("break-words");
@@ -751,7 +754,7 @@ describe("PostDetail shared card → detail element (Wave A)", () => {
     );
     const heading = await screen.findByRole("heading", { level: 1 });
     expect(heading.textContent).toContain("Lost camera");
-    expect(heading.textContent).toContain("(found)");
+    expect(within(screen.getByTestId("post-title-status")).getByText("Found")).toBeTruthy();
     expect(await screen.findByRole("img", { name: "Photo for Lost camera" })).toBeTruthy();
   });
 });
