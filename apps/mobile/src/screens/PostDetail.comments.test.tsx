@@ -27,6 +27,15 @@ const { postsMock, findMock, authState, realtimeHandlers } = vi.hoisted(() => ({
 }));
 
 vi.mock("../services/posts", () => postsMock);
+// This suite mounts the real comment-media resolver, and its auth-subscription
+// effect reads the SDK for a private key. Unit runs carry no Supabase config, so
+// replace only that SDK boundary (the sibling detail suites' seam): the stored
+// URL, the resolver and the rendered attachment path stay real.
+vi.mock("../services/supabaseClient", () => ({ getSupabase: () => ({
+  auth: { getSession: async () => ({ data: { session: authState.user ? { user: { id: authState.user.id } } : null } }),
+    onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }) },
+  storage: { from: () => ({ createSignedUrl: async () => ({ data: { signedUrl: "https://signed.test/comment.jpg" }, error: null }) }) },
+}) }));
 vi.mock("../services/realtime", () => ({
   joinPostRoom: vi.fn(),
   leavePostRoom: vi.fn(),
@@ -469,8 +478,10 @@ describe("PostDetail emoji-only comment bodies", () => {
     ]);
     renderDetail();
     await screen.findByTestId("comment-media-c1");
+    const row = document.getElementById("detail-comment-c1");
+    expect(row).not.toBeNull();
     expect(expressiveBody("c1")).toBeNull();
-    expect(within(document.getElementById("detail-comment-c1") as HTMLElement).getByText(EMOJI)).toBeTruthy();
+    expect(within(row as HTMLElement).getByText(EMOJI)).toBeTruthy();
   });
 
   it("keeps an emoji body beside a shared report at the reading size", async () => {
