@@ -139,7 +139,8 @@ describe("AppearanceSettings", () => {
     expect((bottom as HTMLInputElement).checked).toBe(false);
     expect((rail as HTMLInputElement).checked).toBe(false);
     expect(screen.getByText(/automatic uses the side rail when there is room/i)).toBeTruthy();
-    expect(screen.getByText(/choosing bottom bar keeps the floating bar/i)).toBeTruthy();
+    expect(screen.getByText(/side rail keeps your choice on every screen/i)).toBeTruthy();
+    expect(screen.getByText(/on a phone it opens as a temporary panel/i)).toBeTruthy();
   });
 
   it("persists the navigation choice immediately with no save step", () => {

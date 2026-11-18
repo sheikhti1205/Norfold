@@ -81,7 +81,9 @@ describe("first use device navigation choice", () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole("radio", { name: preference === "rail" ? "Side rail" : "Automatic" }));
     act(() => { width(393); window.dispatchEvent(new Event("resize")); });
-    expect(screen.getByLabelText("Resolved navigation").textContent).toBe("bottom");
+    // A chosen rail stays chosen on a phone (as a drawer); only Automatic
+    // falls back to the bar there.
+    expect(screen.getByLabelText("Resolved navigation").textContent).toBe(preference === "rail" ? "rail" : "bottom");
     act(() => { width(1200); window.dispatchEvent(new Event("resize")); });
     expect(screen.getByLabelText("Resolved navigation").textContent).toBe("rail");
     expect(prompt()).toBeNull();

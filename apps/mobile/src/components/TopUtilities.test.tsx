@@ -89,14 +89,20 @@ describe("notification utility quick view", () => {
     expect(io.rows).not.toHaveBeenCalled();
   });
 
-  it("offers Create report beside the bell on the rail layout only", () => {
-    // The rail no longer carries the large +, so the utility cluster owns it.
-    // Phones keep the bottom bar's floating + and must not show a second one.
+  it("offers Create report beside the bell on every rail layout, and never twice", () => {
+    // The rail carries no large +, so the utility cluster owns it. A chosen
+    // rail on a phone is a temporary drawer, so the bottom bar's floating +
+    // is not there to act as the second control.
     window.innerWidth = 320;
     localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout: "rail" }));
     const phone = render(tree());
-    expect(screen.queryByRole("link", { name: "Create report" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Create report" }).getAttribute("href")).toBe("/report");
     phone.unmount();
+
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout: "bottom", navLayoutChosen: true }));
+    const bar = render(tree());
+    expect(screen.queryByRole("link", { name: "Create report" })).toBeNull();
+    bar.unmount();
 
     window.innerWidth = 1000;
     render(tree());
