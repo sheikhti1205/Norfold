@@ -18,10 +18,12 @@ import { FixtureFrame, FixtureSection, type FixtureVariant } from "../FixtureSec
  * frame is fixture scaffolding, and the pane below is labelled as a placeholder.
  *
  * Width comes from the real viewport (`useWideViewport`, the single breakpoint
- * owner), so resizing the browser at 600px flips the stored rail to the bottom
- * bar exactly as the shell does. The `small-width` frame is a 320px box inside
- * whatever viewport the reviewer has, so it explicitly resolves as compact:
- * that frame is the phone case, not the reviewer's window.
+ * owner), so resizing the browser at 600px flips the untouched Automatic default
+ * to the bottom bar exactly as the shell does. The `small-width` frame is a
+ * 320px box inside whatever viewport the reviewer has, so it explicitly resolves
+ * as compact: that frame is the phone case, not the reviewer's window. A chosen
+ * rail stays a rail there; the frame previews the rail the temporary drawer
+ * carries (the live drawer, its trigger and its dismissal belong to Shell).
  */
 /** The only variants this section renders: the nav has no data to vary. */
 export const NAV_VARIANTS: FixtureVariant[] = ["normal", "large-text", "dark", "amoled", "small-width"];
@@ -114,7 +116,7 @@ export function NavigationFixtures() {
     <FixtureSection
       id="navigation"
       title="Navigation"
-      description="The production primary navigation as a bottom bar or a side rail. Stored choice comes from Appearance; under 600px the bar always wins. Resize the viewport to review the breakpoint. Add ?chooser=frames or ?chooser=page to this route to mount the first-use chooser."
+      description="The production primary navigation as a bottom bar or a side rail. Stored choice comes from Appearance; the rail sits in flow where it fits and opens as a temporary drawer on a phone, so the compact frame previews the rail that drawer carries. Resize the viewport to review the breakpoint. Add ?chooser=frames or ?chooser=page to this route to mount the first-use chooser."
     >
       <div className="flex flex-col gap-4">
         {NAV_VARIANTS.map((variant) => (

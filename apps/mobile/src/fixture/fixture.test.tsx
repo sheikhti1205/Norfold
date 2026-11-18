@@ -594,12 +594,14 @@ describe("navigation preflight renders the production nav", () => {
     expect(selected.map((link) => link.textContent?.trim())).toEqual(["Chats"]);
   });
 
-  it("resolves the stored rail to the bar in the small-width frame", () => {
+  it("keeps the stored rail in the small-width frame, where it opens as a drawer", () => {
     storeNavLayout("rail");
     renderRoute();
+    // The frame previews the rail the phone drawer carries. Production never
+    // paints it until the reader opens the drawer (Shell.test.tsx owns that).
     expect(
       screen.getByTestId("fixture-nav-demo-small-width").getAttribute("data-nav-layout"),
-    ).toBe("bottom");
+    ).toBe("rail");
   });
 
   it("resolves the stored rail to a rail in the wide frames", () => {

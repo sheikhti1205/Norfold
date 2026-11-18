@@ -87,6 +87,7 @@ it("opens a picker narrowed to each file type and forwards the kind", () => {
     ["Video", "video", "video/*"],
   ];
   for (const [label, kind, accept] of cases) {
+    onFiles.mockClear();
     fireEvent.click(within(openAttachments()).getByRole("menuitem", { name: label }));
     const picker = screen.getByLabelText(`Choose ${kind}`) as HTMLInputElement;
     if (kind === "document") expect(picker.getAttribute("accept")).toContain(accept);

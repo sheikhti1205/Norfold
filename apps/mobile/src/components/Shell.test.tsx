@@ -799,7 +799,7 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
       // Collapsed rail width lives in a token so the hover expansion can
       // compute the exact negative margin that keeps <main> from reflowing.
       expect(rail.width).toBe("var(--fb-rail-collapsed)");
-      expect(rail.getPropertyValue("--fb-rail-collapsed").trim()).toBe("64px");
+      expect(rail.getPropertyValue("--fb-rail-collapsed").trim()).toBe("5.25rem");
       expect(rail.getPropertyValue("--fb-rail-expanded").trim()).toBe("196px");
       // Positioned only so the resize handle can anchor to the rail's inner
       // edge. It stays an in-flow flex column (never fixed/absolute), which is
