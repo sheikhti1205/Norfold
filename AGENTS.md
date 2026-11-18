@@ -1,6 +1,6 @@
 # Norfold — Agent Rules (always loaded)
 
-## No local builds or heavy runs — owner order 2026-11-18 (absolute)
+## No local builds or heavy runs (absolute, owner order 2026-11-18)
 
 - Do not run npm install, build, test, typecheck or lint, Gradle, Vite dev
   servers, Vitest, Playwright, emulators, or any other CPU-heavy project job on
