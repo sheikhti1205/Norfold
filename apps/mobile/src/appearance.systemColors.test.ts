@@ -10,7 +10,9 @@ describe("device-local System colors preference", () => {
   });
   it("preserves the last preset and only the source choice, not derived native colors", () => {
     const settings = migrateAppearance({ accent: "violet", accentSource: "system", primary: "#123456", nativePalette: { light: "#ffffff" } });
-    expect(settings).toEqual({ ...DEFAULT_APPEARANCE, accent: "violet", accentSource: "system" });
+    // A store with a valid accent predates the reaction choice, so it keeps the
+    // colorful row it has been seeing instead of switching to the new default.
+    expect(settings).toEqual({ ...DEFAULT_APPEARANCE, accent: "violet", accentSource: "system", reactionAppearance: "colorful" });
     saveAppearance(settings);
     expect(loadAppearance()).toEqual(settings);
     const raw = localStorage.getItem(APPEARANCE_STORAGE_KEY)!;

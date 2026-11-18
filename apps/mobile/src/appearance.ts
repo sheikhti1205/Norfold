@@ -111,12 +111,33 @@ export const REDUCE_MOTION_OPTIONS: readonly {
 ];
 
 /**
- * Reader choice for the primary navigation at wide widths:
- * `"bottom"` keeps the bar, `"rail"` moves it to a side rail. Phones always
- * keep the bottom bar (the width gate lives in `components/navLayout.ts`), so a
- * stored `"rail"` can never produce a narrow side column or a drawer.
+ * Reader choice for the primary navigation:
+ * `"auto"` uses the side rail when the viewport has room and the bottom bar
+ * otherwise, `"bottom"` always keeps the bar (floating on a wide canvas), and
+ * `"rail"` keeps the rail when it fits, falling back to the bar on phones.
+ * The viewport gate lives in `components/navLayout.ts`; a stored choice is
+ * never rewritten by a resize, so the rail returns when the room does.
  */
-export type NavLayout = "bottom" | "rail";
+export type NavLayout = "auto" | "bottom" | "rail";
+
+/**
+ * How reactions present their semantic color:
+ * - `"adaptive"` keeps the row neutral until a reaction is chosen, then shows
+ *   its own color,
+ * - `"colorful"` keeps every reaction in its semantic color at all times,
+ * - `"monochrome"` never uses hue; the filled icon and pressed fill carry state.
+ */
+export type ReactionAppearance = "adaptive" | "colorful" | "monochrome";
+
+export const REACTION_APPEARANCE_OPTIONS: readonly {
+  value: ReactionAppearance;
+  label: string;
+  description: string;
+}[] = [
+  { value: "adaptive", label: "Adaptive", description: "Reactions stay neutral until you choose one, then take their own color." },
+  { value: "colorful", label: "Colorful", description: "Every reaction keeps its own color all the time." },
+  { value: "monochrome", label: "Monochrome", description: "No reaction color. The filled icon and pressed background show what you chose." },
+];
 
 export interface AppearanceSettings {
   accent: AccentId;
@@ -127,6 +148,7 @@ export interface AppearanceSettings {
   navLayout: NavLayout;
   /** Device-local acknowledgement, never an account preference. */
   navLayoutChosen: boolean;
+  reactionAppearance: ReactionAppearance;
   /**
    * The wide navigation rail, pinned open as a labelled panel instead of the
    * icon column (owner order 2026-11-12, R7). Local layout habit, not account
@@ -173,8 +195,9 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
   textScale: "standard",
   reduceMotion: "system",
   highQualityPhoto: false,
-  navLayout: "bottom",
+  navLayout: "auto",
   navLayoutChosen: false,
+  reactionAppearance: "adaptive",
   railPinned: false,
   railWidth: RAIL_WIDTH_DEFAULT,
 };
@@ -192,7 +215,18 @@ function isReduceMotionOverride(value: unknown): value is ReduceMotionOverride {
 }
 
 function isNavLayout(value: unknown): value is NavLayout {
-  return value === "bottom" || value === "rail";
+  return value === "auto" || value === "bottom" || value === "rail";
+}
+
+function isReactionAppearance(value: unknown): value is ReactionAppearance {
+  return value === "adaptive" || value === "colorful" || value === "monochrome";
+}
+
+/** Pre-three-way names some devices may still hold. */
+function migratedNavLayout(value: unknown): NavLayout | null {
+  if (value === "side") return "rail";
+  if (value === "bar") return "bottom";
+  return isNavLayout(value) ? value : null;
 }
 
 /** Pure field-by-field migration; malformed fields never discard valid peers. */
@@ -200,17 +234,34 @@ export function migrateAppearance(value: unknown): AppearanceSettings {
   const parsed = value && typeof value === "object" && !Array.isArray(value)
     ? value as Partial<AppearanceSettings>
     : {};
+  const storedLayout = migratedNavLayout(parsed.navLayout);
+  // A real pre-adaptive store has at least one recognizable preference. An
+  // object with only junk fields is corrupt, not an old device.
+  const hasStoredPreferences = isAccentId(parsed.accent) || isTextScaleId(parsed.textScale)
+    || isReduceMotionOverride(parsed.reduceMotion) || typeof parsed.highQualityPhoto === "boolean"
+    || storedLayout !== null || typeof parsed.railWidth === "number"
+    || typeof parsed.railPinned === "boolean" || typeof parsed.navLayoutChosen === "boolean";
+  // Existing saved layouts remain intentional. New writes carry an explicit
+  // false until the reader chooses; unrelated accent edits cannot dismiss setup.
+  const navLayoutChosen = typeof parsed.navLayoutChosen === "boolean" ? parsed.navLayoutChosen
+    : parsed.navLayoutChosen === undefined && storedLayout !== null;
+  // The old unchosen default was the bare bottom bar. With no stored choice it
+  // becomes Automatic, and a deliberate Bottom choice is preserved.
+  const navLayout: NavLayout = storedLayout === null || (storedLayout === "bottom" && !navLayoutChosen)
+    ? DEFAULT_APPEARANCE.navLayout
+    : storedLayout;
   return {
     accent: migrateAccent(parsed.accent),
     accentSource: parsed.accentSource === "system" ? "system" : "preset",
     textScale: isTextScaleId(parsed.textScale) ? parsed.textScale : DEFAULT_APPEARANCE.textScale,
     reduceMotion: isReduceMotionOverride(parsed.reduceMotion) ? parsed.reduceMotion : DEFAULT_APPEARANCE.reduceMotion,
     highQualityPhoto: typeof parsed.highQualityPhoto === "boolean" ? parsed.highQualityPhoto : DEFAULT_APPEARANCE.highQualityPhoto,
-    navLayout: isNavLayout(parsed.navLayout) ? parsed.navLayout : DEFAULT_APPEARANCE.navLayout,
-    // Existing saved layouts remain intentional. New writes carry an explicit
-    // false until the reader chooses; unrelated accent edits cannot dismiss setup.
-    navLayoutChosen: typeof parsed.navLayoutChosen === "boolean" ? parsed.navLayoutChosen
-      : parsed.navLayoutChosen === undefined && isNavLayout(parsed.navLayout),
+    navLayout,
+    navLayoutChosen,
+    // Absent means a pre-existing device, which has been seeing the colorful
+    // row all along; only a fresh install starts on the adaptive default.
+    reactionAppearance: isReactionAppearance(parsed.reactionAppearance) ? parsed.reactionAppearance
+      : hasStoredPreferences && parsed.reactionAppearance === undefined ? "colorful" : DEFAULT_APPEARANCE.reactionAppearance,
     railPinned: typeof parsed.railPinned === "boolean" ? parsed.railPinned : DEFAULT_APPEARANCE.railPinned,
     railWidth: typeof parsed.railWidth === "number"
       ? clampRailWidth(parsed.railWidth === RAIL_WIDTH_LEGACY_DEFAULT ? RAIL_WIDTH_DEFAULT : parsed.railWidth)
@@ -314,6 +365,7 @@ export function applyAppearance(settings: AppearanceSettings): void {
   root.dataset.accentSource = settings.accentSource;
   root.style.fontSize = `${scale.percent}%`;
   root.dataset.reduceMotionOverride = settings.reduceMotion;
+  root.dataset.reactionAppearance = settings.reactionAppearance;
   root.classList.toggle("fb-reduce-motion", resolveReduceMotion(settings.reduceMotion));
 }
 

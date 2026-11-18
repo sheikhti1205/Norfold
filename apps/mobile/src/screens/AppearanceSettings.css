@@ -34,6 +34,67 @@
   gap: 0.625rem;
 }
 
+/* Three layouts in one row, like the theme tiles above. The setup popover and
+   the account panel keep the auto-fit grid, which stacks when space is short. */
+.fb-appearance-nav-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+/* The representative report: real card anatomy, not a pile of swatches. */
+.fb-appearance-report {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 0.75rem;
+  background: var(--fb-surface);
+}
+.fb-appearance-report-head { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.fb-appearance-avatar {
+  display: grid; place-items: center; flex: none;
+  width: 2rem; height: 2rem; border-radius: 50%;
+  background: var(--fb-primary-container); color: var(--fb-on-primary-container);
+  font-size: 0.75rem; font-weight: 700;
+}
+.fb-appearance-report-identity { display: flex; flex: 1; min-width: 0; flex-direction: column; line-height: 1.25; }
+.fb-appearance-report-name {
+  display: inline-flex; align-items: center; gap: 0.2rem;
+  font-size: 0.875rem; font-weight: 600; overflow-wrap: anywhere;
+}
+.fb-appearance-report-name svg { flex: none; color: var(--fb-success); }
+.fb-appearance-report-time { color: var(--fb-on-surface-variant); font-size: 0.75rem; }
+.fb-appearance-report-status {
+  flex: none; padding: 0.15rem 0.5rem; border-radius: 999px;
+  background: var(--fb-lost-bg); color: var(--fb-lost-ink);
+  font-size: 0.75rem; font-weight: 600;
+}
+/* Title and status share a row, the way the refined feed card reads. */
+.fb-appearance-report-title-row {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 0.5rem; margin-top: 0.1rem;
+}
+.fb-appearance-report-title {
+  margin: 0; min-width: 0; font-size: 1rem; font-weight: 650; line-height: 1.3; overflow-wrap: anywhere;
+}
+.fb-appearance-report-place {
+  display: flex; align-items: center; gap: 0.25rem; margin: 0;
+  color: var(--fb-on-surface-variant); font-size: 0.8125rem;
+}
+.fb-appearance-report-place svg { flex: none; }
+.fb-appearance-report-actions { display: flex; gap: 0.25rem; margin-top: 0.15rem; }
+.fb-appearance-preview-action {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  min-height: 2rem; padding: 0 0.6rem; border-radius: 999px;
+  color: var(--fb-on-surface-variant); font-size: 0.8125rem; font-weight: 500;
+}
+.fb-appearance-preview-action[data-kind="comment"] { color: var(--fb-link); }
+.fb-appearance-preview-action[data-kind="share"] { color: var(--fb-primary); }
+.fb-appearance-preview-action[data-selected="true"] { background: var(--fb-surface-container); }
+.fb-appearance-preview[data-reaction-appearance="adaptive"] .fb-appearance-preview-action[data-kind="like"][data-selected="true"] { color: var(--fb-success); }
+.fb-appearance-preview[data-reaction-appearance="colorful"] .fb-appearance-preview-action[data-kind="like"] { color: var(--fb-success); }
+.fb-appearance-preview[data-reaction-appearance="colorful"] .fb-appearance-preview-action[data-kind="dislike"] { color: var(--fb-error); }
+.fb-appearance-preview[data-reaction-appearance="monochrome"] .fb-appearance-preview-action[data-kind="like"] { color: var(--fb-on-surface-variant); }
+.fb-appearance-preview[data-reaction-appearance="monochrome"] .fb-appearance-preview-action[data-kind="like"][data-selected="true"] { color: var(--fb-on-surface); }
+
 .fb-appearance-preview-button {
   display: inline-flex;
   align-items: center;
@@ -70,11 +131,12 @@
 .fb-appearance-preview-focus {
   display: inline-flex;
   align-items: center;
+  gap: 0.375rem;
   min-height: 2.5rem;
   padding: 0 0.75rem;
   border-radius: 0.625rem;
   background: var(--fb-surface);
-  color: var(--fb-on-surface);
+  color: var(--fb-on-surface-variant);
   font-size: 0.8125rem;
   outline: 2px solid var(--fb-focus);
   outline-offset: 2px;

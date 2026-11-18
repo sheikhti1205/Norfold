@@ -32,7 +32,7 @@ describe("consumer appearance migration", () => {
     // pinned state) must not make an accent-migration test fail.
     expect(appearance.loadAppearance()).toMatchObject({
       accent: next, accentSource: "preset", textScale: "xlarge", reduceMotion: "reduce", highQualityPhoto: true,
-      navLayout: "bottom",
+      navLayout: "auto",
       navLayoutChosen: false,
     });
   });

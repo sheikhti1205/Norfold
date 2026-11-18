@@ -14,6 +14,29 @@
      width (every phone, portrait and landscape) nothing changes. */
   max-width: 44rem; margin-inline: auto;
 }
+/* Owner preference 2026-11-18: a reader who keeps the bottom bar on a wide
+   screen gets a floating capsule, not a full-width slab. It still takes flow
+   space, so it never covers content, and the slot itself is transparent. */
+@media (min-width: 600px) {
+  .fb-nav-slot[data-layout="bottom"] {
+    background: transparent;
+    padding-top: 10px;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+  .fb-nav-slot[data-layout="bottom"] .fb-nav-row {
+    max-width: 36rem;
+    padding: 6px;
+    border: 1px solid var(--fb-outline-variant);
+    border-radius: 999px;
+    background: var(--fb-surface-container-low);
+    box-shadow: var(--shadow-md);
+  }
+  .fb-nav-slot[data-layout="bottom"] .fb-nav-pill {
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+}
 .fb-nav-pill {
   display: flex; flex: 1 1 0; min-width: 0; align-items: stretch;
   padding: 4px; border-radius: 999px;

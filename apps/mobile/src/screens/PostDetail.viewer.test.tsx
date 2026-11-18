@@ -59,7 +59,9 @@ describe("PostDetail viewer layout", () => {
       expect(within(report).getByTestId("report-viewer-inline-actions")).toBeTruthy();
 
       fireEvent.click(screen.getByRole("button", { name: /^Comments, / }));
-      const dialog = await screen.findByRole("dialog", { name: "Comments" });
+      // The floating surface mounts a portal and an entrance animation; a loaded
+      // CI worker can exceed the 1s default even though the click was accepted.
+      const dialog = await screen.findByRole("dialog", { name: "Comments" }, { timeout: 10_000 });
       expect(within(dialog).getByTestId("detail-comments")).toBeTruthy();
       expect(within(dialog).getByTestId("viewer-composer")).toBeTruthy();
     } finally {

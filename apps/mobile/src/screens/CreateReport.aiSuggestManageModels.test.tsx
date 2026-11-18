@@ -312,6 +312,12 @@ describe("CreateReport suggestion failure — Manage local tools affordance (MIN
 
   it("does not leave the helper sentence behind after the report is published", async () => {
     publishReportMock.mockResolvedValue("p1");
+    // This test covers the helper sentence across publish, not field
+    // suggestions. Keep suggestion results out of the form: a late result under
+    // CI load could rewrite a field after it was filled and make the submit
+    // invalid, which is a different scenario.
+    suggestFieldsMock.mockImplementation(cancellable(CANCELLED));
+    suggestCategoryMock.mockImplementation(cancellable(CANCELLED));
     seedDescription("a black umbrella lost near the market");
     render(<CreateReport />);
     await screen.findByRole("toolbar", { name: /description formatting/i });

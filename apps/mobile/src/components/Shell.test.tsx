@@ -58,6 +58,7 @@ function renderShell(entry = "/") {
 
 describe("Shell floating primary navigation", () => {
   it("offers four destinations and a separate create action", () => {
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout: "bottom", navLayoutChosen: true }));
     renderShell();
     const nav = screen.getByRole("navigation", { name: "Primary" });
     expect(within(nav).getAllByRole("link").map((t) => t.getAttribute("href"))).toEqual([
@@ -66,6 +67,7 @@ describe("Shell floating primary navigation", () => {
     expect(within(nav).getByRole("link", { name: "Create report" })).toBeTruthy();
     expect(screen.queryByTestId("assistant-entry")).toBeNull();
     expect(screen.queryByRole("button", { name: "Open assistant" })).toBeNull();
+    localStorage.clear();
   });
 
   it("opens an in-app settings link inside the window instead of replacing the page", () => {
@@ -141,7 +143,7 @@ describe("Shell floating primary navigation", () => {
   });
 
   it("opens the phone bottom bar's Settings destination in the window", async () => {
-    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout: "bottom" }));
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout: "bottom", navLayoutChosen: true }));
     render(
       <MemoryRouter initialEntries={["/"]}>
         <Routes><Route element={<Shell />}>
@@ -384,10 +386,10 @@ describe("Shell nav hide/show with focusability (Wave A)", () => {
 describe("Shell adaptive navigation (owner ruling 4(e))", () => {
   const initialWidth = window.innerWidth;
 
-  function storeNavLayout(navLayout: "bottom" | "rail") {
+  function storeNavLayout(navLayout: "auto" | "bottom" | "rail") {
     localStorage.setItem(
       APPEARANCE_STORAGE_KEY,
-      JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout }),
+      JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout, navLayoutChosen: true }),
     );
   }
 

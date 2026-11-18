@@ -10,7 +10,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function storeNavLayout(navLayout: "bottom" | "rail") {
+function storeNavLayout(navLayout: "auto" | "bottom" | "rail") {
   localStorage.setItem(
     APPEARANCE_STORAGE_KEY,
     JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout }),
@@ -22,13 +22,18 @@ function setWidth(width: number) {
 }
 
 describe("resolveNavLayout", () => {
-  it("keeps the bottom bar on narrow viewports even when a rail is stored", () => {
+  it("keeps the bottom bar on narrow viewports even when a rail or Automatic is stored", () => {
     expect(resolveNavLayout("rail", false)).toBe("bottom");
+    expect(resolveNavLayout("auto", false)).toBe("bottom");
     expect(resolveNavLayout("bottom", false)).toBe("bottom");
   });
 
   it("honours a stored rail once the viewport is wide", () => {
     expect(resolveNavLayout("rail", true)).toBe("rail");
+  });
+
+  it("resolves Automatic to the rail on a wide viewport", () => {
+    expect(resolveNavLayout("auto", true)).toBe("rail");
   });
 
   it("honours a stored bottom bar on wide viewports", () => {
@@ -37,8 +42,14 @@ describe("resolveNavLayout", () => {
 });
 
 describe("useNavLayout", () => {
-  it("defaults to the bottom bar", () => {
+  it("defaults to Automatic, which is the rail on a wide viewport", () => {
     setWidth(1024);
+    const { result } = renderHook(() => useNavLayout());
+    expect(result.current).toBe("rail");
+  });
+
+  it("defaults to Automatic, which is the bottom bar on a phone", () => {
+    setWidth(COMPACT_MAX_PX - 1);
     const { result } = renderHook(() => useNavLayout());
     expect(result.current).toBe("bottom");
   });

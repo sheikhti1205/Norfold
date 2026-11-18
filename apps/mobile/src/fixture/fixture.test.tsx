@@ -557,14 +557,15 @@ describe("navigation preflight renders the production nav", () => {
     localStorage.clear();
   });
 
-  function storeNavLayout(navLayout: "bottom" | "rail") {
+  function storeNavLayout(navLayout: "auto" | "bottom" | "rail") {
     localStorage.setItem(
       APPEARANCE_STORAGE_KEY,
-      JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout }),
+      JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout, navLayoutChosen: true }),
     );
   }
 
   it("renders one production navigation with all five actions in every variant", () => {
+    storeNavLayout("bottom");
     renderRoute();
     for (const variant of NAV_VARIANTS) {
       const demo = screen.getByTestId(`fixture-nav-demo-${variant}`);
@@ -574,6 +575,12 @@ describe("navigation preflight renders the production nav", () => {
         "/", "/my", "/chats", "/settings", "/report",
       ]);
     }
+  });
+
+  it("resolves the untouched Automatic default to the rail on a wide viewport and the bar in the small frame", () => {
+    renderRoute();
+    expect(screen.getByTestId("fixture-nav-demo-normal").getAttribute("data-nav-layout")).toBe("rail");
+    expect(screen.getByTestId("fixture-nav-demo-small-width").getAttribute("data-nav-layout")).toBe("bottom");
   });
 
   it("renders a destination other than Home as selected in the rail", () => {

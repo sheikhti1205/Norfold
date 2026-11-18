@@ -39,7 +39,7 @@ function Harness({ expanded }: { expanded: boolean }) {
 }
 
 function storeLayout(layout: NavLayout) {
-  localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout: layout }));
+  localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout: layout, navLayoutChosen: true }));
 }
 
 afterEach(() => {

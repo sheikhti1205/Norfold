@@ -1,10 +1,12 @@
 /**
- * Primary-navigation layout (owner ruling 4(e)).
+ * Primary-navigation layout (owner ruling 4(e), three-way preference
+ * 2026-11-18).
  *
- * The reader picks a bottom bar or a side rail in Appearance. That preference
- * is only honoured where a side column can exist: at the compact breakpoint and
- * up. Below it the bottom bar always wins, so a stored `"rail"` can never turn
- * a phone into a narrow column or a drawer.
+ * `auto` uses the rail where a side column fits and the bottom bar otherwise.
+ * `rail` asks for the side rail but still falls back to the bar on a phone, so
+ * it can never become a narrow column or a drawer. `bottom` always keeps the
+ * bar, floating over a wide canvas instead of turning into a rail. The stored
+ * preference is never rewritten by a resize; it only decides what renders.
  *
  * The width gate is `useWideViewport` (the single owner of the rail breakpoint,
  * derived from `COMPACT_MAX_PX` in `responsive.ts`); this module only decides
@@ -20,7 +22,8 @@ export function resolveNavLayout(
   preference: NavLayout,
   wideViewport: boolean,
 ): NavLayout {
-  return preference === "rail" && wideViewport ? "rail" : "bottom";
+  if (preference === "bottom") return "bottom";
+  return wideViewport ? "rail" : "bottom";
 }
 
 /** The layout the shell should render right now. */

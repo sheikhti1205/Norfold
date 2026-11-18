@@ -77,8 +77,8 @@ function Choices({ variant, theme, layout }: { variant: FixtureVariant; theme: "
     <SettingsGroup title="Theme"><fieldset className="fb-choice-fieldset"><legend className="sr-only">Theme</legend><div className="fb-preview-grid fb-preview-grid-theme">
       {(["system", "light", "dark"] as const).map(value => <ThemeCard key={value} name={`theme-${variant}`} value={value} checked={theme === value} onChange={() => {}} />)}
     </div></fieldset></SettingsGroup>
-    <SettingsGroup title="Navigation"><fieldset className="fb-choice-fieldset"><legend className="sr-only">Layout</legend><div className="fb-preview-grid fb-preview-grid-nav">
-      {(["bottom", "rail"] as const).map(value => <NavLayoutCard key={value} name={`nav-${variant}`} value={value} checked={layout === value} onChange={() => {}} />)}
+    <SettingsGroup title="Navigation"><fieldset className="fb-choice-fieldset"><legend className="sr-only">Layout</legend><div className="fb-preview-grid fb-preview-grid-nav fb-appearance-nav-grid">
+      {(["auto", "bottom", "rail"] as const).map(value => <NavLayoutCard key={value} name={`nav-${variant}`} value={value} checked={layout === value} onChange={() => {}} />)}
     </div></fieldset></SettingsGroup>
   </SettingsPage>;
 }

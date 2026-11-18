@@ -130,14 +130,16 @@ describe("AppearanceSettings", () => {
     expect(rule).not.toContain("--fb-primary-container");
   });
 
-  it("offers Bottom bar and Side rail with the phone caveat, bottom checked by default", () => {
+  it("offers Automatic, Bottom bar and Side rail, with Automatic checked by default", () => {
     renderScreen();
+    const auto = screen.getByRole("radio", { name: /^Automatic/ });
     const bottom = screen.getByRole("radio", { name: /^Bottom bar/ });
     const rail = screen.getByRole("radio", { name: /^Side rail/ });
-    expect((bottom as HTMLInputElement).checked).toBe(true);
+    expect((auto as HTMLInputElement).checked).toBe(true);
+    expect((bottom as HTMLInputElement).checked).toBe(false);
     expect((rail as HTMLInputElement).checked).toBe(false);
-    expect(screen.getByText(/side rail is used on wider screens/i)).toBeTruthy();
-    expect(screen.getByText(/on a phone, the bottom bar always stays/i)).toBeTruthy();
+    expect(screen.getByText(/automatic uses the side rail when there is room/i)).toBeTruthy();
+    expect(screen.getByText(/choosing bottom bar keeps the floating bar/i)).toBeTruthy();
   });
 
   it("persists the navigation choice immediately with no save step", () => {
@@ -148,6 +150,35 @@ describe("AppearanceSettings", () => {
 
     act(() => { screen.getByRole("radio", { name: /^Bottom bar/ }).click(); });
     expect(JSON.parse(localStorage.getItem(APPEARANCE_STORAGE_KEY) ?? "{}").navLayout).toBe("bottom");
+
+    act(() => { screen.getByRole("radio", { name: /^Automatic/ }).click(); });
+    expect(JSON.parse(localStorage.getItem(APPEARANCE_STORAGE_KEY) ?? "{}").navLayout).toBe("auto");
+  });
+
+  it("offers three explained reaction appearances and applies the choice", () => {
+    renderScreen();
+    const adaptive = screen.getByRole("radio", { name: /^Adaptive/ });
+    expect((adaptive as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText(/reactions stay neutral until you choose one/i)).toBeTruthy();
+    expect(screen.getByText(/every reaction keeps its own color/i)).toBeTruthy();
+    expect(screen.getByText(/no reaction color/i)).toBeTruthy();
+
+    act(() => { screen.getByRole("radio", { name: /^Monochrome/ }).click(); });
+    expect(JSON.parse(localStorage.getItem(APPEARANCE_STORAGE_KEY) ?? "{}").reactionAppearance).toBe("monochrome");
+    expect(document.documentElement.dataset.reactionAppearance).toBe("monochrome");
+    expect(screen.getByRole("img", { name: /preview/i }).getAttribute("aria-label")).toMatch(/monochrome/i);
+  });
+
+  it("shows a representative report in the live preview and moves the reaction state with the setting", () => {
+    renderScreen();
+    const preview = screen.getByRole("img", { name: /preview/i });
+    expect(preview.textContent).toContain("Black canvas backpack");
+    expect(preview.textContent).toContain("Lost");
+    expect(preview.querySelector('[data-kind="like"]')?.getAttribute("data-selected")).toBe("true");
+    expect(preview.querySelector('[data-kind="dislike"]')).toBeTruthy();
+    expect(preview.getAttribute("data-reaction-appearance")).toBe("adaptive");
+    act(() => { screen.getByRole("radio", { name: /^Colorful/ }).click(); });
+    expect(screen.getByRole("img", { name: /preview/i }).getAttribute("data-reaction-appearance")).toBe("colorful");
   });
 
   it("shows a stored rail as selected", () => {

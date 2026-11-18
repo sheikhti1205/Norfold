@@ -259,6 +259,7 @@ const light = {
   hover: "rgba(0, 0, 0, 0.08)", pressed: "rgba(0, 0, 0, 0.12)",
   scrim: "rgba(0, 0, 0, 0.5)",
   shadowSm: "0 1px 2px rgba(0, 0, 0, 0.12)", shadowMd: "0 8px 24px rgba(0, 0, 0, 0.18)",
+  shadowLg: "0 18px 48px rgba(0, 0, 0, 0.24)",
 };
 const dark = {
   surface: "#18191b", low: "#202124", container: "#26272b", high: "#2d2f34",
@@ -267,10 +268,11 @@ const dark = {
   hover: "rgba(255, 255, 255, 0.08)", pressed: "rgba(255, 255, 255, 0.12)",
   scrim: "rgba(0, 0, 0, 0.6)",
   shadowSm: "0 1px 2px rgba(0, 0, 0, 0.5)", shadowMd: "0 8px 24px rgba(0, 0, 0, 0.6)",
+  shadowLg: "0 18px 48px rgba(0, 0, 0, 0.7)",
 };
 const amoled = {
   ...dark, surface: "#000000",
-  shadowSm: "none", shadowMd: "none",
+  shadowSm: "none", shadowMd: "none", shadowLg: "none",
 };
 
 export const COLOR_SYSTEM = {
@@ -323,7 +325,11 @@ export function colorTokensFor(mode: ColorMode): Record<string, string> {
     "--fb-on-media": COLOR_SYSTEM.content.onMedia,
     "--composer-surface": n.low, "--user-bubble": n.bubble, "--assistant-surface": n.surface,
     "--primary-action": n.action, "--scrim": n.scrim, "--shadow-sm": n.shadowSm,
-    "--shadow-md": n.shadowMd, "--skeleton-base": n.low === light.low ? n.container : n.low,
+    "--shadow-md": n.shadowMd, "--shadow-lg": n.shadowLg,
+    /* A photo overlays surfaces of unknown brightness, so its control chip is
+       a fixed dark pair in every mode rather than a mode-inverted one. */
+    "--fb-inverse-surface": "#1f1f23", "--fb-inverse-on-surface": "#f4f4f6",
+    "--skeleton-base": n.low === light.low ? n.container : n.low,
     "--skeleton-highlight": mode === "light" ? n.surface : mode === "amoled" ? n.container : n.high,
     "color-scheme": pair,
   };

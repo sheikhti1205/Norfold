@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from "react";
 import { NavLink, type To } from "react-router";
 import { Check, ChevronRight, Search, X, type LucideIcon } from "lucide-react";
-import { ACCENT_OPTIONS, type AccentId } from "../../appearance";
+import { ACCENT_OPTIONS, type AccentId, type NavLayout } from "../../appearance";
 import type { Theme } from "../../theme";
 import { density } from "../../design/density";
 import { colorTokensFor } from "../../design/colorSystem";
@@ -224,15 +224,17 @@ export function ThemeCard({ name, value, checked, onChange, disabled = false }: 
  * already use bars (§3).
  */
 const NAV_TILE_DOTS = { bottom: 5, rail: 4 } as const;
+const NAV_TILE_LABELS = { auto: "Automatic", bottom: "Bottom bar", rail: "Side rail" } as const;
 
-export function NavLayoutCard({ name, value, checked, onChange }: { name: string; value: "bottom" | "rail"; checked: boolean; onChange: (value: "bottom" | "rail") => void }) {
+export function NavLayoutCard({ name, value, checked, onChange }: { name: string; value: NavLayout; checked: boolean; onChange: (value: NavLayout) => void }) {
   return <label className="fb-preview-choice" data-checked={checked}>
     <input className="fb-choice-input" type="radio" name={name} value={value} checked={checked} onChange={() => onChange(value)} />
     <span className="fb-preview-frame fb-nav-preview" data-layout={value} aria-hidden="true">
+      {value === "auto" && <span className="fb-nav-preview-side">{Array.from({ length: NAV_TILE_DOTS.rail }, (_, index) => <i key={index} />)}</span>}
       <span className="fb-nav-preview-content"><i /><i /><i /></span>
-      <span className="fb-nav-preview-bar">{Array.from({ length: NAV_TILE_DOTS[value] }, (_, index) => <i key={index} />)}</span>
+      <span className="fb-nav-preview-bar">{Array.from({ length: value === "rail" ? NAV_TILE_DOTS.rail : NAV_TILE_DOTS.bottom }, (_, index) => <i key={index} />)}</span>
     </span>
-    <span className="fb-preview-label">{value === "bottom" ? "Bottom bar" : "Side rail"}</span>
+    <span className="fb-preview-label">{NAV_TILE_LABELS[value]}</span>
   </label>;
 }
 

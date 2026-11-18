@@ -28,14 +28,14 @@
    there is the icon column, not a surface a menu should imitate. */
 .fb-account-menu {
   display: flex; flex-direction: column;
-  width: var(--fb-rail-w, 224px); max-width: calc(100vw - 24px);
+  width: var(--fb-rail-w, 192px); max-width: calc(100vw - 24px);
   max-height: min(44rem, calc(100vh - 1.5rem));
   max-height: min(44rem, calc(100dvh - 1.5rem), var(--available-height, 100dvh));
   padding: 8px; border-radius: 18px; background: var(--fb-surface);
   border: 1px solid var(--fb-outline-variant); box-shadow: var(--shadow-md);
 }
 .fb-account-menu:has(.fb-account-panel) {
-  width: max(var(--fb-rail-w, 224px), min(320px, calc(100vw - 24px)));
+  width: max(var(--fb-rail-w, 192px), min(320px, calc(100vw - 24px)));
 }
 .fb-account-dialog { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; outline: none; }
 .fb-account-list { display: flex; flex-direction: column; min-height: 0; }

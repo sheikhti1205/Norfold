@@ -30,6 +30,7 @@ function renderShell(entry = "/") {
 afterEach(() => {
   cleanup();
   unreadMock.mockReset();
+  localStorage.clear();
 });
 
 describe("Shell accent consumers", () => {
@@ -57,6 +58,7 @@ describe("Shell accent consumers", () => {
 
   it("paints the create action with primary bg/on-primary", () => {
     unreadMock.mockResolvedValue(0);
+    localStorage.setItem("findback.appearance.v1", JSON.stringify({ navLayout: "bottom", navLayoutChosen: true }));
     renderShell();
     const create = within(screen.getByRole("navigation", { name: "Primary" })).getByRole(
       "link",
