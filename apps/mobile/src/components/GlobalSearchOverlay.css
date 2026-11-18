@@ -195,10 +195,14 @@
   color: var(--fb-on-surface);
   font-weight: 600;
 }
-.fb-search-pill[data-open],
+.fb-search-pill[data-open] {
+  border-color: var(--fb-on-surface);
+  color: var(--fb-on-surface);
+}
 .fb-search-pill:focus-visible {
   border-color: var(--fb-on-surface);
-  outline: none;
+  outline: 2px solid var(--fb-focus);
+  outline-offset: -2px;
   color: var(--fb-on-surface);
 }
 .fb-search-pill-text { white-space: nowrap; }

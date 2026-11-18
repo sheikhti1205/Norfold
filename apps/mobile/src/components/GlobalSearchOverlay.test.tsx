@@ -96,6 +96,11 @@ beforeEach(() => {
 afterEach(() => { cleanup(); resetGlobalSearch(); });
 
 describe("app-wide search", () => {
+  it("keeps a visible focus ring on the filter pills", () => {
+    expect(searchStyles).toMatch(/\.fb-search-pill:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--fb-focus\)/s);
+    expect(searchStyles).not.toMatch(/\.fb-search-pill:focus-visible\s*\{[^}]*outline:\s*none/s);
+  });
+
   it("keeps the full viewport backdrop below the search surface", async () => {
     render(<Harness />);
     const { overlay } = await openSearch();
