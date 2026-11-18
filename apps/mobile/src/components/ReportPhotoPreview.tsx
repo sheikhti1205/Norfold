@@ -91,8 +91,8 @@ function PreviewLayer({ post, image, children }: { post: PostItem; image: Attach
           onOpenChange={(next) => { if (!next) close(); }}
           triggerRef={triggerRef}
           isNonModal
-          placement="bottom start"
-          offset={10}
+          placement="end"
+          offset={12}
           className="fb-popover fb-report-preview-panel"
         >
           <div className="fb-report-preview" role="dialog" aria-label={`Preview of ${post.title}`}
