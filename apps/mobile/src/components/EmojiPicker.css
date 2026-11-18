@@ -33,14 +33,16 @@
   max-width: calc(100cqw - 8px);
 }
 .fb-peer-composer .fb-picker-layer[data-size="menu"] {
-  /* Content-width menu, centred on its trigger and never touching the card
-     edge: left- or right-anchoring puts a mid-row menu off a 288px composer. */
+  /* Content-width menu that stays inside its own column. Its only trigger is
+     the attachment control, the first in the row: centring the panel on it put
+     a third of the sheet behind the conversation list, which paints above the
+     composer, so the panel opened with its labels cut in half. */
   width: max-content;
   min-width: min(11rem, calc(100cqw - 24px));
   max-width: calc(100cqw - 24px);
-  left: 50%;
+  left: 0;
   right: auto;
-  transform: translateX(-50%);
+  transform: none;
 }
 
 /* The peer composer's attachment sheet: one control opens every real
