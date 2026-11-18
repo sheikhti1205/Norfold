@@ -125,9 +125,9 @@ export const DESTINATIONS: readonly Destination[] = [
   {
     id: "appearance",
     route: "/settings/appearance",
-    title: "Appearance",
+    title: "Personalization",
     summary: "Theme, dark mode, true black and accent.",
-    keywords: ["theme", "dark", "amoled", "accent", "color", "personalization", "display"],
+    keywords: ["theme", "dark", "amoled", "accent", "color", "personalization", "display", "appearance"],
     category: "preferences",
     auth: "signed-in",
     platforms: ["web", "android"],

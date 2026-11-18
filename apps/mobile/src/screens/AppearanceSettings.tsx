@@ -45,7 +45,7 @@ export function AppearanceSettings() {
 
   return (
     <SettingsPage
-      title="Appearance"
+      title="Personalization"
       description="Make Norfold look yours. Changes apply right away."
       backTo="/settings"
     >

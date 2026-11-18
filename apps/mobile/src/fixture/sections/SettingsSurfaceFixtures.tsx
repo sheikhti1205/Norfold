@@ -31,7 +31,7 @@ const FIXTURE_USER: PublicUser = {
 const titles: Record<string, string> = {
   "recovered-items": "Recovered items", "sign-in-security": "Sign-in & security",
   devices: "Devices", backup: "Chat backup",
-  "chat-preferences": "Chat preferences", appearance: "Appearance", notifications: "Notification preferences",
+  "chat-preferences": "Chat preferences", appearance: "Personalization", notifications: "Notification preferences",
   accessibility: "Accessibility", "feed-layout": "Feed layout", "local-intelligence": "Local tools", ai: "Optional AI Chat",
   privacy: "Privacy & safety", feedback: "Send feedback", media: "Media & uploads", diagnostics: "Diagnostics",
   terms: "Terms of use", "privacy-policy": "Privacy policy", "community-guidelines": "Community guidelines",
@@ -73,7 +73,7 @@ function SettingsIndex() {
 }
 
 function Choices({ variant, theme, layout }: { variant: FixtureVariant; theme: "system" | "light" | "dark"; layout: "bottom" | "rail" }) {
-  return <SettingsPage title="Appearance" backTo="/settings" autoFocus={false}>
+  return <SettingsPage title="Personalization" backTo="/settings" autoFocus={false}>
     <SettingsGroup title="Theme"><fieldset className="fb-choice-fieldset"><legend className="sr-only">Theme</legend><div className="fb-preview-grid fb-preview-grid-theme">
       {(["system", "light", "dark"] as const).map(value => <ThemeCard key={value} name={`theme-${variant}`} value={value} checked={theme === value} onChange={() => {}} />)}
     </div></fieldset></SettingsGroup>

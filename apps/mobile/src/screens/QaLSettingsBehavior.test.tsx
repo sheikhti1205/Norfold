@@ -18,7 +18,7 @@ import { localOperationNotice } from "../services/ai/localIntelligenceView";
 /* ------------------------------------------------------------------ */
 
 const SEARCH_MATRIX: ReadonlyArray<{ title: string; keywords: string; route: string }> = [
-  { title: "Appearance", keywords: "theme dark amoled accent color personalization", route: "/settings/appearance" },
+  { title: "Personalization", keywords: "theme dark amoled accent color personalization", route: "/settings/appearance" },
   { title: "Accessibility", keywords: "font text size motion reduce animation", route: "/settings/accessibility" },
   { title: "Chat", keywords: "chat preferences message request backup media uploads photo image quality", route: "/settings/privacy/messages" },
   { title: "Notifications", keywords: "push comment mention like status report bell", route: "/settings/notifications" },
