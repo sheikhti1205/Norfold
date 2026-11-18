@@ -28,16 +28,24 @@ describe("reference voice-note geometry", () => {
     expect(screen.getByRole("button", { name: "Send voice message" }).textContent).toBe("");
   });
 
-  it("pauses a live recording and never enables send until a complete preview exists", () => {
-    const pause = vi.fn();
+  it("sends a live recording without forcing the reader to stop first", () => {
+    const send = vi.fn();
     render(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={3_000}
-      percent={0} playing={false} onPreview={() => undefined} onPause={pause}
+      percent={0} playing={false} onPreview={() => undefined} onPause={() => undefined}
+      onResume={() => undefined} onSend={send} onDiscard={() => undefined} />);
+    const button = screen.getByRole("button", { name: "Send voice message" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+    expect(send).toHaveBeenCalledOnce();
+    // The pause control still owns the explicit stop.
+    expect(screen.getByRole("button", { name: "Pause recording" })).toBeTruthy();
+  });
+
+  it("keeps send unavailable while the take is still being prepared", () => {
+    render(<VoiceRecordingPanel phase="pausing" peaks={peaks} elapsedMs={3_000}
+      percent={0} playing={false} onPreview={() => undefined} onPause={() => undefined}
       onResume={() => undefined} onSend={() => undefined} onDiscard={() => undefined} />);
-    fireEvent.click(screen.getByRole("button", { name: "Pause recording" }));
-    expect(pause).toHaveBeenCalledOnce();
     expect((screen.getByRole("button", { name: "Send voice message" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.queryByText("Stop")).toBeNull();
-    expect(screen.queryByText("Discard")).toBeNull();
   });
 
   it("locks review controls during durable admission", () => {

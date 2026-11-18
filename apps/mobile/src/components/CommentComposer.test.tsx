@@ -117,10 +117,11 @@ afterEach(() => {
 });
 
 function chooseAttachment(name: "GIF" | "Photo" | "Sticker") {
-  // GIF and stickers are their own visible control (they must not hide behind
-  // the attachment menu); Photo still lives in the menu.
+  // Emoji, GIFs and stickers share one control (owner direction 2026-11-18);
+  // the tab names the content. Photo still lives in the attachment menu.
   if (name !== "Photo") {
-    fireEvent.click(screen.getByRole("button", { name: /stickers and gifs/i }));
+    fireEvent.click(screen.getByRole("button", { name: /emoji, gifs and stickers/i }));
+    fireEvent.click(screen.getByRole("tab", { name: name === "GIF" ? "GIFs" : "Stickers" }));
     return;
   }
   fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
@@ -245,10 +246,10 @@ describe("CommentComposer emoji affordance (owner order 2026-11-12, R5)", () => 
     fireEvent.change(screen.getByTestId("comment-input"), { target: { value: "Wow" } });
     const field = screen.getByTestId("comment-input") as HTMLTextAreaElement;
     field.setSelectionRange(3, 3);
-    const trigger = screen.getByRole("button", { name: /emoji/i });
+    const trigger = screen.getByRole("button", { name: /emoji, gifs and stickers/i });
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(trigger);
-    expect(screen.getByRole("dialog", { name: /emoji picker/i })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: /emoji, gifs and stickers picker/i })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "party popper" }));
     expect((screen.getByTestId("comment-input") as HTMLTextAreaElement).value).toBe("Wow🎉");
   });
@@ -575,7 +576,8 @@ describe("CommentComposer attachment tiling (display_order + provenance)", () =>
 describe("CommentComposer Klipy", () => {
   it("keeps the GIF control visible when the key is absent and explains the unavailable provider", () => {
     render(<CommentComposer {...baseProps()} />);
-    fireEvent.click(screen.getByRole("button", { name: /stickers and gifs/i }));
+    fireEvent.click(screen.getByRole("button", { name: /emoji, gifs and stickers/i }));
+    fireEvent.click(screen.getByRole("tab", { name: "GIFs" }));
     expect(screen.getByTestId("comment-gif-panel")).toBeTruthy();
     expect(screen.getByTestId("comment-gif-unavailable")).toBeTruthy();
     expect(screen.queryByTestId("comment-gif-search")).toBeNull();

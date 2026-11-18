@@ -1377,10 +1377,13 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
    * retry is the same note rather than a re-recorded one.
    */
   async function sendVoice() {
-    if (!row || !voiceAllowed || voiceStatus !== "review" || !voiceRecording || voiceSending) return;
+    // Send works during the take as well as from review (owner direction
+    // 2026-11-18): one press stops what has been recorded so far and sends it.
+    if (!row || !voiceAllowed || voiceSending) return;
+    if (voiceStatus !== "review" && voiceStatus !== "recording" && voiceStatus !== "pausing") return;
     setVoiceSending(true); setError(null);
     try {
-      const recording = await voice.recorder.finalize();
+      const recording = await voice.recorder.stopAndFinalize();
       if (!recording || !alive.current) return;
       const mime = storedVoiceMime(recording.mime);
       if (mime !== "audio/webm" && mime !== "audio/mp4") throw new Error("Unsupported voice container");
@@ -1825,6 +1828,11 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
           const emojiOnly = message.unsentAt === undefined && message.messageType === "TEXT"
             && !attachment && !message.replyToId && !message.contextReportId && !message.location
             && isEmojiOnly(message.body);
+          // A Klipy GIF or sticker is the message too: no bubble fill, no
+          // padding, no frame around it (owner direction 2026-11-18).
+          const klipyOnly = message.unsentAt === undefined && message.messageType === "TEXT"
+            && !attachment && !message.replyToId && !message.contextReportId && !message.location
+            && isKlipyMediaUrl(message.body.trim());
           const file = message.unsentAt === undefined ? parseChatFileMarker(message.body) : null;
           const flashClass = flash?.id === message.id ? ` fb-chat-flash-${flash.nonce % 2 ? "a" : "b"}` : "";
           return <Fragment key={message.id}>
@@ -1848,7 +1856,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
               onOpen={() => { setSelectedMessageId(message.id); haptic("commit"); }}>
             {({ open, setOpen }) => <>
             <div data-receipt-message={message.messageType === "TEXT" && message.body && message.unsentAt === undefined ? message.id : undefined}
-              className={`fb-chat-message${own ? " fb-chat-message-own" : ""}${message.messageType === "VOICE" && attachment && message.unsentAt === undefined ? " fb-chat-message-voice" : ""}${emojiOnly ? " fb-chat-message-emoji" : ""}${flashClass}`}>
+              className={`fb-chat-message${own ? " fb-chat-message-own" : ""}${message.messageType === "VOICE" && attachment && message.unsentAt === undefined ? " fb-chat-message-voice" : ""}${emojiOnly ? " fb-chat-message-emoji" : ""}${klipyOnly ? " fb-chat-message-klipy" : ""}${flashClass}`}>
             <span className="sr-only">{own ? "You: " : `${name || "Member"}: `}</span>
             {message.unsentAt === undefined && message.replyToId && <button type="button" className="fb-chat-quote"
               onClick={() => { nearBottom.current = false; setJumpTo(message.replyToId!); }}
@@ -2019,8 +2027,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         photoAllowed={view?.mode === "CONNECTED"}
         onCamera={() => void choosePhoto("camera")} onPhotos={() => void choosePhoto("photos")}
         onFiles={(files) => void sendFiles(files)} fileSending={filesSending}
+        onLocation={locationAllowed ? () => setSheet("location") : undefined}
         voiceAvailable={voiceAllowed} onVoice={toggleVoiceCapture}
-        onPickKlipy={sendKlipy}
+        onPickKlipy={sendKlipy} userId={accountId}
         context={<>
           {replyTo && <div className="fb-chat-reply-chip" role="status" data-chat-reply-to={replyTo.id}>
             <span className="fb-chat-reply-copy">

@@ -158,6 +158,19 @@ describe("voice recorder lifecycle", () => {
     expect(h.recorder.take()).toBeNull();
   });
 
+  it("finalizes a live take in one press so Send works during recording", async () => {
+    const h = harness();
+    await h.recorder.start();
+    h.advance(3_500);
+    const note = await h.recorder.stopAndFinalize();
+    expect(note?.durationMs).toBe(3_500);
+    expect(h.recorder.state.status).toBe("review");
+    expect(h.tracks.every(track => track.stopped)).toBe(true);
+    // The same sealed note keeps its identity for a retry.
+    expect(await h.recorder.stopAndFinalize()).toBe(note);
+    expect(h.recorder.take()).toBe(note);
+  });
+
   it("rejects an accidental tap instead of sending a zero-length note", async () => {
     const h = harness();
     await h.recorder.start();
