@@ -32,17 +32,18 @@ describe("verification badges", () => {
     expect(container.childNodes).toHaveLength(0);
   });
 
-  it("shows the handle and timestamp after the identity and badge", () => {
+  it("shows the display name and timestamp after the identity and badge, with no handle", () => {
     const post = makePost("badge-test");
     post.author = { ...post.author, emailVerified: true, phoneVerified: false };
     render(<MemoryRouter><PostIdentityHeader post={post} /></MemoryRouter>);
     const badge = screen.getByRole("img", { name: "Email verified" });
-    const handle = screen.getByTestId("post-author");
+    const name = screen.getByRole("link", { name: "Open Samira's profile" });
     const time = screen.getByTestId("post-time");
-    expect(handle.textContent).toBe(`@${post.author.username}`);
-    expect(handle.className).not.toContain("sr-only");
-    expect(badge.compareDocumentPosition(handle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(handle.compareDocumentPosition(time) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(name.textContent).toContain("Samira");
+    expect(name.textContent).not.toContain("@");
+    expect(screen.queryByText(`@${post.author.username}`)).toBeNull();
+    expect(name.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(badge.compareDocumentPosition(time) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(time.getAttribute("title")).toBe(new Date(post.createdAt).toLocaleString());
   });
 });

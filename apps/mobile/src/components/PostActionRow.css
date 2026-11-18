@@ -116,8 +116,10 @@
   color: var(--fb-error);
 }
 
-/* The views/insights metric is information, not a control: same column, same
- * rhythm, no hover fill and no pressed state. */
+/* The views/insights metric is information, not a control: no pressed state,
+ * no navigation. It still answers the pointer like its neighbours — the same
+ * circular tint, and the shared pill naming it (see PostAnatomy.tsx) — so the
+ * bar-chart glyph never reads as an unlabelled, dead button. */
 .fb-post-action-row .fb-report-metric {
   display: inline-flex;
   align-items: center;
@@ -126,9 +128,13 @@
   width: 100%;
   min-width: 0;
   min-height: 44px;
+  border-radius: 999px;
   color: var(--fb-warning);
   font-size: 0.75rem;
   font-weight: 500;
+}
+.fb-post-action-row .fb-report-metric:hover {
+  background: var(--fb-surface-container);
 }
 .fb-post-action-row .fb-report-metric > svg {
   flex-shrink: 0;

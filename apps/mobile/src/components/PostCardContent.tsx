@@ -8,7 +8,7 @@ import { MASONRY_FALLBACK_RATIO, masonryAspectRatio } from "./masonryLayout";
 import { HomeFeedReactionButtons } from "./HomeFeedReactionButtons";
 import { PostActionRow } from "./PostActionRow";
 import { ReportShareButton } from "./ReportShareButton";
-import { PostIdentityHeader, PostStatusTitle, PostFacts, PostInsightsMetric, sharedMediaLayoutId, sharedElementTransition } from "./PostAnatomy";
+import { PostIdentityHeader, PostMetaIcons, PostStatusTitle, PostFacts, PostInsightsMetric, sharedMediaLayoutId, sharedElementTransition } from "./PostAnatomy";
 import { useReportNavigation } from "./PostNavigation";
 import { PostDescription } from "./PostDescription";
 import { FeedMediaCarousel } from "./FeedMediaCarousel";
@@ -110,17 +110,23 @@ export function PostCardContent({ post, layout = "classic", enableSharedMedia = 
   const photoCount = post.attachments.filter(a => a.mimeType.startsWith("image/")).length;
   const openDetail = () => openReport(`/posts/${post.id}`);
   const dense = layout === "compact" || layout === "masonry";
+  // The feed and masonry card carry the refined anatomy: one identity line,
+  // the status beside the title, and category/location as labelled controls
+  // instead of a second text row. List densities keep their original facts
+  // row so a search result still reads as a scannable line.
+  const refined = layout === "home-feed" || layout === "masonry";
   const titleClassName = layout === "editorial" ? "fb-editorial-title" : layout === "masonry" ? "fb-masonry-title line-clamp-2" : layout === "compact" ? "text-sm font-bold leading-snug line-clamp-2" : "fb-feed-title line-clamp-2";
   return <div data-testid={layout === "home-feed" ? "home-feed-content" : layout === "masonry" ? "masonry-content" : undefined}
     className={`fb-post-content fb-post-${layout}`}>
-    <PostIdentityHeader post={post} overflow={overflow} contextReportId={post.id} />
-    <PostStatusTitle post={post} titleClassName={titleClassName} enableSharedMedia={enableSharedMedia}
+    <PostIdentityHeader post={post} overflow={overflow} contextReportId={post.id}
+      meta={refined ? <PostMetaIcons post={post} /> : undefined} />
+    <PostStatusTitle post={post} inlineStatus={refined} titleClassName={titleClassName} enableSharedMedia={enableSharedMedia}
       linkTestId={layout === "home-feed" ? "home-feed-detail-link" : layout === "masonry" ? "masonry-detail-link" : undefined} />
     {!dense && <div className="fb-post-description"><PostDescription text={post.description} /></div>}
     <PostMediaPreview key={post.id} post={post} layout={layout} enableSharedMedia={enableSharedMedia} onOpenReport={openDetail} />
-    <PostFacts post={post}>
-      {layout !== "home-feed" && layout !== "masonry" && photoCount > 0 && <p data-testid="photo-count">{photoCount} {photoCount === 1 ? "photo" : "photos"}</p>}
-    </PostFacts>
+    {!refined && <PostFacts post={post}>
+      {photoCount > 0 && <p data-testid="photo-count">{photoCount} {photoCount === 1 ? "photo" : "photos"}</p>}
+    </PostFacts>}
     <div data-testid="post-footer">
       <div data-testid={layout === "home-feed" ? "home-feed-actions" : undefined}>
         <PostActionRow commentCount={post.commentCount} commentsHref={`/posts/${post.id}#detail-comments`} slots={{

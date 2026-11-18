@@ -190,7 +190,7 @@ describe("PostList home-feed density (reference-inspired Home redesign)", () => 
     );
   });
 
-  it("home-feed is one compact column: a flat action row, no category-only footer", () => {
+  it("home-feed is one compact column: a flat action row and labelled metadata", () => {
     render(
       <MemoryRouter>
         <PostList items={[imagePost()]} {...base} density="home-feed" />
@@ -200,12 +200,13 @@ describe("PostList home-feed density (reference-inspired Home redesign)", () => 
     const row = screen.getByTestId("post-action-row");
     expect(row.className).toMatch(/flex-nowrap/);
     expect(row.className).not.toMatch(/grid/);
-    // Time belongs to the identity; category is a compact fact after media.
+    // Time and the category/location controls belong to the identity row.
     const identity = screen.getByRole("link", { name: "Open alice's profile" }).closest("header")!;
     expect(identity.contains(screen.getByTestId("post-time"))).toBe(true);
-    expect(screen.getByTestId("home-feed-media").compareDocumentPosition(screen.getByTestId("post-category")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(identity.contains(screen.getByTestId("post-meta"))).toBe(true);
+    expect(screen.queryByTestId("post-category")).toBeNull();
     const footer = screen.getByTestId("post-footer") as HTMLElement;
-    expect(footer.contains(screen.getByTestId("post-category"))).toBe(false);
+    expect(footer.contains(screen.getByTestId("post-meta"))).toBe(false);
     expect(footer.contains(screen.getByTestId("home-feed-actions"))).toBe(true);
   });
 });

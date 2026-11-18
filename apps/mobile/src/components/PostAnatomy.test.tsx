@@ -67,6 +67,18 @@ it("links the feed identity directly to the profile with the originating report"
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 
+it.each(["home-feed", "masonry"] as const)("puts the metadata controls immediately before the overflow menu in %s", (density) => {
+  mount(density);
+  const meta = screen.getByTestId("post-meta");
+  const overflow = screen.getByRole("button", { name: "More report actions" });
+  expect(meta.nextElementSibling?.contains(overflow)).toBe(true);
+  // The words moved into the controls; no facts row survives.
+  expect(screen.queryByTestId("post-category")).toBeNull();
+  expect(screen.queryByTestId("post-location")).toBeNull();
+  // The status is the title's right-hand fact.
+  expect(screen.getByTestId("post-status-chip").closest(".fb-post-title-row")).toBeTruthy();
+});
+
 it("lets the owner save without offering self-report or self-block", async () => {
   auth.id = "owner";
   mount("compact");

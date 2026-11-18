@@ -1,13 +1,25 @@
 .fb-post-content { display: flex; flex-direction: column; min-width: 0; gap: .375rem; }
 .fb-post-identity { display: flex; align-items: center; gap: .5rem; min-width: 0; }
 .fb-post-identity-line { display: flex; flex: 1; flex-wrap: wrap; align-items: baseline; gap: .125rem .375rem; min-width: 0; }
-.fb-post-name-badge { display: inline-flex; align-items: baseline; gap: .25rem; min-width: 0; max-width: 100%; }
-.fb-post-handle { color: var(--fb-on-surface-variant); font-size: .75rem; overflow-wrap: anywhere; }
+/* The badge is sized from the name's own type, not the header's, so it reads
+   as part of the name rather than a mark floating above it. */
+.fb-post-name-badge { display: inline-flex; align-items: center; gap: .25rem; min-width: 0; max-width: 100%; font-size: .875rem; }
+/* Flex centring follows the line box, which carries descender space the name
+   does not use; lift the mark by a hair so it sits optically on the text. */
+.fb-post-name-badge .fb-verified-badge { position: relative; top: -.06em; }
 .fb-post-identity .fb-identity-link { min-width: 0; flex-shrink: 1; font-size: .875rem; font-weight: 600; }
 .fb-post-identity .fb-identity-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fb-post-time { flex-shrink: 0; color: var(--fb-on-surface-variant); font-size: .75rem; }
+/* Category and location sit beside the overflow menu as quiet, labelled
+   controls: the words they carry do not earn a permanent line of their own. */
+.fb-post-meta { display: flex; align-items: center; flex-shrink: 0; }
+.fb-post-meta .fb-icon-control { color: var(--fb-on-surface-variant); }
+.fb-post-meta .fb-icon-control:hover { color: var(--fb-on-surface); }
 .fb-post-overflow { margin-inline-start: auto; flex-shrink: 0; }
 .fb-post-heading { display: flex; flex-direction: column; min-width: 0; gap: .25rem; }
+.fb-post-title-row { display: flex; align-items: flex-start; gap: .5rem; min-width: 0; }
+.fb-post-title-main { flex: 1 1 auto; min-width: 0; }
+.fb-post-title-row > [data-testid="post-status-chip"] { flex: 0 0 auto; }
 .fb-post-status { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; color: var(--fb-on-surface-variant); font-size: .75rem; }
 .fb-post-title-link { display: block; border-radius: .25rem; }
 .fb-post-title-link:focus-visible, .fb-post-photo:focus-visible { outline: 2px solid var(--fb-on-surface); outline-offset: 2px; }

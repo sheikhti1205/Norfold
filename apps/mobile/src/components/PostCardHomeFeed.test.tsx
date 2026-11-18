@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PostCard } from "./PostCard";
 import { PostCardContent } from "./PostCardContent";
 import { PostNavigationProvider } from "./PostNavigation";
+import { HoverLabelProvider } from "./HoverLabel";
 import { FeedLoveProvider, type FeedPatchItem } from "../hooks/useFeedLove";
 
 const { feedFetchMock, loveToggleMock } = vi.hoisted(() => ({
@@ -149,10 +150,14 @@ describe("PostCardContent home-feed (content-first Home layout)", () => {
     expect(screen.queryByTestId("post-description")).toBeNull();
   });
 
-  it("renders the location row when present and omits it cleanly when absent", () => {
-    const target = post();
-    const { rerender } = renderHomeFeed(target);
-    expect(screen.getByTestId("post-location").textContent).toContain("Riverside Park, Austin, TX");
+  it("carries category and location as labelled controls, not a second text row", () => {
+    const { rerender } = renderHomeFeed(post());
+    expect(screen.queryByTestId("post-location")).toBeNull();
+    expect(screen.queryByTestId("post-category")).toBeNull();
+    const category = screen.getByRole("button", { name: "Category: Pets" });
+    const location = screen.getByRole("button", { name: "Location: Riverside Park, Austin, TX" });
+    expect(category.querySelector("svg")).toBeTruthy();
+    expect(location.querySelector("svg")).toBeTruthy();
     rerender(
       <MemoryRouter>
         <FeedLoveProvider items={[post({ locationLabel: null })]} patchItem={vi.fn() as unknown as FeedPatchItem}>
@@ -160,12 +165,30 @@ describe("PostCardContent home-feed (content-first Home layout)", () => {
         </FeedLoveProvider>
       </MemoryRouter>,
     );
-    expect(screen.queryByTestId("post-location")).toBeNull();
+    expect(screen.getByRole("button", { name: "Category: Pets" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Location: / })).toBeNull();
   });
 
-  it("shows the category chip", () => {
-    renderHomeFeed(post());
-    expect(screen.getByTestId("post-category").textContent).toBe("Pets");
+  it("reveals a metadata label on focus and on touch tap, never a sheet", () => {
+    render(
+      <MemoryRouter>
+        <HoverLabelProvider>
+          <FeedLoveProvider items={[post()]} patchItem={vi.fn() as unknown as FeedPatchItem}>
+            <PostCardContent post={post()} layout="home-feed" />
+          </FeedLoveProvider>
+        </HoverLabelProvider>
+      </MemoryRouter>,
+    );
+    const category = screen.getByRole("button", { name: "Category: Pets" });
+    fireEvent.focusIn(category);
+    expect(document.querySelector(".fb-hover-label")?.textContent).toBe("Pets");
+    fireEvent.focusOut(category);
+    expect(document.querySelector(".fb-hover-label")).toBeNull();
+    fireEvent.pointerUp(category, { pointerType: "touch" });
+    expect(document.querySelector(".fb-hover-label")?.textContent).toBe("Pets");
+    fireEvent.pointerDown(document.body);
+    expect(document.querySelector(".fb-hover-label")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("maps the semantic status chip over the five allowed labels only", () => {
@@ -229,9 +252,11 @@ describe("PostCardContent home-feed (content-first Home layout)", () => {
     expect(writeText).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps the author as quiet metadata without competing with the title", () => {
+  it("names the author once, without competing with the title", () => {
     renderHomeFeed(imagePost());
-    expect(screen.getByTestId("post-author").textContent).toContain("@alice");
+    const identity = screen.getByRole("link", { name: "Open alice's profile" });
+    expect(identity.textContent).toContain("alice");
+    expect(screen.getByTestId("home-feed-content").textContent).not.toContain("@alice");
   });
 
   it("reserves image geometry while loading and falls back with a label on failure", () => {
@@ -298,11 +323,15 @@ describe("PostCardContent home-feed (content-first Home layout)", () => {
     renderHomeFeed(imagePost());
     const card = screen.getByTestId("home-feed-content");
     const order = within(card)
-      .getAllByTestId(/post-status-chip|post-time|post-title|post-description|post-location|post-author|post-footer/)
+      .getAllByTestId(/post-status-chip|post-time|post-title|post-description|post-meta|post-footer/)
       .map((el) => el.getAttribute("data-testid"));
-    expect(order[0]).toBe("post-author");
+    expect(order[0]).toBe("post-time");
     expect(order).toContain("post-title");
-    expect(order.indexOf("post-title")).toBeGreaterThan(order.indexOf("post-status-chip"));
+    expect(order).toContain("post-meta");
+    // The status is the title's right-hand fact, not a row above it.
+    const titleRow = screen.getByTestId("post-title").parentElement!;
+    expect(titleRow.contains(screen.getByTestId("post-status-chip"))).toBe(true);
+    expect(order.indexOf("post-status-chip")).toBeGreaterThan(order.indexOf("post-title"));
     expect(order.indexOf("post-footer")).toBeGreaterThan(order.indexOf("post-title"));
     // The action row is the last interactive region.
     expect(order.indexOf("post-footer")).toBe(order.length - 1);
@@ -664,17 +693,17 @@ describe("home-feed content-first interactions", () => {
     expect(screen.getByRole("button", { name: /share report/i })).toBeTruthy();
   });
 
-  it("keeps identity time local and facts after media, before primary actions", () => {
+  it("keeps identity time local and the metadata controls in the identity row", () => {
     renderHomeFeed(imagePost());
     const time = screen.getByTestId("post-time");
-    const category = screen.getByTestId("post-category");
+    const meta = screen.getByTestId("post-meta");
     const identity = screen.getByRole("link", { name: "Open alice's profile" }).closest("header")!;
     expect(identity.contains(time)).toBe(true);
-    expect(screen.getByTestId("home-feed-media").compareDocumentPosition(category) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // The separate category-only row is gone: the card footer now holds the
-    // action row, and the category chip is not in it.
+    expect(identity.contains(meta)).toBe(true);
+    // The separate category row is gone: the footer holds only the actions.
+    expect(screen.queryByTestId("post-category")).toBeNull();
     const footer = screen.getByTestId("post-footer");
-    expect(footer.contains(category)).toBe(false);
+    expect(footer.contains(meta)).toBe(false);
     expect(footer.contains(screen.getByTestId("home-feed-actions"))).toBe(true);
   });
 
