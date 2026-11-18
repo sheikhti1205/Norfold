@@ -61,19 +61,19 @@ function AccountSearchScreen(props: SearchScreenProps) {
   // Opened from My reports, search is scoped to that owner's reports.
   const mine = params.get("scope") === "mine";
   const [peopleQuery, setPeopleQuery] = useUrlParam("people");
-  // Connect and Search are different places, not two tabs of one screen:
-  // Connect is the people directory, Search is the report search. Rendering
-  // ReportSearch under Connect mounted a second, unreachable search screen and
-  // offered a Reports tab on a page that is about people.
-  if (people) return <ConnectScreen query={peopleQuery} onQueryChange={setPeopleQuery} />;
+  // People and Search are different places, not two tabs of one screen:
+  // People is the directory, Search is the report search. Rendering
+  // ReportSearch under the directory mounted a second, unreachable search
+  // screen and offered a Reports tab on a page that is about people.
+  if (people) return <PeopleDirectory query={peopleQuery} onQueryChange={setPeopleQuery} />;
   return <div className="fb-search-screen">
     <ReportSearch {...props} mineAccountId={mine ? user?.id : undefined} />
   </div>;
 }
 
-function ConnectScreen({ query, onQueryChange }: { query: string; onQueryChange: (value: string) => void }) {
+function PeopleDirectory({ query, onQueryChange }: { query: string; onQueryChange: (value: string) => void }) {
   return <div className="fb-search-screen">
-    <AppBar title="Connect" backTo="/" backLabel="Back" utilities={false} />
+    <AppBar title="People" backTo="/" backLabel="Back" utilities={false} />
     <div className="fb-connect-canvas px-3 pt-2">
       <SearchField
         value={query}

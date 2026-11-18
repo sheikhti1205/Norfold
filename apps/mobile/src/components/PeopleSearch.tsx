@@ -18,7 +18,7 @@ const SUGGESTION_LIMIT = 12;
 /**
  * One short-lived query per account, with no cross-account result cache.
  *
- * An empty query is not "no results": it is the Connect page's default state.
+ * An empty query is not "no results": it is the People page's default state.
  * The reader is shown people the app can already see — chat peers and report
  * authors — because public profile enumeration is deliberately not available
  * to an empty search.
@@ -128,7 +128,7 @@ function PeopleQuery({ query, accountId }: { query: string; accountId: string })
 }
 
 /**
- * Default Connect state: people the viewer can already see.
+ * Default People state: people the viewer can already see.
  *
  * Two honest sources, because no public profile listing exists:
  *   * chat peers — the viewer already sees these identities in Chats;
@@ -139,7 +139,7 @@ function PeopleQuery({ query, accountId }: { query: string; accountId: string })
  */
 function SuggestedPeople({ accountId }: { accountId: string }) {
   const chat = useMessaging();
-  // Two chat sources, because a cold Connect page must not claim the place is
+  // Two chat sources, because a cold People page must not claim the place is
   // empty while the messaging runtime is still opening:
   //   * local conversation summaries (already on this device) name the peers;
   //   * the live projection set wins once it arrives and carries the current
@@ -236,7 +236,7 @@ function SuggestedPeople({ accountId }: { accountId: string }) {
     return next.slice(0, SUGGESTION_LIMIT);
   }, [peerPeople, reportPeople, projectionById]);
 
-  // A cold Connect page opens before the chat runtime has read its local
+  // A cold People page opens before the chat runtime has read its local
   // index. Until it does, "no one to suggest" is a claim about an empty list
   // the page has not actually read — so the honest state is still loading.
   const chatPending = chat.accountId === accountId && chat.status === "opening";

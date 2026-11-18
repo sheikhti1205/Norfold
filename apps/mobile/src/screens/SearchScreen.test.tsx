@@ -93,9 +93,9 @@ describe("SearchScreen URL filters", () => {
     clearFeedCaches();
   });
 
-  it("renders Connect as a people directory without a Reports tab or report search", async () => {
+  it("renders People as a people directory without a Reports tab or report search", async () => {
     renderSearch("/search?scope=people");
-    expect(screen.getByRole("heading", { name: "Connect" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "People" })).toBeTruthy();
     expect(screen.getByRole("searchbox", { name: "Search people" })).toBeTruthy();
     // The old Connect page mounted the whole report search behind a hidden
     // attribute and offered a Reports tab. Neither belongs on a people page.
