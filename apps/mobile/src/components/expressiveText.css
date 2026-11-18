@@ -1,0 +1,22 @@
+/*
+ * Expressive text: a body that is only emoji is the whole expression, so it
+ * reads larger than prose. Declared once here and consumed by chat and comment
+ * bodies so the two surfaces cannot drift. The size is relative (`em`), so it
+ * follows the body it belongs to instead of becoming a fixed display heading.
+ */
+:root {
+  --fb-emoji-only-size: 2em;
+  --fb-emoji-only-line: 1.15;
+}
+
+.fb-emoji-only {
+  font-size: var(--fb-emoji-only-size);
+  line-height: var(--fb-emoji-only-line);
+}
+
+/* The shared markdown body sets its own reading size; inside an expressive
+   body that estimate is wrong, so it follows the body it belongs to. */
+.fb-emoji-only .fb-markdown {
+  font-size: inherit;
+  line-height: inherit;
+}

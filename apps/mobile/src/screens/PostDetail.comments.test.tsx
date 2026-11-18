@@ -373,3 +373,123 @@ describe("PostDetail inline comment threads", () => {
     expect(linked.closest("ul")?.className).not.toContain("border-l");
   });
 });
+
+/**
+ * A comment body that is only emoji is the whole expression, so it reads at
+ * the canonical chat size. The condition mirrors chat's message rule: emoji
+ * beside media, or a body attached to a shared report, is a caption, not the
+ * content, and keeps its normal reading size.
+ */
+describe("PostDetail emoji-only comment bodies", () => {
+  const EMOJI = "\u{1F600}";
+  // ZWJ family, skin tone, regional-indicator flag and keycap, with the
+  // whitespace a phone keyboard or a paste can leave around them.
+  const SEQUENCES = "\n\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466} \u{1F44D}\u{1F3FD} \u{1F1EC}\u{1F1E7} 1\uFE0F\u20E3 \n";
+  const MEDIA_URL = "https://fixture.supabase.co/storage/v1/object/public/findback-comment-media/author/photo.jpg";
+
+  beforeEach(() => {
+    authState.user = { id: "u2", username: "owner" };
+    postsMock.fetchPost.mockResolvedValue(basePost);
+    postsMock.fetchSocialState.mockResolvedValue({ myReaction: null, myRating: null });
+    findMock.mockResolvedValue({ available: true, candidatesConsidered: 0, matches: [] });
+    realtimeHandlers.clear();
+  });
+
+  afterEach(cleanup);
+
+  // A reply renders inside its parent's row, so a plain descendant search
+  // would credit the parent with the child's body. Only a marker owned by this
+  // row counts.
+  function expressiveBody(id: string): Element | null {
+    const marker = document.getElementById(`detail-comment-${id}`)?.querySelector(".fb-emoji-only");
+    return marker?.closest('[id^="detail-comment-"]')?.id === `detail-comment-${id}` ? marker : null;
+  }
+
+  it("scales a root comment that is only emoji, without adding bubble chrome", async () => {
+    postsMock.fetchComments.mockResolvedValue([makeComment("c1", "u1", EMOJI)]);
+    renderDetail();
+    await screen.findByText(EMOJI);
+    const row = document.getElementById("detail-comment-c1") as HTMLElement;
+    const marker = expressiveBody("c1");
+    expect(marker).toBeTruthy();
+    // The body is still the stored text once; the marker adds no copy.
+    expect(within(row).getByText(EMOJI).textContent).toBe(EMOJI);
+    expect(marker?.textContent).toBe(EMOJI);
+    // Expressive size, not a card: no chat bubble class is borrowed.
+    expect(row.querySelector(".fb-chat-message")).toBeNull();
+  });
+
+  it("scales an emoji-only nested reply independently of its parent", async () => {
+    postsMock.fetchComments.mockResolvedValue([
+      makeComment("r0", "rootU", "ordinary root"),
+      makeComment("r1", "u1", EMOJI, "r0", 1),
+    ]);
+    renderDetail();
+    await screen.findByText(EMOJI);
+    expect(expressiveBody("r0")).toBeNull();
+    expect(expressiveBody("r1")).toBeTruthy();
+  });
+
+  it("recognises complete sequences and surrounding whitespace", async () => {
+    postsMock.fetchComments.mockResolvedValue([makeComment("c1", "u1", SEQUENCES)]);
+    renderDetail();
+    await waitFor(() => expect(expressiveBody("c1")).toBeTruthy());
+    expect(expressiveBody("c1")?.textContent).toContain("\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}");
+  });
+
+  it("keeps prose, numbers and punctuation at the reading size", async () => {
+    postsMock.fetchComments.mockResolvedValue([
+      makeComment("c1", "u1", "Great work \u{1F600}"),
+      makeComment("c2", "u2a", "2\u{1F600}"),
+      makeComment("c3", "u3", "\u{1F600}!"),
+    ]);
+    renderDetail();
+    await screen.findByText("Great work \u{1F600}");
+    for (const id of ["c1", "c2", "c3"]) expect(expressiveBody(id)).toBeNull();
+  });
+
+  it("keeps mentions and links at the reading size without changing their targets", async () => {
+    postsMock.fetchComments.mockResolvedValue([
+      makeComment("c1", "u1", "@alex \u{1F600}"),
+      makeComment("c2", "u2a", "[see \u{1F600}](https://example.com/found)"),
+    ]);
+    renderDetail();
+    const mention = await screen.findByRole("link", { name: "@alex" });
+    expect(mention.getAttribute("href")).toBe("/u/alex");
+    const external = screen.getByRole("link", { name: "see \u{1F600}" });
+    expect(external.getAttribute("href")).toBe("https://example.com/found");
+    expect(external.getAttribute("rel")).toContain("noopener");
+    expect(expressiveBody("c1")).toBeNull();
+    expect(expressiveBody("c2")).toBeNull();
+  });
+
+  it("keeps an emoji caption beside media at the reading size", async () => {
+    postsMock.fetchComments.mockResolvedValue([
+      makeComment("c1", "u1", `${EMOJI}\n![photo](${MEDIA_URL})`),
+    ]);
+    renderDetail();
+    await screen.findByTestId("comment-media-c1");
+    expect(expressiveBody("c1")).toBeNull();
+    expect(within(document.getElementById("detail-comment-c1") as HTMLElement).getByText(EMOJI)).toBeTruthy();
+  });
+
+  it("keeps an emoji body beside a shared report at the reading size", async () => {
+    postsMock.fetchComments.mockResolvedValue([{
+      ...makeComment("c1", "u1", EMOJI),
+      attachments: [{ kind: "report", displayOrder: 1, reportPostId: null }],
+    }]);
+    renderDetail();
+    await screen.findByTestId("report-unavailable");
+    expect(expressiveBody("c1")).toBeNull();
+  });
+
+  it("leaves a blocked author's shield and single body copy unchanged", async () => {
+    postsMock.fetchComments.mockResolvedValue([{ ...makeComment("c1", "u1", EMOJI), blockedAuthor: true }]);
+    renderDetail();
+    const shield = await screen.findByTestId("blocked-shield");
+    expect(shield.getAttribute("data-locked")).toBe("true");
+    const content = within(shield).getByTestId("blocked-shield-content");
+    expect(content.getAttribute("aria-hidden")).toBe("true");
+    expect(within(content).getAllByText(EMOJI)).toHaveLength(1);
+  });
+});
