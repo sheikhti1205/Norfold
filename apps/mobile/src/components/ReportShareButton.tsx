@@ -94,7 +94,7 @@ export function ReportShareButton({ postId, title }: { postId: string; title: st
         className="fb-report-action"
         {...hoverLabel("Share")}
       >
-        <Share2 size={18} aria-hidden />
+        <Share2 size={24} aria-hidden />
         <span>Share</span>
       </button>
       {error && (

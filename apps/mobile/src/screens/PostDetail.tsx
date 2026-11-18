@@ -1237,7 +1237,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
                   aria-pressed={postLike.mine}
                   {...hoverLabel("Like")}
                 >
-                  <ReactionGlyph kind="LIKE" mine={postLike.mine} size={34} />
+                  <ReactionGlyph kind="LIKE" mine={postLike.mine} size={24} />
                   <span className="tabular-nums">{postLike.count}</span>
                 </button>
                 <button
@@ -1252,7 +1252,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
                   aria-pressed={myReaction === "DISLIKE"}
                   {...hoverLabel("Dislike")}
                 >
-                  <ReactionGlyph kind="DISLIKE" mine={myReaction === "DISLIKE"} size={34} />
+                  <ReactionGlyph kind="DISLIKE" mine={myReaction === "DISLIKE"} size={24} />
                   <span className="tabular-nums">{postDislikeCount}</span>
                 </button>
               </span>

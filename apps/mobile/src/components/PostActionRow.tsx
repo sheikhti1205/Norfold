@@ -71,7 +71,7 @@ export function PostActionRow({ slots, commentCount, className, commentsHref, hi
   const { hoverLabel } = useHoverLabel();
   const commentControl = (
     <>
-      <MessageSquare size={18} aria-hidden />
+      <MessageSquare size={24} aria-hidden />
       <span className="tabular-nums">{commentCount}</span>
     </>
   );

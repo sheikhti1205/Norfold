@@ -70,7 +70,7 @@ export function PostInsightsMetric({ views }: { views: number }) {
     className="fb-report-metric"
     {...infoLabel(label)}
   >
-    <BarChart3 size={18} aria-hidden />
+    <BarChart3 size={24} aria-hidden />
     <span className="tabular-nums" aria-hidden>{views}</span>
     <span className="sr-only">{label}</span>
   </span>;
