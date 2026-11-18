@@ -1461,7 +1461,11 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     if (photos.length > 0 && ready.length !== photos.length) return;
     if (photos.length > 0 && (view?.mode !== "CONNECTED" || view.ownBlocked)) return;
     if (photos.length === 0 && !draft.trim()) return;
-    if (!(await acceptIncomingRequestForReply())) return;
+    // Only an incoming request needs the accept round trip. Every other send
+    // must stay synchronous up to admission, or a queued draft would lose its
+    // place to the next keystroke while this turn yields.
+    if (view?.mode === "REQUEST" && view.request === "INCOMING"
+      && !(await acceptIncomingRequestForReply())) return;
     const body = convertEmoticons(draft), sendingRevision = draftRevision.current;
     if (ready.length === 0 && textInFlight.current.has(sendingRevision)) return;
     if (ready.length === 0) textInFlight.current.add(sendingRevision);
@@ -1553,7 +1557,8 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     const replyTargetId = replyTo?.id;
     setError(null); setSendStatus(null);
     void (async () => {
-      if (!(await acceptIncomingRequestForReply())) return;
+      if (view?.mode === "REQUEST" && view.request === "INCOMING"
+        && !(await acceptIncomingRequestForReply())) return;
       try {
         await admitText({ id: crypto.randomUUID(), conversationId, authorId: accountId, recipientId: row.peerId,
           body: item.mediaUrl, messageType: "TEXT", createdAt: Date.now(), ...(replyTargetId ? { replyToId: replyTargetId } : {}) });

@@ -385,6 +385,21 @@ it("preserves a newer draft even when its text equals the in-flight admission", 
   expect(field).toHaveProperty("value", "Same words");
 });
 
+it("accepts an incoming request before the reply leaves", async () => {
+  // Replying is the recipient's decision: the accept goes through the canonical
+  // relationship action first, and the text only leaves after it lands.
+  m.view.mode = "REQUEST"; m.view.request = "INCOMING";
+  m.chat.currentProjections = { chat: m.view };
+  await open();
+  const field = screen.getByRole("textbox", { name: "Message" });
+  fireEvent.change(field, { target: { value: "Happy to help" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(m.relationship).toHaveBeenCalledWith("account", "chat", "accept"));
+  await waitFor(() => expect(m.text).toHaveBeenCalledTimes(1));
+  expect(m.relationship.mock.invocationCallOrder[0]).toBeLessThan(m.text.mock.invocationCallOrder[0]!);
+  await waitFor(() => expect(field).toHaveProperty("value", ""));
+});
+
 function sentText() {
   m.messages = [{ id: "sent", conversationId: "chat", authorId: "account", recipientId: "peer", body: "Already read", messageType: "TEXT", server: { sequence: 1 } }];
 }
