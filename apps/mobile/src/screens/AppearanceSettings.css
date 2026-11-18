@@ -94,10 +94,6 @@
 .fb-appearance-preview[data-reaction-appearance="colorful"] .fb-appearance-preview-action[data-kind="dislike"] { color: var(--fb-error); }
 .fb-appearance-preview[data-reaction-appearance="monochrome"] .fb-appearance-preview-action[data-kind="like"] { color: var(--fb-on-surface-variant); }
 .fb-appearance-preview[data-reaction-appearance="monochrome"] .fb-appearance-preview-action[data-kind="like"][data-selected="true"] { color: var(--fb-on-surface); }
-/* The preview is an illustration of the setting, not a live control: its
-   resting glyph follows the mode colour instead of the product's monotone
-   placeholder, so the three choices still read differently. */
-.fb-appearance-preview-action .fb-reaction-outline { color: inherit; }
 
 .fb-appearance-preview-button {
   display: inline-flex;

@@ -215,13 +215,10 @@ html.fb-reduce-motion .fb-home-brand { transition: none; }
 
 /* A reaction is an outline placeholder until it is yours, then the platform's
    own emoji glyph: the reader already recognises it, and the system renders it
-   at every text size. The resting outline stays monotone so the colour belongs
-   to the reader's committed reaction, not to the empty control. The exception
-   is the reader's own Monochrome reaction choice, which drops hue from the
-   emoji too. */
+   at every text size. The outline follows the reader's reaction appearance
+   choice, so Colorful keeps its tone and Adaptive stays neutral until chosen. */
 .fb-reaction-outline {
   flex: none;
-  color: var(--fb-on-surface-variant);
 }
 .fb-reaction-emoji {
   flex: none;
