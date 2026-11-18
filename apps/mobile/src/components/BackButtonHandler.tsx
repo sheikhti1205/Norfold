@@ -18,20 +18,31 @@ export interface BackContext {
 export type BackAction =
   | { type: "back" }
   | { type: "home" }
+  | { type: "chats" }
   | { type: "arm" }
   | { type: "exit" };
 
 /** Home is the single bottom of the stack; only there does back leave the app. */
 export const HOME_PATH = "/";
 
+/** The canonical conversation list: every chat screen's parent. */
+export const CHATS_PATH = "/chats";
+
+/** `/chats/<conversationId>` itself, not the list and not a deeper route. */
+export function isChatThreadPath(pathname: string): boolean {
+  return /^\/chats\/[^/]+\/?$/.test(pathname);
+}
+
 /**
  * Decides what a back press should do.
  *
- * Order: walk real history, otherwise fall back to Home, otherwise (already on
- * Home) require a second press before exiting so an accidental back cannot
- * quit the app.
+ * Order: a conversation returns to the chat list even when a profile or a cold
+ * link opened it (its parent is `/chats`, not whatever came before); otherwise
+ * walk real history, then fall back to Home, then require a second press on
+ * Home before exiting.
  */
 export function resolveBackAction(ctx: BackContext): BackAction {
+  if (!ctx.suppressHistory && isChatThreadPath(ctx.pathname)) return { type: "chats" };
   if (!ctx.suppressHistory && ctx.canGoBack) return { type: "back" };
   if (ctx.pathname !== HOME_PATH) return { type: "home" };
   return ctx.armed ? { type: "exit" } : { type: "arm" };
@@ -83,6 +94,11 @@ export function BackButtonHandler() {
           break;
         case "home":
           navigate(HOME_PATH, { replace: true });
+          break;
+        case "chats":
+          // The conversation is not left behind as the list's next back
+          // destination, whichever screen opened it.
+          navigate(CHATS_PATH, { replace: true });
           break;
         case "arm":
           armedRef.current = true;

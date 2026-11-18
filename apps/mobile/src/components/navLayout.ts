@@ -17,7 +17,7 @@
  * query, no parallel nav system. `Shell` turns a rail on a narrow viewport into
  * the drawer; the resolver itself only names the chosen style.
  */
-import { useSyncExternalStore } from "react";
+import { createContext, createElement, useContext, useSyncExternalStore, type ReactNode } from "react";
 import { APPEARANCE_EVENT, APPEARANCE_STORAGE_KEY, loadAppearance, useAppearance, type NavLayout } from "../appearance";
 import { useWideViewport } from "./responsive";
 
@@ -65,4 +65,26 @@ export function useStoredNavLayout(): NavLayout {
   );
   const wideViewport = useWideViewport();
   return resolveNavLayout(preference, wideViewport);
+}
+
+/**
+ * Whether the shell is currently painting an in-flow side rail.
+ *
+ * The rail's own chrome (Home's row, the shared app bar, and the headers that
+ * render `NavOutsideBrand`) needs to know this without repeating the
+ * breakpoint, and it must be false wherever a rail is not actually on screen:
+ * a phone drawer, a chrome-free route, the dev fixture, or any surface rendered
+ * outside the shell. `Shell` owns the answer, so it publishes one value from
+ * the same expression that mounts the rail: the outside wordmark cannot outlive
+ * the column it belongs to. The default is `false`, which is why a bar rendered
+ * on its own never grows a stray brand.
+ */
+const InlineRailContext = createContext(false);
+
+export function useInlineRail(): boolean {
+  return useContext(InlineRailContext);
+}
+
+export function InlineRailProvider({ show, children }: { show: boolean; children: ReactNode }) {
+  return createElement(InlineRailContext.Provider, { value: show }, children);
 }

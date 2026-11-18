@@ -1,0 +1,25 @@
+/* The app name that reads outside a side rail while the column is an unnamed
+   icon strip. `Shell.nav.css` owns when it may paint; this file owns its type
+   and the one layout case where two headers could both name the app. */
+.fb-nav-outside-label {
+  flex: none;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--fb-on-surface);
+  white-space: nowrap;
+}
+/* A split screen has two top rows. The list pane's bar sits beside the primary
+   rail and carries the name while that pane is visible; the detail header only
+   takes over once the bar is gone (the list collapsed to its avatar rail, or
+   the layout down to one routed pane). Without this an open conversation would
+   paint the name twice. */
+.fb-split-view:has(.fb-split-list:not([hidden]) .fb-app-bar) .fb-split-detail .fb-nav-outside-brand {
+  display: none;
+}
+/* A pane narrower than a phone row is the one place the label would cost the
+   route title real space; the rail head still carries the mark there. */
+@container (max-width: 17rem) {
+  .fb-nav-outside-label { display: none; }
+}

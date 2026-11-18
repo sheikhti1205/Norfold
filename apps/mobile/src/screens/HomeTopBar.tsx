@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Search } from "lucide-react";
 import { SearchField } from "../components/SearchField";
 import { BrandMark } from "../components/BrandMark";
-import { useStoredNavLayout } from "../components/navLayout";
+import { useInlineRail } from "../components/navLayout";
 import { useHoverLabel } from "../components/HoverLabel";
 import { motionDurations, motionEasings, pressFeedback, scaleInVariants } from "../components/uiMotion";
 
@@ -15,11 +15,13 @@ const swap = { duration: motionDurations.fast, ease: motionEasings.out } as cons
 /**
  * Home's app bar: ONE compact row with the essential actions trailing.
  *
- * The visible title unit is gone (owner feedback 2026-11-13): the brand mark
- * and wordmark already live in the sidebar, so repeating them here spent the
- * feed's first row on a second copy of the same identity. The screen keeps one
- * visually hidden `h1` so the document still has its heading, and the row's
- * height does not move when search opens.
+ * The rail's head carries the app mark at every width. While that column is
+ * collapsed the wordmark reads outside it: this row paints the name on Home and
+ * the shared top bars paint the same copy elsewhere (the app bar, Notifications,
+ * Saved reports), so the rule is not Home-only. Shell.nav.css yields the name
+ * back to the rail the moment the panel is expanded (owner direction
+ * 2026-11-18). The screen keeps one visually hidden `h1` so the document still
+ * has its heading, and the row's height does not move when search opens.
  *
  * The search field is deliberately not resident. The row holds either the field
  * or nothing but its trailing actions, never both, so an idle Home spends its
@@ -80,11 +82,13 @@ export function HomeTopBar({
   // focus, so the first paint is never a transition.
   const triggerRef = useRef<HTMLButtonElement>(null);
   const wasExpanded = useRef(expanded);
-  // The rail owns the brand when it is on screen. On the bottom-bar layout
-  // (every phone, plus readers who chose the bar) that sign is absent, so the
-  // feed restores the mark and wordmark here instead of leaving the app
-  // nameless. While search is open the field needs the full row.
-  const showBrand = useStoredNavLayout() === "bottom" && !expanded;
+  // The shell publishes whether an in-flow rail is on screen. That rail's head
+  // carries the mark, so this row paints the wordmark alone beside it; with no
+  // rail (the bottom bar, or a phone where the chosen rail is a drawer) this row
+  // is the only brand surface and keeps the full lockup. While search is open
+  // the field needs the full row.
+  const wordmarkOnly = useInlineRail();
+  const showBrand = !expanded;
   const { hoverLabel } = useHoverLabel();
   useEffect(() => {
     if (wasExpanded.current && !expanded) triggerRef.current?.focus();
@@ -106,13 +110,15 @@ export function HomeTopBar({
         if (!(next instanceof Node) || !event.currentTarget.contains(next)) onBlur();
       }}
     >
-      {/* The sidebar owns the visible brand when it is mounted. This keeps the
-          one heading the screen needs in both layouts, and the bottom-bar
-          layout additionally paints the mark plus wordmark below. */}
+      {/* One heading is always present. The visible brand follows the layout:
+          beside a collapsed rail it is the wordmark alone (the head already
+          carries the mark), and anywhere the rail is absent it is the full
+          lockup. `fb-nav-outside-brand` opts this copy into the rail's shared
+          hide contract, which also covers the app bar's copy on other routes. */}
       <h1 className="sr-only">Norfold</h1>
       {showBrand && (
-        <Link to="/" aria-label="Norfold home" className="fb-home-brand">
-          <BrandMark size={24} shape="tile" alt="" />
+        <Link to="/" aria-label="Norfold home" className="fb-home-brand fb-nav-outside-brand">
+          {!wordmarkOnly && <BrandMark size={24} shape="tile" alt="" />}
           <span className="fb-home-brand-name">Norfold</span>
         </Link>
       )}

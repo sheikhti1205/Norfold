@@ -406,3 +406,139 @@ describe("single-decider ownership in the case sheet", () => {
     );
   });
 });
+
+describe("a sanction's end date", () => {
+  function escapeRegex(text: string): string {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  /**
+   * 15th of next month: always ahead of today, always mid-month, so the day
+   * cell exists without depending on where the suite runs in the month.
+   */
+  function nextMonthFifteenth(): { iso: string; label: string; heading: string } {
+    const todayUtc = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+    const date = new Date(Date.UTC(todayUtc.getUTCFullYear(), todayUtc.getUTCMonth() + 1, 15));
+    return {
+      iso: date.toISOString().slice(0, 10),
+      label: date.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+        timeZone: "UTC",
+      }),
+      heading: new Intl.DateTimeFormat(undefined, {
+        month: "long",
+        year: "numeric",
+        timeZone: "UTC",
+      }).format(date),
+    };
+  }
+
+  async function chooseWarning() {
+    renderSheet(["members_warn"]);
+    await screen.findAllByText("Blue backpack");
+    await chooseSelectOption(screen.getByLabelText(/what to do/i), /^Warn the person/);
+  }
+
+  function endsOnTrigger(): HTMLElement {
+    return screen.getByRole("button", { name: /ends on \(optional\)/i });
+  }
+
+  async function openCalendar(): Promise<void> {
+    fireEvent.click(endsOnTrigger());
+    await waitFor(() => expect(screen.getByRole("dialog", { name: /end date/i })).toBeTruthy());
+  }
+
+  async function chooseFutureEnd(): Promise<{ iso: string; label: string; heading: string }> {
+    const target = nextMonthFifteenth();
+    await openCalendar();
+    fireEvent.click(screen.getByRole("button", { name: /next month/i }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: new RegExp(escapeRegex(target.heading), "i") }),
+      ).toBeTruthy(),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(escapeRegex(target.label), "i") }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^confirm$/i }));
+    await waitFor(() => expect(screen.queryByTestId("bottom-sheet")).toBeNull());
+    return target;
+  }
+
+  it("uses the app calendar, not a native date field", async () => {
+    await chooseWarning();
+
+    expect(document.querySelector('input[type="date"]')).toBeNull();
+    await openCalendar();
+    // The canonical calendar surface, including its month/year jump and grid.
+    expect(screen.getByRole("grid")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /choose month and year/i })).toBeTruthy();
+  });
+
+  it("sends a chosen future end date as the existing UTC-day timestamp", async () => {
+    await chooseWarning();
+    await chooseSelectOption(screen.getByLabelText(/^reason$/i), "Harassment");
+
+    const target = await chooseFutureEnd();
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    await waitFor(() => expect(mockApplyModeration).toHaveBeenCalledTimes(1));
+    expect(mockApplyModeration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "WARN",
+        reasonCode: "HARASSMENT",
+        sanctionKind: "WARNING",
+        sanctionEndsAt: `${target.iso}T00:00:00.000Z`,
+      }),
+    );
+  });
+
+  it("clears a chosen end date and sends no sanction end", async () => {
+    await chooseWarning();
+    await chooseSelectOption(screen.getByLabelText(/^reason$/i), "Harassment");
+
+    await chooseFutureEnd();
+    fireEvent.click(screen.getByRole("button", { name: "Clear end date" }));
+    expect(endsOnTrigger().textContent).toBe("No end date");
+    // The control that removed the value is gone; focus stays on the field.
+    expect(document.activeElement).toBe(endsOnTrigger());
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    await waitFor(() => expect(mockApplyModeration).toHaveBeenCalledTimes(1));
+    expect(mockApplyModeration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "WARN",
+        sanctionKind: "WARNING",
+        sanctionEndsAt: null,
+      }),
+    );
+  });
+
+  it("leaves the case sheet open when the calendar is dismissed", async () => {
+    await chooseWarning();
+    await openCalendar();
+
+    fireEvent.click(screen.getByTestId("bottom-sheet-backdrop"));
+
+    await waitFor(() => expect(screen.queryByTestId("bottom-sheet")).toBeNull());
+    expect(screen.queryByRole("dialog", { name: /end date/i })).toBeNull();
+    expect(screen.getByText("Take action")).toBeTruthy();
+  });
+
+  it("locks the end-date control while the decision is being sent", async () => {
+    let resolve!: (value: unknown) => void;
+    mockApplyModeration.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+    await chooseWarning();
+    await chooseSelectOption(screen.getByLabelText(/^reason$/i), "Harassment");
+
+    const trigger = endsOnTrigger();
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(true));
+    await act(async () => { resolve({ auditId: "audit-1" }); });
+    await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
+  });
+});

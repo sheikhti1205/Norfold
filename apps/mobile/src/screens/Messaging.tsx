@@ -10,6 +10,7 @@ import { onRealtime } from "../services/realtime";
 import { useAuth } from "../auth";
 import { UserAvatar } from "../components/UserAvatar";
 import { ChatIdentity } from "../components/ChatIdentity";
+import { NavOutsideBrand } from "../components/NavOutsideBrand";
 import { PostLink } from "../components/PostNavigation";
 import { StatusChip } from "../components/StatusChip";
 import { formatChatDay, formatEventDate, timeAgo } from "../utils/dates";
@@ -22,6 +23,9 @@ import {
 import { ChatFile } from "../components/ChatFile";
 import { SplitView, type SplitPaneState } from "../components/SplitView";
 import { CHAT_PANE } from "../components/panePreference";
+import { registerBackInterceptor } from "../components/backNavigation";
+import { CHATS_PATH, isChatThreadPath } from "../components/BackButtonHandler";
+import { modalLayerCount } from "../hooks/modalLayers";
 import { ChatDetailsLayout } from "../components/ChatDetailsLayout";
 import { BlockControl } from "../components/BlockControl";
 import { useHoverLabel } from "../components/HoverLabel";
@@ -670,6 +674,15 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
  *  selection more than one screen of thumbnails can still be reviewed here. */
 const MAX_STAGED_PHOTOS = 10;
 
+/**
+ * Layers that own the next Escape/Back even when focus sits outside them: the
+ * canonical modal stack covers dialogs and sheets, and this selector covers the
+ * ones that are not registered there (the phone navigation drawer and the
+ * composer pickers). A plain `role="dialog"` is deliberately absent: the
+ * navigation setup popover stays mounted and must never trap Escape.
+ */
+const OPEN_LAYER_SELECTOR = "[aria-modal='true'], [role='menu'], [role='listbox'], .fb-picker-layer";
+
 interface StagedChatPhoto {
   key: string;
   source?: File;
@@ -795,9 +808,109 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const [playbackSnapshot, setPlaybackSnapshot] = useState<VoicePlaybackSnapshot>({
     playingId: null, positionMs: 0, durationMs: 0 });
   const [voiceUrl, setVoiceUrl] = useState<string | null>(null);
-  const [voiceSending, setVoiceSending] = useState(false);
+  // A voice send crosses two different boundaries. Finalizing the container and
+  // hashing the bytes are preparation: nothing has left this screen, so leaving
+  // still discards the note. From the service call onward the durable outbox
+  // owns it, and leaving neither discards nor cancels it.
+  const [voiceSendPhase, setVoiceSendPhase] = useState<"idle" | "preparing" | "sending">("idle");
+  const voiceSending = voiceSendPhase !== "idle";
+  // Set by an explicit discard, so a finalize or hash already in flight cannot
+  // reach the service after the reader threw the note away.
+  const voiceSendDiscarded = useRef(false);
   const voiceSupported = voiceRecordingSupported();
   const voiceAllowed = photoAllowed && voiceSupported;
+  // A leave gesture never drops work the reader has not sent. Text, staged
+  // photos and a recording that has not reached the service ask for an explicit
+  // choice; a clean conversation still leaves at once. Escape and Android Back
+  // share this one path, and a layer that is already open keeps its own press.
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const voiceActive = voiceStatus === "starting" || voiceStatus === "recording"
+    || voiceStatus === "pausing" || voiceStatus === "review";
+  // Past admission the note is in the outbox, so leaving does not recall it and
+  // "will be discarded" would be a false promise. Preparation is still work
+  // this screen can lose, and a text draft or staged photos keep their warning
+  // either way.
+  const voiceAtRisk = voiceActive && voiceSendPhase !== "sending";
+  const hasUnsentWork = draft.trim() !== "" || photos.length > 0 || voiceAtRisk;
+  const unsentParts = [
+    draft.trim() !== "" ? "message" : null,
+    photos.length > 0 ? "photos" : null,
+    voiceAtRisk ? "recording" : null,
+  ].filter((part): part is string => part !== null);
+  const unsentCopy = unsentParts.length === 1 ? `Your unsent ${unsentParts[0]} will be discarded.`
+    : unsentParts.length > 1
+      ? `Your unsent ${unsentParts.slice(0, -1).join(", ")} and ${unsentParts[unsentParts.length - 1]} will be discarded.`
+      : null;
+  // The boundary can move while the question is open: once the note is admitted
+  // there is nothing left to discard, so the question goes away rather than
+  // standing there with an empty promise.
+  useEffect(() => {
+    if (confirmLeave && !hasUnsentWork) setConfirmLeave(false);
+  }, [confirmLeave, hasUnsentWork]);
+  // Refs keep the one registered gesture owner current without re-registering
+  // it over a child layer that already owns the press.
+  const unsentWork = useRef(hasUnsentWork);
+  unsentWork.current = hasUnsentWork;
+  const leaveThread = useRef<() => void>(() => undefined);
+  leaveThread.current = () => {
+    // Explicit consent releases the microphone here; no gesture does it alone.
+    // A note the service already holds is not discarded: it is in the outbox
+    // and leaving must not pretend to cancel it.
+    if (voiceAtRisk) discardVoice();
+    setConfirmLeave(false);
+    navigate(CHATS_PATH, { replace: true });
+  };
+  const requestLeave = useRef<() => void>(() => undefined);
+  requestLeave.current = () => {
+    if (unsentWork.current) { setConfirmLeave(true); return; }
+    leaveThread.current();
+  };
+  // Set while a press is handed to an open layer's own Escape handling, so the
+  // same key cannot also leave the conversation.
+  const delegatedPress = useRef(false);
+  const closeOpenLayer = () => {
+    delegatedPress.current = true;
+    try {
+      // Dispatched inside the document so the layer's own capture/bubble
+      // listener (document, window or a picker trigger) is the one that runs.
+      document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    } finally { delegatedPress.current = false; }
+  };
+  const closeLayer = useRef(closeOpenLayer);
+  closeLayer.current = closeOpenLayer;
+  // Escape leaves a conversation for the canonical chat list once every open
+  // layer has had the press. A composing field, a repeated key or a modifier is
+  // never a leave gesture, and only the canonical conversation route owns the
+  // gesture (a legacy/redirect mount is not a chat screen).
+  useEffect(() => {
+    const leaveOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing
+        || event.keyCode === 229 || event.repeat || event.ctrlKey || event.altKey
+        || event.metaKey || event.shiftKey) return;
+      if (!isChatThreadPath(routeRef.current.pathname)) return;
+      if (delegatedPress.current) return;
+      // A layer owns this press even when focus sits outside it: the canonical
+      // modal stack, or an open dialog/menu/picker (the phone navigation drawer
+      // is one). Leaving underneath it would be the same key acting twice.
+      if (modalLayerCount() > 0 || document.querySelector(OPEN_LAYER_SELECTOR)) return;
+      event.preventDefault();
+      requestLeave.current();
+    };
+    window.addEventListener("keydown", leaveOnEscape);
+    return () => window.removeEventListener("keydown", leaveOnEscape);
+  }, []);
+  // Android Back asks the same question, but only after every open layer has
+  // had its own press: layers register when they open, so the topmost wins. A
+  // layer with no Back handler of its own is closed through its Escape path.
+  useEffect(() => registerBackInterceptor(() => {
+    if (!isChatThreadPath(routeRef.current.pathname)) return false;
+    if (modalLayerCount() > 0 || document.querySelector(OPEN_LAYER_SELECTOR)) {
+      closeLayer.current();
+      return true;
+    }
+    requestLeave.current();
+    return true;
+  }), []);
   const [viewer, setViewer] = useState<{ id: string; items: MediaViewerItem[] } | null>(null);
   const readyPhotos = useRef(new Map<string, { bytes: ArrayBuffer; mime: string }>());
   const rememberPhoto = useCallback((id: string, content: { bytes: ArrayBuffer; mime: string } | null) => {
@@ -1355,6 +1468,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   /** A discarded note is gone: a later note must not reuse its attachment id. */
   function discardVoice() {
     if (admission.current?.messageType === "VOICE") admission.current = null;
+    // A finalize or hash still in flight must not reach the service after the
+    // reader threw the note away.
+    voiceSendDiscarded.current = true;
     voice.recorder.discard();
   }
   function toggleVoiceCapture() {
@@ -1385,10 +1501,11 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     // 2026-11-18): one press stops what has been recorded so far and sends it.
     if (!row || !voiceAllowed || voiceSending) return;
     if (voiceStatus !== "review" && voiceStatus !== "recording" && voiceStatus !== "pausing") return;
-    setVoiceSending(true); setError(null);
+    voiceSendDiscarded.current = false;
+    setVoiceSendPhase("preparing"); setError(null);
     try {
       const recording = await voice.recorder.stopAndFinalize();
-      if (!recording || !alive.current) return;
+      if (!recording || !alive.current || voiceSendDiscarded.current) return;
       const mime = storedVoiceMime(recording.mime);
       if (mime !== "audio/webm" && mime !== "audio/mp4") throw new Error("Unsupported voice container");
       const bytes = await recording.blob.arrayBuffer();
@@ -1403,6 +1520,12 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         },
       };
       admission.current = attempt;
+      // Preparation ends here. A discard, or an unmounted thread, during the
+      // finalize, the container read or the hash must not become a service
+      // call, so the boundary is checked immediately before the one call that
+      // hands the note to the durable outbox.
+      if (!alive.current || voiceSendDiscarded.current) return;
+      setVoiceSendPhase("sending");
       await sendMessagingVoice(accountId, conversationId, row.peerId, attempt.metadata, bytes, replyTo?.id);
       if (!alive.current) return;
       nearBottom.current = true;
@@ -1416,7 +1539,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       // The ids stay for an identical retry, but the composer must not stay
       // locked: that is the same rule the photo path already follows.
       if (alive.current) { setAdmissionFailed(true); setError("That voice message could not be saved. Try sending it again."); }
-    } finally { if (alive.current) setVoiceSending(false); }
+    } finally { if (alive.current) setVoiceSendPhase("idle"); }
   }
   /**
    * Normal conversation is not a form submission: the durable outbox admits the
@@ -1754,6 +1877,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     {detailsToggle => <section className="fb-chat-page" aria-label="Conversation">
     <header className="fb-chat-header">
       <Link to="/chats" className="fb-chat-icon" aria-label="Back to chats" {...hoverLabel("Back to chats")}><ArrowLeft size={22} aria-hidden="true" /></Link>
+      <NavOutsideBrand />
       <ChatIdentity peerId={row?.peerId} name={name} username={person?.username} avatarUrl={person?.avatarUrl} muted={view?.ownMuted === true}
         conversationId={conversationId}
         status={!view ? "Saved chat" : view.mode === "CONNECTED" ? "Friends" : "Message request"} />
@@ -2070,6 +2194,10 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         : sheet === "unsend" ? "Replace this message with ‘Message unsent’ for everyone. Each device that received it keeps a hidden copy for up to 24 hours so it can still be reported, then deletes it."
           : sheet === "clear" ? "This clears your copy on your devices, not theirs." : "Remove this message from your devices, not the other person’s chat."}</p>
       {error && <p className="fb-chat-error" role="alert">{error}</p>}
+    </ConfirmDialog>
+    <ConfirmDialog open={confirmLeave} onClose={() => setConfirmLeave(false)} title="Leave this chat?"
+      confirmLabel="Leave chat" cancelLabel="Stay" onConfirm={() => leaveThread.current()}>
+      {unsentCopy && <p>{unsentCopy}</p>}
     </ConfirmDialog>
     <AdaptiveTaskSurface open={sheet !== null && sheet !== "location" && !confirming} onClose={() => setSheet(null)} busy={busy}
       title={sheet === "search" ? "Search chat" : sheet === "media" ? "Conversation media" : sheet === "review" ? "Review message" : "Conversation info"}>

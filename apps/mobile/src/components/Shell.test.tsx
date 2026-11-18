@@ -5,6 +5,7 @@ import { createMemoryRouter, Link, MemoryRouter, Route, RouterProvider, Routes, 
 import { useEffect } from "react";
 import { MotionConfig } from "framer-motion";
 import { PrimaryNav, Shell } from "./Shell";
+import { AppBar } from "./AppBar";
 import { HoverLabelProvider } from "./HoverLabel";
 import { TabTapProvider } from "./TabTap";
 import { resetBackInterceptors } from "./backNavigation";
@@ -36,6 +37,10 @@ function renderShell(entry = "/") {
         <Route index element={<p>Home screen</p>} />
         <Route path="/search" element={<p>Search screen</p>} />
         <Route path="/my" element={<p>My Reports screen</p>} />
+        {/* An ordinary route that owns the shared top bar, so the rail's
+            outside name can be observed where the app paints it. */}
+        <Route path="/brand" element={<><AppBar title="Brand route" utilities={false} /><p>Brand route screen</p></>} />
+        <Route path="/brand-back" element={<><AppBar title="Brand back" backTo="/" utilities={false} /><p>Brand back screen</p></>} />
         <Route path="/chats" element={<p>Chats screen</p>} />
         <Route path="/settings" element={<p>Settings screen</p>} />
         <Route path="/profile" element={<p>Profile screen</p>} />
@@ -735,6 +740,49 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     expect(screen.queryByRole("button", { name: "Open navigation" })).toBeNull();
   });
 
+  it("paints the app name outside a collapsed rail on an ordinary route", () => {
+    setWidth(800);
+    stubMatchMedia(true);
+    storeNavLayout("rail");
+    renderShell("/brand");
+    const bar = screen.getByTestId("app-bar");
+    const brand = bar.querySelector(".fb-nav-outside-brand");
+    expect(brand?.textContent).toBe("Norfold");
+    // The name belongs to the content's own top row, not to a second head
+    // stacked inside the icon column (owner direction 2026-11-18).
+    expect(screen.getByRole("navigation", { name: "Primary" }).contains(brand)).toBe(false);
+    // One name in the bar, and the route heading is still the bar's own title.
+    expect(bar.querySelectorAll(".fb-nav-outside-brand")).toHaveLength(1);
+    expect(within(bar).getByRole("heading", { name: "Brand route" })).toBeTruthy();
+  });
+
+  it("keeps the outside name on a rail route that also offers a back path", () => {
+    setWidth(800);
+    stubMatchMedia(true);
+    storeNavLayout("rail");
+    renderShell("/brand-back");
+    const bar = screen.getByTestId("app-bar");
+    // The back control stays first; the label follows it rather than replacing
+    // it, so detail surfaces keep the way out and still carry the app name.
+    expect(bar.querySelector(".fb-nav-outside-brand")?.textContent).toBe("Norfold");
+    expect(within(bar).getByRole("button", { name: "Back" })).toBeTruthy();
+    expect(within(bar).getByRole("heading", { name: "Brand back" })).toBeTruthy();
+  });
+
+  it("keeps the outside name out of a phone drawer's route bar", () => {
+    setWidth(390);
+    stubMatchMedia(false);
+    storeNavLayout("rail");
+    renderShell("/brand");
+    expect(screen.getByTestId("app-bar").querySelector(".fb-nav-outside-brand")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Open navigation" }));
+    const drawer = screen.getByRole("dialog", { name: "Navigation" });
+    // The temporary drawer names the app in its own head; the route bar stays
+    // bare, so the open overlay does not show the name twice.
+    expect(within(drawer).getByText("Norfold")).toBeTruthy();
+    expect(screen.getByTestId("app-bar").querySelector(".fb-nav-outside-brand")).toBeNull();
+  });
+
   it("hides the rail on chrome-free routes", () => {
     setWidth(800);
     storeNavLayout("rail");
@@ -799,8 +847,16 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
       // Collapsed rail width lives in a token so the hover expansion can
       // compute the exact negative margin that keeps <main> from reflowing.
       expect(rail.width).toBe("var(--fb-rail-collapsed)");
-      expect(rail.getPropertyValue("--fb-rail-collapsed").trim()).toBe("5.25rem");
+      expect(rail.getPropertyValue("--fb-rail-collapsed").trim()).toBe("64px");
       expect(rail.getPropertyValue("--fb-rail-expanded").trim()).toBe("196px");
+      // The head keeps the app mark at every width. Collapsed, the name is not
+      // squeezed into the icon column: it is painted outside the rail instead.
+      const collapsedWordmark = nav.querySelector(".fb-nav-wordmark");
+      const collapsedMark = nav.querySelector(".fb-nav-brand-mark");
+      expect(collapsedWordmark).toBeTruthy();
+      expect(collapsedMark).toBeTruthy();
+      expect(getComputedStyle(collapsedWordmark as HTMLElement).display).toBe("none");
+      expect(getComputedStyle(collapsedMark as HTMLElement).display).not.toBe("none");
       // Positioned only so the resize handle can anchor to the rail's inner
       // edge. It stays an in-flow flex column (never fixed/absolute), which is
       // what keeps it from covering the content.
@@ -812,6 +868,12 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
       // 640px-tall window without the rail becoming a scroller.
       expect(item.minHeight).toBe("38px");
       expect(item.flexDirection).toBe("column");
+      // Pinned, the same head names the app beside the mark, so the outside
+      // copy is free to yield and the name never appears twice.
+      fireEvent.click(within(nav).getByRole("button", { name: "Expand navigation" }));
+      const pinned = screen.getByRole("navigation", { name: "Primary" });
+      expect(getComputedStyle(pinned.querySelector(".fb-nav-wordmark") as HTMLElement).display).not.toBe("none");
+      expect(getComputedStyle(pinned.querySelector(".fb-nav-brand-mark") as HTMLElement).display).not.toBe("none");
     } finally {
       style.remove();
     }

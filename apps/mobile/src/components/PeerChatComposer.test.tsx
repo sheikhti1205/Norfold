@@ -1,16 +1,18 @@
 // @vitest-environment jsdom
 import { useState } from "react";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createRef } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { PeerChatComposer, type ChatFileKind } from "./PeerChatComposer";
+import { consumeBackIntercept, resetBackInterceptors } from "./backNavigation";
 
-afterEach(() => { cleanup(); vi.unstubAllEnvs(); });
+afterEach(() => { cleanup(); resetBackInterceptors(); vi.unstubAllEnvs(); });
 
 /** Controlled wrapper: the composer always owns only a draft and callbacks. */
-function Harness({ connected = true, voiceAvailable = false, onVoice, onPickKlipy, onFiles, onLocation }: {
+function Harness({ connected = true, voiceAvailable = false, locked = false, onVoice, onPickKlipy, onFiles, onLocation }: {
   connected?: boolean;
   voiceAvailable?: boolean;
+  locked?: boolean;
   onVoice?: () => void;
   onPickKlipy?: (item: { mediaUrl: string }) => void;
   onFiles?: (files: File[], kind: ChatFileKind) => void;
@@ -18,7 +20,7 @@ function Harness({ connected = true, voiceAvailable = false, onVoice, onPickKlip
 }) {
   const [value, setValue] = useState("Keep draft");
   return <PeerChatComposer value={value} onChange={setValue} onSend={() => setValue("")}
-    inputRef={createRef()} busy={false} locked={false} canSend={!!value.trim()}
+    inputRef={createRef()} busy={false} locked={locked} canSend={!!value.trim()}
     photoAllowed={connected} onCamera={() => undefined} onPhotos={() => undefined}
     voiceAvailable={voiceAvailable} onVoice={onVoice}
     {...(onFiles ? { onFiles } : {})}
@@ -31,7 +33,7 @@ function openAttachments() {
   return screen.getByRole("menu", { name: "Add attachment" });
 }
 
-it("keeps four targets in one row: attachment, field, expressions and send", () => {
+it("keeps one row of fixed targets: attachment, field, expressions and send", () => {
   render(<Harness />);
   const attach = screen.getByRole("button", { name: "Add attachment" });
   const field = screen.getByRole("textbox", { name: "Message" });
@@ -59,14 +61,40 @@ it("opens every real capability from the one attachment sheet", () => {
   expect(onLocation).toHaveBeenCalledOnce();
 });
 
-it("offers voice only when a real recording path is present", () => {
-  const first = render(<Harness voiceAvailable={false} onVoice={() => undefined} />);
-  expect(within(openAttachments()).queryByRole("menuitem", { name: "Voice message" })).toBeNull();
-  first.unmount();
+it("offers voice as its own control only when a real recording path is present", () => {
+  const withoutCapability = render(<Harness voiceAvailable={false} onVoice={() => undefined} />);
+  expect(screen.queryByRole("button", { name: "Voice message" })).toBeNull();
+  withoutCapability.unmount();
+
+  // A capability flag alone is not enough: the screen must own the action.
+  const withoutHandler = render(<Harness voiceAvailable />);
+  expect(screen.queryByRole("button", { name: "Voice message" })).toBeNull();
+  withoutHandler.unmount();
+
   const onVoice = vi.fn();
   render(<Harness voiceAvailable onVoice={onVoice} />);
-  fireEvent.click(within(openAttachments()).getByRole("menuitem", { name: "Voice message" }));
+  fireEvent.click(screen.getByRole("button", { name: "Voice message" }));
   expect(onVoice).toHaveBeenCalledOnce();
+  // One owner for the action: the attachment sheet keeps no second copy of it.
+  expect(within(openAttachments()).queryByRole("menuitem", { name: "Voice message" })).toBeNull();
+});
+
+it("puts the voice control after the expression trigger and before Send", () => {
+  const composer = render(<Harness voiceAvailable onVoice={() => undefined} />);
+  const expressions = screen.getByRole("button", { name: "Emoji, GIFs and stickers" });
+  const voice = screen.getByRole("button", { name: "Voice message" });
+  const send = screen.getByRole("button", { name: "Send message" });
+  expect(expressions.compareDocumentPosition(voice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(voice.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // Adjacent in the row: nothing sits between the expression trigger and Send.
+  expect(voice.previousElementSibling?.contains(expressions)).toBe(true);
+  expect(voice.nextElementSibling).toBe(send);
+  composer.unmount();
+
+  // A read-only conversation keeps the control visible but inert, exactly as
+  // the attachment sheet's row used to behave.
+  render(<Harness voiceAvailable locked onVoice={() => undefined} />);
+  expect((screen.getByRole("button", { name: "Voice message" }) as HTMLButtonElement).disabled).toBe(true);
 });
 
 it("withdraws camera and photos from a request without hiding the sheet", () => {
@@ -131,4 +159,27 @@ it("keeps GIFs and stickers honest when the provider is not configured", () => {
   expect(screen.getByTestId("chat-expression-unavailable")).toBeTruthy();
   expect(screen.getByTestId("chat-expression-unavailable").textContent).toMatch(/aren't available/i);
   expect(screen.queryByTestId("chat-expression-search")).toBeNull();
+});
+
+it("closes the attachment sheet with Escape and consumes that press", () => {
+  render(<Harness />);
+  const menu = openAttachments();
+  const notCancelled = fireEvent.keyDown(
+    within(menu).getByRole("menuitem", { name: "Photos" }),
+    { key: "Escape" },
+  );
+  expect(screen.queryByRole("menu", { name: "Add attachment" })).toBeNull();
+  // The conversation owns Escape; an unconsumed press would also leave it.
+  expect(notCancelled).toBe(false);
+});
+
+it("closes the attachment sheet with Android Back and consumes that press", () => {
+  render(<Harness />);
+  openAttachments();
+  // The sheet is the top layer, so it answers the one press and the thread
+  // underneath never sees it.
+  act(() => { expect(consumeBackIntercept()).toBe(true); });
+  expect(screen.queryByRole("menu", { name: "Add attachment" })).toBeNull();
+  // With the sheet closed the composer owns no press at all.
+  act(() => { expect(consumeBackIntercept()).toBe(false); });
 });

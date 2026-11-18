@@ -35,9 +35,19 @@ interface ReportDatePickerProps {
   description?: string;
   /** Empty-value copy. "Any date" reads as an absent filter bound. */
   placeholder?: string;
-  /** Inclusive ISO-day bounds. Bounds are clamped to the past-only ceiling. */
+  /**
+   * Inclusive ISO-day bounds. A maxValue is clamped to the past-only ceiling
+   * unless `allowFuture` is set.
+   */
   minValue?: string;
   maxValue?: string;
+  /**
+   * Opt in to days after today's UTC day. Report and filter dates are
+   * past-only because the server rejects a future event_date, but a sanction
+   * end date is necessarily ahead of it. Off by default: every existing
+   * caller keeps the same ceiling, and an explicit maxValue still applies.
+   */
+  allowFuture?: boolean;
 }
 
 const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
@@ -86,6 +96,12 @@ const MIN_JUMP_YEAR = 1900;
 /** Years moved by Shift+Arrow inside the jump panel. */
 const DECADE_STEP = 10;
 
+/**
+ * Year headroom for a future-date field with no explicit ceiling. Large enough
+ * for any real sanction end date while keeping the year stepper bounded.
+ */
+const FUTURE_JUMP_YEARS = 100;
+
 /** Horizontal travel (px) that counts as a month swipe on the calendar grid. */
 const SWIPE_THRESHOLD_PX = 40;
 /** Horizontal travel must dominate vertical travel by this factor. */
@@ -118,6 +134,7 @@ export function ReportDatePicker({
   placeholder = "Select date",
   minValue,
   maxValue,
+  allowFuture = false,
 }: ReportDatePickerProps) {
   const id = useId();
   const triggerId = providedId || `${id}-trigger`;
@@ -164,16 +181,24 @@ export function ReportDatePicker({
 
   const todayDate = today("UTC");
   const parsedMax = maxValue ? parseISO(maxValue) : null;
-  const maxDate = parsedMax && parsedMax.compare(todayDate) < 0 ? parsedMax : todayDate;
+  // Past-only fields cap on the server's UTC day; an opted-in future field
+  // takes an explicit bound as-is and otherwise has no ceiling.
+  const maxDate = allowFuture
+    ? parsedMax
+    : parsedMax && parsedMax.compare(todayDate) < 0
+      ? parsedMax
+      : todayDate;
   const minDate = minValue ? parseISO(minValue) : null;
   const isBeforeMin = (date: CalendarDate | CalendarDateTime | ZonedDateTime): boolean =>
     minDate !== null && asCalendarDate(date).compare(minDate) < 0;
+  const isAfterMax = (date: CalendarDate | CalendarDateTime | ZonedDateTime): boolean =>
+    maxDate !== null && asCalendarDate(date).compare(maxDate) > 0;
   const isOutOfRange = (date: CalendarDate | CalendarDateTime | ZonedDateTime): boolean =>
-    isFutureDate(date) || isBeforeMin(date);
+    isAfterMax(date) || (!allowFuture && isFutureDate(date)) || isBeforeMin(date);
 
   // What the header already shows (react-aria clamps its focused date to
   // maxValue, so the label must clamp the same way).
-  const headingDate = focusedDate.compare(maxDate) > 0 ? maxDate : focusedDate;
+  const headingDate = maxDate !== null && focusedDate.compare(maxDate) > 0 ? maxDate : focusedDate;
   const monthYearText = MONTH_YEAR_FORMAT.format(headingDate.toDate(getLocalTimeZone()));
 
   /**
@@ -219,14 +244,25 @@ export function ReportDatePicker({
     if (next) setFocusedDate(next);
   };
 
-  /** Past-only field: a month after the current UTC month is a dead target. */
-  const isMonthUnavailable = (year: number, month: number): boolean =>
-    year > maxDate.year || (year === maxDate.year && month > maxDate.month) ||
-    (minDate !== null && (year < minDate.year || (year === minDate.year && month < minDate.month)));
+  /**
+   * A month outside the field's domain is a dead target. The past-only
+   * default stops at the current UTC month; the future opt-in follows an
+   * explicit maxValue and otherwise has no upper bound.
+   */
+  const isMonthUnavailable = (year: number, month: number): boolean => {
+    const afterMax =
+      maxDate !== null &&
+      (year > maxDate.year || (year === maxDate.year && month > maxDate.month));
+    const beforeMin =
+      minDate !== null &&
+      (year < minDate.year || (year === minDate.year && month < minDate.month));
+    return afterMax || beforeMin;
+  };
 
   const minYear = minDate?.year ?? MIN_JUMP_YEAR;
+  const maxJumpYear = maxDate?.year ?? todayDate.year + FUTURE_JUMP_YEARS;
   const clampJumpYear = (year: number): number =>
-    Math.min(Math.max(year, minYear), maxDate.year);
+    Math.min(Math.max(year, minYear), maxJumpYear);
 
   const stepJumpYear = (delta: number): void => {
     setJumpYear((year) => clampJumpYear(year + delta));
@@ -395,7 +431,7 @@ export function ReportDatePicker({
           onChange={handleCalendarChange}
           focusedValue={focusedDate}
           onFocusChange={setFocusedDate}
-          maxValue={maxDate}
+          maxValue={maxDate ?? undefined}
           minValue={minDate ?? undefined}
           isDateUnavailable={isOutOfRange}
           selectionMode="single"
@@ -476,7 +512,7 @@ export function ReportDatePicker({
                 <button
                   type="button"
                   aria-label="Next year"
-                  disabled={jumpYear >= maxDate.year}
+                  disabled={jumpYear >= maxJumpYear}
                   onClick={() => stepJumpYear(1)}
                   className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-on-surface"
                 >

@@ -1,9 +1,10 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 import { FileText, MessageCircle, MessageSquare, UserRound } from "lucide-react";
 import { useAuth } from "../auth";
 import { AdaptiveTaskSurface } from "./AdaptiveTaskSurface";
 import { Button } from "./Button";
-import { SelectField, TextAreaField, TextField } from "./Fields";
+import { SelectField, TextAreaField } from "./Fields";
+import { ReportDatePicker } from "./ReportDatePicker";
 import { announce } from "./LiveRegion";
 import { friendlyError } from "../utils/friendlyErrors";
 import {
@@ -216,6 +217,7 @@ export function ModerationCaseSheet({
   const { user } = useAuth();
   const generation = useRef(0);
   const readRequest = useRef(0);
+  const endsAtFieldId = useId();
   const targetType = entry?.targetType;
   const targetId = entry?.targetId;
   const [target, setTarget] = useState<ModerationTarget | null>(null);
@@ -508,12 +510,47 @@ export function ModerationCaseSheet({
                 }}
               />
               {sanctionKind ? (
-                <TextField
-                  label="Ends on (optional)"
-                  type="date"
-                  value={endsAt}
-                  onChange={(event) => setEndsAt(event.target.value)}
-                />
+                <div className="block">
+                  {/*
+                    A sanction end date is necessarily in the future, which the
+                    report picker's default past-only domain forbids. The
+                    opt-in keeps every report and filter field capped.
+                  */}
+                  <label
+                    htmlFor={endsAtFieldId}
+                    className="mb-1 block text-sm font-medium text-on-surface"
+                  >
+                    Ends on (optional)
+                  </label>
+                  <ReportDatePicker
+                    id={endsAtFieldId}
+                    label="Ends on (optional)"
+                    title="End date"
+                    description="Choose the day the restriction should end. Leave it empty for no end date."
+                    placeholder="No end date"
+                    allowFuture
+                    disabled={applying}
+                    value={endsAt}
+                    onChange={setEndsAt}
+                  />
+                  {endsAt ? (
+                    <div className="mt-1 flex justify-end">
+                      <Button
+                        variant="text"
+                        disabled={applying}
+                        aria-label="Clear end date"
+                        onClick={() => {
+                          setEndsAt("");
+                          // The Clear control unmounts with the value; keep
+                          // keyboard focus on the field instead of the body.
+                          document.getElementById(endsAtFieldId)?.focus();
+                        }}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
               <TextAreaField
                 label="Note for the record (optional)"

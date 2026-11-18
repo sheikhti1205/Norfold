@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { BackButton } from "./BackButton";
+import { NavOutsideBrand } from "./NavOutsideBrand";
 import { TopUtilities } from "./TopUtilities";
 import "./appBar.css";
 
@@ -28,8 +29,9 @@ export interface AppBarProps {
  * The one route-aware top bar.
  *
  * Before this existed the shell rendered a global utility strip and several
- * screens rendered a second title row underneath it. Every route now renders
- * exactly one of these (or Home's brand/search row) and the shell renders none.
+ * screens rendered a second title row underneath it. A route renders exactly one
+ * top row: this bar, Home's brand/search row, or a bespoke header such as
+ * Notifications, Saved reports, or a conversation. The shell renders none.
  */
 export function AppBar({
   title,
@@ -50,9 +52,22 @@ export function AppBar({
     if (!autoFocus) return;
     heading.current?.focus({ preventScroll: true });
   }, [autoFocus, title]);
+  // Owner direction 2026-11-18: while the side rail is an unnamed icon column,
+  // the app name lives outside it. The shared NavOutsideBrand paints it here,
+  // and the Notifications and Saved reports headers render the same component,
+  // so the name sits beside the rail head on every rail surface rather than on
+  // Home alone. Shell.nav.css yields it back to the rail head the moment the
+  // panel names itself, so it never appears twice; a bespoke header opts in
+  // with the same component instead of growing its own copy. The shell
+  // publishes whether that rail is on screen, so a bar rendered without one (a
+  // phone drawer, the dev fixture, a window) stays bare. A route's back control
+  // keeps the leading slot: the label follows it rather than replacing it.
   return (
     <header className={`fb-app-bar ${className}`} data-testid="app-bar">
       {backTo && <BackButton fallbackTo={backTo} label={backLabel} />}
+      {/* A label, not a control: the rail already owns Home and navigation, so
+          this copy only says whose app the route belongs to. */}
+      <NavOutsideBrand />
       <div className={`fb-app-bar-title${inlineSearch ? " fb-app-bar-title-searching" : ""}`}>
         <div className="fb-app-bar-title-copy">
         {title != null && (

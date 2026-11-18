@@ -1,11 +1,21 @@
 // @vitest-environment jsdom
 import type { PostItem } from "@norfold/shared";
-import { afterEach, describe, expect, it } from "vitest";import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { MotionConfig } from "framer-motion";
 import { PostCardContent, sharedMediaLayoutId, sharedTitleLayoutId } from "./PostCardContent";
+import { ReportPhotoPreviewScope } from "./ReportPhotoPreview";
 
-afterEach(cleanup);
+const pointer = vi.hoisted(() => ({ fine: false }));
+// Hover only exists on a fine pointer; jsdom has none, so the test states the
+// capability instead of pretending jsdom can hover.
+vi.mock("./inputCapabilities", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./inputCapabilities")>();
+  return { ...actual, useFinePointer: () => pointer.fine };
+});
+
+afterEach(() => { cleanup(); pointer.fine = false; vi.unstubAllGlobals(); });
 
 const LONG = `a${"very".repeat(40)}longword`;
 
@@ -151,5 +161,68 @@ describe("PostCardContent image crossfade (Wave A)", () => {
     );
     expect(screen.getByRole("heading", { name: "Lost wallet" })).toBeTruthy();
     expect(screen.getByAltText("Photo for Lost wallet")).toBeTruthy();
+  });
+});
+
+describe("search-only photo hover preview (owner direction 2026-11-18)", () => {
+  it.each(["home-feed", "masonry"] as const)(
+    "does not attach a hover preview to the ordinary %s feed",
+    (layout) => {
+      pointer.fine = true;
+      const { container } = render(
+        <PostCardContent post={imagePost()} layout={layout} />,
+        { wrapper: MemoryRouter },
+      );
+      expect(container.querySelector(".fb-report-preview-trigger")).toBeNull();
+    },
+  );
+
+  it("uses the one shared preview when the search surface opts in", () => {
+    pointer.fine = true;
+    const { container } = render(
+      <MemoryRouter>
+        <ReportPhotoPreviewScope enabled>
+          <PostCardContent post={imagePost()} layout="masonry" />
+        </ReportPhotoPreviewScope>
+      </MemoryRouter>,
+    );
+    const trigger = container.querySelector(".fb-report-preview-trigger");
+    expect(trigger).toBeTruthy();
+    // The report still opens from its own photo; the preview is only a card.
+    expect(trigger?.querySelector("[data-testid='masonry-media']")).toBeTruthy();
+    expect(container.querySelectorAll(".fb-report-preview-trigger")).toHaveLength(1);
+  });
+
+  it("keeps the 50% impression hook and the action row under the search opt-in", () => {
+    pointer.fine = true;
+    const observe = vi.fn();
+    let threshold: number | number[] | undefined;
+    class FakeObserver {
+      constructor(_callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+        threshold = options?.threshold;
+      }
+      observe = observe;
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("IntersectionObserver", FakeObserver);
+
+    const { container } = render(
+      <MemoryRouter>
+        <ReportPhotoPreviewScope enabled>
+          <PostCardContent post={imagePost()} layout="masonry" />
+        </ReportPhotoPreviewScope>
+      </MemoryRouter>,
+    );
+
+    expect(observe).toHaveBeenCalled();
+    expect(threshold).toBe(0.5);
+    expect(screen.getByTestId("post-action-row")).toBeTruthy();
+    expect(screen.getByTestId("post-footer")).toBeTruthy();
+    // The preview wrapper adds no interactive element of its own and nests
+    // nothing inside the report's own photo button.
+    const trigger = container.querySelector(".fb-report-preview-trigger")!;
+    expect(trigger.querySelector("[data-testid='masonry-media']")).toBeTruthy();
+    expect(trigger.querySelector("a button, button a")).toBeNull();
   });
 });

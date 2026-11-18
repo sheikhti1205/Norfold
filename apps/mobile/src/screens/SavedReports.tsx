@@ -5,6 +5,7 @@ import { PostLink } from "../components/PostNavigation";
 import type { PostItem } from "@norfold/shared";
 import { useAuth } from "../auth";
 import { BackButton } from "../components/BackButton";
+import { NavOutsideBrand } from "../components/NavOutsideBrand";
 import { EmptyView, ErrorView, Skeleton } from "../components/uiPrimitives";
 import { useSavedReportsState, type SavedReportRow } from "../hooks/useSavedReports";
 import { ApiError } from "../services/session";
@@ -200,6 +201,7 @@ export function SavedReports() {
       <div className="flex h-full flex-col gap-4 py-5">
         <header className="flex items-center gap-2 px-4">
           <BackButton fallbackTo="/profile" label="Back to profile" />
+          <NavOutsideBrand />
           <div className="min-w-0">
             <h1 className="text-xl font-semibold tracking-tight">Saved reports</h1>
           </div>
@@ -215,6 +217,8 @@ export function SavedReports() {
     <div className="flex h-full flex-col gap-4 py-5">
       <header className="flex items-center gap-2 px-4">
         <BackButton fallbackTo="/profile" label="Back to profile" />
+        {/* The app name stays outside the rail while that column is unnamed. */}
+        <NavOutsideBrand />
         <div className="min-w-0">
           <h1 className="text-xl font-semibold tracking-tight">Saved reports</h1>
           <p className="text-sm text-on-surface-variant">

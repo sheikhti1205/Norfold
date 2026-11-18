@@ -12,7 +12,7 @@ import { PostIdentityHeader, PostMetaIcons, PostStatusTitle, PostFacts, PostInsi
 import { useReportNavigation } from "./PostNavigation";
 import { PostDescription } from "./PostDescription";
 import { FeedMediaCarousel } from "./FeedMediaCarousel";
-import { ReportPhotoPreview } from "./ReportPhotoPreview";
+import { ReportPhotoPreview, useReportPhotoPreviewOptIn } from "./ReportPhotoPreview";
 import { fadeVariants, motionDurations, motionEasings } from "./uiMotion";
 import { useReportImpression } from "../hooks/useReportImpression";
 
@@ -65,21 +65,19 @@ function MasonryPreview({ post, onOpenReport, enableSharedMedia }: {
   if (!first) return null;
   const src = useMediaUrl(first.fileUrl);
   const sharedId = enableSharedMedia ? sharedMediaLayoutId(post.id) : undefined;
-  return <ReportPhotoPreview post={post}>
-    <button type="button" data-testid="masonry-media"
-      aria-label={metrics.imageCount > 1 ? `Photo 1 of ${metrics.imageCount} for ${post.title}` : `Photo for ${post.title}`}
-      onClick={onOpenReport} className="fb-post-photo fb-masonry-media relative block w-full overflow-hidden"
-      style={{ aspectRatio: `${naturalRatio ?? metrics.mediaRatio}` }}>
-      {!failed && <motion.img src={src} alt="" loading="lazy" className="h-full w-full object-cover"
-        {...(sharedId ? { layoutId: sharedId, "data-shared-media": sharedId, transition: sharedElementTransition } : {})}
-        onLoad={(event) => {
-          const el = event.currentTarget;
-          if (!metrics.sizeKnown && el.naturalWidth > 0 && el.naturalHeight > 0) setNaturalRatio(el.naturalWidth / el.naturalHeight);
-        }} onError={() => setFailed(true)} />}
-      {failed && <span data-testid="masonry-media-fallback" className="fb-img-fallback" aria-hidden><ImageOff size={16} aria-hidden />Photo unavailable</span>}
-      {metrics.imageCount > 1 && <span data-testid="masonry-more-media" className="fb-masonry-more" aria-hidden>+{metrics.imageCount - 1}</span>}
-    </button>
-  </ReportPhotoPreview>;
+  return <button type="button" data-testid="masonry-media"
+    aria-label={metrics.imageCount > 1 ? `Photo 1 of ${metrics.imageCount} for ${post.title}` : `Photo for ${post.title}`}
+    onClick={onOpenReport} className="fb-post-photo fb-masonry-media relative block w-full overflow-hidden"
+    style={{ aspectRatio: `${naturalRatio ?? metrics.mediaRatio}` }}>
+    {!failed && <motion.img src={src} alt="" loading="lazy" className="h-full w-full object-cover"
+      {...(sharedId ? { layoutId: sharedId, "data-shared-media": sharedId, transition: sharedElementTransition } : {})}
+      onLoad={(event) => {
+        const el = event.currentTarget;
+        if (!metrics.sizeKnown && el.naturalWidth > 0 && el.naturalHeight > 0) setNaturalRatio(el.naturalWidth / el.naturalHeight);
+      }} onError={() => setFailed(true)} />}
+    {failed && <span data-testid="masonry-media-fallback" className="fb-img-fallback" aria-hidden><ImageOff size={16} aria-hidden />Photo unavailable</span>}
+    {metrics.imageCount > 1 && <span data-testid="masonry-more-media" className="fb-masonry-more" aria-hidden>+{metrics.imageCount - 1}</span>}
+  </button>;
 }
 
 /** The preview keeps density-specific geometry; every tap opens the report. */
@@ -112,6 +110,9 @@ export function PostCardContent({ post, layout = "classic", enableSharedMedia = 
 }) {
   const openReport = useReportNavigation();
   const impressionRef = useReportImpression(post.id);
+  // Search results opt into the one shared hover card; Home/feed/list cards do
+  // not, so an ordinary feed photo still only navigates to its report.
+  const photoPreview = useReportPhotoPreviewOptIn();
   const photoCount = post.attachments.filter(a => a.mimeType.startsWith("image/")).length;
   const openDetail = () => openReport(`/posts/${post.id}`);
   const dense = layout === "compact" || layout === "masonry";
@@ -121,6 +122,7 @@ export function PostCardContent({ post, layout = "classic", enableSharedMedia = 
   // row so a search result still reads as a scannable line.
   const refined = layout === "home-feed" || layout === "masonry";
   const titleClassName = layout === "editorial" ? "fb-editorial-title" : layout === "masonry" ? "fb-masonry-title line-clamp-2" : layout === "compact" ? "text-sm font-bold leading-snug line-clamp-2" : "fb-feed-title line-clamp-2";
+  const media = <PostMediaPreview key={post.id} post={post} layout={layout} enableSharedMedia={enableSharedMedia} onOpenReport={openDetail} />;
   return <div ref={impressionRef} data-testid={layout === "home-feed" ? "home-feed-content" : layout === "masonry" ? "masonry-content" : undefined}
     className={`fb-post-content fb-post-${layout}`}>
     <PostIdentityHeader post={post} overflow={overflow} contextReportId={post.id}
@@ -128,7 +130,7 @@ export function PostCardContent({ post, layout = "classic", enableSharedMedia = 
     <PostStatusTitle post={post} inlineStatus={refined} titleClassName={titleClassName} enableSharedMedia={enableSharedMedia}
       linkTestId={layout === "home-feed" ? "home-feed-detail-link" : layout === "masonry" ? "masonry-detail-link" : undefined} />
     {!dense && <div className="fb-post-description"><PostDescription text={post.description} /></div>}
-    <PostMediaPreview key={post.id} post={post} layout={layout} enableSharedMedia={enableSharedMedia} onOpenReport={openDetail} />
+    {photoPreview ? <ReportPhotoPreview post={post}>{media}</ReportPhotoPreview> : media}
     {!refined && <PostFacts post={post}>
       {photoCount > 0 && <p data-testid="photo-count">{photoCount} {photoCount === 1 ? "photo" : "photos"}</p>}
     </PostFacts>}

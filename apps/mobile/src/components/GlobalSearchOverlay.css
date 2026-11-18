@@ -102,11 +102,17 @@
 
 .fb-search-list { list-style: none; margin: 0; padding: 0; }
 
-.fb-search-row {
+/* The floating overlay owns its own row names (`fb-gsearch-*`). The `/search`
+   toolbar also defines a `.fb-search-row` (SearchScreen.css) as a two-column
+   grid, and because that sheet loads later in the app bundle it won the
+   cascade here: the glyph stayed in the wide 1fr column while the copy was
+   pushed to the far-right auto column. Distinct names keep both surfaces. */
+.fb-gsearch-row {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
+  min-width: 0;
   min-height: 44px;
   padding: 8px 10px;
   border-radius: 10px;
@@ -114,18 +120,45 @@
   text-align: start;
   cursor: pointer;
 }
-.fb-search-row:hover { background: var(--fb-surface-container); }
-.fb-search-row:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; }
-.fb-search-row-icon { flex: none; color: var(--fb-on-surface-variant); }
-.fb-search-row-copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.fb-search-row-title {
+.fb-gsearch-row:hover { background: var(--fb-surface-container); }
+.fb-gsearch-row:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; }
+.fb-gsearch-row-icon { flex: none; color: var(--fb-on-surface-variant); }
+/* One fixed photo box at the same size as a person's avatar (32px), so report
+   and people rows in the same results card keep one row rhythm. The title
+   starts beside it and the meta line stays under the title, so no row can
+   spread its copy across the card. */
+.fb-gsearch-row-thumb {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--fb-surface-container-high);
+  color: var(--fb-on-surface-variant);
+}
+.fb-gsearch-row-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.fb-gsearch-row-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  text-align: start;
+}
+.fb-gsearch-row-title {
   font-size: 0.9375rem;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.fb-search-row-meta {
+.fb-gsearch-row-meta {
   font-size: 0.75rem;
   color: var(--fb-on-surface-variant);
   overflow: hidden;
