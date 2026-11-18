@@ -580,7 +580,10 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
     const dismissed = view?.ownHidden || view?.ownDeclined;
     if (normalized && !`${labels.get(row.peerId) ?? ""} ${identities.get(row.peerId)?.username ?? ""} ${row.lastMessage?.unsentAt === undefined ? row.lastMessage?.body ?? "" : ""}`.toLowerCase().includes(normalized)) return false;
     if (filter === "Archived") return dismissed;
-    if (dismissed) return false;
+    // A name search is also how a hidden chat is found again: show it with its
+    // real state ("Archived" / "Hidden request") so it can be opened and moved
+    // back to the inbox. Browsing All stays the clean inbox.
+    if (dismissed && !normalized) return false;
     if (filter === "Requests") return view?.mode === "REQUEST" && view.request === "INCOMING";
     if (filter === "Unread") return row.unreadCount > 0;
     return true;
@@ -768,6 +771,11 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   // item is reviewed, removed and sent on its own terms.
   const [photos, setPhotos] = useState<StagedChatPhoto[]>([]);
   const [photoSending, setPhotoSending] = useState(false);
+  // A reply to an incoming request accepts it first. While that one round trip
+  // runs, the composer is read-only so a draft typed during the wait cannot be
+  // half-sent by the reply that is already in flight.
+  const [requestAccepting, setRequestAccepting] = useState(false);
+  const requestAcceptingRef = useRef(false);
   const [filesSending, setFilesSending] = useState(false);
   const [draftViewer, setDraftViewer] = useState<{ key: string } | null>(null);
   // Voice is a real capability: one recorder and one transcript player per
@@ -1421,12 +1429,39 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     }
   }
 
+  /**
+   * A reply is also how the recipient accepts a message request. Accept through
+   * the canonical relationship action, wait for its refresh, and only then let
+   * the message leave. A failed accept leaves the draft in place and says why.
+   */
+  async function acceptIncomingRequestForReply(): Promise<boolean> {
+    if (view?.mode !== "REQUEST" || view.request !== "INCOMING") return true;
+    // A second Enter while the first accept is still in flight must not send a
+    // second accept: the server would reject the already-connected second one
+    // and paint an error over a message that actually went out.
+    if (requestAcceptingRef.current) return false;
+    requestAcceptingRef.current = true;
+    setRequestAccepting(true);
+    setSendStatus("Accepting this request…");
+    try {
+      await changeMessagingRelationship(accountId, conversationId, "accept");
+      return true;
+    } catch {
+      if (alive.current) setError("That request could not be accepted. Try again.");
+      return false;
+    } finally {
+      requestAcceptingRef.current = false;
+      if (alive.current) { setRequestAccepting(false); setSendStatus(null); }
+    }
+  }
+
   async function send() {
-    if (!runtimeOpen || !row || photoSending) return;
+    if (!runtimeOpen || !row || photoSending || requestAccepting) return;
     const ready = photos.filter((item): item is StagedChatPhoto & { prepared: PreparedMessagingPhoto } => !!item.prepared);
     if (photos.length > 0 && ready.length !== photos.length) return;
     if (photos.length > 0 && (view?.mode !== "CONNECTED" || view.ownBlocked)) return;
     if (photos.length === 0 && !draft.trim()) return;
+    if (!(await acceptIncomingRequestForReply())) return;
     const body = convertEmoticons(draft), sendingRevision = draftRevision.current;
     if (ready.length === 0 && textInFlight.current.has(sendingRevision)) return;
     if (ready.length === 0) textInFlight.current.add(sendingRevision);
@@ -1518,6 +1553,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     const replyTargetId = replyTo?.id;
     setError(null); setSendStatus(null);
     void (async () => {
+      if (!(await acceptIncomingRequestForReply())) return;
       try {
         await admitText({ id: crypto.randomUUID(), conversationId, authorId: accountId, recipientId: row.peerId,
           body: item.mediaUrl, messageType: "TEXT", createdAt: Date.now(), ...(replyTargetId ? { replyToId: replyTargetId } : {}) });
@@ -1660,7 +1696,13 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       if (alive.current) setError("Could not confirm this change. Sync and check your chat before trying again.");
     } finally { if (alive.current) setBusy(false); }
   }
-  const canCompose = !!row && !view?.ownBlocked && (view?.mode === "CONNECTED" || view?.request !== "INCOMING");
+  // Owner direction 2026-11-18: replying to a request is the recipient's
+  // decision, so the composer is available while it is incoming. The send path
+  // accepts first; declining or hiding it still keeps it closed.
+  const incomingOpen = view?.mode === "REQUEST" && view.request === "INCOMING"
+    && !view.ownDeclined && !view.ownHidden;
+  const canCompose = !!row && !view?.ownBlocked
+    && (view?.mode === "CONNECTED" || incomingOpen || (view?.mode === "REQUEST" && view.request !== "INCOMING"));
   const searchTerm = messageQuery.trim().toLowerCase();
   const searchMatches = searchTerm ? messages.filter(message => message.unsentAt === undefined && message.body.toLowerCase().includes(searchTerm)) : [];
   const gallery = photoAllowed ? messages.filter(message => message.messageType === "MEDIA" && message.unsentAt === undefined)
@@ -1735,7 +1777,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       {loaded && messages.length === 0 && <p className="fb-chat-empty">{view?.request === "INCOMING" ? "A new message request."
         : "Say hello and explain why you’d like to message."}</p>}
       {view?.mode === "REQUEST" && <div className="fb-chat-request">
-        <p>{view.request === "INCOMING" ? "Accept to reply. Photos and read receipts stay off until you accept."
+        <p>{view.request === "INCOMING" ? "Reply to accept this request, or accept it below. Photos and read receipts stay off until then."
           : view.request === "OUTGOING" ? "Request sent. You can add another message while you wait."
             : "Send a text message to start a request."}</p>
         {view.request === "INCOMING" && <div className="fb-chat-actions">
@@ -1966,8 +2008,8 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
           }} />
         </>}
       <PeerChatComposer value={draft} onChange={value => { draftRevision.current++; setDraft(value); }} onSend={() => void send()} inputRef={composer}
-        busy={false} locked={!runtimeOpen || photoSending || voiceSending} attachmentsLocked={photoSending || admissionFailed}
-        canSend={runtimeOpen && (photos.length > 0 ? photoAllowed && photos.every(item => !!item.prepared) : !!draft.trim())}
+        busy={false} locked={!runtimeOpen || requestAccepting || photoSending || voiceSending} attachmentsLocked={photoSending || admissionFailed}
+        canSend={runtimeOpen && !requestAccepting && (photos.length > 0 ? photoAllowed && photos.every(item => !!item.prepared) : !!draft.trim())}
         photoAllowed={view?.mode === "CONNECTED"}
         onCamera={() => void choosePhoto("camera")} onPhotos={() => void choosePhoto("photos")}
         onFiles={(files) => void sendFiles(files)} fileSending={filesSending}
