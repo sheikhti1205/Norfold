@@ -46,6 +46,13 @@ it("counts visible incoming requests and separates archived/unread filters", asy
   fireEvent.click(screen.getByRole("button",{name:"Filter chats"}));fireEvent.click(await screen.findByRole("menuitem",{name:"Archived"}));
   expect(screen.getByRole("link",{name:"Open conversation with Rowan Lee"})).toBeTruthy();expect(screen.queryByRole("link",{name:"Open conversation with Robin Lane"})).toBeNull();
 });
+it("finds a hidden conversation by name so it can be moved back to the inbox", async () => {
+  render(app());await screen.findByRole("link",{name:"Open conversation with River Jones"});
+  // All stays the clean inbox: a hidden chat is not listed until it is searched.
+  expect(screen.queryByRole("link",{name:"Open conversation with Rowan Lee"})).toBeNull();
+  fireEvent.change(screen.getByRole("searchbox",{name:"Search people or chats"}),{target:{value:"rowan"}});
+  expect(await screen.findByRole("link",{name:"Open conversation with Rowan Lee"})).toBeTruthy();
+});
 it("mirrors the bubble direction for the reply swipe and names a quoted attachment", () => {
   // Your own bubble answers right-to-left; a received one left-to-right.
   expect(replySwipeFor(-71, true)).toBe(false);
