@@ -92,7 +92,6 @@ function Thread({ variant }: { variant: FixtureVariant }) {
         onPhotos={() => undefined}
         onFiles={() => undefined}
         voiceAvailable
-        voiceActive={voiceActive}
         onVoice={() => setVoiceActive((active) => !active)}
       />}
     </div>
