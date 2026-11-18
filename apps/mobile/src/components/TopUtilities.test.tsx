@@ -105,6 +105,7 @@ describe("notification utility quick view", () => {
     bar.unmount();
 
     window.innerWidth = 1000;
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout: "rail" }));
     render(tree());
     expect(screen.getByRole("link", { name: "Create report" }).getAttribute("href")).toBe("/report");
   });
