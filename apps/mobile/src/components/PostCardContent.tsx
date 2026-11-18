@@ -12,6 +12,7 @@ import { PostIdentityHeader, PostMetaIcons, PostStatusTitle, PostFacts, PostInsi
 import { useReportNavigation } from "./PostNavigation";
 import { PostDescription } from "./PostDescription";
 import { FeedMediaCarousel } from "./FeedMediaCarousel";
+import { ReportPhotoPreview } from "./ReportPhotoPreview";
 import { fadeVariants, motionDurations, motionEasings } from "./uiMotion";
 import { useReportImpression } from "../hooks/useReportImpression";
 
@@ -64,19 +65,21 @@ function MasonryPreview({ post, onOpenReport, enableSharedMedia }: {
   if (!first) return null;
   const src = useMediaUrl(first.fileUrl);
   const sharedId = enableSharedMedia ? sharedMediaLayoutId(post.id) : undefined;
-  return <button type="button" data-testid="masonry-media"
-    aria-label={metrics.imageCount > 1 ? `Photo 1 of ${metrics.imageCount} for ${post.title}` : `Photo for ${post.title}`}
-    onClick={onOpenReport} className="fb-post-photo fb-masonry-media relative block w-full overflow-hidden"
-    style={{ aspectRatio: `${naturalRatio ?? metrics.mediaRatio}` }}>
-    {!failed && <motion.img src={src} alt="" loading="lazy" className="h-full w-full object-cover"
-      {...(sharedId ? { layoutId: sharedId, "data-shared-media": sharedId, transition: sharedElementTransition } : {})}
-      onLoad={(event) => {
-        const el = event.currentTarget;
-        if (!metrics.sizeKnown && el.naturalWidth > 0 && el.naturalHeight > 0) setNaturalRatio(el.naturalWidth / el.naturalHeight);
-      }} onError={() => setFailed(true)} />}
-    {failed && <span data-testid="masonry-media-fallback" className="fb-img-fallback" aria-hidden><ImageOff size={16} aria-hidden />Photo unavailable</span>}
-    {metrics.imageCount > 1 && <span data-testid="masonry-more-media" className="fb-masonry-more" aria-hidden>+{metrics.imageCount - 1}</span>}
-  </button>;
+  return <ReportPhotoPreview post={post}>
+    <button type="button" data-testid="masonry-media"
+      aria-label={metrics.imageCount > 1 ? `Photo 1 of ${metrics.imageCount} for ${post.title}` : `Photo for ${post.title}`}
+      onClick={onOpenReport} className="fb-post-photo fb-masonry-media relative block w-full overflow-hidden"
+      style={{ aspectRatio: `${naturalRatio ?? metrics.mediaRatio}` }}>
+      {!failed && <motion.img src={src} alt="" loading="lazy" className="h-full w-full object-cover"
+        {...(sharedId ? { layoutId: sharedId, "data-shared-media": sharedId, transition: sharedElementTransition } : {})}
+        onLoad={(event) => {
+          const el = event.currentTarget;
+          if (!metrics.sizeKnown && el.naturalWidth > 0 && el.naturalHeight > 0) setNaturalRatio(el.naturalWidth / el.naturalHeight);
+        }} onError={() => setFailed(true)} />}
+      {failed && <span data-testid="masonry-media-fallback" className="fb-img-fallback" aria-hidden><ImageOff size={16} aria-hidden />Photo unavailable</span>}
+      {metrics.imageCount > 1 && <span data-testid="masonry-more-media" className="fb-masonry-more" aria-hidden>+{metrics.imageCount - 1}</span>}
+    </button>
+  </ReportPhotoPreview>;
 }
 
 /** The preview keeps density-specific geometry; every tap opens the report. */

@@ -1,0 +1,72 @@
+/* A report photo's hover card: the picture first, then the facts that name it. */
+.fb-report-preview-trigger { display: block; min-width: 0; }
+
+.fb-popover.fb-report-preview-panel {
+  width: 21rem;
+  max-width: calc(100vw - 1rem);
+  padding: 0;
+  border-radius: 0.875rem;
+  overflow: hidden;
+}
+
+.fb-report-preview {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-height: min(26rem, 70vh);
+}
+
+.fb-report-preview-photo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  max-height: 20rem;
+  background: var(--fb-surface-container);
+}
+.fb-report-preview-photo img {
+  display: block;
+  max-width: 100%;
+  max-height: 20rem;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.fb-report-preview-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.75rem 0.875rem 0.875rem;
+}
+.fb-report-preview-title {
+  color: var(--fb-on-surface);
+  font-size: 0.9375rem;
+  font-weight: 650;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.fb-report-preview-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  min-width: 0;
+  color: var(--fb-on-surface-variant);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+.fb-report-preview-type {
+  color: var(--fb-on-surface);
+  font-weight: 600;
+}
+.fb-report-preview-place { overflow-wrap: anywhere; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-report-preview-photo img { transition: none; }
+}
