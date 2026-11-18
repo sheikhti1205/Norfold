@@ -13,6 +13,7 @@ import { useReportNavigation } from "./PostNavigation";
 import { PostDescription } from "./PostDescription";
 import { FeedMediaCarousel } from "./FeedMediaCarousel";
 import { fadeVariants, motionDurations, motionEasings } from "./uiMotion";
+import { useReportImpression } from "../hooks/useReportImpression";
 
 export { sharedMediaLayoutId, sharedTitleLayoutId, sharedElementTransition } from "./PostAnatomy";
 export type PostCardLayout = "classic" | "editorial" | "compact" | "home-feed" | "masonry";
@@ -107,6 +108,7 @@ export function PostCardContent({ post, layout = "classic", enableSharedMedia = 
   post: PostItem; layout?: PostCardLayout; enableSharedMedia?: boolean; overflow?: ReactNode;
 }) {
   const openReport = useReportNavigation();
+  const impressionRef = useReportImpression(post.id);
   const photoCount = post.attachments.filter(a => a.mimeType.startsWith("image/")).length;
   const openDetail = () => openReport(`/posts/${post.id}`);
   const dense = layout === "compact" || layout === "masonry";
@@ -116,7 +118,7 @@ export function PostCardContent({ post, layout = "classic", enableSharedMedia = 
   // row so a search result still reads as a scannable line.
   const refined = layout === "home-feed" || layout === "masonry";
   const titleClassName = layout === "editorial" ? "fb-editorial-title" : layout === "masonry" ? "fb-masonry-title line-clamp-2" : layout === "compact" ? "text-sm font-bold leading-snug line-clamp-2" : "fb-feed-title line-clamp-2";
-  return <div data-testid={layout === "home-feed" ? "home-feed-content" : layout === "masonry" ? "masonry-content" : undefined}
+  return <div ref={impressionRef} data-testid={layout === "home-feed" ? "home-feed-content" : layout === "masonry" ? "masonry-content" : undefined}
     className={`fb-post-content fb-post-${layout}`}>
     <PostIdentityHeader post={post} overflow={overflow} contextReportId={post.id}
       meta={refined ? <PostMetaIcons post={post} /> : undefined} />
