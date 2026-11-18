@@ -30,6 +30,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    versionName: "0.16.0-beta.2",
+    about:
+      "This build refines how reports and people look, and lets you choose how navigation and reactions appear.",
+    changes: [
+      "Report cards show the status beside the title, and category and location sit with the author as icons. Hover, focus or tap an icon to read its label.",
+      "A report's page puts its type and recovery state in badges under the title, so both are read at a glance instead of as notes in the heading.",
+      "On a computer, resting on a name or avatar opens a short public profile preview. Clicking still opens the profile page, and touch is unchanged.",
+      "Appearance offers Automatic, bottom bar and side rail navigation, with adaptive, colorful and monochrome reactions. A report preview shows each choice.",
+      "Menus, popovers and toasts share one lifted surface style, and a toast clears the phone's home indicator.",
+    ],
+    features: [
+      { summary: "Preview a public profile without leaving the feed." },
+      { summary: "Choose the navigation layout and the reaction style in Appearance.", destinationId: "appearance" },
+    ],
+  },
+  {
     versionName: "0.16.0-beta.1",
     about:
       "This build rounds out chat, search and navigation, and trims the on-device AI to the two jobs the hardware can run: local search and the sentence model.",

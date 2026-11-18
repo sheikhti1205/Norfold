@@ -5,6 +5,19 @@ described in [docs/history/VERSION_HISTORY.md](docs/history/VERSION_HISTORY.md).
 track real evolution and do not imply a stable release. The per-commit mapping is in
 [docs/history/VERSION_HISTORY.csv](docs/history/VERSION_HISTORY.csv).
 
+## 0.16.0-beta.2
+
+- Report cards show the status beside the title, and category and location
+  appear as icons with the author. Hover, focus or tap an icon for its label.
+- A report's page puts its type and recovery state in badges under the title,
+  so both are read at a glance instead of as notes in the heading.
+- On a computer, resting on a name or avatar opens a short public profile
+  preview. Clicking still opens the profile page; touch is unchanged.
+- Appearance offers Automatic, bottom bar and side rail navigation, and
+  adaptive, colorful or monochrome reactions, with a report preview.
+- Menus, popovers and toasts share one lifted surface style; a toast clears the
+  phone's home indicator.
+
 ## 0.16.0-beta.1
 
 - On-device chat and photo analysis have been removed. AI chat uses your own
