@@ -233,6 +233,8 @@ export function replyPreview(message: StoredHumanMessage): string {
   if (message.messageType === "MEDIA") return "Photo";
   if (message.messageType === "VOICE") return "Voice message";
   if (message.messageType === "LOCATION") return "Location";
+  // A Klipy message is a bare media URL; quote what it is, never the link.
+  if (isKlipyMediaUrl(message.body.trim())) return "GIF";
   // A file message is a marker in the body; quote its name, never the payload.
   return chatFilePreview(message.body) ?? message.body;
 }
@@ -640,9 +642,11 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
                   <strong>{name || person?.username || "Member"}</strong>
                 </span>
                 <span className="fb-chat-preview">{row.lastMessage?.unsentAt !== undefined ? "Message unsent"
-                  : row.lastMessage?.body || (row.lastMessage?.messageType === "LOCATION" ? "Location shared"
-                    : row.lastMessage?.messageType === "MEDIA" ? "Photo"
-                      : row.lastMessage?.messageType === "VOICE" ? "Voice message" : state)}</span>
+                  : row.lastMessage?.body
+                    ? (isKlipyMediaUrl(row.lastMessage.body.trim()) ? "GIF" : row.lastMessage.body)
+                    : (row.lastMessage?.messageType === "LOCATION" ? "Location shared"
+                      : row.lastMessage?.messageType === "MEDIA" ? "Photo"
+                        : row.lastMessage?.messageType === "VOICE" ? "Voice message" : state)}</span>
                 {row.lastMessage?.contextReportId && row.lastMessage.unsentAt === undefined && <ChatReportContext reportId={row.lastMessage.contextReportId} safetyKey={view?.ownBlocked ? "blocked" : "clear"} preview />}
               </div>
               <span className="fb-chat-row-meta">
