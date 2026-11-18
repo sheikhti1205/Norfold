@@ -594,11 +594,13 @@ html.fb-reduce-motion .fb-morph-bar {
 }
 
 /* Lost/Found semantic badges: muted surface + deep ink + icon. Meaning is
- * carried by text + icon, never color alone. */
+ * carried by text + icon, never color alone. The hairline border is derived
+ * from the ink so a badge keeps a defined edge on any neutral surface. */
 .fb-type-badge {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
+  border: 1px solid color-mix(in srgb, currentColor 26%, transparent);
   border-radius: 999px;
   padding: 0.2rem 0.6rem;
   font-size: 0.75rem;
@@ -625,6 +627,13 @@ html.fb-reduce-motion .fb-morph-bar {
 .fb-status-found {
   background: var(--fb-found-bg);
   color: var(--fb-found-ink);
+}
+/* Open lifecycle fact: a filled neutral badge, not a warning. Amber already
+ * means Lost, so reusing it here would merge two different states. */
+.fb-status-open {
+  background: var(--fb-surface-container);
+  color: var(--fb-on-surface);
+  border-color: var(--fb-outline);
 }
 .fb-status-matched {
   background: var(--fb-status-matched-bg);
