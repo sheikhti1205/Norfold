@@ -85,3 +85,11 @@ a944ebcc150db37e96132b6ce9694b47d5a47c79
 # and its subject, body and evidence are otherwise accurate. Grandfathered with
 # reason; the fix-forward commit that records this exception carries `Gates:`.
 a7da0d6ba043e724bbcb9701a90e14406dabe8d8
+# Exception 2026-11-18 (already-pushed fix): b5b295a and ce4f0a8 are merged main
+# history whose bodies carry no `Gates:` trailer, so the range check rejects
+# them. CI caught them after the push; rewording them would need a force-push,
+# which the owner forbids. Their subjects and content are accurate and the work
+# is verified in the run that followed. Grandfathered by SHA with reason; the
+# fix-forward commit that records this exception carries `Gates:`.
+b5b295a163b318baf9e10229bfa45fb93ebe1a03
+ce4f0a82332207300fee5585e2caab752745b7af
