@@ -54,8 +54,14 @@ it("opens after a rest and shows the public facts", async () => {
   const card = await screen.findByTestId("profile-preview");
   expect(card.getAttribute("role")).toBe("dialog");
   expect(screen.getByTestId("profile-preview-handle").textContent).toBe("@samira");
-  expect(card.textContent).toContain("Keeps an eye on the reading room noticeboard.");
-  expect(card.textContent).toContain("Central Library");
+  // The card mounts as soon as it opens and fills from the profile request, so
+  // the fetched facts are a second commit. Asserting them straight after the
+  // mount only passes when the microtask wins the race.
+  await waitFor(() => {
+    expect(screen.getByTestId("profile-preview").textContent)
+      .toContain("Keeps an eye on the reading room noticeboard.");
+    expect(screen.getByTestId("profile-preview").textContent).toContain("Central Library");
+  });
   const action = screen.getByRole("link", { name: "View profile" });
   expect(action.getAttribute("href")).toBe("/u/samira");
   await waitFor(() => expect(mocks.fetch).toHaveBeenCalledWith("samira"));
@@ -64,7 +70,10 @@ it("opens after a rest and shows the public facts", async () => {
 it("serves the second open from the account cache", async () => {
   const { trigger } = mount();
   fireEvent.pointerOver(trigger, { pointerType: "mouse" });
-  await screen.findByTestId("profile-preview");
+  const first = await screen.findByTestId("profile-preview");
+  // The account is cached when the request settles, so open number two only
+  // proves the cache when the first card has actually filled.
+  await waitFor(() => expect(first.textContent).toContain("Central Library"));
   fireEvent.pointerOut(trigger, { pointerType: "mouse", relatedTarget: document.body });
   await waitFor(() => expect(screen.queryByTestId("profile-preview")).toBeNull(), { timeout: 1200 });
   fireEvent.pointerOver(trigger, { pointerType: "mouse" });
