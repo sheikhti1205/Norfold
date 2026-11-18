@@ -10,7 +10,6 @@ import { onRealtime } from "../services/realtime";
 import { useAuth } from "../auth";
 import { UserAvatar } from "../components/UserAvatar";
 import { ChatIdentity } from "../components/ChatIdentity";
-import { NavOutsideBrand } from "../components/NavOutsideBrand";
 import { PostLink } from "../components/PostNavigation";
 import { StatusChip } from "../components/StatusChip";
 import { formatChatDay, formatEventDate, timeAgo } from "../utils/dates";
@@ -1877,7 +1876,6 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     {detailsToggle => <section className="fb-chat-page" aria-label="Conversation">
     <header className="fb-chat-header">
       <Link to="/chats" className="fb-chat-icon" aria-label="Back to chats" {...hoverLabel("Back to chats")}><ArrowLeft size={22} aria-hidden="true" /></Link>
-      <NavOutsideBrand />
       <ChatIdentity peerId={row?.peerId} name={name} username={person?.username} avatarUrl={person?.avatarUrl} muted={view?.ownMuted === true}
         conversationId={conversationId}
         status={!view ? "Saved chat" : view.mode === "CONNECTED" ? "Friends" : "Message request"} />

@@ -50,6 +50,23 @@ describe("the collapsed conversation rail", () => {
     expect(onExpand).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps its one head control inside the slot the shell name reserves", () => {
+    renderRail();
+    const rail = document.querySelector(".fb-chat-rail");
+    const header = document.querySelector(".fb-chat-rail-header");
+    expect(rail).not.toBeNull();
+    expect(header).not.toBeNull();
+    // The reserved band is the rail's first box, so the shell's name reads over
+    // it while the control starts below that band.
+    expect(rail!.firstElementChild).toBe(header);
+    expect(header!.classList.contains("fb-chat-header")).toBe(true);
+    const expand = screen.getByRole("button", { name: "Expand conversation list" });
+    expect(header!.contains(expand)).toBe(true);
+    // One control in the head. The rail never paints a name of its own.
+    expect(header!.querySelectorAll("button, a")).toHaveLength(1);
+    expect(header!.querySelector(".fb-nav-outside-brand")).toBeNull();
+  });
+
   it("names an unnamed person plainly instead of inventing one", () => {
     renderRail({ labels: new Map() });
     expect(screen.getByRole("link", { name: "Open conversation with member" })).toBeTruthy();

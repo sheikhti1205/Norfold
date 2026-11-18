@@ -146,6 +146,28 @@ describe("the resizable conversation pane", () => {
     expect(screen.queryByRole("main")).toBeNull();
   });
 
+  it("exposes one visible detail pane beside the hidden list in a routed chat", () => {
+    setWidth(390);
+    render(<SplitView selected pane={PANE} list={<p>List</p>}
+      detail={<section className="fb-chat-page" aria-label="Conversation">
+        <header className="fb-chat-header"><span>Thread</span></header>
+        <p role="main">Thread body</p>
+      </section>} />);
+    const list = document.querySelector<HTMLElement>(".fb-split-list");
+    const detail = document.querySelector<HTMLElement>(".fb-split-detail");
+    expect(list).not.toBeNull();
+    expect(detail).not.toBeNull();
+    // The state the detail header's leading gap is scoped to: the list is out
+    // of layout and its detail sibling owns the pane's leading edge.
+    expect(list!.hidden).toBe(true);
+    expect(detail!.hidden).toBe(false);
+    expect(list!.nextElementSibling).toBe(detail);
+    const header = detail!.querySelector(".fb-chat-header");
+    expect(header).not.toBeNull();
+    expect(header!.closest(".fb-split-detail")).toBe(detail);
+    expect(screen.getByRole("main")).toBeTruthy();
+  });
+
   it("leaves a split view that did not opt in exactly as it was", () => {
     render(<SplitView selected={false} list={<button type="button">List</button>} detail={<p>Thread</p>} />);
     expect(screen.queryByRole("separator")).toBeNull();

@@ -42,19 +42,14 @@ describe("Home brand ownership", () => {
     const brand = screen.getByRole("link", { name: "Norfold home" });
     expect(brand.textContent).toContain("Norfold");
     expect(brand.querySelector("img")).toBeTruthy();
-    // It still opts into the shared contract, so a rail on this viewport would
-    // take the name over without a second rule.
-    expect(brand.classList.contains("fb-nav-outside-brand")).toBe(true);
+    expect(brand.classList.contains("fb-home-brand")).toBe(true);
   });
 
-  it("paints the wordmark outside the rail and leaves the mark to the rail head", () => {
+  it("leaves the outside name to the shell while a rail is in flow", () => {
     render(<Harness expanded={false} inlineRail />);
-    const brand = screen.getByRole("link", { name: "Norfold home" });
-    expect(brand.textContent).toContain("Norfold");
-    expect(brand.querySelector("img")).toBeNull();
-    // The rail owns when this copy may show: the same contract also hides the
-    // app bar's copy once the panel names itself.
-    expect(brand.classList.contains("fb-nav-outside-brand")).toBe(true);
+    // One shell-owned name is anchored beside the rail head; this row must not
+    // paint a second copy (owner direction 2026-11-18).
+    expect(screen.queryByRole("link", { name: "Norfold home" })).toBeNull();
     // The screen still has its one heading.
     expect(screen.getByRole("heading", { name: "Norfold" })).toBeTruthy();
   });

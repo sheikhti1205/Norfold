@@ -24,7 +24,6 @@ vi.mock("../services/posts", () => ({ fetchPost: fetchPostMock }));
 
 import { SavedReports, isDeviceOnlySave } from "./SavedReports";
 import { SavePostButton } from "../components/SavePostButton";
-import { InlineRailProvider } from "../components/navLayout";
 import { SavedReportsProvider } from "../hooks/useSavedReports";
 import { readSavedReports, writeSavedReport } from "../services/savedReports";
 import { ApiError } from "../services/session";
@@ -98,29 +97,6 @@ describe("SavedReports", () => {
     expect(await screen.findByText("No saved reports yet")).toBeTruthy();
     expect(screen.getByRole("heading", { level: 1, name: "Saved reports" })).toBeTruthy();
     expect(screen.queryByTestId("saved-reports-list")).toBeNull();
-  });
-
-  it("paints the shared app name outside the rail's header", async () => {
-    const { container } = render(
-      <InlineRailProvider show>
-        <MemoryRouter initialEntries={["/saved"]}>
-          <SavedReportsProvider>
-            <SavedReports />
-          </SavedReportsProvider>
-        </MemoryRouter>
-      </InlineRailProvider>,
-    );
-    await screen.findByText("No saved reports yet");
-    const header = container.querySelector("header") as HTMLElement;
-    expect(header.querySelector(".fb-nav-outside-brand")?.textContent).toBe("Norfold");
-    // The screen title is still the header's heading.
-    expect(within(header).getByRole("heading", { level: 1, name: "Saved reports" })).toBeTruthy();
-  });
-
-  it("stays unnamed when no in-flow rail is on screen", async () => {
-    renderScreen();
-    await screen.findByText("No saved reports yet");
-    expect(document.querySelector("header .fb-nav-outside-brand")).toBeNull();
   });
 
   it("lists a saved report with its title and links into the report", async () => {

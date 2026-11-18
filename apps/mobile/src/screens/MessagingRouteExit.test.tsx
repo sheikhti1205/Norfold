@@ -575,21 +575,16 @@ it("lets an open layer consume Android Back before the leave guard", async () =>
   expect(field).toHaveProperty("value", "Unsent words");
 });
 
-it("paints the app name in the thread header only while an in-flow rail is on screen", async () => {
+it("leaves the app name to the shell's rail anchor, not the thread header", async () => {
   await openThread({ inlineRail: true });
   const back = screen.getByRole("link", { name: "Back to chats" });
   const header = back.closest("header.fb-chat-header");
-  const brand = screen.getByText("Norfold");
-  const identity = screen.getByRole("heading", { level: 1, name: "Conversation" }).closest(".fb-chat-heading");
   expect(header).not.toBeNull();
-  expect(identity).not.toBeNull();
-  expect(header!.contains(brand)).toBe(true);
-  expect(header!.contains(identity)).toBe(true);
-  // Between the back control and the thread's own identity: one inert name,
-  // no extra row, and no second way home.
-  const order = [...header!.children];
-  expect(order.indexOf(brand)).toBe(order.indexOf(back) + 1);
-  expect(order.indexOf(identity!)).toBeGreaterThan(order.indexOf(brand));
+  // The shell owns the one outside wordmark, anchored to the rail itself. A
+  // thread header never positions or copies it (owner direction 2026-11-18).
+  expect(header!.querySelector(".fb-nav-outside-brand")).toBeNull();
+  expect(header!.textContent).not.toContain("Norfold");
+  expect(screen.getByRole("heading", { level: 1, name: "Conversation" })).toBeTruthy();
 });
 
 it("keeps that header wordmark-free without an in-flow rail", async () => {
