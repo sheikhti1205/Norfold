@@ -6,6 +6,7 @@ import type { ConversationProjection } from "../services/messaging/conversationI
 
 const state = vi.hoisted(() => ({
   account: "viewer", status: "ready", projections: {} as Record<string, ConversationProjection> | null,
+  conversations: [] as Array<{ peerId: string; cachedProjection: ConversationProjection | null }>,
   create: vi.fn(), send: vi.fn(), refresh: vi.fn(), end: vi.fn(),
 }));
 vi.mock("../auth", () => ({
@@ -14,6 +15,7 @@ vi.mock("../auth", () => ({
 }));
 vi.mock("../services/messaging/useMessaging", () => ({ useMessaging: () => ({
   accountId: state.account, status: state.status, currentProjections: state.projections,
+  conversations: state.conversations,
 }) }));
 vi.mock("../services/messaging/runtime", () => ({
   requestMessagingConversation: (...args: unknown[]) => state.create(...args),
@@ -44,7 +46,7 @@ function identityTree(identity: PublicIdentity) {
   </Routes></MemoryRouter>;
 }
 beforeEach(() => {
-  state.account = "viewer"; state.status = "ready"; state.projections = {};
+  state.account = "viewer"; state.status = "ready"; state.projections = {}; state.conversations = [];
   state.create.mockReset().mockResolvedValue("chat"); state.send.mockReset().mockResolvedValue("message");
   state.refresh.mockReset().mockResolvedValue(undefined);
   state.end.mockReset().mockResolvedValue(undefined);
@@ -98,6 +100,16 @@ it("offers Message plus an explicit, confirmed Remove friend on a connected prof
   expect(confirm.textContent).toContain("Your messages stay in the conversation.");
   expect(screen.getByRole("button", { name: "More profile actions" })).toBeTruthy();
   expect(state.end).not.toHaveBeenCalled();
+});
+
+it("keeps a friend labelled as a friend while the live snapshot is still opening", () => {
+  // The Connect directory already knows this person is a friend from its own
+  // cached index; the card must not briefly offer a second friend request.
+  state.status = "opening"; state.projections = null;
+  state.conversations = [{ peerId: "peer", cachedProjection: connected }];
+  mount();
+  expect(screen.getByRole("button", { name: "Message River Lee" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Add friend River Lee" })).toBeNull();
 });
 
 it("renders the identity as a direct profile link with no card until it is asked for", () => {

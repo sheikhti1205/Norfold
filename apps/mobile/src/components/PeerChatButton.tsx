@@ -17,9 +17,11 @@ import type { PublicIdentity } from "./identity";
  * "Request sent", and one that reached you reads "View request"; both open the
  * conversation, which is the canonical owner of accepting or declining.
  *
- * The relationship comes from this account's live messaging snapshot only.
- * A cached projection is not current authority, so before the snapshot is
- * ready the button asks the runtime to open instead of guessing a state.
+ * The live snapshot is the authority. Before it is ready the button falls back
+ * to this account's own cached index for the label and destination, because a
+ * friend whose live projections are still opening must not be offered a second
+ * friend request. The cache is never used for a block decision, which only the
+ * live state can settle.
  */
 export function PeerChatButton({ person, className = "" }: { person: PublicIdentity; className?: string }) {
   // The card that hosts this button can be opened outside the signed-in shell
@@ -41,11 +43,14 @@ function PeerChatSession({ accountId, person, className }: { accountId: string; 
   const [note, setNote] = useState<string | null>(null);
 
   const ready = chat.accountId === accountId && chat.status === "ready";
-  const projection = ready
+  const live = ready
     ? Object.values(chat.currentProjections ?? {}).find((row) => row.peerId === person.id)
     : undefined;
+  const projection = live ?? (chat.conversations ?? [])
+    .map((summary) => summary.cachedProjection)
+    .find((row) => row?.peerId === person.id) ?? undefined;
 
-  if (projection?.ownBlocked) {
+  if (live?.ownBlocked) {
     return <p className="fb-peer-chat-note">You blocked this account. Unblock it to message.</p>;
   }
 
