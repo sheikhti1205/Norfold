@@ -1,14 +1,13 @@
-/* The shell gives /search the full canvas. The screen itself must not be a
-   second centred column: the results scroller owns the window edge, exactly
-   like Home's feed. The search chrome shares Home's 1152px cap; the results
-   themselves take the reader's feed layout (see SearchScreen), so a wide
-   window is not mostly gutters and the scrollbar is never a floating inner
-   bar at the edge of a phone-width strip. */
+/* Search and the People directory start where the route's own app bar starts.
+   A centred canvas pushed the search chrome and the person rows to the middle
+   of a wide window (live: title at x≈152, rows at x≈391) while the bar itself
+   is inset from the shell edge. The canvas keeps its readable cap, but it is
+   anchored at the start, not floated to the middle. */
 .fb-search-screen { display:flex; flex-direction:column; height:100%; min-height:0; width:100%; }
-.fb-search-canvas { width:100%; max-width:1152px; margin-inline:auto; }
+.fb-search-canvas { width:100%; max-width:1152px; }
 /* Connect is a people list, not a feed: one readable directory column, the
    same 44rem cap as settings, so names do not stretch across a wide window. */
-.fb-connect-canvas { width:100%; max-width:44rem; margin-inline:auto; }
+.fb-connect-canvas { width:100%; max-width:44rem; }
 /* One row: the app's search field, then the filter trigger. Active-filter
    chips wrap underneath in the same grid, never in a second bar. */
 .fb-search-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:.5rem; }
