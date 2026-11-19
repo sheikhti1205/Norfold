@@ -48,6 +48,95 @@
 .fb-chat-file-action:disabled { opacity: 0.6; }
 .fb-chat-file-error { flex-basis: 100%; margin: 0; font-size: 0.75rem; color: var(--fb-error, #b3261e); }
 
+/* ---------- documents: one compact message-integrated surface ------------ */
+
+/* A document is not a second card inside the bubble: the bubble already
+   groups the message, so this row paints no fill, border or radius of its own.
+   The visible surface is the filename, its type/size and two plain actions
+   joined by one functional hairline, matching the owner's reference without
+   the unrequested white preview. */
+.fb-chat-document {
+  display: flex;
+  flex-direction: column;
+  /* A plain length survives the max-content surface measurement. The
+     percentage is only the narrow-pane guard, so a 320px phone never widens
+     the bubble and a 320px cap still holds on a wide window. */
+  width: 320px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+}
+.fb-chat-document-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+/* A long name wraps by word and, when one token has no break, only as far as
+   it must to stay inside the bubble. It never clips, ellipsizes or overflows. */
+.fb-chat-document-name {
+  min-width: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  hyphens: none;
+  color: inherit;
+}
+.fb-chat-document-meta {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+  opacity: 0.72;
+}
+/* The bubble's corner menu is only painted where hover exists; reserve its
+   strip there, exactly as an ordinary text bubble does, so the menu never
+   lands on the last characters of a filename. */
+@media (hover: hover) {
+  .fb-chat-document-name { padding-inline-end: 1.25rem; }
+}
+.fb-chat-document-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 6px;
+  border-top: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+}
+.fb-chat-document-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.fb-chat-document-action + .fb-chat-document-action {
+  border-inline-start: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+}
+.fb-chat-document-action:hover { background: color-mix(in srgb, currentColor 7%, transparent); }
+.fb-chat-document-action:disabled { opacity: 0.62; cursor: progress; }
+.fb-chat-document-action:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: -2px; }
+.fb-chat-document-notice {
+  display: block;
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+  color: inherit;
+  opacity: 0.85;
+}
+.fb-chat-document-notice[data-tone="error"] { color: var(--fb-error, #b3261e); opacity: 1; }
+
 /* ---------- video: a compact row until the real player is here ----------- */
 
 .fb-chat-video {

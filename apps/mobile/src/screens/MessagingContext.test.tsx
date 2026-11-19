@@ -29,23 +29,38 @@ it("renders the live report subject as a link to that report", async () => {
   expect(fetchPost).toHaveBeenCalledWith(REPORT);
 });
 
-it("degrades to plain text when the reader can no longer see the report", async () => {
+it("keeps the canonical route reachable when the reader can no longer see the report", async () => {
   fetchPost.mockRejectedValue(new Error("Post not found"));
   render(<MemoryRouter><ChatReportContext reportId={REPORT} /></MemoryRouter>);
-  expect(await screen.findByText("Report unavailable")).toBeTruthy();
-  expect(screen.queryByRole("link")).toBeNull();
+  const link = await screen.findByRole("link", { name: "Report unavailable" });
+  expect(link.getAttribute("href")).toBe(`/posts/${REPORT}`);
+  expect(link.getAttribute("data-chat-report")).toBe("unavailable");
+  expect(link.className).toBe("fb-chat-report-preview fb-chat-report-preview-state");
+  expect(screen.queryByText("Blue wallet")).toBeNull();
+});
+
+it("keeps the canonical route reachable while the report is loading", () => {
+  fetchPost.mockReturnValue(new Promise(() => {}));
+  render(<MemoryRouter><ChatReportContext reportId={REPORT} /></MemoryRouter>);
+  const link = screen.getByRole("link", { name: "Loading report…" });
+  expect(link.getAttribute("href")).toBe(`/posts/${REPORT}`);
+  expect(link.getAttribute("data-chat-report")).toBe("loading");
+  expect(link.className).toBe("fb-chat-report-preview fb-chat-report-preview-state");
 });
 
 it("shows the current first image, approximate place, event date and report status", async () => {
   fetchPost.mockResolvedValue({ id: REPORT, title: "Blue wallet", type: "FOUND", status: "RECOVERED",
     locationLabel: "Near the station", eventDate: "2026-10-20", attachments: [{ fileUrl: "/wallet.jpg", mimeType: "image/jpeg" }, { fileUrl: "/other.jpg", mimeType: "image/jpeg" }] });
   render(<MemoryRouter><ChatReportContext reportId={REPORT} /></MemoryRouter>);
-  await screen.findByRole("link", { name: /Blue wallet/ });
-  expect(screen.getByRole("img", { name: /Blue wallet/ }).getAttribute("src")).toBe("/wallet.jpg");
-  expect(screen.getAllByRole("img")).toHaveLength(1);
+  const link = await screen.findByRole("link", { name: /Blue wallet/ });
+  // The title beside the cover carries the meaning, so the image is decorative.
+  const cover = link.querySelector("img");
+  expect(cover?.getAttribute("src")).toBe("/wallet.jpg");
+  expect(cover?.getAttribute("alt")).toBe("");
+  expect(screen.queryByRole("img")).toBeNull();
   expect(screen.getByText("Near the station")).toBeTruthy();
   expect(screen.getByText("Recovered")).toBeTruthy();
-  expect(document.querySelector("time")?.getAttribute("datetime")).toBe("2026-10-20");
+  expect(link.querySelector("time")?.getAttribute("datetime")).toBe("2026-10-20");
 });
 
 it("removes a previous subject immediately on a different report id and on revalidation", async () => {
@@ -78,7 +93,11 @@ it("conceals a report the reader has blocked instead of previewing it", async ()
   expect(await screen.findByText("Report unavailable")).toBeTruthy();
   expect(screen.queryByText("Blocked wallet")).toBeNull();
   expect(screen.queryByRole("img")).toBeNull();
-  expect(screen.queryByRole("link")).toBeNull();
+  // Concealment removes the content, not the way to the report: the state link
+  // is the canonical route and reveals no title, photo or place by itself.
+  const state = screen.getByRole("link", { name: "Report unavailable" });
+  expect(state.getAttribute("href")).toBe(`/posts/${REPORT}`);
+  expect(state.getAttribute("data-chat-report")).toBe("unavailable");
 });
 
 it("revokes a loaded subject when a block happens elsewhere in this tab", async () => {
@@ -112,10 +131,14 @@ it.each(["UPDATE", "DELETE"])("revokes a loaded subject on a feed %s without foc
   let rejectRead!: (error: Error) => void;
   fetchPost.mockReturnValue(new Promise((_resolve, reject) => { rejectRead = reject; }));
   act(() => { realtime.get("feed:changed")?.forEach(handler => handler({ postId: REPORT, op })); });
-  // Hide old title/photo/link immediately, not only after the refetch settles.
+  // Hide old title/photo at once, not only after the refetch settles. The
+  // canonical route stays reachable through the loading state link.
   expect(screen.queryByText("Revoked wallet")).toBeNull();
   expect(screen.queryByRole("img")).toBeNull();
-  expect(screen.queryByRole("link")).toBeNull();
+  expect(view.container.querySelector(".fb-chat-report-preview-title")).toBeNull();
+  const state = screen.getByRole("link", { name: "Loading report…" });
+  expect(state.getAttribute("data-chat-report")).toBe("loading");
+  expect(state.getAttribute("href")).toBe(`/posts/${REPORT}`);
   await act(async () => { rejectRead(new Error("Post unavailable")); });
   expect(await screen.findByText("Report unavailable")).toBeTruthy();
   view.unmount();

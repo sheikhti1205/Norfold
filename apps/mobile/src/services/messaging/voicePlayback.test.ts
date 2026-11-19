@@ -77,6 +77,7 @@ describe("voice playback", () => {
     h.tick();
     expect(h.playback.snapshot.positionMs).toBe(12_400);
     expect(h.playback.snapshot.durationMs).toBe(65_000);
+    expect(h.playback.snapshot.currentId).toBe("a");
   });
 
   it("pauses, seeks within bounds and nudges by ten seconds", async () => {
@@ -90,6 +91,59 @@ describe("voice playback", () => {
     expect(h.audio().currentTime).toBe(30);
     h.playback.nudge("back");
     expect(h.audio().currentTime).toBe(20);
+  });
+
+  it("keeps the note and its exact stopped position after a pause", async () => {
+    const h = harness();
+    h.playback.load("a", "blob:a", 30_000);
+    await h.playback.play();
+    h.audio().currentTime = 12.4;
+    h.playback.pause();
+    expect(h.playback.snapshot.playingId).toBeNull();
+    // The note stays current so the bubble below still owns this clock.
+    expect(h.playback.snapshot.currentId).toBe("a");
+    expect(h.playback.snapshot.positionMs).toBe(12_400);
+    expect(h.playback.snapshot.durationMs).toBe(30_000);
+  });
+
+  it("ends at the exact stored length with the note still current", async () => {
+    const h = harness();
+    h.playback.load("a", "blob:a", 8_000);
+    await h.playback.play();
+    h.audio().currentTime = 7.98;
+    h.audio().emit("ended");
+    expect(h.playback.snapshot.playingId).toBeNull();
+    expect(h.playback.snapshot.currentId).toBe("a");
+    expect(h.playback.snapshot.positionMs).toBe(8_000);
+    expect(h.playback.snapshot.durationMs).toBe(8_000);
+    expect(voiceProgressPercent(h.playback.snapshot.positionMs, h.playback.snapshot.durationMs)).toBe(100);
+    expect(h.hasTicker()).toBe(false);
+  });
+
+  it("clears the note and the clock when the element fails", async () => {
+    const h = harness();
+    h.playback.load("a", "blob:a", 8_000);
+    await h.playback.play();
+    h.audio().currentTime = 3;
+    h.audio().emit("error");
+    expect(h.playback.snapshot.playingId).toBeNull();
+    expect(h.playback.snapshot.currentId).toBeNull();
+    expect(h.playback.snapshot.positionMs).toBe(0);
+    expect(h.playback.snapshot.durationMs).toBe(0);
+  });
+
+  it("never reports the previous note's clock after loading another", async () => {
+    const h = harness();
+    h.playback.load("a", "blob:a", 65_000);
+    await h.playback.play();
+    h.audio().currentTime = 42;
+    h.tick();
+    expect(h.playback.snapshot.positionMs).toBe(42_000);
+    h.playback.load("b", "blob:b", 5_000);
+    expect(h.playback.snapshot.currentId).toBe("b");
+    expect(h.playback.snapshot.positionMs).toBe(0);
+    expect(h.playback.snapshot.durationMs).toBe(5_000);
+    expect(h.playback.snapshot.playingId).toBeNull();
   });
 
   it("keeps the stored length when the container reports Infinity", async () => {
@@ -114,6 +168,8 @@ describe("voice playback", () => {
     h.playback.teardown();
     expect(h.audio().released).toBe(true);
     expect(h.playback.snapshot.playingId).toBeNull();
+    expect(h.playback.snapshot.currentId).toBeNull();
+    expect(h.playback.snapshot.positionMs).toBe(0);
   });
 
   it("computes a bounded progress percentage", () => {

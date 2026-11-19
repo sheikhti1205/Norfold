@@ -29,7 +29,12 @@ export interface VoicePlaybackPorts {
 }
 
 export interface VoicePlaybackSnapshot {
+  /** The note actually playing now. Null while paused, ended or reset. */
   playingId: string | null;
+  /** The note the element holds, playing, paused or ended; null after a reset.
+   * Optional in the type so older fixture snapshots still satisfy it, but the
+   * port always emits it. It is how a bubble knows the clock below is its own. */
+  currentId?: string | null;
   positionMs: number;
   durationMs: number;
 }
@@ -53,7 +58,10 @@ export function createVoicePlayback(ports: VoicePlaybackPorts) {
 
   const snapshot = (): VoicePlaybackSnapshot => ({
     playingId: playing ? current?.id ?? null : null,
-    positionMs: current?.id === null ? 0 : positionMs,
+    // Pausing and ending keep `current`, so the note keeps its identity and its
+    // exact stopped position. Only a reset clears both.
+    currentId: current?.id ?? null,
+    positionMs: current ? positionMs : 0,
     durationMs: current?.durationMs ?? 0,
   });
 
@@ -119,7 +127,8 @@ export function createVoicePlayback(ports: VoicePlaybackPorts) {
         stopTicker();
         playing = false;
         if (current) {
-          // Ending is not the same as resetting: the bubble keeps the length.
+          // Ending is not the same as resetting: the bubble keeps the length,
+          // and the note stays current so its clock reads 100%, not 0:00.
           positionMs = current.durationMs;
         }
         emit();

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { Connections, MessagingThread, replyPreview } from "./Messaging";
@@ -153,6 +153,7 @@ describe("R19 message copy", () => {
     expect(document.querySelector('[data-chat-message="message"] a')).toBeNull();
     await openMessageMenu();
     expect(screen.queryByRole("menuitem", { name: "Copy text" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Copy link" })).toBeNull();
   });
 
   it("copies only the visible caption of a file, never the serialized marker", async () => {
@@ -191,6 +192,7 @@ describe("R19 message copy", () => {
     expect(m.fetchPost).not.toHaveBeenCalled();
     await openMessageMenu();
     expect(screen.queryByRole("menuitem", { name: "Copy text" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Copy link" })).toBeNull();
   });
 
   it("shows an honest error when the clipboard is unavailable", async () => {
@@ -209,6 +211,128 @@ describe("R19 message copy", () => {
     await openMessageMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Copy text" }));
     expect((await screen.findByRole("alert")).textContent).toBe("Could not copy this message.");
+  });
+
+  it("shows an honest error when the clipboard write throws synchronously", async () => {
+    stubClipboard({ writeText: vi.fn(() => { throw new Error("sync"); }) });
+    m.messages = [received("Copy me")];
+    await open();
+    await openMessageMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy text" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Could not copy this message.");
+    expect(screen.getByTestId("live-region-announcement").textContent).not.toBe("Message copied.");
+  });
+});
+
+describe("R19 copy actions", () => {
+  it("offers Copy link, not Copy text, for one bare safe URL", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard({ writeText });
+    m.messages = [received("https://example.com/a?x=1")];
+    await open();
+    await openMessageMenu();
+    expect(screen.queryByRole("menuitem", { name: "Copy text" })).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy link" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledExactlyOnceWith("https://example.com/a?x=1"));
+  });
+
+  it("copies prose and the exact link as two separate actions", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard({ writeText });
+    const url = "https://example.com/a?x=1";
+    m.messages = [received(`Read ${url} and reply`)];
+    await open();
+    await openMessageMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy text" }));
+    await waitFor(() => expect(writeText).toHaveBeenLastCalledWith("Read and reply"));
+    expect(writeText.mock.calls[0]?.[0]).not.toContain(url);
+
+    await waitFor(() => expect(screen.queryByRole("menu", { name: "Message actions" })).toBeNull());
+    await openMessageMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy link" }));
+    await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(url));
+  });
+
+  it("chooses one exact link at a time from the canonical menu, never a URL blob", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard({ writeText });
+    const first = "https://a.example/one";
+    const second = "https://b.example/two";
+    m.messages = [received(`Compare ${first} with ${second} first`)];
+    await open();
+    await openMessageMenu();
+    const chooser = screen.getByRole("menuitem", { name: "Copy link" });
+    act(() => chooser.focus());
+    fireEvent.click(chooser);
+    const submenu = await screen.findByRole("menu", { name: "Copy link" });
+    expect(within(submenu).getAllByRole("menuitem").map((node) => node.textContent))
+      .toEqual([first, second]);
+    fireEvent.click(within(submenu).getByRole("menuitem", { name: second }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledExactlyOnceWith(second));
+  });
+
+  it("dedupes a repeated link into one direct action", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard({ writeText });
+    const url = "https://example.com/one";
+    m.messages = [received(`${url} again ${url}`)];
+    await open();
+    await openMessageMenu();
+    expect(screen.queryByRole("menu", { name: "Copy link" })).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy link" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledExactlyOnceWith(url));
+  });
+
+  it("copies the visible report share URL, never the internal report id", async () => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard({ writeText });
+    m.messages = [received(reportUrl, { contextReportId: reportId })];
+    await open();
+    await openMessageMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy link" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledExactlyOnceWith(reportUrl));
+    expect(writeText.mock.calls[0]?.[0]).not.toBe(reportId);
+  });
+
+  it("keeps an unsafe scheme as text and never offers it as a link", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard({ writeText });
+    m.messages = [received("javascript:alert(1)")];
+    await open();
+    await openMessageMenu();
+    expect(screen.queryByRole("menuitem", { name: "Copy link" })).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy text" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledExactlyOnceWith("javascript:alert(1)"));
+  });
+
+  it("reports an honest failure when a link cannot reach the clipboard", async () => {
+    stubClipboard(undefined);
+    m.messages = [received("https://example.com/a")];
+    await open();
+    await openMessageMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy link" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Could not copy this link.");
+  });
+
+  it("never claims a link copy that the clipboard rejected", async () => {
+    stubClipboard({ writeText: vi.fn().mockRejectedValue(new Error("denied")) });
+    m.messages = [received("https://example.com/a")];
+    await open();
+    await openMessageMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy link" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Could not copy this link.");
+    expect(screen.getByTestId("live-region-announcement").textContent).not.toBe("Link copied.");
+  });
+
+  it("never claims a link copy when the clipboard write throws synchronously", async () => {
+    stubClipboard({ writeText: vi.fn(() => { throw new Error("sync"); }) });
+    m.messages = [received("https://example.com/a")];
+    await open();
+    await openMessageMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy link" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Could not copy this link.");
+    expect(screen.getByTestId("live-region-announcement").textContent).not.toBe("Link copied.");
   });
 });
 
@@ -244,22 +368,37 @@ describe("R19 message menu", () => {
 });
 
 describe("R19 chat links and previews", () => {
-  it("renders one live report card for a repeated link while keeping both links", async () => {
+  it("renders one live report preview for a repeated link and copies the exact pasted URL", async () => {
     vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard({ writeText });
     m.messages = [received(`${reportUrl} and again ${reportUrl}`)];
     await open();
-    await waitFor(() => expect(document.querySelectorAll(".fb-chat-report-card")).toHaveLength(1));
-    expect(screen.getAllByText(reportUrl)).toHaveLength(2);
+    // Wait for the resolved card, not the loading state: both carry the same
+    // preview class, and only the ready card carries the report id.
+    await waitFor(() => expect(document.querySelector(`[data-chat-report="${reportId}"]`)).toBeTruthy());
+    expect(document.querySelectorAll(".fb-chat-report-preview")).toHaveLength(1);
+    const card = document.querySelector(`[data-chat-report="${reportId}"]`)!;
+    expect(card.getAttribute("href")).toBe(`/posts/${reportId}`);
+    // The represented URL is not printed again; the exact pasted URL is still
+    // what the menu copies.
+    expect(screen.queryAllByText(reportUrl)).toHaveLength(0);
     expect(m.fetchPost).toHaveBeenCalledTimes(1);
     expect(m.fetchPost).toHaveBeenCalledWith(reportId);
+    await openMessageMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy link" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledExactlyOnceWith(reportUrl));
   });
 
-  it("suppresses the link card when the same report is already the message context", async () => {
+  it("suppresses the repeated preview when the same report is already the message context", async () => {
     vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
     m.messages = [received(reportUrl, { contextReportId: reportId })];
     await open();
-    await waitFor(() => expect(document.querySelectorAll(".fb-chat-report-card")).toHaveLength(1));
-    expect(screen.getAllByText(reportUrl)).toHaveLength(1);
+    await waitFor(() => expect(document.querySelector(`[data-chat-report="${reportId}"]`)).toBeTruthy());
+    expect(document.querySelectorAll(".fb-chat-report-preview")).toHaveLength(1);
+    const card = document.querySelector(`[data-chat-report="${reportId}"]`)!;
+    expect(card.getAttribute("href")).toBe(`/posts/${reportId}`);
+    expect(screen.queryAllByText(reportUrl)).toHaveLength(0);
     expect(m.fetchPost).toHaveBeenCalledTimes(1);
   });
 
@@ -274,6 +413,10 @@ describe("R19 chat links and previews", () => {
   });
 
   it("mounts the canonical YouTube player only after a deliberate press", async () => {
+    // The compact card asks the provider for the real title. CI has no network:
+    // an explicit not-ok answer keeps the honest fallback and this playback
+    // check independent of YouTube; afterEach restores the global.
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false })));
     m.messages = [received("Watch https://youtu.be/dQw4w9WgXcQ now")];
     await open();
     expect(document.querySelector("iframe")).toBeNull();
@@ -290,7 +433,7 @@ describe("R19 chat links and previews", () => {
     expect(bubble.querySelector(".fb-chat-message-text")?.textContent).toBe("javascript:alert(1)");
   });
 
-  it("links a safe generic URL without fetching any metadata", async () => {
+  it("links a safe generic URL without contacting the pasted host directly", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     m.messages = [received("Read https://example.com/a?x=1 now")];
@@ -298,8 +441,9 @@ describe("R19 chat links and previews", () => {
     const anchor = document.querySelector('[data-chat-message="message"] a[href="https://example.com/a?x=1"]');
     expect(anchor?.getAttribute("target")).toBe("_blank");
     expect(anchor?.getAttribute("rel")).toBe("noopener noreferrer");
-    // Zero metadata requests for the link itself; unrelated chrome (a badge
-    // read) is allowed to run, but nothing may approach the pasted host.
+    // The card may contact only the Norfold metadata service, with the pasted
+    // address in its body; unrelated chrome (a badge read) is allowed to run,
+    // but nothing may approach the pasted host directly.
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("example.com"))).toBe(false);
     expect(m.fetchPost).not.toHaveBeenCalled();
   });

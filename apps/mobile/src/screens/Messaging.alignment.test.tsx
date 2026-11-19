@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
  * A received row is left-anchored and keeps the default start packing. The
  * row and the bubble keep their existing widths; this file pins placement, not
  * a wider bubble. The same row wraps text, long captions, photos, expressive
- * media, YouTube/report previews, report cards and voice notes, so the packing
+ * media, YouTube embeds, report previews and voice notes, so the packing
  * is a row contract rather than a text or media rule. Declarations only:
  * rendered confirmation belongs to the deployed browser.
  */
@@ -23,7 +23,9 @@ type CssRule = { selectors: string[]; body: string };
 
 const chatCss = readFileSync(new URL("./Messaging.css", import.meta.url), "utf8");
 const chatMessageTextCss = readFileSync(new URL("../components/ChatMessageText.css", import.meta.url), "utf8");
+const reportPreviewCss = readFileSync(new URL("../components/ChatReportPreview.css", import.meta.url), "utf8");
 const messagingTsx = readFileSync(new URL("./Messaging.tsx", import.meta.url), "utf8");
+const reportPreviewTsx = readFileSync(new URL("../components/ChatReportPreview.tsx", import.meta.url), "utf8");
 
 /** Comments removed; every brace-free body is paired with its selector list. */
 function cssRules(css: string): CssRule[] {
@@ -129,27 +131,54 @@ describe("chat transcript own and received gutters", () => {
     expect(messagingTsx).toContain('disabled={!message.server} className="fb-chat-message-surface"');
   });
 
-  it("lets photo, caption, preview and report-card content inherit the row packing", () => {
+  it("lets photo, caption, preview and report-preview content inherit the row packing", () => {
     // These are content classes inside the one surface and bubble. None may
     // align itself to the gutter, or the row rule would be bypassed for that
     // content kind. The YouTube embed lives in the preview grid and the report
-    // card is the same bubble wrapper, so the common row contract covers both.
+    // preview is the same bubble content, so the common row contract covers both.
     const surface = bodies(".fb-chat-message-surface").join("\n");
     expect(surface).not.toMatch(/(?:^|[;\s])justify-content\s*:/);
     expect(surface).not.toMatch(/margin-inline/);
-    for (const selector of [".fb-chat-message", ".fb-chat-photo", ".fb-chat-report-card"]) {
+    for (const selector of [".fb-chat-message", ".fb-chat-photo"]) {
       const body = bodies(selector).join("\n");
       expect(body).not.toMatch(/(?:^|[;\s])justify-content\s*:\s*flex-end/);
       expect(body).not.toMatch(/margin-inline-start\s*:\s*auto/);
     }
+    // The report preview is a shared component now, so its own sheet carries
+    // its declarations; it may not re-align itself to the gutter either.
+    const preview = cssRules(reportPreviewCss)
+      .filter(rule => rule.selectors.some(selector => selector.startsWith(".fb-chat-report-preview")))
+      .map(rule => rule.body).join("\n");
+    expect(preview).not.toMatch(/(?:^|[;\s])justify-content\s*:\s*flex-end/);
+    expect(preview).not.toMatch(/margin-inline-start\s*:\s*auto/);
     const previews = cssRules(chatMessageTextCss)
       .filter(rule => rule.selectors.includes(".fb-chat-message-previews"))
       .map(rule => rule.body).join("\n");
     expect(previews).toContain("max-width: 100%;");
     expect(previews).not.toMatch(/(?:^|[;\s])justify-content\s*:/);
-    expect(messagingTsx).toContain('className="fb-chat-context fb-chat-report-card"');
+    // The screen mounts the one shared preview and the same state link in
+    // loading/unavailable, so markup and styles cannot diverge again.
+    expect(messagingTsx).toContain("<ChatReportPreview post={post} reportId={reportId} coverSrc={firstImageSrc} />");
+    expect(messagingTsx).toContain('"fb-chat-report-preview fb-chat-report-preview-state"');
+    expect(reportPreviewTsx).toContain('className="fb-chat-report-preview"');
     expect(messagingTsx).toContain('className="fb-chat-photo"');
     expect(messagingTsx).toContain('className="fb-chat-message-surface"');
+  });
+
+  it("marks only a bare non-media file as the compact document bubble", () => {
+    // The screen owns this seam and the file component owns classification.
+    // A file is bare only when the body parses, the shared predicate says it is
+    // not a media kind, its own caption is empty, and the bubble holds no quote,
+    // report context or location. A removed file is already null.
+    const gate = messagingTsx.match(/const documentOnly = ([^;]+);/)?.[1]?.replace(/\s+/g, " ") ?? "";
+    expect(gate).toContain("file !== null && isDocumentChatFile(file)");
+    expect(gate).toContain("!message.replyToId && !message.contextReportId && !message.location");
+    expect(gate).toContain('chatFileCaption(message.body) === ""');
+    expect(messagingTsx).toContain('message.unsentAt === undefined ? parseChatFileMarker(message.body) : null');
+    expect(messagingTsx).toContain('${documentOnly ? " fb-chat-message-document" : ""}');
+    // The media allowlist stays in the file component: the screen never repeats
+    // a raster/video/audio list of its own.
+    expect(messagingTsx).toContain('import { ChatFile, isDocumentChatFile } from "../components/ChatFile";');
   });
 
   it("removes the measured inboard gap when the row is wider than the bubble", () => {

@@ -8,9 +8,26 @@ import { ChatMessageText } from "./ChatMessageText";
 const origin = "https://findbackapp.social";
 const id = "5b6f7c8d-1234-4abc-8def-123456789012";
 const id2 = "0f0e0d0c-1111-4222-8333-444455556666";
+const video = "https://youtu.be/dQw4w9WgXcQ";
+
+/**
+ * A visible generic card asks the service for metadata. These tests assert the
+ * card and the suppressed URL, not the provider, so that request stays pending:
+ * no jsdom network and no late state update. Link classification is the real
+ * service code, so previewable and non-previewable cases stay honest.
+ */
+vi.mock("../services/linkPreview", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../services/linkPreview")>();
+  return { ...actual, fetchLinkPreview: vi.fn(() => new Promise<never>(() => {})) };
+});
 
 function frame(children: ReactNode) {
   return <MemoryRouter>{children}</MemoryRouter>;
+}
+
+/** The compact player asks the provider for a title; never let a test reach it. */
+function stubProvider(): void {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({}) }));
 }
 
 afterEach(() => {
@@ -20,8 +37,9 @@ afterEach(() => {
 });
 
 describe("ChatMessageText", () => {
-  it("renders the body exactly inside one paragraph", () => {
-    const body = "Meet at 5 🎉\nhttps://example.com/a?x=1";
+  it("renders an ordinary body exactly inside one paragraph", () => {
+    // HTTP is deliberately not previewable, so this stays the inline safe anchor.
+    const body = "Meet at 5 🎉\nhttp://example.com/a?x=1";
     const { container } = render(frame(<ChatMessageText body={body} renderReportPreview={() => null} />));
 
     const paragraph = container.querySelector("p");
@@ -31,42 +49,96 @@ describe("ChatMessageText", () => {
     expect(container.querySelector(".fb-chat-message-previews")).toBeNull();
 
     const anchor = container.querySelector("a");
-    expect(anchor?.textContent).toBe("https://example.com/a?x=1");
-    expect(anchor?.getAttribute("href")).toBe("https://example.com/a?x=1");
+    expect(anchor?.textContent).toBe("http://example.com/a?x=1");
+    expect(anchor?.getAttribute("href")).toBe("http://example.com/a?x=1");
     expect(anchor?.getAttribute("target")).toBe("_blank");
     expect(anchor?.getAttribute("rel")).toBe("noopener noreferrer");
   });
 
-  it("opens safe generic links without fetching any metadata", () => {
+  it("mounts one generic card for a previewable link and hides its raw URL", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const body = "Read https://example.com/report/1 now";
+    const link = "https://example.com/report/1";
+    const body = `Read ${link} now`;
     const { container } = render(frame(<ChatMessageText body={body} renderReportPreview={() => null} />));
 
-    expect(container.querySelector("p")?.textContent).toBe(body);
-    expect(container.querySelectorAll("a")).toHaveLength(1);
-    expect(container.querySelector("img")).toBeNull();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(container.querySelector("p")?.textContent).toBe("Read now");
+    expect(container.querySelector(".fb-chat-message-text a")).toBeNull();
+    expect(screen.queryByText(link)).toBeNull();
+
+    const cards = container.querySelectorAll(".fb-chat-message-previews > .fb-linkp");
+    expect(cards).toHaveLength(1);
+    const anchor = cards[0]?.querySelector("a.fb-linkp-link");
+    expect(anchor?.getAttribute("href")).toBe(link);
+    expect(anchor?.getAttribute("target")).toBe("_blank");
+    expect(anchor?.getAttribute("rel")).toBe("noopener noreferrer");
+    // Rendering prose must never contact the pasted host by itself.
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("example.com"))).toBe(false);
   });
 
-  it("links a canonical report internally and renders one live preview", () => {
+  it("renders one card for a repeated generic destination and hides every raw copy", () => {
+    // Two spellings that normalize to the same destination own one card.
+    const link = "https://example.com/a?x=1";
+    const variant = `${link}#again`;
+    const body = `${link} and ${variant}`;
+    const { container } = render(frame(<ChatMessageText body={body} renderReportPreview={() => null} />));
+
+    const cards = container.querySelectorAll(".fb-chat-message-previews > .fb-linkp");
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.querySelector("a")?.getAttribute("href")).toBe(link);
+    expect(container.querySelector(".fb-chat-message-text a")).toBeNull();
+    expect(screen.queryByText(link)).toBeNull();
+    expect(screen.queryByText(variant)).toBeNull();
+    expect(container.querySelector("p")?.textContent).toBe("and");
+  });
+
+  it("renders two cards for two different destinations in body order", () => {
+    const first = "https://example.com/a";
+    const second = "https://example.org/b";
+    const body = `${first} ${second}`;
+    const { container } = render(frame(<ChatMessageText body={body} renderReportPreview={() => null} />));
+
+    const cards = container.querySelectorAll(".fb-chat-message-previews > .fb-linkp");
+    expect(cards).toHaveLength(2);
+    expect(Array.from(cards, (card) => card.querySelector("a")?.getAttribute("href"))).toEqual([first, second]);
+    expect(container.querySelector("p")).toBeNull();
+    expect(container.querySelector(".fb-chat-message-text a")).toBeNull();
+  });
+
+  it.each([
+    ["plain HTTP", "http://example.com/a"],
+    ["a local host", "https://localhost/x"],
+    ["a private address", "https://192.168.1.5/x"],
+    ["a non-default port", "https://example.com:8443/x"],
+  ])("keeps %s as its inline anchor with no card", (_name, link) => {
+    const body = `See ${link} now`;
+    const { container } = render(frame(<ChatMessageText body={body} renderReportPreview={() => null} />));
+
+    expect(container.querySelector(".fb-chat-message-previews")).toBeNull();
+    const anchors = container.querySelectorAll(".fb-chat-message-text a");
+    expect(anchors).toHaveLength(1);
+    expect(anchors[0]?.textContent).toBe(link);
+    expect(anchors[0]?.getAttribute("href")).toBe(link);
+    expect(container.querySelector("p")?.textContent).toBe(body);
+  });
+
+  it("replaces a represented report URL with one live preview", () => {
     vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
     const url = `${origin}/r/${id}?focus=comments&comment=${id}`;
     const body = `Shared ${url} again`;
     const preview = vi.fn((postId: string) => <span data-testid="report-preview">{postId}</span>);
     const { container } = render(frame(<ChatMessageText body={body} renderReportPreview={preview} />));
 
-    const anchor = container.querySelector("a");
-    expect(anchor?.textContent).toBe(url);
-    expect(anchor?.getAttribute("href")).toBe(`/posts/${id}?comment=${id}#detail-comments`);
-
+    // The preview is the representation; the provider URL is not printed above it.
+    expect(container.querySelector("p")?.textContent).toBe("Shared again");
+    expect(container.querySelector("a")).toBeNull();
+    expect(container.textContent).not.toContain(origin);
     expect(preview).toHaveBeenCalledTimes(1);
     expect(preview).toHaveBeenCalledWith(id);
     expect(screen.getByTestId("report-preview").textContent).toBe(id);
-    expect(container.querySelector("p")?.textContent).toBe(body);
   });
 
-  it("renders each report card once while keeping every link", () => {
+  it("renders one card per report id, never a paragraph of bare URLs", () => {
     vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
     const body = `${origin}/api/share/${id} ${origin}/r/${id} ${origin}/r/${id2}`;
     const preview = vi.fn((postId: string) => <span data-testid="report-preview">{postId}</span>);
@@ -74,11 +146,12 @@ describe("ChatMessageText", () => {
 
     expect(preview.mock.calls).toEqual([[id], [id2]]);
     expect(screen.getAllByTestId("report-preview").map((node) => node.textContent)).toEqual([id, id2]);
-    expect(container.querySelectorAll("a")).toHaveLength(3);
-    expect(container.querySelector("p")?.textContent).toBe(body);
+    expect(container.querySelector("a")).toBeNull();
+    expect(container.querySelector("p")).toBeNull();
+    expect(container.querySelectorAll(".fb-chat-message-previews > *")).toHaveLength(2);
   });
 
-  it("suppresses a preview whose report is already the message context", () => {
+  it("suppresses a URL and its card when the report is already the message context", () => {
     vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
     const body = `${origin}/r/${id} ${origin}/r/${id}`;
     const preview = vi.fn((postId: string) => <span data-testid="report-preview">{postId}</span>);
@@ -88,16 +161,37 @@ describe("ChatMessageText", () => {
 
     expect(preview).not.toHaveBeenCalled();
     expect(container.querySelector(".fb-chat-message-previews")).toBeNull();
-    expect(container.querySelectorAll("a")).toHaveLength(2);
-    expect(container.querySelector("a")?.getAttribute("href")).toBe(`/posts/${id}`);
+    expect(container.querySelector("a")).toBeNull();
+    expect(container.querySelector("p")).toBeNull();
+  });
+
+  const emptyCards: Array<[string, () => ReactNode]> = [
+    ["null", () => null],
+    ["undefined", () => undefined],
+    ["false", () => false],
+  ];
+  it.each(emptyCards)("keeps the safe anchor when the parent card is %s", (_name, preview) => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    const url = `${origin}/r/${id}`;
+    const body = `${url} shared`;
+    const { container } = render(frame(<ChatMessageText body={body} renderReportPreview={preview} />));
+
+    expect(container.querySelector(".fb-chat-message-previews")).toBeNull();
+    const anchor = container.querySelector("a");
+    expect(anchor?.textContent).toBe(url);
+    expect(anchor?.getAttribute("href")).toBe(`/posts/${id}`);
     expect(container.querySelector("p")?.textContent).toBe(body);
   });
 
-  it("mounts a YouTube player only after a deliberate press", async () => {
-    const body = "Watch https://youtu.be/dQw4w9WgXcQ now";
+  it("mounts a YouTube player only after a deliberate press and hides its raw URL", async () => {
+    stubProvider();
+    const body = `Watch ${video} now`;
     const { container } = render(frame(<ChatMessageText body={body} renderReportPreview={() => null} />));
 
-    expect(container.querySelector("p")?.textContent).toBe(body);
+    expect(container.querySelector("p")?.textContent).toBe("Watch now");
+    // The player card may state its own host; the pasted URL is not in the prose.
+    expect(container.querySelector(".fb-chat-message-text a")).toBeNull();
+    expect(screen.queryByText(video)).toBeNull();
     expect(screen.queryByTitle("Embedded YouTube video")).toBeNull();
     expect(container.querySelector("iframe")).toBeNull();
 
@@ -106,13 +200,45 @@ describe("ChatMessageText", () => {
     expect(player.getAttribute("src")).toBe("https://www.youtube.com/embed/dQw4w9WgXcQ");
   });
 
-  it("keeps repeated YouTube links as text but renders one player", () => {
-    const body = "https://youtu.be/dQw4w9WgXcQ and https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+  it("renders one player for repeated video links instead of their URLs", () => {
+    stubProvider();
+    const other = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+    const body = `${video} and ${other}`;
     const { container } = render(frame(<ChatMessageText body={body} renderReportPreview={() => null} />));
 
-    expect(container.querySelectorAll("p a")).toHaveLength(2);
+    expect(container.querySelector(".fb-chat-message-text a")).toBeNull();
+    expect(screen.queryByText(video)).toBeNull();
+    expect(screen.queryByText(other)).toBeNull();
+    expect(container.querySelector("p")?.textContent).toBe("and");
     expect(screen.getAllByRole("button", { name: "Play video" })).toHaveLength(1);
-    expect(container.querySelector("p")?.textContent).toBe(body);
+  });
+
+  it("keeps report and video previews in body order", () => {
+    stubProvider();
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    const body = `${video} ${origin}/r/${id}`;
+    const preview = vi.fn((postId: string) => <span data-testid="report-preview">{postId}</span>);
+    const { container } = render(frame(<ChatMessageText body={body} renderReportPreview={preview} />));
+
+    const previews = container.querySelector(".fb-chat-message-previews");
+    expect(previews?.children).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Play video" })).toBeTruthy();
+    expect(screen.getByTestId("report-preview").textContent).toBe(id);
+    expect(container.querySelector("p")).toBeNull();
+  });
+
+  it("shows a generic card beside a represented report", () => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    const link = "https://example.com/a";
+    const body = `Details ${link} ${origin}/r/${id}`;
+    const { container } = render(frame(
+      <ChatMessageText body={body} renderReportPreview={(postId) => <span data-testid="report-preview">{postId}</span>} />,
+    ));
+
+    expect(container.querySelector("p")?.textContent).toBe("Details");
+    expect(container.querySelector(".fb-chat-message-text a")).toBeNull();
+    expect(container.querySelectorAll(".fb-chat-message-previews > .fb-linkp")).toHaveLength(1);
+    expect(screen.getByTestId("report-preview").textContent).toBe(id);
   });
 
   it.each([
@@ -123,6 +249,20 @@ describe("ChatMessageText", () => {
     const { container } = render(frame(<ChatMessageText body={body} renderReportPreview={() => null} />));
     expect(container.querySelector("a")).toBeNull();
     expect(container.querySelector("p")?.textContent).toBe(body);
+  });
+
+  it("does not treat a lookalike report origin as a Norfold report", () => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    const body = `https://findbackapp.social.evil.example/r/${id}`;
+    const preview = vi.fn();
+    const { container } = render(frame(<ChatMessageText body={body} renderReportPreview={preview} />));
+
+    expect(preview).not.toHaveBeenCalled();
+    expect(container.querySelector("p")).toBeNull();
+    expect(screen.queryByText(body)).toBeNull();
+    const cards = container.querySelectorAll(".fb-chat-message-previews > .fb-linkp");
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.querySelector("a")?.getAttribute("href")).toBe(body);
   });
 
   it("revokes a previous preview when the callback or the report changes", () => {
@@ -153,12 +293,125 @@ describe("ChatMessageText", () => {
     expect(paragraph?.textContent).toBe("🎉");
   });
 
-  it("preserves mixed punctuation and unicode around a link", () => {
-    const body = "héllo 🎉 (https://example.com/a), “ok”... done";
+  it("preserves mixed punctuation and unicode around an ordinary link", () => {
+    const body = "héllo 🎉 (http://example.com/a), “ok”... done";
     const { container } = render(frame(<ChatMessageText body={body} renderReportPreview={() => null} />));
     const anchor = container.querySelector("a");
-    expect(anchor?.getAttribute("href")).toBe("https://example.com/a");
-    expect(anchor?.textContent).toBe("https://example.com/a");
+    expect(anchor?.getAttribute("href")).toBe("http://example.com/a");
+    expect(anchor?.textContent).toBe("http://example.com/a");
+    expect(container.querySelector("p")?.textContent).toBe(body);
+  });
+
+  it("drops only the redundant space around a removed link", () => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    const body = `Find ${origin}/r/${id} near the station`;
+    const { container } = render(frame(
+      <ChatMessageText body={body} renderReportPreview={(postId) => <span data-testid="report-preview">{postId}</span>} />,
+    ));
+
+    expect(container.querySelector("p")?.textContent).toBe("Find near the station");
+  });
+
+  it("keeps a meaningful line break when a represented link owns its own line", () => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    const body = `First line\n${origin}/r/${id}\nSecond line`;
+    const { container } = render(frame(
+      <ChatMessageText body={body} renderReportPreview={(postId) => <span data-testid="report-preview">{postId}</span>} />,
+    ));
+
+    expect(container.querySelector("p")?.textContent).toBe("First line\nSecond line");
+  });
+
+  it("keeps the author's newline after a represented report", () => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    const body = `before ${origin}/r/${id}\nafter`;
+    const { container } = render(frame(
+      <ChatMessageText body={body} renderReportPreview={(postId) => <span data-testid="report-preview">{postId}</span>} />,
+    ));
+
+    expect(container.querySelector("p")?.textContent).toBe("before\nafter");
+  });
+
+  it("keeps the author's blank line after a represented report", () => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    const body = `before ${origin}/r/${id}\n\nafter`;
+    const { container } = render(frame(
+      <ChatMessageText body={body} renderReportPreview={(postId) => <span data-testid="report-preview">{postId}</span>} />,
+    ));
+
+    expect(container.querySelector("p")?.textContent).toBe("before\n\nafter");
+  });
+
+  it("drops the blank line a represented report leaves at the end", () => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    const body = `before\n${origin}/r/${id}`;
+    const { container } = render(frame(
+      <ChatMessageText body={body} renderReportPreview={(postId) => <span data-testid="report-preview">{postId}</span>} />,
+    ));
+
+    expect(container.querySelector("p")?.textContent).toBe("before");
+  });
+
+  it("keeps a newline caption after a represented video", () => {
+    stubProvider();
+    const body = `Watch ${video}\nthanks`;
+    const { container } = render(frame(<ChatMessageText body={body} renderReportPreview={() => null} />));
+
+    expect(container.querySelector("p")?.textContent).toBe("Watch\nthanks");
+  });
+
+  it("keeps the author's newline when a generic card sits between prose", () => {
+    const link = "https://example.org";
+    const body = `before ${link}\nafter`;
+    const { container } = render(frame(<ChatMessageText body={body} renderReportPreview={() => null} />));
+
+    expect(container.querySelector("p")?.textContent).toBe("before\nafter");
+    expect(container.querySelectorAll(".fb-chat-message-previews > .fb-linkp")).toHaveLength(1);
+    expect(screen.queryByText(link)).toBeNull();
+  });
+
+  it("keeps the author's blank line when a generic card sits between prose", () => {
+    const link = "https://example.org";
+    const body = `before ${link}\n\nafter`;
+    const { container } = render(frame(<ChatMessageText body={body} renderReportPreview={() => null} />));
+
+    expect(container.querySelector("p")?.textContent).toBe("before\n\nafter");
+    expect(container.querySelectorAll(".fb-chat-message-previews > .fb-linkp")).toHaveLength(1);
+    expect(screen.queryByText(link)).toBeNull();
+  });
+
+  it("preserves a caption newline across mixed report, video and generic links", () => {
+    stubProvider();
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    const body = `Details https://example.org\n${video}\n${origin}/r/${id}\ncaption`;
+    const preview = vi.fn((postId: string) => <span data-testid="report-preview">{postId}</span>);
+    const { container } = render(frame(<ChatMessageText body={body} renderReportPreview={preview} />));
+
+    expect(container.querySelector("p")?.textContent).toBe("Details\ncaption");
+    expect(container.querySelector(".fb-chat-message-text a")).toBeNull();
+    expect(container.querySelectorAll(".fb-chat-message-previews > .fb-linkp")).toHaveLength(1);
+    expect(screen.getByTestId("report-preview").textContent).toBe(id);
+    expect(screen.getByRole("button", { name: "Play video" })).toBeTruthy();
+  });
+
+  it("does not invent a leading blank line when a represented link opens the body", () => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    const body = `${origin}/r/${id}\nafter`;
+    const { container } = render(frame(
+      <ChatMessageText body={body} renderReportPreview={(postId) => <span data-testid="report-preview">{postId}</span>} />,
+    ));
+
+    expect(container.querySelector("p")?.textContent).toBe("after");
+  });
+
+  it("asks the parent for one card per report id even when its card is empty", () => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    const body = `${origin}/r/${id} ${origin}/r/${id}`;
+    const preview = vi.fn(() => null);
+    const { container } = render(frame(<ChatMessageText body={body} renderReportPreview={preview} />));
+
+    expect(preview).toHaveBeenCalledTimes(1);
+    expect(container.querySelectorAll("a")).toHaveLength(2);
     expect(container.querySelector("p")?.textContent).toBe(body);
   });
 });

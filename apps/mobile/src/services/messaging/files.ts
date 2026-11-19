@@ -1,4 +1,4 @@
-import { getSupabase } from "../supabaseClient";
+import { getSupabase, getSupabaseBackendUrl } from "../supabaseClient";
 import { ApiError } from "../session";
 
 /**
@@ -190,13 +190,19 @@ export function chatFileExtension(name: string): string {
   return dot < 0 || dot === name.length - 1 ? "" : name.slice(dot + 1).toLowerCase();
 }
 
-/** Strip path separators and control characters from a name used in a key. */
+/**
+ * Strip path separators and control characters from a name used in a key.
+ * `?`, `#` and `%` go too: `isSignableChatFileKey` refuses a key carrying a
+ * query, fragment or percent escape, so a name with one would upload and then
+ * never sign, leaving View and Save dead for that file.
+ */
 export function safeChatFileName(name: string): string {
   const cleaned = name
     .replace(/[\\/]/g, "-")
     // Control characters are exactly what this sanitizer exists to remove.
     // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/[?#%]/g, "-")
     .trim()
     .slice(0, 120);
   return cleaned === "" || cleaned === "." || cleaned === ".." ? "file" : cleaned;
@@ -254,6 +260,114 @@ export function chatFileMime(file: File): string {
     return declared;
   }
   return EXTENSION_MIME[chatFileExtension(file.name)] ?? CHAT_FILE_FALLBACK_MIME;
+}
+
+/**
+ * Characters Windows refuses in a file name, and the invisible direction
+ * controls that can disguise an extension. Export copies are for other apps,
+ * so the copy name is cleaned here even though the uploaded name and marker
+ * bytes are never rewritten.
+ */
+const EXPORT_WINDOWS_FORBIDDEN = /[<>:"|?*]/g;
+const EXPORT_BIDI_CONTROLS = /[\u202a-\u202e\u2066-\u2069\u200e\u200f]/g;
+const EXPORT_MAX_NAME_CODE_POINTS = 120;
+
+/** Reserved DOS device names, matched on the stem (before the first dot). */
+const EXPORT_DOS_DEVICES: ReadonlySet<string> = new Set([
+  "CON", "PRN", "AUX", "NUL",
+  "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+  "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+]);
+
+function stripExportTrailing(value: string): string {
+  return value.replace(/[. ]+$/g, "");
+}
+
+/**
+ * The same separator/control rules as `safeChatFileName`. The 120-unit cap
+ * that function applies is skipped only for a longer source, so a real
+ * extension at the end survives the export-specific code-point cap below.
+ */
+function exportNameSource(raw: string): string {
+  if (raw.length <= EXPORT_MAX_NAME_CODE_POINTS) return safeChatFileName(raw);
+  const cleaned = raw
+    .replace(/[\\/]/g, "-")
+    // Control characters are exactly what this sanitizer exists to remove.
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .trim();
+  return cleaned;
+}
+
+function capExportName(name: string): string {
+  if (Array.from(name).length <= EXPORT_MAX_NAME_CODE_POINTS) return name;
+  const dot = name.lastIndexOf(".");
+  const suffix = dot > 0 && name.length - dot <= 24 ? name.slice(dot) : "";
+  const stem = suffix === "" ? name : name.slice(0, dot);
+  const keep = EXPORT_MAX_NAME_CODE_POINTS - Array.from(suffix).length;
+  const capped = stripExportTrailing(Array.from(stem).slice(0, Math.max(1, keep)).join(""));
+  return `${capped === "" ? "file" : capped}${suffix}`;
+}
+
+/**
+ * A safe copy name for an export. The stored marker keeps the sender's name
+ * verbatim; only the copy handed to the browser or the platform downloader is
+ * cleaned. Path separators and control characters become neutral, Windows
+ * forbidden characters and bidi overrides are removed, a reserved device stem
+ * is prefixed, and the result is capped at 120 code points without losing its
+ * extension.
+ */
+function exportCopyName(raw: string): string {
+  let name = exportNameSource(typeof raw === "string" ? raw : "")
+    .replace(EXPORT_WINDOWS_FORBIDDEN, "-")
+    .replace(EXPORT_BIDI_CONTROLS, "");
+  name = stripExportTrailing(name);
+  if (name === "" || name === "." || name === "..") name = "file";
+  const firstDot = name.indexOf(".");
+  const stem = (firstDot < 0 ? name : name.slice(0, firstDot)).trim().toUpperCase();
+  if (EXPORT_DOS_DEVICES.has(stem)) name = `file-${name}`;
+  return capExportName(name);
+}
+
+/**
+ * Replace a refused executable/script extension with the neutral `.download`
+ * suffix. `.bin` is deliberately not reused: `bin` is itself on the refusal
+ * list, so the copy would still look like a program.
+ */
+function neutralExportName(name: string): string {
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : "";
+  const cleaned = stripExportTrailing(stem);
+  return capExportName(
+    `${cleaned === "" || cleaned === "." || cleaned === ".." ? "file" : cleaned}.download`,
+  );
+}
+
+/**
+ * The exact name and MIME an export copy may carry.
+ *
+ * The marker's declared type is not trusted on its own: a refused extension
+ * always wins (`.html`, `.svg`, `.bin`, every script/installer suffix becomes
+ * `.download` with the octet-stream catch-all), a known ordinary extension
+ * overrides a lying marker MIME, and an unknown extension keeps only an
+ * allowlisted non-executable marker type, otherwise octet-stream. Ordinary
+ * allowed files keep their original extension and their exact bytes.
+ */
+export function chatFileExportIdentity(meta: ChatFileMeta): { name: string; mime: string } {
+  const name = exportCopyName(meta.name);
+  const extension = chatFileExtension(name);
+  if (extension !== "" && REFUSED_EXTENSIONS.has(extension)) {
+    return { name: neutralExportName(name), mime: CHAT_FILE_FALLBACK_MIME };
+  }
+  const declared = normalizeChatFileMime(typeof meta.mime === "string" ? meta.mime : "");
+  const mapped = EXTENSION_MIME[extension];
+  const mappedMime = mapped !== undefined && isChatFileMimeAllowed(mapped) ? mapped : undefined;
+  const declaredMime = declared !== "" && isChatFileMimeAllowed(declared) && !REFUSED_MIME.has(declared)
+    ? declared
+    : undefined;
+  const mime = mappedMime ?? declaredMime ?? CHAT_FILE_FALLBACK_MIME;
+  if (REFUSED_MIME.has(mime)) return { name: neutralExportName(name), mime: CHAT_FILE_FALLBACK_MIME };
+  return { name, mime };
 }
 
 function base64UrlEncode(value: string): string {
@@ -366,6 +480,136 @@ export async function downloadChatFile(key: string): Promise<Blob> {
   const { data, error } = await getSupabase().storage.from(CHAT_FILE_BUCKET).download(key);
   if (error || !data) throw new ApiError("That file is no longer available.", 404);
   return data;
+}
+
+/**
+ * Short-lived signed addresses for the platform exporter.
+ *
+ * The native downloader streams this URL straight to a viewer or Downloads, so
+ * the bytes never cross the JS bridge (a 20 MB base64 payload would cost about
+ * 26.7 MB of memory and a second copy). Signing asks Storage to authorize one
+ * object for the current account; it requires the same `objects` SELECT
+ * permission as a download and never uses a service-role key. The URL is
+ * returned to the native caller only: it must never become a browser anchor,
+ * because that would expose the scoped token and bypass the export identity.
+ */
+export const CHAT_FILE_SIGNED_URL_SECONDS = 60;
+
+/** Storage keys are bounded; anything longer is not one of our uploads. */
+const CHAT_FILE_MAX_KEY_LENGTH = 1024;
+
+/**
+ * True for the one key shape uploads create:
+ * `files/<uid>/<conversation>/<uuid>-<name>`.
+ *
+ * This is stricter than the historical marker parser on purpose: signing is a
+ * new capability, so it accepts only a normal four-segment path with no empty
+ * dot segment, traversal, control character, query/fragment, or percent-encoded
+ * separator. `%2f`/`%5c`/`%2e` are refused rather than assumed to name the same
+ * path segment; the upload path never produces them.
+ */
+export function isSignableChatFileKey(key: unknown): key is string {
+  if (typeof key !== "string" || key.length === 0 || key.length > CHAT_FILE_MAX_KEY_LENGTH) return false;
+  if (!key.startsWith("files/")) return false;
+  if (key.includes("..") || key.includes("\\") || /[?#]/.test(key)) return false;
+  // NUL and the other C0 controls never belong in a Storage key.
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(key)) return false;
+  if (/%2f|%5c|%2e/i.test(key)) return false;
+  const segments = key.split("/");
+  return segments.length === 4
+    && segments.every((segment) => segment !== "" && segment !== "." && segment !== "..");
+}
+
+/**
+ * Clamp to the documented short export window. A caller can ask for less, but
+ * never for the SDK's long-lived default: a signed address is handed to another
+ * app, so an accidental year-long token is not acceptable.
+ */
+function signedUrlTtl(seconds: number): number {
+  if (!Number.isFinite(seconds)) return CHAT_FILE_SIGNED_URL_SECONDS;
+  return Math.min(CHAT_FILE_SIGNED_URL_SECONDS, Math.max(1, Math.floor(seconds)));
+}
+
+function rejectedSignedUrl(): ApiError {
+  return new ApiError("That file can't be opened safely.", 502);
+}
+
+/**
+ * Accept only the URL the SDK itself documents: the configured HTTPS origin,
+ * `/storage/v1/object/sign/findback-chat-files/<key>`, and exactly one `token`
+ * query parameter. The key suffix is compared after decoding, and an encoded
+ * slash is refused instead of treated as equivalent, so a URL cannot name a
+ * different object than the key the caller asked for.
+ */
+function validateSignedChatFileUrl(raw: string, key: string): string {
+  let signed: URL;
+  let base: URL;
+  try {
+    signed = new URL(raw);
+    base = new URL(getSupabaseBackendUrl());
+  } catch {
+    throw rejectedSignedUrl();
+  }
+  if (signed.protocol !== "https:" || signed.origin !== base.origin) throw rejectedSignedUrl();
+  if (signed.username !== "" || signed.password !== "" || signed.hash !== "") throw rejectedSignedUrl();
+  const prefix = `/storage/v1/object/sign/${CHAT_FILE_BUCKET}/`;
+  if (!signed.pathname.startsWith(prefix)) throw rejectedSignedUrl();
+  const encodedKey = signed.pathname.slice(prefix.length);
+  if (/%2f|%5c/i.test(encodedKey)) throw rejectedSignedUrl();
+  let decodedKey: string;
+  try {
+    decodedKey = decodeURIComponent(encodedKey);
+  } catch {
+    throw rejectedSignedUrl();
+  }
+  if (decodedKey !== key) throw rejectedSignedUrl();
+  const parameters = [...signed.searchParams.keys()];
+  if (parameters.length !== 1 || parameters[0] !== "token") throw rejectedSignedUrl();
+  if (!signed.searchParams.get("token")) throw rejectedSignedUrl();
+  return signed.href;
+}
+
+/**
+ * Sign one chat-file object for a short native export. Throws an `ApiError`
+ * with a consumer-safe message; the caller maps the status to its own code and
+ * never logs or prints the returned URL. No token, secret or long-lived
+ * credential is created here.
+ */
+export async function signedChatFileUrl(
+  key: string,
+  seconds: number = CHAT_FILE_SIGNED_URL_SECONDS,
+): Promise<string> {
+  if (!isSignableChatFileKey(key)) throw new ApiError("That file can't be opened.", 400);
+  let signedUrl: string | undefined;
+  let status: number | undefined;
+  try {
+    const { data, error } = await getSupabase().storage
+      .from(CHAT_FILE_BUCKET)
+      // No `download`/transform option: the caller needs the exact stored
+      // bytes and this keeps the token the only query parameter.
+      .createSignedUrl(key, signedUrlTtl(seconds));
+    if (error || !data?.signedUrl) {
+      const raw = (error as { status?: unknown } | null)?.status;
+      status = typeof raw === "number" ? raw : undefined;
+    } else {
+      signedUrl = data.signedUrl;
+    }
+  } catch {
+    throw new ApiError("That file is no longer available.", 502);
+  }
+  if (signedUrl === undefined) {
+    if (status === 401 || status === 403) {
+      throw new ApiError("You don't have access to this file.", 403);
+    }
+    // Storage masks an inaccessible or missing object as 400/404; either way
+    // the honest consumer answer is that the file is gone.
+    if (status === 400 || status === 404) {
+      throw new ApiError("That file is no longer available.", 404);
+    }
+    throw new ApiError("That file is no longer available.", 502);
+  }
+  return validateSignedChatFileUrl(signedUrl, key);
 }
 
 /** Best effort: a failed send removes the object it uploaded. Never throws. */

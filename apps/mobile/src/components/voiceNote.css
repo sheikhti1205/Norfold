@@ -1,83 +1,70 @@
-/* Reference geometry, not reference branding. One centered speech envelope,
-   one flat delivered bubble, and a two-row recorder replacing the composer. */
-.fb-chat-voice { display:grid; grid-template-columns:54px 44px minmax(0,1fr); align-items:center;
-  column-gap:.25rem; width:18.5rem; max-width:100%; min-height:3.25rem; }
-.fb-chat-voice-identity { position:relative; display:grid; place-items:center; width:54px; height:44px; }
-.fb-chat-voice-avatar { display:flex; }
-.fb-chat-voice-mic { position:absolute; inset-inline-end:5px; bottom:0; color:var(--fb-primary);
-  background:var(--fb-primary-container); border-radius:1rem; }
-.fb-chat-voice-toggle, .fb-chat-voice-rate, .fb-voice-panel-preview {
-  display:grid; place-items:center; padding:0; border:0; min-height:44px; background:transparent;
-  color:inherit; border-radius:50%; }
-.fb-chat-voice-toggle { width:44px; }
+/* One compact voice system: a single continuous progress bar on the recorder,
+   the paused preview and the delivered note. No envelope, no second capture
+   line and no banked minute marks. */
+.fb-chat-voice { display:flex; flex-direction:column; gap:.3rem; width:260px; max-width:100%; min-width:0; }
+.fb-chat-voice-row { display:flex; align-items:center; gap:.3rem; min-width:0; flex-wrap:wrap; }
+.fb-chat-voice-toggle { display:grid; place-items:center; width:44px; min-width:44px; min-height:44px;
+  padding:0; border:0; border-radius:50%; background:transparent; color:inherit; }
 .fb-chat-voice-toggle svg, .fb-voice-panel-preview svg { fill:currentColor; stroke-width:1; }
-.fb-chat-voice-toggle:disabled, .fb-chat-voice-panel button:disabled { opacity:.45; }
-.fb-chat-voice-rate { position:relative; isolation:isolate; width:54px; font-size:.8125rem; font-weight:650; }
-/* The speed affordance is a short pill, but its real touch target stays 44px. */
-.fb-chat-voice-rate::before { content:""; position:absolute; z-index:-1; inset:8px 0;
-  background:color-mix(in srgb,currentColor 10%,transparent); border-radius:1.5rem; }
-.fb-chat-voice-timeline { min-width:0; display:grid; gap:.125rem; padding-top:.2rem; }
-/* The gap is shared by every surface and stays fractional on purpose: 39 of
-   them must not consume a narrow delivered track. With 40 bars, a 60px track
-   still computes to about 1px per bar, while a wide track spreads the same
-   bars apart with space-between. */
-.fb-chat-voice-track { position:relative; display:flex; align-items:center; gap:0.5px;
-  justify-content:space-between; width:100%; min-width:0; height:1.75rem; }
-/* One measured envelope owns every voice surface: the recorder, the paused
-   preview and the delivered note all paint this bar, so the 2px cap belongs to
-   the shared rule. A cap scoped to `.fb-chat-voice` never reaches the recorder. */
-.fb-chat-voice-bar { flex:0 1 2px; min-width:0; max-width:2px; border-radius:999px;
-  background:color-mix(in srgb,currentColor 40%,transparent); }
-.fb-chat-voice-bar[data-played] { background:var(--fb-primary); }
-.fb-chat-voice-cursor { position:absolute; width:9px; height:9px; border-radius:50%; background:var(--fb-primary); }
-.fb-chat-voice-time { font-size:.75rem; line-height:1.2; font-variant-numeric:tabular-nums; color:inherit; opacity:.7; }
-.fb-chat-message-voice { position:relative; padding:.35rem .5rem; }
-.fb-chat-message-voice .fb-chat-message-status { position:absolute; inset-inline-end:.5rem; bottom:.35rem; margin:0;
-  max-width:calc(100% - 5rem); }
-/* A pending/retry status needs real room; never overlay its controls on audio. */
-.fb-chat-message-voice:has(.fb-chat-message-status button) .fb-chat-message-status { position:static; max-width:none; }
+.fb-chat-voice-toggle:disabled, .fb-voice-panel button:disabled { opacity:.45; }
+.fb-chat-voice-rate { position:relative; isolation:isolate; display:grid; place-items:center; width:44px;
+  min-width:44px; min-height:44px; padding:0; border:0; border-radius:50%; background:transparent;
+  color:inherit; font-size:.8125rem; font-weight:650; }
+.fb-chat-voice-rate::before { content:""; position:absolute; z-index:-1; inset:6px;
+  background:color-mix(in srgb,currentColor 10%,transparent); border-radius:999px; }
+.fb-chat-voice-clock { display:flex; flex:1 1 auto; flex-wrap:wrap; align-items:baseline;
+  justify-content:flex-end; gap:.1rem .5rem; min-width:min-content; }
+.fb-chat-voice-time { white-space:nowrap; font-size:.75rem; line-height:1.2;
+  font-variant-numeric:tabular-nums; color:inherit; }
+.fb-chat-voice-remaining { white-space:nowrap; font-size:.75rem; line-height:1.2;
+  font-variant-numeric:tabular-nums; color:inherit; opacity:.7; }
+.fb-chat-voice-progress { position:relative; display:block; width:100%; height:3px;
+  border-radius:999px; overflow:hidden; background:color-mix(in srgb,currentColor 18%,transparent); }
+.fb-chat-voice-progress-fill { display:block; height:100%; border-radius:inherit;
+  background:var(--fb-primary); transition:width .12s linear; }
+.fb-chat-message-voice { padding:.35rem .5rem .45rem; }
+/* The timestamp and receipt flow below the bar. They are never an absolute
+   corner chip on a voice note: at large text that chip wrapped into a tall
+   column over the progress row. */
+.fb-chat-message-voice .fb-chat-message-status { position:static; max-width:none; margin-top:.2rem;
+  text-align:end; overflow-wrap:normal; }
+.fb-chat-message-voice .fb-chat-time { white-space:nowrap; }
 .fb-chat-voice-state { display:flex; flex-wrap:wrap; align-items:center; gap:.25rem .5rem;
-  font-size:.8125rem; color:var(--fb-on-surface-variant); }
+  margin-top:.2rem; font-size:.8125rem; color:var(--fb-on-surface-variant); }
 .fb-chat-voice-state button { min-height:44px; min-width:44px; padding:.2rem .35rem; text-decoration:underline; }
-.fb-chat-voice-panel { flex:none; min-width:0; padding:.7rem .6rem max(.6rem,env(safe-area-inset-bottom));
-  border-radius:1.5rem 1.5rem 0 0; background:var(--fb-surface-container); color:var(--fb-on-surface); }
-.fb-voice-panel-wave { display:flex; align-items:center; gap:.6rem; min-height:3rem; padding:0 .45rem; }
-.fb-voice-panel-wave .fb-chat-voice-track { flex:1; height:2rem; }
-.fb-voice-panel-wave .fb-chat-voice-time { flex:none; font-size:1.125rem; opacity:1; }
-/* The capture clock is a bottom rule under the measured wave, never a second
-   amplitude: one sweep of the whole track per minute, a playhead for the live
-   sweep, and five compact marks for the minutes already banked. */
-.fb-voice-capture-track { position:relative; flex:1; min-width:0; height:2rem; }
-.fb-voice-capture-track .fb-chat-voice-track { position:relative; z-index:1; height:100%; }
-/* One horizontal rule growing 0..100% over the minute, then restarting. No end
-   border: a full-height vertical edge beside it drew an L and read as graph
-   axes rather than the Messenger minute fill. */
-.fb-voice-capture-fill { position:absolute; inset-block:0; inset-inline-start:0; box-sizing:border-box;
-  border-block-end:2px solid var(--fb-primary); }
-.fb-voice-panel-clock { flex:0 1 auto; min-width:0; max-width:45%; display:grid; justify-items:end; gap:.1rem; }
-.fb-voice-panel-clock .fb-chat-voice-time { display:block; text-align:end; }
-.fb-voice-panel-remaining { color:var(--fb-error); font-size:.75rem; font-weight:600;
-  font-variant-numeric:tabular-nums; }
-.fb-voice-capture-marks { display:flex; gap:3px; }
-.fb-voice-capture-mark { width:6px; height:2px; border-radius:1px;
-  background:color-mix(in srgb,currentColor 20%,transparent); }
-.fb-voice-capture-mark[data-complete] { background:var(--fb-primary); }
-.fb-voice-panel-preview { width:44px; flex:none; }
-.fb-chat-voice-dot { flex:none; margin-inline:.65rem; width:.45rem; height:.45rem; border-radius:50%; background:var(--fb-error); }
-.fb-voice-panel-actions { display:grid; grid-template-columns:48px minmax(0,1fr) 48px; align-items:center; gap:.65rem; margin-top:.65rem; }
-.fb-voice-panel-actions button { display:flex; align-items:center; justify-content:center; gap:.5rem; padding:.5rem;
-  min-width:44px; min-height:48px; border:0; border-radius:50%; }
+/* The recorder starts at the composer edge, stays compact on a wide window and
+   uses the available width on a phone. */
+.fb-chat-voice-panel { box-sizing:border-box; flex:none; align-self:flex-start; width:calc(100% - 1.1rem);
+  max-width:300px; min-width:0; margin:0 .55rem max(.5rem, env(safe-area-inset-bottom));
+  padding:.5rem .55rem; border-radius:1.25rem; background:var(--fb-surface-container); color:var(--fb-on-surface); }
+.fb-voice-panel-actions { display:flex; flex-wrap:wrap; align-items:center; gap:.2rem .3rem; min-width:0; }
+.fb-voice-panel-actions button { display:flex; align-items:center; justify-content:center; gap:.4rem;
+  padding:0; min-width:44px; min-height:44px; border:0; border-radius:50%; }
 .fb-voice-panel-discard { background:color-mix(in srgb,var(--fb-error) 12%,transparent); color:var(--fb-error); }
-.fb-voice-panel-actions .fb-voice-panel-resume { background:var(--fb-primary-container); color:var(--fb-on-primary-container);
-  border-radius:1rem; min-width:0; font-size:1rem; }
-.fb-voice-panel-resume span { overflow-wrap:anywhere; }
+.fb-voice-panel-actions .fb-voice-panel-resume { background:var(--fb-primary-container);
+  color:var(--fb-on-primary-container); border-radius:50%; }
 .fb-voice-panel-send { background:var(--fb-primary); color:var(--fb-on-primary); }
-.fb-chat-voice-panel button:focus-visible, .fb-chat-voice button:focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }
-.fb-chat-voice-draft { flex:none; display:flex; align-items:center; gap:.5rem; padding:.5rem .8rem; font-size:.875rem; }
+.fb-voice-panel-clock { display:flex; flex:1 1 auto; flex-wrap:wrap; align-items:baseline;
+  gap:.1rem .5rem; min-width:min-content; }
+.fb-voice-panel-clock .fb-chat-voice-time { font-size:1rem; opacity:1; }
+.fb-voice-panel-clock .fb-chat-voice-remaining { font-size:.8125rem; }
+.fb-voice-panel-remaining { color:var(--fb-error); font-weight:600; }
+.fb-voice-panel-preview { display:grid; place-items:center; width:44px; min-width:44px; min-height:44px;
+  padding:0; border:0; border-radius:50%; background:transparent; color:inherit; }
+.fb-chat-voice-dot { position:relative; flex:none; width:8px; min-width:8px; height:8px;
+  margin-inline:6px; border-radius:50%; background:var(--fb-error); }
+.fb-chat-voice-panel .fb-chat-voice-progress { margin-top:.35rem; }
+.fb-chat-voice-panel button:focus-visible, .fb-chat-voice button:focus-visible {
+  outline:2px solid var(--fb-focus); outline-offset:2px; }
+.fb-chat-voice-draft { flex:none; display:flex; flex-wrap:wrap; align-items:center; gap:.5rem;
+  padding:.5rem .8rem; font-size:.875rem; }
 .fb-chat-voice-draft button { min-width:44px; min-height:44px; }
 @media (prefers-reduced-motion:no-preference) {
   .fb-voice-panel-remaining { animation:fb-voice-warning .4s var(--ease-fb) 1; }
   .fb-voice-sending { animation:fb-voice-spin 1s linear infinite; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .fb-chat-voice-progress-fill { transition:none; }
 }
 @keyframes fb-voice-warning { from { opacity:.25; } to { opacity:1; } }
 @keyframes fb-voice-spin { to { transform:rotate(360deg); } }
