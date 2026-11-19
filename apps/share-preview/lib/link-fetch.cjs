@@ -1,3 +1,4 @@
+/* global URL, setTimeout, clearTimeout */
 'use strict';
 
 // Secure, bounded HTTPS egress for the link-preview metadata service.

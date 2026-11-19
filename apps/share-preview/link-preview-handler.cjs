@@ -1,3 +1,4 @@
+/* global AbortController, URL, setTimeout, clearTimeout */
 'use strict';
 
 // Automatic link metadata service. It accepts one HTTPS URL authenticated by
