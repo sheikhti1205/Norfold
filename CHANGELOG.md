@@ -5,6 +5,17 @@ described in [docs/history/VERSION_HISTORY.md](docs/history/VERSION_HISTORY.md).
 track real evolution and do not imply a stable release. The per-commit mapping is in
 [docs/history/VERSION_HISTORY.csv](docs/history/VERSION_HISTORY.csv).
 
+## 0.16.0-beta.3
+
+- Chat opens in a compact window that floats over the page you were on. Start
+  from the chat button, pick a recent conversation or search for someone, then
+  minimize the window to its header, restore it, or open the full Chats screen.
+  A minimized window keeps its draft, staged photos and recording.
+- The recorder, the preview and the sent note draw the same voice wave, with one
+  bar thickness and a visible gap on a narrow phone. The recording clock is a
+  single rule that fills over a minute and restarts, and a small mark fills in
+  for each minute recorded.
+
 ## 0.16.0-beta.2
 
 - Report cards show the status beside the title, and category and location
