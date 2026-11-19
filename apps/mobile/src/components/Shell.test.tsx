@@ -64,6 +64,7 @@ function renderShell(entry = "/") {
         <Route path="/notifications" element={<p>Notifications screen</p>} />
         <Route path="/report" element={<p>Report screen</p>} />
         <Route path="/ai-connection" element={<p>AI connection</p>} />
+        <Route path="/help" element={<p>Help screen</p>} />
       </Route></Routes>
     </MemoryRouter>
     </HoverLabelProvider>,
@@ -1102,7 +1103,7 @@ describe("Shell chat dock host (R19 T3)", () => {
       <MemoryRouter initialEntries={["/"]}>
         <Routes><Route element={<Shell />}>
           <Route index element={<Link to="/chats/c-1">Open thread</Link>} />
-          <Route path="/chats/:id" element={<><p>Chat thread</p><Link to="/">Home</Link></>} />
+          <Route path="/chats/:id" element={<><p>Chat thread</p><Link to="/">Back to home</Link></>} />
         </Route></Routes>
       </MemoryRouter>,
     );
@@ -1111,7 +1112,7 @@ describe("Shell chat dock host (R19 T3)", () => {
     // Route eligibility belongs to the dock; the shell never unmounts it.
     expect(screen.getByTestId("chat-dock")).toBe(first);
     expect(screen.queryAllByTestId("chat-dock")).toHaveLength(1);
-    fireEvent.click(screen.getByRole("link", { name: "Home" }));
+    fireEvent.click(screen.getByRole("link", { name: "Back to home" }));
     expect(screen.getByTestId("chat-dock")).toBe(first);
   });
 });
