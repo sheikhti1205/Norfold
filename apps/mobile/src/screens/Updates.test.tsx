@@ -241,13 +241,17 @@ describe("updates screen", () => {
   });
 
   it("links a new feature only when its destination exists for this platform", () => {
-    runtime.snapshot = snapshot();
+    // A running note need not name a destination. The newest written note that
+    // does must still turn it into a link when the reader opens that version.
+    const note = RELEASE_NOTES.find((entry) => entry.features.some((feature) => feature.destinationId))!;
+    runtime.snapshot = snapshot({
+      history: [release({ id: `v${note.versionName}`, versionName: note.versionName, tag: `v${note.versionName}` })],
+    });
     renderScreen();
-    const note = RELEASE_NOTES.find((entry) => entry.versionName === APP_VERSION)!;
-    const feature = note.features.find((entry) => entry.destinationId);
-    expect(feature).toBeTruthy();
-    const destination = destinationFor(feature!.destinationId!)!;
-    expect(feature!.summary).toContain("Personalization");
+    fireEvent.click(screen.getByTestId("updates-history-item").querySelector("summary")!);
+    const feature = note.features.find((entry) => entry.destinationId)!;
+    const destination = destinationFor(feature.destinationId!)!;
+    expect(feature.summary).toContain("Personalization");
     const link = screen.getByRole("link", { name: destination.title });
     expect(link.getAttribute("href")).toBe(destination.route);
   });

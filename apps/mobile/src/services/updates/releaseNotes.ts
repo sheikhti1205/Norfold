@@ -30,6 +30,18 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    versionName: "0.16.0-beta.3",
+    about:
+      "Chat can float over the page you are reading, and voice notes share one wave from recording to delivery.",
+    changes: [
+      "Chat opens in a compact window over the page you were on. Start from the chat button, pick a recent conversation or search for someone, then minimize it to its header, restore it, or open the full Chats screen. A minimized window keeps its draft, staged photos and recording.",
+      "The recorder, the preview and the sent note draw the same voice wave: one bar thickness and a visible gap on a narrow phone. The recording clock is a single rule that fills over a minute and restarts, and a small mark fills in for each minute recorded.",
+    ],
+    features: [
+      { summary: "Keep a chat open while you use another page, then open it as the full conversation when you need the room." },
+    ],
+  },
+  {
     versionName: "0.16.0-beta.2",
     about:
       "This build refines how reports and people look, and lets you choose how navigation and reactions appear.",
