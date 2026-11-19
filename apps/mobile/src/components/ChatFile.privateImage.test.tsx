@@ -26,7 +26,7 @@ function u16le(value: number): number[] {
   return [value & 0xff, (value >> 8) & 0xff];
 }
 /** One-frame GIF with a loop, a comment and a transparency control block. */
-function gif(): Uint8Array {
+function gif(): Uint8Array<ArrayBuffer> {
   const comment = ascii("secret-comment");
   return Uint8Array.from([
     0x47, 0x49, 0x46, 0x38, 0x39, 0x61,
@@ -45,7 +45,7 @@ function gif(): Uint8Array {
  * block, one baseline SOF0 frame and EOI. The probe reads the SOF size while
  * the browser paints the APP1 orientation, which is the difference under test.
  */
-function jpeg(width: number, height: number, orientation?: number): Uint8Array {
+function jpeg(width: number, height: number, orientation?: number): Uint8Array<ArrayBuffer> {
   const bytes: number[] = [0xff, 0xd8];
   if (orientation !== undefined) {
     const tiff = [
@@ -67,7 +67,7 @@ function jpeg(width: number, height: number, orientation?: number): Uint8Array {
   );
   return Uint8Array.from(bytes);
 }
-function html(): Uint8Array {
+function html(): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode("<html><script>alert(1)</script></html>");
 }
 function meta(mime = "image/gif", name = "sticker.gif"): ChatFileMeta {
