@@ -218,7 +218,9 @@ function beginRestoration(owner: Owner, source: "backup" | "history", missing: n
   return () => { owner.restorations.delete(token); update(); };
 }
 
-async function reload(owner: Owner) {
+/** `shouldPublish` is re-evaluated at the publication point, so a caller can
+ * refuse a frame whose authority changed during these reads. */
+async function reload(owner: Owner, shouldPublish: () => boolean = () => true): Promise<boolean> {
   const revision = ++owner.historyRevision;
   const conversations = await owner.handle.history.listConversations();
   assertOwner(owner);
@@ -226,7 +228,9 @@ async function reload(owner: Owner) {
   // blank/stale frames on navigation. The cache never holds live authority.
   await Promise.all([...owner.threadCache.keys()].map(id => readMessagingThreadState(owner.handle.scope.accountId, id)));
   assertOwner(owner);
-  if (revision === owner.historyRevision) publish({ ...snapshot, localReady: true, conversations, revision: snapshot.revision + 1 });
+  if (revision !== owner.historyRevision || !shouldPublish()) return false;
+  publish({ ...snapshot, localReady: true, conversations, revision: snapshot.revision + 1 });
+  return true;
 }
 
 function invalidateAuthority(owner: Owner) {
@@ -398,6 +402,25 @@ function requestRefresh(owner: Owner, mode: RefreshMode, conversationId?: string
         try {
           await owner.session.reconcileConversation(target);
           assertOwner(owner);
+          // The reconciled rows are durable now. Hand them to the reader before
+          // this pass does unrelated outbox/media work, but only under the
+          // authority the reconcile ran beneath: reload checks `live` at the
+          // publication point, so a newer full pass or account replacement
+          // cannot emit or paint this early frame.
+          const early = target;
+          const live = () => current === owner && owner.generation === generation
+            && owner.authorityVersion === authorityVersion && conversationTarget(owner, early) === early;
+          if (live()) {
+            try {
+              const published = await reload(owner, live); // Publishes the rows this reconcile stored.
+              if (published && live()) markConversationPainted(early);
+            } catch (error) {
+              // A local read failure here is not this pass's outcome: the final
+              // reload below still reports it, and a replaced account still
+              // aborts the pass instead of publishing under the old owner.
+              if (current !== owner || owner.generation !== generation) throw error;
+            }
+          }
         } catch (error) {
           // One conversation failing to reconcile is not an account outage: let
           // this pass finish, then ask for the authoritative full pass.
@@ -738,18 +761,21 @@ export async function sendMessagingText(accountId: string, conversationId: strin
   contextReportId?: string, replyToId?: string, messageId?: string): Promise<string | { id: string; viewStale: true }> {
   const owner = ownerFor(accountId);
   const id = uuid(messageId ?? crypto.randomUUID());
-  await owner.session.send({ id, conversationId: uuid(conversationId), authorId: uuid(accountId), recipientId: uuid(peerId), body, createdAt: Date.now(),
+  const conversation = uuid(conversationId);
+  await owner.session.send({ id, conversationId: conversation, authorId: uuid(accountId), recipientId: uuid(peerId), body, createdAt: Date.now(),
     ...(contextReportId ? { messageType: "TEXT" as const, contextReportId: uuid(contextReportId) } : {}),
     ...(replyToId ? { replyToId: uuid(replyToId) } : {}) });
   try {
     assertOwner(owner);
     await reload(owner); // Queued send appears without waiting for connectivity.
   } catch {
-    if (current === owner && owner.generation === generation) void requestRefresh(owner, "fast");
+    if (current === owner && owner.generation === generation) void requestRefresh(owner, "fast", conversation);
     return { id, viewStale: true };
   }
-  // Settle this send and the peer's echo; projections/media stay on full passes.
-  void requestRefresh(owner, "fast");
+  // Settle this send and the peer's echo in the conversation that already named
+  // itself: a targeted fast pass reconciles that thread instead of rescanning
+  // every projection. Projections/media stay on full passes.
+  void requestRefresh(owner, "fast", conversation);
   return id;
 }
 
