@@ -1,0 +1,144 @@
+// @vitest-environment node
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+
+/**
+ * Chat transcript alignment contract.
+ *
+ * The row, not the bubble, owns the one 70% message cap. A long paragraph's
+ * max-content therefore fills the row while the bubble still stops at its
+ * 34rem measure. In an own line the row is right-anchored by row-reverse, so
+ * the surface must also be packed to the row's end. Otherwise the leftover
+ * width appears as an inboard gap between the bubble and the sender's gutter,
+ * which is the owner-reported long-text placement defect.
+ *
+ * A received row is left-anchored and keeps the default start packing. The
+ * row and the bubble keep their existing widths; this file pins placement, not
+ * a wider bubble. The same row wraps text, long captions, photos, expressive
+ * media, YouTube/report previews, report cards and voice notes, so the packing
+ * is a row contract rather than a text or media rule. Declarations only:
+ * rendered confirmation belongs to the deployed browser.
+ */
+type CssRule = { selectors: string[]; body: string };
+
+const chatCss = readFileSync(new URL("./Messaging.css", import.meta.url), "utf8");
+const chatMessageTextCss = readFileSync(new URL("../components/ChatMessageText.css", import.meta.url), "utf8");
+const messagingTsx = readFileSync(new URL("./Messaging.tsx", import.meta.url), "utf8");
+
+/** Comments removed; every brace-free body is paired with its selector list. */
+function cssRules(css: string): CssRule[] {
+  const clean = css.replace(/\/\*[\s\S]*?\*\//g, " ");
+  const rules: CssRule[] = [];
+  for (const match of clean.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const [, selectorText = "", body = ""] = match;
+    rules.push({
+      selectors: selectorText.split(",").map(selector => selector.replace(/\s+/g, " ").trim()),
+      body,
+    });
+  }
+  return rules;
+}
+
+const rules = cssRules(chatCss);
+
+function bodies(selector: string) {
+  return rules.filter(rule => rule.selectors.includes(selector)).map(rule => rule.body);
+}
+
+const ownRow = bodies(".fb-chat-line-own > .fb-chat-line-row").join("\n");
+const receivedRow = bodies(".fb-chat-line-row").join("\n");
+
+describe("chat transcript own and received gutters", () => {
+  it("packs an own row's surface against the same edge the row occupies", () => {
+    // The line stays full width and reverses its own main axis, so the row is
+    // placed on the sender's side. The row's own content must follow it.
+    expect(bodies(".fb-chat-line").join("\n")).toContain("max-width:100%;");
+    expect(bodies(".fb-chat-line-own").join("\n")).toContain("flex-direction:row-reverse;");
+    expect(ownRow).toContain("justify-content:flex-end;");
+  });
+
+  it("leaves a received row on the default start packing", () => {
+    // No justify-content on the base row: its start edge is the recipient's
+    // gutter, because the line is neither reversed nor end-packed.
+    expect(receivedRow).toContain("display:flex;");
+    expect(receivedRow).not.toMatch(/(?:^|[;\s])justify-content\s*:/);
+  });
+
+  it("keeps the cap on the row and the bubble content-sized", () => {
+    expect(chatCss).toContain(".fb-chat-line > .fb-chat-line-row { max-width:70%; }");
+    const surface = bodies(".fb-chat-message-surface").join("\n");
+    expect(surface).toContain("width:max-content;");
+    expect(surface).toContain("max-width:min(100%, 34rem);");
+    const bubble = bodies(".fb-chat-message").find(body => body.includes("max-width:min(100%, 34rem);")) ?? "";
+    expect(bubble).toContain("min-width:0;");
+    expect(bubble).not.toMatch(/(?:^|[;\s])width\s*:/);
+    // No full-width row or line: the gutter comes from packing, not stretching.
+    expect(chatCss).not.toMatch(/\.fb-chat-line-row[^{}]*\{[^{}]*width:100%/);
+    expect(chatCss).not.toMatch(/\.fb-chat-line-own[^{}]*\{[^{}]*width:/);
+  });
+
+  it("does not turn the alignment into a margin or width workaround", () => {
+    // A prior rejected shape pushed the surface with an auto inline margin.
+    expect(chatCss).not.toContain(
+      ".fb-chat-line-own > .fb-chat-line-row > .fb-chat-message-surface { margin-inline-start:auto; }");
+    expect(ownRow).not.toMatch(/margin-inline/);
+    expect(ownRow).not.toMatch(/(?:^|[;\s])width\s*:/);
+  });
+
+  it("leaves the album's own placement unchanged", () => {
+    expect(bodies(".fb-chat-run").join("\n")).toContain("max-width:70%;");
+    expect(bodies(".fb-chat-run-own").join("\n")).toContain("margin-inline-start:auto;");
+    expect(bodies(".fb-chat-run .fb-chat-message-surface").join("\n")).toContain("width:100%;");
+  });
+
+  it("keeps the row and surface hooks in the screen markup", () => {
+    expect(messagingTsx).toContain('ownRun ? "fb-chat-line fb-chat-line-own" : "fb-chat-line"');
+    expect(messagingTsx).toContain("className={`fb-chat-line-row${wideFirst");
+    expect(messagingTsx).toContain('disabled={!message.server} className="fb-chat-message-surface"');
+  });
+
+  it("lets photo, caption, preview and report-card content inherit the row packing", () => {
+    // These are content classes inside the one surface and bubble. None may
+    // align itself to the gutter, or the row rule would be bypassed for that
+    // content kind. The YouTube embed lives in the preview grid and the report
+    // card is the same bubble wrapper, so the common row contract covers both.
+    const surface = bodies(".fb-chat-message-surface").join("\n");
+    expect(surface).not.toMatch(/(?:^|[;\s])justify-content\s*:/);
+    expect(surface).not.toMatch(/margin-inline/);
+    for (const selector of [".fb-chat-message", ".fb-chat-photo", ".fb-chat-report-card"]) {
+      const body = bodies(selector).join("\n");
+      expect(body).not.toMatch(/(?:^|[;\s])justify-content\s*:\s*flex-end/);
+      expect(body).not.toMatch(/margin-inline-start\s*:\s*auto/);
+    }
+    const previews = cssRules(chatMessageTextCss)
+      .filter(rule => rule.selectors.includes(".fb-chat-message-previews"))
+      .map(rule => rule.body).join("\n");
+    expect(previews).toContain("max-width: 100%;");
+    expect(previews).not.toMatch(/(?:^|[;\s])justify-content\s*:/);
+    expect(messagingTsx).toContain('className="fb-chat-context fb-chat-report-card"');
+    expect(messagingTsx).toContain('className="fb-chat-photo"');
+    expect(messagingTsx).toContain('className="fb-chat-message-surface"');
+  });
+
+  it("removes the measured inboard gap when the row is wider than the bubble", () => {
+    // Deployed measurements from the reported long own message (7439 chars):
+    // at 1440 the 70% row is 746.48 and the 34rem bubble is 544, so the old
+    // start packing left 202.48 between the bubble and the right gutter; at
+    // 2000 it left 594.48. At 320 the row itself is 206.08, so the bubble is
+    // already flush. The report card at the same 1440 pane measured 30.57 of
+    // the same gap: the same row wrapper with a narrower surface.
+    const cases = [
+      { row: 746.48, bubble: 544, gap: 202.48 },
+      { row: 1138.48, bubble: 544, gap: 594.48 },
+      { row: 206.08, bubble: 206.08, gap: 0 },
+    ];
+    for (const { row, bubble, gap } of cases) {
+      expect(row - bubble).toBeCloseTo(gap, 2);
+    }
+    // The row keeps that width and the bubble keeps its size: flex-end is the
+    // only change that moves the surface to the same edge as the row.
+    expect(ownRow).toContain("justify-content:flex-end;");
+    expect(ownRow).not.toMatch(/margin-inline/);
+    expect(ownRow).not.toMatch(/(?:^|[;\s])width\s*:/);
+  });
+});
