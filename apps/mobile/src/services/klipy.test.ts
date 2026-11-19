@@ -10,6 +10,9 @@ import {
   isKlipyMediaUrl,
   klipyAppKey,
   klipyCustomerId,
+  klipyMessageBody,
+  klipyMessageKind,
+  klipyMessageUrl,
   normalizeKlipyItem,
   searchKlipyGifs,
   searchKlipyStickers,
@@ -516,5 +519,96 @@ describe("createKlipySearchController", () => {
     expect(ctl.getState().items.map((i) => i.slug)).toEqual(["-p1", "-p2"]);
     expect(ctl.getState().page).toBe(2);
     ctl.dispose();
+  });
+});
+
+describe("klipy message kind fragment (owner direction 2026-11-19)", () => {
+  const GIF = "https://media.klipy.com/a.gif";
+  const STICKER = "https://media.klipy.com/s.webp";
+  const pick = (kind: "gifs" | "stickers", mediaUrl: string) => ({ kind, mediaUrl });
+
+  it("tags a new pick with its picker kind and keeps the body one bare allowlisted URL", () => {
+    const sticker = klipyMessageBody(pick("stickers", STICKER));
+    const gif = klipyMessageBody(pick("gifs", GIF));
+    expect(sticker).toBe(`${STICKER}#norfold-media=sticker`);
+    expect(gif).toBe(`${GIF}#norfold-media=gif`);
+    // An older client classifies with the same allowlist: protocol and host are
+    // unchanged, so the body still renders as media, not text.
+    expect(isKlipyMediaUrl(sticker)).toBe(true);
+    expect(isKlipyMediaUrl(gif)).toBe(true);
+    expect(/\s/.test(sticker) || /\s/.test(gif)).toBe(false);
+  });
+
+  it("keeps a provider fragment and never doubles its own token", () => {
+    const once = klipyMessageBody(pick("gifs", `${GIF}#t=3`));
+    expect(once).toBe(`${GIF}#t=3&norfold-media=gif`);
+    expect(klipyMessageBody(pick("gifs", once))).toBe(once);
+    expect(klipyMessageBody(pick("stickers", once))).toBe(`${GIF}#t=3&norfold-media=sticker`);
+  });
+
+  it("leaves a URL it does not trust unmarked", () => {
+    expect(klipyMessageBody(pick("gifs", "https://evil.example/a.gif"))).toBe("https://evil.example/a.gif");
+    expect(klipyMessageBody(pick("gifs", "http://media.klipy.com/a.gif"))).toBe("http://media.klipy.com/a.gif");
+    expect(klipyMessageBody(pick("gifs", ""))).toBe("");
+  });
+
+  it("names a kind only when exactly one well-formed marker exists", () => {
+    expect(klipyMessageKind(`  ${STICKER}#norfold-media=sticker  `)).toBe("sticker");
+    expect(klipyMessageKind(`${GIF}#norfold-media=gif`)).toBe("gif");
+    expect(klipyMessageKind(`${GIF}#t=3&norfold-media=gif&x=1`)).toBe("gif");
+    expect(klipyMessageKind(`${GIF}#x=1&norfold-media=sticker&y=2`)).toBe("sticker");
+    // History predates the marker: a bare provider URL is its own honest answer.
+    expect(klipyMessageKind(GIF)).toBe("unknown");
+    expect(klipyMessageKind(`${GIF}#norfold-media=video`)).toBe("unknown");
+    expect(klipyMessageKind(`${GIF}#norfold-media=sticker=1`)).toBe("unknown");
+    expect(klipyMessageKind(`${GIF}#x=norfold-media=sticker`)).toBe("unknown");
+    expect(klipyMessageKind(`${GIF}#norfold%2Dmedia=sticker`)).toBe("unknown");
+    expect(klipyMessageKind(`${GIF}#norfold-media`)).toBe("unknown");
+  });
+
+  it("treats any second marker as contradictory, in either order", () => {
+    // A hand-edited or merged fragment must never read as whichever valid
+    // token happened to come first.
+    expect(klipyMessageKind(`${GIF}#norfold-media=sticker&norfold-media=gif`)).toBe("unknown");
+    expect(klipyMessageKind(`${GIF}#norfold-media=gif&norfold-media=sticker`)).toBe("unknown");
+    expect(klipyMessageKind(`${GIF}#norfold-media=sticker&norfold-media=sticker`)).toBe("unknown");
+    expect(klipyMessageKind(`${GIF}#norfold-media=sticker&x=1&norfold-media=gif`)).toBe("unknown");
+    // A valid value beside a malformed one, either order.
+    expect(klipyMessageKind(`${GIF}#norfold-media=sticker&norfold-media=video`)).toBe("unknown");
+    expect(klipyMessageKind(`${GIF}#norfold-media=video&norfold-media=sticker`)).toBe("unknown");
+    expect(klipyMessageKind(`${GIF}#norfold-media&norfold-media=gif`)).toBe("unknown");
+    expect(klipyMessageKind(`${GIF}#norfold-media=gif&norfold-media`)).toBe("unknown");
+    expect(klipyMessageKind(`${GIF}#norfold-media=gif&norfold-media=gif=1`)).toBe("unknown");
+  });
+
+  it("is not a Klipy message at all for surrounding text or an untrusted URL", () => {
+    expect(klipyMessageKind("")).toBeNull();
+    expect(klipyMessageKind("not a url")).toBeNull();
+    expect(klipyMessageKind(`${GIF} and more#norfold-media=sticker`)).toBeNull();
+    expect(klipyMessageKind("https://evil.example/a.gif#norfold-media=sticker")).toBeNull();
+    expect(klipyMessageKind("http://media.klipy.com/a.gif#norfold-media=sticker")).toBeNull();
+  });
+
+  it("strips only its own token when a body is shown as text", () => {
+    expect(klipyMessageUrl(`${STICKER}#norfold-media=sticker`)).toBe(STICKER);
+    expect(klipyMessageUrl(`${GIF}#t=3&norfold-media=gif`)).toBe(`${GIF}#t=3`);
+    // Every marker goes, including contradictory ones; provider bytes stay.
+    expect(klipyMessageUrl(`${GIF}#norfold-media=sticker&norfold-media=gif&t=3`)).toBe(`${GIF}#t=3`);
+    expect(klipyMessageUrl(`${GIF}#t=3`)).toBe(`${GIF}#t=3`);
+    expect(klipyMessageUrl(GIF)).toBe(GIF);
+  });
+
+  it("classifies locally with no network call", () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      const body = klipyMessageBody(pick("stickers", STICKER));
+      expect(klipyMessageKind(body)).toBe("sticker");
+      expect(klipyMessageUrl(body)).toBe(STICKER);
+      expect(isKlipyMediaUrl(body)).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

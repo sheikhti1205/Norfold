@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { motion, type PanInfo } from "framer-motion";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { Archive, ArrowLeft, BellOff, ChevronDown, Flag, ImageOff, Images, ListFilter, LogOut, MapPin, PanelLeftClose, PanelLeftOpen, Pin, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound, X } from "lucide-react";
+import { Archive, ArrowLeft, BellOff, ChevronDown, Film, Flag, ImageOff, Images, ListFilter, LogOut, MapPin, PanelLeftClose, PanelLeftOpen, Pin, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound, X } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import type { PostItem } from "@norfold/shared";
 import { copyStaticLocation, isUuid } from "../services/messaging/validation";
@@ -13,9 +13,10 @@ import { ChatIdentity } from "../components/ChatIdentity";
 import { PostLink } from "../components/PostNavigation";
 import { StatusChip } from "../components/StatusChip";
 import { formatChatDay, formatEventDate, timeAgo } from "../utils/dates";
-import { messagePreview } from "../utils/messagePreview";
+import { klipyPreviewLabel, messagePreview } from "../utils/messagePreview";
 import { haptic } from "../utils/haptics";
 import { convertEmoticons, isEmojiOnly } from "../utils/emoji";
+import { klipyMessageBody, klipyMessageKind, klipyMessageUrl } from "../services/klipy";
 import type { KlipyItem } from "../services/klipy";
 import {
   chatFileBody, chatFileCaption, chatFilePreview, parseChatFileMarker, removeChatFile, uploadChatFile, validateChatFile,
@@ -61,7 +62,9 @@ import {
   readMessagingUnsentHold, readMessagingUnsentHoldIds, purgeMessagingUnsentHold,
 } from "../services/messaging/runtime";
 import type { MediaAttachment, OutboxEntry, StaticLocation, StoredHumanMessage } from "../services/messaging/history";
+import type { ConversationProjection } from "../services/messaging/conversationIndex";
 import { prepareMessagingPhoto, type PreparedMessagingPhoto } from "../services/messaging/preparePhoto";
+import { buildMediaRuns } from "../services/messaging/mediaRuns";
 import {
   classifyClipboardImage, createKeyboardMediaSession, readClipboardAnimation,
   type KeyboardMediaSession, type VerifiedKeyboardMedia,
@@ -75,7 +78,7 @@ import {
   browserVoicePlaybackPorts, createVoicePlayback, voiceProgressPercent,
   type VoicePlaybackPort, type VoicePlaybackSnapshot,
 } from "../services/messaging/voicePlayback";
-import { storedVoiceMime } from "../services/messaging/voice";
+import { storedVoiceMime, VOICE_MAX_MS } from "../services/messaging/voice";
 import { PhotoUnavailableError } from "../services/messaging/mediaTransport";
 import { chooseNativeImage, chooseNativeImages, importNativeImageUri, importedImageToFile } from "../services/media/nativeMedia";
 import { FOLLOW_PX, JUMP_PX, useTranscriptAnchor } from "../hooks/useTranscriptAnchor";
@@ -262,6 +265,40 @@ export function replySwipeFor(offsetX: number, own: boolean): boolean {
   return own ? offsetX <= -REPLY_SWIPE_PX : offsetX >= REPLY_SWIPE_PX;
 }
 
+/**
+ * The relationship facts the screen may *show* while a routine refresh sits
+ * between authoritative sets (owner direction 2026-11-19).
+ *
+ * The runtime publishes `displayProjections`, the last accepted set, retained
+ * only so a row, badge, label or header does not disappear for the length of a
+ * focus/visibility/online pass. It is never permission: every send, read,
+ * receipt, media, block/end/archive/clear gate keeps reading
+ * `currentProjections` and `threadSync`.
+ *
+ * Order of truth:
+ * - a non-null accepted set is the freshest relation this account holds, so it
+ *   answers first;
+ * - then the published display, which only bridges the pass that revoked it;
+ * - when the field is absent (fixtures and older snapshots), the previous
+ *   behaviour, `current ?? cached`;
+ * - when the field is explicitly `null` (offline, error, account switch, and
+ *   every relationship or preference mutation), nothing is shown from a stale
+ *   set: a cached CONNECTED projection is NOT a fallback.
+ */
+export function presentationProjection(chat: {
+  accountId: string | null;
+  currentProjections?: Readonly<Record<string, ConversationProjection>> | null;
+  displayProjections?: Readonly<Record<string, ConversationProjection>> | null;
+}, accountId: string, conversationId: string, cached?: ConversationProjection): ConversationProjection | null {
+  if (chat.accountId !== accountId) return null;
+  const current = chat.currentProjections?.[conversationId];
+  if (current) return current;
+  const display = chat.displayProjections;
+  if (display === undefined) return cached ?? null;
+  if (display === null) return null;
+  return display[conversationId] ?? null;
+}
+
 /** What a quoted message is called when the quoted row itself has no text. */
 export function replyPreview(message: StoredHumanMessage): string {
   if (message.unsentAt !== undefined) return "Message unsent";
@@ -269,8 +306,10 @@ export function replyPreview(message: StoredHumanMessage): string {
   if (message.messageType === "VOICE") return "Voice message";
   if (message.messageType === "LOCATION") return "Location";
   // A Klipy message is one bare media URL; prose that merely contains one is
-  // still quoted exactly, and the link is never mistaken for the message.
-  if (isBareKlipyMediaBody(message.body)) return "GIF";
+  // still quoted exactly, and the link is never mistaken for the message. The
+  // label is the app's canonical preview copy: a new send proves its kind,
+  // history that predates the marker says "Sticker/GIF" instead of a guess.
+  if (isBareKlipyMediaBody(message.body)) return klipyPreviewLabel(klipyMessageKind(message.body));
   // A file message is a marker in the body; quote its name, never the payload.
   const file = chatFilePreview(message.body);
   if (file) return file;
@@ -278,6 +317,23 @@ export function replyPreview(message: StoredHumanMessage): string {
   // version) is still opaque: quote its family name rather than its payload.
   if (isChatFileMarkerBody(message.body)) return "File";
   return message.body;
+}
+
+/**
+ * What one album of media rows calls itself. The label names only what the run
+ * actually holds, so a mixed selection never reads as "3 photos" when one of
+ * them is a video.
+ */
+export function mediaRunLabel(messages: readonly StoredHumanMessage[]): string {
+  let photos = 0, videos = 0;
+  for (const message of messages) {
+    if (message.messageType === "MEDIA") photos += 1;
+    else videos += 1;
+  }
+  const photoCopy = `${photos} photo${photos === 1 ? "" : "s"}`;
+  const videoCopy = `${videos} video${videos === 1 ? "" : "s"}`;
+  if (photos > 0 && videos > 0) return `${photoCopy} and ${videoCopy}`;
+  return photos > 0 ? photoCopy : videoCopy;
 }
 
 function RetrySync({ accountId, labelled = false }: { accountId: string; labelled?: boolean }) {
@@ -490,16 +546,20 @@ function VoiceDraft({ recorder, status, recording, notice, url, snapshot, sendin
   notice: string | null; url: string | null; snapshot: VoicePlaybackSnapshot; sending: boolean; allowed: boolean;
   onStop: () => void; onResume: () => void; onDiscard: () => void; onSend: () => void; onPreview: () => void;
 }) {
-  const [elapsed, setElapsed] = useState(0);
+  // The capture clock, never the preview clock. It is the recorder's monotonic
+  // elapsed time, and it outlives `pausing`: a container flush takes a moment,
+  // and flashing the strip back to 0:00 while it lands reads as a lost take.
+  // Only a take that ended or failed clears it.
+  const [captureElapsed, setCaptureElapsed] = useState(0);
   const [live, setLive] = useState<number[]>([]);
   const [decoded, setDecoded] = useState<number[]>([]);
   useEffect(() => {
-    if (status !== "recording") { setElapsed(0); setLive([]); return; }
+    if (status === "idle" || status === "error") { setCaptureElapsed(0); setLive([]); return; }
     if (recorder.state.status === "recording") {
-      setElapsed(recorder.state.elapsedMs); setLive(recorder.state.peaks);
+      setCaptureElapsed(recorder.state.elapsedMs); setLive(recorder.state.peaks);
     }
     return recorder.subscribe((next) => {
-      if (next.status === "recording") { setElapsed(next.elapsedMs); setLive(next.peaks); }
+      if (next.status === "recording") { setCaptureElapsed(next.elapsedMs); setLive(next.peaks); }
     });
   }, [recorder, status]);
   // A note recorded where the live meter is unavailable still gets a real
@@ -529,13 +589,23 @@ function VoiceDraft({ recorder, status, recording, notice, url, snapshot, sendin
   if (status === "review" && recording) {
     const playing = snapshot.playingId === "voice-draft";
     const position = playing ? Math.min(snapshot.positionMs, recording.durationMs) : 0;
-    return <VoiceRecordingPanel phase="review" peaks={reviewPeaks} playing={playing}
-      elapsedMs={playing ? position : recording.durationMs} percent={voiceProgressPercent(position, recording.durationMs)}
-      previewReady={!!url} canResume={recorder.canResume} sending={sending} allowed={allowed}
-      onPreview={onPreview} onPause={onStop} onResume={onResume} onDiscard={onDiscard} onSend={onSend} />;
+    // The preview clock may sit anywhere; the minute sweep and the ceiling
+    // always read the capture clock that produced this take.
+    return <>
+      <VoiceRecordingPanel phase="review" peaks={reviewPeaks} playing={playing}
+        elapsedMs={playing ? position : recording.durationMs} percent={voiceProgressPercent(position, recording.durationMs)}
+        captureElapsedMs={recording.durationMs} captureLimitMs={VOICE_MAX_MS}
+        previewReady={!!url} canResume={recorder.canResume} sending={sending} allowed={allowed}
+        onPreview={onPreview} onPause={onStop} onResume={onResume} onDiscard={onDiscard} onSend={onSend} />
+      {recording.durationMs >= VOICE_MAX_MS && <p className="fb-chat-voice-limit" role="status">
+        5-minute limit reached. Send this note, or discard it and record another.
+      </p>}
+    </>;
   }
   return <VoiceRecordingPanel phase={status === "pausing" ? "pausing" : "recording"}
-    peaks={livePeaks(live)} elapsedMs={elapsed} percent={0} playing={false}
+    peaks={livePeaks(live)} elapsedMs={captureElapsed} percent={0} playing={false}
+    captureElapsedMs={captureElapsed} captureLimitMs={VOICE_MAX_MS}
+    sending={sending} allowed={allowed}
     onPreview={onPreview} onPause={onStop} onResume={onResume} onDiscard={onDiscard} onSend={onSend} />;
 }
 
@@ -626,21 +696,36 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
     paneToggle.current?.focus({ preventScroll: true });
   }, [pane?.collapsed]);
   // One backup ticker per open Chat surface; it stops when the last one closes.
+  // The badge is presentation: a routine refresh revokes authority for one pass,
+  // and a request count must not flicker. Nothing here grants an action.
   const requests = chat.conversations.filter(row => {
-    const view = chat.currentProjections?.[row.conversationId] ?? row.cachedProjection;
-    return !view?.ownHidden && !view?.ownDeclined && view?.mode === "REQUEST" && view.request === "INCOMING";
+    const shown = presentationProjection(chat, accountId, row.conversationId, row.cachedProjection);
+    return !!shown && !shown.ownHidden && !shown.ownDeclined
+      && shown.mode === "REQUEST" && shown.request === "INCOMING";
   }).length;
+  // A row's hidden/dismissed state is a durable local privacy fact, not a
+  // relationship: the accepted view answers while it exists, and an explicit
+  // clear may only fall back to this account's own cached hide/dismiss flags.
+  // Mode, request, mute and every gate still come from `current` alone.
+  const privacy = (shown: ConversationProjection | null, row: (typeof chat.conversations)[number]) => {
+    if (shown) return { hidden: shown.ownHidden, declined: shown.ownDeclined };
+    const cached = chat.accountId === accountId ? row.cachedProjection : undefined;
+    return { hidden: cached?.ownHidden === true, declined: cached?.ownDeclined === true };
+  };
   const normalized = query.trim().replace(/^@/, "").toLowerCase();
   const rows = chat.conversations.filter((row) => {
-    const view = chat.currentProjections?.[row.conversationId] ?? row.cachedProjection;
-    const dismissed = view?.ownHidden || view?.ownDeclined;
+    // Presentation only; the row's send/read gates are elsewhere and stay live.
+    const shown = presentationProjection(chat, accountId, row.conversationId, row.cachedProjection);
+    const { hidden, declined } = privacy(shown, row);
+    const dismissed = hidden || declined;
     if (normalized && !`${labels.get(row.peerId) ?? ""} ${identities.get(row.peerId)?.username ?? ""} ${row.lastMessage?.unsentAt === undefined ? row.lastMessage?.body ?? "" : ""}`.toLowerCase().includes(normalized)) return false;
     if (filter === "Archived") return dismissed;
     // A name search is also how a hidden chat is found again: show it with its
-    // real state ("Archived" / "Hidden request") so it can be opened and moved
-    // back to the inbox. Browsing All stays the clean inbox.
+    // known state ("Archived" / "Hidden request", or "Hidden conversation" when
+    // only the local flag survives) so it can be opened and moved back to the
+    // inbox. Browsing All stays the clean inbox.
     if (dismissed && !normalized) return false;
-    if (filter === "Requests") return view?.mode === "REQUEST" && view.request === "INCOMING";
+    if (filter === "Requests") return !!shown && shown.mode === "REQUEST" && shown.request === "INCOMING";
     if (filter === "Unread") return row.unreadCount > 0;
     return true;
   });
@@ -678,10 +763,15 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
       <ul>
         {rows.map((row) => {
           const name = labels.get(row.peerId);
+          // Authority for the report card's concealment; presentation for the
+          // row's relationship label. They are never the same variable.
           const view = chat.currentProjections?.[row.conversationId] ?? row.cachedProjection;
-          const state = view?.ownBlocked ? "Blocked by you" : view?.ownHidden ? (view.mode === "CONNECTED" ? "Archived" : "Hidden request")
-            : view?.ownDeclined ? "Dismissed" : view?.mode === "CONNECTED" ? "Friends"
-              : view?.request === "INCOMING" ? "Message request" : view?.request === "OUTGOING" ? "Request sent" : "Conversation";
+          const shown = presentationProjection(chat, accountId, row.conversationId, row.cachedProjection);
+          const flags = privacy(shown, row);
+          const state = shown?.ownBlocked ? "Blocked by you" : shown?.ownHidden ? (shown.mode === "CONNECTED" ? "Archived" : "Hidden request")
+            : shown?.ownDeclined ? "Dismissed" : shown?.mode === "CONNECTED" ? "Friends"
+              : shown?.request === "INCOMING" ? "Message request" : shown?.request === "OUTGOING" ? "Request sent"
+              : flags.hidden ? "Hidden conversation" : flags.declined ? "Dismissed" : "Conversation";
           const person = identities.get(row.peerId);
           // One hit target: the name and avatar open the conversation, exactly
           // like the rest of the row. The profile lives in the conversation
@@ -719,6 +809,20 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
 const MAX_STAGED_PHOTOS = 10;
 
 /**
+ * One picked file, classified by what the platform actually named it. A video
+ * keeps the private file lane and is never decoded as a still; a browser that
+ * could not name the format at all keeps the canonical photo lane, which sniffs
+ * and refuses what it cannot read. Everything else is refused here, before any
+ * preparation, so a document never becomes a broken "photo".
+ */
+function stagedKindOf(file: File): "photo" | "video" | null {
+  const type = file.type.toLowerCase();
+  if (type.startsWith("video/")) return "video";
+  if (type.startsWith("image/") || type === "") return "photo";
+  return null;
+}
+
+/**
  * Layers that own the next Escape/Back even when focus sits outside them: the
  * canonical modal stack covers dialogs and sheets, and this selector covers the
  * ones that are not registered there (the phone navigation drawer and the
@@ -730,13 +834,16 @@ const OPEN_LAYER_SELECTOR = "[aria-modal='true'], [role='menu'], [role='listbox'
 interface StagedChatPhoto {
   key: string;
   /** `photo` uses the canonical still media lane; `animation` keeps its bytes
-   *  for the existing private file lane so frames/alpha are not flattened. */
-  kind?: "photo" | "animation";
+   *  for the existing private file lane so frames/alpha are not flattened;
+   *  `video` travels that same file lane and gets no invented poster. */
+  kind?: "photo" | "animation" | "video";
   source?: File;
   prepared?: PreparedMessagingPhoto;
-  /** Animation bytes (GIF/WebP/APNG), already sanitized and bounded. */
+  /** File bytes for the private file lane (an animation or a video). */
   file?: File;
   animated?: boolean;
+  /** The picked file's own name, shown where a video has no preview frame. */
+  name?: string;
   width?: number;
   height?: number;
   /** Object URL of the prepared bytes; only present once preparation succeeded. */
@@ -783,6 +890,10 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
   const row = chat.conversations.find((entry) => entry.conversationId === conversationId);
   const current = chat.currentProjections?.[conversationId];
   const view = current ?? row?.cachedProjection;
+  // Presentation only: the label, mute state and management-row presence may
+  // survive a routine pass, while `current`, `threadLive` and `threadBlocked`
+  // remain the sole authority for every send, read, receipt and media gate.
+  const presentationView = presentationProjection(chat, accountId, conversationId, row?.cachedProjection);
   const photoAllowed = view?.mode === "CONNECTED" && !view.ownBlocked && chat.accountId === accountId;
   const labels = useLabels(accountId, row ? [row.peerId] : []);
   const person = row ? labels.get(row.peerId) : undefined;
@@ -860,9 +971,10 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
   // Captured before every await and compared again at tray mutation and send.
   const conversationOwner = useRef({ accountId, conversationId });
   conversationOwner.current = { accountId, conversationId };
-  // Per-animation admission ids survive an uncertain send, so a retry of the
-  // same staged GIF is never a second message.
-  const animationAdmissions = useRef(new Map<string, { messageId: string; createdAt: number }>());
+  // Per-file admission ids and the caption that first travelled with them
+  // survive an uncertain send, so a retry of the same staged animation or video
+  // is never a second message and never picks up text typed after the failure.
+  const fileAdmissions = useRef(new Map<string, { messageId: string; createdAt: number; caption: string }>());
   const [composerFocused, setComposerFocused] = useState(false);
   // A press on the composer is an earlier signal than its focus event, so the
   // native flag can be set while the IME is still opening. It only widens WHEN
@@ -913,7 +1025,12 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
   // either way.
   const voiceAtRisk = voiceActive && voiceSendPhase !== "sending";
   const hasUnsentWork = draft.trim() !== "" || photos.length > 0 || voiceAtRisk;
-  const stagedAttachments = photos.some((item) => item.kind === "animation");
+  const stagedVideos = photos.some((item) => item.kind === "video");
+  const stagedAttachments = stagedVideos || photos.some((item) => item.kind === "animation");
+  // Only a prepared still or animation has a frame to review; a video has no
+  // poster, so the shared viewer counts and pages through the frames that
+  // actually exist instead of inventing one.
+  const reviewablePhotos = photos.filter((item) => !!item.url && (!!item.prepared || !!item.file));
   const unsentParts = [
     draft.trim() !== "" ? "message" : null,
     photos.length > 0 ? (stagedAttachments ? "attachments" : "photos") : null,
@@ -1221,7 +1338,7 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
       const item = list.find((entry) => entry.key === key);
       if (item) releaseStagedUrl(item);
       photoAdmissions.current.delete(key);
-      animationAdmissions.current.delete(key);
+      fileAdmissions.current.delete(key);
       return list.filter((entry) => entry.key !== key);
     });
     setAdmissionFailed(false);
@@ -1248,7 +1365,7 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
   async function retryStaged(item: StagedChatPhoto) {
     if (!item.source) { removeStaged(item.key); return; }
     photoAdmissions.current.delete(item.key);
-    animationAdmissions.current.delete(item.key);
+    fileAdmissions.current.delete(item.key);
     setPhotos((list) => list.map((entry) => entry.key === item.key ? { ...entry, preparing: true, error: false } : entry));
     await prepareStaged(item, item.source);
   }
@@ -1385,17 +1502,63 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
     } catch { setError("Could not open that photo. Please try again."); }
     finally { picking.current = false; }
   }
-  /** Web/browser pick: the same staged tray, prepared through the codec. */
+  /**
+   * A video joins the same review tray but keeps its own bytes: the private
+   * file lane carries it unchanged, and no poster frame is invented for it.
+   * The slot names the file instead of pretending to be a photo.
+   */
+  function stageVideo(slot: StagedChatPhoto, file: File) {
+    setPhotos((list) => list.map((entry) => entry.key === slot.key
+      ? { ...entry, kind: "video", file, name: file.name, preparing: false, error: false }
+      : entry));
+  }
+  /**
+   * Web/browser pick: one selection may mix photos and videos. A still goes
+   * through the canonical codec and its retry identity; a video skips decoding
+   * and is staged with the same admission rules the tray already applies.
+   */
   async function stageLocalFiles(files: File[]) {
+    // A picker or camera can resolve after the conversation changed, or while
+    // another send owns the composer. Without the same canonical gates the
+    // paste path uses, a request or blocked thread would still accept items
+    // that Send can never take, leaving an unsendable tray.
+    if (!runtimeOpen || !row) return;
+    if (!photoAllowed) { setError("Photos and videos are available when you're friends."); return; }
+    if (photoSending || filesSending || admissionFailed || requestAccepting || voiceSending) {
+      setError("Wait for the current send to finish before adding an attachment.");
+      return;
+    }
+    const owner = { ...conversationOwner.current };
+    const usable = files.filter((file) => stagedKindOf(file) !== null);
+    if (usable.length < files.length) setError("Only photos and videos can be added here.");
     const room = Math.max(0, MAX_STAGED_PHOTOS - photos.length);
-    const accepted = files.slice(0, room);
-    if (accepted.length === 0) { setError(`You can send up to ${MAX_STAGED_PHOTOS} photos at once.`); return; }
+    // A clip travels the file lane, so it must pass that lane's gate before it
+    // takes a review slot: a slot holding a file that can never be sent would
+    // fail on Send with no way back except removing it by hand.
+    const accepted: File[] = [];
+    let refusal: string | null = null;
+    for (const file of usable.slice(0, room)) {
+      const problem = stagedKindOf(file) === "video" ? validateChatFile(file) : null;
+      if (problem) { refusal ??= problem; continue; }
+      accepted.push(file);
+    }
+    if (refusal) setError(refusal);
+    if (accepted.length === 0) {
+      if (usable.length > 0 && !refusal) setError(`You can send up to ${MAX_STAGED_PHOTOS} attachments at once.`);
+      return;
+    }
     const slots = reserveStaged(accepted.length);
     for (const [index, file] of accepted.entries()) {
       const slot = slots[index];
-      if (slot) await prepareStaged(slot, file);
+      if (!slot) continue;
+      // A still preparation yields, so the rest of the selection must be
+      // checked against the owner that started it before staging anything.
+      if (!alive.current || conversationOwner.current.accountId !== owner.accountId
+        || conversationOwner.current.conversationId !== owner.conversationId) return;
+      if (stagedKindOf(file) === "video") stageVideo(slot, file);
+      else await prepareStaged(slot, file);
     }
-    if (accepted.length < files.length) setError(`Only ${MAX_STAGED_PHOTOS} photos can be reviewed at once. The first ${accepted.length} were added.`);
+    if (!refusal && accepted.length < usable.length) setError(`Only ${MAX_STAGED_PHOTOS} attachments can be reviewed at once. The first ${accepted.length} were added.`);
   }
   useEffect(() => {
     const update = () => setVisible(document.visibilityState === "visible");
@@ -1883,7 +2046,7 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
         // stack intact. The caption rides the first message that actually
         // leaves, whichever lane carries it. A retry keeps the instant (and,
         // for an animation, the message id) of the admission that already left.
-        const prior = [...photoAdmissions.current.values(), ...animationAdmissions.current.values()];
+        const prior = [...photoAdmissions.current.values(), ...fileAdmissions.current.values()];
         const batchCreatedAt = prior.length > 0
           ? Math.min(...prior.map((entry) => entry.createdAt))
           : Date.now();
@@ -1891,6 +2054,10 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
         for (const item of photos) {
           const admissionKey = item.key;
           const caption = consumed ? "" : body;
+          // The caption this item actually carries. A retry reuses the caption
+          // its first attempt stored, so text typed after the failure is not
+          // silently dropped by the success that clears the field below.
+          let sentCaption = "";
           if (item.prepared) {
             const { bytes, ...info } = item.prepared;
             const attempt = photoAdmissions.current.get(admissionKey) ?? { caption,
@@ -1899,38 +2066,44 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
               metadata: { ...info, durationMs: null,
                 id: crypto.randomUUID(), messageId: crypto.randomUUID(), direction: "OUT" as const, expiresAt: null } };
             photoAdmissions.current.set(admissionKey, attempt);
-            await sendMessagingMedia(accountId, conversationId, row.peerId, attempt.caption, attempt.metadata, bytes, replyTargetId, attempt.createdAt);
+            sentCaption = attempt.caption;
+            await sendMessagingMedia(accountId, conversationId, row.peerId, sentCaption, attempt.metadata, bytes, replyTargetId, attempt.createdAt);
             photoAdmissions.current.delete(admissionKey);
           } else if (item.file) {
             const problem = validateChatFile(item.file);
             if (problem) throw new Error(problem);
-            const admission = animationAdmissions.current.get(admissionKey) ?? {
-              messageId: crypto.randomUUID(), createdAt: batchCreatedAt,
+            // The file lane keeps its own message id, the batch's composition
+            // instant and the caption it first carried, so a refused animation
+            // or video retries the same message inside the same media run
+            // instead of starting a new one at the retry time.
+            const fileAdmission = fileAdmissions.current.get(admissionKey) ?? {
+              messageId: crypto.randomUUID(), createdAt: batchCreatedAt, caption,
             };
-            animationAdmissions.current.set(admissionKey, admission);
+            fileAdmissions.current.set(admissionKey, fileAdmission);
+            sentCaption = fileAdmission.caption;
             const meta = await uploadChatFile(item.file, { userId: accountId, conversationId });
             try {
               await sendMessagingText(accountId, conversationId, row.peerId,
-                chatFileBody(meta, caption), undefined, replyTargetId, admission.messageId);
+                chatFileBody(meta, sentCaption), undefined, replyTargetId, fileAdmission.messageId, undefined, fileAdmission.createdAt);
             } catch (error) {
               // A refusal removes the object it uploaded, so retry never leaves
               // bytes the transcript cannot name.
               await removeChatFile(meta.key);
               throw error;
             }
-            animationAdmissions.current.delete(admissionKey);
+            fileAdmissions.current.delete(admissionKey);
           } else {
             // The readiness guard above makes this unreachable; never send a
             // half-prepared item.
             throw new Error("Attachment not ready");
           }
-          // The caption belonged to the first message that actually left, so
-          // clear the draft as soon as it is carried, not at the end of a bulk
-          // send that may still fail on a later item.
+          // Clear only the text this message carried. A retry that sends the
+          // caption from its first attempt must leave a newer edit in place for
+          // the reader to send as its own message.
           if (!consumed && stillOwner()) {
             consumed = true;
             transcript.followLatest();
-            if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+            if (sentCaption === body && draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
             setReplyTo(null);
           }
           if (stillOwner()) setPhotos((list) => {
@@ -1987,7 +2160,7 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
         if (view?.mode === "REQUEST" && view.request === "INCOMING"
           && !(await acceptIncomingRequestForReply())) return;
         await admitText({ id: crypto.randomUUID(), conversationId, authorId: accountId, recipientId: row.peerId,
-          body: item.mediaUrl, messageType: "TEXT", createdAt: Date.now(), ...(replyTargetId ? { replyToId: replyTargetId } : {}) },
+          body: klipyMessageBody(item), messageType: "TEXT", createdAt: Date.now(), ...(replyTargetId ? { replyToId: replyTargetId } : {}) },
           releaseAdmission);
         if (!alive.current) return;
         transcript.followLatest();
@@ -2020,6 +2193,9 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
     const releaseAdmission = () => { if (admissionLatch.current === latch) admissionLatch.current = null; };
     const sendingRevision = draftRevision.current;
     const replyTargetId = replyTo?.id;
+    // One pick is one composition: every file it carries is stamped with the
+    // same instant, taken before the first upload yields.
+    const batchCreatedAt = Date.now();
     let caption = draft.trim();
     let leaving = false;
     setError(null); setSendStatus(null); setFilesSending(true);
@@ -2027,9 +2203,13 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
       for (const file of picked) {
         const problem = validateChatFile(file);
         if (problem) { setError(problem); continue; }
+        // A deliberate pick is a new message, and its identity is fixed before
+        // the upload so a retry inside this pass can never duplicate it.
+        const messageId = crypto.randomUUID();
         const meta = await uploadChatFile(file, { userId: accountId, conversationId });
         try {
-          await sendMessagingText(accountId, conversationId, row.peerId, chatFileBody(meta, caption), undefined, replyTargetId);
+          await sendMessagingText(accountId, conversationId, row.peerId, chatFileBody(meta, caption),
+            undefined, replyTargetId, messageId, undefined, batchCreatedAt);
         } catch (error) {
           await removeChatFile(meta.key);
           throw error;
@@ -2163,22 +2343,33 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
   const gallery = photoAllowed ? messages.filter(message => message.messageType === "MEDIA" && message.unsentAt === undefined)
     .flatMap(message => { const attachment = media.find(item => item.messageId === message.id); return attachment ? [attachment] : []; }) : [];
   const confirming = sheet === "end" || sheet === "delete" || sheet === "unsend" || sheet === "clear";
+  // One ordered partition of the transcript: a lone message is its own row, and
+  // consecutive photos/videos inside the rolling window become one bounded
+  // album. The window is the only grouping key the stored rows carry; it is not
+  // proof of a real picker batch, so two quick separate sends can share a run.
+  const mediaRuns = useMemo(() => buildMediaRuns(messages, media), [messages, media]);
+  const messageIndexes = useMemo(() => new Map(messages.map((message, index) => [message.id, index] as const)), [messages]);
   const confirmationTitle = sheet === "end" ? "Remove friend?" : sheet === "unsend" ? "Unsend message?" : sheet === "clear" ? "Clear chat for me?" : "Delete for me?";
   // One action list, rendered in the wide third pane and in the compact sheet.
   const conversationInfo = <div className="fb-chat-sheet">
     {person?.username && <Link className="fb-chat-info-row" to={`/u/${encodeURIComponent(person.username)}`}><UserRound size={20} aria-hidden="true" /><span>View profile</span></Link>}
     <button type="button" className="fb-chat-info-row" onClick={() => setSheet("search")}><Search size={20} aria-hidden="true" /><span>Search chat</span></button>
     <button type="button" className="fb-chat-info-row" onClick={() => setSheet("media")}><Images size={20} aria-hidden="true" /><span>Media</span></button>
-    {locationAllowed && <button type="button" className="fb-chat-info-row" onClick={() => setSheet("location")}><MapPin size={20} aria-hidden="true" /><span>Share location</span></button>}
+    {presentationView?.mode === "CONNECTED" && !presentationView.ownBlocked && !presentationView.ownDeclined
+      && <button type="button" className="fb-chat-info-row" disabled={!locationAllowed}
+        onClick={() => { if (locationAllowed) setSheet("location"); }}><MapPin size={20} aria-hidden="true" /><span>Share location</span></button>}
     <hr className="fb-chat-info-divider" />
-    {typeof view?.ownMuted === "boolean" ? <PreferenceSwitchRow className="fb-chat-mute" title="Mute notifications" icon={BellOff}
-      checked={view.ownMuted} disabled={busy || chat.status !== "ready" || typeof current?.ownMuted !== "boolean"}
+    {typeof presentationView?.ownMuted === "boolean" ? <PreferenceSwitchRow className="fb-chat-mute" title="Mute notifications" icon={BellOff}
+      checked={presentationView.ownMuted} disabled={busy || chat.status !== "ready" || typeof current?.ownMuted !== "boolean"}
       onChange={muted => void setMuted(muted)} /> : <p className="fb-chat-secondary">Sync to change chat notifications.</p>}
     <RetrySync accountId={accountId} labelled />
     <Link className="fb-chat-info-row" to="/settings/privacy/messages"><Settings2 size={20} aria-hidden="true" /><span>Message settings</span></Link>
     <hr className="fb-chat-info-divider" />
-    <button type="button" className="fb-chat-info-row" disabled={busy || !current} onClick={() => void relationship(view?.ownHidden ? "unhide" : "hide")}><Archive size={20} aria-hidden="true" /><span>{view?.ownHidden ? "Move to inbox" : view?.mode === "CONNECTED" ? "Archive" : "Hide request"}</span></button>
-    {view?.mode === "CONNECTED" && <button type="button" className="fb-chat-info-row" disabled={busy || !current} onClick={() => setSheet("end")}><LogOut size={20} aria-hidden="true" /><span>Remove friend</span></button>}
+    {presentationView && <button type="button" className="fb-chat-info-row" disabled={busy || !current}
+      onClick={() => { if (!current) return; void relationship(current.ownHidden ? "unhide" : "hide"); }}>
+      <Archive size={20} aria-hidden="true" /><span>{presentationView.ownHidden ? "Move to inbox" : presentationView.mode === "CONNECTED" ? "Archive" : "Hide request"}</span></button>}
+    {presentationView?.mode === "CONNECTED" && <button type="button" className="fb-chat-info-row" disabled={busy || !current}
+      onClick={() => { if (current?.mode === "CONNECTED") setSheet("end"); }}><LogOut size={20} aria-hidden="true" /><span>Remove friend</span></button>}
     <button type="button" className="fb-chat-info-row" disabled={busy || !current || highest === 0 || outbox.length > 0} onClick={() => setSheet("clear")}><Trash2 size={20} aria-hidden="true" /><span>Clear chat for me</span></button>
     {outbox.length > 0 && <p className="fb-chat-secondary">Wait for messages still sending before clearing this chat.</p>}
     <hr className="fb-chat-info-divider" />
@@ -2188,13 +2379,13 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
   </div>;
   return <ChatDetailsLayout details={conversationInfo} onCompactOpen={() => setSheet("actions")}
     identity={<><UserAvatar username={name || person?.username} avatarUrl={person?.avatarUrl} size={72} shape="squircle" />
-      <strong dir="auto">{name || "Conversation"}</strong><span className="fb-chat-secondary">{!view ? "Saved chat" : view.mode === "CONNECTED" ? "Friends" : "Message request"}</span></>}>
+      <strong dir="auto">{name || "Conversation"}</strong><span className="fb-chat-secondary">{!presentationView ? "Saved chat" : presentationView.mode === "CONNECTED" ? "Friends" : "Message request"}</span></>}>
     {detailsToggle => <section className="fb-chat-page" aria-label="Conversation">
     <header className="fb-chat-header">
       <Link to="/chats" className="fb-chat-icon" aria-label="Back to chats" {...hoverLabel("Back to chats")}><ArrowLeft size={22} aria-hidden="true" /></Link>
-      <ChatIdentity peerId={row?.peerId} name={name} username={person?.username} avatarUrl={person?.avatarUrl} muted={view?.ownMuted === true}
+      <ChatIdentity peerId={row?.peerId} name={name} username={person?.username} avatarUrl={person?.avatarUrl} muted={presentationView?.ownMuted === true}
         conversationId={conversationId}
-        status={!view ? "Saved chat" : view.mode === "CONNECTED" ? "Friends" : "Message request"} />
+        status={!presentationView ? "Saved chat" : presentationView.mode === "CONNECTED" ? "Friends" : "Message request"} />
       {detailsToggle}
       {wideApp && <><RetrySync accountId={accountId} /><TopUtilities /></>}
     </header>
@@ -2246,7 +2437,49 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
         </div>}
       </div>}
       <ol className="fb-chat-transcript" aria-label="Messages">
-        {messages.map((message, index) => {
+        {mediaRuns.map((run) => {
+          const first = run.messages[0]!;
+          const grouped = run.kind === "group";
+          const firstIndex = messageIndexes.get(first.id) ?? 0;
+          // One day chip per calendar day keeps a long thread readable without
+          // making every bubble carry a date. A run never spans a local day, so
+          // its first message is the only member that can open one.
+          const day = first.createdAt ? formatChatDay(first.createdAt) : "";
+          const before = firstIndex > 0 ? messages[firstIndex - 1] : undefined;
+          const opensDay = !!day && day !== (before?.createdAt ? formatChatDay(before.createdAt) : "");
+          // An odd album opens with one wide cell, so a three-photo album reads
+          // as a tall-left 3-up instead of ending in a hole. An album that
+          // carries anything wider than a picture stacks in one column: a clip
+          // needs the full width for its own transport, and a caption, quote or
+          // report card needs it to stay readable and attached to its own item.
+          const stacked = grouped && run.messages.some((message) => {
+            const marker = parseChatFileMarker(message.body);
+            if (marker?.kind === "video") return true;
+            const caption = marker ? chatFileCaption(message.body) : message.body;
+            return caption.trim() !== "" || !!message.replyToId || !!message.contextReportId;
+          });
+          const wideFirst = grouped && !stacked && run.messages.length % 2 === 1;
+          const ownRun = first.authorId === accountId;
+          return <Fragment key={first.id}>
+            {opensDay && <li className="fb-chat-day" role="presentation"><span>{day}</span></li>}
+            {/* Consecutive media inside one rolling window is one bounded
+                album; a lone message is the ordinary line. The album stays a
+                native list item with a name, so its members are never wrapped
+                in a second node. The row inside keeps the same element in both
+                shapes, so gaining a second photo never remounts the first
+                picture, its player or its scroll anchor. The swipe is a
+                single-message gesture: inside an album the long-press and the
+                corner menu carry the same actions. */}
+            <motion.li aria-label={grouped ? mediaRunLabel(run.messages) : undefined}
+              drag={!grouped && canCompose && first.unsentAt === undefined ? "x" : false}
+              dragDirectionLock dragConstraints={{ left: 0, right: 0 }} dragElastic={0.18}
+              onDragEnd={(_event, info: PanInfo) => {
+                if (grouped || first.unsentAt !== undefined || !canCompose) return;
+                if (replySwipeFor(info.offset.x, ownRun)) startReply(first);
+              }}
+              className={grouped ? `fb-chat-run${stacked ? " fb-chat-run-stack" : ""}${ownRun ? " fb-chat-run-own" : ""}`
+                : ownRun ? "fb-chat-line fb-chat-line-own" : "fb-chat-line"}>
+            {run.messages.map((message, member) => {
           const own = message.authorId === accountId;
           const attachment = media.find((entry) => entry.messageId === message.id);
           const statusMembers = [message];
@@ -2268,11 +2501,6 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
           const mediaOnly = isMediaOnlyMessage(message, attachment, {
             actionable: !!localFailed || !!reviewMember || !!failedMember || removableMembers.length > 0,
           });
-          // One day chip per calendar day keeps a long thread readable without
-          // making every bubble carry a date.
-          const day = message.createdAt ? formatChatDay(message.createdAt) : "";
-          const before = index > 0 ? messages[index - 1] : undefined;
-          const opensDay = !!day && day !== (before?.createdAt ? formatChatDay(before.createdAt) : "");
           const quoted = message.replyToId ? messages.find((entry) => entry.id === message.replyToId) : undefined;
           const quotedAttachment = quoted?.messageType === "MEDIA" && quoted.unsentAt === undefined
             ? media.find((entry) => entry.messageId === quoted.id) : undefined;
@@ -2285,21 +2513,15 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
           const klipyOnly = message.unsentAt === undefined && message.messageType === "TEXT"
             && !attachment && !message.replyToId && !message.contextReportId && !message.location
             && isBareKlipyMediaBody(message.body);
+          // The kind is read from the same body that was just proven to be one
+          // bare provider URL. Pre-marker history answers `unknown`, so the
+          // surface never calls an old sticker a GIF.
+          const klipyKind = message.unsentAt === undefined && isBareKlipyMediaBody(message.body)
+            ? klipyMessageKind(message.body) : null;
           const file = message.unsentAt === undefined ? parseChatFileMarker(message.body) : null;
           const flashClass = flash?.id === message.id ? ` fb-chat-flash-${flash.nonce % 2 ? "a" : "b"}` : "";
-          return <Fragment key={message.id}>
-            {opensDay && <li className="fb-chat-day" role="presentation"><span>{day}</span></li>}
-          {/* The swipe and the menu reach the same reply. Your own bubble
-              answers with a right-to-left pull, a received one left-to-right —
-              the direction each bubble already points. */}
-          <motion.li data-chat-message={message.id} tabIndex={-1}
-            drag={canCompose && message.unsentAt === undefined ? "x" : false}
-            dragDirectionLock dragConstraints={{ left: 0, right: 0 }} dragElastic={0.18}
-            onDragEnd={(_event, info: PanInfo) => {
-              if (message.unsentAt !== undefined || !canCompose) return;
-              if (replySwipeFor(info.offset.x, own)) startReply(message);
-            }}
-            className={own ? "fb-chat-line fb-chat-line-own" : "fb-chat-line"}>
+          return <div key={message.id} data-chat-message={message.id} tabIndex={-1}
+            className={`fb-chat-line-row${wideFirst && member === 0 ? " fb-chat-line-row-wide" : ""}`}>
             {/* The same contextual layer the feed and the report card use: a
                 400 ms hold (or right-click / Shift+F10) opens the app's own
                 menu anchored to this bubble, never a bottom sheet. */}
@@ -2333,7 +2555,9 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
               {chatFileCaption(message.body) !== "" && <ChatMessageText body={chatFileCaption(message.body)}
                 contextReportId={message.contextReportId} renderReportPreview={reportPreview} />}
             </> : message.body && message.unsentAt === undefined && isBareKlipyMediaBody(message.body)
-              ? <img className="fb-chat-klipy" src={message.body.trim()} alt="Sticker or GIF"
+              ? <img className="fb-chat-klipy" src={klipyMessageUrl(message.body)}
+                  data-media-kind={klipyKind ?? "unknown"}
+                  alt={klipyKind === "gif" ? "GIF" : klipyKind === "sticker" ? "Sticker" : "Sticker or GIF"}
                   loading="lazy" referrerPolicy="no-referrer" />
               : message.body ? (isChatFileMarkerBody(message.body)
                   ? <p dir="auto" className={emojiOnly ? "fb-chat-emoji-only" : undefined}>{message.body}</p>
@@ -2351,6 +2575,7 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
               {statusMessage.createdAt ? <time className="fb-chat-time" dateTime={new Date(statusMessage.createdAt).toISOString()}>
                 {new Date(statusMessage.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
               </time> : null}
+              {klipyKind && <span className="fb-chat-expressive-kind">{klipyPreviewLabel(klipyKind)}</span>}
               {own && <>{localFailed ? "Not sent"
                 : reviewMember ? "Needs review"
                 : failedMember ? (failedMember.messageType === "VOICE" ? "Voice saved" : failedMember.messageType === "MEDIA" ? "Photo saved" : "Message saved")
@@ -2421,7 +2646,9 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
             </>}
             </>}
             </LongPressArea>
-          </motion.li>
+          </div>;
+            })}
+            </motion.li>
           </Fragment>;
         })}
       </ol>
@@ -2438,10 +2665,17 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
     {photos.length > 0 && <div className="fb-chat-photo-draft" role="group"
       aria-label={`${photos.length} ${stagedAttachments ? "attachment" : "photo"}${photos.length === 1 ? "" : "s"} to send`}>
       <ul className="fb-chat-photo-strip">
-        {photos.map((item, index) => <li key={item.key} className="fb-chat-photo-slot">
-          {item.url && (item.prepared || item.file)
+        {photos.map((item, index) => {
+          const reviewIndex = reviewablePhotos.findIndex((entry) => entry.key === item.key);
+          return <li key={item.key} className="fb-chat-photo-slot">
+          {item.kind === "video"
+            ? <span className="fb-chat-photo-open fb-chat-photo-video">
+                <Film size={20} aria-hidden="true" />
+                <span className="fb-chat-photo-video-name">{item.name || "Video"}</span>
+              </span>
+            : item.url && (item.prepared || item.file)
             ? (photoAllowed
-                ? <button type="button" className="fb-chat-photo-open" aria-label={`Review ${stagedAttachments ? "attachment" : "photo"} ${index + 1} of ${photos.length}`}
+                ? <button type="button" className="fb-chat-photo-open" aria-label={`Review photo ${reviewIndex + 1} of ${reviewablePhotos.length}`}
                     onClick={() => { setViewer(null); setDraftViewer({ key: item.key }); }}>
                     <img src={item.url} alt="" />
                   </button>
@@ -2453,7 +2687,8 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
           <button type="button" className="fb-chat-photo-remove" aria-label={`Remove ${stagedAttachments ? "attachment" : "photo"} ${index + 1}`}
             disabled={photoSending || admissionFailed} onClick={() => removeStaged(item.key)}
             {...hoverLabel(stagedAttachments ? "Remove attachment" : "Remove photo")}><X size={14} aria-hidden="true" /></button>
-        </li>)}
+        </li>;
+        })}
       </ul>
       <div className="fb-chat-photo-options">
         <p role="status" className="fb-chat-secondary">
@@ -2461,7 +2696,8 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
             : photoSending ? `Sending ${stagedAttachments ? "attachments" : "photos"}…`
             : photos.some(item => item.preparing) ? "Preparing attachments…"
             : photos.some(item => item.error) ? "Some attachments could not be prepared. Retry or remove them."
-            : `${photos.length} ${stagedAttachments ? "attachment" : "photo"}${photos.length === 1 ? "" : "s"} ready. Tap one to review.`}
+            : `${photos.length} ${stagedAttachments ? "attachment" : "photo"}${photos.length === 1 ? "" : "s"} ready. ${reviewablePhotos.length === 0 ? "Tap Send to share."
+              : stagedVideos ? "Tap a photo to review." : "Tap one to review."}`}
         </p>
         {photoAllowed && photos.some(item => item.error) && <button type="button" disabled={photoSending}
           onClick={() => { for (const item of photos) if (item.error) void retryStaged(item); }}>Retry</button>}
@@ -2475,7 +2711,7 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
       onPreview={() => void previewVoice()} />
     {canCompose && (voiceStatus === "idle" || voiceStatus === "error") && <>
         {view?.mode === "CONNECTED" && <>
-          <input ref={photoInput} type="file" accept="image/*" multiple aria-label="Photo file input" hidden onChange={(event) => {
+          <input ref={photoInput} type="file" accept="image/*,video/*" multiple aria-label="Photo file input" hidden onChange={(event) => {
             const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = "";
             if (files.length > 0 && Capacitor.getPlatform() !== "android") void stageLocalFiles(files);
           }} />
@@ -2485,7 +2721,7 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
         canSend={runtimeOpen && !requestAccepting && (photos.length > 0 ? photoAllowed && photos.every(item => !!item.prepared || !!item.file) : !!draft.trim())}
         photoAllowed={view?.mode === "CONNECTED"}
         onCamera={() => void choosePhoto("camera")} onPhotos={() => void choosePhoto("photos")}
-        onFiles={(files) => void sendFiles(files)} fileSending={filesSending}
+        onFiles={(files, kind) => void (kind === "video" ? stageLocalFiles(files) : sendFiles(files))} fileSending={filesSending}
         onLocation={locationAllowed ? () => setSheet("location") : undefined}
         voiceAvailable={voiceAllowed} onVoice={toggleVoiceCapture}
         onPickKlipy={sendKlipy} userId={accountId}

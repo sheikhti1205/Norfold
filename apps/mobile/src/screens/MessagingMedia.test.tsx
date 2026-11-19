@@ -2,7 +2,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
-import { MessagingThread } from "./Messaging";
+import { Connections, MessagingThread, presentationProjection, replyPreview } from "./Messaging";
+import type { ConversationProjection } from "../services/messaging/conversationIndex";
 import { ConversationInfo } from "../components/ConversationInfo";
 import { LiveRegion } from "../components/LiveRegion";
 import { MessagingRestoration } from "../components/MessagingRestoration";
@@ -12,22 +13,35 @@ import type { MessagingThreadSync } from "../services/messaging/runtime";
 import { Blob as NodeBlob } from "node:buffer";
 import { webcrypto } from "node:crypto";
 import { sha256Hex } from "../services/messaging/media";
+import { EXPRESSION_RECENTS_KEY } from "../services/expressionRecents";
 
 const m = vi.hoisted(() => {
   const view = { mode: "CONNECTED", request: "OUTGOING", ownBlocked: false, ownMuted: false, epoch: "relationship-a", revision: 1, pinnedMessageIds: [] as string[] };
   return { view, watch: vi.fn(), chat: { accountId: "account", status: "ready", revision: 1,
     threadSync: { conversationId: "chat", mode: "ready", missing: 0 } as MessagingThreadSync | null,
-    conversations: [{ conversationId: "chat", peerId: "peer", cachedProjection: view }], currentProjections: { chat: view } },
+    conversations: [{ conversationId: "chat", peerId: "peer", cachedProjection: view }], currentProjections: { chat: view },
+    displayProjections: undefined as Record<string, ConversationProjection | typeof view> | null | undefined },
     messages: [] as unknown[], media: [] as unknown[], outbox: [] as unknown[], cached: null as null | { messages: unknown[]; media: unknown[]; outbox: unknown[] }, threadRead: vi.fn(),
-    voice: vi.fn(), location: vi.fn(), mute: vi.fn(), pin: vi.fn(), prepare: vi.fn(), relationship: vi.fn(), text: vi.fn(), send: vi.fn(), read: vi.fn(), download: vi.fn(), remove: vi.fn(), recover: vi.fn(), retry: vi.fn(), receipt: vi.fn(), observe: vi.fn(), refresh: vi.fn(), choose: vi.fn(), import: vi.fn(), file: vi.fn(),
+    voice: vi.fn(), location: vi.fn(), mute: vi.fn(), pin: vi.fn(), prepare: vi.fn(), relationship: vi.fn(), text: vi.fn(), send: vi.fn(), read: vi.fn(), download: vi.fn(), remove: vi.fn(), recover: vi.fn(), retry: vi.fn(), receipt: vi.fn(), observe: vi.fn(), refresh: vi.fn(), choose: vi.fn(), import: vi.fn(), file: vi.fn(), upload: vi.fn(), removeFile: vi.fn(),
     holdIds: vi.fn(async () => [] as string[]), hold: vi.fn(async (): Promise<Record<string, unknown> | null> => null), purgeHold: vi.fn(async () => undefined),
     report: vi.fn(async (_input: unknown, _signal?: AbortSignal) => ({ reportId: "receipt" })) };
 });
 vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "account" } }) }));
-vi.mock("../services/accountLabels", () => ({ fetchAccountIdentities: async () => new Map(), readCachedAccountIdentities: () => new Map() }));
+vi.mock("../services/accountLabels", () => ({ fetchAccountIdentities: async () => new Map([
+  ["localized-peer", { id: "localized-peer", username: "rowan", displayName: "Rowan Lee" }],
+]), readCachedAccountIdentities: () => new Map() }));
+vi.mock("../services/people", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../services/people")>()),
+  searchPeople: async () => ({ items: [], nextCursor: null }),
+}));
 vi.mock("../services/messaging/useMessaging", () => ({ useMessaging: () => m.chat }));
 vi.mock("../services/messaging/runtime", () => ({ getCachedMessagingThreadState: () => m.cached, watchMessagingThread: m.watch, sendMessagingVoice: m.voice, sendMessagingLocation: m.location, setMessagingMuted: m.mute, pinMessagingMessage: m.pin, readMessagingThreadState: () => m.threadRead(), fetchMessagingReceiptView: m.receipt, observeMessagingReceipt: m.observe, markMessagingConversationRead: async () => {}, refreshMessaging: m.refresh, sendMessagingText: m.text, sendMessagingMedia: m.send, readMessagingMedia: m.read, downloadMessagingMedia: m.download, changeMessagingRelationship: m.relationship, clearMessagingConversation: async () => {}, removeMessagingMessage: m.remove, recoverMessagingText: m.recover, retryMessagingMessage: m.retry, readMessagingUnsentHoldIds: m.holdIds, readMessagingUnsentHold: m.hold, purgeMessagingUnsentHold: m.purgeHold }));
 vi.mock("../services/messaging/preparePhoto", () => ({ prepareMessagingPhoto: m.prepare }));
+vi.mock("../services/messaging/files", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../services/messaging/files")>()),
+  uploadChatFile: m.upload,
+  removeChatFile: m.removeFile,
+}));
 vi.mock("../services/moderation", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../services/moderation")>()),
   submitReport: (input: unknown, signal?: AbortSignal) => m.report(input, signal),
@@ -37,12 +51,16 @@ beforeEach(() => { vi.stubGlobal("URL", Object.assign(class extends URL {}, { cr
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ x: 0, y: 0, top: 0, left: 0, bottom: 200, right: 200, width: 200, height: 200, toJSON: () => ({}) });
   m.choose.mockReset(); m.import.mockReset(); m.file.mockReset();
   m.retry.mockReset().mockResolvedValue(undefined);
+  m.upload.mockReset();
+  m.removeFile.mockReset().mockResolvedValue(undefined);
   m.text.mockReset().mockResolvedValue("saved");
   m.location.mockReset().mockResolvedValue("shared"); m.chat.accountId = "account";
   m.relationship.mockReset().mockResolvedValue(undefined);
   m.mute.mockReset().mockResolvedValue(undefined); m.view.ownMuted = false; m.chat.status = "ready";
   m.pin.mockReset().mockResolvedValue(undefined); m.view.pinnedMessageIds = [];
   m.view.epoch = "relationship-a"; m.view.revision = 1; m.chat.currentProjections = { chat: m.view };
+  m.chat.displayProjections = undefined;
+  m.chat.conversations = [{ conversationId: "chat", peerId: "peer", cachedProjection: m.view }];
   m.chat.threadSync = { conversationId: "chat", mode: "ready", missing: 0 };
   m.watch.mockReset().mockReturnValue(() => {});
   m.cached = null;
@@ -52,7 +70,7 @@ beforeEach(() => { vi.stubGlobal("URL", Object.assign(class extends URL {}, { cr
   m.report.mockReset().mockImplementation(async () => ({ reportId: "receipt" }));
   m.threadRead.mockReset().mockImplementation(async () => ({ messages: m.messages, outbox: m.outbox, media: m.media }));
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.removeItem(EXPRESSION_RECENTS_KEY); });
 
 it("replaces the composer with recording/review, resumes, and sends only the finalized note", async () => {
   let now = Date.now();
@@ -104,6 +122,117 @@ it("replaces the composer with recording/review, resumes, and sends only the fin
   expect(m.voice.mock.calls[0]?.[3]).toMatchObject({ durationMs: 5_000, byteSize: 17 });
   expect(screen.getByRole("textbox", { name: "Message" })).toHaveProperty("value", "Keep my text draft");
   expect(track.stop).toHaveBeenCalled();
+});
+
+/** A browser-shaped recorder whose trailer or stop event can be withheld to hold
+ *  the "pausing" phase, or the finalize itself, open as a slow container flush
+ *  does on a real device. */
+function fakeVoiceRecorder(options: { deferTrailer?: boolean; deferStop?: boolean } = {}) {
+  class BrowserBlob extends NodeBlob {
+    override async arrayBuffer(): Promise<ArrayBuffer> {
+      const source = await super.arrayBuffer();
+      const result = new ArrayBuffer(source.byteLength);
+      new Uint8Array(result).set(new Uint8Array(source));
+      return result;
+    }
+  }
+  vi.stubGlobal("Blob", BrowserBlob);
+  vi.stubGlobal("crypto", webcrypto);
+  const track = { enabled: true, readyState: "live", stop: vi.fn() };
+  vi.stubGlobal("navigator", { userAgent: navigator.userAgent, mediaDevices: {
+    getUserMedia: async () => ({ getTracks: () => [track] }),
+  } });
+  let instance: {
+    ondataavailable: ((event: { data: Blob }) => void) | null;
+    deliverStop: () => void;
+  } | null = null;
+  class Recorder {
+    static isTypeSupported() { return true; }
+    mimeType = "audio/webm";
+    state = "inactive";
+    ondataavailable: ((event: { data: Blob }) => void) | null = null;
+    onstop: (() => void) | null = null;
+    constructor() { instance = this; }
+    start() { this.state = "recording"; }
+    pause() { this.state = "paused"; }
+    resume() { this.state = "recording"; }
+    requestData() { if (!options.deferTrailer) this.ondataavailable?.({ data: new Blob(["audio"]) }); }
+    // The stop is delivered in one place, so a test can hold it open and see what
+    // the strip offers while the container is still settling.
+    deliverStop() { this.ondataavailable?.({ data: new Blob(["trailer"]) }); this.onstop?.(); }
+    stop() { this.state = "inactive"; if (!options.deferStop) this.deliverStop(); }
+  }
+  vi.stubGlobal("MediaRecorder", Recorder);
+  return {
+    track,
+    deliver: () => instance?.ondataavailable?.({ data: new Blob(["audio"]) }),
+    deliverStop: () => instance?.deliverStop(),
+  };
+}
+it("keeps the measured capture clock while the preview is still settling", async () => {
+  let now = Date.now();
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  const recorder = fakeVoiceRecorder({ deferTrailer: true });
+  m.voice.mockReset().mockResolvedValue("voice-saved");
+  await open();
+  fireEvent.click(screen.getByRole("button", { name: "Voice message" }));
+  await screen.findByRole("button", { name: "Pause recording" });
+  now += 3_000;
+  // Let the recorder publish its measured capture first, exactly as its 200 ms
+  // tick does on a device; the pause itself carries no clock of its own.
+  await act(async () => { await new Promise((done) => setTimeout(done, 250)); });
+  fireEvent.click(screen.getByRole("button", { name: "Pause recording" }));
+  // Pausing has no clock of its own. The last measured capture time must stay
+  // on screen instead of flashing back to 0:00 while the trailer arrives.
+  expect(await screen.findByText("0:03")).toBeTruthy();
+  expect(screen.getByRole("group", { name: "Recording voice message" })).toBeTruthy();
+  await act(async () => { recorder.deliver(); });
+  expect(await screen.findByRole("group", { name: "Voice message ready" })).toBeTruthy();
+  expect(screen.getByText("0:03")).toBeTruthy();
+  expect(m.voice).not.toHaveBeenCalled();
+});
+it("stops at the five-minute ceiling for review instead of sending", async () => {
+  let now = Date.now();
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  fakeVoiceRecorder();
+  m.voice.mockReset().mockResolvedValue("voice-saved");
+  await open();
+  fireEvent.click(screen.getByRole("button", { name: "Voice message" }));
+  await screen.findByRole("button", { name: "Pause recording" });
+  now += 300_000;
+  fireEvent.click(screen.getByRole("button", { name: "Pause recording" }));
+  await screen.findByRole("group", { name: "Voice message ready" });
+  expect(screen.getByText("5:00")).toBeTruthy();
+  // The ceiling stops the take; it never sends it.
+  expect(screen.getByText(/5-minute limit reached/i)).toBeTruthy();
+  expect((screen.getByRole("button", { name: "Send voice message" }) as HTMLButtonElement).disabled).toBe(false);
+  expect(m.voice).not.toHaveBeenCalled();
+});
+it("locks the strip behind a send that starts while the take is still open", async () => {
+  let now = Date.now();
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  const recorder = fakeVoiceRecorder({ deferStop: true });
+  m.voice.mockReset().mockResolvedValue("voice-saved");
+  await open();
+  fireEvent.click(screen.getByRole("button", { name: "Voice message" }));
+  await screen.findByRole("button", { name: "Pause recording" });
+  now += 3_000;
+  // Send works during the take: one press stops what has been recorded so far.
+  fireEvent.click(screen.getByRole("button", { name: "Send voice message" }));
+  // Until that take settles, the send owns the note. Pause, discard and a second
+  // send are unavailable, so no press can throw away or fork the take that is
+  // already being finalized, and the strip says what is happening.
+  const sending = await screen.findByRole("button", { name: "Sending voice message" });
+  expect((sending as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "Pause recording" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "Discard recording" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByRole("group", { name: "Recording voice message" }).getAttribute("aria-busy")).toBe("true");
+  expect(m.voice).not.toHaveBeenCalled();
+  await act(async () => { recorder.deliverStop(); });
+  await waitFor(() => expect(m.voice).toHaveBeenCalledTimes(1));
+  // The press that owned the note is the only one that sent it, and the strip
+  // leaves the screen once the note is admitted.
+  await waitFor(() => expect(screen.queryByRole("group", { name: "Recording voice message" })).toBeNull());
 });
 
 it("collapses desktop conversation details without replacing the transcript or draft", async () => {
@@ -833,17 +962,19 @@ it("shows only live image attachments from photo or legacy messages in shared ph
   await waitFor(() => expect(within(gallery).getAllByRole("button", { name: "View photo" })).toHaveLength(2));
   expect(m.read.mock.calls.map((call) => call[1]).sort()).toEqual(["legacy", "photo"]);
 });
-it("renders nearby photos as individual messages with their own actions", async () => {
+it("groups nearby photos from one selection while each keeps its own actions", async () => {
   const run = photoRun(3); run.messages[2]!.readByPeer = true;
   m.messages = run.messages; m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  expect(screen.queryByRole("group", { name: "3 photos" })).toBeNull();
+  expect(screen.getByRole("listitem", { name: "3 photos" })).toBeTruthy();
   expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(3);
   expect(screen.getAllByText("Two shots")).toHaveLength(1);
   expect(screen.getByRole("img", { name: "Read" })).toBeTruthy();
+  // Every member still owns its own menu target.
+  expect(screen.getAllByRole("button", { name: "Options for your message" })).toHaveLength(3);
   expect(document.querySelector('[data-chat-message="photo-2"]')).toBeTruthy();
 });
-it("deletes only the selected sent photo when photos are close together", async () => {
+it("deletes only the selected sent photo inside a grouped selection", async () => {
   const run = photoRun(2);
   m.messages = run.messages; m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
@@ -854,7 +985,7 @@ it("deletes only the selected sent photo when photos are close together", async 
   fireEvent.click(within(dialog).getByRole("button", { name: "Delete for me" }));
   await waitFor(() => expect(m.remove.mock.calls).toEqual([["account", "chat", "photo-2", false]]));
 });
-it("starts a new bubble when the next photo carries its own caption", async () => {
+it("keeps each grouped photo's own caption instead of promoting one", async () => {
   const run = photoRun(1);
   m.messages = [...run.messages,
     { id: "second", conversationId: "chat", authorId: "account", recipientId: "peer", body: "And this",
@@ -862,9 +993,9 @@ it("starts a new bubble when the next photo carries its own caption", async () =
   m.media = [...run.media, { id: "media-2", messageId: "second", direction: "OUT", state: "READY", width: 2, height: 1, mime: "image/jpeg" }];
   m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  // The second send is one second after the first, so it would have joined the
-  // run; its caption must still be visible, so it keeps its own bubble.
-  expect(screen.queryByRole("group", { name: "2 photos" })).toBeNull();
+  // The second send is inside the rolling window, so both share one bounded
+  // group; a caption never breaks the run, and never moves to another item.
+  expect(screen.getByRole("listitem", { name: "2 photos" })).toBeTruthy();
   expect(screen.getAllByText("Two shots")).toHaveLength(1);
   expect(screen.getByText("And this")).toBeTruthy();
   expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(2);
@@ -884,12 +1015,15 @@ it("does not preview a quoted photo while the conversation hides photos", async 
   expect(quote.querySelector("img.fb-chat-quote-thumb")).toBeNull();
   expect(within(quote).getByText("Photo")).toBeTruthy();
 });
-it("renders five nearby photos separately without hiding overflow", async () => {
+it("keeps a long selection whole inside one bounded album", async () => {
   const run = photoRun(5);
   m.messages = run.messages; m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  expect(screen.queryByRole("group", { name: "5 photos" })).toBeNull();
+  // Five photos from one selection are one album, not five separate cards, and
+  // no member is hidden: every message keeps its own surface and its own menu.
+  expect(screen.getByRole("listitem", { name: "5 photos" })).toBeTruthy();
   expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(5);
+  expect(screen.getAllByRole("button", { name: "Options for your message" })).toHaveLength(5);
 });
 it("jumps a quote to the exact photo and rings it", async () => {
   const run = photoRun(3);
@@ -1113,6 +1247,87 @@ it("stages a bulk pick, reviews it in the shared viewer, and sends one message p
   expect(m.send.mock.calls.map((call) => (call[4] as { width: number }).width)).toEqual([2, 2, 2]);
   await waitFor(() => expect(screen.queryByRole("button", { name: /^Review photo/ })).toBeNull());
 });
+it("stages a mixed photo and video pick and sends each through its own lane", async () => {
+  m.prepare.mockResolvedValue({ bytes: new ArrayBuffer(1), sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
+  m.upload.mockResolvedValue({ key: "files/account/chat/clip.mp4", name: "clip.mp4", mime: "video/mp4", byteSize: 12, kind: "video" });
+  await open();
+  fireEvent.change(screen.getByLabelText("Photo file input"), { target: { files: [
+    new File(["x"], "p.jpg", { type: "image/jpeg" }),
+    new File(["video"], "clip.mp4", { type: "video/mp4" }),
+  ] } });
+  await screen.findByText("2 attachments ready. Tap a photo to review.");
+  // Only the photo goes through the canonical image preparation lane.
+  expect(m.prepare).toHaveBeenCalledTimes(1);
+  // A video has no fabricated poster, so it offers no review frame.
+  expect(screen.getByRole("button", { name: /^Review photo 1 of 1$/ })).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Both" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(m.send).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(m.text).toHaveBeenCalledTimes(1));
+  expect(m.upload).toHaveBeenCalledTimes(1);
+  const body = String(m.text.mock.calls[0]?.[3]);
+  expect(body.startsWith("norfold-file:v1:")).toBe(true);
+  // The caption rides the first item that actually left. The photo leaves
+  // first, so the photo carries it and the clip's own body stays bare.
+  expect(String(m.send.mock.calls[0]?.[3])).toBe("Both");
+  expect(body).not.toContain("Both");
+  expect(m.send.mock.calls[0]?.[4]).toMatchObject({ width: 2 });
+});
+it("keeps a staged video's identity and composition instant across a retry", async () => {
+  m.upload.mockResolvedValue({ key: "files/account/chat/clip.mp4", name: "clip.mp4", mime: "video/mp4", byteSize: 12, kind: "video" });
+  m.text.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce("saved");
+  await open();
+  fireEvent.change(screen.getByLabelText("Photo file input"), { target: { files: [new File(["video"], "clip.mp4", { type: "video/mp4" })] } });
+  await screen.findByText("1 attachment ready. Tap Send to share.");
+  fireEvent.change(screen.getByLabelText("Message"), { target: { value: "First caption" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(m.text).toHaveBeenCalledTimes(1));
+  const identity = m.text.mock.calls[0]?.[6];
+  const instant = m.text.mock.calls[0]?.[8];
+  expect(typeof identity).toBe("string");
+  expect(typeof instant).toBe("number");
+  // A refused send removes the object it uploaded; the item stays for retry.
+  expect(m.removeFile).toHaveBeenCalledTimes(1);
+  await screen.findByText("1 attachment ready. Tap Send to share.");
+  // Text typed after the failure is newer intent: the retry still sends the
+  // caption its first attempt stored, and the newer words stay in the field.
+  fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Edited after failure" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(m.text).toHaveBeenCalledTimes(2));
+  expect(m.text.mock.calls[1]?.[6]).toBe(identity);
+  expect(m.text.mock.calls[1]?.[8]).toBe(instant);
+  expect(m.text.mock.calls[1]?.[3]).toBe(m.text.mock.calls[0]?.[3]);
+  expect(screen.getByLabelText("Message")).toHaveProperty("value", "Edited after failure");
+});
+it("does not stage a non-photo, non-video file chosen through the attachment picker", async () => {
+  await open();
+  fireEvent.change(screen.getByLabelText("Photo file input"), { target: { files: [new File(["x"], "notes.pdf", { type: "application/pdf" })] } });
+  await waitFor(() => expect(screen.getByText("Only photos and videos can be added here.")).toBeTruthy());
+  expect(m.prepare).not.toHaveBeenCalled();
+  expect(screen.queryByRole("group", { name: /to send/ })).toBeNull();
+});
+it("refuses a video chosen in a message request without staging or uploading it", async () => {
+  m.view.mode = "REQUEST";
+  await open();
+  // The file rows stay reachable in a request; the intake must refuse them
+  // instead of filling a tray that Send can never accept.
+  fireEvent.change(screen.getByLabelText("Choose video"), { target: { files: [new File(["v"], "clip.mp4", { type: "video/mp4" })] } });
+  await waitFor(() => expect(screen.getByText("Photos and videos are available when you're friends.")).toBeTruthy());
+  expect(screen.queryByRole("group", { name: /to send/ })).toBeNull();
+  expect(m.upload).not.toHaveBeenCalled();
+});
+it("refuses a video that arrives while another file is still sending", async () => {
+  // The document send owns the composer when the already-open video picker
+  // resolves; its late result must not enter the tray or upload.
+  m.upload.mockReturnValue(new Promise(() => {}));
+  await open();
+  fireEvent.change(screen.getByLabelText("Choose document"), { target: { files: [new File(["x"], "notes.pdf", { type: "application/pdf" })] } });
+  await waitFor(() => expect(m.upload).toHaveBeenCalledTimes(1));
+  fireEvent.change(screen.getByLabelText("Choose video"), { target: { files: [new File(["v"], "clip.mp4", { type: "video/mp4" })] } });
+  await waitFor(() => expect(screen.getByText("Wait for the current send to finish before adding an attachment.")).toBeTruthy());
+  expect(screen.queryByRole("group", { name: /to send/ })).toBeNull();
+  expect(m.upload).toHaveBeenCalledTimes(1);
+});
 it("survives a projection refresh while the native picker is open", async () => {
   vi.spyOn(Capacitor, "getPlatform").mockReturnValue("android");
   const imported = { uri: "synthetic-import" }, source = new File(["x"], "photo.jpg");
@@ -1240,4 +1455,317 @@ it("removes an unsent noncurrent photo from the open gallery and revokes its ind
   expect(URL.revokeObjectURL).not.toHaveBeenCalledWith("blob:unsend-4");
   fireEvent.click(screen.getByRole("button", { name: "Close photo viewer" }));
   await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:unsend-4"));
+});
+
+/** One stored Klipy body row. The body carries the picker-kind fragment. */
+function klipyRow(id: string, body: string, extras: Record<string, unknown> = {}) {
+  return { id, conversationId: "chat", authorId: "peer", recipientId: "account", body,
+    messageType: "TEXT" as const, server: { eventId: `event-${id}`, sequence: 1 }, ...extras };
+}
+function seedKlipyRecent(item: { kind: "gifs" | "stickers"; slug: string; title: string; mediaUrl: string; previewUrl: string }) {
+  localStorage.setItem(EXPRESSION_RECENTS_KEY, JSON.stringify([{ type: "klipy", key: `klipy:${item.kind}:${item.slug}`, item }]));
+}
+async function pickRecent(title: string) {
+  fireEvent.click(screen.getByRole("button", { name: "Emoji, GIFs and stickers" }));
+  fireEvent.click(screen.getByRole("button", { name: `Recent ${title}` }));
+}
+
+it("sends a sticker as its provider URL tagged with the picker kind", async () => {
+  seedKlipyRecent({ kind: "stickers", slug: "sticker-a", title: "Sticker A",
+    mediaUrl: "https://media.klipy.com/s.webp", previewUrl: "https://media.klipy.com/s.png" });
+  await open();
+  await pickRecent("Sticker A");
+  await waitFor(() => expect(m.text).toHaveBeenCalledTimes(1));
+  // The kind rides the fragment; the whole body is still the provider URL.
+  expect(m.text.mock.calls[0]?.[3]).toBe("https://media.klipy.com/s.webp#norfold-media=sticker");
+  const img = document.querySelector("img.fb-chat-klipy") as HTMLImageElement;
+  expect(img.getAttribute("data-media-kind")).toBe("sticker");
+  expect(img.getAttribute("alt")).toBe("Sticker");
+  const label = screen.getByText("Sticker");
+  expect(label.className).toBe("fb-chat-expressive-kind");
+  expect(label.closest(".fb-chat-message-status")).toBeTruthy();
+  // The marker is never rendered, and no media lane moved bytes for it.
+  expect(screen.queryByText(/norfold-media/)).toBeNull();
+  expect(m.upload).not.toHaveBeenCalled();
+  expect(m.send).not.toHaveBeenCalled();
+  expect(m.download).not.toHaveBeenCalled();
+});
+
+it("sends a GIF tagged as a GIF and labels it beside the time", async () => {
+  seedKlipyRecent({ kind: "gifs", slug: "gif-a", title: "Gif A",
+    mediaUrl: "https://media.klipy.com/a.gif", previewUrl: "https://media.klipy.com/a.png" });
+  await open();
+  await pickRecent("Gif A");
+  await waitFor(() => expect(m.text).toHaveBeenCalledTimes(1));
+  expect(m.text.mock.calls[0]?.[3]).toBe("https://media.klipy.com/a.gif#norfold-media=gif");
+  expect(document.querySelector("img.fb-chat-klipy")?.getAttribute("data-media-kind")).toBe("gif");
+  expect(screen.getByText("GIF").className).toBe("fb-chat-expressive-kind");
+});
+
+it("labels a received Klipy row and still offers no Copy for it", async () => {
+  m.messages = [klipyRow("gif", "https://media.klipy.com/a.gif#norfold-media=gif")];
+  await open();
+  const img = document.querySelector("img.fb-chat-klipy") as HTMLImageElement;
+  expect(img.getAttribute("data-media-kind")).toBe("gif");
+  expect(img.getAttribute("alt")).toBe("GIF");
+  expect(screen.getByText("GIF").className).toBe("fb-chat-expressive-kind");
+  expect(screen.queryByText(/norfold-media/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Options for received message" }));
+  await screen.findByRole("menu", { name: "Message actions" });
+  expect(screen.queryByRole("menuitem", { name: "Copy text" })).toBeNull();
+});
+
+it("shows an honest fallback for a Klipy body that predates the marker", async () => {
+  m.messages = [klipyRow("legacy", "https://media.klipy.com/legacy.gif")];
+  await open();
+  const img = document.querySelector("img.fb-chat-klipy") as HTMLImageElement;
+  expect(img.getAttribute("data-media-kind")).toBe("unknown");
+  expect(img.getAttribute("alt")).toBe("Sticker or GIF");
+  expect(screen.getByText("Sticker/GIF").className).toBe("fb-chat-expressive-kind");
+});
+
+it("clears the kind label when a Klipy row is unsent", async () => {
+  m.messages = [klipyRow("gone", "https://media.klipy.com/s.webp#norfold-media=sticker", { unsentAt: 5 })];
+  await open();
+  expect(screen.getByText("Message unsent")).toBeTruthy();
+  expect(document.querySelector(".fb-chat-expressive-kind")).toBeNull();
+  expect(document.querySelector("img.fb-chat-klipy")).toBeNull();
+});
+
+it("keeps a quoted Klipy row and its summary free of the encoded kind", async () => {
+  m.messages = [
+    klipyRow("orig", "Original"),
+    klipyRow("answer", "https://media.klipy.com/a.gif#norfold-media=gif",
+      { replyToId: "orig", server: { eventId: "event-answer", sequence: 2 } }),
+  ];
+  await open();
+  const row = document.querySelector('[data-chat-message="answer"]')!;
+  // The quote names the quoted row exactly; the marker never reaches a reader.
+  expect(row.querySelector(".fb-chat-quote-preview")?.textContent).toBe("Original");
+  const img = row.querySelector("img.fb-chat-klipy") as HTMLImageElement;
+  expect(img.getAttribute("src")).toBe("https://media.klipy.com/a.gif");
+  expect(img.getAttribute("data-media-kind")).toBe("gif");
+  expect(row.textContent).not.toContain("norfold-media");
+  expect(row.querySelector(".fb-chat-expressive-kind")?.textContent).toBe("GIF");
+});
+
+it("keeps a Klipy row out of a photo album and leaves photo timestamps alone", async () => {
+  const run = photoRun(2);
+  m.messages = [...run.messages, klipyRow("sticker", "https://media.klipy.com/s.webp#norfold-media=sticker",
+    { authorId: "account", recipientId: "peer", createdAt: 9_000, server: { eventId: "event-sticker", sequence: 9 } })];
+  m.media = run.media;
+  m.read.mockResolvedValue(new Uint8Array([1]).buffer);
+  await open();
+  const album = screen.getByRole("listitem", { name: "2 photos" });
+  expect(album.textContent).not.toContain("norfold-media");
+  expect(album.querySelector(".fb-chat-expressive-kind")).toBeNull();
+  const row = document.querySelector('[data-chat-message="sticker"]')!;
+  expect(row.closest("li.fb-chat-run")).toBeNull();
+  expect(row.querySelector('img.fb-chat-klipy[data-media-kind="sticker"]')).toBeTruthy();
+  expect(row.querySelector(".fb-chat-expressive-kind")?.textContent).toBe("Sticker");
+});
+
+it("summarizes a tagged Klipy row by kind and keeps the pre-marker fallback", () => {
+  const base = { id: "q", conversationId: "chat", authorId: "peer", recipientId: "account",
+    messageType: "TEXT" as const, server: { eventId: "e", sequence: 1 } };
+  expect(replyPreview({ ...base, body: "https://media.klipy.com/s.webp#norfold-media=sticker" })).toBe("Sticker");
+  expect(replyPreview({ ...base, body: "https://media.klipy.com/a.gif#norfold-media=gif" })).toBe("GIF");
+  // History predates the marker, so the quoted summary says both instead of
+  // guessing a kind from the URL's extension.
+  expect(replyPreview({ ...base, body: "https://media.klipy.com/a.gif" })).toBe("Sticker/GIF");
+});
+
+function projection(over: Partial<ConversationProjection> = {}): ConversationProjection {
+  return { conversationId: "chat", peerId: "peer", mode: "CONNECTED", request: "NONE",
+    requestEpoch: null, ownHidden: false, ownDeclined: false, ownBlocked: false,
+    ownMuted: false, pinnedMessageIds: [], revision: 1, ...over };
+}
+function optionsSheet() {
+  fireEvent.click(screen.getByRole("button", { name: "Conversation options" }));
+  return screen.getByRole("dialog", { name: "Conversation info" });
+}
+function chatHeader(): HTMLElement {
+  return document.querySelector(".fb-chat-header") as HTMLElement;
+}
+
+it("separates an absent presentation field from an explicit authority clear", () => {
+  const cached = projection({ ownMuted: undefined });
+  const current = projection({ ownHidden: true });
+  const display = projection();
+  // A fixture or older snapshot without the field keeps the previous
+  // current-then-cached behaviour instead of inventing a third rule.
+  expect(presentationProjection({ accountId: "account", currentProjections: null }, "account", "chat", cached)).toBe(cached);
+  expect(presentationProjection({ accountId: "account", currentProjections: { chat: current } }, "account", "chat", cached)).toBe(current);
+  // A published set answers for its own signed-in account only.
+  const displayProjections = { chat: display };
+  expect(presentationProjection({ accountId: "account", currentProjections: null, displayProjections }, "account", "chat", cached)).toBe(display);
+  expect(presentationProjection({ accountId: "other", currentProjections: null, displayProjections }, "account", "chat", cached)).toBeNull();
+  // A live accepted set outranks the bridged view instead of showing the older
+  // relationship for one more frame.
+  expect(presentationProjection({ accountId: "account", currentProjections: { chat: current }, displayProjections }, "account", "chat", cached)).toBe(current);
+  // An explicit clear is not a cache miss: a revoked authority never falls back
+  // to a stale CONNECTED projection, and an accepted set only answers for the
+  // conversations it actually carries.
+  expect(presentationProjection({ accountId: "account", currentProjections: null, displayProjections: null }, "account", "chat", cached)).toBeNull();
+  expect(presentationProjection({ accountId: "account", currentProjections: null, displayProjections: {} }, "account", "chat", cached)).toBeNull();
+});
+
+it("keeps the relationship visible but inert while a routine refresh is between sets", async () => {
+  m.view.ownMuted = true;
+  m.chat.currentProjections = null as never;
+  m.chat.displayProjections = { chat: m.view };
+  await open();
+  // The header keeps naming the last accepted relationship instead of flicking
+  // to "Saved chat" for one pass.
+  expect(within(chatHeader()).getByText("Friends")).toBeTruthy();
+  const sheet = optionsSheet();
+  // Presentation keeps the management rows in place; authority decides whether
+  // any of them may act.
+  const share = within(sheet).getByRole("button", { name: "Share location" });
+  expect(share).toHaveProperty("disabled", true);
+  expect(within(sheet).getByRole("button", { name: "Archive" })).toHaveProperty("disabled", true);
+  expect(within(sheet).getByRole("button", { name: "Remove friend" })).toHaveProperty("disabled", true);
+  const mute = within(sheet).getByRole("switch", { name: "Mute notifications" });
+  expect(mute.getAttribute("aria-checked")).toBe("true");
+  expect(mute).toHaveProperty("disabled", true);
+  fireEvent.click(share);
+  fireEvent.click(within(sheet).getByRole("button", { name: "Archive" }));
+  fireEvent.click(within(sheet).getByRole("button", { name: "Remove friend" }));
+  // No mutation, no location picker: a revoked authority is a truthful disabled
+  // state, never a queued action.
+  expect(m.location).not.toHaveBeenCalled();
+  expect(m.relationship).not.toHaveBeenCalled();
+  expect(m.mute).not.toHaveBeenCalled();
+});
+
+it("does not revive a cached CONNECTED row after an explicit clear and follows a fresh set", async () => {
+  const rendered = await open();
+  m.chat.currentProjections = null as never;
+  m.chat.displayProjections = null;
+  rendered.rerender(thread());
+  expect(within(chatHeader()).getByText("Saved chat")).toBeTruthy();
+  optionsSheet();
+  // Nothing is known about the relationship, so no relationship row claims one.
+  expect(screen.queryByRole("button", { name: "Share location" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Remove friend" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Archive" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Hide request" })).toBeNull();
+  // A restored, genuinely non-connected set relabels the same rows.
+  m.chat.displayProjections = { chat: projection({ mode: "REQUEST", request: "INCOMING", requestEpoch: "epoch" }) };
+  rendered.rerender(thread());
+  await waitFor(() => expect(within(chatHeader()).getByText("Message request")).toBeTruthy());
+  expect(screen.getByRole("button", { name: "Hide request" })).toBeTruthy();
+});
+
+it("keeps the request badge from the published presentation during a routine refresh", async () => {
+  vi.stubGlobal("innerWidth", 400);
+  const incoming = projection({ mode: "REQUEST", request: "INCOMING", requestEpoch: "epoch" });
+  m.chat.currentProjections = null as never;
+  m.chat.displayProjections = { chat: incoming };
+  m.chat.conversations = [{ conversationId: "chat", peerId: "peer", cachedProjection: incoming,
+    lastMessage: null, lastSequence: 0, unreadCount: 0, pendingCount: 0, updatedAt: 0, projectionObservedAt: null }] as never;
+  const list = () => <MemoryRouter initialEntries={["/connections"]}><Routes>
+    <Route path="/connections" element={<Connections />} /></Routes></MemoryRouter>;
+  const rendered = render(list());
+  expect(await screen.findByRole("button", { name: "Requests, 1" })).toBeTruthy();
+  // An explicit clear drops the badge to zero rather than reviving the cached
+  // incoming request.
+  m.chat.displayProjections = null;
+  rendered.rerender(list());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Requests, 0" })).toBeTruthy());
+});
+
+/** One conversation-list row for the privacy-classification tests: the cached
+ *  projection carries the durable local hide/dismiss flags, and an optional
+ *  body stands in for the last message so the row can be found in the list. */
+function listRow(conversationId: string, over: Partial<ConversationProjection> = {}, body?: string) {
+  const cachedProjection = projection({ conversationId, peerId: `${conversationId}-peer`, ...over });
+  return { conversationId, peerId: `${conversationId}-peer`, cachedProjection,
+    lastMessage: body === undefined ? null : { body, conversationId, authorId: `${conversationId}-peer`, recipientId: "account" },
+    lastSequence: 0, unreadCount: 0, pendingCount: 0, updatedAt: 0, projectionObservedAt: 0 };
+}
+function connectionsList() {
+  return <MemoryRouter initialEntries={["/connections"]}><Routes>
+    <Route path="/connections" element={<Connections />} /></Routes></MemoryRouter>;
+}
+
+it("keeps locally archived and dismissed chats out of All when presentation is cleared", async () => {
+  vi.stubGlobal("innerWidth", 400);
+  m.chat.currentProjections = null as never;
+  m.chat.displayProjections = null;
+  m.chat.conversations = [
+    listRow("hidden", { ownHidden: true }, "Hidden body"),
+    listRow("declined", { ownDeclined: true }, "Declined body"),
+    listRow("plain", {}, "Plain body"),
+  ] as never;
+  render(connectionsList());
+  // All is the clean inbox even while no relationship is known: only the local
+  // hide/dismiss flags classify the row, so nothing reappears.
+  expect(await screen.findByText("Plain body")).toBeTruthy();
+  expect(screen.queryByText("Hidden body")).toBeNull();
+  expect(screen.queryByText("Declined body")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Filter chats" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Archived" }));
+  expect(await screen.findByText("Hidden body")).toBeTruthy();
+  expect(screen.getByText("Declined body")).toBeTruthy();
+  expect(screen.queryByText("Plain body")).toBeNull();
+});
+
+it("names an unknown locally hidden row instead of claiming a relationship", async () => {
+  vi.stubGlobal("innerWidth", 400);
+  m.chat.currentProjections = null as never;
+  m.chat.displayProjections = null;
+  m.chat.conversations = [listRow("localized", { ownHidden: true })] as never;
+  render(connectionsList());
+  // All hides it; a name search is the way back, labelled for what is known.
+  expect(screen.queryByText("Hidden conversation")).toBeNull();
+  fireEvent.change(screen.getByRole("searchbox", { name: "Search people or chats" }), { target: { value: "rowan" } });
+  expect(await screen.findByRole("link", { name: "Open conversation with Rowan Lee" })).toBeTruthy();
+  expect(screen.getByText("Hidden conversation")).toBeTruthy();
+  // The cached relationship is never repainted as a label.
+  expect(screen.queryByText("Archived")).toBeNull();
+  expect(screen.queryByText("Friends")).toBeNull();
+  expect(screen.queryByText("Message request")).toBeNull();
+  expect(screen.queryByText("Request sent")).toBeNull();
+});
+
+it("does not derive the Requests tab from a cached relationship when presentation is cleared", async () => {
+  vi.stubGlobal("innerWidth", 400);
+  m.chat.currentProjections = null as never;
+  m.chat.displayProjections = null;
+  m.chat.conversations = [listRow("cached-request", { mode: "REQUEST", request: "INCOMING", requestEpoch: "epoch" }, "Request body")] as never;
+  render(connectionsList());
+  // The row is a conversation with an unknown relationship, not a request.
+  expect(await screen.findByText("Request body")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Requests, 0" }));
+  expect(await screen.findByText("No requests conversations")).toBeTruthy();
+  expect(screen.queryByText("Request body")).toBeNull();
+});
+
+it("lets a fresh accepted unhide override the durable hidden flag", async () => {
+  vi.stubGlobal("innerWidth", 400);
+  m.chat.currentProjections = null as never;
+  m.chat.displayProjections = { chat: projection({ ownHidden: false }) };
+  m.chat.conversations = [listRow("chat", { ownHidden: true })] as never;
+  render(connectionsList());
+  // The fresh accepted view answers first: the row is a friend again, not a
+  // hidden conversation, and it leaves the local archived bucket.
+  expect(await screen.findByText("Friends")).toBeTruthy();
+  expect(screen.queryByText("Hidden conversation")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Filter chats" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Archived" }));
+  expect(await screen.findByText("No archived conversations")).toBeTruthy();
+});
+
+it("does not paint another account's cached privacy flags", async () => {
+  vi.stubGlobal("innerWidth", 400);
+  m.chat.accountId = "other";
+  m.chat.currentProjections = null as never;
+  m.chat.displayProjections = null;
+  m.chat.conversations = [listRow("foreign", { ownHidden: true, ownDeclined: true })] as never;
+  render(connectionsList());
+  // The cached flags belong to another viewer, so they cannot hide this row.
+  expect(await screen.findByText("Conversation")).toBeTruthy();
+  expect(screen.queryByText("Hidden conversation")).toBeNull();
+  expect(screen.queryByText("Dismissed")).toBeNull();
 });

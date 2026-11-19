@@ -22,17 +22,30 @@ function transcriptDistance(area: HTMLElement) {
 }
 
 /**
- * The first message row in document order that satisfies `match`. Day chips
- * share the list but carry no `data-chat-message`, so they are skipped. The
- * indexed walk allocates nothing: this runs on every scroll frame and on every
- * resize settle of a long thread.
+ * The first message row in document order that satisfies `match`. A message row
+ * is either the list's own child (a lone message) or one of the rows inside a
+ * run that holds several messages as one album. Day chips share the list and
+ * carry no `data-chat-message`, so they are skipped. The indexed walk allocates
+ * nothing: this runs on every scroll frame and on every resize settle of a long
+ * thread.
  */
 function findTranscriptRow(area: HTMLElement, match: (row: HTMLElement) => boolean) {
   const list = area.querySelector<HTMLElement>(".fb-chat-transcript");
   if (!list) return null;
   for (let index = 0; index < list.children.length; index += 1) {
-    const row = list.children[index];
-    if (row instanceof HTMLElement && row.dataset.chatMessage && match(row)) return row;
+    const child = list.children[index];
+    if (!(child instanceof HTMLElement)) continue;
+    if (child.dataset.chatMessage) {
+      if (match(child)) return child;
+      continue;
+    }
+    // A run's own rows are its direct children, so one level down reaches every
+    // message in the album without a per-frame query or an extra allocation.
+    const members = child.children;
+    for (let member = 0; member < members.length; member += 1) {
+      const row = members[member];
+      if (row instanceof HTMLElement && row.dataset.chatMessage && match(row)) return row;
+    }
   }
   return null;
 }

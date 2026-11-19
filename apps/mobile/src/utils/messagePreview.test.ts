@@ -70,11 +70,16 @@ describe("chat preview text", () => {
     expect(messagePreview({ body: " \n\t " })).toBe(" \n\t ");
   });
 
-  it("shows GIF only for a bare provider media URL", () => {
-    expect(messagePreview({ body: "https://media.klipy.com/a.gif" })).toBe("GIF");
-    expect(messagePreview({ body: "  https://media.klipy.com/a.gif  " })).toBe("GIF");
-    expect(messagePreview({ body: "https://klipy.com/a.gif" })).toBe("GIF");
-    expect(messagePreview({ body: "https://media.klipy.com/a.gif\nand more" })).not.toBe("GIF");
+  it("names the proven kind and keeps pre-marker history honest", () => {
+    expect(messagePreview({ body: "https://media.klipy.com/a.gif#norfold-media=gif" })).toBe("GIF");
+    expect(messagePreview({ body: "  https://media.klipy.com/s.webp#norfold-media=sticker  " })).toBe("Sticker");
+    // Pre-marker history proves no kind; it is never guessed from an extension.
+    expect(messagePreview({ body: "https://media.klipy.com/a.gif" })).toBe("Sticker/GIF");
+    expect(messagePreview({ body: "  https://media.klipy.com/a.gif  " })).toBe("Sticker/GIF");
+    expect(messagePreview({ body: "https://klipy.com/a.gif" })).toBe("Sticker/GIF");
+    // Contradictory markers are not a claim, and prose is never a sticker.
+    expect(messagePreview({ body: "https://media.klipy.com/a.gif#norfold-media=sticker&norfold-media=gif" })).toBe("Sticker/GIF");
+    expect(messagePreview({ body: "https://media.klipy.com/a.gif\nand more" })).not.toBe("Sticker/GIF");
   });
 
   it("prefers visible message text over the type fallback", () => {

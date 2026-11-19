@@ -110,13 +110,18 @@ describe("MessagePillHost", () => {
     expect(screen.queryByText(/norfold-file:/)).toBeNull();
   });
 
-  it("keeps the existing typed and GIF preview copy", () => {
+  it("keeps the existing typed and honest expressive preview copy", () => {
     const view = mount();
     state.conversations = [{ ...row("a", ""),
       lastMessage: { authorId: "other", body: "", messageType: "VOICE" } }];
     view.rerender(<MemoryRouter initialEntries={["/search"]}><Harness /></MemoryRouter>);
     expect(screen.getByText("Voice message")).toBeTruthy();
+    // A pre-marker body proves no kind, so the pill says both; it is never
+    // relabelled GIF from the URL's extension.
     state.conversations = [row("a", "https://media.klipy.com/a.gif")];
+    view.rerender(<MemoryRouter initialEntries={["/search"]}><Harness /></MemoryRouter>);
+    expect(screen.getByText("Sticker/GIF")).toBeTruthy();
+    state.conversations = [row("a", "https://media.klipy.com/a.gif#norfold-media=gif")];
     view.rerender(<MemoryRouter initialEntries={["/search"]}><Harness /></MemoryRouter>);
     expect(screen.getByText("GIF")).toBeTruthy();
   });

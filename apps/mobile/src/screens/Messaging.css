@@ -123,6 +123,16 @@
   color:var(--fb-on-surface-variant); font-size:.75rem; font-weight:600; letter-spacing:.01em;
   box-shadow:0 1px 2px rgb(0 0 0 / .08); }
 .fb-chat-line-own { flex-direction:row-reverse; }
+/* The line is the message's slot; the row is the message itself. A lone
+   message and an album member therefore keep the same element and the same
+   state across the moment a second photo turns a single into a group. */
+.fb-chat-line-row { display:flex; align-items:center; min-width:0; max-width:100%; }
+/* One message is at most 70% of the usable transcript, and that percentage is
+   written once, on the row whose containing block is the line. The line itself
+   stays the full pane width, so an own message still ends on the opposite edge
+   and a received one starts on the other. Everything below the row reads 100% of
+   the box it is given, so 70% of 70% cannot compound down the tree. */
+.fb-chat-line > .fb-chat-line-row { max-width:70%; }
 /* The message menu control lives in the bubble's own top-inline-end corner.
    Its button is a transparent 44px square, the project's house minimum for a
    press target, anchored flush inside the bubble so the whole target sits
@@ -157,6 +167,7 @@
    sizing and bubble stay untouched. */
 @media (hover:hover) and (pointer:fine) {
   .fb-chat-line:hover .fb-chat-message-options,
+  .fb-chat-run .fb-chat-line-row:hover .fb-chat-message-options,
   .fb-chat-message-surface:focus-within .fb-chat-message-options,
   .fb-chat-message-options:focus-visible { opacity:1; pointer-events:auto; }
   .fb-chat-message > p:not(.fb-chat-emoji-only) { padding-right:1.25rem; }
@@ -176,6 +187,7 @@
    transient bubble ring is the visible cue, so the browser's row-wide focus
    rectangle must not paint over the thread. */
 .fb-chat-line:focus { outline:none; }
+.fb-chat-line-row:focus { outline:none; }
 .fb-chat-message { align-self:flex-start; max-width:min(100%, 34rem); padding:.6rem .8rem; border-radius:1rem 1rem 1rem .25rem; background:var(--fb-surface-container); overflow-wrap:anywhere; min-width:0; }
 .fb-chat-message-own { align-self:flex-end; border-radius:1rem 1rem .25rem 1rem; background:var(--fb-primary-container); color:var(--fb-on-primary-container); }
 /* A bare emoji is the whole message: keep the time/ticks, drop the bubble
@@ -192,11 +204,44 @@
 .fb-chat-message-klipy .fb-chat-message-status { color:var(--fb-on-surface-variant); }
 .fb-chat-message-klipy.fb-chat-flash-a, .fb-chat-message-klipy.fb-chat-flash-b { border-radius:.85rem; }
 /* A Klipy GIF or sticker keeps its own animation and source URL: only its box is
-   bounded. Without this bound a wide sticker painted at its intrinsic width and
-   pushed the bubble past the transcript. No object-fit and no aspect-ratio are
-   set, so the picture is neither cropped nor flattened. */
+   bounded, and the bubble has to be the picture. A bare URL's bubble was sized
+   by the picture's own intrinsic width: at 1440 the picture painted at 352
+   inside a 483px bubble and at a 320 phone it painted at 249.59 inside a
+   full-width 294.4px bubble, so the timestamp and the corner menu sat on an
+   empty strip beside the picture. The cause was the percentage inside the cap: a
+   percentage max-width cannot resolve while the max-content surface measures the
+   bubble, so the whole cap was dropped and the bitmap's own width sized the
+   bubble. The bubble below therefore states a plain length, which survives that
+   measurement, and the picture keeps its percentage only as the guard that
+   shrinks it inside a narrow pane. Both read the same token for the same kind,
+   so the picture, the bubble and the status line share one edge: inline-end for
+   the sender, inline-start for the recipient, and the line stays full width so
+   that edge is the pane's own.
+   No object-fit and no aspect-ratio are set, so the picture is neither cropped,
+   letterboxed nor squashed; `width:auto` never upscales a small piece of art,
+   and the max-height bound shrinks a tall one by its own ratio. A bare Klipy URL
+   carries no kind, so an item without `data-media-kind` keeps the compact shared
+   cap: guessing sticker vs GIF from a URL path, a file extension or an alpha
+   channel would be a fabricated distinction. The attribute belongs on the
+   `img.fb-chat-klipy` itself, so the picture states its kind once and the bubble
+   reads it with `:has()`. */
+.fb-chat-message.fb-chat-message-klipy { max-width:var(--fb-chat-klipy-width, 192px); }
+.fb-chat-message.fb-chat-message-klipy:has(.fb-chat-klipy[data-media-kind="gif"]) {
+  max-width:var(--fb-chat-photo-width, 320px); }
+.fb-chat-message.fb-chat-message-klipy:has(.fb-chat-klipy[data-media-kind="sticker"]) {
+  max-width:var(--fb-chat-sticker-width, 176px); }
 .fb-chat-message .fb-chat-klipy { display:block; width:auto; height:auto;
-  max-width:min(100%, var(--fb-chat-media-width)); max-height:min(30rem, 80vh); border-radius:.6rem; }
+  max-width:min(var(--fb-chat-klipy-width, 192px), 100%);
+  max-height:var(--fb-chat-klipy-height, min(224px, 40vh)); border-radius:.6rem; }
+/* A known GIF is preview media, so it takes the same bounded box as a photo
+   preview. A known sticker is expression, not a picture, and stays smaller: the
+   owner's reference gives it about 56% of the picture width. */
+.fb-chat-message .fb-chat-klipy[data-media-kind="gif"] {
+  max-width:min(var(--fb-chat-photo-width, 320px), 100%);
+  max-height:var(--fb-chat-photo-height, min(320px, 50vh)); }
+.fb-chat-message .fb-chat-klipy[data-media-kind="sticker"] {
+  max-width:min(var(--fb-chat-sticker-width, 176px), 100%);
+  max-height:var(--fb-chat-sticker-height, min(176px, 34vh)); }
 /* A bare photo is the message: no padding ring, no tinted footer and no
    mismatched tail. The flush paint is gated on ChatPhoto actually having bytes
    to show, so a loading, missing or downloadable photo keeps the ordinary
@@ -282,44 +327,51 @@
 .fb-chat-sheet :is(button,a):focus-visible, .fb-chat-search-results button:focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }
 @media (prefers-reduced-motion:no-preference) { .fb-chat-refreshing { animation:fb-chat-spin 1s linear infinite; } }
 @keyframes fb-chat-spin { to { transform:rotate(360deg); } }
-/* Files, video and stickers share one preferred width: 22rem (352px) once the
-   conversation allows it, capped at 78vw so a 320px phone keeps its message
-   padding. The bubble's max-width and each media element's max-width:100%
-   clamp it further, so the preference never becomes an overflow minimum.
-   Photos opt into their own wider preference below; this token stays the one
-   those shapes read. */
-.fb-chat-page { --fb-chat-media-width: min(22rem, 78vw); --fb-chat-photo-width: 32rem; }
-/* A bare photo prefers 32rem inside the same 34rem bubble cap, but the shared
-   height bound still owns tall pictures: the width also has to fit
-   `height cap × ratio`, so a 9:16 photo narrows to 270px at a 480px cap and the
-   contain-fitted picture paints edge to edge instead of sitting letterboxed in
-   a wider frame. --fb-chat-photo-ratio is the validated unitless width/height
-   number ChatPhoto publishes on the same inline style as the aspect ratio; the
-   1 default matches its own invalid-dimensions fallback, so a box never leaks
-   NaN into calc(). A wide panorama simply takes the preferred width and keeps
-   its own ratio: no crop, no letterbox and no arbitrary panorama clamp. */
-.fb-chat-photo { --fb-chat-photo-ratio: 1; position:relative; width:min(var(--fb-chat-photo-width, 32rem), 100%, calc(min(30rem, 80vh) * var(--fb-chat-photo-ratio))); max-width:100%; max-height:min(30rem, 80vh); overflow:hidden; border-radius:.6rem; background:var(--fb-surface); }
+/* One compact preview scale for the whole conversation. Every value is a
+   length, not a viewport fraction, because the pane is not the window: the 70%
+   message cap above already makes a preview relative to the transcript, while a
+   length keeps the cap from growing without bound on a wide monitor and from
+   growing at all when a reader raises the text size to 200%. At the default root
+   these are the owner's 20rem preview, 12rem unknown expressive, 11rem sticker,
+   plus a separate height bound so one tall picture cannot fill the screen. A
+   preview smaller than its cap keeps its own size: nothing here upscales art. */
+.fb-chat-page { --fb-chat-media-width: 320px; --fb-chat-photo-width: 320px;
+  --fb-chat-photo-height: min(320px, 50vh); --fb-chat-klipy-width: 192px;
+  --fb-chat-klipy-height: min(224px, 40vh); --fb-chat-sticker-width: 176px;
+  --fb-chat-sticker-height: min(176px, 34vh); }
+/* A bare photo prefers the shared 20rem preview inside the same 34rem bubble
+   cap, but the shared height bound still owns tall pictures: the width also has
+   to fit `height cap × ratio`, so a 9:16 photo narrows to 180px at a 320px cap
+   and the contain-fitted picture paints edge to edge instead of sitting
+   letterboxed in a wider frame. --fb-chat-photo-ratio is the validated unitless
+   width/height number ChatPhoto publishes on the same inline style as the aspect
+   ratio; the 1 default matches its own invalid-dimensions fallback, so a box
+   never leaks NaN into calc(). A wide panorama simply takes the preferred width
+   and keeps its own ratio: no crop, no letterbox and no arbitrary panorama
+   clamp. */
+.fb-chat-photo { --fb-chat-photo-ratio: 1; position:relative; width:min(var(--fb-chat-photo-width, 320px), 100%, calc(var(--fb-chat-photo-height, min(320px, 50vh)) * var(--fb-chat-photo-ratio))); max-width:100%; max-height:var(--fb-chat-photo-height, min(320px, 50vh)); overflow:hidden; border-radius:.6rem; background:var(--fb-surface); }
 /* A flush bubble is exactly the picture frame. The surface sizes to
    `max-content` and the bubble declares no width, so the bubble's width is the
    in-flow photo's contribution. The base photo width carries a percentage,
    which cannot resolve during intrinsic sizing: that contribution fell back to
    the bitmap's own width, the 34rem cap became the bubble width, and the photo
-   then resolved to 32rem inside it. A 512px picture sat in a 544px bubble with
-   a blank strip beside it and the corner chip and menu anchored to the strip.
+   resolved to its own preference inside it. A 512px picture sat in a 544px
+   bubble with a blank strip beside it and the corner chip and menu anchored to
+   the strip.
    Inside a flush bubble the box states its real width, so the picture owns the
    width and those overlays land on it; the base `max-width:100%` still clamps
    the same box on a narrow pane. */
 .fb-chat-message-media:has(> .fb-chat-photo > button) > .fb-chat-photo {
-  width:min(var(--fb-chat-photo-width, 32rem), calc(min(30rem, 80vh) * var(--fb-chat-photo-ratio))); }
+  width:min(var(--fb-chat-photo-width, 320px), calc(var(--fb-chat-photo-height, min(320px, 50vh)) * var(--fb-chat-photo-ratio))); }
 /* No bytes yet (loading, missing, failed, unavailable): the inline intrinsic
    ratio would reserve a tall empty card for a picture that may never paint, so
    the status text sizes itself instead. `!important` only because an inline
    declaration cannot be beaten otherwise; a painted photo renders a button, so
    this never matches real content. */
 .fb-chat-photo:has(> div[role="status"]) { aspect-ratio:auto !important; }
-/* A standalone no-bytes card keeps the compact shared media width instead of the
-   wider photo preference. Grouped cells and the details gallery own their box,
-   so they are excluded and keep filling it. */
+/* A standalone no-bytes card takes the shared preview width: there is no picture
+   to size to, so it must not reserve a photo-shaped box. Grouped cells and the
+   details gallery own their box, so they are excluded and keep filling it. */
 .fb-chat-message .fb-chat-photo:not(.fb-chat-photo-grouped):has(> div[role="status"]) { width:var(--fb-chat-media-width); }
 /* Bytes can exist before the bitmap paints; without a skeleton the bubble is a
    blank rectangle and looks like a failed photo. The spinner is decorative —
@@ -368,6 +420,59 @@
 .fb-chat-photo-more { position:absolute; inset:0; display:grid; place-items:center; pointer-events:none;
   background:rgb(0 0 0 / .52); color:#fff; font-size:1.2rem; font-weight:650; }
 
+/* A selection of photos and videos is one bounded album, not a stack of cards.
+   Every cell is the same message surface a lone photo uses, so per-item
+   captions, retry, receipts and the shared viewer never diverge; the album only
+   removes the second card chrome around them. Two columns keep each picture
+   readable on a 320px phone, and an odd album opens with one wide cell so it
+   never ends in a hole. The album is a direct child of the transcript, so its
+   own 70% cap resolves against the usable transcript exactly like a lone
+   message's row, and its cells below only read 100%. */
+.fb-chat-run { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:2px;
+  width:var(--fb-chat-media-width); max-width:70%; border-radius:.6rem; overflow:hidden; }
+.fb-chat-run-own { margin-inline-start:auto; }
+.fb-chat-run > .fb-chat-line-row { align-items:flex-start; }
+.fb-chat-run > .fb-chat-line-row-wide { grid-column:1 / -1; }
+.fb-chat-run .fb-chat-message-surface { width:100%; max-width:100%; }
+.fb-chat-run-own .fb-chat-message-surface { flex-direction:row-reverse; }
+/* One album, not a stack of rounded cards. The canonical flush bubble sets a
+   1rem radius and hands it to the picture; inside a cell that radius is larger
+   than the album's own, so the shared 2px gap and the album corner stay the only
+   edges. Only the flush pair is flattened: a cell with a caption, a control or a
+   placeholder keeps the ordinary padded bubble and its in-flow status row. */
+.fb-chat-run .fb-chat-message-media:has(> .fb-chat-photo > button),
+.fb-chat-run .fb-chat-message-media:has(> .fb-chat-photo > button) > .fb-chat-photo { border-radius:0; }
+/* A clip needs the album's full width for its own transport; a half cell would
+   squeeze the seek bar and the buttons into a column too narrow to press. A cell
+   with its own caption, quote or report takes that width for the same reason:
+   a paragraph in a 125px column is unreadable. */
+.fb-chat-run-stack { grid-template-columns:minmax(0, 1fr); }
+/* The cell owns the box, so the shared photo control fills it instead of asking
+   for the single-photo preference, which would overflow a half cell. Every cell
+   is the same square, so two pictures of different shapes still tile: the
+   album reads as one grid instead of two ragged boxes with a hole under the
+   shorter one. Nothing is lost to the crop - one tap opens the whole frame in
+   the shared viewer - and the ratio token the single photo publishes is not
+   consulted here because the cell, not the picture, owns the shape. */
+.fb-chat-run .fb-chat-photo,
+.fb-chat-run .fb-chat-message .fb-chat-photo,
+.fb-chat-run .fb-chat-message-media:has(> .fb-chat-photo > button) > .fb-chat-photo {
+  width:100%; max-width:100%; max-height:none; aspect-ratio:1 / 1 !important; }
+/* A photo with no bytes paints a status card, not a button, and the base rule
+   gives that card the shared media width. Inside a cell it owns the column
+   instead, so the placeholder never spills over its neighbour. */
+.fb-chat-run .fb-chat-message .fb-chat-photo:not(.fb-chat-photo-grouped):has(> div[role="status"]) {
+  width:100%; }
+/* A stacked photo is alone in its row, so it keeps its own shape: the same
+   ratio-bound width the single photo uses, with the same shared height bound so
+   one portrait cannot fill the screen. */
+.fb-chat-run-stack .fb-chat-photo,
+.fb-chat-run-stack .fb-chat-message .fb-chat-photo,
+.fb-chat-run-stack .fb-chat-message-media:has(> .fb-chat-photo > button) > .fb-chat-photo {
+  width:min(100%, calc(var(--fb-chat-photo-height, min(320px, 50vh)) * var(--fb-chat-photo-ratio)));
+  max-height:var(--fb-chat-photo-height, min(320px, 50vh)); aspect-ratio:auto !important; }
+.fb-chat-run .fb-chat-photo img { object-fit:cover; }
+
 /* Tapping a quote scrolls the original into view and rings it once. The two
    names are identical animations, alternated by the tap counter, so tapping
    the same quote twice restarts the ring instead of resetting a live class.
@@ -399,6 +504,12 @@
   background:var(--fb-surface-container); text-decoration:none; }
 .fb-chat-photo-open img { display:block; width:100%; height:100%; object-fit:cover; }
 .fb-chat-photo-pending { display:grid; place-items:center; gap:.15rem; color:var(--fb-on-surface-variant); }
+/* A staged video has no fabricated poster: the slot names the file and shows
+   the shared film glyph instead of an empty frame. */
+.fb-chat-photo-draft .fb-chat-photo-video { display:grid; place-items:center; gap:.1rem; padding:.2rem;
+  color:var(--fb-on-surface-variant); }
+.fb-chat-photo-video-name { width:100%; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  text-align:center; font-size:.7rem; line-height:1.15; }
 .fb-chat-photo-spinner { width:1.1rem; height:1.1rem; border-radius:50%;
   border:2px solid var(--fb-outline-variant); border-top-color:var(--fb-primary); }
 @media (prefers-reduced-motion:no-preference) { .fb-chat-photo-spinner { animation:fb-chat-spin 1s linear infinite; } }
@@ -412,6 +523,9 @@
 .fb-chat-photo-options { display:flex; align-items:center; flex-wrap:wrap; gap:.4rem .75rem; }
 .fb-chat-photo-options p { margin:0; flex:1 1 10rem; min-width:0; }
 /* Shared voice-note geometry lives in components/voiceNote.css. */
+/* The recorder's ceiling is a fact, not an alarm: one quiet line under the
+   strip, stated once, never repeated on every tick. */
+.fb-chat-voice-limit { margin:0 .8rem .35rem; font-size:.8rem; line-height:1.4; color:var(--fb-on-surface-variant); }
 /* Report subject and one-time location stay compact cards inside the bubble:
    the report id is a live reference, so an unreadable report degrades to plain
    text rather than a broken card. */

@@ -13,6 +13,7 @@ import { ReportSheet } from "./ReportSheet";
 import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
 import { announce } from "./LiveRegion";
 import { friendlyError } from "../utils/friendlyErrors";
+import { presentationProjection } from "../screens/Messaging";
 import "./conversationInfo.css";
 
 /**
@@ -44,6 +45,10 @@ export function ConversationInfo({ accountId, conversationId, peer }: {
 
   const current = chat.accountId === accountId ? chat.currentProjections?.[conversationId] : undefined;
   const live = chat.accountId === accountId && chat.status === "ready" && Boolean(current);
+  // What the rows may *show* across a routine refresh. `current` stays the sole
+  // authority for every mutation and for whether this card can act at all.
+  const presentation = presentationProjection(chat, accountId, conversationId);
+  const canShareLocation = live && current?.mode === "CONNECTED" && !current.ownBlocked;
 
   useEffect(() => {
     let cancelled = false;
@@ -73,8 +78,14 @@ export function ConversationInfo({ accountId, conversationId, peer }: {
       <Link to={`/chats/${encodeURIComponent(conversationId)}?search=1`}><Search size={20} aria-hidden="true" /><span>Search chat</span></Link>
       <a href="#conversation-photos"><Images size={20} aria-hidden="true" /><span>Shared photos</span></a>
       <Link to="/settings/privacy/messages"><Settings2 size={20} aria-hidden="true" /><span>Message settings</span></Link>
-      {current?.mode === "CONNECTED" && (
-        <Link to={`/chats/${encodeURIComponent(conversationId)}?location=1`}>
+      {/* Presentation keeps the shortcut in place across a routine refresh; the
+          link itself never activates without the live CONNECTED authority the
+          chat screen will re-check before it opens the location composer. */}
+      {presentation?.mode === "CONNECTED" && !presentation.ownBlocked && !presentation.ownDeclined && (
+        <Link to={`/chats/${encodeURIComponent(conversationId)}?location=1`}
+          aria-disabled={canShareLocation ? undefined : true}
+          className={canShareLocation ? undefined : "pointer-events-none opacity-50"}
+          onClick={(event) => { if (!canShareLocation) event.preventDefault(); }}>
           <MapPin size={20} aria-hidden="true" /><span>Share location</span>
         </Link>
       )}
@@ -98,24 +109,31 @@ export function ConversationInfo({ accountId, conversationId, peer }: {
 
     <section aria-label="Conversation actions" className="fb-conversation-actions">
       <h2>Conversation</h2>
-      {typeof current?.ownMuted === "boolean"
-        ? <PreferenceSwitchRow title="Mute notifications" icon={BellOff} checked={current.ownMuted}
-            disabled={busy || !live} onChange={(muted) => void act(() => setMessagingMuted(accountId, conversationId, muted), muted ? "Conversation muted." : "Conversation unmuted.")} />
+      {typeof presentation?.ownMuted === "boolean"
+        ? <PreferenceSwitchRow title="Mute notifications" icon={BellOff} checked={presentation.ownMuted}
+            disabled={busy || !live || typeof current?.ownMuted !== "boolean"}
+            onChange={(muted) => void act(() => setMessagingMuted(accountId, conversationId, muted), muted ? "Conversation muted." : "Conversation unmuted.")} />
         : <p className="fb-chat-secondary">Sync to change chat notifications.</p>}
-      <button type="button" disabled={busy || !live} onClick={() => void act(
-        () => changeMessagingRelationship(accountId, conversationId, current?.ownHidden ? "unhide" : "hide"),
-        current?.ownHidden ? "Moved back to your inbox." : current?.mode === "CONNECTED" ? "Conversation archived." : "Request hidden.")}>
-        <Archive size={20} aria-hidden="true" /><span>{current?.ownHidden ? "Move to inbox" : current?.mode === "CONNECTED" ? "Archive conversation" : "Hide request"}</span>
-      </button>
-      {current?.mode === "CONNECTED" && (confirming === "end"
+      {presentation && <button type="button" disabled={busy || !live} onClick={() => {
+        if (!live || !current) return;
+        void act(
+          () => changeMessagingRelationship(accountId, conversationId, current.ownHidden ? "unhide" : "hide"),
+          current.ownHidden ? "Moved back to your inbox." : current.mode === "CONNECTED" ? "Conversation archived." : "Request hidden.");
+      }}>
+        <Archive size={20} aria-hidden="true" /><span>{presentation.ownHidden ? "Move to inbox" : presentation.mode === "CONNECTED" ? "Archive conversation" : "Hide request"}</span>
+      </button>}
+      {presentation?.mode === "CONNECTED" && (confirming === "end"
         ? <InlineConfirm text="Your messages stay here. Either of you can send a new request."
-            confirm="Remove friend" busy={busy}
+            confirm="Remove friend" busy={busy} confirmDisabled={!live || current?.mode !== "CONNECTED"}
             onCancel={() => setConfirming(null)}
-            onConfirm={() => void act(async () => { await changeMessagingRelationship(accountId, conversationId, "end"); setConfirming(null); }, "Removed from friends.")} />
-        : <button type="button" disabled={busy || !live} onClick={() => setConfirming("end")}><LogOut size={20} aria-hidden="true" /><span>Remove friend</span></button>)}
+            onConfirm={() => {
+              if (!live || current?.mode !== "CONNECTED") return;
+              void act(async () => { await changeMessagingRelationship(accountId, conversationId, "end"); setConfirming(null); }, "Removed from friends.");
+            }} />
+        : <button type="button" disabled={busy || !live} onClick={() => { if (live && current?.mode === "CONNECTED") setConfirming("end"); }}><LogOut size={20} aria-hidden="true" /><span>Remove friend</span></button>)}
       {(confirming === "clear"
         ? <InlineConfirm text="This clears your copy on your devices, not theirs."
-            confirm="Clear for me" busy={busy}
+            confirm="Clear for me" busy={busy} confirmDisabled={!live}
             onCancel={() => setConfirming(null)}
             onConfirm={() => void act(async () => { await clearMessagingConversation(accountId, conversationId, highest); setConfirming(null); }, "Your copy was cleared.")} />
         : <button type="button" disabled={busy || !live || highest === 0 || pendingOutbox > 0} onClick={() => setConfirming("clear")}>
@@ -143,14 +161,14 @@ function FlagIcon() {
     strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" x2="4" y1="22" y2="15" /></svg>;
 }
 
-function InlineConfirm({ text, confirm, busy, onCancel, onConfirm }: {
-  text: string; confirm: string; busy: boolean; onCancel: () => void; onConfirm: () => void;
+function InlineConfirm({ text, confirm, busy, confirmDisabled = false, onCancel, onConfirm }: {
+  text: string; confirm: string; busy: boolean; confirmDisabled?: boolean; onCancel: () => void; onConfirm: () => void;
 }) {
   return <div className="fb-conversation-confirm" role="group" aria-label={confirm}>
     <p>{text}</p>
     <div>
       <button type="button" onClick={onCancel} disabled={busy}>Cancel</button>
-      <button type="button" className="destructive" onClick={onConfirm} disabled={busy}>{busy ? "Working…" : confirm}</button>
+      <button type="button" className="destructive" onClick={onConfirm} disabled={busy || confirmDisabled}>{busy ? "Working…" : confirm}</button>
     </div>
   </div>;
 }
