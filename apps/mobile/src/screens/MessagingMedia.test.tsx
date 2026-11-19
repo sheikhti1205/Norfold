@@ -1608,6 +1608,10 @@ it("separates an absent presentation field from an explicit authority clear", ()
   // conversations it actually carries.
   expect(presentationProjection({ accountId: "account", currentProjections: null, displayProjections: null }, "account", "chat", cached)).toBeNull();
   expect(presentationProjection({ accountId: "account", currentProjections: null, displayProjections: {} }, "account", "chat", cached)).toBeNull();
+  // A conversation summary's cached projection is nullable, so the helper must
+  // accept that shape: no cache and no accepted set still show nothing.
+  expect(presentationProjection({ accountId: "account", currentProjections: null }, "account", "chat", null)).toBeNull();
+  expect(presentationProjection({ accountId: "account", currentProjections: null, displayProjections: null }, "account", "chat", null)).toBeNull();
 });
 
 it("keeps the relationship visible but inert while a routine refresh is between sets", async () => {

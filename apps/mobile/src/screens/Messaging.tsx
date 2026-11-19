@@ -289,7 +289,7 @@ export function presentationProjection(chat: {
   accountId: string | null;
   currentProjections?: Readonly<Record<string, ConversationProjection>> | null;
   displayProjections?: Readonly<Record<string, ConversationProjection>> | null;
-}, accountId: string, conversationId: string, cached?: ConversationProjection): ConversationProjection | null {
+}, accountId: string, conversationId: string, cached?: ConversationProjection | null): ConversationProjection | null {
   if (chat.accountId !== accountId) return null;
   const current = chat.currentProjections?.[conversationId];
   if (current) return current;
