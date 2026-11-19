@@ -248,7 +248,7 @@ describe("GenericLinkPreview", () => {
 
 describe("GenericLinkPreview surface contract", () => {
   it("paints no nested surface, caps its width and keeps a 44px anchor", () => {
-    const css = readFileSync(new URL("./GenericLinkPreview.css", import.meta.url), "utf8");
+    const css = readFileSync("src/components/GenericLinkPreview.css", "utf8");
 
     const wrapper = /\.fb-linkp\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
     expect(wrapper).toContain("width: min(320px, 100%)");

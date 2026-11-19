@@ -6,9 +6,11 @@ const { auth, sdk } = vi.hoisted(() => ({
 }));
 
 let authHandler: ((event: string, session: { user: { id: string } } | null) => void) | undefined;
+let authSubscriptions = 0;
 
 auth.onAuthStateChange.mockImplementation(
   (callback: (event: string, session: { user: { id: string } } | null) => void) => {
+    authSubscriptions += 1;
     authHandler = callback;
     return { data: { subscription: { unsubscribe: vi.fn() } } };
   },
@@ -408,6 +410,7 @@ describe("fetchLinkPreview", () => {
     const kept = fetchLinkPreview(target);
     await vi.waitFor(() => expect(mock).toHaveBeenCalledTimes(1));
 
+    await flushMicrotasks();
     controller.abort();
     await expect(aborted).resolves.toBeNull();
     expect(calls[0]!.init?.signal?.aborted).toBe(false);
@@ -518,7 +521,7 @@ describe("fetchLinkPreview", () => {
     await fetchLinkPreview("https://owner.example.com/a");
     await fetchLinkPreview("https://owner.example.com/b");
 
-    expect(auth.onAuthStateChange.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(authSubscriptions).toBeGreaterThanOrEqual(1);
     expect(auth.getSession).toHaveBeenCalled();
   });
 });

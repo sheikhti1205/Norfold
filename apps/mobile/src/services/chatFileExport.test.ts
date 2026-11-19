@@ -288,7 +288,8 @@ describe("web view", () => {
   it("refuses bytes relabelled as PDF instead of opening them", async () => {
     const viewer = viewerStub();
     openMock.mockReturnValue(viewer as unknown as Window);
-    m.download.mockResolvedValue(blobOf("<html><script>alert(1)</script>", "application/pdf"));
+    // This hostile blob has the declared size, so the magic check, not the size guard, rejects it.
+    m.download.mockResolvedValue(blobOf("<html><!", "application/pdf"));
 
     await expect(viewChatFile(pdfMeta)).rejects.toMatchObject({
       code: "UNSUPPORTED_VIEW",

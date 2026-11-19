@@ -252,7 +252,7 @@ describe("recorder progress and clocks", () => {
     expect(container.querySelector(".fb-chat-voice-remaining")?.textContent).toBe("0:00 left");
     expect(fillWidth(container)).toBe("100%");
     expect(progress(container)?.getAttribute("aria-valuenow")).toBe("100");
-    expect(container.textContent).toContain("of 0:08, 0:00 left");
+    expect(progress(container)?.getAttribute("aria-valuetext")).toBe("0:08 of 0:08, 0:00 left");
   });
 
   it("clamps a non-finite review duration instead of dividing by it", () => {
