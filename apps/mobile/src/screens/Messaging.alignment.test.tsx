@@ -45,6 +45,30 @@ function bodies(selector: string) {
   return rules.filter(rule => rule.selectors.includes(selector)).map(rule => rule.body);
 }
 
+/** One rule body's declarations, keyed by lowercased property name. A
+ * substring search cannot tell `width` from `max-width`; this can. */
+function declarations(body: string) {
+  const declared = new Map<string, string[]>();
+  for (const part of body.split(";")) {
+    const colon = part.indexOf(":");
+    if (colon < 0) continue;
+    const property = part.slice(0, colon).trim().toLowerCase();
+    if (!property) continue;
+    declared.set(property, [...(declared.get(property) ?? []), part.slice(colon + 1).trim()]);
+  }
+  return declared;
+}
+
+/** Selectors of line/row boxes that declare a real width, which would
+ * stretch the gutter instead of packing the content-sized surface. */
+function stretchedBoxes(lineSelectors: string[]) {
+  return rules
+    .filter(rule => rule.selectors.some(selector =>
+      lineSelectors.includes(selector) || selector.endsWith("> .fb-chat-line-row")))
+    .filter(rule => declarations(rule.body).has("width"))
+    .flatMap(rule => rule.selectors);
+}
+
 const ownRow = bodies(".fb-chat-line-own > .fb-chat-line-row").join("\n");
 const receivedRow = bodies(".fb-chat-line-row").join("\n");
 
@@ -73,8 +97,16 @@ describe("chat transcript own and received gutters", () => {
     expect(bubble).toContain("min-width:0;");
     expect(bubble).not.toMatch(/(?:^|[;\s])width\s*:/);
     // No full-width row or line: the gutter comes from packing, not stretching.
-    expect(chatCss).not.toMatch(/\.fb-chat-line-row[^{}]*\{[^{}]*width:100%/);
-    expect(chatCss).not.toMatch(/\.fb-chat-line-own[^{}]*\{[^{}]*width:/);
+    // Property-level extraction keeps `max-width:100%` distinct from a real
+    // `width:100%`; the old substring regex matched the max clamp and failed.
+    expect(stretchedBoxes([".fb-chat-line", ".fb-chat-line-own", ".fb-chat-line-row"])).toEqual([]);
+  });
+
+  it("reads width as its own property, not a max-width substring", () => {
+    // A real stretch is rejected; the legitimate row clamp stays allowed.
+    expect(declarations("display:flex; max-width:100%; min-width:0;").has("width")).toBe(false);
+    expect(declarations("display:flex; width:100%;").get("width")).toEqual(["100%"]);
+    expect(declarations("max-width:100%; width:min(100%, 34rem)").get("width")).toEqual(["min(100%, 34rem)"]);
   });
 
   it("does not turn the alignment into a margin or width workaround", () => {
