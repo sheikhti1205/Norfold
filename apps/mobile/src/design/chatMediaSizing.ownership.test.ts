@@ -42,6 +42,39 @@ function bodiesFor(rules: CssRule[], selector: string) {
   return rules.filter(rule => rule.selectors.includes(selector)).map(rule => rule.body);
 }
 
+/**
+ * One exported function's full source, from its declaration through the brace
+ * that closes its body. A lazy `\n}` match ends on the first line-final `}`,
+ * which is the parameter object's own closing brace here, so the guards in the
+ * body were never read; counting from the body brace to its match cannot stop
+ * early on a multi-line signature.
+ */
+function functionSource(source: string, name: string) {
+  const start = source.indexOf(`export function ${name}(`);
+  if (start < 0) return "";
+  let cursor = source.indexOf("(", start);
+  if (cursor < 0) return "";
+  let parens = 0;
+  for (; cursor < source.length; cursor += 1) {
+    if (source[cursor] === "(") parens += 1;
+    else if (source[cursor] === ")") {
+      parens -= 1;
+      if (parens === 0) break;
+    }
+  }
+  const open = source.indexOf("{", cursor);
+  if (open < 0) return "";
+  let depth = 0;
+  for (let index = open; index < source.length; index += 1) {
+    if (source[index] === "{") depth += 1;
+    else if (source[index] === "}") {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, index + 1);
+    }
+  }
+  return "";
+}
+
 const rules = cssRules(chatCss);
 const peerComposerRules = cssRules(peerComposerCss);
 
@@ -489,7 +522,7 @@ describe("R19 media-only bubble ownership", () => {
     expect(messagingTsx).toContain("const mediaOnly = isMediaOnlyMessage(message, attachment, {");
     expect(messagingTsx)
       .toContain("actionable: !!localFailed || !!reviewMember || !!failedMember || removableMembers.length > 0,");
-    const predicate = /export function isMediaOnlyMessage\([\s\S]*?\n\}/.exec(messagingTsx)?.[0] ?? "";
+    const predicate = functionSource(messagingTsx, "isMediaOnlyMessage");
     expect(predicate).toContain('message.messageType !== "MEDIA"');
     expect(predicate).toContain("if (status.actionable) return false;");
     expect(predicate).toContain('attachment.state === "READY" || attachment.state === "EVICTED"');
