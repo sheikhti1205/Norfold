@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ChatFile } from "./ChatFile";
 import type { ChatFileMeta } from "../services/messaging/files";
 
-const chatCss = readFileSync(new URL("./ChatFile.css", import.meta.url), "utf8");
+const chatCss = readFileSync("src/components/ChatFile.css", "utf8");
 
 const m = vi.hoisted(() => ({
   download: vi.fn(),
