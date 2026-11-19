@@ -9,12 +9,27 @@ import type { PostItem, SearchedProfile } from "@norfold/shared";
 const io = vi.hoisted(() => ({
   fetchFeed: vi.fn(),
   searchPeople: vi.fn(),
+  fetchProfile: vi.fn(),
+  fetchConnections: vi.fn(),
   user: { id: "searcher" } as { id: string } | null,
   pointer: { fine: false },
 }));
-vi.mock("../auth", () => ({ useAuth: () => ({ user: io.user }) }));
+vi.mock("../auth", () => ({
+  useAuth: () => ({ user: io.user }),
+  useOptionalAuth: () => ({ user: io.user }),
+}));
 vi.mock("../services/posts", () => ({ fetchFeed: io.fetchFeed }));
 vi.mock("../services/people", () => ({ searchPeople: io.searchPeople }));
+// The people row now carries the one person card. Its own reads are mocked so a
+// tap opens the card without reaching a real profile or connection endpoint.
+vi.mock("../services/profile", () => ({ fetchPublicProfile: io.fetchProfile }));
+vi.mock("../services/connections", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../services/connections")>();
+  return { ...actual, fetchConnectionCount: io.fetchConnections };
+});
+vi.mock("../services/messaging/useMessaging", () => ({
+  useMessaging: () => ({ accountId: null, status: "closed", currentProjections: null }),
+}));
 // Hover previews exist only on a fine pointer; jsdom has none. The switch is
 // explicit so the hover contract is tested without pretending jsdom can hover.
 vi.mock("./inputCapabilities", async (importOriginal) => {
@@ -23,6 +38,7 @@ vi.mock("./inputCapabilities", async (importOriginal) => {
 });
 
 import { GlobalSearchOverlay } from "./GlobalSearchOverlay";
+import { clearProfilePreviewCache } from "./ProfilePreview";
 import { resetGlobalSearch, toggleGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
 import { resetModalLayers } from "../hooks/modalLayers";
 
@@ -59,6 +75,17 @@ const person = {
   displayName: "Amira Saleh",
   avatarUrl: null,
 } as SearchedProfile;
+const publicProfile = {
+  id: "person-1",
+  username: "amira",
+  displayName: "Amira Saleh",
+  avatarUrl: null,
+  emailVerified: true,
+  phoneVerified: false,
+  bio: "Keeps the reading room noticeboard current.",
+  locationLabel: "Central Library",
+  createdAt: "2026-01-01T00:00:00.000Z",
+};
 
 const DAY_LABEL = new Intl.DateTimeFormat("en-US", {
   weekday: "long",
@@ -164,6 +191,14 @@ async function openFilters() {
   return { overlay, toggle, bar };
 }
 
+/** Type a query and return the live people row it produced. */
+async function searchPeopleRow(query = "wallet") {
+  const { overlay } = await openSearch();
+  fireEvent.change(within(overlay).getByRole("searchbox"), { target: { value: query } });
+  const row = await within(overlay).findByRole("link", { name: /Amira Saleh/ });
+  return { overlay, row };
+}
+
 /** Open the month menu, then the shared picker's own From sheet. */
 async function openFromPicker() {
   const { overlay, bar } = await openFilters();
@@ -183,8 +218,13 @@ beforeEach(() => {
   io.pointer.fine = false;
   io.fetchFeed.mockReset();
   io.searchPeople.mockReset();
+  io.fetchProfile.mockReset();
+  io.fetchConnections.mockReset();
   io.fetchFeed.mockResolvedValue({ items: [], nextCursor: null, total: 0 });
   io.searchPeople.mockResolvedValue({ items: [], nextCursor: null });
+  io.fetchProfile.mockResolvedValue(publicProfile);
+  io.fetchConnections.mockResolvedValue(null);
+  clearProfilePreviewCache();
   localStorage.clear();
   resetGlobalSearch();
   resetModalLayers();
@@ -757,5 +797,109 @@ describe("app-wide search", () => {
     expect(await within(overlay).findByText("Sign in to search reports and people.")).toBeTruthy();
     expect(io.fetchFeed).not.toHaveBeenCalled();
     expect(io.searchPeople).not.toHaveBeenCalled();
+  });
+
+  it("opens the person card on a touch tap without closing the search", async () => {
+    io.fetchFeed.mockResolvedValue({ items: [report], nextCursor: null, total: 1 });
+    io.searchPeople.mockResolvedValue({ items: [person], nextCursor: null });
+    render(<Harness />);
+    const { overlay, row } = await searchPeopleRow();
+
+    // The people row carries the one person card; a report row keeps its own
+    // search-only photo preview and is not a person trigger.
+    expect(row.closest(".fb-profile-preview-trigger")).toBeTruthy();
+    const reportRow = within(overlay).getByRole("link", { name: /Blue wallet near the library/ });
+    expect(reportRow.closest(".fb-profile-preview-trigger")).toBeNull();
+    // Nothing is read for a profile until the card is actually asked for.
+    expect(io.fetchProfile).not.toHaveBeenCalled();
+
+    fireEvent.click(row, { detail: 1 });
+
+    const card = await screen.findByTestId("profile-preview");
+    // The tap hands focus to the card's first action, so the reader lands
+    // inside the card instead of behind it.
+    await waitFor(() => expect(card.contains(document.activeElement)).toBe(true));
+    // A tap opens the card; it must not also dismiss the search behind it.
+    expect(screen.getByRole("search")).toBeTruthy();
+    // Pressing inside the portalled card is not an outside press on the search.
+    fireEvent.pointerDown(card);
+    expect(screen.getByRole("search")).toBeTruthy();
+    expect(screen.getByTestId("route").textContent).toBe("/");
+    await waitFor(() => expect(io.fetchProfile).toHaveBeenCalledWith("amira"));
+  });
+
+  it("navigates from the card's View full profile and closes the search", async () => {
+    io.searchPeople.mockResolvedValue({ items: [person], nextCursor: null });
+    render(<Harness />);
+    const { row } = await searchPeopleRow();
+    fireEvent.click(row, { detail: 1 });
+    const card = await screen.findByTestId("profile-preview");
+
+    fireEvent.click(within(card).getByRole("link", { name: "View full profile" }), { detail: 1 });
+
+    await waitFor(() => expect(screen.getByTestId("route").textContent).toBe("/u/amira"));
+    await waitFor(() => expect(screen.queryByRole("search")).toBeNull());
+  });
+
+  it("closes only the card from its Close, leaving the search open", async () => {
+    io.searchPeople.mockResolvedValue({ items: [person], nextCursor: null });
+    render(<Harness />);
+    const { row } = await searchPeopleRow();
+    fireEvent.click(row, { detail: 1 });
+    const card = await screen.findByTestId("profile-preview");
+
+    fireEvent.click(within(card).getByRole("button", { name: "Close profile preview" }), { detail: 1 });
+
+    await waitFor(() => expect(screen.queryByTestId("profile-preview")).toBeNull());
+    // The identity gets its focus back; landing there must not reopen the card.
+    await waitFor(() => expect(document.activeElement).toBe(row));
+    expect(screen.queryByTestId("profile-preview")).toBeNull();
+    expect(screen.getByRole("search")).toBeTruthy();
+    expect(screen.getByTestId("route").textContent).toBe("/");
+  });
+
+  it("closes the card first and the search on the next Escape", async () => {
+    io.searchPeople.mockResolvedValue({ items: [person], nextCursor: null });
+    render(<Harness />);
+    const { row } = await searchPeopleRow();
+    fireEvent.click(row, { detail: 1 });
+    await screen.findByTestId("profile-preview");
+
+    fireEvent.keyDown(row, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("profile-preview")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(row));
+    expect(screen.queryByTestId("profile-preview")).toBeNull();
+    expect(screen.getByRole("search")).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("search")).toBeNull());
+  });
+
+  it("opens the person card on a fine-pointer rest and still navigates on click", async () => {
+    io.pointer.fine = true;
+    io.searchPeople.mockResolvedValue({ items: [person], nextCursor: null });
+    render(<Harness />);
+    const { row } = await searchPeopleRow();
+
+    fireEvent.pointerOver(row.closest(".fb-profile-preview-trigger")!, { pointerType: "mouse" });
+    expect(await screen.findByTestId("profile-preview")).toBeTruthy();
+    // A rest is not a tap: the search field keeps focus.
+    expect(screen.getByTestId("profile-preview").contains(document.activeElement)).toBe(false);
+
+    fireEvent.click(row, { detail: 1 });
+    await waitFor(() => expect(screen.getByTestId("route").textContent).toBe("/u/amira"));
+    await waitFor(() => expect(screen.queryByRole("search")).toBeNull());
+  });
+
+  it("keeps the direct destination for a keyboard activation", async () => {
+    io.searchPeople.mockResolvedValue({ items: [person], nextCursor: null });
+    render(<Harness />);
+    const { row } = await searchPeopleRow();
+
+    fireEvent.click(row, { detail: 0 });
+
+    await waitFor(() => expect(screen.getByTestId("route").textContent).toBe("/u/amira"));
+    expect(screen.queryByTestId("profile-preview")).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("search")).toBeNull());
   });
 });

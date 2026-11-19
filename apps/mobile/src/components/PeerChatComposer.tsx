@@ -57,6 +57,18 @@ export interface PeerChatComposerProps {
   onPickKlipy?: (item: KlipyItem) => void;
   /** Signed-in reader, hashed into the provider customer id. */
   userId?: string | null;
+  /** Image-only clipboard paste. Present only where the screen's one media
+   *  admission owner accepts staged attachments; plain or mixed text paste is
+   *  never intercepted here. */
+  onPasteImages?: (files: File[]) => void;
+  /** Reports the field's focus so the screen advertises keyboard/provider
+   *  insertion only while this composer actually owns the caret. */
+  onFocusChange?: (focused: boolean) => void;
+  /** Reports a press on this field (`true`) and its withdrawal (`false`).
+   *  The screen may advertise on the press, before the focus event and its
+   *  bridge round trip; nothing is committed here, and focus landing on any
+   *  other control withdraws it. */
+  onKeyboardIntentChange?: (intent: boolean) => void;
   context?: ReactNode;
 }
 
@@ -78,9 +90,11 @@ export interface PeerChatComposerProps {
 export function PeerChatComposer({
   value, onChange, onSend, inputRef, busy, locked, canSend, attachmentsLocked = false,
   photoAllowed, onCamera, onPhotos, onFiles, fileSending = false, onLocation,
-  voiceAvailable = false, onVoice, onPickKlipy, userId = null, context,
+  voiceAvailable = false, onVoice, onPickKlipy, userId = null, onPasteImages, onFocusChange,
+  onKeyboardIntentChange, context,
 }: PeerChatComposerProps) {
   const [focused, setFocused] = useState(false);
+  const [intent, setIntent] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const field = inputRef;
   const attachRoot = useRef<HTMLDivElement>(null);
@@ -140,6 +154,35 @@ export function PeerChatComposer({
       offBack();
     };
   }, [attachOpen]);
+
+  // A press on the field is the earliest honest signal that this composer is
+  // about to own the IME. The screen may advertise from it before the focus
+  // event and its asynchronous bridge call; this only widens WHEN the native
+  // flag is set, never what a commit may do.
+  useEffect(() => {
+    onKeyboardIntentChange?.(intent);
+  }, [intent, onKeyboardIntentChange]);
+
+  // A press is provisional: focus landing anywhere else, a press on any other
+  // control, or this field going away ends it immediately instead of leaving
+  // the screen advertised behind something the reader chose instead. The
+  // capture phase sees `focus`, which does not bubble.
+  useEffect(() => {
+    if (!intent) return;
+    const withdrawFocus = (event: FocusEvent) => {
+      if (event.target !== field.current) setIntent(false);
+    };
+    const withdrawPress = (event: PointerEvent) => {
+      if (event.target !== field.current) setIntent(false);
+    };
+    document.addEventListener("focus", withdrawFocus, true);
+    document.addEventListener("pointerdown", withdrawPress, true);
+    return () => {
+      document.removeEventListener("focus", withdrawFocus, true);
+      document.removeEventListener("pointerdown", withdrawPress, true);
+      onKeyboardIntentChange?.(false);
+    };
+  }, [intent, field, onKeyboardIntentChange]);
 
   const send = () => { if (available && !composing.current) onSend(); };
 
@@ -222,8 +265,26 @@ export function PeerChatComposer({
           // complaint is precisely that the caret leaves the box on send.
           readOnly={locked}
           aria-disabled={locked || undefined}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          // A press precedes focus: it lets the screen advertise the field
+          // while the keyboard is still opening, without restarting the IME.
+          // Only a writable field can carry an insertion, so a locked composer
+          // never prearms.
+          onPointerDown={() => { if (!locked) setIntent(true); }}
+          onTouchStart={() => { if (!locked) setIntent(true); }}
+          onFocus={() => { setFocused(true); onFocusChange?.(true); }}
+          onBlur={() => { setFocused(false); setIntent(false); onFocusChange?.(false); }}
+          onPaste={(event) => {
+            // Image-only paste joins the screen's media admission owner. Any
+            // text (plain or mixed) and any active IME composition keeps the
+            // browser's own paste path, so nothing is admitted twice.
+            if (!onPasteImages || composing.current) return;
+            const data = event.clipboardData;
+            if (!data || data.getData("text/plain").trim() !== "") return;
+            const pasted = Array.from(data.files ?? []);
+            if (pasted.length === 0 || !pasted.every((file) => file.type.startsWith("image/"))) return;
+            event.preventDefault();
+            onPasteImages(pasted);
+          }}
           onChange={(event) => {
             const next = event.target.value;
             const start = event.target.selectionStart ?? next.length;

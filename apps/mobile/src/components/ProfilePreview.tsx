@@ -19,10 +19,10 @@ import "./ProfilePreview.css";
  * Owner direction 2026-11-18 (reference: the Facebook hover card). Every place
  * a person appears carries the same card, not only desktop:
  * - fine pointer: a short rest or a key focus opens it;
- * - touch: a tap opens it, and the card is the way to the profile, the friend
- *   action and the conversation. A keyboard or screen-reader activation still
- *   follows the identity link directly (`detail === 0`), so assistive tech is
- *   never asked to open a card to reach a destination that exists.
+ * - touch: a tap opens it and hands it focus, and the card is the way to the
+ *   profile, the friend action and the conversation. An activation with no
+ *   pointer detail (`detail === 0`) follows the identity link directly, so a
+ *   destination that already exists is never behind a card step.
  *
  * Inside the card the avatar and name are links, the friend/message action is
  * one button that also opens the chat, and "View full profile" is the explicit
@@ -115,6 +115,8 @@ function PreviewCard({ person, className, finePointer, openOnFocus, children }: 
   // Without this guard that focus would reopen the card it just left.
   const suppressFocusOpen = useRef(false);
   const keyboardOpened = useRef(false);
+  // A tap or a key hands focus to the card once it opens; a rest does not.
+  const focusIntoPanel = useRef(false);
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [state, setState] = useState<PreviewState>(() => {
@@ -152,6 +154,7 @@ function PreviewCard({ person, className, finePointer, openOnFocus, children }: 
     }
     setOpen(false);
     keyboardOpened.current = false;
+    focusIntoPanel.current = false;
   }, [cancelClose, cancelOpen]);
 
   useEffect(() => () => { cancelOpen(); cancelClose(); }, [cancelOpen, cancelClose]);
@@ -249,6 +252,7 @@ function PreviewCard({ person, className, finePointer, openOnFocus, children }: 
   const onPointerEnter = (event: ReactPointerEvent) => {
     if (!finePointer || event.pointerType === "touch") return;
     keyboardOpened.current = false;
+    focusIntoPanel.current = false;
     cancelClose();
     if (open) return;
     cancelOpen();
@@ -266,21 +270,34 @@ function PreviewCard({ person, className, finePointer, openOnFocus, children }: 
   };
 
   /**
-   * Touch has no hover, so the tap opens the card. Keyboard and assistive
-   * activation carry no pointer detail and keep the link's direct destination.
+   * Touch has no hover, so the tap opens the card and hands it focus. An
+   * activation with no pointer detail (`detail === 0`) keeps the link's own
+   * destination instead of adding a card step.
    */
   const onTriggerClick = (event: ReactMouseEvent) => {
     if (finePointer) return;
     if (event.detail === 0) return;
+    // The panel portals to the body but stays inside this trigger's React tree,
+    // so its own taps reach this capture first. A tap on the card's controls is
+    // a destination or a close, never a request to reopen the card.
+    const target = event.target as Node | null;
+    if (target && panelRef.current?.contains(target)) return;
     event.preventDefault();
     cancelClose();
+    if (!open) focusIntoPanel.current = true;
     setOpen(true);
   };
 
-  // A key focus hands focus to the card once the portalled panel has committed.
+  // A tap or a key hands focus to the card once the portalled panel has
+  // committed. A rest-opened card leaves focus where the reader had it, and
+  // preventScroll keeps this focus change from scrolling the card and tripping
+  // its own scroll dismissal.
   useEffect(() => {
-    if (!open || !keyboardOpened.current) return;
-    panelRef.current?.querySelector<HTMLElement>("a[href], button:not([disabled])")?.focus();
+    if (!open || !focusIntoPanel.current) return;
+    focusIntoPanel.current = false;
+    panelRef.current
+      ?.querySelector<HTMLElement>("a[href], button:not([disabled])")
+      ?.focus({ preventScroll: true });
   }, [open]);
 
   // Keyboard focus opens at once, as the metadata labels do. Touch focus is the
@@ -290,6 +307,7 @@ function PreviewCard({ person, className, finePointer, openOnFocus, children }: 
     if (panelRef.current?.contains(event.target as Node)) return;
     if (suppressFocusOpen.current) { suppressFocusOpen.current = false; return; }
     keyboardOpened.current = true;
+    if (!open) focusIntoPanel.current = true;
     cancelOpen();
     cancelClose();
     setOpen(true);

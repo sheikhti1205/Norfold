@@ -148,22 +148,72 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
   transition: width 140ms ease, margin-inline-end 140ms ease, box-shadow 140ms ease;
 }
 /* R19-4 (owner 2026-11-19): the in-flow rail is an inset surface like the chat
-   panes. The frame is the rail's own border, so the outer column keeps its
-   exact 64/72px budget, the pinned inline width stays the stored width and the
-   hover negative margin still cancels the expansion. Four pixels of frame
-   beside the existing 6px padding keep the 44px hit target and the same
-   32/36px icon axis; the 24px outer corner less that 4px frame is the panes'
-   20px surface radius. Eight pixels at the foot is the panes' own foot gutter.
-   No top edge: the head centre stays 8px padding plus half the 40px head. The
-   phone drawer lives outside `.fb-rail-anchor`, so its own border and width
-   are untouched. */
+   panes, and the paint is split the same way. The column (`.fb-rail-anchor`)
+   owns the frame: it paints the container, takes the 4px inline and 8px foot
+   gutter, and keeps a square outer edge, exactly like the split view around the
+   chat pages. The rail inside owns only the surface: the panes' 20px corner and
+   no border. That leaves one curved outline (the surface) instead of a 24px
+   border ring with its own 20px inner edge on a surface-colored parent.
+
+   The column keeps the exact 64/72px budget and the stored pinned width; the
+   hover overlay moves the width and its cancelling negative margin onto the
+   column so the frame covers the whole overlay and <main> still never reflows.
+   Every one of those numbers is a COLUMN width. The painted surface is always
+   the column minus this 8px inline frame (64/56, 72/64, 192/184, 196/188), so
+   the 4px frame plus the pane's 4px inset stay visible as the 8px band. The
+   stored width reaches the column through the root `--fb-rail-w` variable; the
+   rail itself must never carry an inline width, which out-ranks the 100%
+   surface rule and covers that band.
+   Four pixels of frame beside the existing 6px padding keep the 44px hit
+   target and the same 32/36px icon axis. No top inset: the head centre stays
+   8px padding plus half the 40px head. The phone drawer lives outside
+   `.fb-rail-anchor`, so its own border and width are untouched. */
 @media (min-width: 600px) {
+  .fb-rail-anchor:has(> .fb-nav-rail) {
+    width: var(--fb-rail-collapsed);
+    padding: 0 4px 8px;
+    background: var(--fb-surface-container);
+    /* The column carries the rail's old stacking: while the hover/focus
+       overlay is 132px wider than the space it takes, its frame and shadow
+       paint above <main> exactly as the rail's own z-index 30 did. */
+    z-index: 30;
+    transition: width 140ms ease, margin-inline-end 140ms ease, box-shadow 140ms ease;
+  }
+  .fb-rail-anchor:has(> .fb-nav-rail[data-pinned="true"]) {
+    width: var(--fb-rail-w, 192px);
+  }
+  /* `:has()` may not nest inside another `:has()`, so the keyboard arm reads
+     the focus from outside the rail: one `:has` per arm, same condition as the
+     rail's own `[data-hover-expanded]` / `:has(:focus-visible)` expansion. */
+  .fb-rail-anchor:has(> .fb-nav-rail[data-pinned="false"][data-hover-expanded="true"]),
+  .fb-rail-anchor:has(> .fb-nav-rail[data-pinned="false"] :focus-visible) {
+    width: var(--fb-rail-expanded);
+    margin-inline-end: calc(var(--fb-rail-collapsed) - var(--fb-rail-expanded));
+    box-shadow: var(--shadow-md);
+  }
   .fb-rail-anchor > .fb-nav-rail {
-    border: 0 solid var(--fb-surface-container);
-    border-inline-width: 4px;
-    border-block-end-width: 8px;
-    border-radius: 24px;
-    background-clip: padding-box;
+    width: 100%;
+    border: 0;
+    border-radius: 20px;
+  }
+  .fb-rail-anchor > .fb-nav-rail[data-pinned="true"] {
+    width: 100%;
+  }
+  .fb-rail-anchor > .fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) {
+    width: 100%;
+    margin-inline-end: 0;
+    box-shadow: none;
+  }
+}
+/* R19-5 (owner 2026-11-19): the inset rail takes the same superellipse the
+   avatars use (avatarShape.css), not a plain 20px arc. `corner-shape` is the
+   real shape where the engine has it; everywhere else the absolute 20px above
+   is the whole rendering, unchanged. The arm adds the shape and nothing else -
+   no percentage radius and no shared corner token - so the drawer and the chat
+   cards keep their own geometry. */
+@supports (corner-shape: squircle) {
+  .fb-rail-anchor > .fb-nav-rail {
+    corner-shape: squircle;
   }
 }
 /* Destinations scroll; the identity control below them does not. Settings is
@@ -232,8 +282,10 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
 .fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-nav-rail-section { display: block; }
 @media (prefers-reduced-motion: reduce) {
   .fb-nav-rail { transition: none; }
+  .fb-rail-anchor:has(> .fb-nav-rail) { transition: none; }
 }
 html.fb-reduce-motion .fb-nav-rail { transition: none; }
+html.fb-reduce-motion .fb-rail-anchor:has(> .fb-nav-rail) { transition: none; }
 /* Very short windows (landscape phone, or a laptop with a shallow viewport):
    tighten the same geometry rather than introducing a scroller. */
 @media (max-height: 600px) {
@@ -285,7 +337,7 @@ html.fb-reduce-motion .fb-nav-rail { transition: none; }
 .fb-nav-brand:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: 2px; }
 .fb-nav-brand-mark { flex: none; }
 .fb-nav-wordmark {
-  font-weight: 700; font-size: 1rem; letter-spacing: -0.02em;
+  font-weight: 700; font-size: 1.125rem; line-height: 1.2; letter-spacing: -0.02em;
   color: var(--fb-on-surface); white-space: nowrap;
 }
 /* The head carries the app mark at every width. The wordmark only joins it in
@@ -350,6 +402,7 @@ html.fb-reduce-motion .fb-nav-rail { transition: none; }
 .fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-account-trigger-text { display: flex; }
 .fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-account-trigger .fb-verified-badge { display: inline-flex; }
 body:has(#report-editor-overlay) .fb-nav-slot,
+body:has(#report-editor-overlay) .fb-rail-anchor,
 body:has(#report-editor-overlay) .fb-nav-rail { display: none; }
 
 /* Phone rail (owner direction 2026-11-18): the reader who chose "Side rail"

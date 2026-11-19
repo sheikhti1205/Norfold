@@ -738,6 +738,29 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     expect(main.className).toContain("flex-1");
   });
 
+  it("sizes the pinned rail from the stored column, not an inline width", () => {
+    setWidth(800);
+    localStorage.setItem(
+      APPEARANCE_STORAGE_KEY,
+      JSON.stringify({
+        ...DEFAULT_APPEARANCE, navLayout: "rail", navLayoutChosen: true, railPinned: true, railWidth: 208,
+      }),
+    );
+    renderShell("/");
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(nav.getAttribute("data-pinned")).toBe("true");
+    // One CSS owner: the stored width is the column's width. An inline width on
+    // the rail would paint the stored width inside the column's 4px frame and
+    // cover the 8px band to the list.
+    expect(document.documentElement.style.getPropertyValue("--fb-rail-w")).toBe("208px");
+    expect(nav.style.width).toBe("");
+    expect(nav.getAttribute("style") ?? "").not.toMatch(/width/);
+    // The drag/keyboard handle still reports the stored column width.
+    const grip = screen.getByRole("separator", { name: "Resize navigation" });
+    expect(grip.getAttribute("aria-valuenow")).toBe("208");
+    expect(grip.getAttribute("aria-valuetext")).toBe("208 pixels");
+  });
+
   it.each([320, 500])("honours a chosen bottom bar on a phone instead of forcing a rail", (width) => {
     setWidth(width);
     storeNavLayout("bottom");

@@ -82,8 +82,53 @@
   margin-inline: auto;
   aspect-ratio: var(--fb-chat-video-ratio);
   max-height: min(30rem, 80vh);
+  /* The transport is 100px tall (44px seek, 44px controls, bar padding). An
+     extreme wide source would otherwise make the frame shorter than its own
+     controls; the floor keeps them inside while contain keeps every pixel. */
+  min-height: 100px;
   background: #000;
 }
+/* No ratio exists until this source's own metadata arrives, and the file name
+   is not a shape. The frame keeps a compact band tall enough for its transport
+   instead of reserving a guessed 16:9 box that would collapse into a tall
+   portrait; the same <video> element is already mounted inside it. */
+.fb-chat-video-frame[data-active="true"][data-pending="true"] {
+  width: 100%;
+  height: 144px;
+  max-height: none;
+  aspect-ratio: auto;
+}
+/* The band itself is the loading state, so the spinner sits in the 44px above
+   the 100px transport instead of on its seek rail. */
+.fb-chat-video-frame[data-active="true"][data-pending="true"] .fb-vp-loading {
+  inset-block-end: 100px;
+}
+/* A refused file still needs room for its message and Download even though no
+   ratio ever arrived. Here the frame takes its height from that content: the
+   overlay joins the flow instead of being centred behind the transport, so a
+   narrow frame or a large text scale grows the band rather than clipping the
+   one control that gets the file back. The transport keeps its own reserved
+   band, with the dead seek rail dropped. */
+.fb-chat-video-frame[data-active="true"]:has(.fb-vp-error) {
+  width: 100%;
+  height: auto;
+  max-height: none;
+  aspect-ratio: auto;
+}
+.fb-chat-video-frame[data-active="true"]:has(.fb-vp-error) .fb-vp--inline { position: static; }
+.fb-chat-video-frame[data-active="true"]:has(.fb-vp-error) .fb-vp-stage {
+  position: static;
+  padding-block-end: 56px;
+}
+.fb-chat-video-frame[data-active="true"]:has(.fb-vp-error) .fb-vp-video {
+  position: absolute;
+  inset: 0;
+}
+.fb-chat-video-frame[data-active="true"]:has(.fb-vp-error) .fb-vp-error {
+  position: static;
+  inset: auto;
+}
+.fb-chat-video-frame[data-active="true"]:has(.fb-vp-error) .fb-vp-track { display: none; }
 .fb-chat-video-launch {
   display: flex;
   align-items: center;

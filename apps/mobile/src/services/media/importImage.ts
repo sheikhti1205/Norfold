@@ -469,8 +469,12 @@ export function readExifOrientation(bytes: Uint8Array): number {
   return 1;
 }
 
-/** Rebuild a GIF from complete rendering blocks, discarding non-animation extensions. */
-function stripGifMetadata(bytes: Uint8Array): Uint8Array | null {
+/**
+ * Rebuild a GIF from complete rendering blocks, discarding non-animation
+ * extensions. Exported for the keyboard-media lane: an inserted GIF keeps its
+ * frames, delays and transparency but loses comments/application metadata.
+ */
+export function stripGifMetadata(bytes: Uint8Array): Uint8Array | null {
   if (bytes.length < 14) return null;
   const packed = bytes[10]!;
   let offset = 13 + ((packed & 0x80) ? 3 * (1 << ((packed & 7) + 1)) : 0);

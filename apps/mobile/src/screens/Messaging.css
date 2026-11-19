@@ -44,6 +44,12 @@
 .fb-chat-line:focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }
 .fb-chat-heading { flex:1; min-width:0; }
 .fb-chat-heading p { margin:.1rem 0 0; }
+/* The heading takes programmatic focus on mount so assistive tech announces the
+   conversation. It is not a keyboard target, so it paints no ring across the
+   flexible row; the identity link inside it and every real control keep their
+   own. Mirrors the app bar and Settings heading exception. */
+.fb-chat-heading h1[tabindex="-1"]:focus,
+.fb-chat-heading h1[tabindex="-1"]:focus-visible { outline:none; }
 .fb-chat-identity { display:flex; align-items:center; gap:.6rem; width:100%; min-height:44px; text-align:start; }
 .fb-chat-identity-copy { min-width:0; flex:1; overflow:hidden; }
 .fb-chat-identity-name { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -66,6 +72,11 @@
    (pins, staged photos) own their own overflow-x. */
 .fb-chat-list, .fb-chat-messages { min-height:0; flex:1; overflow-x:hidden; overflow-y:auto;
   overscroll-behavior:contain; scrollbar-gutter:stable; }
+/* The message viewport owns the floating latest control. It is a sibling of
+   the scroller, never a child, so the control cannot scroll away with the
+   transcript; its bottom edge sits at the top of the composer stack (error
+   line, staged photo strip, composer), so none of those can cover it. */
+.fb-chat-viewport { position:relative; display:flex; flex-direction:column; flex:1; min-height:0; }
 .fb-chat-list ul, .fb-chat-transcript { margin:0; padding:0; list-style:none; }
 /* A row is a surface, not a table cell: it carries the shape, the hover and the
    selection tint, so the stretched link can stay transparent and never paints
@@ -112,23 +123,53 @@
   color:var(--fb-on-surface-variant); font-size:.75rem; font-weight:600; letter-spacing:.01em;
   box-shadow:0 1px 2px rgb(0 0 0 / .08); }
 .fb-chat-line-own { flex-direction:row-reverse; }
-/* Nothing sits beside a bubble on touch; a pointer gets the control on hover
-   and a keyboard user reaches it through the long-press surface. */
-.fb-chat-message-options { color:var(--fb-on-surface-variant); opacity:0; pointer-events:none;
-  width:0; min-width:0; padding:0; overflow:hidden; transition:opacity .12s linear; }
+/* The message menu control lives in the bubble's own top-inline-end corner.
+   Its button is a transparent 44px square, the project's house minimum for a
+   press target, anchored flush inside the bubble so the whole target sits
+   inside the message. A 20px glyph is centred in it, so the visible chevron
+   stays well clear of the rounded corner. Only opacity and pointer-events
+   change, so revealing it never widens or reflows the bubble. Touch keeps no
+   visible chrome: long-press owns the action there. */
+.fb-chat-message { position:relative; }
+.fb-chat-message-options { position:absolute; inset-block-start:0; inset-inline-end:0;
+  display:inline-flex; align-items:center; justify-content:center;
+  width:2.75rem; height:2.75rem; min-width:0; min-height:0; padding:0; overflow:visible;
+  border-radius:.75rem; color:var(--fb-on-surface-variant); background:transparent;
+  opacity:0; pointer-events:none; transition:opacity .12s linear; z-index:1; }
+/* The glyph keeps a fixed 20px size whatever the press target is, so the bigger
+   target never grows the symbol. */
+.fb-chat-message-options > svg { width:1.25rem; height:1.25rem; }
+/* Hover paint stays on the glyph-sized disc inside the transparent target, so
+   the 44px area itself never becomes a painted circle. */
+.fb-chat-message-options::before { content:""; position:absolute; inset:calc(50% - .625rem);
+  border-radius:50%; background:transparent; pointer-events:none; }
+.fb-chat-message-options:hover::before, .fb-chat-message-options:focus-visible::before {
+  background:color-mix(in srgb, currentColor 12%, transparent); }
+/* Keyboard focus stays visible without drawing outside the bubble. */
+.fb-chat-message > .fb-chat-message-options:focus-visible {
+  outline:2px solid var(--fb-focus); outline-offset:-2px; }
+/* The corner control is pointer-only, so its clearance is pointer-only too:
+   the same query that reveals the chevron reserves the 20px paragraph inset
+   beside it, and a touch screen leaves no phantom inset behind a control that
+   is not rendered there. While the query matches the inset is fixed, so nothing
+   moves on hover; the physical side matches the LTR shell's top-right corner
+   and an explicit RTL shell mirrors it. Emoji-only text is exempt so its glyph
+   sizing and bubble stay untouched. */
 @media (hover:hover) and (pointer:fine) {
   .fb-chat-line:hover .fb-chat-message-options,
-  .fb-chat-message-surface:focus-within .fb-chat-message-options {
-    opacity:1; pointer-events:auto; width:auto; min-width:44px; overflow:visible;
-  }
+  .fb-chat-message-surface:focus-within .fb-chat-message-options,
+  .fb-chat-message-options:focus-visible { opacity:1; pointer-events:auto; }
+  .fb-chat-message > p:not(.fb-chat-emoji-only) { padding-right:1.25rem; }
+  [dir="rtl"] .fb-chat-message > p:not(.fb-chat-emoji-only) { padding-right:0; padding-left:1.25rem; }
 }
 @media (prefers-reduced-motion:reduce) { .fb-chat-message-options { transition:none; } }
-/* The long-press surface is the flex item now, so the bubble keeps its own
-   alignment and the options control sits beside it exactly as before. */
-.fb-chat-message-surface { display:flex; align-items:flex-end; gap:.15rem; min-width:0;
-  /* The line owns the width; the surface only reserves room for the options
-     control, so a one-word bubble keeps its natural width. */
-  max-width:calc(100% - 2.75rem); }
+/* The long-press surface is the only flex item now: the bubble keeps its own
+   alignment and the line no longer reserves width beside it. It also fits the
+   bubble exactly. max-content keeps a short message short, and the same 34rem
+   cap as the bubble keeps the menu anchor and the press target on the bubble
+   instead of on the empty row beside it. */
+.fb-chat-message-surface { display:flex; align-items:flex-end; gap:.15rem; width:max-content;
+  max-width:min(100%, 34rem); min-width:0; }
 .fb-chat-line-own .fb-chat-message-surface { flex-direction:row-reverse; }
 .fb-chat-message-surface:focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; border-radius:1rem; }
 /* A quote jump focuses the original row so assistive tech follows it. The
@@ -150,6 +191,42 @@
 .fb-chat-message-klipy.fb-chat-message-own { background:transparent; color:var(--fb-on-surface); }
 .fb-chat-message-klipy .fb-chat-message-status { color:var(--fb-on-surface-variant); }
 .fb-chat-message-klipy.fb-chat-flash-a, .fb-chat-message-klipy.fb-chat-flash-b { border-radius:.85rem; }
+/* A Klipy GIF or sticker keeps its own animation and source URL: only its box is
+   bounded. Without this bound a wide sticker painted at its intrinsic width and
+   pushed the bubble past the transcript. No object-fit and no aspect-ratio are
+   set, so the picture is neither cropped nor flattened. */
+.fb-chat-message .fb-chat-klipy { display:block; width:auto; height:auto;
+  max-width:min(100%, var(--fb-chat-media-width)); max-height:min(30rem, 80vh); border-radius:.6rem; }
+/* A bare photo is the message: no padding ring, no tinted footer and no
+   mismatched tail. The flush paint is gated on ChatPhoto actually having bytes
+   to show, so a loading, missing or downloadable photo keeps the ordinary
+   padded bubble and the in-flow status row it needs. */
+.fb-chat-message-media:has(> .fb-chat-photo > button) { padding:0; background:transparent;
+  overflow:hidden; border-radius:1rem; }
+.fb-chat-message-media:has(> .fb-chat-photo > button).fb-chat-message-own { background:transparent; }
+.fb-chat-message-media:has(> .fb-chat-photo > button) > .fb-chat-photo { border-radius:inherit; }
+/* On a flush photo the menu glyph sits on picture pixels, where the ordinary
+   on-surface-variant glyph can disappear. Keep the 20px disc and give it the
+   same dark scrim as the time chip; the 44px press target stays unpainted. */
+.fb-chat-message-media:has(> .fb-chat-photo > button) .fb-chat-message-options { color:#fff; }
+.fb-chat-message-media:has(> .fb-chat-photo > button) .fb-chat-message-options::before {
+  background:rgb(0 0 0 / .55); }
+.fb-chat-message-media:has(> .fb-chat-photo > button) .fb-chat-message-options:hover::before,
+.fb-chat-message-media:has(> .fb-chat-photo > button) .fb-chat-message-options:focus-visible::before {
+  background:rgb(0 0 0 / .72); }
+.fb-chat-message-media:has(> .fb-chat-photo > button) .fb-chat-message-options:focus-visible {
+  box-shadow:inset 0 0 0 1px rgb(255 255 255 / .85); }
+/* Time and receipt ticks are passive, so they may sit on the picture as one
+   compact scrim-backed corner chip. No control is ever placed here: every state
+   that owns a button keeps the padded bubble and its in-flow status row. */
+.fb-chat-message-media:has(> .fb-chat-photo > button) > .fb-chat-message-status {
+  position:absolute; inset-block-end:.3rem; inset-inline-end:.3rem; z-index:2;
+  display:flex; align-items:center; gap:.15rem; margin:0; padding:.05rem .3rem;
+  border-radius:.5rem; background:rgb(0 0 0 / .55); color:#fff; font-size:.75rem;
+  line-height:1.35; pointer-events:none; }
+.fb-chat-message-media:has(> .fb-chat-photo > button) .fb-chat-ticks { color:#fff; }
+/* Read keeps its second check and a light tint that survives the scrim. */
+.fb-chat-message-media:has(> .fb-chat-photo > button) .fb-chat-ticks.is-read { color:#a9d4ff; }
 .fb-chat-message p { white-space:pre-wrap; margin:0; line-height:1.45; font-size:.95rem; }
 .fb-chat-message-status { display:block; font-size:.75rem; text-align:end; margin-top:.25rem;
   color:var(--fb-on-surface-variant); }
@@ -205,21 +282,33 @@
 .fb-chat-sheet :is(button,a):focus-visible, .fb-chat-search-results button:focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }
 @media (prefers-reduced-motion:no-preference) { .fb-chat-refreshing { animation:fb-chat-spin 1s linear infinite; } }
 @keyframes fb-chat-spin { to { transform:rotate(360deg); } }
-/* Sent media shares one preferred width: 22rem (352px) once the conversation
-   allows it, capped at 78vw so a 320px phone keeps its message padding and the
-   options reserve. The bubble's max-width and each photo's max-width:100% clamp
-   it further, so the preference never becomes an overflow minimum.
-   The height bound clears an ordinary 3:4 portrait at that width (352 / (3 / 4)
-   is 469px) and falls back to 80vh on a short screen. Content stays
-   contain-fitted, so anything taller is letterboxed, never cropped or stretched. */
-.fb-chat-page { --fb-chat-media-width: min(22rem, 78vw); }
-.fb-chat-photo { position:relative; width:var(--fb-chat-media-width); max-width:100%; max-height:min(30rem, 80vh); overflow:hidden; border-radius:.6rem; background:var(--fb-surface); }
+/* Files, video and stickers share one preferred width: 22rem (352px) once the
+   conversation allows it, capped at 78vw so a 320px phone keeps its message
+   padding. The bubble's max-width and each media element's max-width:100%
+   clamp it further, so the preference never becomes an overflow minimum.
+   Photos opt into their own wider preference below; this token stays the one
+   those shapes read. */
+.fb-chat-page { --fb-chat-media-width: min(22rem, 78vw); --fb-chat-photo-width: 32rem; }
+/* A bare photo prefers 32rem inside the same 34rem bubble cap, but the shared
+   height bound still owns tall pictures: the width also has to fit
+   `height cap × ratio`, so a 9:16 photo narrows to 270px at a 480px cap and the
+   contain-fitted picture paints edge to edge instead of sitting letterboxed in
+   a wider frame. --fb-chat-photo-ratio is the validated unitless width/height
+   number ChatPhoto publishes on the same inline style as the aspect ratio; the
+   1 default matches its own invalid-dimensions fallback, so a box never leaks
+   NaN into calc(). A wide panorama simply takes the preferred width and keeps
+   its own ratio: no crop, no letterbox and no arbitrary panorama clamp. */
+.fb-chat-photo { --fb-chat-photo-ratio: 1; position:relative; width:min(var(--fb-chat-photo-width, 32rem), 100%, calc(min(30rem, 80vh) * var(--fb-chat-photo-ratio))); max-width:100%; max-height:min(30rem, 80vh); overflow:hidden; border-radius:.6rem; background:var(--fb-surface); }
 /* No bytes yet (loading, missing, failed, unavailable): the inline intrinsic
    ratio would reserve a tall empty card for a picture that may never paint, so
    the status text sizes itself instead. `!important` only because an inline
    declaration cannot be beaten otherwise; a painted photo renders a button, so
    this never matches real content. */
 .fb-chat-photo:has(> div[role="status"]) { aspect-ratio:auto !important; }
+/* A standalone no-bytes card keeps the compact shared media width instead of the
+   wider photo preference. Grouped cells and the details gallery own their box,
+   so they are excluded and keep filling it. */
+.fb-chat-message .fb-chat-photo:not(.fb-chat-photo-grouped):has(> div[role="status"]) { width:var(--fb-chat-media-width); }
 /* Bytes can exist before the bitmap paints; without a skeleton the bubble is a
    blank rectangle and looks like a failed photo. The spinner is decorative —
    the placeholder copy still carries the status for assistive technology. */
@@ -227,12 +316,21 @@
   border-radius:50%; border:2px solid var(--fb-outline-variant); border-top-color:var(--fb-primary); }
 @media (prefers-reduced-motion:no-preference) { .fb-chat-photo[data-loading]::after { animation:fb-chat-spin 1s linear infinite; } }
 .fb-chat-photo > button { display:block; width:100%; height:100%; min-width:44px; min-height:44px; }
+/* The button fills its wrapper, and both the wrapper and a flush bubble clip
+   overflow, so the app-wide 2px ring with a positive offset would be cut off at
+   the picture edge. Draw it inside instead, and put the white contrast ring on
+   the image itself: an inset shadow on the button would sit under the picture.
+   Together they keep the focus token visible on a same-coloured photo. */
+.fb-chat-page .fb-chat-photo > button:focus-visible {
+  outline:2px solid var(--fb-focus); outline-offset:-3px; border-radius:inherit; }
+.fb-chat-page .fb-chat-photo > button:focus-visible img {
+  outline:1px solid rgb(255 255 255 / .85); outline-offset:-1px; border-radius:inherit; }
 .fb-chat-photo img { display:block; width:100%; height:100%; object-fit:contain; }
 .fb-chat-photo > div { display:flex; height:100%; min-height:5rem; flex-direction:column; align-items:center; justify-content:center; gap:.4rem; padding:.5rem; font-size:.875rem; }
 /* The retry button is the only ELEMENT child of its status box, so a
    `:not(:first-child)` rule never reached it and it measured 21px tall.
    Match the status box's button directly and keep the 44px house minimum. */
-.fb-chat-photo > div button, .fb-chat-photo-draft button, .fb-chat-message > button { min-height:44px; min-width:44px; padding:.3rem .5rem; text-decoration:underline; }
+.fb-chat-photo > div button, .fb-chat-photo-draft button, .fb-chat-message > button:not(.fb-chat-message-options) { min-height:44px; min-width:44px; padding:.3rem .5rem; text-decoration:underline; }
 
 /* Photos from one send read as one bubble: a 2-up row, a tall-left 3-up, or a
    2x2 with the remainder counted on the last cell. Every cell is the same
@@ -333,12 +431,19 @@ a.fb-chat-context:hover, a.fb-chat-context:focus-visible { text-decoration:under
 .fb-chat-backup-settings { font-size:.8125rem; color:var(--fb-primary); text-decoration:underline; }
 .fb-chat-backup-error { color:var(--fb-error) !important; }
 
-/* Desktop Chat (packet 07): the transcript sits in a readable rail inside the
-   detail pane, so two people on a wide monitor still read a conversation and
-   not a wall of empty space. Phones are narrower than the rail by construction. */
+/* Desktop Chat (packet 07): a wide pane keeps a 48rem measure for the thread's
+   own status rows instead of stretching a short line across the whole monitor.
+   The transcript itself owns the pane gutters (see below); phones are narrower
+   than the rail by construction. */
 .fb-chat-page { --fb-chat-rail-width: 48rem; }
-.fb-chat-messages > * { width: 100%; max-width: var(--fb-chat-rail-width); margin-inline: auto; }
-.fb-chat-page > .fb-composer-shell { width: 100%; max-width: var(--fb-chat-rail-width); margin-inline: auto; }
+/* The transcript aligns to the thread's own inline gutters instead of a
+   centred 48rem rail: on a wide pane the rail left 158px of dead space on each
+   side while the bubbles stayed narrow. The 34rem cap on `.fb-chat-message`
+   still bounds the readable measure. The composer is deliberately not clamped
+   here: `components/peerComposer.css` gives the real root `width: 100%`, so the
+   composer keeps the full pane width it has always had. */
+.fb-chat-messages > *:not(.fb-chat-transcript) { width: 100%; max-width: var(--fb-chat-rail-width); margin-inline: auto; }
+.fb-chat-transcript { width: 100%; }
 
 /* The collapsed conversation pane: a rail of the same people, not a second
    compact list. 64px keeps a 40px avatar comfortably inside the hit target. */
@@ -356,33 +461,22 @@ a.fb-chat-context:hover, a.fb-chat-context:focus-visible { text-decoration:under
 .fb-chat-rail-unread { position: absolute; inset-block-start: 7px; inset-inline-end: 10px; width: 9px; height: 9px;
   border-radius: 50%; background: var(--fb-primary); box-shadow: 0 0 0 2px var(--fb-surface); }
 
-/* A pointer that can hover gets the actions on approach, positioned clear of
-   the bubble. A finger does not: there the whole message is the long-press
-   target and no permanent chrome sits in the transcript. */
+/* A finger does not get persistent chrome: the whole message is the long-press
+   target and the corner chevron is removed there. */
 .fb-chat-message { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 /* A horizontal swipe is a reply, never a native drag: a slow gesture inside the
    WebView otherwise lifts the pressed content into a platform drag shadow. */
 .fb-chat-transcript, .fb-chat-transcript * { -webkit-user-drag: none; }
-.fb-chat-message-options { border-radius: 50%; background: var(--fb-surface-container); }
-@media (hover: hover) and (pointer: fine) {
-  .fb-chat-message-options { opacity: 0; transform: translateY(2px); }
-  .fb-chat-line-own .fb-chat-message-options { margin-inline-end: .35rem; }
-  .fb-chat-line:not(.fb-chat-line-own) .fb-chat-message-options { margin-inline-start: .35rem; }
-  .fb-chat-line:hover .fb-chat-message-options,
-  .fb-chat-line:focus-within .fb-chat-message-options,
-  .fb-chat-message-options:focus-visible { opacity: 1; transform: none; }
-  @media (prefers-reduced-motion: no-preference) {
-    .fb-chat-message-options { transition: opacity 120ms ease, transform 120ms ease; }
-  }
-}
 @media (hover: none), (pointer: coarse) {
   .fb-chat-message-options { display: none; }
 }
 
 /* Floating jump-to-latest: appears only when the reader is far from the newest
-   message, sits above the composer, and never moves the reader on its own. */
+   message. It is positioned against the message viewport, not the page: that
+   box ends where the composer stack begins, so a growing textarea, a reply chip
+   or a staged photo strip never needs a guessed larger bottom constant. */
 .fb-chat-jump {
-  position:absolute; right:.9rem; bottom:5.75rem;
+  position:absolute; right:.9rem; bottom:.75rem;
   display:flex; align-items:center; justify-content:center;
   min-width:44px; min-height:44px; border-radius:999px;
   background:var(--fb-surface-container-high); color:var(--fb-on-surface);

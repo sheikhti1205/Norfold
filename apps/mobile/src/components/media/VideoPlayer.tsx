@@ -1,6 +1,6 @@
 import {
   useCallback, useEffect, useMemo, useRef, useState,
-  type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent,
+  type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent,
 } from "react";
 import {
   Download, LoaderCircle, Maximize2, Minimize2, Pause, PictureInPicture2, Play,
@@ -443,6 +443,14 @@ export function VideoPlayer({ src, name, poster, mode, onMinimize, onExpand, onC
   const ratio = (value: number) => (duration > 0 ? Math.max(0, Math.min(100, (value / duration) * 100)) : 0);
   const seekLabel = `${formatTime(time)} of ${formatTime(duration)}`;
   const volumeLabel = muted || volume === 0 ? "Unmute" : "Mute";
+  // The stage's shape is this element's own measurement, tagged to this src.
+  // A replaced video (or one that has not reported metadata) falls back to the
+  // familiar 16:9 here; the message frame handles unknown differently, because
+  // a wide guess would collapse into a tall portrait in the transcript.
+  const measuredRatio = aspectSample && aspectSample.src === src ? aspectSample.ratio : null;
+  const stageRatio = measuredRatio && Number.isFinite(measuredRatio) && measuredRatio > 0
+    ? Math.min(4, Math.max(0.25, measuredRatio))
+    : 16 / 9;
   const canPictureInPicture = expanded && typeof document !== "undefined"
     && document.pictureInPictureEnabled === true;
 
@@ -455,6 +463,7 @@ export function VideoPlayer({ src, name, poster, mode, onMinimize, onExpand, onC
   return <div
     ref={(node) => { rootRef.current = node; focusTrapRef(node); }}
     className={`fb-vp fb-vp--${mode}${chromeShown ? "" : " fb-vp--idle"}`}
+    style={{ "--fb-vp-ratio": String(stageRatio) } as CSSProperties}
     data-mode={mode}
     role={expanded ? "dialog" : "group"}
     aria-modal={expanded || undefined}
@@ -529,12 +538,15 @@ export function VideoPlayer({ src, name, poster, mode, onMinimize, onExpand, onC
           </button>
           <span className="fb-vp-time" aria-hidden="true">{formatTime(time)} / {formatTime(duration)}</span>
           <span className="fb-vp-spacer" />
-          <button type="button" className="fb-vp-icon" onClick={toggleMute} aria-label={volumeLabel}
+          {/* Mute is a keyboard action everywhere ("m"), but its button lives in
+              the overlay: a 44px target is the house minimum, and the message
+              row can only hold three of them at the narrowest portrait. */}
+          {expanded ? <button type="button" className="fb-vp-icon" onClick={toggleMute} aria-label={volumeLabel}
             {...hoverLabel(volumeLabel)}>
             {muted || volume === 0 ? <VolumeX size={18} aria-hidden="true" />
               : volume < 0.5 ? <Volume1 size={18} aria-hidden="true" />
                 : <Volume2 size={18} aria-hidden="true" />}
-          </button>
+          </button> : null}
           {expanded ? <input
             type="range"
             className="fb-vp-volume"
@@ -545,8 +557,8 @@ export function VideoPlayer({ src, name, poster, mode, onMinimize, onExpand, onC
             onChange={(event) => setVolume(Number(event.target.value))}
             aria-label={`Volume for ${name}`}
           /> : null}
-          <button type="button" className="fb-vp-icon fb-vp-rate" onClick={cycleRate}
-            aria-label={`Playback speed ${rate}×`} {...hoverLabel(`Playback speed ${rate}×`)}>{rate}×</button>
+          {expanded ? <button type="button" className="fb-vp-icon fb-vp-rate" onClick={cycleRate}
+            aria-label={`Playback speed ${rate}×`} {...hoverLabel(`Playback speed ${rate}×`)}>{rate}×</button> : null}
           {canPictureInPicture ? <button type="button" className="fb-vp-icon"
             onClick={enterPictureInPicture} aria-label="Picture in picture"
             {...hoverLabel("Picture in picture")}>

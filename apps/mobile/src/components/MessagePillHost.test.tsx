@@ -2,7 +2,16 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { chatFileBody, type ChatFileMeta } from "../services/messaging/files";
 import { MessagePillHost } from "./MessagePillHost";
+
+const meta: ChatFileMeta = {
+  key: "files/u-1/c-1/00000000-0000-4000-8000-000000000000-report.pdf",
+  name: "report.pdf",
+  mime: "application/pdf",
+  byteSize: 4096,
+  kind: "pdf",
+};
 
 type ConversationRow = {
   conversationId: string;
@@ -84,5 +93,31 @@ describe("MessagePillHost", () => {
     state.conversations = [row("a", "Hello")];
     mount("/privacy");
     expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("never shows a serialized file marker in the pill", () => {
+    state.conversations = [row("a", chatFileBody(meta, "Here is the report"))];
+    mount();
+    expect(screen.getByText("report.pdf")).toBeTruthy();
+    expect(screen.queryByText(/norfold-file:/)).toBeNull();
+    expect(screen.queryByText(/files\/u-1/)).toBeNull();
+  });
+
+  it("shows a neutral File preview for a malformed or future marker", () => {
+    state.conversations = [row("a", "norfold-file:v2:AAAA")];
+    mount();
+    expect(screen.getByText("File")).toBeTruthy();
+    expect(screen.queryByText(/norfold-file:/)).toBeNull();
+  });
+
+  it("keeps the existing typed and GIF preview copy", () => {
+    const view = mount();
+    state.conversations = [{ ...row("a", ""),
+      lastMessage: { authorId: "other", body: "", messageType: "VOICE" } }];
+    view.rerender(<MemoryRouter initialEntries={["/search"]}><Harness /></MemoryRouter>);
+    expect(screen.getByText("Voice message")).toBeTruthy();
+    state.conversations = [row("a", "https://media.klipy.com/a.gif")];
+    view.rerender(<MemoryRouter initialEntries={["/search"]}><Harness /></MemoryRouter>);
+    expect(screen.getByText("GIF")).toBeTruthy();
   });
 });

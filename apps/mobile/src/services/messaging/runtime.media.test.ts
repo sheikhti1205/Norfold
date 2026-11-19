@@ -1004,4 +1004,83 @@ describe("foreground fast path", () => {
       await expect(prior.history.listConversations()).rejects.toThrow();
     } finally { rangeGate?.resolve(); }
   });
+
+  describe("durable admission boundary", () => {
+    it("does not report admission before the durable local commit resolves", async () => {
+      runtime.setMessagingAccount(A);
+      await waitForState(state => state.status === "ready" && !!state.currentProjections);
+      const history = boundary.handles[0]!.history;
+      const enqueue = history.enqueueOutgoing.bind(history);
+      const entered = deferred(), commit = deferred();
+      vi.spyOn(history, "enqueueOutgoing").mockImplementation(async (...args) => {
+        entered.resolve(); await commit.promise; return enqueue(...args);
+      });
+      const admitted = vi.fn();
+      const sending = runtime.sendMessagingText(A, CONV, B, "not yet", undefined, undefined, undefined, admitted);
+      await entered.promise;
+      // The epoch read and the outbox write are the durable boundary; until they
+      // settle the message is not admitted and no presentation callback may run.
+      expect(admitted).not.toHaveBeenCalled();
+      commit.resolve();
+      await expect(sending).resolves.toEqual(expect.any(String));
+      expect(admitted).toHaveBeenCalledTimes(1);
+      expect((await history.listMessages(CONV)).filter(message => message.body === "not yet")).toHaveLength(1);
+    });
+
+    it("reports admission while the post-commit view read is still blocked", async () => {
+      runtime.setMessagingAccount(A);
+      await waitForState(state => state.status === "ready" && !!state.currentProjections);
+      const history = boundary.handles[0]!.history;
+      const enqueue = history.enqueueOutgoing.bind(history), list = history.listConversations.bind(history);
+      const readHeld = deferred(), releaseRead = deferred();
+      vi.spyOn(history, "enqueueOutgoing").mockImplementation(async (...args) => {
+        await enqueue(...args);
+        // The reload that follows admission is the slow view read the composer
+        // must not depend on.
+        vi.spyOn(history, "listConversations").mockImplementationOnce(async () => {
+          readHeld.resolve(); await releaseRead.promise; return list();
+        });
+      });
+      const admitted = vi.fn();
+      const sending = runtime.sendMessagingText(A, CONV, B, "before the read", undefined, undefined, undefined, admitted);
+      await readHeld.promise;
+      expect(admitted).toHaveBeenCalledTimes(1);
+      expect((await history.listMessages(CONV)).filter(message => message.body === "before the read")).toHaveLength(1);
+      releaseRead.resolve();
+      await expect(sending).resolves.toEqual(expect.any(String));
+    });
+
+    it("never reports admission to a thread replaced by an account switch", async () => {
+      runtime.setMessagingAccount(A);
+      await waitForState(state => state.status === "ready" && !!state.currentProjections);
+      const history = boundary.handles[0]!.history;
+      const enqueue = history.enqueueOutgoing.bind(history);
+      const entered = deferred(), commit = deferred();
+      vi.spyOn(history, "enqueueOutgoing").mockImplementation(async (...args) => {
+        entered.resolve(); await commit.promise; return enqueue(...args);
+      });
+      const admitted = vi.fn();
+      const sending = runtime.sendMessagingText(A, CONV, B, "fenced", undefined, undefined, undefined, admitted);
+      sending.catch(() => undefined);
+      await entered.promise;
+      account = B; runtime.setMessagingAccount(B);
+      commit.resolve();
+      await expect(sending).rejects.toThrow();
+      expect(admitted).not.toHaveBeenCalled();
+      await waitForState(state => state.accountId === B && state.status === "ready");
+      expect(await boundary.handles.at(-1)!.history.listMessages(CONV)).toEqual([]);
+    });
+
+    it("keeps the committed row when the admission callback throws", async () => {
+      runtime.setMessagingAccount(A);
+      await waitForState(state => state.status === "ready" && !!state.currentProjections);
+      const history = boundary.handles[0]!.history;
+      const admitted = vi.fn(() => { throw new Error("presentation failed"); });
+      const result = await runtime.sendMessagingText(A, CONV, B, "still committed", undefined, undefined, undefined, admitted);
+      expect(admitted).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(expect.any(String));
+      // Presentation work can never reopen a row the outbox already owns.
+      expect((await history.listMessages(CONV)).filter(message => message.body === "still committed")).toHaveLength(1);
+    });
+  });
 });

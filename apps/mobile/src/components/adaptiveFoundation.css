@@ -166,6 +166,49 @@
   .fb-split-list:has(> .fb-chat-page:not(.fb-chat-rail)) { padding: 0 8px 8px; }
   .fb-split-detail:has(> .fb-chat-workspace),
   .fb-split-detail:has(> .fb-chat-empty) { padding: 0 8px 8px; }
+  /* The splitter is one 8px surface gap, not 8px of list padding + the 7px
+     track + 8px of detail padding (23px). The 0.5px grid gaps put the 7px track
+     in the middle of the 8px; the panes drop their facing padding to 0 and keep
+     their outward edges and foot at 8px. Scoped to the state that actually
+     renders the splitter, so the collapsed 64px chat rail and the one-pane
+     layouts keep the base gutters. */
+  .fb-split-wide:has(.fb-chat-page):has(> .fb-split-resize) { column-gap: 0.5px; }
+  .fb-split-wide:has(.fb-chat-page):has(> .fb-split-resize) > .fb-split-list:has(> .fb-chat-page:not(.fb-chat-rail)) {
+    padding-inline: 8px 0;
+  }
+  .fb-split-wide:has(.fb-chat-page):has(> .fb-split-resize) > .fb-split-detail:has(> .fb-chat-workspace),
+  .fb-split-wide:has(.fb-chat-page):has(> .fb-split-resize) > .fb-split-detail:has(> .fb-chat-empty) {
+    padding-inline: 0 8px;
+  }
+  /* Beside the shell's rail column the pane's outward 8px would stack with the
+     column's 4px frame and paint a 12px band, while the splitter and the
+     details stay at 8. The frame and this inset are one band: 4 + 4. Without
+     an in-flow rail (bottom navigation, a route rendered outside the shell)
+     the pane keeps its 8px edge. The condition only asks whether the rail
+     exists; its paint stays in Shell.nav.css.
+     Only the pane actually beside the column changes: the list, and the
+     thread when the list is hidden (`[hidden]`, so a wide split keeps its own
+     edges). The collapsed conversation rail has no 8px to give, so it takes
+     the separate outer 4px below instead. */
+  .fb-app-viewport:has(.fb-rail-anchor > .fb-nav-rail) .fb-split-list:has(> .fb-chat-page:not(.fb-chat-rail)),
+  .fb-app-viewport:has(.fb-rail-anchor > .fb-nav-rail) .fb-split-list[hidden] ~ .fb-split-detail:has(> .fb-chat-workspace),
+  .fb-app-viewport:has(.fb-rail-anchor > .fb-nav-rail) .fb-split-list[hidden] ~ .fb-split-detail:has(> .fb-chat-empty) {
+    padding-inline-start: 4px;
+  }
+  /* The collapsed 64px conversation rail is its own pane, not an inset list: it
+     gives no width away, so it never took the list's 8px gutter and its surface
+     ran straight into the shell rail's 4px frame - a 4px band beside Chat
+     against 8px at the thread and the foot. The column keeps its 64px budget
+     and the 40px avatar / 44px controls still fit the 60px content box; only
+     the face beside the rail takes the missing 4px, so column frame + pane
+     inset is the same 8px band as everywhere else. The foot takes the same
+     8px the thread's surface does, so both surfaces start and end on the same
+     baseline. The expanded list, the hidden list, non-chat splits and the
+     phone layout keep their own geometry. */
+  .fb-app-viewport:has(.fb-rail-anchor > .fb-nav-rail) .fb-split-list:has(> .fb-chat-page.fb-chat-rail) {
+    padding-inline-start: 4px;
+    padding-bottom: 8px;
+  }
   /* The panes stop 8px above the viewport foot; the chat splitter's 7px track
      takes the same foot inset so its grip centre matches the details track
      instead of sitting 4px lower. The grid column itself stays 7px wide. */

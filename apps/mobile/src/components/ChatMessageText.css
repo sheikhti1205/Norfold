@@ -1,0 +1,23 @@
+/* R19-2 chat body: links stay inline in the existing bubble paragraph and
+   previews sit under it as compact secondary content. Nothing here paints a new
+   card or duplicates the report card / player chrome they already own. */
+.fb-chat-message-text { min-width: 0; max-width: 100%; }
+
+.fb-chat-message-link {
+  color: currentColor;
+  text-decoration: underline;
+  text-underline-offset: .15em;
+  overflow-wrap: anywhere;
+}
+.fb-chat-message-link:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; border-radius: .2rem; }
+
+.fb-chat-message-previews {
+  display: grid;
+  gap: .5rem;
+  margin-top: .5rem;
+  min-width: 0;
+  max-width: 100%;
+}
+/* The canonical report card carries its own bottom margin; the grid gap owns
+   the rhythm here so the bubble does not grow a second spacing rule. */
+.fb-chat-message-previews > .fb-chat-context { margin-bottom: 0; }

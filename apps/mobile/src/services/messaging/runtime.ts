@@ -756,15 +756,28 @@ export async function downloadMessagingMedia(accountId: string, conversationId: 
  * Report-linked first contact/message. The report id travels with the message so
  * the recipient can resolve the report live; it is never a copied snapshot and
  * it never changes a plain text send into a different capability.
+ *
+ * `onAdmitted` marks the durable boundary: the captured epoch and the committed
+ * local outbox row exist, but the network relay has not been attempted. It runs
+ * before the view refresh so the composer can settle its submitted draft without
+ * waiting for a read. It is fenced to this exact live owner and it can never
+ * reopen an admission that already committed.
  */
 export async function sendMessagingText(accountId: string, conversationId: string, peerId: string, body: string,
-  contextReportId?: string, replyToId?: string, messageId?: string): Promise<string | { id: string; viewStale: true }> {
+  contextReportId?: string, replyToId?: string, messageId?: string, onAdmitted?: () => void): Promise<string | { id: string; viewStale: true }> {
   const owner = ownerFor(accountId);
   const id = uuid(messageId ?? crypto.randomUUID());
   const conversation = uuid(conversationId);
   await owner.session.send({ id, conversationId: conversation, authorId: uuid(accountId), recipientId: uuid(peerId), body, createdAt: Date.now(),
     ...(contextReportId ? { messageType: "TEXT" as const, contextReportId: uuid(contextReportId) } : {}),
     ...(replyToId ? { replyToId: uuid(replyToId) } : {}) });
+  // The row and its exact identity are durable now. Report that boundary under
+  // the same fence as assertOwner, without throwing: an account switch must not
+  // call back into the previous thread, and presentation work must not turn a
+  // committed message into a retryable admission failure.
+  if (current === owner && owner.generation === generation && desiredAccount === owner.handle.scope.accountId) {
+    try { onAdmitted?.(); } catch { /* presentation only; the row is committed */ }
+  }
   try {
     assertOwner(owner);
     await reload(owner); // Queued send appears without waiting for connectivity.

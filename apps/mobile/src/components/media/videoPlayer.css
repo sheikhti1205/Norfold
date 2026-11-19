@@ -12,13 +12,22 @@
 }
 
 .fb-vp {
+  /* The playing element's own measured ratio, written by VideoPlayer for the
+     src currently loaded. Every stage paints this shape; the fallback only
+     covers the first frame before metadata reaches the overlay, never the
+     message frame (which stays compact until it knows). */
+  --fb-vp-ratio: 1.7777778;
+  /* The transport's real height: 44px seek, 44px control row and the bar's own
+     padding. A stage narrower than this would clip the bar, so it doubles as
+     the stage's height floor. */
+  --fb-vp-bar-height: 100px;
   pointer-events: auto;
   color: var(--fb-on-media, #fff);
   -webkit-tap-highlight-color: transparent;
 }
 .fb-vp:focus { outline: none; }
 
-/* ---------- inline: fills the 16:9 frame the transcript tiles reserve ---- */
+/* ---------- inline: fills the frame the transcript tile reserves --------- */
 
 .fb-vp--inline {
   position: absolute;
@@ -39,6 +48,12 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+  /* The stage is bounded by the height the overlay can actually give it, so a
+     portrait source uses that height instead of being letterboxed. */
+  --fb-vp-stage-max-height: calc(100dvh - 80px);
+  /* Two 44px rows fit at 320dp when Picture-in-Picture is available: the
+     transport is then 146px and the stage may never be shorter than that. */
+  --fb-vp-bar-height: 146px;
   padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
     max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   /* A video scrim is black in every theme, including light: the same rule the
@@ -85,6 +100,7 @@
   bottom: calc(78px + env(safe-area-inset-bottom));
   z-index: 85;
   width: min(228px, calc(100vw - 24px));
+  --fb-vp-mini-height: min(45dvh, 20rem);
   overflow: hidden;
   border: 1px solid var(--fb-outline-variant);
   border-radius: 12px;
@@ -106,14 +122,28 @@
 }
 .fb-vp--expanded .fb-vp-stage {
   z-index: 1;
-  width: min(1100px, 100%);
-  max-height: calc(100dvh - 80px);
-  aspect-ratio: 16 / 9;
+  /* The picture's own shape, bounded by the height the overlay leaves after its
+     header and padding. A 9:21 portrait now fills that height and takes the
+     width it needs; a wide source is bounded by 1100px and the viewport. */
+  width: min(1100px, 100%, calc(var(--fb-vp-stage-max-height) * var(--fb-vp-ratio)));
+  max-height: var(--fb-vp-stage-max-height);
+  /* A very wide clip would otherwise leave a stage shorter than the transport,
+     clipping the bar it is supposed to show. The floor is the bar's real
+     height; the picture stays contain-fitted (scaled, never cropped) and the
+     source ratio itself is untouched. */
+  min-height: min(var(--fb-vp-bar-height), var(--fb-vp-stage-max-height));
+  aspect-ratio: var(--fb-vp-ratio);
   border-radius: 14px;
 }
 .fb-vp--mini .fb-vp-stage {
-  aspect-ratio: 16 / 9;
-  width: 100%;
+  /* Same ratio as the message frame and the overlay, but the docked player
+     caps at 45dvh so a portrait does not grow past the phone's usable height.
+     The stage centres inside the fixed-width card; the card's surface fills
+     the side space. */
+  width: min(100%, calc(var(--fb-vp-mini-height) * var(--fb-vp-ratio)));
+  margin-inline: auto;
+  aspect-ratio: var(--fb-vp-ratio);
+  max-height: var(--fb-vp-mini-height);
   border-radius: 0;
 }
 
@@ -166,8 +196,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 36px;
-  padding: 0 12px;
+  min-height: 44px;
+  padding: 0 14px;
   border: 1px solid rgb(255 255 255 / 30%);
   border-radius: 999px;
   font-size: 0.75rem;
@@ -206,19 +236,22 @@
   bottom: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 14px 6px 4px;
+  gap: 0;
+  padding-block: 8px 4px;
+  padding-inline: 4px;
   background: linear-gradient(transparent, rgb(0 0 0 / 72%));
   transition: opacity 150ms var(--ease-fb, ease-out);
 }
 .fb-vp--idle .fb-vp-bar { opacity: 0; pointer-events: none; }
 .fb-vp--idle { cursor: none; }
 
+/* The seek is a real 44px control; the rail it draws stays a 4px line centred
+   inside it, so the target is generous without covering the row below. */
 .fb-vp-track {
   position: relative;
   display: flex;
   align-items: center;
-  height: 22px;
+  height: 44px;
 }
 .fb-vp-rail,
 .fb-vp-buffered,
@@ -241,7 +274,7 @@
   background: transparent;
   cursor: pointer;
 }
-.fb-vp-seek { position: relative; width: 100%; height: 22px; }
+.fb-vp-seek { position: relative; width: 100%; height: 44px; }
 .fb-vp-seek::-webkit-slider-runnable-track { height: 4px; background: transparent; }
 .fb-vp-seek::-moz-range-track { height: 4px; background: transparent; }
 .fb-vp-seek::-webkit-slider-thumb {
@@ -263,7 +296,7 @@
 }
 .fb-vp-seek:disabled { cursor: default; opacity: 0.55; }
 
-.fb-vp-volume { width: 68px; height: 22px; }
+.fb-vp-volume { width: 68px; height: 44px; }
 .fb-vp-volume::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: rgb(255 255 255 / 34%); }
 .fb-vp-volume::-moz-range-track { height: 4px; border-radius: 2px; background: rgb(255 255 255 / 34%); }
 .fb-vp-volume::-webkit-slider-thumb {
@@ -282,16 +315,26 @@
   gap: 2px;
   min-width: 0;
 }
+/* An extreme narrow portrait can still ask the overlay for more controls than
+   one line holds at a large text scale. The overlay wraps instead of clipping
+   a button; every control stays on screen and reachable. */
+.fb-vp--expanded .fb-vp-row { flex-wrap: wrap; row-gap: 2px; }
+/* The message row never clips either: a source tall enough to leave the frame
+   narrower than its three boxes wraps them instead of cutting one off. Such a
+   frame is tall by construction, so the second line has room. */
+.fb-vp--inline .fb-vp-row { flex-wrap: wrap; row-gap: 2px; }
 .fb-vp-spacer { flex: 1; min-width: 0; }
 
+/* Every icon is a real 44x44 box: the house minimum, square, and separated by
+   the row gap so two targets never overlap. The glyph inside stays compact. */
 .fb-vp-icon {
   position: relative;
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 0;
   border-radius: 8px;
@@ -301,14 +344,7 @@
 }
 .fb-vp-icon:hover { background: rgb(255 255 255 / 14%); }
 .fb-vp-icon:disabled { cursor: not-allowed; opacity: 0.55; }
-.fb-vp--expanded .fb-vp-icon { width: 40px; height: 40px; border-radius: 10px; }
-/* The visual box stays compact; the touch target reaches 44px vertically. */
-.fb-vp--inline .fb-vp-icon::after {
-  content: "";
-  position: absolute;
-  inset-block: -5px;
-  inset-inline: -2px;
-}
+.fb-vp--expanded .fb-vp-icon { border-radius: 10px; }
 
 .fb-vp-time {
   flex: none;
@@ -323,36 +359,36 @@
 
 .fb-vp-rate {
   width: auto;
-  min-width: 34px;
+  min-width: 44px;
   padding-inline: 4px;
   font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.01em;
 }
-.fb-vp--expanded .fb-vp-rate { min-width: 40px; font-size: 0.75rem; }
+.fb-vp--expanded .fb-vp-rate { min-width: 44px; font-size: 0.75rem; }
 
-/* A 320dp bubble cannot hold the whole transport: the rate stepper is the one
-   control that stays reachable in the expanded overlay instead. */
-@container (max-width: 300px) {
-  .fb-vp--inline .fb-vp-icon { width: 32px; }
-  .fb-vp--inline .fb-vp-rate { display: none; }
+/* A 320dp bubble cannot hold the whole transport on one line. The message row
+   keeps what playback and escape need (play/pause, seek, expand, close); mute,
+   rate, volume and picture-in-picture live in the expanded overlay, so the row
+   needs three 44px boxes and no control is hidden while still in the focus
+   order. Below the widths where the clock fits, the clock alone leaves. */
+@container (max-width: 260px) {
   .fb-vp--inline .fb-vp-time { font-size: 0.625rem; }
 }
+/* Three 44px boxes, their gaps, the bar padding and an ordinary clock need
+   about 216px. Under that the clock alone leaves the row: it is aria-hidden,
+   and the seek slider carries the same value. If a large text scale still asks
+   for more than the row has, the clock gives way first instead of pushing a
+   control past the frame. */
+.fb-vp--inline .fb-vp-time { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+@container (max-width: 232px) {
+  .fb-vp--inline .fb-vp-time { display: none; }
+}
 
-/* A 320dp phone cannot hold the whole expanded transport on one line: the
-   volume SLIDER collapses (Mute stays), the icons tighten, and each visual box
-   still carries a 44px hit area through the pseudo-element. */
+/* The expanded row keeps its 44px boxes and wraps onto a second line when
+   320dp cannot hold them; the stage's height floor reserves that line. */
 @media (max-width: 420px) {
-  .fb-vp--expanded .fb-vp-row { gap: 0; }
-  .fb-vp--expanded .fb-vp-icon { width: 36px; height: 36px; }
-  .fb-vp--expanded .fb-vp-rate { min-width: 36px; }
   .fb-vp--expanded .fb-vp-time { font-size: 0.6875rem; }
-  .fb-vp--expanded .fb-vp-volume { display: none; }
-  .fb-vp--expanded .fb-vp-icon::after {
-    content: "";
-    position: absolute;
-    inset: -4px;
-  }
 }
 
 /* ---------- mini transport ---------------------------------------------- */
@@ -370,16 +406,13 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 2px 4px 2px 2px;
+  padding: 4px;
   color: var(--fb-on-surface);
 }
-.fb-vp-mini-actions .fb-vp-icon { width: 36px; height: 36px; color: var(--fb-on-surface); }
-.fb-vp-mini-actions .fb-vp-icon::after {
-  content: "";
-  position: absolute;
-  inset-block: -4px;
-  inset-inline: -2px;
-}
+/* The mini player's three actions are the same 44px boxes as everywhere else,
+   with room above and below inside the card instead of a hit area clipped by
+   its rounded edge. */
+.fb-vp-mini-actions .fb-vp-icon { color: var(--fb-on-surface); }
 .fb-vp-mini-actions .fb-vp-icon:hover { background: var(--fb-surface-container-high); }
 .fb-vp-mini-name {
   flex: 1;
@@ -425,8 +458,8 @@
 }
 
 @media (max-height: 480px) {
+  .fb-vp--expanded { --fb-vp-stage-max-height: calc(100dvh - 16px); padding-block: 8px; }
   .fb-vp--expanded .fb-vp-top { display: none; }
-  .fb-vp--expanded .fb-vp-stage { max-height: calc(100dvh - 16px); }
 }
 
 @media (prefers-reduced-motion: reduce) {

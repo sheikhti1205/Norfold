@@ -46,7 +46,19 @@ public class MainActivity extends BridgeActivity {
             mediaPlugin().restoreMediaRequestState(savedInstanceState.getBundle("findbackMediaRequest"));
         }
     }
-    @Override public void onNewIntent(Intent intent) {
+    /**
+     * BridgeActivity inflates Capacitor's library layout first; the app-owned
+     * layout replaces it here so Bridge.Builder.create() finds this app's
+     * KeyboardMediaWebView at the canonical @id/webview and wires the bridge to
+     * it. Nothing else about the activity changes.
+     */
+    @Override
+    protected void load() {
+        setContentView(R.layout.activity_main);
+        super.load();
+    }
+    @Override
+    public void onNewIntent(Intent intent) {
         boolean chat = ChatPushState.ACTION_TAP.equals(intent.getAction());
         boolean captured = captureChatIntent(intent);
         Intent safe = chat ? new Intent(this, MainActivity.class).setAction(Intent.ACTION_MAIN) : intent;
@@ -64,6 +76,17 @@ public class MainActivity extends BridgeActivity {
         // Capacitor push-action paths. Only our private pending record is used.
         setIntent(new Intent(this, MainActivity.class).setAction(Intent.ACTION_MAIN));
         return captured;
+    }
+    /**
+     * Foreground loss withdraws keyboard insertion immediately, before the
+     * WebView is asked to re-render: the IME may hold an editor session that
+     * the JS page can no longer supervise.
+     */
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (getBridge() == null || getBridge().getPlugin("FindbackMedia") == null) return;
+        ((FindbackMediaPlugin) getBridge().getPlugin("FindbackMedia").getInstance()).onHostPaused();
     }
     @Override public void onSaveInstanceState(android.os.Bundle outState) {
         android.os.Bundle media = mediaPlugin().saveMediaRequestState();
