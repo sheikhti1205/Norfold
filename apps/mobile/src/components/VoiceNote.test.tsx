@@ -261,11 +261,18 @@ describe("voice-note weight and motion contract", () => {
     return new RegExp(`(?:^|\\}\\s*)${escaped}\\s*\\{([^{}]*)\\}`).exec(css)?.[1];
   }
 
-  /** Every rule in the sheet, so a compound bar selector cannot hide. */
+  /** Every rule in the sheet, so a compound bar selector cannot hide. A whole
+   * match always fills both required groups; the guard turns a parser miss into
+   * a failing test instead of an assertion that silently skips. */
   function allRules(): Array<{ selector: string; body: string }> {
-    return Array.from(css.matchAll(/([^{}]+)\{([^{}]*)\}/g), (match) => ({
-      selector: match[1].trim(), body: match[2],
-    }));
+    return Array.from(css.matchAll(/([^{}]+)\{([^{}]*)\}/g), (match) => {
+      const selector = match[1];
+      const body = match[2];
+      if (selector === undefined || body === undefined) {
+        throw new Error("voice-note css parser: rule match without selector or body");
+      }
+      return { selector: selector.trim(), body };
+    });
   }
 
   it("caps every voice bar in the shared rule, so recording, paused preview and delivered all stay slender", () => {
@@ -310,8 +317,8 @@ describe("voice-note weight and motion contract", () => {
     // The minimum layout has to fit the narrowest track: no forced overflow.
     expect((VOICE_BARS - 1) * gap + VOICE_BARS * minWidth).toBeLessThanOrEqual(60);
     // No surface may widen the shared gap back into a hairline.
-    const recorderGap = /(?:^|;)\s*gap\s*:\s*([\d.]+)px/.exec(ruleBody(".fb-voice-panel-wave .fb-chat-voice-track") ?? "");
-    if (recorderGap) expect(Number(recorderGap[1])).toBeLessThan(1);
+    const recorderGap = /(?:^|;)\s*gap\s*:\s*([\d.]+)px/.exec(ruleBody(".fb-voice-panel-wave .fb-chat-voice-track") ?? "")?.[1];
+    if (recorderGap) expect(Number(recorderGap)).toBeLessThan(1);
   });
 
   it("draws one full-width sweep per minute, never a five-part cumulative bar", () => {
