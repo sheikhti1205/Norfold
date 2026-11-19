@@ -1,0 +1,7 @@
+{
+  "bindings": [
+    { "authLevel": "anonymous", "type": "httpTrigger", "direction": "in", "name": "req", "methods": ["post", "options"], "route": "link-preview" },
+    { "type": "http", "direction": "out", "name": "res" }
+  ],
+  "scriptFile": "index.cjs"
+}
