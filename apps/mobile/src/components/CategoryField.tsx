@@ -31,9 +31,18 @@ export function CategoryField({ value, onChange, error, disabled = false }: Cate
   // popover's DOM tree or the parent closes as soon as this one takes focus.
   const portalContainer = useOverlayPortalContainer();
   const triggerRef = useRef<HTMLButtonElement>(null);
+  // This field's own panel node; ownership checks use it so another field's
+  // panel is never mistaken for this one.
+  const popoverRef = useRef<HTMLElement | null>(null);
+  // Deferred close restore handle, so a reopen or second close coalesces it.
+  const restoreFrameRef = useRef<number | null>(null);
   const [query, setQuery] = useState("");
   const [activeOption, setActiveOption] = useState("");
   useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
+  // A pending restore must not outlive the field.
+  useEffect(() => () => {
+    if (restoreFrameRef.current !== null) cancelAnimationFrame(restoreFrameRef.current);
+  }, []);
   const errorId = error ? "category-error" : undefined;
 
   const results = useMemo(() => searchCategoryCatalog(query), [query]);
@@ -53,9 +62,40 @@ export function CategoryField({ value, onChange, error, disabled = false }: Cate
     setQuery("");
   }
 
+  function cancelPendingFocusRestore() {
+    if (restoreFrameRef.current === null) return;
+    cancelAnimationFrame(restoreFrameRef.current);
+    restoreFrameRef.current = null;
+  }
+
+  function openPopover() {
+    // A close being reversed must not pull focus off the reopened search field.
+    cancelPendingFocusRestore();
+    setOpen(true);
+  }
+
+  /**
+   * Closes the panel, then returns focus to the trigger one frame later unless
+   * something deliberately took focus meanwhile (the form's validation summary
+   * after an invalid submit). commit and onOpenChange can both close, so the
+   * pending frame is cancelled and rescheduled rather than duplicated.
+   */
   function closePopover() {
     setOpen(false);
-    requestAnimationFrame(() => triggerRef.current?.focus());
+    cancelPendingFocusRestore();
+    restoreFrameRef.current = requestAnimationFrame(() => {
+      restoreFrameRef.current = null;
+      const active = document.activeElement;
+      const insideThisPopover =
+        active instanceof HTMLElement && popoverRef.current?.contains(active) === true;
+      const focusMovedElsewhere =
+        active instanceof HTMLElement &&
+        active !== document.body &&
+        active !== triggerRef.current &&
+        !insideThisPopover;
+      if (focusMovedElsewhere) return;
+      triggerRef.current?.focus();
+    });
   }
 
   const matchCount = results.filter((option) => isReleasedCategory(option.canonical)).length;
@@ -106,7 +146,7 @@ export function CategoryField({ value, onChange, error, disabled = false }: Cate
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => (open ? closePopover() : openPopover())}
         aria-haspopup="dialog"
         aria-expanded={open && !disabled}
         aria-label="Category"
@@ -124,7 +164,7 @@ export function CategoryField({ value, onChange, error, disabled = false }: Cate
         <ChevronDown aria-hidden="true" size={18} className="shrink-0 text-on-surface-variant" />
       </button>
 
-      <Popover triggerRef={triggerRef} isOpen={open && !disabled} onOpenChange={(next) => next ? setOpen(true) : closePopover()} placement="bottom start" offset={8} UNSTABLE_portalContainer={portalContainer ?? undefined} className="fb-popover fb-category-popover" style={{ zIndex: 70 + depth * 10 }} data-testid="category-popover">
+      <Popover ref={popoverRef} triggerRef={triggerRef} isOpen={open && !disabled} onOpenChange={(next) => (next ? openPopover() : closePopover())} placement="bottom start" offset={8} UNSTABLE_portalContainer={portalContainer ?? undefined} className="fb-popover fb-category-popover" style={{ zIndex: 70 + depth * 10 }} data-testid="category-popover">
         <OverlayDepthProvider depth={depth}>
         <OverlayStackBridge onClose={closePopover} />
         <Dialog aria-label="Choose a category" className="fb-category-dialog">

@@ -1,10 +1,61 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CATEGORY_OPTIONS, CategoryField } from "./CategoryField";
 import { categoryTrigger, categoryValue } from "../test-utils/reportCategory";
 
-afterEach(cleanup);
+afterEach(() => {
+  // Unmount before restoring the spies so pending cancels still reach the
+  // installed frame queue.
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+/**
+ * A faithful rAF queue: real ids, real cancellation, one snapshot per frame and
+ * increasing timestamps. Frames run only when a test steps them, so focus can be
+ * decided before a deferred restore lands.
+ */
+function installFrameQueue() {
+  const pending = new Map<number, FrameRequestCallback>();
+  let nextId = 1;
+  let timestamp = 0;
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    const id = nextId;
+    nextId += 1;
+    pending.set(id, callback);
+    return id;
+  });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+    pending.delete(id);
+  });
+  return {
+    get pending() {
+      return pending.size;
+    },
+    step() {
+      timestamp += 16;
+      // Snapshot this frame: a callback cancelled mid-frame never runs, and a
+      // frame requested now waits for the next step.
+      const frame = Array.from(pending);
+      act(() => {
+        for (const [id, callback] of frame) {
+          if (pending.get(id) !== callback) continue;
+          pending.delete(id);
+          callback(timestamp);
+        }
+      });
+    },
+    drain(maxFrames = 5) {
+      for (let frame = 0; frame < maxFrames && pending.size > 0; frame += 1) {
+        this.step();
+      }
+      if (pending.size > 0) {
+        throw new Error(`frame queue did not settle: ${pending.size} callbacks pending`);
+      }
+    },
+  };
+}
 
 describe("CategoryField (P3 searchable grouped sheet)", () => {
   it("opens an anchored popover, focuses search, and restores focus on Escape", async () => {
@@ -245,5 +296,101 @@ describe("CategoryField (P3 searchable grouped sheet)", () => {
     expect(screen.getByRole("button", { name: "Electronics" }).getAttribute("aria-pressed")).toBe(
       "true",
     );
+  });
+
+  it("does not steal focus that moved on purpose before the close frame lands", async () => {
+    const frames = installFrameQueue();
+    render(<CategoryField value="" onChange={() => {}} />);
+    fireEvent.click(categoryTrigger());
+    fireEvent.click(screen.getByRole("button", { name: "Electronics" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    // The form focuses its validation summary after an invalid publish.
+    const summary = document.createElement("p");
+    summary.tabIndex = -1;
+    document.body.appendChild(summary);
+    summary.focus();
+
+    frames.drain();
+    expect(document.activeElement).toBe(summary);
+    summary.remove();
+  });
+
+  it("returns focus to the trigger when closing left focus on the body", async () => {
+    const frames = installFrameQueue();
+    render(<CategoryField value="" onChange={() => {}} />);
+    const trigger = categoryTrigger();
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "Electronics" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // The focused search field went away with the panel.
+    expect(document.activeElement).toBe(document.body);
+
+    frames.drain();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("leaves focus in another field's open panel when this field closes", async () => {
+    const frames = installFrameQueue();
+    render(
+      <>
+        <CategoryField value="" onChange={() => {}} />
+        <CategoryField value="" onChange={() => {}} />
+      </>,
+    );
+    const [first, second] = screen.getAllByTestId("category-trigger");
+    // Open and close the first field; its restore frame is still pending.
+    fireEvent.click(first!);
+    fireEvent.click(first!);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    fireEvent.click(second!);
+    const otherSearch = screen.getByRole("searchbox", { name: "Search categories" });
+    otherSearch.focus();
+
+    frames.drain();
+    expect(document.activeElement).toBe(otherSearch);
+  });
+
+  it("cancels the pending close restore when the panel reopens first", () => {
+    const frames = installFrameQueue();
+    render(<CategoryField value="" onChange={() => {}} />);
+    const trigger = categoryTrigger();
+    fireEvent.click(trigger);
+    fireEvent.click(trigger);
+    const afterClose = frames.pending;
+    expect(afterClose).toBeGreaterThan(0);
+
+    fireEvent.click(trigger);
+    expect(frames.pending).toBeLessThan(afterClose);
+
+    const search = screen.getByRole("searchbox", { name: "Search categories" });
+    search.focus();
+    frames.drain();
+    expect(document.activeElement).toBe(search);
+  });
+
+  it("coalesces two closes in the same tick into one restore", () => {
+    const frames = installFrameQueue();
+    render(<CategoryField value="" onChange={() => {}} />);
+    const trigger = categoryTrigger();
+
+    // One close schedules one deferred restore.
+    fireEvent.click(trigger);
+    fireEvent.keyDown(document, { key: "Escape" });
+    const afterOneClose = frames.pending;
+    expect(afterOneClose).toBeGreaterThan(0);
+    frames.drain();
+    expect(document.activeElement).toBe(trigger);
+
+    // Both presses land before React commits the first close.
+    fireEvent.click(trigger);
+    act(() => {
+      fireEvent.keyDown(document, { key: "Escape" });
+      fireEvent.keyDown(document, { key: "Escape" });
+    });
+    expect(frames.pending).toBe(afterOneClose);
+    frames.drain();
+    expect(document.activeElement).toBe(trigger);
   });
 });
