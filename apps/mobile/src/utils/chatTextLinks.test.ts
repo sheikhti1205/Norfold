@@ -145,6 +145,18 @@ describe("chat text link segmentation", () => {
     expect(segmentChatTextLinks(credential)).toEqual([{ kind: "text", text: credential }]);
   });
 
+  it("ends a URL at a control character and keeps the control in the text", () => {
+    const url = "https://example.com/a";
+    for (const control of ["\u0000", "\u001f", "\u007f"]) {
+      const body = `${url}${control}b`;
+      expect(segmentChatTextLinks(body)).toEqual([
+        { kind: "link", text: url, href: url },
+        { kind: "text", text: `${control}b` },
+      ]);
+      expect(joined(segmentChatTextLinks(body))).toBe(body);
+    }
+  });
+
   it("refuses malformed and untrusted schemes instead of linking them", () => {
     for (const body of [
       "javascript:alert(1)",
