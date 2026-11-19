@@ -17,13 +17,14 @@
 .fb-search-overlay {
   position: fixed;
   z-index: 74;
-  top: 50%;
-  left: 50%;
-  /* Center with the individual `translate` property, not `transform`: Motion
-     writes its scale animation into the inline `transform`, which would wipe a
-     CSS translate and leave the overlay anchored at the screen's centre rather
-     than centred on it (measured: right edge at 1280 on a 1280 viewport). */
-  translate: -50% -50%;
+  /* Centre with `inset: 0` + auto margins, never `translate`/`transform`: a
+     transformed box becomes the containing block for its fixed-position
+     descendants, which would trap the shared date sheet's BottomSheet inside
+     this overlay instead of covering the viewport. Motion writes its entrance
+     scale into the inline `transform` and leaves `transform: none` at rest. */
+  inset: 0;
+  margin: auto;
+  height: fit-content;
   width: min(640px, calc(100% - 48px));
   max-height: calc(100% - 48px);
   display: flex;
@@ -279,12 +280,6 @@
   background: var(--fb-surface-container-low);
   box-shadow: var(--shadow-md);
 }
-/* The calendar needs the room the preset list does not: it replaces the pill
-   row and the results card while a bound is being picked. */
-.fb-search-menu[data-calendar="true"] {
-  max-height: min(560px, 72dvh);
-  padding: 4px;
-}
 .fb-search-menu-title {
   margin: 2px 8px 6px;
   font-size: 0.6875rem;
@@ -398,209 +393,48 @@
   background: var(--fb-surface-container-high);
   font-weight: 600;
 }
-.fb-search-date-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  padding: 4px 4px 2px;
-}
-.fb-search-date-trigger {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-width: 0;
-  min-height: 48px;
-  padding: 6px 10px;
-  border: 1px solid var(--fb-outline-variant);
-  border-radius: 12px;
-  background: var(--fb-surface);
-  color: var(--fb-on-surface);
-  text-align: start;
-  cursor: pointer;
-}
-.fb-search-date-trigger:hover { background: var(--fb-surface-container); border-color: var(--fb-outline); }
-.fb-search-date-trigger:focus-visible { border-color: var(--fb-on-surface); outline: 2px solid var(--fb-focus); outline-offset: 1px; }
-.fb-search-date-trigger-copy { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-.fb-search-date-trigger-label { font-size: 0.6875rem; font-weight: 600; color: var(--fb-on-surface-variant); }
-.fb-search-date-trigger-value { font-size: 0.8125rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fb-search-date-trigger[data-empty] .fb-search-date-trigger-value { color: var(--fb-on-surface-variant); font-weight: 500; }
-.fb-search-date-trigger > svg { flex: none; color: var(--fb-on-surface-variant); }
-
-/* Calendar: a compact column inside the panel, so a day stays near 44px on a
-   desktop instead of stretching across the whole card. Six fixed rows keep the
-   panel from jumping as months change. */
-.fb-search-calendar {
+/* Each bound is the app's shared date field: a caption row with its own Clear
+   above the picker trigger. The calendar itself is that component's sheet. */
+.fb-search-date-fields {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  width: 100%;
-  max-width: 360px;
-  margin-inline: auto;
-  padding: 2px;
+  padding: 2px 4px 0;
 }
-.fb-search-calendar-top {
-  display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) 36px;
-  align-items: center;
-  gap: 4px;
-}
-.fb-search-calendar-top p {
-  margin: 0;
-  text-align: center;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--fb-on-surface-variant);
-}
-.fb-search-calendar-nav {
-  display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) 36px;
-  align-items: center;
-  gap: 4px;
-}
-.fb-search-calendar-navbtn {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--fb-on-surface-variant);
-  cursor: pointer;
-}
-.fb-search-calendar-navbtn:hover { background: var(--fb-surface-container); color: var(--fb-on-surface); }
-.fb-search-calendar-navbtn:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 1px; }
-.fb-search-calendar-title {
+.fb-search-date-field {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
+  flex-direction: column;
   min-width: 0;
 }
-.fb-search-calendar-titlebtn {
-  min-height: 32px;
-  max-width: 100%;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--fb-on-surface);
-  font: inherit;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: pointer;
-}
-.fb-search-calendar-titlebtn:hover { background: var(--fb-surface-container); }
-.fb-search-calendar-titlebtn:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 1px; }
-.fb-search-calendar-range {
-  padding: 0 8px;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--fb-on-surface);
-}
-.fb-search-calendar-weekdays,
-.fb-search-calendar-days {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 2px;
-}
-.fb-search-calendar-weekdays span {
-  padding: 2px 0;
-  text-align: center;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  color: var(--fb-on-surface-variant);
-}
-.fb-search-calendar-days > span { min-height: 34px; }
-.fb-search-calendar-day {
-  display: grid;
-  place-items: center;
-  aspect-ratio: 1;
-  min-width: 0;
-  min-height: 34px;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--fb-on-surface);
-  font: inherit;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  cursor: pointer;
-}
-.fb-search-calendar-day:hover:not(:disabled) { background: var(--fb-surface-container); }
-.fb-search-calendar-day:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 1px; }
-.fb-search-calendar-day[aria-current="date"]:not([aria-pressed="true"]) {
-  box-shadow: inset 0 0 0 1px var(--fb-outline);
-  font-weight: 700;
-}
-.fb-search-calendar-day[aria-pressed="true"] {
-  background: var(--fb-primary);
-  color: var(--fb-on-primary);
-  font-weight: 700;
-}
-.fb-search-calendar-day:disabled {
-  color: var(--fb-on-surface-variant);
-  opacity: 0.38;
-  background: transparent;
-  cursor: not-allowed;
-}
-.fb-search-calendar-months,
-.fb-search-calendar-years {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  padding: 2px 0;
-}
-.fb-search-calendar-month,
-.fb-search-calendar-year {
-  min-height: 40px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--fb-on-surface);
-  font: inherit;
-  font-size: 0.875rem;
-  cursor: pointer;
-}
-.fb-search-calendar-month:hover,
-.fb-search-calendar-year:hover { background: var(--fb-surface-container); }
-.fb-search-calendar-month:focus-visible,
-.fb-search-calendar-year:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 1px; }
-.fb-search-calendar-month[aria-pressed="true"],
-.fb-search-calendar-year[aria-pressed="true"] {
-  background: var(--fb-primary-container);
-  color: var(--fb-on-primary-container);
-  font-weight: 600;
-}
-.fb-search-calendar-actions {
+.fb-search-date-field-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding-top: 4px;
-  border-top: 1px solid var(--fb-outline-variant);
+  min-height: 44px;
+  padding-inline: 2px;
 }
-.fb-search-calendar-action {
-  min-height: 36px;
-  padding: 0 14px;
-  border: 1px solid transparent;
-  border-radius: 999px;
+.fb-search-date-field-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fb-on-surface-variant);
+}
+/* The shared picker has no Clear of its own, so each bound keeps one. */
+.fb-search-date-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
   background: transparent;
-  color: var(--fb-on-surface);
-  font: inherit;
-  font-size: 0.8125rem;
-  font-weight: 600;
+  color: var(--fb-on-surface-variant);
   cursor: pointer;
 }
-.fb-search-calendar-action:hover:not(:disabled) { background: var(--fb-surface-container); }
-.fb-search-calendar-action:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 1px; }
-.fb-search-calendar-action:disabled { color: var(--fb-on-surface-variant); opacity: 0.38; cursor: not-allowed; }
-.fb-search-calendar-action-primary { border-color: var(--fb-outline-variant); }
-.fb-search-calendar-action-primary:hover:not(:disabled) { border-color: var(--fb-outline); }
+.fb-search-date-clear:hover { background: var(--fb-surface-container); color: var(--fb-on-surface); }
+.fb-search-date-clear:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 1px; }
 .fb-search-menu-note {
   margin: 2px 8px 6px;
   font-size: 0.75rem;
@@ -631,18 +465,16 @@
    real bar, so a taller bar at 200% text never hides the field. */
 @media (max-width: 599px) {
   .fb-search-overlay {
-    translate: -50% 0;
-    width: calc(100% - 16px);
+    /* No auto margins here: the measured inline `top` anchors the overlay, and
+       the 8px side insets replace the old fixed-width + translate pair. */
+    inset: 0 8px auto 8px;
+    width: auto;
+    height: auto;
+    margin: 0;
   }
   .fb-search-bar { min-height: 48px; }
   /* Search-surface controls keep the 44px tap target at phone width. */
   .fb-search-pill { min-height: 44px; font-size: 0.8125rem; }
   .fb-search-clear-filters { min-height: 44px; padding: 0 9px; }
   .fb-search-menu-option { min-height: 44px; }
-  .fb-search-date-trigger { min-height: 46px; }
-  .fb-search-calendar { max-width: 300px; }
-  .fb-search-date-grid { grid-template-columns: minmax(0, 1fr); }
-}
-@media (max-width: 340px) {
-  .fb-search-calendar { max-width: 264px; }
 }

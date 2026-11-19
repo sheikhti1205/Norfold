@@ -24,6 +24,7 @@ vi.mock("./inputCapabilities", async (importOriginal) => {
 
 import { GlobalSearchOverlay } from "./GlobalSearchOverlay";
 import { resetGlobalSearch, toggleGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
+import { resetModalLayers } from "../hooks/modalLayers";
 
 // Vitest does not transform CSS imports for the test environment (the `?inline`
 // module is empty), so the layer contract is asserted against the stylesheet
@@ -59,21 +60,78 @@ const person = {
   avatarUrl: null,
 } as SearchedProfile;
 
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-] as const;
+const DAY_LABEL = new Intl.DateTimeFormat("en-US", {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
 
-/** Today's month, so the tests do not depend on the wall clock's month. */
-function thisMonth(day: number) {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth();
+// The picker names its own month heading and jump buttons with the runtime
+// locale (`Intl.DateTimeFormat` with no locale), so the test must format the
+// same way instead of assuming en-US month names.
+const MONTH_LONG = new Intl.DateTimeFormat(undefined, { month: "long" });
+const MONTH_YEAR_LABEL = new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" });
+
+const PICKER_DATE_LABEL = new Intl.DateTimeFormat("en-US", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * A day inside the month the picker opens on. Fixed day numbers keep the
+ * assertions off the month boundary: "yesterday" or "tomorrow" can fall in the
+ * adjacent month, where the cell is not rendered at all.
+ */
+function utcDayInMonth(day: number) {
+  const now = new Date();
+  const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), day));
+  const iso = date.toISOString().slice(0, 10);
+  return { iso, label: DAY_LABEL.format(new Date(`${iso}T00:00:00Z`)) };
+}
+
+function lastUtcDayInMonth() {
+  const now = new Date();
+  const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
+  return utcDayInMonth(day);
+}
+
+/** 15th of next month: always ahead of today and always mid-month. */
+function nextMonthFifteenth() {
+  const now = new Date();
+  const year = now.getUTCMonth() === 11 ? now.getUTCFullYear() + 1 : now.getUTCFullYear();
+  const month = (now.getUTCMonth() + 1) % 12;
+  const iso = `${year}-${String(month + 1).padStart(2, "0")}-15`;
   return {
-    year,
-    iso: `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
-    label: `${MONTH_NAMES[month]} ${day}, ${year}`,
+    iso,
+    label: DAY_LABEL.format(new Date(`${iso}T00:00:00Z`)),
+    heading: MONTH_YEAR_LABEL.format(new Date(year, month, 1)),
   };
+}
+
+/** A month in the picker's opening year, chosen so the heading must change. */
+function otherMonth() {
+  const now = new Date();
+  const month = now.getUTCMonth() === 0 ? 1 : 0;
+  const year = now.getUTCFullYear();
+  return {
+    buttonName: `${MONTH_LONG.format(new Date(2024, month, 15))} ${year}`,
+    heading: MONTH_YEAR_LABEL.format(new Date(year, month, 1)),
+  };
+}
+
+/** The overlay's presets are local calendar days; format the same fields. */
+function localIso(date: Date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 function RouteProbe() {
@@ -106,6 +164,20 @@ async function openFilters() {
   return { overlay, toggle, bar };
 }
 
+/** Open the month menu, then the shared picker's own From sheet. */
+async function openFromPicker() {
+  const { overlay, bar } = await openFilters();
+  fireEvent.click(within(bar).getByRole("button", { name: "Date" }));
+  const menu = within(bar).getByRole("group", { name: "Date lost or found" });
+  const trigger = within(menu).getByRole("button", { name: "From date. Any date" });
+  // jsdom's click does not move focus the way a real pointer press does; the
+  // sheet restores focus to whatever was focused when it opened.
+  trigger.focus();
+  fireEvent.click(trigger);
+  const dialog = await screen.findByRole("dialog", { name: "From date" });
+  return { overlay, bar, menu, trigger, dialog };
+}
+
 beforeEach(() => {
   io.user = { id: "searcher" };
   io.pointer.fine = false;
@@ -115,13 +187,41 @@ beforeEach(() => {
   io.searchPeople.mockResolvedValue({ items: [], nextCursor: null });
   localStorage.clear();
   resetGlobalSearch();
+  resetModalLayers();
 });
-afterEach(() => { cleanup(); resetGlobalSearch(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); resetGlobalSearch(); resetModalLayers(); vi.unstubAllGlobals(); });
 
 describe("app-wide search", () => {
   it("keeps a visible focus ring on the filter pills", () => {
     expect(searchStyles).toMatch(/\.fb-search-pill:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--fb-focus\)/s);
     expect(searchStyles).not.toMatch(/\.fb-search-pill:focus-visible\s*\{[^}]*outline:\s*none/s);
+  });
+
+  it("has no second calendar implementation of its own", () => {
+    // The search date fields reuse the canonical ReportDatePicker sheet. A
+    // search-owned calendar stylesheet is the regression this guards against.
+    expect(searchStyles).not.toMatch(/\.fb-search-calendar/);
+    expect(searchStyles).not.toMatch(/\.fb-search-date-trigger/);
+    expect(searchStyles).toMatch(/\.fb-search-date-fields\s*\{/);
+  });
+
+  it("centres the overlay with insets instead of a transform that would trap the sheet", () => {
+    // The shared date sheet is position: fixed. A transform on the overlay would
+    // make it the containing block for that sheet, so centring must not use
+    // translate. Comments are stripped first so the rule's own explanation of
+    // that constraint is not mistaken for a declaration.
+    const css = searchStyles.replace(/\/\*[\s\S]*?\*\//g, "");
+    const overlayRule = /\.fb-search-overlay\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(overlayRule).toMatch(/inset:\s*0;/);
+    expect(overlayRule).toMatch(/margin:\s*auto;/);
+    expect(overlayRule).toMatch(/height:\s*fit-content;/);
+    expect(overlayRule).not.toMatch(/transform|translate/);
+
+    // The phone override keeps the measured top anchor and side insets.
+    const phoneRule =
+      /@media\s*\(max-width:\s*599px\)\s*\{[\s\S]*?\.fb-search-overlay\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(phoneRule).toMatch(/inset:\s*0\s+8px\s+auto\s+8px;/);
+    expect(phoneRule).toMatch(/margin:\s*0;/);
   });
 
   it("keeps the full viewport backdrop below the search surface", async () => {
@@ -303,7 +403,7 @@ describe("app-wide search", () => {
     await waitFor(() => expect(io.fetchFeed).toHaveBeenCalledWith(expect.objectContaining({ type: "LOST" })));
   });
 
-  it("opens a designed calendar and lets the month and year drill down", async () => {
+  it("opens the shared date picker for a bound instead of a second calendar", async () => {
     render(<Harness />);
     const { overlay, bar } = await openFilters();
 
@@ -315,34 +415,105 @@ describe("app-wide search", () => {
     // No native date inputs survive the redesign.
     expect(within(menu).queryByRole("textbox")).toBeNull();
 
-    fireEvent.click(within(menu).getByRole("button", { name: /^From date/ }));
-    expect(within(bar).getByRole("group", { name: "Start date" })).toBeTruthy();
+    const fromTrigger = within(menu).getByRole("button", { name: "From date. Any date" });
+    fromTrigger.focus();
+    fireEvent.click(fromTrigger);
+    const dialog = await screen.findByRole("dialog", { name: "From date" });
+
+    // The shared sheet is the only calendar the overlay mounts: its test ids
+    // and react-aria grid are the whole date UI here.
+    expect(within(dialog).getByTestId("calendar-surface")).toBeTruthy();
+    expect(within(dialog).getByRole("grid")).toBeTruthy();
+    expect(overlay.querySelector(".fb-search-calendar")).toBeNull();
+    expect(overlay.querySelectorAll('[data-testid="calendar-surface"]')).toHaveLength(1);
+    // The independent Monday-first month/year controls are gone.
+    expect(within(dialog).queryByRole("button", { name: "Choose month" })).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "Choose year" })).toBeNull();
+
+    // The shared picker still offers its one month/year jump control.
+    fireEvent.click(within(dialog).getByRole("button", { name: /choose month and year/i }));
+    const jumpPanel = within(dialog).getByTestId("calendar-jump-panel");
+    const target = otherMonth();
+    fireEvent.click(within(jumpPanel).getByRole("button", { name: target.buttonName }));
+    await waitFor(() => expect(
+      within(dialog).getByRole("heading", { name: new RegExp(escapeRegex(target.heading)) }),
+    ).toBeTruthy());
+
     // The pills stay mounted (so their scroll position survives) while the
-    // results card yields the room to the calendar.
+    // shared sheet covers the results.
     expect(within(bar).getByRole("button", { name: /^Date/ })).toBeTruthy();
-    expect(within(overlay).queryByText("Recent searches")).toBeNull();
 
-    // Month opens the month list; choosing one returns to that month's days.
-    fireEvent.click(within(menu).getByRole("button", { name: "Choose month" }));
-    fireEvent.click(within(menu).getByRole("button", { name: "March" }));
-    expect(within(menu).getByRole("button", { name: "Choose month" }).textContent).toBe("March");
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "From date" })).toBeNull());
+  });
 
-    // Year opens the year list; choosing one shows that year's months.
-    const pageStart = Math.floor(thisMonth(1).year / 12) * 12;
-    fireEvent.click(within(menu).getByRole("button", { name: "Choose year" }));
-    fireEvent.click(within(menu).getByRole("button", { name: String(pageStart + 1) }));
-    fireEvent.click(within(menu).getByRole("button", { name: "June" }));
+  it("applies a date preset's real bounds and clears both of them on Any date", async () => {
+    render(<Harness />);
+    const { overlay, bar } = await openFilters();
+    // A word keeps the feed live after the dates return to "any".
+    fireEvent.change(within(overlay).getByRole("searchbox"), { target: { value: "wallet" } });
 
-    const chosenYear = pageStart + 1;
-    fireEvent.click(within(menu).getByRole("button", { name: `June 15, ${chosenYear}` }));
+    fireEvent.click(within(bar).getByRole("button", { name: "Date" }));
+    let menu = within(bar).getByRole("group", { name: "Date lost or found" });
+    expect(within(menu).getByRole("button", { name: "Any date" }).getAttribute("aria-pressed")).toBe("true");
+
+    // "Last 7 days" is the local calendar day six days back through today.
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(start.getDate() - 6);
+    fireEvent.click(within(menu).getByRole("button", { name: "Last 7 days" }));
+
     await waitFor(() => expect(io.fetchFeed).toHaveBeenCalledWith(expect.objectContaining({
-      dateFrom: `${chosenYear}-06-15`,
+      dateFrom: localIso(start),
+      dateTo: localIso(today),
     })));
+    // The panel closes, and the date pill names the preset it applied.
+    expect(within(bar).queryByRole("group", { name: "Date lost or found" })).toBeNull();
+    const presetPill = within(bar).getByRole("button", { name: "Date: Last 7 days" });
+    expect(document.activeElement).toBe(presetPill);
 
-    // The date options return, the trigger shows the day, and focus is on it.
-    const fromTrigger = within(menu).getByRole("button", { name: /^From date/ });
-    expect(fromTrigger.textContent).toContain("Jun 15");
-    expect(document.activeElement).toBe(fromTrigger);
+    // Any date resets both bounds, not just one: the pill returns to "Date".
+    fireEvent.click(presetPill);
+    menu = within(bar).getByRole("group", { name: "Date lost or found" });
+    expect(within(menu).getByRole("button", { name: "Last 7 days" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(within(menu).getByRole("button", { name: "Any date" }));
+
+    await waitFor(() => {
+      const call = io.fetchFeed.mock.calls.at(-1)?.[0] as Record<string, unknown> | undefined;
+      expect(call?.dateFrom).toBeUndefined();
+      expect(call?.dateTo).toBeUndefined();
+    });
+    expect(within(bar).getByRole("button", { name: "Date" })).toBeTruthy();
+  });
+
+  it("does not apply a picked date until the shared picker is confirmed", async () => {
+    render(<Harness />);
+    const { bar, menu, trigger } = await openFromPicker();
+    const picked = utcDayInMonth(15);
+
+    fireEvent.click(within(screen.getByRole("dialog", { name: "From date" }))
+      .getByRole("button", { name: new RegExp(escapeRegex(picked.label), "i") }));
+    // A picked day is a draft: the filter and its query are untouched.
+    expect(io.fetchFeed).not.toHaveBeenCalled();
+    expect(within(bar).getByRole("button", { name: /^Date/ })).toBeTruthy();
+
+    fireEvent.click(within(screen.getByRole("dialog", { name: "From date" }))
+      .getByRole("button", { name: /^cancel$/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "From date" })).toBeNull());
+    expect(within(menu).getByRole("button", { name: "From date. Any date" })).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(io.fetchFeed).not.toHaveBeenCalled();
+
+    // Confirm is the one commit point.
+    fireEvent.click(trigger);
+    const dialog = await screen.findByRole("dialog", { name: "From date" });
+    fireEvent.click(within(dialog).getByRole("button", { name: new RegExp(escapeRegex(picked.label), "i") }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /^confirm$/i }));
+    await waitFor(() => expect(io.fetchFeed).toHaveBeenCalledWith(expect.objectContaining({
+      dateFrom: picked.iso,
+    })));
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(within(menu).getByRole("button", { name: `From date. ${PICKER_DATE_LABEL.format(new Date(`${picked.iso}T00:00:00Z`))}` })).toBeTruthy();
   });
 
   it("scrolls the open pill back into view when a chosen value widens it", async () => {
@@ -352,58 +523,114 @@ describe("app-wide search", () => {
     const datePill = within(bar).getByRole("button", { name: "Date" });
     fireEvent.click(datePill);
     const menu = within(bar).getByRole("group", { name: "Date lost or found" });
-    fireEvent.click(within(menu).getByRole("button", { name: /^From date/ }));
+    const fromTrigger = within(menu).getByRole("button", { name: "From date. Any date" });
+    fromTrigger.focus();
+    fireEvent.click(fromTrigger);
+    const dialog = await screen.findByRole("dialog", { name: "From date" });
 
     // A phone cannot fit every pill. Choosing a day widens "Date" into
     // "From Nov 15"; the row must follow the label instead of leaving half
     // the value scrolled out of sight.
     const scroll = vi.fn();
     datePill.scrollIntoView = scroll;
-    fireEvent.click(within(menu).getByRole("button", { name: thisMonth(15).label }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /^today$/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /^confirm$/i }));
 
     await waitFor(() => expect(scroll).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" }));
     expect(within(bar).getByRole("button", { name: /^Date/ })).toBe(datePill);
   });
 
-  it("disables days outside the other bound and clears one bound", async () => {
+  it("bounds the end date by the start date and clears one bound", async () => {
+    render(<Harness />);
+    const { bar } = await openFromPicker();
+    const menu = within(bar).getByRole("group", { name: "Date lost or found" });
+    // Both days sit inside the month the picker opens on, so the assertions
+    // never depend on where today falls in the month.
+    const first = utcDayInMonth(1);
+    const last = lastUtcDayInMonth();
+
+    // Set From to the month's last day through the shared picker.
+    fireEvent.click(within(screen.getByRole("dialog", { name: "From date" }))
+      .getByRole("button", { name: new RegExp(escapeRegex(last.label), "i") }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "From date" }))
+      .getByRole("button", { name: /^confirm$/i }));
+    await waitFor(() => expect(io.fetchFeed).toHaveBeenCalledWith(expect.objectContaining({
+      dateFrom: last.iso,
+    })));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "From date" })).toBeNull());
+
+    // To cannot precede From: the shared picker disables the earlier day and
+    // still allows the bound itself.
+    const toTrigger = within(menu).getByRole("button", { name: "To date. Any date" });
+    toTrigger.focus();
+    fireEvent.click(toTrigger);
+    const dialog = await screen.findByRole("dialog", { name: "To date" });
+    const disabledDay = within(dialog).getByRole("button", { name: new RegExp(escapeRegex(first.label), "i") });
+    const allowedDay = within(dialog).getByRole("button", { name: new RegExp(escapeRegex(last.label), "i") });
+    expect(disabledDay.getAttribute("aria-disabled")).toBe("true");
+    expect(allowedDay.getAttribute("aria-disabled")).not.toBe("true");
+
+    fireEvent.click(allowedDay);
+    fireEvent.click(within(dialog).getByRole("button", { name: /^confirm$/i }));
+    await waitFor(() => expect(io.fetchFeed).toHaveBeenCalledWith(expect.objectContaining({
+      dateFrom: last.iso,
+      dateTo: last.iso,
+    })));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "To date" })).toBeNull());
+
+    // Clear one bound without touching the other.
+    fireEvent.click(within(menu).getByRole("button", { name: "Clear from date" }));
+    await waitFor(() => {
+      const call = io.fetchFeed.mock.calls.at(-1)?.[0] as Record<string, unknown> | undefined;
+      expect(call?.dateFrom).toBeUndefined();
+      expect(call?.dateTo).toBe(last.iso);
+    });
+    const cleared = within(menu).getByRole("button", { name: "From date. Any date" });
+    expect(document.activeElement).toBe(cleared);
+  });
+
+  it("blocks the days after the end bound when choosing the start bound", async () => {
     render(<Harness />);
     const { bar } = await openFilters();
     fireEvent.click(within(bar).getByRole("button", { name: "Date" }));
     const menu = within(bar).getByRole("group", { name: "Date lost or found" });
 
-    const from = thisMonth(15);
-    const early = thisMonth(10);
-    const late = thisMonth(20);
-
-    // Set From first.
-    fireEvent.click(within(menu).getByRole("button", { name: /^From date/ }));
-    fireEvent.click(within(menu).getByRole("button", { name: from.label }));
+    // End mid-month, so the following day is still in the same grid.
+    const end = utcDayInMonth(15);
+    const toTrigger = within(menu).getByRole("button", { name: "To date. Any date" });
+    toTrigger.focus();
+    fireEvent.click(toTrigger);
+    let dialog = await screen.findByRole("dialog", { name: "To date" });
+    fireEvent.click(within(dialog).getByRole("button", { name: new RegExp(escapeRegex(end.label), "i") }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /^confirm$/i }));
     await waitFor(() => expect(io.fetchFeed).toHaveBeenCalledWith(expect.objectContaining({
-      dateFrom: from.iso,
+      dateTo: end.iso,
     })));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "To date" })).toBeNull());
 
-    // To cannot precede From: the calendar disables day 10 and allows day 20.
-    fireEvent.click(within(menu).getByRole("button", { name: /^To date/ }));
-    const disabledDay = within(menu).getByRole("button", { name: early.label }) as HTMLButtonElement;
-    const allowedDay = within(menu).getByRole("button", { name: late.label }) as HTMLButtonElement;
-    expect(disabledDay.disabled).toBe(true);
-    expect(allowedDay.disabled).toBe(false);
+    // The start may not pass the end, but the end day itself is inclusive.
+    const afterEnd = utcDayInMonth(16);
+    const fromTrigger = within(menu).getByRole("button", { name: "From date. Any date" });
+    fromTrigger.focus();
+    fireEvent.click(fromTrigger);
+    dialog = await screen.findByRole("dialog", { name: "From date" });
+    const blocked = within(dialog).getByRole("button", { name: new RegExp(escapeRegex(afterEnd.label), "i") });
+    expect(blocked.getAttribute("aria-disabled")).toBe("true");
+    const inclusive = within(dialog).getByRole("button", { name: new RegExp(escapeRegex(end.label), "i") });
+    expect(inclusive.getAttribute("aria-disabled")).not.toBe("true");
 
-    fireEvent.click(allowedDay);
+    // A blocked day cannot be committed: with no draft, Confirm stays disabled.
+    fireEvent.click(blocked);
+    expect(within(dialog).getByRole("button", { name: /^confirm$/i }).hasAttribute("disabled")).toBe(true);
+
+    fireEvent.click(inclusive);
+    const confirm = within(dialog).getByRole("button", { name: /^confirm$/i });
+    expect(confirm.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(confirm);
     await waitFor(() => expect(io.fetchFeed).toHaveBeenCalledWith(expect.objectContaining({
-      dateFrom: from.iso,
-      dateTo: late.iso,
+      dateFrom: end.iso,
+      dateTo: end.iso,
     })));
-
-    // Clear one bound without touching the other.
-    fireEvent.click(within(menu).getByRole("button", { name: /^From date/ }));
-    fireEvent.click(within(menu).getByRole("button", { name: "Clear" }));
-    await waitFor(() => {
-      const last = io.fetchFeed.mock.calls.at(-1)?.[0] as Record<string, unknown> | undefined;
-      expect(last?.dateFrom).toBeUndefined();
-      expect(last?.dateTo).toBe(late.iso);
-    });
-    expect(within(menu).getByRole("button", { name: "From date, any date" })).toBeTruthy();
   });
 
   it("searches the category list and keeps the chosen category in the pill", async () => {
@@ -451,19 +678,22 @@ describe("app-wide search", () => {
     expect(within(overlay).queryByRole("button", { name: "Clear filters" })).toBeNull();
   });
 
-  it("closes the calendar, the filter panel, the filter row and the search one Escape at a time", async () => {
+  it("closes the shared date sheet, the date panel, the filter row and the search one Escape at a time", async () => {
     render(<Harness />);
     const { overlay, toggle, bar } = await openFilters();
 
     fireEvent.click(within(bar).getByRole("button", { name: "Date" }));
-    fireEvent.click(within(bar).getByRole("button", { name: /^From date/ }));
-    expect(within(bar).getByRole("group", { name: "Start date" })).toBeTruthy();
+    const menu = within(bar).getByRole("group", { name: "Date lost or found" });
+    const fromTrigger = within(menu).getByRole("button", { name: "From date. Any date" });
+    fromTrigger.focus();
+    fireEvent.click(fromTrigger);
+    await screen.findByRole("dialog", { name: "From date" });
 
-    // One: the calendar returns to the date options, focus on its trigger.
+    // One: the shared sheet closes; the date panel behind it stays open.
     fireEvent.keyDown(document, { key: "Escape" });
-    expect(within(bar).queryByRole("group", { name: "Start date" })).toBeNull();
-    expect(within(bar).getByRole("button", { name: "Last 7 days" })).toBeTruthy();
-    expect(document.activeElement).toBe(within(bar).getByRole("button", { name: /^From date/ }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "From date" })).toBeNull());
+    expect(within(bar).getByRole("group", { name: "Date lost or found" })).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(fromTrigger));
 
     // Two: the date panel closes and the Date pill takes focus.
     fireEvent.keyDown(document, { key: "Escape" });
@@ -478,6 +708,36 @@ describe("app-wide search", () => {
     // Four: the search closes.
     fireEvent.keyDown(document, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("search")).toBeNull());
+  });
+
+  it("keeps future dates selectable in search while reports stay past-only", async () => {
+    render(<Harness />);
+    const { bar } = await openFilters();
+    fireEvent.click(within(bar).getByRole("button", { name: "Date" }));
+    const menu = within(bar).getByRole("group", { name: "Date lost or found" });
+    const toTrigger = within(menu).getByRole("button", { name: "To date. Any date" });
+    toTrigger.focus();
+    fireEvent.click(toTrigger);
+    const dialog = await screen.findByRole("dialog", { name: "To date" });
+
+    // The future opt-in keeps the filter's historical domain: an explicit
+    // allowFuture, not a silent change to the report picker's past-only cap.
+    const nextMonthButton = within(dialog).getByRole("button", { name: /next month/i }) as HTMLButtonElement;
+    expect(nextMonthButton.disabled).toBe(false);
+    fireEvent.click(nextMonthButton);
+
+    const next = nextMonthFifteenth();
+    await waitFor(() => expect(
+      within(dialog).getByRole("heading", { name: new RegExp(escapeRegex(next.heading)) }),
+    ).toBeTruthy());
+    const cell = within(dialog).getByRole("button", { name: new RegExp(escapeRegex(next.label), "i") });
+    expect(cell.getAttribute("aria-disabled")).not.toBe("true");
+
+    fireEvent.click(cell);
+    fireEvent.click(within(dialog).getByRole("button", { name: /^confirm$/i }));
+    await waitFor(() => expect(io.fetchFeed).toHaveBeenCalledWith(expect.objectContaining({
+      dateTo: next.iso,
+    })));
   });
 
   it("closes on an outside press", async () => {
