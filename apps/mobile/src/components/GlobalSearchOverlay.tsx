@@ -2,11 +2,8 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, ty
 import { AnimatePresence, motion } from "framer-motion";
 import { Link, useLocation, useNavigate } from "react-router";
 import {
-  CalendarDays,
   Check,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Clock,
   ImageOff,
   Search,
@@ -25,13 +22,14 @@ import { fetchFeed } from "../services/posts";
 import { searchPeople } from "../services/people";
 import { useMediaUrl } from "../services/media/privateMedia";
 import { friendlyError } from "../utils/friendlyErrors";
+import { modalLayerCount } from "../hooks/modalLayers";
 import { CATEGORY_OPTIONS } from "./CategoryField";
 import { POST_TYPE_OPTIONS, STATUS_OPTIONS, statusLabel } from "./Segmented";
 import { UserAvatar } from "./UserAvatar";
 import { PostLink } from "./PostNavigation";
+import { ReportDatePicker } from "./ReportDatePicker";
 import { ReportPhotoPreview } from "./ReportPhotoPreview";
 import { SearchField } from "./SearchField";
-import { useHoverLabel } from "./HoverLabel";
 import { closeGlobalSearch, takeGlobalSearchSeed, useGlobalSearchOpen } from "./globalSearch";
 import { motionDurations, motionEasings } from "./uiMotion";
 import "./GlobalSearchOverlay.css";
@@ -53,7 +51,7 @@ import "./GlobalSearchOverlay.css";
  * panel and writes its value straight into the pill, so the reader can see the
  * live query without a separate chip summary. Report dates use the item's
  * lost/found date (`event_date`), which is the bound the feed has always
- * supported.
+ * supported, through the shared date sheet (`ReportDatePicker`).
  */
 
 interface SearchFilters {
@@ -68,7 +66,6 @@ interface SearchFilters {
 type FilterMenuKey = "type" | "category" | "status" | "date" | "sort";
 type DatePreset = "any" | "week" | "month" | "year";
 type DateBound = "from" | "to";
-type CalendarView = "days" | "months" | "years";
 
 const EMPTY_FILTERS: SearchFilters = {
   type: "",
@@ -97,19 +94,6 @@ const DATE_PRESETS: readonly { key: DatePreset; label: string }[] = [
 ];
 
 const DAY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
-
-/** The calendar is English, like the rest of the product copy. */
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-] as const;
-const MONTHS_SHORT = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-] as const;
-/** Monday first: the week starts on Monday in the product's date copy. */
-const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] as const;
-
 
 function recentStorageKey(accountId: string | undefined) {
   return `${RECENT_KEY}:${accountId ?? "guest"}`;
@@ -169,29 +153,12 @@ function validDay(value: string): boolean {
   return parseDay(value) !== null;
 }
 
-/** `Nov 15, 2026`: compact, unambiguous across years, and no locale drift. */
-function formatDay(value: string) {
-  const parts = parseDay(value);
-  if (!parts) return value;
-  return `${MONTHS_SHORT[parts.month]} ${parts.day}, ${parts.year}`;
-}
-
-function daysInMonth(year: number, month: number) {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-function pad2(value: number) {
-  return String(value).padStart(2, "0");
-}
-
-function dayKey(year: number, month: number, day: number) {
-  return `${year}-${pad2(month + 1)}-${pad2(day)}`;
-}
-
 /**
  * The bounds the feed may actually use. Each bound is judged on its own, so one
  * impossible day cannot throw away the other valid one; only a reversed range
- * invalidates both. This mirrors the `/search` page's contract.
+ * invalidates both. The full `/search` page applies the same validity and range
+ * rules; only availability differs on purpose, because this overlay's pickers
+ * opt in to future days while `/search` keeps its past-only fields.
  */
 function appliedRange(filters: SearchFilters) {
   const fromUsable = !filters.dateFrom || validDay(filters.dateFrom);
@@ -307,7 +274,6 @@ function SearchSurface() {
   const [filters, setFilters] = useState<SearchFilters>(EMPTY_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [openMenu, setOpenMenu] = useState<FilterMenuKey | null>(null);
-  const [dateBound, setDateBound] = useState<DateBound | null>(null);
   const [categoryQuery, setCategoryQuery] = useState("");
   const [recent, setRecent] = useState<string[]>(() => readRecent(user?.id));
   const [reports, setReports] = useState<PostItem[]>([]);
@@ -320,8 +286,6 @@ function SearchSurface() {
   const filterToggle = useRef<HTMLButtonElement>(null);
   const tray = useRef<HTMLDivElement>(null);
   const menuPanel = useRef<HTMLDivElement>(null);
-  const dateBoundRefs = useRef<Record<DateBound, HTMLButtonElement | null>>({ from: null, to: null });
-  const refocusBound = useRef<DateBound | null>(null);
   const pillRefs = useRef<Record<FilterMenuKey, HTMLButtonElement | null>>({
     type: null,
     category: null,
@@ -331,6 +295,8 @@ function SearchSurface() {
   });
   const resultsId = useId();
   const filtersId = useId();
+  const dateFromId = `${filtersId}-date-from`;
+  const dateToId = `${filtersId}-date-to`;
 
   // A printable keystroke elsewhere in the app opens search with that
   // character already in the field, so the reader never types it twice.
@@ -366,18 +332,15 @@ function SearchSurface() {
     return () => window.removeEventListener("resize", measure);
   }, []);
 
-  // Escape closes one layer at a time: menu, then filter row, then search.
-  // The trigger owns focus after both of its layers close.
+  // Escape closes one layer at a time: the shared date sheet first, then the
+  // date panel, the filter row, and finally the search. The sheet registers as
+  // a modal layer above this surface, so its own topmost handler gets the key;
+  // this handler must not close the panel behind it.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (modalLayerCount() > 0) return;
       event.preventDefault();
-      if (dateBound) {
-        // The calendar is one layer inside the date panel: leave it first.
-        refocusBound.current = dateBound;
-        setDateBound(null);
-        return;
-      }
       if (openMenu) {
         const key = openMenu;
         setOpenMenu(null);
@@ -393,22 +356,7 @@ function SearchSurface() {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [dateBound, filtersOpen, openMenu]);
-
-  // A closed calendar hands focus back to the From/To trigger it replaced.
-  useEffect(() => {
-    if (dateBound !== null) return;
-    const bound = refocusBound.current;
-    if (!bound) return;
-    refocusBound.current = null;
-    dateBoundRefs.current[bound]?.focus();
-  }, [dateBound]);
-
-  // Leaving the date panel (or closing filters) must not leave a calendar
-  // view behind for the next open.
-  useEffect(() => {
-    if (openMenu !== "date") setDateBound(null);
-  }, [openMenu]);
+  }, [filtersOpen, openMenu]);
 
   // An open filter panel puts focus on its selected option (or the category
   // search field), so a keyboard reader enters the panel instead of tabbing
@@ -431,7 +379,6 @@ function SearchSurface() {
     const onDown = (event: PointerEvent) => {
       if (tray.current?.contains(event.target as Node)) return;
       setOpenMenu(null);
-      setDateBound(null);
     };
     document.addEventListener("pointerdown", onDown);
     return () => document.removeEventListener("pointerdown", onDown);
@@ -517,12 +464,10 @@ function SearchSurface() {
   function clearFilters() {
     setFilters(EMPTY_FILTERS);
     setOpenMenu(null);
-    setDateBound(null);
     filterToggle.current?.focus();
   }
 
   function toggleMenu(key: FilterMenuKey) {
-    setDateBound(null);
     setOpenMenu((current) => (current === key ? null : key));
   }
 
@@ -537,29 +482,22 @@ function SearchSurface() {
     const next = presetRange(preset);
     setFilters((current) => ({ ...current, dateFrom: next.from, dateTo: next.to }));
     setOpenMenu(null);
-    setDateBound(null);
     pillRefs.current.date?.focus();
   }
 
-  // The calendar replaces the From/To triggers while a bound is being picked.
-  function openDateBound(bound: DateBound) {
-    setDateBound(bound);
-  }
-
-  function closeDateBound() {
-    if (!dateBound) return;
-    refocusBound.current = dateBound;
-    setDateBound(null);
-  }
-
-  /** A chosen day (or an empty string from Clear) applies live, then hands
-   *  focus back to the trigger so the other bound stays one Tab away. */
-  function commitDateBound(bound: DateBound, value: string) {
+  /** The shared picker commits only on Confirm; its onChange is the one place
+   *  a bound reaches the filters, so Cancel leaves the query untouched. */
+  function applyDateBound(bound: DateBound, value: string) {
     setFilters((current) => (
       bound === "from" ? { ...current, dateFrom: value } : { ...current, dateTo: value }
     ));
-    refocusBound.current = bound;
-    setDateBound(null);
+  }
+
+  /** The picker has no Clear control, so each bound keeps its own: clearing
+   *  means "any date" and keeps the reader on the field it emptied. */
+  function clearDateBound(bound: DateBound) {
+    applyDateBound(bound, "");
+    document.getElementById(bound === "from" ? dateFromId : dateToId)?.focus();
   }
 
   function seeAll() {
@@ -584,7 +522,6 @@ function SearchSurface() {
   const statusValue = filters.status ? statusLabel(filters.status) : "Status";
   const dateValue = datePillLabel(filters);
   const sortValue = filters.sort === "oldest" ? "Oldest" : "Newest";
-  const pickingDate = openMenu === "date" && dateBound !== null;
   const filterToggleName = activeCount > 0 ? `Advanced search, ${activeCount} active` : "Advanced search";
 
   // A phone cannot fit every pill. The open pill must stay fully visible even
@@ -751,15 +688,14 @@ function SearchSurface() {
           onCategoryQuery={setCategoryQuery}
           onPatch={patchFilters}
           onPreset={choosePreset}
-          dateBound={dateBound}
-          onOpenBound={openDateBound}
-          onBackBound={closeDateBound}
-          onCommitBound={commitDateBound}
-          onBoundTriggerRef={(bound, node) => { dateBoundRefs.current[bound] = node; }}
+          dateFromId={dateFromId}
+          dateToId={dateToId}
+          onApplyBound={applyDateBound}
+          onClearBound={clearDateBound}
         />}
       </div>}
 
-      {!pickingDate && <div className="fb-search-card" aria-live="polite">
+      <div className="fb-search-card" aria-live="polite">
         {showRecent && <>
           <p className="fb-search-card-title">Recent searches</p>
           {recent.length === 0
@@ -800,7 +736,7 @@ function SearchSurface() {
           </div>}
           {!accountId && <p className="fb-search-note">Sign in to search reports and people.</p>}
         </>}
-      </div>}
+      </div>
     </motion.div>
   </>;
 }
@@ -908,11 +844,10 @@ function FilterMenu({
   onCategoryQuery,
   onPatch,
   onPreset,
-  dateBound,
-  onOpenBound,
-  onBackBound,
-  onCommitBound,
-  onBoundTriggerRef,
+  dateFromId,
+  dateToId,
+  onApplyBound,
+  onClearBound,
 }: {
   menu: FilterMenuKey;
   filters: SearchFilters;
@@ -922,19 +857,14 @@ function FilterMenu({
   onCategoryQuery: (value: string) => void;
   onPatch: (key: FilterMenuKey, patch: Partial<SearchFilters>, close?: boolean) => void;
   onPreset: (preset: DatePreset) => void;
-  dateBound: DateBound | null;
-  onOpenBound: (bound: DateBound) => void;
-  onBackBound: () => void;
-  onCommitBound: (bound: DateBound, value: string) => void;
-  onBoundTriggerRef: (bound: DateBound, node: HTMLButtonElement | null) => void;
+  dateFromId: string;
+  dateToId: string;
+  onApplyBound: (bound: DateBound, value: string) => void;
+  onClearBound: (bound: DateBound) => void;
 }) {
   const title = MENU_TITLES[menu];
   const range = appliedRange(filters);
   const preset = presetFor(filters);
-  const calendarOpen = menu === "date" && dateBound !== null;
-  const menuLabel = calendarOpen
-    ? dateBound === "from" ? "Start date" : "End date"
-    : title;
   const categories = CATEGORY_OPTIONS.filter((option) =>
     option.label.toLowerCase().includes(categoryQuery.trim().toLowerCase()),
   );
@@ -943,11 +873,10 @@ function FilterMenu({
     className="fb-search-menu"
     id={`${filtersId}-${menu}`}
     role="group"
-    aria-label={menuLabel}
-    data-calendar={calendarOpen ? "true" : undefined}
+    aria-label={title}
     ref={menuRef}
   >
-    {!calendarOpen && <p className="fb-search-menu-title">{title}</p>}
+    <p className="fb-search-menu-title">{title}</p>
     {menu === "category" && <div className="fb-search-menu-search">
       <Search size={16} aria-hidden="true" />
       <input
@@ -988,260 +917,88 @@ function FilterMenu({
         >{option.label}</MenuOption>)}
       </>}
 
-      {menu === "date" && (dateBound
-        ? <DateCalendar
-          key={dateBound}
-          bound={dateBound}
-          filters={filters}
-          onBack={onBackBound}
-          onCommit={onCommitBound}
-        />
-        : <div className="fb-search-date-options">
-          <div className="fb-search-date-presets">
-            {DATE_PRESETS.map((option) => <button
-              key={option.key}
-              type="button"
-              className="fb-search-date-preset"
-              aria-pressed={preset === option.key}
-              onClick={() => onPreset(option.key)}
-            >
-              <span>{option.label}</span>
-              {preset === option.key && <Check size={14} aria-hidden="true" />}
-            </button>)}
+      {menu === "date" && <div className="fb-search-date-options">
+        <div className="fb-search-date-presets">
+          {DATE_PRESETS.map((option) => <button
+            key={option.key}
+            type="button"
+            className="fb-search-date-preset"
+            aria-pressed={preset === option.key}
+            onClick={() => onPreset(option.key)}
+          >
+            <span>{option.label}</span>
+            {preset === option.key && <Check size={14} aria-hidden="true" />}
+          </button>)}
+        </div>
+        <div className="fb-search-menu-divider" role="separator" />
+        {/* Both bounds are the app's shared date field. A value reaches the
+            filter only when the picker's Confirm is pressed, so dismissing the
+            sheet changes nothing. allowFuture keeps this filter's existing
+            range: search has always allowed future days, unlike the report
+            form. */}
+        <div className="fb-search-date-fields">
+          <div className="fb-search-date-field">
+            <div className="fb-search-date-field-head">
+              <span className="fb-search-date-field-label">From</span>
+              {filters.dateFrom && <button
+                type="button"
+                className="fb-search-date-clear"
+                aria-label="Clear from date"
+                onClick={() => onClearBound("from")}
+              >
+                <X size={16} aria-hidden="true" />
+              </button>}
+            </div>
+            <ReportDatePicker
+              id={dateFromId}
+              label="From date"
+              title="From date"
+              description="Show reports on or after this day."
+              placeholder="Any date"
+              value={filters.dateFrom}
+              maxValue={validDay(filters.dateTo) ? filters.dateTo : undefined}
+              allowFuture
+              onChange={(value) => onApplyBound("from", value)}
+            />
           </div>
-          <div className="fb-search-menu-divider" role="separator" />
-          <div className="fb-search-date-grid">
-            <button
-              type="button"
-              className="fb-search-date-trigger"
-              data-empty={!range.from ? "true" : undefined}
-              aria-label={`From date, ${range.from ? formatDay(range.from) : "any date"}`}
-              ref={(node) => onBoundTriggerRef("from", node)}
-              onClick={() => onOpenBound("from")}
-            >
-              <span className="fb-search-date-trigger-copy">
-                <span className="fb-search-date-trigger-label">From</span>
-                <span className="fb-search-date-trigger-value">{range.from ? formatDay(range.from) : "Any date"}</span>
-              </span>
-              <CalendarDays size={16} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="fb-search-date-trigger"
-              data-empty={!range.to ? "true" : undefined}
-              aria-label={`To date, ${range.to ? formatDay(range.to) : "any date"}`}
-              ref={(node) => onBoundTriggerRef("to", node)}
-              onClick={() => onOpenBound("to")}
-            >
-              <span className="fb-search-date-trigger-copy">
-                <span className="fb-search-date-trigger-label">To</span>
-                <span className="fb-search-date-trigger-value">{range.to ? formatDay(range.to) : "Any date"}</span>
-              </span>
-              <CalendarDays size={16} aria-hidden="true" />
-            </button>
+          <div className="fb-search-date-field">
+            <div className="fb-search-date-field-head">
+              <span className="fb-search-date-field-label">To</span>
+              {filters.dateTo && <button
+                type="button"
+                className="fb-search-date-clear"
+                aria-label="Clear to date"
+                onClick={() => onClearBound("to")}
+              >
+                <X size={16} aria-hidden="true" />
+              </button>}
+            </div>
+            <ReportDatePicker
+              id={dateToId}
+              label="To date"
+              title="To date"
+              description="Show reports on or before this day."
+              placeholder="Any date"
+              value={filters.dateTo}
+              minValue={validDay(filters.dateFrom) ? filters.dateFrom : undefined}
+              allowFuture
+              onChange={(value) => onApplyBound("to", value)}
+            />
           </div>
-          {range.reversed && <p className="fb-search-menu-note fb-search-menu-error" role="alert">
-            The start date must be on or before the end date.
-          </p>}
-          {range.invalid && !range.reversed && <p className="fb-search-menu-note fb-search-menu-error" role="alert">
-            Enter a real calendar date.
-          </p>}
-          <p className="fb-search-menu-note">Matches the date the item was lost or found.</p>
-        </div>)}
+        </div>
+        {range.reversed && <p className="fb-search-menu-note fb-search-menu-error" role="alert">
+          The start date must be on or before the end date.
+        </p>}
+        {range.invalid && !range.reversed && <p className="fb-search-menu-note fb-search-menu-error" role="alert">
+          Enter a real calendar date.
+        </p>}
+        <p className="fb-search-menu-note">Matches the date the item was lost or found.</p>
+      </div>}
 
       {menu === "sort" && <>
         <MenuOption selected={filters.sort === "newest"} onSelect={() => onPatch("sort", { sort: "newest" })}>Newest first</MenuOption>
         <MenuOption selected={filters.sort === "oldest"} onSelect={() => onPatch("sort", { sort: "oldest" })}>Oldest first</MenuOption>
       </>}
-    </div>
-  </div>;
-}
-
-/**
- * A real calendar, not a native date input: the month and year in the header
- * are buttons that open their own grids, so any day is a few clicks away and
- * the grid shows exactly what is about to apply. Monday-first, six fixed rows
- * (no height jump between months), and the opposite bound disables impossible
- * days instead of letting a reversed range through.
- */
-function DateCalendar({
-  bound,
-  filters,
-  onBack,
-  onCommit,
-}: {
-  bound: DateBound;
-  filters: SearchFilters;
-  onBack: () => void;
-  onCommit: (bound: DateBound, value: string) => void;
-}) {
-  const current = bound === "from" ? filters.dateFrom : filters.dateTo;
-  const other = bound === "from" ? filters.dateTo : filters.dateFrom;
-  const selected = validDay(current) ? current : "";
-  const today = new Date();
-  const todayIso = isoDay(today);
-  const start = parseDay(selected) ?? {
-    year: today.getFullYear(),
-    month: today.getMonth(),
-    day: today.getDate(),
-  };
-  const [view, setView] = useState<CalendarView>("days");
-  const [year, setYear] = useState(start.year);
-  const [month, setMonth] = useState(start.month);
-  const [yearPage, setYearPage] = useState(Math.floor(start.year / 12) * 12);
-  const { hoverLabel } = useHoverLabel();
-  const daysRef = useRef<HTMLDivElement>(null);
-  const monthsRef = useRef<HTMLDivElement>(null);
-  const yearsRef = useRef<HTMLDivElement>(null);
-
-  const minIso = bound === "to" && validDay(other) ? other : "";
-  const maxIso = bound === "from" && validDay(other) ? other : "";
-
-  // Enter the grid on the chosen day (or today), and keep focus inside the
-  // panel when a month or year list replaces the grid.
-  useEffect(() => {
-    const grid = view === "days"
-      ? daysRef.current
-      : view === "months" ? monthsRef.current : yearsRef.current;
-    if (!grid) return;
-    const preferred = grid.querySelector<HTMLButtonElement>('[aria-pressed="true"]:not(:disabled)')
-      ?? grid.querySelector<HTMLButtonElement>(`[data-day="${todayIso}"]:not(:disabled)`)
-      ?? grid.querySelector<HTMLButtonElement>("button:not(:disabled)");
-    preferred?.focus();
-  }, [todayIso, view]);
-
-  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
-  const total = daysInMonth(year, month);
-  const cells = Array.from({ length: 42 }, (_, index) => {
-    const day = index - firstWeekday + 1;
-    return day >= 1 && day <= total ? dayKey(year, month, day) : null;
-  });
-
-  function shiftMonth(delta: number) {
-    const next = new Date(year, month + delta, 1);
-    setYear(next.getFullYear());
-    setMonth(next.getMonth());
-  }
-
-  function openYears() {
-    setYearPage(Math.floor(year / 12) * 12);
-    setView("years");
-  }
-
-  function isOutOfRange(iso: string) {
-    return Boolean((minIso && iso < minIso) || (maxIso && iso > maxIso));
-  }
-
-  return <div className="fb-search-calendar">
-    <div className="fb-search-calendar-top">
-      <button type="button" className="fb-search-calendar-navbtn" aria-label="Back to date options" onClick={onBack}
-        {...hoverLabel("Back to date options")}>
-        <ChevronLeft size={18} aria-hidden="true" />
-      </button>
-      <p>{bound === "from" ? "Start date" : "End date"}</p>
-      <span aria-hidden="true" />
-    </div>
-
-    {view === "days" && <>
-      <div className="fb-search-calendar-nav">
-        <button type="button" className="fb-search-calendar-navbtn" aria-label="Previous month" onClick={() => shiftMonth(-1)}
-          {...hoverLabel("Previous month")}>
-          <ChevronLeft size={18} aria-hidden="true" />
-        </button>
-        <div className="fb-search-calendar-title">
-          <button type="button" className="fb-search-calendar-titlebtn" aria-label="Choose month" onClick={() => setView("months")}>
-            {MONTHS[month]}
-          </button>
-          <button type="button" className="fb-search-calendar-titlebtn" aria-label="Choose year" onClick={openYears}>
-            {year}
-          </button>
-        </div>
-        <button type="button" className="fb-search-calendar-navbtn" aria-label="Next month" onClick={() => shiftMonth(1)}
-          {...hoverLabel("Next month")}>
-          <ChevronRight size={18} aria-hidden="true" />
-        </button>
-      </div>
-      <div className="fb-search-calendar-weekdays" aria-hidden="true">
-        {WEEKDAYS.map((weekday) => <span key={weekday}>{weekday}</span>)}
-      </div>
-      <div className="fb-search-calendar-days" ref={daysRef}>
-        {cells.map((iso, index) => iso
-          ? <button
-            key={iso}
-            type="button"
-            className="fb-search-calendar-day"
-            data-day={iso}
-            data-selected={iso === selected ? "true" : undefined}
-            aria-label={`${MONTHS[month]} ${Number(iso.slice(-2))}, ${year}`}
-            aria-pressed={iso === selected}
-            aria-current={iso === todayIso ? "date" : undefined}
-            disabled={isOutOfRange(iso)}
-            onClick={() => onCommit(bound, iso)}
-          >{Number(iso.slice(-2))}</button>
-          : <span key={`blank-${index}`} aria-hidden="true" />)}
-      </div>
-    </>}
-
-    {view === "months" && <>
-      <div className="fb-search-calendar-nav">
-        <button type="button" className="fb-search-calendar-navbtn" aria-label="Previous year" onClick={() => setYear((value) => value - 1)}
-          {...hoverLabel("Previous year")}>
-          <ChevronLeft size={18} aria-hidden="true" />
-        </button>
-        <div className="fb-search-calendar-title">
-          <button type="button" className="fb-search-calendar-titlebtn" aria-label="Choose year" onClick={openYears}>
-            {year}
-          </button>
-        </div>
-        <button type="button" className="fb-search-calendar-navbtn" aria-label="Next year" onClick={() => setYear((value) => value + 1)}
-          {...hoverLabel("Next year")}>
-          <ChevronRight size={18} aria-hidden="true" />
-        </button>
-      </div>
-      <div className="fb-search-calendar-months" ref={monthsRef}>
-        {MONTHS.map((label, index) => <button
-          key={label}
-          type="button"
-          className="fb-search-calendar-month"
-          aria-pressed={index === month}
-          onClick={() => { setMonth(index); setView("days"); }}
-        >{label}</button>)}
-      </div>
-    </>}
-
-    {view === "years" && <>
-      <div className="fb-search-calendar-nav">
-        <button type="button" className="fb-search-calendar-navbtn" aria-label="Previous years" onClick={() => setYearPage((value) => value - 12)}
-          {...hoverLabel("Previous years")}>
-          <ChevronLeft size={18} aria-hidden="true" />
-        </button>
-        <div className="fb-search-calendar-title">
-          <span className="fb-search-calendar-range">{yearPage} – {yearPage + 11}</span>
-        </div>
-        <button type="button" className="fb-search-calendar-navbtn" aria-label="Next years" onClick={() => setYearPage((value) => value + 12)}
-          {...hoverLabel("Next years")}>
-          <ChevronRight size={18} aria-hidden="true" />
-        </button>
-      </div>
-      <div className="fb-search-calendar-years" ref={yearsRef}>
-        {Array.from({ length: 12 }, (_, index) => yearPage + index).map((option) => <button
-          key={option}
-          type="button"
-          className="fb-search-calendar-year"
-          aria-pressed={option === year}
-          onClick={() => { setYear(option); setView("months"); }}
-        >{option}</button>)}
-      </div>
-    </>}
-
-    <div className="fb-search-calendar-actions">
-      <button type="button" className="fb-search-calendar-action" onClick={() => onCommit(bound, "")}>Clear</button>
-      <button
-        type="button"
-        className="fb-search-calendar-action fb-search-calendar-action-primary"
-        disabled={isOutOfRange(todayIso)}
-        onClick={() => onCommit(bound, todayIso)}
-      >Today</button>
     </div>
   </div>;
 }
