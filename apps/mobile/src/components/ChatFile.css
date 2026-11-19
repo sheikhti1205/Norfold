@@ -48,49 +48,58 @@
 .fb-chat-file-action:disabled { opacity: 0.6; }
 .fb-chat-file-error { flex-basis: 100%; margin: 0; font-size: 0.75rem; color: var(--fb-error, #b3261e); }
 
-/* ---------- video: a poster frame that hands off to the global player ---- */
+/* ---------- video: a compact row until the real player is here ----------- */
 
 .fb-chat-video {
+  /* The shared chat media width that sent photos already use. The card keeps
+     that useful width for its launch row and metadata; the picture itself is
+     sized inside it below, so an extreme portrait narrows the frame without
+     collapsing the row around it. */
+  --fb-chat-video-ratio: 1.7777778;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  width: min(320px, 100%);
+  width: var(--fb-chat-media-width, min(22rem, 78vw));
+  max-width: 100%;
   min-width: 0;
 }
 .fb-chat-video-frame {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  min-width: 0;
   overflow: hidden;
   border: 1px solid var(--fb-outline-variant);
   border-radius: 14px;
-  background:
-    linear-gradient(155deg, var(--fb-surface-container-high), var(--fb-surface-container-low));
+  background: var(--fb-surface-container-low);
+}
+/* Only a player that is actually here paints media. The frame takes the
+   source's own ratio under the shared height cap and centres when that is
+   narrower than the row, so a portrait clip is genuinely tall instead of
+   letterboxed inside a guessed wide box, and an extreme shape still leaves a
+   usable row around it. */
+.fb-chat-video-frame[data-active="true"] {
+  width: min(100%, calc(min(30rem, 80vh) * var(--fb-chat-video-ratio)));
+  margin-inline: auto;
+  aspect-ratio: var(--fb-chat-video-ratio);
+  max-height: min(30rem, 80vh);
+  background: #000;
 }
 .fb-chat-video-launch {
-  position: absolute;
-  inset: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 0;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
   border: 0;
   background: transparent;
+  text-align: start;
   cursor: pointer;
 }
 .fb-chat-video-launch:disabled { cursor: progress; }
-.fb-chat-video-art {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--fb-on-surface-variant);
-  opacity: 0.5;
-}
 .fb-chat-video-play {
-  position: relative;
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
   width: 44px;
@@ -101,9 +110,16 @@
   color: var(--fb-on-primary);
 }
 .fb-chat-video-play svg { margin-left: 2px; }
-.fb-chat-video-launch:hover .fb-chat-video-play { background: var(--fb-primary); filter: brightness(1.08); }
+.fb-chat-video-launch:hover .fb-chat-video-play { filter: brightness(1.08); }
 .fb-chat-video-launch:disabled .fb-chat-video-play { opacity: 0.85; }
 .fb-chat-video-launch:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: -3px; border-radius: 14px; }
+.fb-chat-video-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
 .fb-chat-video-meta {
   display: flex;
   align-items: center;
@@ -235,3 +251,53 @@
   .fb-chat-video-spin { animation-duration: 2.4s; }
 }
 html.fb-reduce-motion .fb-chat-video-spin { animation-duration: 2.4s; }
+
+/* ---------- private inline raster: explicit view, reserved geometry -------- */
+
+.fb-chat-image {
+  /* The shared media width sent photos use. The row keeps that width so its
+     View and Download controls stay usable at any picture shape; the frame
+     below takes the picture's real ratio under the shared height cap. */
+  --fb-chat-image-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: var(--fb-chat-media-width, min(22rem, 78vw));
+  max-width: 100%;
+  min-width: 0;
+}
+.fb-chat-image .fb-chat-file { width: 100%; max-width: 100%; }
+/* Both actions in this row share the 44px house target. */
+.fb-chat-image .fb-chat-file-action { min-height: 44px; }
+.fb-chat-image-actions { display: flex; flex: none; align-items: center; gap: 4px; }
+.fb-chat-image-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fb-on-surface-variant);
+  cursor: pointer;
+}
+.fb-chat-image-download:hover { background: var(--fb-surface-container-high); }
+.fb-chat-image-download:disabled { opacity: 0.6; cursor: progress; }
+.fb-chat-image-frame {
+  width: min(100%, calc(min(30rem, 80vh) * var(--fb-chat-image-ratio)));
+  margin-inline: auto;
+  max-height: min(30rem, 80vh);
+  aspect-ratio: var(--fb-chat-image-ratio);
+  overflow: hidden;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 14px;
+  background: var(--fb-surface-container-low);
+  line-height: 0;
+}
+.fb-chat-image-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}

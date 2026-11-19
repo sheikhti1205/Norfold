@@ -1,8 +1,9 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import {
-  Archive, Download, File as FileIcon, FileText, Film, LoaderCircle, Music, Pause, Play,
+  Archive, Download, File as FileIcon, FileText, Film, Images, LoaderCircle, Music, Pause, Play,
 } from "lucide-react";
 import { downloadChatFile, type ChatFileMeta } from "../services/messaging/files";
+import { probeDimensions, readExifOrientation, sniffImage } from "../services/media/importImage";
 import { formatTime, useMediaEngine } from "./media/VideoPlayer";
 import { useVideoPlayer } from "./media/VideoPlayerProvider";
 import "./ChatFile.css";
@@ -29,6 +30,10 @@ function triggerDownload(url: string, name: string) {
   anchor.click();
 }
 
+/** Sniffed raster formats the private viewer may render. SVG/HTML never join. */
+const INLINE_RASTER_MIME: ReadonlySet<string> = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+const INLINE_RASTER_MAX_EDGE = 8192;
+
 /**
  * One ordinary file in the transcript. Nothing is fetched until the reader
  * asks: a 20 MB video must not download because a thread opened.
@@ -42,7 +47,151 @@ function triggerDownload(url: string, name: string) {
 export function ChatFile({ meta }: { meta: ChatFileMeta }) {
   if (meta.kind === "video") return <ChatVideo meta={meta} />;
   if (meta.kind === "audio") return <ChatAudio meta={meta} />;
+  if (INLINE_RASTER_MIME.has(meta.mime)) return <ChatImageFile meta={meta} />;
   return <ChatDocument meta={meta} />;
+}
+
+/**
+ * A GIF/WebP/APNG/JPEG travelled here through the private file lane. The bytes
+ * stay untouched until an explicit press fetches them; the preview is only
+ * mounted for a sniffed, allowlisted raster, and its one object URL is reused
+ * for a download and revoked on hide or unmount. Animation is the content the
+ * sender chose: there is no fake pause control. A file that sniffs as some
+ * other format is not called missing: the row says the preview is unsupported
+ * and still offers the download.
+ */
+function ChatImageFile({ meta }: { meta: ChatFileMeta }) {
+  const [state, setState] = useState<"idle" | "loading" | "ready" | "unsupported" | "missing">("idle");
+  const [view, setView] = useState<{ url: string; width: number; height: number } | null>(null);
+  const alive = useRef(true);
+  const generation = useRef(0);
+  // One URL per mounted row: created on the first explicit press, shared by
+  // View and Download, and revoked by hide() or unmount so nothing leaks.
+  const cacheRef = useRef<{ blob: Blob; url: string } | null>(null);
+  const busy = useRef(false);
+
+  useEffect(() => {
+    // StrictMode runs setup → cleanup → setup on the same instance, so the
+    // setup must re-arm the liveness flag the cleanup clears; otherwise a
+    // later press would drop its fetched preview.
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      generation.current += 1;
+      release();
+    };
+  }, []);
+
+  function release() {
+    const cache = cacheRef.current;
+    cacheRef.current = null;
+    if (cache) URL.revokeObjectURL(cache.url);
+  }
+
+  function hide() {
+    generation.current += 1;
+    release();
+    setView(null);
+    setState("idle");
+  }
+
+  async function ensureCache(): Promise<{ blob: Blob; url: string } | null> {
+    if (cacheRef.current) return cacheRef.current;
+    const attempt = ++generation.current;
+    setState("loading");
+    try {
+      const blob = await downloadChatFile(meta.key);
+      if (!alive.current || attempt !== generation.current) return null;
+      const cache = { blob, url: URL.createObjectURL(blob) };
+      cacheRef.current = cache;
+      return cache;
+    } catch {
+      if (alive.current && attempt === generation.current) setState("missing");
+      return null;
+    }
+  }
+
+  async function preview() {
+    if (busy.current) return;
+    if (view) { hide(); return; }
+    busy.current = true;
+    try {
+      const cache = await ensureCache();
+      if (!cache) return;
+      const bytes = new Uint8Array(await cache.blob.arrayBuffer());
+      if (!alive.current) return;
+      const kind = sniffImage(bytes);
+      const base = kind?.replace("-animated", "");
+      if (!kind || !base || !["jpeg", "png", "gif", "webp"].includes(base)) throw new Error("unsupported");
+      const dimensions = probeDimensions(bytes, kind);
+      if (!dimensions || dimensions.width <= 0 || dimensions.height <= 0
+        || dimensions.width > INLINE_RASTER_MAX_EDGE || dimensions.height > INLINE_RASTER_MAX_EDGE) {
+        throw new Error("unsupported");
+      }
+      // A JPEG stores its SOF width and height unrotated while the browser
+      // paints it by EXIF orientation, so an unadjusted frame would disagree
+      // with the picture. Swap the display geometry for the quarter turns,
+      // exactly as the import path does. The stored bytes stay untouched.
+      const orientation = kind === "jpeg" ? readExifOrientation(bytes) : 1;
+      const width = orientation >= 5 ? dimensions.height : dimensions.width;
+      const height = orientation >= 5 ? dimensions.width : dimensions.height;
+      setView({ url: cache.url, width, height });
+      setState("ready");
+    } catch {
+      if (alive.current) setState("unsupported");
+    } finally {
+      busy.current = false;
+    }
+  }
+
+  async function download() {
+    if (busy.current) return;
+    busy.current = true;
+    try {
+      const cache = await ensureCache();
+      if (!cache || !alive.current) return;
+      triggerDownload(cache.url, meta.name);
+      setState((current) => (current === "loading" ? "idle" : current));
+    } finally {
+      busy.current = false;
+    }
+  }
+
+  // The card keeps the shared media width for its row; the frame takes the
+  // picture's own shape, so a tall portrait centres instead of widening the
+  // row or leaving an enlarged empty box.
+  return (
+    <div className="fb-chat-image" data-kind="image"
+      style={view === null ? undefined : { "--fb-chat-image-ratio": String(view.width / view.height) } as CSSProperties}>
+      <div className="fb-chat-file">
+        <span className="fb-chat-file-icon"><Images size={22} aria-hidden="true" /></span>
+        <span className="fb-chat-file-copy">
+          <span className="fb-chat-file-name" title={meta.name}>{meta.name}</span>
+          <span className="fb-chat-file-size">{humanSize(meta.byteSize)}</span>
+        </span>
+        <span className="fb-chat-image-actions">
+          <button type="button" className="fb-chat-file-action" onClick={() => void preview()}
+            aria-label={view ? `Hide ${meta.name}` : `View ${meta.name}`} disabled={state === "loading"}>
+            {state === "loading" ? <LoaderCircle className="fb-chat-video-spin" size={16} aria-hidden="true" />
+              : view ? "Hide" : "View"}
+          </button>
+          <button type="button" className="fb-chat-image-download" onClick={() => void download()}
+            aria-label={`Download ${meta.name}`} disabled={state === "loading"}>
+            <Download size={18} aria-hidden="true" />
+          </button>
+        </span>
+      </div>
+      {view && (
+        <div className="fb-chat-image-frame">
+          <img src={view.url} alt={meta.name} />
+        </div>
+      )}
+      {state === "unsupported" && (
+        <p role="status" className="fb-chat-file-error">This image can&apos;t be previewed here. Download it instead.</p>
+      )}
+      {state === "missing" && <p role="status" className="fb-chat-file-error">That file is no longer available.</p>}
+    </div>
+  );
 }
 
 function ChatDocument({ meta }: { meta: ChatFileMeta }) {
@@ -91,9 +240,13 @@ function ChatDocument({ meta }: { meta: ChatFileMeta }) {
 }
 
 /**
- * The video tile. It is a poster frame, not a download: pressing play is the
- * only thing that fetches bytes. Once fetched, the blob URL belongs to the
- * global player until the reader closes it.
+ * A sent video stays a compact, honest file row until the reader presses play:
+ * the film mark below is a kind label, never a fabricated poster, and mounting
+ * the row fetches nothing. Once fetched, the blob URL belongs to the global
+ * player until it is closed. The message frame reserves the shared chat media
+ * width only while that player is actually here, and follows the source's own
+ * measured ratio, so the real video paints at a useful size instead of an
+ * empty enlarged box.
  */
 function ChatVideo({ meta }: { meta: ChatFileMeta }) {
   const player = useVideoPlayer();
@@ -106,12 +259,22 @@ function ChatVideo({ meta }: { meta: ChatFileMeta }) {
 
   const mine = player.video?.id === id;
   const inlineHere = mine && player.mode === "inline";
+  // Until this source's own metadata arrives the familiar 16:9 frame stands
+  // in; a measured ratio only applies while the player is painted here.
+  const measured = inlineHere && player.aspect && Number.isFinite(player.aspect) && player.aspect > 0
+    ? player.aspect
+    : 16 / 9;
 
   // Latest API without re-running effects on every playback tick.
   const apiRef = useRef(player);
   apiRef.current = player;
 
-  useEffect(() => () => { aliveRef.current = false; }, []);
+  // StrictMode runs setup → cleanup → setup on this instance: the cleanup
+  // clears liveness, so setup must re-arm it or a resumed download is dropped.
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
 
   // Leaving the transcript docks the player instead of silencing it; the URL
   // stays the player's to revoke.
@@ -121,7 +284,7 @@ function ChatVideo({ meta }: { meta: ChatFileMeta }) {
   }, [id]);
 
   // The player closed (or moved to another message): that URL is gone, so the
-  // tile returns to its poster instead of offering a dead source.
+  // row returns to idle instead of offering a dead source.
   useEffect(() => {
     if (mine || statusRef.current === "idle") return;
     srcRef.current = null;
@@ -154,23 +317,27 @@ function ChatVideo({ meta }: { meta: ChatFileMeta }) {
     }
   }
 
-  return <div className="fb-chat-video" data-kind="video">
-    <div className="fb-chat-video-frame" ref={slotRef}>
+  return <div className="fb-chat-video" data-kind="video"
+    style={inlineHere ? { "--fb-chat-video-ratio": String(measured) } as CSSProperties : undefined}>
+    <div className="fb-chat-video-frame" ref={slotRef} data-active={inlineHere ? "true" : undefined}>
       {!inlineHere && <button type="button" className="fb-chat-video-launch" disabled={status === "loading"}
         onClick={() => void start()}
         aria-label={mine ? `Show ${meta.name} in the conversation` : `Play ${meta.name}`}>
-        <span className="fb-chat-video-art" aria-hidden="true"><Film size={26} /></span>
         <span className="fb-chat-video-play" aria-hidden="true">
           {status === "loading" ? <LoaderCircle className="fb-chat-video-spin" size={18} />
             : <Play size={18} fill="currentColor" />}
         </span>
+        <span className="fb-chat-video-copy">
+          <span className="fb-chat-video-name" title={meta.name}>{meta.name}</span>
+          <span className="fb-chat-video-size">{humanSize(meta.byteSize)}</span>
+        </span>
       </button>}
     </div>
-    <div className="fb-chat-video-meta">
+    {inlineHere && <div className="fb-chat-video-meta">
       <Film size={14} aria-hidden="true" />
       <span className="fb-chat-video-name" title={meta.name}>{meta.name}</span>
       <span className="fb-chat-video-size">{humanSize(meta.byteSize)}</span>
-    </div>
+    </div>}
     {status === "error" && <p role="status" className="fb-chat-file-error">That file is no longer available.</p>}
   </div>;
 }
@@ -190,10 +357,15 @@ function ChatAudio({ meta }: { meta: ChatFileMeta }) {
   const aliveRef = useRef(true);
   const autoplayRef = useRef(false);
 
-  useEffect(() => () => {
-    aliveRef.current = false;
-    if (srcRef.current) URL.revokeObjectURL(srcRef.current);
-    srcRef.current = null;
+  useEffect(() => {
+    // StrictMode's setup → cleanup → setup must re-arm liveness; otherwise the
+    // resumed download is discarded and the row silently never plays.
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+      if (srcRef.current) URL.revokeObjectURL(srcRef.current);
+      srcRef.current = null;
+    };
   }, []);
 
   // The element only has the new source after this commit.

@@ -203,10 +203,9 @@ export function safeChatFileName(name: string): string {
 }
 
 /**
- * The display kind of one file message. An image is a document here, not a
- * new kind: `ChatFile` renders only video and audio inline, and an image that
- * arrives through the file lane must download like a file rather than be
- * trusted to render inside the transcript.
+ * The display kind of one file message. An image stays a document kind: the
+ * transcript offers an explicit preview only when the bytes sniff as an
+ * allowlisted raster, and every other image downloads like a file.
  */
 export function chatFileKindOf(mime: string): ChatFileKind {
   if (mime.startsWith("video/")) return "video";

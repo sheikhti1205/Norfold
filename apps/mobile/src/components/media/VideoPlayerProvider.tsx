@@ -38,6 +38,12 @@ export interface VideoPlayerSource {
 export interface VideoPlayerApi {
   video: VideoPlayerSource | null;
   mode: VideoPlayerMode;
+  /**
+   * The open source's own width/height ratio, measured from the one playing
+   * element's real metadata. Null until that measurement exists, and always
+   * tied to the source it was measured from.
+   */
+  aspect: number | null;
   open: (source: VideoPlayerSource) => void;
   minimize: () => void;
   expand: () => void;
@@ -58,6 +64,9 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
     source: null,
     mode: "inline",
   });
+  // A measurement always carries the src it came from, so replacing the video
+  // cannot inherit the previous source's shape.
+  const [aspectSample, setAspectSample] = useState<{ src: string; ratio: number } | null>(null);
   // Created imperatively on purpose: React portals keep the container's own
   // parent in their bookkeeping, so a React-owned host cannot be moved between
   // the bubble and <body> without breaking unmount. This host is invisible to
@@ -70,6 +79,11 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
     hostRef.current = host;
   }
 
+  // The measurement callback can land a tick after the source changed, so it
+  // compares against the source open right now, not the render that made it.
+  const sourceRef = useRef<VideoPlayerSource | null>(null);
+  sourceRef.current = state.source;
+
   // An inline presentation with nowhere to sit is the docked player: the
   // bubble can unmount while a message is playing.
   const mode: VideoPlayerMode = state.source
@@ -77,6 +91,9 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
     : "inline";
 
   const open = useCallback((source: VideoPlayerSource) => {
+    // A replacement starts with an unknown shape; a same-src re-home keeps the
+    // measurement this video already earned.
+    setAspectSample((current) => (current && current.src === source.src ? current : null));
     setState((current) => {
       if (current.source && current.source.id === source.id && current.source.src === source.src) {
         // Same media, re-homed: keep the element and the playhead.
@@ -98,7 +115,21 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const close = useCallback(() => {
+    setAspectSample(null);
     setState((current) => (current.source ? { source: null, mode: "inline" } : current));
+  }, []);
+
+  const reportAspect = useCallback((ratio: number | null, measuredSrc: string) => {
+    // Keyed by source: a late frame from the video that was just replaced must
+    // never set the replacement's frame.
+    if (sourceRef.current?.src !== measuredSrc) return;
+    setAspectSample((current) => {
+      if (ratio === null || !Number.isFinite(ratio) || ratio <= 0) {
+        return current && current.src === measuredSrc ? null : current;
+      }
+      if (current && current.src === measuredSrc && current.ratio === ratio) return current;
+      return { src: measuredSrc, ratio };
+    });
   }, []);
 
   // Revoke only after React removed the element that was reading the blob, and
@@ -125,9 +156,13 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
     return () => { host?.remove(); };
   }, []);
 
+  const aspect = state.source && aspectSample && aspectSample.src === state.source.src
+    ? aspectSample.ratio
+    : null;
+
   const api = useMemo<VideoPlayerApi>(() => ({
-    video: state.source, mode, open, minimize, expand, close,
-  }), [state.source, mode, open, minimize, expand, close]);
+    video: state.source, mode, aspect, open, minimize, expand, close,
+  }), [state.source, mode, aspect, open, minimize, expand, close]);
 
   const host = hostRef.current;
   return <VideoPlayerContext.Provider value={api}>
@@ -140,6 +175,7 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
       onMinimize={minimize}
       onExpand={expand}
       onClose={close}
+      onAspect={reportAspect}
     /> : null, host)}
   </VideoPlayerContext.Provider>;
 }

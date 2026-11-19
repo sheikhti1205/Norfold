@@ -24,6 +24,8 @@ export interface MediaEngine {
   /** Callback ref for the <video>/<audio> element. */
   setElement: (element: HTMLMediaElement | null) => void;
   element: HTMLMediaElement | null;
+  /** The element's own width/height ratio, tagged with the src it came from. */
+  aspectSample: { src: string; ratio: number } | null;
   playing: boolean;
   /** True once the browser can play through (`canplay`). */
   ready: boolean;
@@ -72,6 +74,7 @@ function bufferedEnd(element: HTMLMediaElement): number {
 
 export function useMediaEngine(): MediaEngine {
   const [element, setElement] = useState<HTMLMediaElement | null>(null);
+  const [aspectSample, setAspectSample] = useState<{ src: string; ratio: number } | null>(null);
   const [playing, setPlaying] = useState(false);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -103,8 +106,25 @@ export function useMediaEngine(): MediaEngine {
       setMuted(element.muted);
     };
     const onRate = () => setRate(element.playbackRate);
+    // The element's own intrinsic shape, tagged with the src attribute the
+    // browser loaded. A replacement keeps this same node, so the tag is what
+    // stops the old video's ratio from being read as the new video's.
+    const readAspect = () => {
+      if (!(element instanceof HTMLVideoElement)) return;
+      const width = element.videoWidth;
+      const height = element.videoHeight;
+      if (!(width > 0) || !(height > 0)) return;
+      const source = element.getAttribute("src") ?? "";
+      setAspectSample((current) => (
+        current && current.src === source && current.ratio === width / height
+          ? current
+          : { src: source, ratio: width / height }
+      ));
+    };
 
     element.addEventListener("loadedmetadata", syncDuration);
+    element.addEventListener("loadedmetadata", readAspect);
+    element.addEventListener("resize", readAspect);
     element.addEventListener("durationchange", syncDuration);
     element.addEventListener("timeupdate", syncTime);
     element.addEventListener("progress", syncTime);
@@ -122,11 +142,14 @@ export function useMediaEngine(): MediaEngine {
     // The element may already hold metadata by the time React attached these
     // (a cached object URL loads instantly).
     syncDuration();
+    readAspect();
     onVolume();
     setRate(element.playbackRate);
     setPlaying(!element.paused && element.currentTime > 0);
     return () => {
       element.removeEventListener("loadedmetadata", syncDuration);
+      element.removeEventListener("loadedmetadata", readAspect);
+      element.removeEventListener("resize", readAspect);
       element.removeEventListener("durationchange", syncDuration);
       element.removeEventListener("timeupdate", syncTime);
       element.removeEventListener("progress", syncTime);
@@ -198,10 +221,10 @@ export function useMediaEngine(): MediaEngine {
   }, [element]);
 
   return useMemo(() => ({
-    setElement, element, playing, ready, failed, time, duration, buffered, volume, muted, rate,
+    setElement, element, aspectSample, playing, ready, failed, time, duration, buffered, volume, muted, rate,
     play, pause, toggle, seek, seekBy, setVolume, toggleMute, cycleRate,
   }), [
-    element, playing, ready, failed, time, duration, buffered, volume, muted, rate,
+    element, aspectSample, playing, ready, failed, time, duration, buffered, volume, muted, rate,
     play, pause, toggle, seek, seekBy, setVolume, toggleMute, cycleRate,
   ]);
 }
@@ -226,6 +249,11 @@ export interface VideoPlayerProps {
   onMinimize: () => void;
   onExpand: () => void;
   onClose: () => void;
+  /**
+   * Reports the intrinsic ratio measured from this element together with the
+   * src it belongs to. The provider is the only owner of that measurement.
+   */
+  onAspect?: (ratio: number | null, src: string) => void;
 }
 
 const TRANSPORT_SELECTOR = "input, textarea, select, [contenteditable='true']";
@@ -236,11 +264,11 @@ const CONTROL_SELECTOR = "button, a, [role='button']";
  * only classes and a few siblings change — so the <video> node, its decoder
  * and its playhead survive inline → expanded → mini.
  */
-export function VideoPlayer({ src, name, poster, mode, onMinimize, onExpand, onClose }: VideoPlayerProps) {
+export function VideoPlayer({ src, name, poster, mode, onMinimize, onExpand, onClose, onAspect }: VideoPlayerProps) {
   const engine = useMediaEngine();
   const { hoverLabel } = useHoverLabel();
   const {
-    setElement, element, playing, ready, failed, time, duration, buffered, volume, muted, rate,
+    setElement, element, aspectSample, playing, ready, failed, time, duration, buffered, volume, muted, rate,
     play, toggle, seek, seekBy, setVolume, toggleMute, cycleRate,
   } = engine;
   const rootRef = useRef<HTMLDivElement>(null);
@@ -327,6 +355,20 @@ export function VideoPlayer({ src, name, poster, mode, onMinimize, onExpand, onC
       element.removeEventListener("canplay", attempt);
     };
   }, [element, src]);
+
+  // The provider owns the transcript frame's shape. Publish only a ratio
+  // measured from the src now on this element: after a swap the previous
+  // video's sample is not the replacement's, so it reports unknown until the
+  // new source delivers its own metadata.
+  useEffect(() => {
+    if (!onAspect) return;
+    const current = element?.getAttribute("src") ?? null;
+    if (aspectSample && current !== null && aspectSample.src === current) {
+      onAspect(aspectSample.ratio, aspectSample.src);
+    } else {
+      onAspect(null, src);
+    }
+  }, [aspectSample, element, src, onAspect]);
 
   // A keyboard reader who pressed the tile keeps their place in the player.
   useEffect(() => {
