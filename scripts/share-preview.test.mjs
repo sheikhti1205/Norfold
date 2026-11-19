@@ -2,6 +2,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { prepareSharePreview } from './prepare-share-preview.mjs';
 const require = createRequire(import.meta.url);
 const { handleShare } = require('../apps/share-preview/handler.cjs');
 const id = '5b6f7c8d-1234-4abc-8def-123456789012';
@@ -69,4 +73,40 @@ test('timeout, oversized and malformed responses fail closed; HEAD carries metad
  }
  const res=await handleShare({...request(),method:'HEAD'},config,network().fetch);
  assert.equal(res.status,200);assert.equal(res.body,'');assert.match(res.headers['Content-Type'],/text\/html/);
+});
+test('metadata service ships builtin-only, dependency-free and packages with the renderer',async()=>{
+ const out=await mkdtemp(join(tmpdir(),'share-package-link-'));
+ try{
+  await prepareSharePreview(out,{VITE_SUPABASE_URL:'https://project.supabase.co',VITE_SUPABASE_PUBLISHABLE_KEY:'sb_publishable_fixture',VITE_PUBLIC_SHARE_ORIGIN:'https://findbackapp.social'});
+  const trigger=JSON.parse(await readFile(join(out,'link-preview','function.json'),'utf8')).bindings;
+  assert.equal(trigger[0].route,'link-preview');assert.deepEqual(trigger[0].methods,['post','options']);assert.equal(trigger[0].authLevel,'anonymous');
+  assert.match(await readFile(join(out,'link-preview','index.cjs'),'utf8'),/createLinkPreviewHandler/);
+  assert.match(await readFile(join(out,'link-preview-handler.cjs'),'utf8'),/createLinkPreviewHandler/);
+  assert.match(await readFile(join(out,'lib','link-fetch.cjs'),'utf8'),/pinnedLookup/);
+  const parser=await readFile(join(out,'lib','metadata.cjs'),'utf8');
+  assert.match(parser,/extractMetadata/);assert.match(parser,/validatePreviewImage/);
+ }finally{await rm(out,{recursive:true,force:true});}
+});
+test('the metadata server has no npm dependencies, no lockfile and only builtin/relative requires',async()=>{
+ const pkg=JSON.parse(await readFile(new URL('../apps/share-preview/package.json',import.meta.url),'utf8'));
+ assert.equal(pkg.dependencies,undefined);assert.equal(pkg.devDependencies,undefined);assert.equal(pkg.type,'commonjs');
+ await assert.rejects(readFile(new URL('../apps/share-preview/package-lock.json',import.meta.url)),{code:'ENOENT'});
+ for(const file of ['lib/link-fetch.cjs','lib/metadata.cjs','link-preview-handler.cjs','link-preview/index.cjs']){
+  const source=await readFile(new URL(`../apps/share-preview/${file}`,import.meta.url),'utf8');
+  assert.doesNotMatch(source,/\.innerHTML\b|outerHTML\b|insertAdjacentHTML/,file);
+  assert.doesNotMatch(source,/\bconsole\.(?:log|error|warn|info|debug)\b/,file);
+  for(const match of source.matchAll(/require\((['"])([^'"]+)\1\)/g))assert.match(match[2],/^(?:node:.+|\.{1,2}\/.*)$/,`${file} requires ${match[2]}`);
+ }
+});
+test('host.json leaves CORS to the per-function handlers so responses never carry duplicate values',async()=>{
+ // Azure applies host.json customHeaders to every HTTP response app-wide.
+ // link-preview-handler.cjs (and android-updates/index.cjs) already emit their
+ // own Access-Control-Allow-Origin/Methods/Headers/Vary per request, so an
+ // app-wide copy would append a second ACAO and make browsers reject the
+ // response, including the OPTIONS 204 preflight. Keep this file CORS-free.
+ const raw=await readFile(new URL('../apps/share-preview/host.json',import.meta.url),'utf8');
+ const host=JSON.parse(raw);
+ assert.equal(host.version,'2.0');assert.equal(host.logging.logLevel.default,'Warning');
+ assert.equal(host.extensions,undefined,'host.json must not declare app-wide customHeaders');
+ assert.doesNotMatch(raw,/customHeaders|Access-Control-/i);
 });

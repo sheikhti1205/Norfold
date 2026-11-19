@@ -14,7 +14,9 @@ export async function prepareSharePreview(out,env=process.env){
  if(!validConfig(config))throw new Error('Share renderer requires valid non-empty public configuration');
   await mkdir(resolve(out,'share'),{recursive:true});
   await mkdir(resolve(out,'android-updates'),{recursive:true});
-  for(const file of ['host.json','package.json','handler.cjs','share/function.json','share/index.cjs'])await cp(resolve(root,'apps/share-preview',file),resolve(out,file));
+  await mkdir(resolve(out,'lib'),{recursive:true});
+  await mkdir(resolve(out,'link-preview'),{recursive:true});
+  for(const file of ['host.json','package.json','handler.cjs','share/function.json','share/index.cjs','lib/link-fetch.cjs','lib/metadata.cjs','link-preview-handler.cjs','link-preview/function.json','link-preview/index.cjs'])await cp(resolve(root,'apps/share-preview',file),resolve(out,file));
   for(const file of ['function.json','index.cjs'])await cp(resolve(root,'apps/share-preview/android-updates',file),resolve(out,'android-updates',file));
  await writeFile(resolve(out,'public-config.json'),JSON.stringify(config));
 }

@@ -78,7 +78,7 @@ jobs:
         run: node --test apps/share-preview/handler.test.cjs apps/share-preview/android-updates/version.test.cjs
       - name: Verify and package same-domain public preview renderer
         run: |
-          node --test scripts/share-preview.test.mjs scripts/prepare-share-preview.test.mjs
+          node --test scripts/share-preview.test.mjs scripts/prepare-share-preview.test.mjs scripts/link-preview.test.mjs scripts/link-preview-metadata.test.mjs
           node scripts/prepare-share-preview.mjs apps/share-preview-dist
       - name: Build static web surface
         run: npm run build -w @norfold/mobile
