@@ -41,6 +41,14 @@ export interface MessagingRuntimeSnapshot {
   /** Last fully fetched projection set in this live account lifetime. Cleared
    * when offline/refreshing; cached local projections are kept separately. */
   currentProjections: Readonly<Record<string, ConversationProjection>> | null;
+  /** Last accepted projection set, retained only to keep presentation stable:
+   * a routine focus/visibility/online refresh can then leave a row, label or
+   * filter rendered instead of unmounting it for the length of a network pass.
+   * It is never authority. Sends, reads, receipts, media work and block/end
+   * actions must still check `currentProjections` and `threadSync`, so a stale
+   * display can never re-enable an action. Cleared by account switch, offline,
+   * error and every relationship/preference/clear mutation. */
+  displayProjections?: Readonly<Record<string, ConversationProjection>> | null;
   /** Ephemeral active-thread gate. Only durable session reconciliation unlocks it. */
   threadSync: MessagingThreadSync | null;
   error: string | null;
@@ -49,7 +57,8 @@ export interface MessagingRuntimeSnapshot {
 }
 
 export const EMPTY_MESSAGING_SNAPSHOT: MessagingRuntimeSnapshot = Object.freeze({
-  accountId: null, status: "closed", conversations: [], currentProjections: null, threadSync: null, restoration: null, error: null, revision: 0,
+  accountId: null, status: "closed", conversations: [], currentProjections: null, displayProjections: null,
+  threadSync: null, restoration: null, error: null, revision: 0,
 });
 
 type Session = ReturnType<typeof createSupabaseMessagingSession>;
@@ -233,9 +242,24 @@ async function reload(owner: Owner, shouldPublish: () => boolean = () => true): 
   return true;
 }
 
-function invalidateAuthority(owner: Owner) {
+/**
+ * Revoke live receipt/relationship authority. `authorityVersion` always moves,
+ * so a pass already in flight can never republish what this invalidation
+ * revoked.
+ *
+ * Presentation is a separate question. An ordinary focus/visibility/online
+ * refresh keeps the last accepted display snapshot, so dependent rows and
+ * labels do not unmount for the length of a network pass. Every other
+ * invalidation — mute/pin/relationship/clear/preference work, offline and
+ * error — drops it immediately, because those are exactly the moments a stale
+ * affordance would offer an action the account may no longer perform. A pass
+ * that was already queued cannot bring it back: publication carries whatever is
+ * published at that moment, never the caller's captured view.
+ */
+function invalidateAuthority(owner: Owner, options?: { keepDisplay?: boolean }) {
   owner.authorityVersion++;
   if (current === owner) publish({ ...snapshot, currentProjections: null,
+    ...(options?.keepDisplay ? {} : { displayProjections: null }),
     threadSync: owner.activeThread ? { ...owner.activeThread, mode: "checking", missing: null } : null });
 }
 
@@ -350,7 +374,9 @@ function requestRefresh(owner: Owner, mode: RefreshMode, conversationId?: string
   if (owner.retryTimer !== null) clearTimeout(owner.retryTimer);
   owner.retryTimer = null;
   // Full is the only mode that may drop live receipt authority; it refetches it.
-  if (mode === "full") invalidateAuthority(owner);
+  // The accepted presentation survives that drop: a routine wake must not blank
+  // every dependent row just because the authority read is in flight.
+  if (mode === "full") invalidateAuthority(owner, { keepDisplay: true });
   if (owner.refreshing) {
     // A send/wake can arrive after the running flush already exhausted its
     // outbox. Coalesce one follow-up instead of dropping that invalidation, and
@@ -472,7 +498,11 @@ function requestRefresh(owner: Owner, mode: RefreshMode, conversationId?: string
         : run === "full" ? null : snapshot.currentProjections;
       publish({ ...snapshot, status: "ready", error: mediaFailed ? "Some photos could not sync. Try again."
         : sendFailed ? "Some messages could not send. Try again." : null,
-        currentProjections: projectionsNow });
+        currentProjections: projectionsNow,
+        // Presentation follows the accepted set. A superseded pass published
+        // null above, and the display a mutation already cleared stays cleared;
+        // an ordinary pass carries the last accepted view unchanged.
+        displayProjections: projectionsNow ?? snapshot.displayProjections ?? null });
       if (conversationId) markConversationPainted(conversationId);
       if (mediaFailed || sendFailed || snapshot.threadSync?.mode === "error") retryRefresh(owner);
       else owner.retryAttempts = 0;
@@ -481,6 +511,7 @@ function requestRefresh(owner: Owner, mode: RefreshMode, conversationId?: string
       // Local data remains primary and usable even if the server is unreachable.
       await reload(owner).catch(() => undefined);
       if (current === owner) publish({ ...snapshot, status: "offline", currentProjections: null,
+        displayProjections: null,
         threadSync: owner.activeThread ? { ...owner.activeThread, mode: "error", missing: null } : null,
         error: "Chat could not sync. Try again." });
       retryRefresh(owner);
@@ -519,7 +550,8 @@ export function setMessagingAccount(accountId: string | null, sessionId?: string
   // Attach rejection handling immediately; lifecycle work may still be queued.
   const settledClose = closing.then(() => ({ ok: true as const }), () => ({ ok: false as const }));
   publish(next === null ? EMPTY_MESSAGING_SNAPSHOT : {
-    accountId: next, status: "opening", conversations: [], currentProjections: null, threadSync: null, restoration: null, error: null, revision: 0,
+    accountId: next, status: "opening", conversations: [], currentProjections: null, displayProjections: null,
+    threadSync: null, restoration: null, error: null, revision: 0,
   });
   const start = async () => {
     const closed = await settledClose;
@@ -762,13 +794,20 @@ export async function downloadMessagingMedia(accountId: string, conversationId: 
  * before the view refresh so the composer can settle its submitted draft without
  * waiting for a read. It is fenced to this exact live owner and it can never
  * reopen an admission that already committed.
+ *
+ * `createdAt` is when the item was composed, not when it reached the network.
+ * Items the user selected together share one value, so a receiver's media run
+ * detector groups by selection instead of by upload latency. Omitting it stamps
+ * the send time, which is what an ordinary text send means.
  */
 export async function sendMessagingText(accountId: string, conversationId: string, peerId: string, body: string,
-  contextReportId?: string, replyToId?: string, messageId?: string, onAdmitted?: () => void): Promise<string | { id: string; viewStale: true }> {
+  contextReportId?: string, replyToId?: string, messageId?: string, onAdmitted?: () => void,
+  createdAt?: number): Promise<string | { id: string; viewStale: true }> {
   const owner = ownerFor(accountId);
   const id = uuid(messageId ?? crypto.randomUUID());
   const conversation = uuid(conversationId);
-  await owner.session.send({ id, conversationId: conversation, authorId: uuid(accountId), recipientId: uuid(peerId), body, createdAt: Date.now(),
+  await owner.session.send({ id, conversationId: conversation, authorId: uuid(accountId), recipientId: uuid(peerId), body,
+    createdAt: createdAt ?? Date.now(),
     ...(contextReportId ? { messageType: "TEXT" as const, contextReportId: uuid(contextReportId) } : {}),
     ...(replyToId ? { replyToId: uuid(replyToId) } : {}) });
   // The row and its exact identity are durable now. Report that boundary under
