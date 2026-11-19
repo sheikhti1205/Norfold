@@ -42,6 +42,9 @@ let wakes: Array<{ messageId: string; committed: boolean }>;
 let headPosition: number, headRevision: number, headState: number;
 let rangeGate: ReturnType<typeof deferred> | null;
 let rangeEntered: ReturnType<typeof deferred> | null;
+/** Bodies the synthetic conversation prefix actually carries, by position. */
+let rangeMail: Map<number, MailboxEnvelope>;
+let rangeMalformedOnce: boolean;
 let authSession: string | null, enrollmentGate: ReturnType<typeof deferred> | null;
 let enrollmentCalls: string[], challenges: Map<string, Record<string, unknown>>;
 let peerCalls: Array<{action: string; args: Record<string, unknown>}>;
@@ -61,6 +64,7 @@ beforeEach(async () => {
   authSession = id(11); enrollmentGate = null; enrollmentCalls = []; challenges = new Map();
   peerCalls=[];
   headPosition = 0; headRevision = 1; headState = 0; rangeGate = null; rangeEntered = null;
+  rangeMail = new Map(); rangeMalformedOnce = false;
   requestLog = []; mail = []; remote = new Map(); acked = new Set(); deliveryGate = null;
   entered = deferred(); lastGetSignal = null;
   mutationGate = null; mutationEntered = deferred(); connected = true;
@@ -138,10 +142,19 @@ beforeEach(async () => {
       if (action === "CONVERSATION_SYNC") {
         rangeEntered?.resolve();
         if (rangeGate) await rangeGate.promise;
+        if (rangeMalformedOnce) { rangeMalformedOnce = false; return Response.json({}); }
         const after = fields.afterPosition as number, target = fields.head as { position: number };
         return Response.json({ head: fields.head, afterPosition: after, throughPosition: target.position,
-          entries: Array.from({ length: target.position - after }, (_, i) => ({ position: after + i + 1,
-            kind: "MESSAGE", sourceId: id(1000 + after + i), messageId: id(1000 + after + i), publishedAt: 900, disposition: "UNAVAILABLE" })) });
+          entries: Array.from({ length: target.position - after }, (_, i) => {
+            const position = after + i + 1, envelope = rangeMail.get(position);
+            // A mapped body is an available publication; every other position
+            // keeps the honest UNAVAILABLE disposition the other tests rely on.
+            return envelope
+              ? { position, kind: "MESSAGE", sourceId: envelope.event.eventId, messageId: envelope.event.message.id,
+                publishedAt: 900, envelope }
+              : { position, kind: "MESSAGE", sourceId: id(1000 + position), messageId: id(1000 + position),
+                publishedAt: 900, disposition: "UNAVAILABLE" };
+          }) });
       }
       if (action === "REGISTER" || action === "STATE_ACK") return Response.json(null);
       if (action === "DELETE_FOR_ME" || action === "UNSEND") return Response.json(fields.messageId);
@@ -157,7 +170,7 @@ beforeEach(async () => {
         // The gateway defaults omitted messageType to TEXT; MEDIA is explicit.
         expect(["MEDIA", undefined]).toContain(fields.messageType); sent.push(fields);
         mail.push({ accountId: account, deviceId: DEVICE, mailboxId: id(400), event: { kind: "TEXT", eventId: id(300),
-          sequence: 1, message: { id: fields.messageId as string, conversationId: CONV,
+          sequence: 1, message: { id: fields.messageId as string, conversationId: fields.conversationId as string,
             authorId: account, recipientId: fields.recipientId as string, body: fields.body as string } } });
         return Response.json(fields.messageId);
       }
@@ -802,37 +815,193 @@ describe("foreground fast path", () => {
       { messageId: id(101), committed: false }, { messageId: id(101), committed: true },
     ]));
   });
-  it("settles an outgoing text and a realtime hint without full reconciliation", async () => {
+  /** A synthetic conversation-prefix page body the reconcile can apply. */
+  const prefixBody = (sequence: number, body: string): MailboxEnvelope => ({
+    accountId: A, deviceId: DEVICE, mailboxId: id(450 + sequence),
+    event: { kind: "TEXT", eventId: id(1500 + sequence), sequence,
+      message: { id: id(1500 + sequence), conversationId: CONV, authorId: B, recipientId: A, body } },
+  });
+  it("settles an outgoing text in the conversation it names instead of rescanning views", async () => {
     runtime.setMessagingAccount(A);
     await waitForState((state) => state.status === "ready" && !!state.currentProjections);
     requestLog.length = 0;
 
     await runtime.sendMessagingText(A, CONV, B, "hello");
-    let revision = runtime.getMessagingRuntimeSnapshot().revision;
-    await waitForState((state) => state.status === "ready" && state.revision > revision);
+    // The targeted pass admits the queued row and settles its echo. Wait for
+    // that rather than for a publish: the reconcile frame may paint earlier.
+    await vi.waitFor(() => expect(sent.map((fields) => fields.body)).toContain("hello"), { timeout: 3000 });
+    await vi.waitFor(async () =>
+      expect((await runtime.readMessagingThreadState(A, CONV)).outbox).toEqual([]), { timeout: 3000 });
 
     // The send is admitted, its echo settled, and the durable mailbox ACKed.
-    expect(sent.map((fields) => fields.body)).toContain("hello");
     expect(requestLog).toContain("SEND");
     expect(requestLog).toContain("SYNC");
     expect(requestLog).toContain("ACK");
-    // A content-free wake refreshes the shared view projection so pins/mute/
-    // request state stay live; it still skips re-registration and media sweeps.
-    expect(requestLog).toContain("VIEWS");
+    // The send named a conversation this account already knows, so the fast
+    // pass reconciles that thread and skips the whole-account VIEWS scan.
+    expect(requestLog).not.toContain("VIEWS");
     expect(requestLog).not.toContain("REGISTER");
     // No attachment upload is attempted by a plain text pass (the chat-wake
     // POST is the message-scoped push hint and is not media work).
     expect(requestLog.filter((entry) => /^POST:[0-9a-f-]{36}$/.test(entry))).toEqual([]);
-    // Live receipt authority survives the fast pass.
+    // Live receipt authority survives the targeted fast pass.
     expect(runtime.getMessagingRuntimeSnapshot().currentProjections?.[CONV]?.mode).toBe("CONNECTED");
 
     requestLog.length = 0;
-    revision = runtime.getMessagingRuntimeSnapshot().revision;
     runtime.invalidateMessaging(A);
-    await waitForState((state) => state.status === "ready" && state.revision > revision);
-    expect(requestLog).toContain("SYNC");
-    expect(requestLog).toContain("VIEWS");
+    // A content-free wake names no conversation, so the existing fallback
+    // account-wide fast pass still refreshes the shared projection set.
+    await vi.waitFor(() => expect(requestLog).toContain("VIEWS"), { timeout: 3000 });
+    await vi.waitFor(() => expect(requestLog).toContain("SYNC"), { timeout: 3000 });
     expect(requestLog).not.toContain("REGISTER");
     expect(runtime.getMessagingRuntimeSnapshot().currentProjections?.[CONV]?.mode).toBe("CONNECTED");
+  });
+  it("falls back to the account-wide fast pass for a conversation this device does not know", async () => {
+    runtime.setMessagingAccount(A);
+    await waitForState((state) => state.status === "ready" && !!state.currentProjections);
+    requestLog.length = 0;
+    const history = boundary.handles[0]!.history, enqueue = history.enqueueOutgoing.bind(history);
+    vi.spyOn(history, "enqueueOutgoing").mockImplementation(async (...args) => {
+      await enqueue(...args);
+      vi.spyOn(history, "listConversations").mockRejectedValueOnce(new Error("reload failed"));
+    });
+    const unknown = id(999);
+    const result = await runtime.sendMessagingText(A, unknown, B, "Saved once");
+    expect(result).toEqual({ id: expect.any(String), viewStale: true });
+    // The admitted row is kept exactly once; the unknown target only widened
+    // the pass back to the existing account-wide fallback.
+    await vi.waitFor(() => expect(requestLog).toContain("VIEWS"), { timeout: 3000 });
+    await vi.waitFor(() => expect(runtime.getMessagingRuntimeSnapshot().conversations
+      .some((row) => row.conversationId === unknown)).toBe(true), { timeout: 3000 });
+    expect((await runtime.readMessagingThreadState(A, unknown)).messages
+      .filter((message) => message.body === "Saved once")).toHaveLength(1);
+  });
+  it("publishes a reconciled closed-thread target before the pass's outbox work", async () => {
+    runtime.setMessagingAccount(A);
+    await waitForState((state) => state.status === "ready" && !!state.currentProjections);
+    headPosition = 1; headRevision = 2;
+    rangeMail.set(1, prefixBody(2, "Late reply"));
+    const history = boundary.handles[0]!.history;
+    const claim = history.claimNextOutgoing.bind(history), claimed = deferred(), release = deferred();
+    vi.spyOn(history, "claimNextOutgoing").mockImplementationOnce(async () => {
+      claimed.resolve(); await release.promise; return claim();
+    });
+    try {
+      await runtime.sendMessagingText(A, CONV, B, "hello");
+      // Parked in the unrelated outbox drain, after this pass's reconcile.
+      await claimed.promise;
+      expect(runtime.getMessagingRuntimeSnapshot().conversations
+        .find((value) => value.conversationId === CONV)?.unreadCount).toBe(1);
+      expect(sent).toEqual([]);
+    } finally { release.resolve(); }
+    await vi.waitFor(() => expect(sent.map((fields) => fields.body)).toContain("hello"), { timeout: 3000 });
+    expect((await runtime.readMessagingThreadState(A, CONV)).messages.map((message) => message.body))
+      .toEqual(expect.arrayContaining(["hello", "Late reply"]));
+  });
+  it("suppresses the early frame when a newer authority supersedes the targeted pass", async () => {
+    runtime.setMessagingAccount(A);
+    await waitForState((state) => state.status === "ready" && !!state.currentProjections);
+    headPosition = 1; headRevision = 2;
+    rangeMail.set(1, prefixBody(2, "Late reply"));
+    rangeGate = deferred(); rangeEntered = deferred();
+    const history = boundary.handles[0]!.history;
+    const claim = history.claimNextOutgoing.bind(history), claimed = deferred(), release = deferred();
+    vi.spyOn(history, "claimNextOutgoing").mockImplementationOnce(async () => {
+      claimed.resolve(); await release.promise; return claim();
+    });
+    try {
+      await runtime.sendMessagingText(A, CONV, B, "hello");
+      await rangeEntered.promise; // the reconcile page is still in flight
+      const full = runtime.refreshMessaging(A); // newer authority supersedes it
+      rangeGate.resolve(); rangeGate = null;
+      await claimed.promise;
+      // The durable prefix landed, but the superseded pass may not paint it.
+      expect((await runtime.readMessagingThreadState(A, CONV)).messages
+        .some((message) => message.body === "Late reply")).toBe(true);
+      expect(runtime.getMessagingRuntimeSnapshot().conversations
+        .find((value) => value.conversationId === CONV)?.unreadCount ?? 0).toBe(0);
+      release.resolve();
+      await full;
+    } finally { rangeGate?.resolve(); release.resolve(); }
+    await vi.waitFor(() => expect(runtime.getMessagingRuntimeSnapshot().conversations
+      .find((value) => value.conversationId === CONV)?.unreadCount).toBe(1), { timeout: 3000 });
+  });
+  it("refuses the early frame when authority changes while its read is in flight", async () => {
+    runtime.setMessagingAccount(A);
+    await waitForState((state) => state.status === "ready" && !!state.currentProjections);
+    headPosition = 1; headRevision = 2;
+    rangeMail.set(1, prefixBody(2, "Late reply"));
+    const history = boundary.handles[0]!.history;
+    const list = history.listConversations.bind(history);
+    const readHeld = deferred(), releaseRead = deferred();
+    let held = false;
+    vi.spyOn(history, "listConversations").mockImplementation(async (...args) => {
+      const rows = await list(...args);
+      // Hold the read that already carries this pass's reconciled row, so the
+      // authority change lands after the reconcile but before its publication.
+      if (!held && rows.some((row) => row.conversationId === CONV && row.unreadCount > 0)) {
+        held = true; readHeld.resolve(); await releaseRead.promise;
+      }
+      return rows;
+    });
+    const claim = history.claimNextOutgoing.bind(history), claimed = deferred(), release = deferred();
+    vi.spyOn(history, "claimNextOutgoing").mockImplementationOnce(async () => {
+      claimed.resolve(); await release.promise; return claim();
+    });
+    try {
+      await runtime.sendMessagingText(A, CONV, B, "hello");
+      await readHeld.promise;
+      const revision = runtime.getMessagingRuntimeSnapshot().revision;
+      const full = runtime.refreshMessaging(A); // newer authority supersedes the read
+      releaseRead.resolve();
+      await claimed.promise; // the pass is now parked in outbox work
+      expect(runtime.getMessagingRuntimeSnapshot().revision).toBe(revision);
+      expect(runtime.getMessagingRuntimeSnapshot().conversations
+        .find((row) => row.conversationId === CONV)?.unreadCount ?? 0).toBe(0);
+      release.resolve();
+      await full;
+    } finally { releaseRead.resolve(); release.resolve(); }
+    await vi.waitFor(() => expect(runtime.getMessagingRuntimeSnapshot().conversations
+      .find((value) => value.conversationId === CONV)?.unreadCount).toBe(1), { timeout: 3000 });
+  });
+  it("does not publish early when the targeted reconcile fails", async () => {
+    runtime.setMessagingAccount(A);
+    await waitForState((state) => state.status === "ready" && !!state.currentProjections);
+    headPosition = 1; headRevision = 2; rangeMalformedOnce = true;
+    rangeMail.set(1, prefixBody(2, "Late reply"));
+    const history = boundary.handles[0]!.history;
+    const claim = history.claimNextOutgoing.bind(history), claimed = deferred(), release = deferred();
+    vi.spyOn(history, "claimNextOutgoing").mockImplementationOnce(async () => {
+      claimed.resolve(); await release.promise; return claim();
+    });
+    try {
+      await runtime.sendMessagingText(A, CONV, B, "hello");
+      await claimed.promise;
+      // The rejected reconcile published nothing; the pass continues to its
+      // authoritative follow-up instead of inventing an early frame.
+      expect(runtime.getMessagingRuntimeSnapshot().conversations
+        .find((value) => value.conversationId === CONV)?.unreadCount ?? 0).toBe(0);
+    } finally { release.resolve(); }
+    // The flush's own reconcile succeeds, so the final reload still shows it.
+    await vi.waitFor(() => expect(runtime.getMessagingRuntimeSnapshot().conversations
+      .find((value) => value.conversationId === CONV)?.unreadCount).toBe(1), { timeout: 3000 });
+  });
+  it("cannot publish a reconciled frame after the account was replaced", async () => {
+    runtime.setMessagingAccount(A);
+    await waitForState((state) => state.status === "ready" && !!state.currentProjections);
+    headPosition = 1; headRevision = 2;
+    rangeMail.set(1, prefixBody(2, "Late reply"));
+    rangeGate = deferred(); rangeEntered = deferred();
+    try {
+      await runtime.sendMessagingText(A, CONV, B, "hello");
+      await rangeEntered.promise;
+      const prior = boundary.handles[0]!;
+      account = B; runtime.setMessagingAccount(B, id(13));
+      rangeGate.resolve(); rangeGate = null;
+      await waitForState((state) => state.accountId === B && state.status === "ready");
+      expect(runtime.getMessagingRuntimeSnapshot().conversations
+        .some((row) => row.conversationId === CONV && row.unreadCount > 0)).toBe(false);
+      await expect(prior.history.listConversations()).rejects.toThrow();
+    } finally { rangeGate?.resolve(); }
   });
 });
