@@ -58,6 +58,7 @@ describe("chat report preview surface", () => {
   it("leaves the preview grid capped at the bubble width with no self-alignment", () => {
     const grid = bodies(messageTextCss, ".fb-chat-message-previews");
     expect(grid).toContain("max-width: 100%;");
+    expect(grid).toContain("grid-template-columns: minmax(0, 1fr);");
     expect(grid).not.toMatch(/(?:^|[;\s])justify-content\s*:/);
   });
 

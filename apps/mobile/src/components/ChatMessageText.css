@@ -16,6 +16,9 @@
    keeps the row's start edge, so a capped card never centres inside the bubble. */
 .fb-chat-message-previews {
   display: grid;
+  /* A minmax floor is the structural cap: an implicit auto column would take
+     the card's 320px max-content and overflow a 320px phone bubble. */
+  grid-template-columns: minmax(0, 1fr);
   gap: .5rem;
   margin-top: .5rem;
   min-width: 0;
