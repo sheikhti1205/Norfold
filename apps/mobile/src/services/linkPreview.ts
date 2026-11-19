@@ -373,6 +373,7 @@ async function startRequest(
   token: string,
   generation: number,
   target: string,
+  signal?: AbortSignal,
 ): Promise<LinkPreview | null> {
   const key = `${owner}\u0000${target}`;
   const controller = new AbortController();
@@ -408,7 +409,7 @@ async function startRequest(
     if (inFlight.get(key) === request) inFlight.delete(key);
   });
   inFlight.set(key, request);
-  return consume(request);
+  return consume(request, signal);
 }
 
 /**
@@ -444,5 +445,5 @@ export async function fetchLinkPreview(
   const shared = inFlight.get(key);
   if (shared && shared.generation === authGeneration) return consume(shared, signal);
 
-  return startRequest(sdk, started.id, started.token, generation, target);
+  return startRequest(sdk, started.id, started.token, generation, target, signal);
 }
