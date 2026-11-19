@@ -123,6 +123,14 @@
   color:var(--fb-on-surface-variant); font-size:.75rem; font-weight:600; letter-spacing:.01em;
   box-shadow:0 1px 2px rgb(0 0 0 / .08); }
 .fb-chat-line-own { flex-direction:row-reverse; }
+/* The row is the capped slot, not the bubble. A long paragraph's max-content
+   fills the 70% row while the bubble still stops at its 34rem measure, so the
+   surface's default start packing put that difference between the bubble and
+   the sender's edge. Pack the row's only surface to the same end the row sits
+   on: every own message ends on the usable right gutter, while a received row
+   keeps the default start packing and its left gutter. This changes neither
+   the row cap nor the bubble's content-sized width. */
+.fb-chat-line-own > .fb-chat-line-row { justify-content:flex-end; }
 /* The line is the message's slot; the row is the message itself. A lone
    message and an album member therefore keep the same element and the same
    state across the moment a second photo turns a single into a group. */
