@@ -19,14 +19,17 @@ export function categoryValue(): string {
 
 /**
  * Drive the searchable category sheet the way a person does: open the trigger,
- * press the canonical option, and prove the value was committed.
+ * press the canonical option, and prove the value was committed. The sheet opens
+ * within the trigger press (the component's own suite relies on it), so opening
+ * and selecting stay in one interaction turn. No manual focus: the row's focus
+ * handler writes React state outside `act`.
  */
 export async function chooseCategory(canonical: string): Promise<void> {
   fireEvent.click(categoryTrigger());
-  const sheet = await screen.findByRole("dialog", { name: SHEET_NAME });
+  const sheet = screen.getByRole("dialog", { name: SHEET_NAME });
   const row = within(sheet).getByRole("button", { name: canonical });
-  // Focus the row before pressing it, as a person would.
-  row.focus();
+  expect(sheet.isConnected).toBe(true);
+  expect(row.isConnected).toBe(true);
   fireEvent.click(row);
   // The committed value is the post-condition; the sheet closing is not proof of it.
   expect(categoryValue()).toBe(canonical);
