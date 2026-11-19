@@ -166,16 +166,22 @@
   .fb-split-list:has(> .fb-chat-page:not(.fb-chat-rail)) { padding: 0 8px 8px; }
   .fb-split-detail:has(> .fb-chat-workspace),
   .fb-split-detail:has(> .fb-chat-empty) { padding: 0 8px 8px; }
+  /* The panes stop 8px above the viewport foot; the chat splitter's 7px track
+     takes the same foot inset so its grip centre matches the details track
+     instead of sitting 4px lower. The grid column itself stays 7px wide. */
+  .fb-split-view:has(.fb-chat-page) > .fb-split-resize { margin-bottom: 8px; }
 }
 /* Chat only: a short centred grip inside the same 7px drag track. The full
    height hairline read as the hard pane border this pass removes. */
 .fb-split-view:has(.fb-chat-page) > .fb-split-resize::before {
   inset-block: auto; inset-inline-start: 2px; top: 50%; width: 3px; height: 32px;
   transform: translateY(-50%); border-radius: 999px; background: var(--fb-outline-variant);
+  transition: width .15s ease, height .15s ease, background .15s ease;
 }
 .fb-split-view:has(.fb-chat-page) > .fb-split-resize:hover::before,
+.fb-split-view:has(.fb-chat-page) > .fb-split-resize:active::before,
 .fb-split-view:has(.fb-chat-page) > .fb-split-resize:focus-visible::before {
-  inset-inline-start: 1px; width: 5px; background: var(--fb-primary);
+  inset-inline-start: 1px; width: 5px; height: 32px; background: var(--fb-primary);
 }
 /* The grip replaces the inherited full-height focus rectangle for Chat only.
    The ring moves to the 5x32px pill, mirroring the details resize; every
@@ -183,6 +189,9 @@
 .fb-split-view:has(.fb-chat-page) > .fb-split-resize:focus-visible { outline: 0; }
 .fb-split-view:has(.fb-chat-page) > .fb-split-resize:focus-visible::before {
   box-shadow: 0 0 0 2px var(--fb-focus);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fb-split-view:has(.fb-chat-page) > .fb-split-resize::before { transition: none; }
 }
 .fb-composer-shell { container: composer / inline-size; min-width: 0; width: 100%; border: 1px solid var(--fb-outline-variant); background: var(--fb-surface); border-radius: 20px; }
 /* The comment composer's avatar belongs to the first text line, not to the

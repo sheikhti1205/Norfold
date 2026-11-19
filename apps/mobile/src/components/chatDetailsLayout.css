@@ -33,13 +33,15 @@
 }
 
 .fb-chat-details-resize {
-  position:absolute; top:0; bottom:0; right:calc(var(--fb-details-w, 320px) - .5px);
-  width:9px; z-index:6; cursor:col-resize; touch-action:none;
+  position:absolute; top:0; bottom:0; right:calc(var(--fb-details-w, 320px) + .5px);
+  width:7px; z-index:6; cursor:col-resize; touch-action:none;
   background:transparent; border:0;
   transition:background .15s ease;
 }
-/* The pointer target and keyboard stop stay on the 9px strip; the paint is a
-   short centred grip in the frame gap, not a full-height wall. */
+/* The pointer target and keyboard stop stay on the 7px strip; the paint is a
+   short centred grip in the frame gap, not a full-height wall. With the 7px
+   track, `right: detailsW + .5px` puts its centre on the 8px gap's centre:
+   7/2 - 4 = -0.5px offset from the details edge. */
 .fb-chat-details-resize::before {
   content:""; position:absolute; top:50%; left:50%; width:3px; height:32px;
   transform:translate(-50%, -50%); border-radius:999px;
@@ -48,11 +50,11 @@
 }
 .fb-chat-details-resize:hover::before,
 .fb-chat-workspace-dragging .fb-chat-details-resize::before {
-  width:5px; background:var(--fb-primary);
+  width:5px; height:32px; background:var(--fb-primary);
 }
 .fb-chat-details-resize:focus-visible { outline:none; }
 .fb-chat-details-resize:focus-visible::before {
-  width:5px; height:40px; background:var(--fb-primary);
+  width:5px; height:32px; background:var(--fb-primary);
   box-shadow:0 0 0 2px var(--fb-focus);
 }
 .fb-chat-workspace:not(.fb-chat-workspace-details) .fb-chat-details-resize { display:none; }

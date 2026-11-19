@@ -143,10 +143,28 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
   width: var(--fb-rail-collapsed); gap: 6px;
   padding: 8px 6px;
   background: var(--fb-surface);
-  border-inline-end: 1px solid var(--fb-outline-variant);
   overflow: hidden; overscroll-behavior: contain;
   position: relative; z-index: 30;
   transition: width 140ms ease, margin-inline-end 140ms ease, box-shadow 140ms ease;
+}
+/* R19-4 (owner 2026-11-19): the in-flow rail is an inset surface like the chat
+   panes. The frame is the rail's own border, so the outer column keeps its
+   exact 64/72px budget, the pinned inline width stays the stored width and the
+   hover negative margin still cancels the expansion. Four pixels of frame
+   beside the existing 6px padding keep the 44px hit target and the same
+   32/36px icon axis; the 24px outer corner less that 4px frame is the panes'
+   20px surface radius. Eight pixels at the foot is the panes' own foot gutter.
+   No top edge: the head centre stays 8px padding plus half the 40px head. The
+   phone drawer lives outside `.fb-rail-anchor`, so its own border and width
+   are untouched. */
+@media (min-width: 600px) {
+  .fb-rail-anchor > .fb-nav-rail {
+    border: 0 solid var(--fb-surface-container);
+    border-inline-width: 4px;
+    border-block-end-width: 8px;
+    border-radius: 24px;
+    background-clip: padding-box;
+  }
 }
 /* Destinations scroll; the identity control below them does not. Settings is
    reached from inside that control (R1), so it must stay on screen however
@@ -252,8 +270,12 @@ html.fb-reduce-motion .fb-nav-rail { transition: none; }
    left-aligns the brand with those rows instead (owner order 2026-11-13). */
 .fb-nav-rail[data-pinned="false"] .fb-nav-rail-head { justify-content: center; }
 .fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-nav-rail-head { justify-content: flex-start; }
+/* `justify-content` only bites when the inset column clamps this button below
+   its content width: the 28px mark then stays on the icon axis instead of
+   drifting 2px right. At its natural width (pinned, expanded) it changes
+   nothing. */
 .fb-nav-brand {
-  display: inline-flex; align-items: center; gap: 10px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
   max-width: 100%; min-height: 40px; padding: 0 10px;
   border: 0; border-radius: 12px; background: transparent;
   color: var(--fb-on-surface); cursor: pointer;
