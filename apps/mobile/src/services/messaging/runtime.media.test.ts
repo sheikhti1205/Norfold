@@ -161,7 +161,13 @@ beforeEach(async () => {
       if (action === "STATE_SYNC") return Response.json([]);
       if (action === "VIEWS") return Response.json([{ conversationId: CONV, peerId: account === A ? B : A,
         mode: connected ? "CONNECTED" : "REQUEST", request: "NONE", requestEpoch: null, ownBlocked: false,
-         ownHidden: false, ownDeclined: false, ownMuted: muted.get(account) ?? false, revision: muted.get(account) ? 2 : 1 }]);
+         ownHidden: false, ownDeclined: false, ownMuted: muted.get(account) ?? false,
+         // END republishes both members as REQUEST/NONE and
+         // findback_chat_publish_member bumps that viewer's revision with the
+         // change. A changed projection at an unchanged revision is a real
+         // conflict the durable cache must refuse, so the fixture must move the
+         // revision with mode the way the server does.
+         revision: (muted.get(account) ? 2 : 1) + (connected ? 0 : 1) }]);
       if (action === "END") {
         mutationEntered.resolve(); if (mutationGate) await mutationGate.promise;
         connected = false; return Response.json(null);
