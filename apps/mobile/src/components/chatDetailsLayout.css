@@ -5,8 +5,9 @@
   position:relative;
   display:grid;
   grid-template-columns:minmax(0,1fr) 0px;
+  column-gap:0;
   height:100%; min-height:0; min-width:0;
-  transition:grid-template-columns .26s cubic-bezier(.2,.7,.2,1);
+  transition:grid-template-columns .26s cubic-bezier(.2,.7,.2,1), column-gap .26s cubic-bezier(.2,.7,.2,1);
 }
 .fb-chat-workspace-details {
   grid-template-columns:minmax(0,1fr) var(--fb-details-w, 320px);
@@ -15,30 +16,50 @@
 
 .fb-chat-details {
   min-width:0; min-height:0; overflow-y:auto; overscroll-behavior:contain;
-  padding:.75rem 1rem; border-inline-start:1px solid var(--fb-outline-variant);
+  padding:.75rem 1rem;
   background:var(--fb-surface); color:var(--fb-on-surface);
   opacity:0; transform:translateX(6px);
   transition:opacity .16s ease, transform .22s cubic-bezier(.2,.7,.2,1);
 }
 .fb-chat-workspace-details .fb-chat-details { opacity:1; transform:none; }
 .fb-chat-workspace-dragging .fb-chat-details { transition:none; }
+/* R19-3: the open details panel is a second nested surface. The old hairline
+   becomes an 8px frame gap plus the same 20px corner as the other chat panels.
+   The gap is scoped to the open grid class: the collapsed grid has a 0px detail
+   track, so it cannot shave 8px out of the conversation. */
+@media (min-width: 600px) {
+  .fb-chat-workspace-details { column-gap: 8px; }
+  .fb-chat-details { border-radius: 20px; }
+}
 
 .fb-chat-details-resize {
-  position:absolute; top:0; bottom:0; right:calc(var(--fb-details-w, 320px) - 4px);
+  position:absolute; top:0; bottom:0; right:calc(var(--fb-details-w, 320px) - .5px);
   width:9px; z-index:6; cursor:col-resize; touch-action:none;
-  background:transparent; border-inline-start:1px solid transparent;
-  transition:background .15s ease, border-color .15s ease;
+  background:transparent; border:0;
+  transition:background .15s ease;
 }
-.fb-chat-details-resize:hover,
-.fb-chat-details-resize:focus-visible,
-.fb-chat-workspace-dragging .fb-chat-details-resize {
-  background:color-mix(in srgb, var(--fb-primary, #3355ff) 16%, transparent);
-  border-inline-start-color:var(--fb-primary, #3355ff);
+/* The pointer target and keyboard stop stay on the 9px strip; the paint is a
+   short centred grip in the frame gap, not a full-height wall. */
+.fb-chat-details-resize::before {
+  content:""; position:absolute; top:50%; left:50%; width:3px; height:32px;
+  transform:translate(-50%, -50%); border-radius:999px;
+  background:var(--fb-outline-variant);
+  transition:width .15s ease, height .15s ease, background .15s ease;
+}
+.fb-chat-details-resize:hover::before,
+.fb-chat-workspace-dragging .fb-chat-details-resize::before {
+  width:5px; background:var(--fb-primary);
+}
+.fb-chat-details-resize:focus-visible { outline:none; }
+.fb-chat-details-resize:focus-visible::before {
+  width:5px; height:40px; background:var(--fb-primary);
+  box-shadow:0 0 0 2px var(--fb-focus);
 }
 .fb-chat-workspace:not(.fb-chat-workspace-details) .fb-chat-details-resize { display:none; }
 
 @media (prefers-reduced-motion: reduce) {
   .fb-chat-workspace,
   .fb-chat-details,
-  .fb-chat-details-resize { transition:none; }
+  .fb-chat-details-resize,
+  .fb-chat-details-resize::before { transition:none; }
 }
