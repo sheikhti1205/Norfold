@@ -13,6 +13,7 @@ import com.findback.app.vlm.EmbeddingPlugin;
 import com.findback.app.OpenRouterKeyPlugin;
 import com.getcapacitor.BridgeActivity;
 import com.findback.app.media.FindbackMediaPlugin;
+import com.findback.app.file.FindbackFileExportPlugin;
 import com.findback.app.messaging.FindbackMessagingSqlitePlugin;
 import com.findback.app.messaging.NorfoldDeviceIdentityPlugin;
 import com.findback.app.push.ChatPushState;
@@ -37,6 +38,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(DriveAuthPlugin.class);
         registerPlugin(FindbackNotificationsPlugin.class);
         registerPlugin(FindbackMediaPlugin.class);
+        registerPlugin(FindbackFileExportPlugin.class);
         registerPlugin(FindbackMessagingSqlitePlugin.class);
         registerPlugin(NorfoldDeviceIdentityPlugin.class);
         registerPlugin(SystemColorsPlugin.class);

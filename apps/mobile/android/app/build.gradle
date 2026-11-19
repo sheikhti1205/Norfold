@@ -108,6 +108,22 @@ def findbackMapSearchUrl() {
     return url.trim()
 }
 
+// Chat-file export: the compiled, trusted Storage origin the native bridge
+// compares every signed URL against. It is PUBLIC configuration (already in
+// the web bundle), never a secret and never a JS argument, so a compromised
+// page cannot point the downloader at another host. VITE_SUPABASE_URL is
+// already mandatory for every build (AGENTS.md hard rule 2); this field
+// reuses the same value and fails configuration when it is absent instead of
+// shipping a permissive fallback. Backslashes and quotes are escaped so the
+// generated Java string literal stays valid.
+def chatFileStorageOrigin() {
+    def raw = System.getenv("VITE_SUPABASE_URL")
+    if (raw == null || raw.trim().isEmpty()) {
+        throw new GradleException("VITE_SUPABASE_URL is required for BuildConfig.CHAT_FILE_STORAGE_ORIGIN")
+    }
+    return raw.trim().replace("\\", "\\\\").replace("\"", "\\\"")
+}
+
 android {
     namespace = "com.findback.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -159,6 +175,10 @@ android {
         // Public non-secret config; validated natively before use (HTTPS,
         // non-empty) with MapValidation.DEFAULT_NOMINATIM_ENDPOINT as fallback.
         buildConfigField "String", "MAP_SEARCH_URL", "\"${findbackMapSearchUrl()}\""
+        // Native chat-file export origin (see chatFileStorageOrigin above).
+        // Public, compiled, mandatory; the plugin rejects every request when
+        // this is not a bare https://<project>.supabase.co origin.
+        buildConfigField "String", "CHAT_FILE_STORAGE_ORIGIN", "\"${chatFileStorageOrigin()}\""
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

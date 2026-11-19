@@ -130,6 +130,14 @@
     <!-- Android 13+ runtime permission for the push notification service. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!--
+      Legacy public Downloads only: API 29+ writes through MediaStore and
+      needs no storage permission at all, so this grant exists solely for the
+      API 24-28 Save path and is never requested on a newer device.
+    -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <!--
       One-time coarse location for "Use my location once" (report pin).
       Both entries are required: Capacitor's BridgeWebChromeClient requests
       ACCESS_COARSE_LOCATION + ACCESS_FINE_LOCATION together and only falls
