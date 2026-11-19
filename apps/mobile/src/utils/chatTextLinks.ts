@@ -105,7 +105,12 @@ function trimUrlEnd(candidate: string): string {
 
 /** Only an uncredentialed http(s) URL with a host, kept exactly as written. */
 function isSafeHttpUrl(candidate: string): boolean {
-  if (/[\u0000-\u001f\u007f]/.test(candidate)) return false;
+  // A C0 control or DEL never belongs in a link. The scan above already stops
+  // there, so this stays as the last guard on the exact candidate.
+  for (let index = 0; index < candidate.length; index += 1) {
+    const code = candidate.charCodeAt(index);
+    if (code <= 0x1f || code === 0x7f) return false;
+  }
   try {
     const url = new URL(candidate);
     if (url.protocol !== "http:" && url.protocol !== "https:") return false;
