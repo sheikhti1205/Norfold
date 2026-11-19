@@ -47,6 +47,16 @@ vi.mock("../services/moderation", async (importOriginal) => ({
   submitReport: (input: unknown, signal?: AbortSignal) => m.report(input, signal),
 }));
 vi.mock("../services/media/nativeMedia", () => ({ chooseNativeImages: m.choose, importNativeImageUri: m.import, importedImageToFile: m.file }));
+// The chat list mounts the optional BackupPrompt. These are list privacy and
+// badge contracts, not backup integration, so keep the real Drive grant, key,
+// upload ticker and runtime lease out of the render entirely. `null` is the
+// honest "no prompt" answer: a real decision returns it whenever no account is
+// eligible to back up.
+vi.mock("../services/messaging/backupRuntime", () => ({
+  driveBackup: () => ({ promptDecision: () => null }),
+  startDriveBackup: () => () => undefined,
+  clearDriveBackup: () => undefined,
+}));
 beforeEach(() => { vi.stubGlobal("URL", Object.assign(class extends URL {}, { createObjectURL: vi.fn(() => "blob:test"), revokeObjectURL: vi.fn() })); m.view.mode = "CONNECTED"; m.view.ownBlocked = false; m.chat.revision = 1; m.messages = []; m.media = []; m.outbox = []; m.prepare.mockReset(); m.send.mockReset(); m.read.mockReset().mockResolvedValue(null); m.download.mockReset().mockResolvedValue(undefined); m.remove.mockReset().mockResolvedValue(undefined); m.recover.mockReset().mockResolvedValue(undefined); m.receipt.mockReset().mockResolvedValue({ context: "authority", readIds: [] }); m.observe.mockReset().mockResolvedValue(true); m.refresh.mockReset().mockResolvedValue(undefined);
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ x: 0, y: 0, top: 0, left: 0, bottom: 200, right: 200, width: 200, height: 200, toJSON: () => ({}) });
   m.choose.mockReset(); m.import.mockReset(); m.file.mockReset();
