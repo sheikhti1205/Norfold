@@ -299,6 +299,18 @@
    NaN into calc(). A wide panorama simply takes the preferred width and keeps
    its own ratio: no crop, no letterbox and no arbitrary panorama clamp. */
 .fb-chat-photo { --fb-chat-photo-ratio: 1; position:relative; width:min(var(--fb-chat-photo-width, 32rem), 100%, calc(min(30rem, 80vh) * var(--fb-chat-photo-ratio))); max-width:100%; max-height:min(30rem, 80vh); overflow:hidden; border-radius:.6rem; background:var(--fb-surface); }
+/* A flush bubble is exactly the picture frame. The surface sizes to
+   `max-content` and the bubble declares no width, so the bubble's width is the
+   in-flow photo's contribution. The base photo width carries a percentage,
+   which cannot resolve during intrinsic sizing: that contribution fell back to
+   the bitmap's own width, the 34rem cap became the bubble width, and the photo
+   then resolved to 32rem inside it. A 512px picture sat in a 544px bubble with
+   a blank strip beside it and the corner chip and menu anchored to the strip.
+   Inside a flush bubble the box states its real width, so the picture owns the
+   width and those overlays land on it; the base `max-width:100%` still clamps
+   the same box on a narrow pane. */
+.fb-chat-message-media:has(> .fb-chat-photo > button) > .fb-chat-photo {
+  width:min(var(--fb-chat-photo-width, 32rem), calc(min(30rem, 80vh) * var(--fb-chat-photo-ratio))); }
 /* No bytes yet (loading, missing, failed, unavailable): the inline intrinsic
    ratio would reserve a tall empty card for a picture that may never paint, so
    the status text sizes itself instead. `!important` only because an inline
