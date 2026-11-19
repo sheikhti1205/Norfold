@@ -1,7 +1,7 @@
 ---
 description: Read-only FindBack UI/UX reviewer that rejects generic, bulky, inaccessible, or physically implausible interfaces.
 mode: subagent
-model: openai/gpt-6.1-terra
+model: opencode/deepseek-v4.1-flash-free
 permissions:
   - action: edit
     resource: "*"
@@ -60,45 +60,6 @@ permissions:
   - action: playwright_*
     resource: "*"
     effect: deny
-  - action: playwright_browser_close
-    resource: "*"
-    effect: allow
-  - action: playwright_browser_resize
-    resource: "*"
-    effect: allow
-  - action: playwright_browser_console_messages
-    resource: "*"
-    effect: allow
-  - action: playwright_browser_emulate_media
-    resource: "*"
-    effect: allow
-  - action: playwright_browser_find
-    resource: "*"
-    effect: allow
-  - action: playwright_browser_navigate
-    resource: "*"
-    effect: allow
-  - action: playwright_browser_navigate_back
-    resource: "*"
-    effect: allow
-  - action: playwright_browser_network_requests
-    resource: "*"
-    effect: allow
-  - action: playwright_browser_network_request
-    resource: "*"
-    effect: allow
-  - action: playwright_browser_take_screenshot
-    resource: "*"
-    effect: allow
-  - action: playwright_browser_snapshot
-    resource: "*"
-    effect: allow
-  - action: playwright_browser_tabs
-    resource: "*"
-    effect: allow
-  - action: playwright_browser_wait_for
-    resource: "*"
-    effect: allow
   - action: supabase_write_*
     resource: "*"
     effect: deny
@@ -129,3 +90,15 @@ permissions:
 ---
 
 Load the three allowed FindBack skills. Review the requested base..head work against the owner requirement and any supplied screenshots. Inspect source and rendered evidence. Treat green tests as insufficient for visual acceptance. Return PASS/PARTIAL/FAIL and concrete fixes; never edit files.
+
+Use Flash Free first (`opencode/deepseek-v4.1-flash-free`), then Flash 1017
+(`opencode-go/deepseek-v4.1-flash`) only when dispatched by the lead and permitted
+by the runtime. Never use GPT/OpenAI, V4 Pro, or another worker model. Do not
+switch models or launch child agents.
+
+Rendered acceptance uses the deployed app in the owner's existing Chrome through
+the `browser` skill and `browse` relay only. Never launch a browser, new profile,
+Playwright, or a local server. Coordinate exclusive tab access with the lead;
+capture and inspect screenshots at the assigned widths/themes/text scales and
+report geometry and screenshot paths. If browser tools or evidence are unavailable,
+report rendered acceptance as unverified. No local build/test/lint/typecheck runs.
