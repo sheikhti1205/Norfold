@@ -1067,12 +1067,14 @@ it("closes an open photo when an unsend arrives in the same thread", async () =>
 it("can retry preparation after relationship loss aborted a draft", async () => {
   let resolve!: (value: unknown) => void; m.prepare.mockReturnValue(new Promise((done) => { resolve = done; }));
   const rendered = await open();
+  const strip = () => screen.getByRole("group", { name: "1 photo to send" });
   fireEvent.change(screen.getByLabelText("Photo file input"), { target: { files: [new File(["x"], "p.jpg")] } });
-  expect(screen.getByText("Preparing photos…")).toBeTruthy();
+  // The staged tray's own pending line is what the reader sees while the codec runs.
+  expect(within(strip()).getByText("Preparing attachments…")).toBeTruthy();
   m.view.mode = "REQUEST"; rendered.rerender(thread());
   await act(async () => { resolve({ bytes: new ArrayBuffer(1), mime: "image/jpeg", width: 2, height: 1 }); });
   m.view.mode = "CONNECTED"; rendered.rerender(thread());
-  expect(screen.queryByText("Preparing photos…")).toBeNull();
+  expect(within(strip()).queryByText("Preparing attachments…")).toBeNull();
   expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
 });
 it("uses the canonical Android URI import before preparing a selected photo", async () => {

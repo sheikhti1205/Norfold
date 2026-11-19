@@ -217,7 +217,7 @@ describe("R19-4 inset navigation rail", () => {
     expect(outsideLabel).not.toContain("0.9375rem");
     // Parity is with the title's size, not its weight: 1.125rem is 18px at a
     // 16px root. The name keeps its own 700 so it still reads as a wordmark.
-    const appBarCss = readFileSync(new URL("../components/AppBar.css", import.meta.url), "utf8");
+    const appBarCss = readFileSync(new URL("../components/appBar.css", import.meta.url), "utf8");
     expect(appBarCss).toMatch(/\.fb-app-bar-title :is\(h1, h2\) \{[^}]*font-size: 1\.125rem;/);
   });
 

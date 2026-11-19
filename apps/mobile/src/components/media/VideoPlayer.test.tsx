@@ -260,13 +260,19 @@ describe("the one video player", () => {
     fireEvent.click(screen.getByRole("button", { name: "open inline" }));
     const group = await screen.findByRole("group", { name: "Video player: clip.mp4" });
     expect(group.closest("[data-testid='inline-slot']")).toBeTruthy();
-    loadVideo();
+    const video = loadVideo();
 
-    // Inline: play, seek, expand and close. Mute joins the overlay so the row
-    // needs three 44px boxes rather than four; the overlay-only controls are
-    // absent from the DOM, not merely hidden, so nothing focusable sits
-    // off-frame and no box has to shrink below the house minimum.
-    expect(within(group).getByRole("button", { name: "Play" })).toBeTruthy();
+    // Opening a source starts it, so the first inline control is the
+    // play/pause toggle and its label follows the element rather than a fixed
+    // word. Inline keeps play/pause, seek, expand and close; mute joins the
+    // overlay so the row needs three 44px boxes rather than four. The
+    // overlay-only controls are absent from the DOM, not merely hidden, so
+    // nothing focusable sits off-frame and no box shrinks below the minimum.
+    const toggle = within(group).getByRole("button", { name: /^(Play|Pause)$/ });
+    expect(toggle.getAttribute("aria-label")).toBe(video.paused ? "Play" : "Pause");
+    fireEvent.click(toggle);
+    expect(video.paused).toBe(true);
+    expect(within(group).getByRole("button", { name: "Play" })).toBe(toggle);
     expect(within(group).getByRole("slider", { name: "Seek in clip.mp4" })).toBeTruthy();
     expect(within(group).getByRole("button", { name: "Expand video" })).toBeTruthy();
     expect(within(group).getByRole("button", { name: "Close video" })).toBeTruthy();
@@ -350,39 +356,82 @@ describe("the conversation video tile", () => {
 describe("transport hit boxes", () => {
   const css = readFileSync("src/components/media/videoPlayer.css", "utf8");
 
-  function body(selector: string): string {
-    const start = css.indexOf(`${selector} {`);
-    if (start < 0) throw new Error(`missing rule ${selector}`);
-    return css.slice(start, css.indexOf("}", start) + 1);
+  type Rule = { selector: string; body: string };
+
+  /**
+   * A CSSOM-free rule reader: it walks balanced braces, descends into
+   * at-rules and splits grouped selectors. Looking a selector up as plain text
+   * would land on `.fb-vp-seek, .fb-vp-volume {` (the shared reset) instead of
+   * the rule that actually sizes the volume slider.
+   */
+  function collect(source: string): Rule[] {
+    const rules: Rule[] = [];
+    let index = 0;
+    while (index < source.length) {
+      const open = source.indexOf("{", index);
+      if (open < 0) break;
+      let depth = 0;
+      let close = open;
+      for (; close < source.length; close += 1) {
+        if (source[close] === "{") depth += 1;
+        else if (source[close] === "}") {
+          depth -= 1;
+          if (depth === 0) break;
+        }
+      }
+      const prelude = source.slice(index, open).trim();
+      const block = source.slice(open + 1, close);
+      if (prelude.startsWith("@")) {
+        rules.push(...collect(block));
+      } else {
+        for (const selector of prelude.split(",")) {
+          rules.push({ selector: selector.trim(), body: block });
+        }
+      }
+      index = close + 1;
+    }
+    return rules;
   }
 
-  function values(source: string, property: string): number[] {
-    const match = new RegExp(`(?:^|[;{\\s])${property}:\\s*([^;]+);`).exec(source);
+  const rules = collect(css.replace(/\/\*[\s\S]*?\*\//g, ""));
+
+  function declares(source: string, property: string): boolean {
+    return new RegExp(`(?:^|[;{\\s])${property}\\s*:`).test(source);
+  }
+
+  /** The declarations of the rule that owns `property` for `selector`. */
+  function body(selector: string, property: string): string {
+    const owned = rules.find((rule) => rule.selector === selector && declares(rule.body, property));
+    if (!owned) throw new Error(`missing ${selector} ${property}`);
+    return owned.body;
+  }
+
+  function values(selector: string, property: string): number[] {
+    const match = new RegExp(`(?:^|[;{\\s])${property}:\\s*([^;]+);`).exec(body(selector, property));
     if (!match) throw new Error(`missing ${property}`);
     return [...match[1]!.matchAll(/(-?\d+)px/g)].map((found) => Number(found[1]));
   }
 
-  const size = (source: string, property: string): number => values(source, property)[0]!;
+  const size = (selector: string, property: string): number => values(selector, property)[0]!;
 
   it("gives every touched control a real 44x44 box, not an overlay", () => {
-    const icon = body(".fb-vp-icon");
-    expect(size(icon, "width")).toBe(44);
-    expect(size(icon, "height")).toBe(44);
+    expect(size(".fb-vp-icon", "width")).toBe(44);
+    expect(size(".fb-vp-icon", "height")).toBe(44);
     // The seek and the volume slider are touched controls too.
-    expect(size(body(".fb-vp-seek"), "height")).toBe(44);
-    expect(size(body(".fb-vp-volume"), "height")).toBe(44);
-    expect(size(body(".fb-vp-error-action"), "min-height")).toBe(44);
+    expect(size(".fb-vp-seek", "height")).toBe(44);
+    expect(size(".fb-vp-volume", "height")).toBe(44);
+    expect(size(".fb-vp-error-action", "min-height")).toBe(44);
     // A box is the target: nothing extends over a neighbour and nothing can be
     // clipped by the surface that draws it.
     expect(css).not.toContain("::after");
     expect(css).not.toMatch(/inset(?:-block|-inline)?:\s*-\d/);
-    expect(icon).not.toMatch(/margin:\s*-/);
+    expect(body(".fb-vp-icon", "width")).not.toMatch(/margin:\s*-/);
   });
 
   it("fits three 44px boxes in the narrowest inline frame and keeps the clock last", () => {
-    const box = size(body(".fb-vp-icon"), "width");
-    const gap = size(body(".fb-vp-row"), "gap");
-    const pad = size(body(".fb-vp-bar"), "padding-inline");
+    const box = size(".fb-vp-icon", "width");
+    const gap = size(".fb-vp-row", "gap");
+    const pad = size(".fb-vp-bar", "padding-inline");
     // 320x480 viewport, 9:21 source: the message frame is capped by both the
     // 78vw chat width and the shared min(30rem, 80vh) height under its ratio.
     const frame = Math.min(320 * 0.78, Math.min(30 * 16, 480 * 0.8) * (9 / 21));
@@ -400,13 +449,12 @@ describe("transport hit boxes", () => {
   });
 
   it("reserves both wrapped rows of the expanded transport in the stage floor", () => {
-    expect(body(".fb-vp--expanded .fb-vp-row")).toContain("flex-wrap: wrap;");
-    const bar = body(".fb-vp-bar");
-    const [top, bottom] = values(bar, "padding-block");
-    const track = size(body(".fb-vp-track"), "height");
-    const box = size(body(".fb-vp-icon"), "height");
-    const rowGap = size(body(".fb-vp--expanded .fb-vp-row"), "row-gap");
-    const reserved = size(body(".fb-vp--expanded"), "--fb-vp-bar-height");
+    expect(body(".fb-vp--expanded .fb-vp-row", "flex-wrap")).toContain("flex-wrap: wrap;");
+    const [top, bottom] = values(".fb-vp-bar", "padding-block");
+    const track = size(".fb-vp-track", "height");
+    const box = size(".fb-vp-icon", "height");
+    const rowGap = size(".fb-vp--expanded .fb-vp-row", "row-gap");
+    const reserved = size(".fb-vp--expanded", "--fb-vp-bar-height");
     // A row is as tall as its boxes; the gap between wrapped rows is positive,
     // so two lines never share a pixel.
     expect(rowGap).toBeGreaterThan(0);

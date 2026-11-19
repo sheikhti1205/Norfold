@@ -35,6 +35,13 @@ vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "account" } }) }));
 vi.mock("../services/accountLabels", () => ({ fetchAccountIdentities: async () => new Map(), readCachedAccountIdentities: () => new Map() }));
 vi.mock("../services/messaging/useMessaging", () => ({ useMessaging: () => m.chat }));
 vi.mock("../services/messaging/runtime", () => ({ getCachedMessagingThreadState: () => null, watchMessagingThread: m.watch, sendMessagingVoice: m.voice, sendMessagingLocation: m.location, setMessagingMuted: m.mute, pinMessagingMessage: m.pin, readMessagingThreadState: () => m.threadRead(), fetchMessagingReceiptView: m.receipt, observeMessagingReceipt: m.observe, markMessagingConversationRead: async () => {}, refreshMessaging: m.refresh, sendMessagingText: m.text, sendMessagingMedia: m.send, readMessagingMedia: m.read, downloadMessagingMedia: m.download, changeMessagingRelationship: m.relationship, clearMessagingConversation: async () => {}, removeMessagingMessage: m.remove, recoverMessagingText: m.recover, retryMessagingMessage: m.retry, readMessagingUnsentHoldIds: m.holdIds, readMessagingUnsentHold: m.hold, purgeMessagingUnsentHold: m.purgeHold }));
+// The chat list mounts the optional BackupPrompt; this suite covers previews,
+// so keep the real Drive/runtime backup wiring out of the render entirely.
+vi.mock("../services/messaging/backupRuntime", () => ({
+  driveBackup: () => ({ promptDecision: () => null }),
+  startDriveBackup: () => () => undefined,
+  clearDriveBackup: () => undefined,
+}));
 vi.mock("../services/messaging/preparePhoto", () => ({ prepareMessagingPhoto: m.prepare }));
 vi.mock("../services/moderation", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../services/moderation")>()),
