@@ -32,6 +32,13 @@
   display: block; width: 100%; min-width: 0; min-height: 44px; max-height: 160px;
   resize: none; padding: 10px 12px; font: inherit; line-height: 1.4;
   color: inherit; background: transparent; border: 0;
+  /* The component owns the textarea height inline and used to leave a blurred
+     draft capped at one line with `overflow-y: hidden`, so every line past the
+     first one was unreachable. `auto` keeps an over-cap draft scrollable
+     whether or not the field has focus; the max-height above is still the only
+     bound and height is declared nowhere here, so JavaScript remains its one
+     owner. */
+  overflow-y: auto !important;
 }
 /* The screen rule `.fb-chat-page :is(button,a,textarea):focus-visible` has the
    same specificity as the previous selector and wins on order, which painted a
@@ -40,8 +47,19 @@
 .fb-peer-field textarea:focus-visible,
 .fb-peer-composer .fb-peer-field textarea:focus-visible { outline: none; }
 .fb-peer-send { color: var(--fb-primary); }
-/* 320dp: four 40px controls plus the field (`min-width: 0`) still fit; the
-   field is the only element that gives ground, so the row never overflows. */
+/* R19 dock composer at 320dp: the single inline row left the field about
+   108 CSS px, so a 27-character draft painted as "r19 / comp" over clipped
+   lines. Below 20rem the field takes the whole first row and the four actions
+   share a second row, each still a real 44px target. The DOM order stays
+   attach, field, expressions, voice, Send, so tab order and accessible names do
+   not move: the field is placed on row 1 and the actions auto-place after it,
+   with Send held at the row's trailing edge. Above 20rem the flex row is
+   untouched. No frame, background or border is added here. */
 @container composer (max-width: 20rem) {
-  .fb-peer-icon { min-width: 40px; min-height: 44px; }
+  .fb-peer-composer-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(44px, auto)) minmax(44px, 1fr);
+  }
+  .fb-peer-field { grid-row: 1; grid-column: 1 / -1; }
+  .fb-peer-send { grid-column: 4; justify-self: end; }
 }

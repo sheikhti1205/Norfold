@@ -160,14 +160,32 @@
 
 /* Four 44px header controls must wrap rather than crush the identity at
    320px or large text. The canonical header keeps its own order; only the
-   wrap and the identity's shrink floor are added. */
+   wrap, the identity's shrink floor and this dock-local container are added.
+   The header is its own query container, so a dock measures itself and the
+   full chat page is never queried. */
 .fb-chat-dock .fb-chat-header {
+  container-type: inline-size;
+  container-name: fb-chat-dock-header;
   flex-wrap: wrap;
   row-gap: .25rem;
 }
 .fb-chat-dock .fb-chat-header > .fb-chat-heading {
   flex: 1 1 5rem;
   min-width: min(100%, 5rem);
+}
+/* Below 22rem the identity and four 44px controls cannot sit on one row; the
+   old wrap split them three-and-one and left Close alone above a dead band.
+   The identity takes the whole first line, and the auto inline-start margin
+   on the first control starts the entire group at the second line's end. The
+   column gap stays .5rem (8px) and the row gap stays .25rem (4px). */
+@container fb-chat-dock-header (max-width: 22rem) {
+  .fb-chat-dock .fb-chat-header > .fb-chat-heading {
+    flex: 1 0 100%;
+    min-width: 0;
+  }
+  .fb-chat-dock .fb-chat-header > :nth-child(2) {
+    margin-inline-start: auto;
+  }
 }
 
 /* ------------------------------------------------------------------ picker */
