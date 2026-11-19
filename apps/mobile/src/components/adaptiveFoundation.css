@@ -157,6 +157,33 @@
 .fb-split-resize:hover::before, .fb-split-resize:focus-visible::before { width: 2px; inset-inline-start: 2px; background: var(--fb-primary); }
 .fb-split-resize:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: -2px; }
 .fb-split-list:focus-visible, .fb-split-detail:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: -2px; }
+/* Chat only: the split's neutral frame. The panes keep their own scrolling;
+   the gutters sit on the panes so the rail stays its full 64px and the inner
+   chat surface can take the existing 20px panel corner. No top gutter keeps
+   every chat header on the same centre as the rail logo and outside wordmark. */
+@media (min-width: 600px) {
+  .fb-split-view:has(.fb-chat-page) { background: var(--fb-surface-container); }
+  .fb-split-list:has(> .fb-chat-page:not(.fb-chat-rail)) { padding: 0 8px 8px; }
+  .fb-split-detail:has(> .fb-chat-workspace),
+  .fb-split-detail:has(> .fb-chat-empty) { padding: 0 8px 8px; }
+}
+/* Chat only: a short centred grip inside the same 7px drag track. The full
+   height hairline read as the hard pane border this pass removes. */
+.fb-split-view:has(.fb-chat-page) > .fb-split-resize::before {
+  inset-block: auto; inset-inline-start: 2px; top: 50%; width: 3px; height: 32px;
+  transform: translateY(-50%); border-radius: 999px; background: var(--fb-outline-variant);
+}
+.fb-split-view:has(.fb-chat-page) > .fb-split-resize:hover::before,
+.fb-split-view:has(.fb-chat-page) > .fb-split-resize:focus-visible::before {
+  inset-inline-start: 1px; width: 5px; background: var(--fb-primary);
+}
+/* The grip replaces the inherited full-height focus rectangle for Chat only.
+   The ring moves to the 5x32px pill, mirroring the details resize; every
+   non-chat split keeps the shared outline above. */
+.fb-split-view:has(.fb-chat-page) > .fb-split-resize:focus-visible { outline: 0; }
+.fb-split-view:has(.fb-chat-page) > .fb-split-resize:focus-visible::before {
+  box-shadow: 0 0 0 2px var(--fb-focus);
+}
 .fb-composer-shell { container: composer / inline-size; min-width: 0; width: 100%; border: 1px solid var(--fb-outline-variant); background: var(--fb-surface); border-radius: 20px; }
 /* The comment composer's avatar belongs to the first text line, not to the
  * top edge of a shell that grows with the draft. The offset is derived from

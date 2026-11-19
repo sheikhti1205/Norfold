@@ -379,3 +379,21 @@ a.fb-chat-context:hover, a.fb-chat-context:focus-visible { text-decoration:under
    `.fb-chat-message p` is (0,1,1) and would otherwise discard both declarations.
    The values live in components/expressiveText.css so comments read the same. */
 .fb-chat-message p.fb-chat-emoji-only { font-size: var(--fb-emoji-only-size, 2em); line-height: var(--fb-emoji-only-line, 1.15); }
+
+/* Chat only (R19-3): inset canvases take the existing 20px panel corner and
+   clip inside the gutters. The collapsed 64px rail is excluded because it has
+   no width to give, and every non-chat split keeps its current geometry. */
+.fb-chat-page .fb-app-bar { border-bottom:0; }
+@media (min-width: 600px) {
+  .fb-split-list:has(> .fb-chat-page:not(.fb-chat-rail)) > .fb-chat-page:not(.fb-chat-rail),
+  .fb-split-detail > .fb-chat-workspace > .fb-chat-page {
+    border-radius: 20px;
+    overflow: hidden;
+  }
+  .fb-split-detail > .fb-chat-empty {
+    border-radius: 20px;
+    overflow: hidden;
+    background: var(--fb-surface);
+    min-height: 100%;
+  }
+}
