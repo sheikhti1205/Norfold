@@ -11,8 +11,8 @@ function boundedPercent(value: number): number {
 }
 
 /** Milliseconds that are safe to print and compare. */
-function safeMillis(value: number): number {
-  return Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+function safeMillis(value: number | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
 }
 
 function clampMillis(value: number, max: number): number {
