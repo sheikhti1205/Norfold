@@ -51,7 +51,6 @@ import { useAuth } from "./auth";
 import { SavedReportsProvider } from "./hooks/useSavedReports";
 import { Connections, LegacyChatsRedirect, MessagingThread } from "./screens/Messaging";
 import { MessagingLifecycle } from "./components/MessagingLifecycle";
-import { MessagePillHost } from "./components/MessagePillHost";
 import { PostNavigationProvider, useReportViewerBackground } from "./components/PostNavigation";
 import { PostModal } from "./components/PostModal";
 import { VideoPlayerProvider } from "./components/media/VideoPlayerProvider";
@@ -163,7 +162,6 @@ function AppRouteTree() {
           <BackButtonHandler />
           <NativeUpdateLifecycle />
           <DesktopNotifications />
-          <MessagePillHost />
           {user && !booting && !needsProfile ? <UpdatePrompt /> : null}
           <ErrorBoundary>
             <AccountDeletionFeedback />

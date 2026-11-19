@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { motion, type PanInfo } from "framer-motion";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { Archive, ArrowLeft, BellOff, ChevronDown, Film, Flag, ImageOff, Images, ListFilter, LogOut, MapPin, PanelLeftClose, PanelLeftOpen, Pin, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound, X } from "lucide-react";
+import { Archive, ArrowLeft, BellOff, ChevronDown, ChevronUp, Film, Flag, ImageOff, Images, ListFilter, LogOut, MapPin, Maximize2, PanelLeftClose, PanelLeftOpen, Pin, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound, X } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import type { PostItem } from "@norfold/shared";
 import { copyStaticLocation, isUuid } from "../services/messaging/validation";
@@ -25,10 +25,10 @@ import { ChatFile } from "../components/ChatFile";
 import { ChatMessageText } from "../components/ChatMessageText";
 import { copyableMessageText, isBareKlipyMediaBody, isChatFileMarkerBody } from "../utils/messageCopy";
 import { SplitView, type SplitPaneState } from "../components/SplitView";
-import { CHAT_PANE } from "../components/panePreference";
+import { CHAT_PANE, type PaneBounds } from "../components/panePreference";
 import { registerBackInterceptor } from "../components/backNavigation";
 import { CHATS_PATH, isChatThreadPath } from "../components/BackButtonHandler";
-import { modalLayerCount } from "../hooks/modalLayers";
+import { modalLayerCount, useAnyModalLayerOpen } from "../hooks/modalLayers";
 import { ChatDetailsLayout } from "../components/ChatDetailsLayout";
 import { BlockControl } from "../components/BlockControl";
 import { useHoverLabel } from "../components/HoverLabel";
@@ -37,7 +37,7 @@ import { ActionMenu, type MenuAction } from "../components/ActionMenu";
 import { LongPressArea } from "../components/LongPressArea";
 import { AppBar } from "../components/AppBar";
 import { TopUtilities } from "../components/TopUtilities";
-import { MEDIUM_MAX_PX, useViewportWidth } from "../components/responsive";
+import { MEDIUM_MAX_PX, useContentWidth, useRootFontPx, useViewportWidth } from "../components/responsive";
 import { PeopleSearch } from "../components/PeopleSearch";
 import { PeerChatComposer } from "../components/PeerChatComposer";
 import { CameraCapture } from "../components/CameraCapture";
@@ -609,16 +609,43 @@ function VoiceDraft({ recorder, status, recording, notice, url, snapshot, sendin
     onPreview={onPreview} onPause={onStop} onResume={onResume} onDiscard={onDiscard} onSend={onSend} />;
 }
 
+/**
+ * The conversation list is a column of names, previews and times, so its
+ * comfortable width is a text measure, not a fixed pixel count. `CHAT_PANE`'s
+ * track was authored at the 16px root; at a larger text scale the same pixels
+ * hold fewer characters, and at a 200% root the 320px default wrapped a
+ * five-letter name one glyph per line between the 44px avatar and the time.
+ * Scaling the bounds by the root size keeps the character measure the pane was
+ * designed for, and `SplitView`'s existing viability sum then falls back to the
+ * single routed pane whenever the window cannot hold that measure beside a real
+ * thread. At a 16px root every number is unchanged; the collapsed rail holds
+ * avatars rather than text, so it keeps its pixels.
+ */
+export function chatPaneBounds(rootFontPx: number): PaneBounds {
+  const scale = Number.isFinite(rootFontPx) && rootFontPx > 0 ? rootFontPx / 16 : 1;
+  const scaled = (value: number) => (scale === 1 ? value : Math.round(value * scale));
+  return {
+    ...CHAT_PANE,
+    defaultWidth: scaled(CHAT_PANE.defaultWidth),
+    minWidth: scaled(CHAT_PANE.minWidth),
+    maxWidth: scaled(CHAT_PANE.maxWidth),
+  };
+}
+
 export function Connections() {
   const { user } = useAuth();
   const { conversationId } = useParams();
   const width = useViewportWidth();
+  // A reader who enlarges text keeps the screen open, so the bounds have to
+  // follow the live root size rather than a mount-time snapshot.
+  const rootFontPx = useRootFontPx();
+  const pane = useMemo(() => chatPaneBounds(rootFontPx), [rootFontPx]);
   // On a wide window the app utilities belong to the content side (top-right),
-  // never inside the 320px conversation sidebar. Phones keep them in the list
-  // page's own top bar, where that page is the whole app.
+  // never inside the conversation sidebar. Phones keep them in the list page's
+  // own top bar, where that page is the whole app.
   const showAppUtilities = width >= MEDIUM_MAX_PX;
   return user ? <SplitView selected={!!conversationId}
-    pane={{ ...CHAT_PANE, label: "Resize conversation list" }}
+    pane={{ ...pane, label: "Resize conversation list" }}
     list={(pane) => <ConnectionsSession key={user.id} accountId={user.id} selectedId={conversationId} pane={pane} />}
     detail={conversationId ? <Outlet /> : <div className="fb-chat-empty">
       {showAppUtilities && <div className="fb-chat-empty-utilities"><TopUtilities /></div>}
@@ -858,11 +885,51 @@ export function MessagingThread() {
   return user ? <ThreadSession key={`${user.id}:${conversationId}`} accountId={user.id} conversationId={conversationId} /> : null;
 }
 
-export function ThreadSession({ accountId, conversationId }: { accountId: string; conversationId: string }) {
+/** `route` is the full chat screen; `dock` is the compact floating window. */
+export type ThreadSurface = "route" | "dock";
+
+export function ThreadSession({
+  accountId,
+  conversationId,
+  surface = "route",
+  active = true,
+  onToggleCompact,
+  onClose,
+  onExpand,
+  onUnsentWorkChange,
+}: {
+  accountId: string;
+  conversationId: string;
+  /** "route" keeps every current behaviour, including route-owned Escape/Back. */
+  surface?: ThreadSurface;
+  /** Dock only. false while minimized, occluded or behind a chat route. */
+  active?: boolean;
+  /** Dock only: the header toggle. The host collapses when open and restores
+   *  when minimized; the component stays mounted either way. */
+  onToggleCompact?: () => void;
+  /** Dock only: called only after the unsent-work guard is satisfied. */
+  onClose?: () => void;
+  /** Dock only: called only after the unsent-work guard is satisfied. */
+  onExpand?: () => void;
+  /** Dock only: the host mirrors this to guard its own picker/close paths. */
+  onUnsentWorkChange?: (hasUnsent: boolean) => void;
+}) {
+  const dock = surface === "dock";
   const { user } = useAuth();
+  // The panel is a narrow window on a wide display, so the utilities and the
+  // third pane are decided by the thread's own box, never by the viewport.
+  const pageRef = useRef<HTMLElement>(null);
+  // The once-registered Escape/Back owners read the live activity without
+  // re-registering over a child layer that already owns the press.
+  const activeRef = useRef(active);
+  activeRef.current = active;
   // On the wide split the app utilities live at the top-right of the thread,
   // not in the conversation sidebar. On a phone the list page owns them.
-  const wideApp = useViewportWidth() >= MEDIUM_MAX_PX;
+  const viewportWidth = useViewportWidth();
+  // The measurement is the thread's own box. Before it lands, assume the wide
+  // layout only for the full-screen route: a narrow window must never paint
+  // the wide extras first just because the display behind it is wide.
+  const wideApp = useContentWidth(pageRef, dock ? 0 : viewportWidth) >= MEDIUM_MAX_PX;
   const chat = useMessaging();
   const { hoverLabel } = useHoverLabel();
   const [cached] = useState(() => getCachedMessagingThreadState(accountId, conversationId));
@@ -870,9 +937,12 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
   const [threadReadFailed, setThreadReadFailed] = useState(false);
   const [threadReadRetry, setThreadReadRetry] = useState(0);
   const runtimeOpen = chat.accountId === accountId && (chat.localReady || chat.status === "ready" || chat.status === "offline");
+  // One active lease, not one mounted component: a minimized or occluded
+  // window releases the thread to the route screen instead of starving it.
   useEffect(() => {
-    if (runtimeOpen) return watchMessagingThread(accountId, conversationId);
-  }, [runtimeOpen, accountId, conversationId]);
+    if (!runtimeOpen || !active) return;
+    return watchMessagingThread(accountId, conversationId);
+  }, [runtimeOpen, active, accountId, conversationId]);
   const threadSync = chat.threadSync?.conversationId === conversationId ? chat.threadSync : null;
   const threadReconciled = !!threadSync && (threadSync.mode === "ready" || threadSync.mode === "soft")
     && (threadSync.appliedRevision === undefined || renderedRevision >= threadSync.appliedRevision);
@@ -927,13 +997,17 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
   const route = useLocation();
   const navigate = useNavigate();
   const routeRef = useRef(route); routeRef.current = route;
-  const queryReport = new URLSearchParams(route.search).get("report");
+  // An ambient page query is never a chat intent for the floating window: the
+  // dock starts an ordinary conversation and never adopts or rewrites the page
+  // underneath (report links stay a route-only entry).
+  const queryReport = dock ? null : new URLSearchParams(route.search).get("report");
   const validReport = isUuid(queryReport) ? queryReport : null;
   const [reportContext, setReportContext] = useState(validReport);
   useEffect(() => { setReportContext(validReport); }, [validReport]);
   // The full-screen conversation-info route links back here with an explicit
   // search/media request; consume it once so closing the sheet does not reopen.
   useEffect(() => {
+    if (dock) return;
     const params = new URLSearchParams(route.search);
     const requested = params.get("search") === "1" ? "search"
       : params.get("media") === "1" ? "media"
@@ -943,7 +1017,7 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
     params.delete("search"); params.delete("media"); params.delete("location");
     navigate({ pathname: route.pathname, search: params.toString() ? `?${params}` : "", hash: route.hash },
       { replace: true, state: route.state });
-  }, [route, navigate]);
+  }, [route, navigate, dock]);
   function clearReportContext(expected: string | null) {
     const latest = routeRef.current, params = new URLSearchParams(latest.search);
     if (expected !== params.get("report")) return;
@@ -1017,6 +1091,9 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
   // choice; a clean conversation still leaves at once. Escape and Android Back
   // share this one path, and a layer that is already open keeps its own press.
   const [confirmLeave, setConfirmLeave] = useState(false);
+  // What the leave question is guarding: the route screen navigates, the dock
+  // closes, or the dock opens the full route. One dialog, one canonical guard.
+  const [leaveIntent, setLeaveIntent] = useState<"route" | "close" | "expand">("route");
   const voiceActive = voiceStatus === "starting" || voiceStatus === "recording"
     || voiceStatus === "pausing" || voiceStatus === "review";
   // Past admission the note is in the outbox, so leaving does not recall it and
@@ -1050,19 +1127,24 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
   // it over a child layer that already owns the press.
   const unsentWork = useRef(hasUnsentWork);
   unsentWork.current = hasUnsentWork;
-  const leaveThread = useRef<() => void>(() => undefined);
-  leaveThread.current = () => {
+  // The host mirrors this boolean to refuse its own picker/close paths; the
+  // work itself never leaves this component.
+  useEffect(() => { onUnsentWorkChange?.(hasUnsentWork); }, [hasUnsentWork, onUnsentWorkChange]);
+  const leaveThread = useRef<(intent?: "route" | "close" | "expand") => void>(() => undefined);
+  leaveThread.current = (intent = "route") => {
     // Explicit consent releases the microphone here; no gesture does it alone.
     // A note the service already holds is not discarded: it is in the outbox
     // and leaving must not pretend to cancel it.
     if (voiceAtRisk) discardVoice();
     setConfirmLeave(false);
-    navigate(CHATS_PATH, { replace: true });
+    if (!dock) { navigate(CHATS_PATH, { replace: true }); return; }
+    // A clean dock close never writes history or moves the page underneath.
+    if (intent === "expand") onExpand?.(); else onClose?.();
   };
-  const requestLeave = useRef<() => void>(() => undefined);
-  requestLeave.current = () => {
-    if (unsentWork.current) { setConfirmLeave(true); return; }
-    leaveThread.current();
+  const requestLeave = useRef<(intent?: "route" | "close" | "expand") => void>(() => undefined);
+  requestLeave.current = (intent = "route") => {
+    if (unsentWork.current) { setLeaveIntent(intent); setConfirmLeave(true); return; }
+    leaveThread.current(intent);
   };
   // Set while a press is handed to an open layer's own Escape handling, so the
   // same key cannot also leave the conversation.
@@ -1079,37 +1161,38 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
   closeLayer.current = closeOpenLayer;
   // Escape leaves a conversation for the canonical chat list once every open
   // layer has had the press. A composing field, a repeated key or a modifier is
-  // never a leave gesture, and only the canonical conversation route owns the
-  // gesture (a legacy/redirect mount is not a chat screen).
+  // never a leave gesture. The route screen owns the gesture only on its own
+  // route (a legacy/redirect mount is not a chat screen); the dock owns it
+  // whenever it is the active surface, whatever page it floats over.
   useEffect(() => {
     const leaveOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || event.isComposing
         || event.keyCode === 229 || event.repeat || event.ctrlKey || event.altKey
         || event.metaKey || event.shiftKey) return;
-      if (!isChatThreadPath(routeRef.current.pathname)) return;
+      if (dock ? !activeRef.current : !isChatThreadPath(routeRef.current.pathname)) return;
       if (delegatedPress.current) return;
       // A layer owns this press even when focus sits outside it: the canonical
       // modal stack, or an open dialog/menu/picker (the phone navigation drawer
       // is one). Leaving underneath it would be the same key acting twice.
       if (modalLayerCount() > 0 || document.querySelector(OPEN_LAYER_SELECTOR)) return;
       event.preventDefault();
-      requestLeave.current();
+      requestLeave.current("close");
     };
     window.addEventListener("keydown", leaveOnEscape);
     return () => window.removeEventListener("keydown", leaveOnEscape);
-  }, []);
+  }, [dock]);
   // Android Back asks the same question, but only after every open layer has
   // had its own press: layers register when they open, so the topmost wins. A
   // layer with no Back handler of its own is closed through its Escape path.
   useEffect(() => registerBackInterceptor(() => {
-    if (!isChatThreadPath(routeRef.current.pathname)) return false;
+    if (dock ? !activeRef.current : !isChatThreadPath(routeRef.current.pathname)) return false;
     if (modalLayerCount() > 0 || document.querySelector(OPEN_LAYER_SELECTOR)) {
       closeLayer.current();
       return true;
     }
-    requestLeave.current();
+    requestLeave.current("close");
     return true;
-  }), []);
+  }), [dock]);
   const [viewer, setViewer] = useState<{ id: string; items: MediaViewerItem[] } | null>(null);
   const readyPhotos = useRef(new Map<string, { bytes: ArrayBuffer; mime: string }>());
   const rememberPhoto = useCallback((id: string, content: { bytes: ArrayBuffer; mime: string } | null) => {
@@ -1152,7 +1235,48 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
   // is fetched only when the report sheet is actually opened.
   const [heldMessageIds, setHeldMessageIds] = useState<ReadonlySet<string>>(() => new Set());
   const [reportHold, setReportHold] = useState<{ messageId: string; body: string } | null>(null);
-  const [visible, setVisible] = useState(() => document.visibilityState === "visible");
+  // A hidden window must not leave its own sheets, viewers or confirms
+  // portalled above a page it no longer owns. Only presentation state is
+  // cleared: the draft, staged media and an open recording stay exactly where
+  // they were, and nothing is sent.
+  useEffect(() => {
+    if (active) return;
+    setSheet(null);
+    setViewer(null);
+    setDraftViewer(null);
+    setCameraOpen(false);
+    setConfirmLeave(false);
+    setReportTarget(null);
+    setReportHold(null);
+    setSelectedMessageId(null);
+  }, [active]);
+  // A row menu is the one transient this component cannot unmount: its open
+  // state lives inside each LongPressArea, and its panel is a body portal that
+  // would float over whatever page the reader moved to. Hiding the window
+  // closes it through the same canonical layer bridge every layer answers, one
+  // press per layer so an open submenu unwinds first. `selectedMessageId` is
+  // set only when this thread opened a menu, so another surface's stays alone.
+  const menuOpen = useRef(false);
+  menuOpen.current = selectedMessageId !== null;
+  useEffect(() => {
+    if (active || !menuOpen.current) return;
+    let frame = 0;
+    let presses = 0;
+    const closeTopMenu = () => {
+      if (!document.querySelector(".fb-action-menu")) return;
+      closeLayer.current();
+      if (++presses < 3) frame = window.requestAnimationFrame(closeTopMenu);
+    };
+    closeTopMenu();
+    return () => { if (frame) window.cancelAnimationFrame(frame); };
+  }, [active]);
+  const [docVisible, setDocVisible] = useState(() => document.visibilityState === "visible");
+  // "Showing" folds the document and this surface together, so a minimized,
+  // occluded or behind-a-route window never reads, inserts or observes. Live
+  // receipts additionally pause under any modal layer the reader is in.
+  const visible = docVisible && active;
+  const modalLayerOpen = useAnyModalLayerOpen();
+  const receiptsActive = visible && !modalLayerOpen;
   // Live contexts authorize NEW observations only. Historical Read facts are
   // durable and never disappear just because consent/context/connection changes.
   const receiptAuthority = current ? JSON.stringify([accountId, conversationId, current.peerId,
@@ -1561,7 +1685,7 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
     if (!refusal && accepted.length < usable.length) setError(`Only ${MAX_STAGED_PHOTOS} attachments can be reviewed at once. The first ${accepted.length} were added.`);
   }
   useEffect(() => {
-    const update = () => setVisible(document.visibilityState === "visible");
+    const update = () => setDocVisible(document.visibilityState === "visible");
     document.addEventListener("visibilitychange", update);
     return () => document.removeEventListener("visibilitychange", update);
   }, []);
@@ -1664,8 +1788,10 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
     const checkRead = () => {
       const distance = area.scrollHeight - area.scrollTop - area.clientHeight;
       // Follow comes from the transcript hook, so a reader who scrolled up
-      // is never marked read just because new content arrived.
-      if (document.visibilityState !== "visible" || !transcript.following.current
+      // is never marked read just because new content arrived. `receiptsActive`
+      // also refuses a hidden/minimized window, whose zero measured distance
+      // would otherwise read as "at the bottom" on a visibilitychange.
+      if (!receiptsActive || !transcript.following.current
         || distance >= FOLLOW_PX || highest <= lastMarked.current) return;
       lastMarked.current = highest;
       void markMessagingConversationRead(accountId, conversationId, highest).catch(() => { lastMarked.current = 0; });
@@ -1677,14 +1803,14 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
       area.removeEventListener("scroll", checkRead);
       document.removeEventListener("visibilitychange", checkRead);
     };
-  }, [accountId, conversationId, highest, loaded, threadBlocked]);
+  }, [accountId, conversationId, highest, loaded, threadBlocked, receiptsActive]);
 
   // This is live, disposable receipt authority, never the stored unread cursor.
   // A fetched context precedes a fresh geometric observation of an inbound bubble.
   useLayoutEffect(() => {
     const area = scroll.current;
     const projections = chat.currentProjections;
-    if (threadBlocked || !area || !loaded || !visible || sheet !== null || reportTarget || viewer || chat.accountId !== accountId || chat.status !== "ready"
+    if (threadBlocked || !area || !loaded || !receiptsActive || sheet !== null || reportTarget || viewer || chat.accountId !== accountId || chat.status !== "ready"
       || !projections || !receiptAuthority || current?.mode !== "CONNECTED" || current.ownBlocked) return;
     const controller = new AbortController();
     let context: string | null = null;
@@ -1802,7 +1928,7 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
       area.removeEventListener("load", schedule, true);
       window.removeEventListener("resize", schedule);
     };
-  }, [accountId, conversationId, chat.accountId, chat.status, chat.currentProjections, current, receiptAuthority, loaded, messages, visible, sheet, reportTarget, viewer, threadBlocked]);
+  }, [accountId, conversationId, chat.accountId, chat.status, chat.currentProjections, current, receiptAuthority, loaded, messages, receiptsActive, sheet, reportTarget, viewer, threadBlocked]);
 
   async function setMuted(muted: boolean) {
     if (busy || chat.status !== "ready" || typeof current?.ownMuted !== "boolean") return;
@@ -2380,13 +2506,27 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
   return <ChatDetailsLayout details={conversationInfo} onCompactOpen={() => setSheet("actions")}
     identity={<><UserAvatar username={name || person?.username} avatarUrl={person?.avatarUrl} size={72} shape="squircle" />
       <strong dir="auto">{name || "Conversation"}</strong><span className="fb-chat-secondary">{!presentationView ? "Saved chat" : presentationView.mode === "CONNECTED" ? "Friends" : "Message request"}</span></>}>
-    {detailsToggle => <section className="fb-chat-page" aria-label="Conversation">
+    {detailsToggle => <section ref={pageRef} className="fb-chat-page" aria-label="Conversation" data-surface={surface}>
     <header className="fb-chat-header">
-      <Link to="/chats" className="fb-chat-icon" aria-label="Back to chats" {...hoverLabel("Back to chats")}><ArrowLeft size={22} aria-hidden="true" /></Link>
+      {!dock && <Link to={CHATS_PATH} className="fb-chat-icon" aria-label="Back to chats"
+        onClick={(event) => { if (unsentWork.current) { event.preventDefault(); requestLeave.current("route"); } }}
+        {...hoverLabel("Back to chats")}><ArrowLeft size={22} aria-hidden="true" /></Link>}
       <ChatIdentity peerId={row?.peerId} name={name} username={person?.username} avatarUrl={person?.avatarUrl} muted={presentationView?.ownMuted === true}
         conversationId={conversationId}
         status={!presentationView ? "Saved chat" : presentationView.mode === "CONNECTED" ? "Friends" : "Message request"} />
       {detailsToggle}
+      {/* The dock reuses the canonical header and adds window controls; it never
+          renders the back link, because that would navigate the page beneath. */}
+      {dock && <>
+        <button type="button" className="fb-chat-icon" aria-label={active ? "Collapse chat" : "Expand chat"}
+          aria-expanded={active} onClick={() => onToggleCompact?.()}>
+          {active ? <ChevronDown size={20} aria-hidden="true" /> : <ChevronUp size={20} aria-hidden="true" />}
+        </button>
+        <button type="button" className="fb-chat-icon" aria-label="Open full chat"
+          onClick={() => requestLeave.current("expand")}><Maximize2 size={20} aria-hidden="true" /></button>
+        <button type="button" className="fb-chat-icon" aria-label="Close chat"
+          onClick={() => requestLeave.current("close")}><X size={20} aria-hidden="true" /></button>
+      </>}
       {wideApp && <><RetrySync accountId={accountId} /><TopUtilities /></>}
     </header>
     {/* Pinned messages: one compact row directly under the header. Tapping a
@@ -2766,7 +2906,7 @@ export function ThreadSession({ accountId, conversationId }: { accountId: string
       {error && <p className="fb-chat-error" role="alert">{error}</p>}
     </ConfirmDialog>
     <ConfirmDialog open={confirmLeave} onClose={() => setConfirmLeave(false)} title="Leave this chat?"
-      confirmLabel="Leave chat" cancelLabel="Stay" onConfirm={() => leaveThread.current()}>
+      confirmLabel="Leave chat" cancelLabel="Stay" onConfirm={() => leaveThread.current(leaveIntent)}>
       {unsentCopy && <p>{unsentCopy}</p>}
     </ConfirmDialog>
     <AdaptiveTaskSurface open={sheet !== null && sheet !== "location" && !confirming} onClose={() => setSheet(null)} busy={busy}
