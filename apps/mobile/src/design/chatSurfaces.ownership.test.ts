@@ -107,8 +107,15 @@ describe("R19 chat surfaces stay chat-scoped", () => {
     expect(detailsCss).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.fb-chat-workspace,[\s\S]*?transition:none;/);
   });
 
-  it("centres the details grip in the 8px gap on its 9px target", () => {
-    expect(detailsCss).toMatch(/\.fb-chat-details-resize \{[^}]*right:calc\(var\(--fb-details-w, 320px\) - \.5px\);[^}]*width:9px;/);
+  it("centres the details grip in the 8px gap on its 7px target", () => {
+    expect(detailsCss).toMatch(/\.fb-chat-details-resize \{[^}]*right:calc\(var\(--fb-details-w, 320px\) \+ \.5px\);[^}]*width:7px;/);
+    expect(detailsCss).toMatch(/\.fb-chat-details-resize::before \{[^}]*top:50%;[^}]*transform:translate\(-50%, -50%\);/);
+  });
+
+  it("aligns the chat splitter track with the details track's 8px foot inset", () => {
+    expect(splitGutters).toMatch(/\.fb-split-view:has\(\.fb-chat-page\) > \.fb-split-resize \{\s*margin-bottom: 8px;/);
+    expect(splitGutters).toMatch(/\.fb-split-detail:has\(> \.fb-chat-workspace\),\s*\.fb-split-detail:has\(> \.fb-chat-empty\) \{\s*padding: 0 8px 8px;/);
+    expect(detailsCss).toMatch(/\.fb-chat-details-resize \{[^}]*top:0; bottom:0;/);
   });
 
   it("removes only the chat AppBar rule and keeps content dividers", () => {
@@ -137,11 +144,48 @@ describe("R19 chat surfaces stay chat-scoped", () => {
     expect(chatOutline.some(body => declared(body, "outline", "0"))).toBe(true);
     const focusPill = bodiesFor(splitRules, ".fb-split-view:has(.fb-chat-page) > .fb-split-resize:focus-visible::before");
     expect(focusPill.length).toBeGreaterThan(0);
+    expect(focusPill.some(body => declared(body, "width", "5px") && declared(body, "height", "32px"))).toBe(true);
     expect(focusPill.some(body => FOCUS_RING.test(body))).toBe(true);
     const detailsOutline = bodiesFor(detailsRules, ".fb-chat-details-resize:focus-visible");
     expect(detailsOutline.some(body => /outline\s*:\s*none/.test(body))).toBe(true);
     const detailsRing = bodiesFor(detailsRules, ".fb-chat-details-resize:focus-visible::before");
-    expect(detailsRing.some(body => FOCUS_RING.test(body))).toBe(true);
+    expect(detailsRing.some(body => (
+      declared(body, "width", "5px") && declared(body, "height", "32px") && FOCUS_RING.test(body)
+    ))).toBe(true);
+    expect(detailsCss).not.toMatch(/height:\s*40px/);
+  });
+
+  it("gives both chat grips the same rest and engaged size, colour and transition", () => {
+    const leftRest = bodiesFor(splitRules, ".fb-split-view:has(.fb-chat-page) > .fb-split-resize::before");
+    expect(leftRest.some(body => (
+      declared(body, "width", "3px") && declared(body, "height", "32px")
+      && /background\s*:\s*var\(--fb-outline-variant\)/.test(body)
+      && /transition\s*:\s*width \.15s ease, height \.15s ease, background \.15s ease;/.test(body)
+    ))).toBe(true);
+    expect(leftRest.some(body => /top:\s*50%/.test(body) && /transform:\s*translateY\(-50%\)/.test(body))).toBe(true);
+    const leftHover = bodiesFor(splitRules, ".fb-split-view:has(.fb-chat-page) > .fb-split-resize:hover::before");
+    const leftActive = bodiesFor(splitRules, ".fb-split-view:has(.fb-chat-page) > .fb-split-resize:active::before");
+    expect(leftHover.length).toBeGreaterThan(0);
+    expect(leftActive.length).toBeGreaterThan(0);
+    expect([...leftHover, ...leftActive].some(body => (
+      declared(body, "width", "5px") && declared(body, "height", "32px")
+      && /background\s*:\s*var\(--fb-primary\)/.test(body)
+    ))).toBe(true);
+    const rightRest = bodiesFor(detailsRules, ".fb-chat-details-resize::before");
+    expect(rightRest.some(body => (
+      declared(body, "width", "3px") && declared(body, "height", "32px")
+      && /background\s*:\s*var\(--fb-outline-variant\)/.test(body)
+      && /transition\s*:\s*width \.15s ease, height \.15s ease, background \.15s ease;/.test(body)
+    ))).toBe(true);
+    const rightHover = bodiesFor(detailsRules, ".fb-chat-details-resize:hover::before");
+    const rightDrag = bodiesFor(detailsRules, ".fb-chat-workspace-dragging .fb-chat-details-resize::before");
+    expect(rightHover.length).toBeGreaterThan(0);
+    expect(rightDrag.length).toBeGreaterThan(0);
+    expect([...rightHover, ...rightDrag].some(body => (
+      declared(body, "width", "5px") && declared(body, "height", "32px")
+      && /background\s*:\s*var\(--fb-primary\)/.test(body)
+    ))).toBe(true);
+    expect(splitCss).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.fb-split-view:has\(\.fb-chat-page\) > \.fb-split-resize::before \{ transition\s*:\s*none;/);
   });
 
   it("keeps the collapsed rail at its 64px bound and outside the inset", () => {
