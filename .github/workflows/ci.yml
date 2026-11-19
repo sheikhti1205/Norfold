@@ -435,6 +435,35 @@ jobs:
         run: cd apps/mobile/android && ./gradlew :app:testDebugUnitTest :app:assembleDebug
       - name: Log versionName/versionCode
         run: cd apps/mobile/android && ./gradlew :app:printVersionInfo
+      # Failure-only evidence for the Android job: three fixed public POM GETs
+      # matching the root buildscript pins (AGP / google-services / KGP). The
+      # bodies are discarded; only HTTP status, elapsed time and curl's exit
+      # code are printed. No retry, redirect, header, env, proxy, IP or body
+      # output, and a failed request never fails this step, so the original
+      # Gradle gate stays the job's failure. Keep these coordinates in step
+      # with apps/mobile/android/build.gradle; a later 200 only records what
+      # the public POM host says now.
+      - name: Root build classpath POM reachability (failure only)
+        if: failure()
+        run: |
+          probe() {
+            label="$1"
+            url="$2"
+            if result=$(curl -s -o /dev/null --max-redirs 0 --max-time 10 \
+              -w '%{http_code} %{time_total}s' "$url" 2>/dev/null); then
+              code=0
+            else
+              code=$?
+            fi
+            echo "$label: ${result:-no response} (curl exit $code)"
+          }
+          probe "com.android.tools.build:gradle:8.13.0" \
+            "https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/8.13.0/gradle-8.13.0.pom"
+          probe "com.google.gms:google-services:4.4.4" \
+            "https://dl.google.com/dl/android/maven2/com/google/gms/google-services/4.4.4/google-services-4.4.4.pom"
+          probe "org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.0" \
+            "https://repo1.maven.org/maven2/org/jetbrains/kotlin/kotlin-gradle-plugin/2.4.0/kotlin-gradle-plugin-2.4.0.pom"
+          echo "probe complete; this step does not change the job result"
       - name: Strict APK scan (DEX/assets secrets, forbidden weights, JNI, 16 KiB)
         run: npm run scan:apk -- --strict
       - name: Verify Supabase and Sentry in packaged debug APK
