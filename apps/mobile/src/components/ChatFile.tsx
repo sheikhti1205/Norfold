@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import {
-  Archive, Download, File as FileIcon, FileText, Film, Images, LoaderCircle, Music, Pause, Play,
+  Download, Film, Images, LoaderCircle, Music, Pause, Play,
 } from "lucide-react";
-import { downloadChatFile, type ChatFileMeta } from "../services/messaging/files";
+import { chatFileExtension, downloadChatFile, type ChatFileMeta } from "../services/messaging/files";
+import { saveChatFile, viewChatFile } from "../services/chatFileExport";
 import { probeDimensions, readExifOrientation, sniffImage } from "../services/media/importImage";
 import { formatTime, useMediaEngine } from "./media/VideoPlayer";
 import { useVideoPlayer } from "./media/VideoPlayerProvider";
@@ -12,14 +13,6 @@ function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
-}
-
-function IconFor({ kind }: { kind: ChatFileMeta["kind"] }) {
-  if (kind === "video") return <Film size={22} aria-hidden="true" />;
-  if (kind === "audio") return <Music size={22} aria-hidden="true" />;
-  if (kind === "archive") return <Archive size={22} aria-hidden="true" />;
-  if (kind === "pdf" || kind === "document") return <FileText size={22} aria-hidden="true" />;
-  return <FileIcon size={22} aria-hidden="true" />;
 }
 
 function triggerDownload(url: string, name: string) {
@@ -41,14 +34,25 @@ const INLINE_RASTER_MAX_EDGE = 8192;
  * Video and audio do not use the browser's own controls. Video hands its blob
  * URL to the app-wide player (which revokes it on close, so this bubble must
  * NOT revoke it again); audio stays here as a compact row over the shared
- * playback engine. Documents still open through a download, which is
- * deliberate: the file is data, not a page.
+ * playback engine. A document never becomes a page in this origin: its two
+ * simple actions ask the platform export service to hand the file to an
+ * external viewer or a real save, so this row holds no bytes, object URL or
+ * embedded preview of its own.
  */
 export function ChatFile({ meta }: { meta: ChatFileMeta }) {
   if (meta.kind === "video") return <ChatVideo meta={meta} />;
   if (meta.kind === "audio") return <ChatAudio meta={meta} />;
-  if (INLINE_RASTER_MIME.has(meta.mime)) return <ChatImageFile meta={meta} />;
-  return <ChatDocument meta={meta} />;
+  return isDocumentChatFile(meta) ? <ChatDocument meta={meta} /> : <ChatImageFile meta={meta} />;
+}
+
+/**
+ * The same non-media predicate the transcript uses to give a bare file its
+ * one compact message surface. Exported for the parent only, so it never has
+ * to repeat the raster allowlist: a video, audio file or sniffable raster keeps
+ * the canonical media rendering; every other file is a document row.
+ */
+export function isDocumentChatFile(meta: ChatFileMeta): boolean {
+  return meta.kind !== "video" && meta.kind !== "audio" && !INLINE_RASTER_MIME.has(meta.mime);
 }
 
 /**
@@ -194,47 +198,169 @@ function ChatImageFile({ meta }: { meta: ChatFileMeta }) {
   );
 }
 
-function ChatDocument({ meta }: { meta: ChatFileMeta }) {
-  const [state, setState] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [src, setSrc] = useState<string | null>(null);
-  const objectUrl = useRef<string | null>(null);
+type DocumentAction = "view" | "save";
+type DocumentNotice = { tone: "status" | "error"; text: string };
 
-  useEffect(() => () => {
-    if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
-    objectUrl.current = null;
+/** The export service's own failure codes; anything else is unclassified. */
+const EXPORT_FAILURE_CODES: ReadonlySet<string> = new Set([
+  "PERMISSION_DENIED", "CANCELLED", "BUSY", "NO_HANDLER", "SIZE_MISMATCH",
+  "INSUFFICIENT_STORAGE", "NETWORK_ERROR", "INVALID_REQUEST",
+  "UNSUPPORTED_VIEW", "NOT_FOUND",
+]);
+/** A limitation or a transient busy state carrying a remedy, not a fault:
+ * neutral tone, never red. */
+const EXPORT_LIMITATION_CODES: ReadonlySet<string> = new Set(["NO_HANDLER", "UNSUPPORTED_VIEW", "BUSY"]);
+
+function readExportFailureCode(error: unknown): string | null {
+  if (typeof error !== "object" || error === null) return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && EXPORT_FAILURE_CODES.has(code) ? code : null;
+}
+
+/**
+ * Fixed consumer copy per code. The thrown message is deliberately never
+ * printed: it can carry a storage path, URL or provider detail that a reader
+ * must not see. Permission also differs by action, because saving needs the
+ * platform's storage grant while viewing needs access to the file itself.
+ */
+function documentActionError(action: DocumentAction, code: string | null): string {
+  if (code === "PERMISSION_DENIED") {
+    return action === "save"
+      ? "Allow storage access to save files."
+      : "You don’t have access to this file.";
+  }
+  if (code === "NO_HANDLER") {
+    return action === "view"
+      ? "No app on this device can open this file. Save it instead."
+      : "This device can’t save that file here. Try View instead.";
+  }
+  if (code === "UNSUPPORTED_VIEW") {
+    return "Your browser can’t view this file. Save it and open it with a compatible app.";
+  }
+  if (code === "NOT_FOUND") return "That file is no longer available.";
+  if (code === "BUSY") return "Another file action is still running. Try again in a moment.";
+  return action === "view"
+    ? "That file couldn’t be opened. Try again."
+    : "That file couldn’t be saved. Try again.";
+}
+
+/** A PDF is labelled PDF; other documents use their own extension, never a guess. */
+function documentTypeLabel(meta: ChatFileMeta): string {
+  if (meta.kind === "pdf") return "PDF";
+  const extension = chatFileExtension(meta.name);
+  if (extension.length > 0 && extension.length <= 5) return extension.toUpperCase();
+  if (meta.kind === "archive") return "Archive";
+  if (meta.kind === "document") return "Document";
+  return "File";
+}
+
+/**
+ * A non-media file is one compact, message-integrated surface: the name and
+ * its type/size, then two plain actions joined by one functional hairline.
+ * There is no nested card, icon tile or pill control, and no PDF preview: the
+ * only ways bytes leave storage are the platform export service's external
+ * viewer and its real save. Both actions share one busy latch, so a second
+ * press cannot start a competing request while the first is still settling.
+ * Neither action is ever hidden: a format the platform cannot view is refused
+ * with a remedy, because the owner asked for the pair, not a reduced pair.
+ */
+function ChatDocument({ meta }: { meta: ChatFileMeta }) {
+  const [pending, setPending] = useState<DocumentAction | null>(null);
+  const [notice, setNotice] = useState<DocumentNotice | null>(null);
+  const busy = useRef(false);
+  const alive = useRef(true);
+  const generation = useRef(0);
+
+  useEffect(() => {
+    // StrictMode's setup → cleanup → setup must re-arm liveness; a late export
+    // result must never paint into a row that is gone.
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      generation.current += 1;
+      busy.current = false;
+    };
   }, []);
 
-  async function open() {
-    if (state === "loading") return;
-    if (state === "ready" && src) {
-      triggerDownload(src, meta.name);
-      return;
-    }
-    setState("loading");
+  // A different message reuses this component type: invalidate anything still
+  // in flight and return to idle rather than letting a false completion repaint
+  // the new metadata. Every stored field is a dependency, not only the key.
+  useEffect(() => {
+    generation.current += 1;
+    busy.current = false;
+    setPending(null);
+    setNotice(null);
+    return () => { generation.current += 1; };
+  }, [meta.key, meta.name, meta.mime, meta.byteSize]);
+
+  async function run(action: DocumentAction) {
+    if (busy.current) return;
+    busy.current = true;
+    setPending(action);
+    setNotice(null);
+    const attempt = ++generation.current;
     try {
-      const blob = await downloadChatFile(meta.key);
-      const url = URL.createObjectURL(blob);
-      objectUrl.current = url;
-      setSrc(url);
-      setState("ready");
-      triggerDownload(url, meta.name);
-    } catch {
-      setState("error");
+      if (action === "view") {
+        const result = await viewChatFile(meta);
+        if (!alive.current || attempt !== generation.current) return;
+        // An external viewer reports no completion we can observe, so only a
+        // handoff to a browser download has anything honest to say.
+        setNotice(result.status === "download-started"
+          ? { tone: "status", text: "Download started." }
+          : null);
+      } else {
+        const result = await saveChatFile(meta);
+        if (!alive.current || attempt !== generation.current) return;
+        if (result.status === "saved") {
+          setNotice({
+            tone: "status",
+            text: result.location === "downloads" ? "Saved to Downloads." : "Saved.",
+          });
+        } else if (result.status === "download-started") {
+          // A browser download is not a file-system write: the browser owns
+          // where it lands, so "Saved" would be a claim we cannot make.
+          setNotice({ tone: "status", text: "Download started." });
+        } else {
+          // `cancelled`, or a status this build does not know: no phantom Saved.
+          setNotice(null);
+        }
+      }
+    } catch (error) {
+      if (!alive.current || attempt !== generation.current) return;
+      const code = readExportFailureCode(error);
+      // A cancellation is the reader backing out, not a failure: return to idle.
+      if (code === "CANCELLED") setNotice(null);
+      else setNotice({
+        tone: code !== null && EXPORT_LIMITATION_CODES.has(code) ? "status" : "error",
+        text: documentActionError(action, code),
+      });
+    } finally {
+      if (alive.current && attempt === generation.current) {
+        busy.current = false;
+        setPending(null);
+      }
     }
   }
 
   return (
-    <div className="fb-chat-file" data-kind={meta.kind}>
-      <span className="fb-chat-file-icon"><IconFor kind={meta.kind} /></span>
-      <span className="fb-chat-file-copy">
-        <span className="fb-chat-file-name" title={meta.name}>{meta.name}</span>
-        <span className="fb-chat-file-size">{humanSize(meta.byteSize)}</span>
+    <div className="fb-chat-document" data-kind={meta.kind} data-chat-file="document">
+      <span className="fb-chat-document-copy">
+        <span className="fb-chat-document-name" title={meta.name} dir="auto">{meta.name}</span>
+        <span className="fb-chat-document-meta">{documentTypeLabel(meta)} · {humanSize(meta.byteSize)}</span>
       </span>
-      <button type="button" className="fb-chat-file-action" onClick={() => void open()}
-        aria-label={`Open ${meta.name}`} disabled={state === "loading"}>
-        {state === "loading" ? "Opening…" : state === "error" ? "Unavailable" : <><Download size={18} aria-hidden="true" /> Open</>}
-      </button>
-      {state === "error" && <p role="status" className="fb-chat-file-error">That file is no longer available.</p>}
+      <span className="fb-chat-document-actions">
+        <button type="button" className="fb-chat-document-action" onClick={() => void run("view")}
+          aria-label={`View ${meta.name}`} aria-busy={pending === "view"} disabled={pending !== null}>
+          {pending === "view" && <LoaderCircle className="fb-chat-video-spin" size={16} aria-hidden="true" />}
+          <span>View</span>
+        </button>
+        <button type="button" className="fb-chat-document-action" onClick={() => void run("save")}
+          aria-label={`Save ${meta.name}`} aria-busy={pending === "save"} disabled={pending !== null}>
+          {pending === "save" && <LoaderCircle className="fb-chat-video-spin" size={16} aria-hidden="true" />}
+          <span>Save</span>
+        </button>
+      </span>
+      {notice && <span role="status" className="fb-chat-document-notice" data-tone={notice.tone}>{notice.text}</span>}
     </div>
   );
 }

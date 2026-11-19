@@ -4,169 +4,142 @@ import { resolve } from "node:path";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { VoiceMessagePlayer, VoiceRecordingPanel } from "./VoiceNote";
-import { VOICE_BARS } from "../services/messaging/voicePeaks";
 
 afterEach(cleanup);
 const peaks = [0, .25, 1, .5, 0];
 const noop = () => undefined;
 
-/** The one full-width sweep of the current minute, as a width string. */
-function fillWidth(container: HTMLElement): string | null {
-  return container.querySelector<HTMLElement>(".fb-voice-capture-fill")?.style.width ?? null;
+function progress(container: HTMLElement): HTMLElement | null {
+  return container.querySelector<HTMLElement>('[role="progressbar"]');
 }
 
-describe("reference voice-note geometry", () => {
-  it("uses separate waveform and action rows for review, with real resume and icon actions", () => {
-    const resume = vi.fn(), send = vi.fn(), discard = vi.fn();
-    const { container } = render(<VoiceRecordingPanel phase="review" peaks={peaks} elapsedMs={8_000}
-      percent={0} playing={false} previewReady canResume onPreview={() => undefined}
-      onPause={() => undefined} onResume={resume} onSend={send} onDiscard={discard} />);
-    const panel = screen.getByRole("group", { name: "Voice message ready" });
-    const row = panel.querySelector(".fb-voice-panel-wave");
-    expect(row?.contains(screen.getByRole("button", { name: "Play voice preview" }))).toBe(true);
-    expect(row?.textContent).toContain("0:08");
-    const actions = panel.querySelector(".fb-voice-panel-actions");
-    for (const name of ["Discard recording", "Resume recording", "Send voice message"]) {
-      expect(actions?.contains(screen.getByRole("button", { name }))).toBe(true);
-    }
-    fireEvent.click(screen.getByRole("button", { name: "Resume recording" }));
-    fireEvent.click(screen.getByRole("button", { name: "Send voice message" }));
-    fireEvent.click(screen.getByRole("button", { name: "Discard recording" }));
-    expect(resume).toHaveBeenCalledOnce(); expect(send).toHaveBeenCalledOnce(); expect(discard).toHaveBeenCalledOnce();
-    expect(container.querySelector("textarea")).toBeNull();
-    expect(screen.getByRole("button", { name: "Send voice message" }).textContent).toBe("");
+function fillWidth(container: HTMLElement): string | null {
+  return container.querySelector<HTMLElement>(".fb-chat-voice-progress-fill")?.style.width ?? null;
+}
+
+function barAfter(container: HTMLElement, rowSelector: string): boolean {
+  const row = container.querySelector(rowSelector);
+  const bar = container.querySelector(".fb-chat-voice-progress");
+  return !!row && !!bar && row.nextElementSibling === bar;
+}
+
+describe("one continuous voice progress indicator", () => {
+  it("draws one progress bar and no waveform in the delivered note", () => {
+    const { container } = render(<VoiceMessagePlayer peaks={peaks} durationMs={8_000} positionMs={0}
+      playing={false} ready avatar={<span>Alex</span>} onToggle={noop} rate={1} onRate={noop} />);
+    expect(container.querySelectorAll('[role="progressbar"]')).toHaveLength(1);
+    expect(container.querySelectorAll(".fb-chat-voice-progress")).toHaveLength(1);
+    expect(container.querySelectorAll(".fb-chat-voice-bar")).toHaveLength(0);
+    expect(container.querySelectorAll(".fb-chat-voice-cursor")).toHaveLength(0);
+    expect(container.querySelectorAll(".fb-voice-capture-fill")).toHaveLength(0);
+    expect(progress(container)?.getAttribute("aria-valuemin")).toBe("0");
+    expect(progress(container)?.getAttribute("aria-valuemax")).toBe("100");
+    expect(progress(container)?.getAttribute("aria-valuenow")).toBe("0");
+    expect(progress(container)?.getAttribute("aria-valuetext")).toBe("0:00 of 0:08, 0:08 left");
+    expect(fillWidth(container)).toBe("0%");
+    expect(container.textContent).toContain("0:00");
+    expect(container.textContent).toContain("0:08 left");
+    expect(barAfter(container, ".fb-chat-voice-row")).toBe(true);
   });
 
-  it("sends a live recording without forcing the reader to stop first", () => {
-    const send = vi.fn();
-    render(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={3_000}
-      percent={0} playing={false} onPreview={() => undefined} onPause={() => undefined}
-      onResume={() => undefined} onSend={send} onDiscard={() => undefined} />);
-    const button = screen.getByRole("button", { name: "Send voice message" }) as HTMLButtonElement;
-    expect(button.disabled).toBe(false);
-    fireEvent.click(button);
-    expect(send).toHaveBeenCalledOnce();
-    // The pause control still owns the explicit stop.
-    expect(screen.getByRole("button", { name: "Pause recording" })).toBeTruthy();
-  });
-
-  it("keeps send unavailable while the take is still being prepared", () => {
-    render(<VoiceRecordingPanel phase="pausing" peaks={peaks} elapsedMs={3_000}
-      percent={0} playing={false} onPreview={() => undefined} onPause={() => undefined}
-      onResume={() => undefined} onSend={() => undefined} onDiscard={() => undefined} />);
-    expect((screen.getByRole("button", { name: "Send voice message" }) as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it("locks pause, discard and send while a live take is being finalized", () => {
-    render(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={3_000}
-      percent={0} playing={false} sending onPreview={noop} onPause={noop}
-      onResume={noop} onDiscard={noop} onSend={noop} />);
-    for (const name of ["Pause recording", "Discard recording", "Sending voice message"]) {
-      expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
-    }
-  });
-
-  it("locks review controls during durable admission", () => {
-    render(<VoiceRecordingPanel phase="review" peaks={peaks} elapsedMs={8_000}
-      percent={0} playing={false} previewReady canResume sending onPreview={() => undefined}
-      onPause={() => undefined} onResume={() => undefined} onSend={() => undefined} onDiscard={() => undefined} />);
-    for (const name of ["Discard recording", "Resume recording", "Sending voice message"]) {
-      expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
-    }
-  });
-
-  it("puts the clock below the waveform and swaps avatar for working speed control during playback", () => {
-    const rate = vi.fn();
+  it("moves the delivered clock and bar with playback and honours an explicit zero", () => {
     const { container, rerender } = render(<VoiceMessagePlayer peaks={peaks} durationMs={8_000} positionMs={0}
-      playing={false} ready avatar={<span>Alex</span>} onToggle={() => undefined} rate={1} onRate={rate} />);
-    expect(container.querySelector(".fb-chat-voice-timeline")?.textContent).toContain("0:08");
-    expect(container.querySelector(".fb-chat-voice-identity")?.textContent).toBe("Alex");
-    expect(screen.queryByRole("button", { name: /Playback speed/ })).toBeNull();
+      playing={false} ready avatar={<span>Alex</span>} onToggle={noop} rate={1} onRate={noop} />);
     rerender(<VoiceMessagePlayer peaks={peaks} durationMs={8_000} positionMs={2_000}
-      playing ready avatar={<span>Alex</span>} onToggle={() => undefined} rate={1} onRate={rate} />);
-    expect(screen.getByText("0:02")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Playback speed 1×" }));
-    expect(rate).toHaveBeenCalledOnce();
-    expect(container.querySelectorAll(".fb-chat-voice-bar")).toHaveLength(peaks.length);
+      playing ready avatar={<span>Alex</span>} onToggle={noop} rate={1} onRate={noop} />);
+    expect(container.textContent).toContain("0:02");
+    expect(container.textContent).toContain("0:06 left");
+    expect(fillWidth(container)).toBe("25%");
+    expect(progress(container)?.getAttribute("aria-valuenow")).toBe("25");
+    expect(screen.getByRole("button", { name: "Pause voice message" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Playback speed 1×" })).toBeTruthy();
+    // The owner pauses on this note: it keeps showing where the take stopped.
+    rerender(<VoiceMessagePlayer peaks={peaks} durationMs={8_000} positionMs={2_000}
+      playing={false} ready avatar={<span>Alex</span>} onToggle={noop} rate={1} onRate={noop} />);
+    expect(container.textContent).toContain("0:02");
+    expect(container.textContent).toContain("0:06 left");
+    // While the element holds a different note the clock is withheld, and this
+    // bubble keeps its own last position instead of reading a stranger's.
+    rerender(<VoiceMessagePlayer peaks={peaks} durationMs={8_000} positionMs={undefined}
+      playing={false} ready avatar={<span>Alex</span>} onToggle={noop} rate={1} onRate={noop} />);
+    expect(container.textContent).toContain("0:02");
+    expect(container.textContent).toContain("0:06 left");
+    expect(fillWidth(container)).toBe("25%");
+    // A supplied 0 is the owner speaking: a seek to the start, or a reset.
+    rerender(<VoiceMessagePlayer peaks={peaks} durationMs={8_000} positionMs={0}
+      playing={false} ready avatar={<span>Alex</span>} onToggle={noop} rate={1} onRate={noop} />);
+    expect(container.querySelector(".fb-chat-voice-time")?.textContent).toBe("0:00");
+    expect(container.querySelector(".fb-chat-voice-remaining")?.textContent).toBe("0:08 left");
+    expect(fillWidth(container)).toBe("0%");
+    expect(progress(container)?.getAttribute("aria-valuenow")).toBe("0");
+  });
+
+  it("ends at the full duration and clamps non-finite input", () => {
+    const { container, rerender } = render(<VoiceMessagePlayer peaks={peaks} durationMs={8_000} positionMs={8_000}
+      playing={false} ready avatar={<span>Alex</span>} onToggle={noop} rate={1} onRate={noop} />);
+    expect(container.textContent).toContain("0:08");
+    expect(container.textContent).toContain("0:00 left");
+    expect(fillWidth(container)).toBe("100%");
+    expect(progress(container)?.getAttribute("aria-valuenow")).toBe("100");
+    rerender(<VoiceMessagePlayer peaks={peaks} durationMs={Number.NaN} positionMs={Number.NaN}
+      playing={false} ready avatar={<span>Alex</span>} onToggle={noop} rate={1} onRate={noop} />);
+    expect(container.textContent).toContain("0:00");
+    expect(container.textContent).toContain("0:00 left");
+    expect(fillWidth(container)).toBe("0%");
+    expect(progress(container)?.getAttribute("aria-valuenow")).toBe("0");
+    expect((screen.getByRole("button", { name: "Play voice message" }) as HTMLButtonElement).disabled).toBe(true);
+    rerender(<VoiceMessagePlayer peaks={peaks} durationMs={Number.POSITIVE_INFINITY} positionMs={3_000}
+      playing={false} ready avatar={<span>Alex</span>} onToggle={noop} rate={1} onRate={noop} />);
+    expect(fillWidth(container)).toBe("0%");
+    expect((screen.getByRole("button", { name: "Play voice message" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("keeps the elapsed and remaining clocks on one whole-second line", () => {
+    const { container } = render(<VoiceMessagePlayer peaks={peaks} durationMs={8_400} positionMs={5_900}
+      playing ready avatar={<span>Alex</span>} onToggle={noop} rate={1} onRate={noop} />);
+    expect(container.querySelector(".fb-chat-voice-time")?.textContent).toBe("0:05");
+    expect(container.querySelector(".fb-chat-voice-remaining")?.textContent).toBe("0:03 left");
+    expect(fillWidth(container)).toBe("70%");
+  });
+
+  it("keeps the play control disabled until the note is ready", () => {
+    render(<VoiceMessagePlayer peaks={peaks} durationMs={8_000} positionMs={0} playing={false}
+      ready={false} avatar={<span>Alex</span>} onToggle={noop} rate={1} onRate={noop} />);
+    expect((screen.getByRole("button", { name: "Play voice message" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
 
-describe("canonical wave geometry", () => {
-  it("draws recording, paused preview and review with the shared bar class", () => {
-    const { container, rerender } = render(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={3_000}
-      percent={75} playing={false} onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
-    // No `.fb-chat-voice` ancestor: a cap scoped to the delivered bubble can
-    // never reach the recorder, which is how the shipped thick bars survived.
-    expect(container.querySelector(".fb-voice-panel-wave .fb-chat-voice")).toBeNull();
-    expect(container.querySelectorAll(".fb-voice-capture-track .fb-chat-voice-bar")).toHaveLength(peaks.length);
-    rerender(<VoiceRecordingPanel phase="pausing" peaks={peaks} elapsedMs={3_000}
-      percent={0} playing={false} onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
-    expect(container.querySelectorAll(".fb-voice-capture-track .fb-chat-voice-bar")).toHaveLength(peaks.length);
-    rerender(<VoiceRecordingPanel phase="review" peaks={peaks} elapsedMs={3_000}
-      percent={75} playing={false} previewReady canResume onPreview={noop} onPause={noop}
-      onResume={noop} onDiscard={noop} onSend={noop} />);
-    expect(container.querySelectorAll(".fb-voice-capture-track .fb-chat-voice-bar")).toHaveLength(peaks.length);
-  });
-});
-
-describe("capture time track", () => {
-  it("sweeps the full track once for the current minute and banks the completed one as a mark", () => {
-    const { container } = render(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={95_000}
-      captureElapsedMs={95_000} percent={0} playing={false} onPreview={noop} onPause={noop}
-      onResume={noop} onDiscard={noop} onSend={noop} />);
-    expect(container.querySelectorAll(".fb-voice-capture-mark")).toHaveLength(5);
-    expect(container.querySelectorAll(".fb-voice-capture-mark[data-complete]")).toHaveLength(1);
-    expect(container.querySelectorAll(".fb-voice-capture-fill")).toHaveLength(1);
-    expect(fillWidth(container)).toBe("58%");
-    expect(container.querySelector(".fb-voice-capture-fill[data-active]")).toBeTruthy();
-    const panel = screen.getByRole("group", { name: "Recording voice message" });
-    expect(panel.querySelector(".fb-voice-panel-clock")?.textContent).toBe("1:35");
-  });
-
-  // 0/59/60/119/120/240/300: each minute fills 0..100%, then restarts, and each
-  // completed minute is banked as one mark.
-  const minuteCases: Array<[number, string, number, boolean]> = [
-    [0, "0%", 0, false],
-    [59_000, "98%", 0, true],
-    [60_000, "0%", 1, false],
-    [119_000, "98%", 1, true],
-    [120_000, "0%", 2, false],
-    [240_000, "0%", 4, false],
-    [300_000, "100%", 5, false],
+describe("recorder progress and clocks", () => {
+  const cases: Array<[number, string, string, string]> = [
+    [0, "0%", "0:00", "5:00 left"],
+    [60_000, "20%", "1:00", "4:00 left"],
+    [240_000, "80%", "4:00", "1:00 left"],
+    [300_000, "100%", "5:00", "0:00 left"],
   ];
-  for (const [elapsed, width, complete, active] of minuteCases) {
-    it(`fills ${width} with ${complete} banked minute(s) at ${elapsed}ms`, () => {
+  for (const [elapsed, width, left, right] of cases) {
+    it(`shows ${width} at ${elapsed}ms with elapsed and remaining labels`, () => {
       const { container } = render(<VoiceRecordingPanel phase="recording" peaks={peaks}
         elapsedMs={elapsed} captureElapsedMs={elapsed} percent={0} playing={false}
         onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
-      expect(container.querySelectorAll(".fb-voice-capture-mark[data-complete]")).toHaveLength(complete);
+      expect(container.querySelectorAll('[role="progressbar"]')).toHaveLength(1);
+      expect(container.querySelectorAll(".fb-chat-voice-bar")).toHaveLength(0);
+      expect(container.querySelectorAll(".fb-voice-capture-fill")).toHaveLength(0);
+      expect(container.querySelectorAll(".fb-voice-capture-mark")).toHaveLength(0);
       expect(fillWidth(container)).toBe(width);
-      expect(container.querySelector(".fb-voice-capture-fill[data-active]") !== null).toBe(active);
+      expect(progress(container)?.getAttribute("aria-valuenow")).toBe(String(Number.parseInt(width, 10)));
+      expect(container.textContent).toContain(left);
+      expect(container.textContent).toContain(right);
+      expect(barAfter(container, ".fb-voice-panel-actions")).toBe(true);
     });
   }
 
-  it("starts the fifth sweep empty at four minutes", () => {
-    const { container } = render(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={240_000}
-      captureElapsedMs={240_000} percent={0} playing={false} onPreview={noop} onPause={noop}
-      onResume={noop} onDiscard={noop} onSend={noop} />);
-    expect(container.querySelectorAll(".fb-voice-capture-mark[data-complete]")).toHaveLength(4);
-    expect(fillWidth(container)).toBe("0%");
-    expect(screen.getByRole("group", { name: "Recording voice message" })
-      .querySelector(".fb-voice-panel-clock")?.textContent).toBe("4:00 / 1:00 left");
-  });
-
-  it("stops at the ceiling with five marks, no sixth sweep, and no automatic send", () => {
+  it("uses the five-minute ceiling but never sends on its own", () => {
     const send = vi.fn();
     const { container } = render(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={300_000}
-      captureElapsedMs={300_000} percent={0} playing={false} onPreview={noop} onPause={noop}
-      onResume={noop} onDiscard={noop} onSend={send} />);
-    expect(container.querySelectorAll(".fb-voice-capture-mark")).toHaveLength(5);
-    expect(container.querySelectorAll(".fb-voice-capture-mark[data-complete]")).toHaveLength(5);
-    expect(container.querySelectorAll(".fb-voice-capture-fill")).toHaveLength(1);
-    expect(fillWidth(container)).toBe("100%");
-    expect(container.querySelector(".fb-voice-capture-fill[data-active]")).toBeNull();
-    expect(screen.getByRole("group", { name: "Recording voice message" })
-      .querySelector(".fb-voice-panel-clock")?.textContent).toBe("5:00 / 0:00 left");
+      captureElapsedMs={300_000} percent={0} playing={false}
+      onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={send} />);
+    expect(progress(container)?.getAttribute("aria-valuenow")).toBe("100");
+    expect(container.querySelector(".fb-voice-panel-remaining")).toBeNull();
     expect(send).not.toHaveBeenCalled();
     const button = screen.getByRole("button", { name: "Send voice message" }) as HTMLButtonElement;
     expect(button.disabled).toBe(false);
@@ -174,96 +147,263 @@ describe("capture time track", () => {
     expect(send).toHaveBeenCalledOnce();
   });
 
-  it("shows the last-minute remaining after a real slash in the error colour", () => {
-    const { container } = render(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={255_000}
-      captureElapsedMs={255_000} percent={0} playing={false} onPreview={noop} onPause={noop}
-      onResume={noop} onDiscard={noop} onSend={noop} />);
-    expect(container.querySelectorAll(".fb-voice-capture-mark[data-complete]")).toHaveLength(4);
-    expect(fillWidth(container)).toBe("25%");
-    const clock = screen.getByRole("group", { name: "Recording voice message" }).querySelector(".fb-voice-panel-clock");
-    expect(clock?.querySelector(".fb-chat-voice-time")?.textContent).toBe("4:15 / 0:45 left");
-    expect(screen.getByText("/ 0:45 left").className).toContain("fb-voice-panel-remaining");
-  });
-
-  it("announces the last minute once at the four-minute threshold", () => {
-    const { rerender } = render(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={239_999}
-      captureElapsedMs={239_999} percent={0} playing={false} onPreview={noop} onPause={noop}
-      onResume={noop} onDiscard={noop} onSend={noop} />);
-    expect(screen.getByRole("status").textContent).toBe("Recording");
-    rerender(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={240_000}
-      captureElapsedMs={240_000} percent={0} playing={false} onPreview={noop} onPause={noop}
-      onResume={noop} onDiscard={noop} onSend={noop} />);
-    expect(screen.getByRole("status").textContent).toBe("Recording. One minute left");
-    rerender(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={255_000}
-      captureElapsedMs={255_000} percent={0} playing={false} onPreview={noop} onPause={noop}
-      onResume={noop} onDiscard={noop} onSend={noop} />);
-    expect(screen.getByRole("status").textContent).toBe("Recording. One minute left");
-  });
-
-  it("keeps sending, preparing and review notices ahead of the minute warning", () => {
-    const { rerender } = render(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={255_000}
-      captureElapsedMs={255_000} percent={0} playing={false} sending onPreview={noop} onPause={noop}
-      onResume={noop} onDiscard={noop} onSend={noop} />);
-    expect(screen.getByRole("status").textContent).toBe("Sending voice message");
-    rerender(<VoiceRecordingPanel phase="pausing" peaks={peaks} elapsedMs={255_000}
-      captureElapsedMs={255_000} percent={0} playing={false} onPreview={noop} onPause={noop}
-      onResume={noop} onDiscard={noop} onSend={noop} />);
-    expect(screen.getByRole("status").textContent).toBe("Preparing preview");
-    rerender(<VoiceRecordingPanel phase="review" peaks={peaks} elapsedMs={255_000}
-      captureElapsedMs={255_000} percent={0} playing={false} previewReady canResume onPreview={noop}
-      onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
-    expect(screen.getByRole("status").textContent).toBe("Recording paused. Preview, resume or send.");
-  });
-
-  it("never forwards capture progress into the waveform and keeps preview progress on review", () => {
-    const { container, rerender } = render(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={95_000}
-      captureElapsedMs={95_000} percent={75} playing={false} onPreview={noop} onPause={noop}
-      onResume={noop} onDiscard={noop} onSend={noop} />);
-    expect(container.querySelectorAll(".fb-chat-voice-bar[data-played]")).toHaveLength(0);
-    expect(fillWidth(container)).toBe("58%");
-    rerender(<VoiceRecordingPanel phase="review" peaks={peaks} elapsedMs={95_000}
-      captureElapsedMs={95_000} percent={75} playing={false} previewReady canResume onPreview={noop}
-      onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
-    expect(container.querySelectorAll(".fb-chat-voice-bar[data-played]")).toHaveLength(4);
-  });
-
-  it("keeps the preview clock and the banked marks on separate clocks", () => {
-    const { container } = render(<VoiceRecordingPanel phase="review" peaks={peaks} elapsedMs={2_000}
-      captureElapsedMs={125_000} percent={0} playing={false} previewReady canResume
+  it("reads capture time, never the preview percent, while recording", () => {
+    const { container } = render(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={95_000}
+      captureElapsedMs={95_000} percent={75} playing={false}
       onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
-    expect(container.querySelectorAll(".fb-voice-capture-mark[data-complete]")).toHaveLength(2);
-    expect(container.querySelectorAll(".fb-voice-capture-fill")).toHaveLength(0);
-    expect(screen.getByText("0:02")).toBeTruthy();
-    expect(screen.queryByText(/ left$/)).toBeNull();
+    expect(fillWidth(container)).toBe("32%");
+    expect(container.textContent).toContain("1:35");
+    expect(container.textContent).toContain("3:25 left");
   });
 
   it("falls back to the elapsed clock when the capture clock is not supplied", () => {
     const { container } = render(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={61_000}
       percent={0} playing={false} onPreview={noop} onPause={noop}
       onResume={noop} onDiscard={noop} onSend={noop} />);
-    expect(container.querySelectorAll(".fb-voice-capture-mark[data-complete]")).toHaveLength(1);
-    expect(fillWidth(container)).toBe("2%");
+    expect(fillWidth(container)).toBe("20%");
+    expect(container.textContent).toContain("1:01");
+    expect(container.textContent).toContain("3:59 left");
+  });
+
+  it("clamps non-finite capture values to the five-minute window", () => {
+    const { container } = render(<VoiceRecordingPanel phase="recording" peaks={peaks}
+      elapsedMs={Number.POSITIVE_INFINITY} captureElapsedMs={Number.POSITIVE_INFINITY}
+      captureLimitMs={Number.NaN} percent={0} playing={false}
+      onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
+    expect(fillWidth(container)).toBe("0%");
+    expect(container.textContent).toContain("0:00");
+    expect(container.textContent).toContain("5:00 left");
+  });
+
+  it("uses the recorded total and playback position in review", () => {
+    const { container, rerender } = render(<VoiceRecordingPanel phase="review" peaks={peaks}
+      elapsedMs={125_000} captureElapsedMs={125_000} percent={0} playing={false}
+      previewReady canResume onPreview={noop} onPause={noop} onResume={noop}
+      onDiscard={noop} onSend={noop} />);
+    expect(container.textContent).toContain("0:00");
+    expect(container.textContent).toContain("2:05 left");
+    expect(fillWidth(container)).toBe("0%");
+    rerender(<VoiceRecordingPanel phase="review" peaks={peaks}
+      elapsedMs={25_000} positionMs={25_000} captureElapsedMs={125_000} percent={20} playing
+      previewReady canResume onPreview={noop} onPause={noop} onResume={noop}
+      onDiscard={noop} onSend={noop} />);
+    expect(container.textContent).toContain("0:25");
+    expect(container.textContent).toContain("1:40 left");
+    expect(fillWidth(container)).toBe("20%");
+    expect(progress(container)?.getAttribute("aria-valuenow")).toBe("20");
+  });
+
+  it("derives the review position from percent when no explicit position is supplied", () => {
+    const { container } = render(<VoiceRecordingPanel phase="review" peaks={peaks}
+      elapsedMs={50_000} captureElapsedMs={125_000} percent={40} playing
+      previewReady canResume onPreview={noop} onPause={noop} onResume={noop}
+      onDiscard={noop} onSend={noop} />);
+    expect(container.textContent).toContain("0:50");
+    expect(container.textContent).toContain("1:15 left");
+    expect(fillWidth(container)).toBe("40%");
+  });
+
+  it("holds its own position when the clock is withheld but resets on an explicit zero", () => {
+    const { container, rerender } = render(<VoiceRecordingPanel phase="review" peaks={peaks}
+      elapsedMs={25_000} positionMs={25_000} captureElapsedMs={125_000} percent={20} playing
+      previewReady canResume onPreview={noop} onPause={noop} onResume={noop}
+      onDiscard={noop} onSend={noop} />);
+    expect(container.textContent).toContain("0:25");
+    // The owner pauses: it still reports this take's exact stopped position.
+    rerender(<VoiceRecordingPanel phase="review" peaks={peaks}
+      elapsedMs={25_000} positionMs={25_000} captureElapsedMs={125_000} percent={20} playing={false}
+      previewReady canResume onPreview={noop} onPause={noop} onResume={noop}
+      onDiscard={noop} onSend={noop} />);
+    expect(container.textContent).toContain("0:25");
+    expect(container.textContent).toContain("1:40 left");
+    // While the element holds another clip the clock is withheld, and no
+    // legacy percent arrives, so this take keeps its own last position.
+    rerender(<VoiceRecordingPanel phase="review" peaks={peaks}
+      elapsedMs={125_000} positionMs={undefined} captureElapsedMs={125_000} percent={0} playing={false}
+      previewReady canResume onPreview={noop} onPause={noop} onResume={noop}
+      onDiscard={noop} onSend={noop} />);
+    expect(container.textContent).toContain("0:25");
+    expect(container.textContent).toContain("1:40 left");
+    expect(fillWidth(container)).toBe("20%");
+    // An explicit zero is the owner speaking: a preview seek to the start.
+    rerender(<VoiceRecordingPanel phase="review" peaks={peaks}
+      elapsedMs={125_000} positionMs={0} captureElapsedMs={125_000} percent={0} playing={false}
+      previewReady canResume onPreview={noop} onPause={noop} onResume={noop}
+      onDiscard={noop} onSend={noop} />);
+    expect(container.querySelector(".fb-chat-voice-time")?.textContent).toBe("0:00");
+    expect(container.querySelector(".fb-chat-voice-remaining")?.textContent).toBe("2:05 left");
+    expect(fillWidth(container)).toBe("0%");
+    // A new take must not inherit the previous take's retained position.
+    rerender(<VoiceRecordingPanel phase="review" peaks={peaks}
+      elapsedMs={60_000} positionMs={undefined} captureElapsedMs={60_000} percent={0} playing={false}
+      previewReady canResume onPreview={noop} onPause={noop} onResume={noop}
+      onDiscard={noop} onSend={noop} />);
+    expect(container.textContent).toContain("0:00");
+    expect(container.textContent).toContain("1:00 left");
+    expect(fillWidth(container)).toBe("0%");
+  });
+
+  it("reaches the exact recorded total and a full bar at the end of review", () => {
+    const { container } = render(<VoiceRecordingPanel phase="review" peaks={peaks}
+      elapsedMs={8_000} positionMs={8_000} durationMs={8_000} captureElapsedMs={8_000}
+      percent={100} playing={false} previewReady canResume onPreview={noop} onPause={noop}
+      onResume={noop} onDiscard={noop} onSend={noop} />);
+    expect(container.querySelector(".fb-chat-voice-time")?.textContent).toBe("0:08");
+    expect(container.querySelector(".fb-chat-voice-remaining")?.textContent).toBe("0:00 left");
+    expect(fillWidth(container)).toBe("100%");
+    expect(progress(container)?.getAttribute("aria-valuenow")).toBe("100");
+    expect(container.textContent).toContain("of 0:08, 0:00 left");
+  });
+
+  it("clamps a non-finite review duration instead of dividing by it", () => {
+    const { container } = render(<VoiceRecordingPanel phase="review" peaks={peaks}
+      elapsedMs={Number.NaN} positionMs={Number.NaN} durationMs={Number.POSITIVE_INFINITY}
+      captureElapsedMs={Number.NaN} percent={100} playing={false}
+      previewReady canResume onPreview={noop} onPause={noop} onResume={noop}
+      onDiscard={noop} onSend={noop} />);
+    expect(fillWidth(container)).toBe("0%");
+    expect(progress(container)?.getAttribute("aria-valuenow")).toBe("0");
+    expect(container.textContent).toContain("0:00 left");
+  });
+
+  it("keeps the elapsed and remaining labels as separate nowrap units", () => {
+    const { container } = render(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={255_000}
+      captureElapsedMs={255_000} percent={0} playing={false}
+      onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
+    const labels = container.querySelectorAll(".fb-voice-panel-clock > *");
+    expect(labels).toHaveLength(2);
+    expect(labels[0]?.classList.contains("fb-chat-voice-time")).toBe(true);
+    expect(labels[1]?.classList.contains("fb-chat-voice-remaining")).toBe(true);
+    expect(labels[0]?.textContent).toBe("4:15");
+    expect(labels[1]?.textContent).toBe("0:45 left");
   });
 });
 
-describe("voice-note weight and motion contract", () => {
+describe("recorder status and warnings", () => {
+  it("announces the last minute once at the four-minute threshold", () => {
+    const { rerender } = render(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={239_999}
+      captureElapsedMs={239_999} percent={0} playing={false}
+      onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
+    expect(screen.getByRole("status").textContent).toBe("Recording");
+    rerender(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={240_000}
+      captureElapsedMs={240_000} percent={0} playing={false}
+      onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
+    expect(screen.getByRole("status").textContent).toBe("Recording. One minute left");
+    rerender(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={255_000}
+      captureElapsedMs={255_000} percent={0} playing={false}
+      onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
+    expect(screen.getByRole("status").textContent).toBe("Recording. One minute left");
+  });
+
+  it("marks the remaining label in the final minute without adding marks", () => {
+    const { container, rerender } = render(<VoiceRecordingPanel phase="recording" peaks={peaks}
+      elapsedMs={239_999} captureElapsedMs={239_999} percent={0} playing={false}
+      onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
+    expect(container.querySelector(".fb-voice-panel-remaining")).toBeNull();
+    rerender(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={240_000}
+      captureElapsedMs={240_000} percent={0} playing={false}
+      onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
+    expect(container.querySelector(".fb-voice-panel-remaining")?.textContent).toBe("1:00 left");
+    expect(container.querySelectorAll(".fb-voice-capture-mark")).toHaveLength(0);
+    rerender(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={255_000}
+      captureElapsedMs={255_000} percent={0} playing={false}
+      onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
+    expect(container.querySelector(".fb-voice-panel-remaining")?.textContent).toBe("0:45 left");
+  });
+
+  it("keeps sending, preparing and review notices ahead of the minute warning", () => {
+    const { rerender } = render(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={255_000}
+      captureElapsedMs={255_000} percent={0} playing={false} sending
+      onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
+    expect(screen.getByRole("status").textContent).toBe("Sending voice message");
+    rerender(<VoiceRecordingPanel phase="pausing" peaks={peaks} elapsedMs={255_000}
+      captureElapsedMs={255_000} percent={0} playing={false}
+      onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
+    expect(screen.getByRole("status").textContent).toBe("Preparing preview");
+    rerender(<VoiceRecordingPanel phase="review" peaks={peaks} elapsedMs={255_000}
+      captureElapsedMs={255_000} percent={0} playing={false} previewReady canResume
+      onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
+    expect(screen.getByRole("status").textContent).toBe("Recording paused. Preview, resume or send.");
+  });
+});
+
+describe("recorder actions and admission", () => {
+  it("uses separate compact controls with real resume and icon actions", () => {
+    const preview = vi.fn(), resume = vi.fn(), send = vi.fn(), discard = vi.fn();
+    render(<VoiceRecordingPanel phase="review" peaks={peaks} elapsedMs={8_000}
+      captureElapsedMs={8_000} percent={0} playing={false} previewReady canResume
+      onPreview={preview} onPause={noop} onResume={resume} onSend={send} onDiscard={discard} />);
+    const panel = screen.getByRole("group", { name: "Voice message ready" });
+    const actions = panel.querySelector(".fb-voice-panel-actions");
+    for (const name of ["Discard recording", "Play voice preview", "Resume recording", "Send voice message"]) {
+      expect(actions?.contains(screen.getByRole("button", { name }))).toBe(true);
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Play voice preview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resume recording" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send voice message" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard recording" }));
+    expect(preview).toHaveBeenCalledOnce();
+    expect(resume).toHaveBeenCalledOnce();
+    expect(send).toHaveBeenCalledOnce();
+    expect(discard).toHaveBeenCalledOnce();
+    expect(panel.querySelector("textarea")).toBeNull();
+    expect(screen.getByRole("button", { name: "Send voice message" }).textContent).toBe("");
+  });
+
+  it("sends a live recording without forcing the reader to stop first", () => {
+    const send = vi.fn();
+    render(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={3_000}
+      captureElapsedMs={3_000} percent={0} playing={false}
+      onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={send} />);
+    const button = screen.getByRole("button", { name: "Send voice message" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+    expect(send).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: "Pause recording" })).toBeTruthy();
+  });
+
+  it("keeps send unavailable while the take is still being prepared", () => {
+    render(<VoiceRecordingPanel phase="pausing" peaks={peaks} elapsedMs={3_000}
+      captureElapsedMs={3_000} percent={0} playing={false}
+      onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
+    expect((screen.getByRole("button", { name: "Send voice message" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("locks pause, discard and send while a live take is being finalized", () => {
+    render(<VoiceRecordingPanel phase="recording" peaks={peaks} elapsedMs={3_000}
+      captureElapsedMs={3_000} percent={0} playing={false} sending
+      onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
+    for (const name of ["Pause recording", "Discard recording", "Sending voice message"]) {
+      expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
+    }
+  });
+
+  it("locks review controls during durable admission", () => {
+    render(<VoiceRecordingPanel phase="review" peaks={peaks} elapsedMs={8_000}
+      captureElapsedMs={8_000} percent={0} playing={false} previewReady canResume sending
+      onPreview={noop} onPause={noop} onResume={noop} onDiscard={noop} onSend={noop} />);
+    for (const name of ["Discard recording", "Resume recording", "Sending voice message"]) {
+      expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
+    }
+  });
+});
+
+describe("voice-note compact and motion contract", () => {
   // Vitest runs from apps/mobile. This repo's jsdom source readers resolve from
   // process.cwd(); a file-URL read is the failure mode this environment hit
   // before, so the CSS contract uses the same absolute path as the others.
   const css = readFileSync(resolve(process.cwd(), "src/components/voiceNote.css"), "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\s+/g, " ");
+    .replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\s+/g, " ").trim();
 
-  /** Declarations of the one rule whose selector is exactly `selector`. Scoped
-   * checks are the point: a cap that also matches `.fb-chat-voice` passes a
-   * loose substring search and still leaves the recorder full width. */
+  /** Declarations of the one rule whose selector is exactly `selector`. */
   function ruleBody(selector: string): string | undefined {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     return new RegExp(`(?:^|\\}\\s*)${escaped}\\s*\\{([^{}]*)\\}`).exec(css)?.[1];
   }
 
-  /** Every rule in the sheet, so a compound bar selector cannot hide. A whole
-   * match always fills both required groups; the guard turns a parser miss into
-   * a failing test instead of an assertion that silently skips. */
+  /** Every rule in the sheet. A whole match always fills both required groups;
+   * the guard turns a parser miss into a failing test instead of an assertion
+   * that silently skips. */
   function allRules(): Array<{ selector: string; body: string }> {
     return Array.from(css.matchAll(/([^{}]+)\{([^{}]*)\}/g), (match) => {
       const selector = match[1];
@@ -275,76 +415,44 @@ describe("voice-note weight and motion contract", () => {
     });
   }
 
-  it("caps every voice bar in the shared rule, so recording, paused preview and delivered all stay slender", () => {
-    const base = ruleBody(".fb-chat-voice-bar");
-    expect(base).toBeDefined();
-    expect(base).toMatch(/max-width:2px/);
-    // No other rule may grow a bar back, and the cap may not be re-scoped to
-    // `.fb-chat-voice`, which the recorder's panel never matches.
-    const blocked = /flex:[^;]*\b1 1 0\b|flex-grow\s*:\s*[1-9]|(?:^|;)\s*width\s*:\s*(?:[3-9]|\d{2,})px/;
-    const widened = allRules()
-      .filter(({ selector }) => /(^|[ .>])\.fb-chat-voice-bar(?![\w-])/.test(selector))
-      .filter(({ body }) => blocked.test(body))
+  it("owns one thin progress bar and no waveform or second capture line", () => {
+    expect(ruleBody(".fb-chat-voice-progress")).toMatch(/height:3px/);
+    expect(ruleBody(".fb-chat-voice-progress-fill")).toMatch(/background:var\(--fb-primary\)/);
+    expect(css).not.toMatch(/fb-chat-voice-bar|fb-chat-voice-track|fb-chat-voice-cursor|fb-voice-capture-/);
+    const barRules = allRules()
+      .filter(({ selector }) => /(^|[ .>])\.fb-chat-voice-progress(?![-\w])/.test(selector))
       .map(({ selector }) => selector);
-    expect(widened).toEqual([]);
-    expect(css).not.toMatch(/\.fb-chat-voice \.fb-chat-voice-track \.fb-chat-voice-bar/);
-    expect(css).not.toMatch(/\.fb-voice-panel-wave \.fb-chat-voice-bar/);
+    expect(barRules).toEqual([".fb-chat-voice-progress", ".fb-chat-voice-panel .fb-chat-voice-progress"]);
+    expect(ruleBody(".fb-chat-voice-panel .fb-chat-voice-progress")).toMatch(/margin-top:\.35rem/);
   });
 
-  it("spreads the slender bars across the whole track instead of growing each one", () => {
-    expect(ruleBody(".fb-chat-voice-track")).toMatch(/justify-content:space-between/);
-    expect(ruleBody(".fb-voice-panel-wave .fb-chat-voice-track")).toMatch(/flex:1/);
+  it("keeps the delivered and recorder widths compact and pixel-bounded", () => {
+    expect(ruleBody(".fb-chat-voice")).toMatch(/width:260px/);
+    expect(ruleBody(".fb-chat-voice")).toMatch(/max-width:100%/);
+    expect(ruleBody(".fb-chat-voice-panel")).toMatch(/max-width:300px/);
+    expect(ruleBody(".fb-chat-voice-panel")).toMatch(/align-self:flex-start/);
+    expect(css).not.toMatch(/18\.5rem|54px 44px|max-width:45%/);
   });
 
-  it("keeps 40 bars legible in a narrow delivered track, not hairlines", () => {
-    const track = ruleBody(".fb-chat-voice-track") ?? "";
-    const bar = ruleBody(".fb-chat-voice-bar") ?? "";
-    const gap = Number(/(?:^|;)\s*gap\s*:\s*([\d.]+)px/.exec(track)?.[1]);
-    const maxWidth = Number(/max-width\s*:\s*([\d.]+)px/.exec(bar)?.[1]);
-    const minWidth = Number(/min-width\s*:\s*([\d.]+)px/.exec(bar)?.[1] ?? "0");
-    expect(Number.isFinite(gap) && gap > 0).toBe(true);
-    expect(Number.isFinite(maxWidth) && maxWidth <= 2).toBe(true);
-    expect(Number.isFinite(minWidth)).toBe(true);
-    // The delivered track measured at 84.08px in the 320px build, and the owner
-    // named ~60px as the floor once 320px meets large text. Bars shrink with
-    // flex, so the shared gap and the bar minimum decide whether they survive.
-    const barWidth = (trackPx: number) => Math.max(
-      minWidth,
-      Math.min(maxWidth, (trackPx - (VOICE_BARS - 1) * gap) / VOICE_BARS),
-    );
-    for (const trackPx of [60, 84.08]) expect(barWidth(trackPx)).toBeGreaterThanOrEqual(1);
-    expect(barWidth(84.08)).toBeLessThanOrEqual(maxWidth);
-    // The minimum layout has to fit the narrowest track: no forced overflow.
-    expect((VOICE_BARS - 1) * gap + VOICE_BARS * minWidth).toBeLessThanOrEqual(60);
-    // No surface may widen the shared gap back into a hairline.
-    const recorderGap = /(?:^|;)\s*gap\s*:\s*([\d.]+)px/.exec(ruleBody(".fb-voice-panel-wave .fb-chat-voice-track") ?? "")?.[1];
-    if (recorderGap) expect(Number(recorderGap)).toBeLessThan(1);
+  it("lets elapsed and remaining labels wrap as whole units, never per character", () => {
+    expect(ruleBody(".fb-chat-voice-time")).toMatch(/white-space:nowrap/);
+    expect(ruleBody(".fb-chat-voice-remaining")).toMatch(/white-space:nowrap/);
+    expect(ruleBody(".fb-chat-voice-clock")).toMatch(/flex-wrap:wrap/);
+    expect(ruleBody(".fb-voice-panel-clock")).toMatch(/flex-wrap:wrap/);
+    expect(ruleBody(".fb-chat-message-voice .fb-chat-time")).toMatch(/white-space:nowrap/);
   });
 
-  it("draws one full-width sweep per minute, never a five-part cumulative bar", () => {
-    expect(css).not.toMatch(/fb-voice-capture-slot/);
-    expect(css).toMatch(/\.fb-voice-capture-fill \{ [^}]*border-block-end:2px/);
+  it("puts the voice timestamp and status in normal flow, never over the bar", () => {
+    const status = ruleBody(".fb-chat-message-voice .fb-chat-message-status") ?? "";
+    expect(status).toMatch(/position:static/);
+    expect(status).toMatch(/max-width:none/);
+    expect(status).not.toMatch(/position:absolute|calc\(100% - 5rem\)/);
   });
 
-  it("fills the minute as one horizontal rule, never an L-shaped vertical edge", () => {
-    const fillRules = allRules().filter(({ selector }) => selector.includes(".fb-voice-capture-fill"));
-    expect(fillRules.length).toBeGreaterThan(0);
-    // A full-height end border on the fill drew the L beside the bottom rule.
-    expect(css).not.toMatch(/border-(?:inline-(?:start|end)|left|right)(?![\w-])/);
-    const offenders = fillRules.filter(({ body }) =>
-      /border-block-start|border-inline-(?:start|end)|border-(?:left|right)(?![\w-])/.test(body)
-      || /(?:^|;)\s*border\s*:/.test(body)
-      || /(?:^|;)\s*width\s*:\s*(?:[1-9]|\d{2,})px/.test(body)
-      || /(?:^|;)\s*height\s*:\s*[1-9]/.test(body)
-    ).map(({ selector }) => selector);
-    expect(offenders).toEqual([]);
-    expect(fillRules.some(({ body }) => /border-block-end:2px/.test(body))).toBe(true);
-  });
-
-  it("pulses the last-minute warning once, not on a loop, and holds it still under reduced motion", () => {
+  it("pulses the last-minute warning once, not on a loop, and holds the bar still under reduced motion", () => {
     expect(css).toContain("@media (prefers-reduced-motion:no-preference) { .fb-voice-panel-remaining { animation:fb-voice-warning .4s var(--ease-fb) 1; }");
     expect(css).toContain("@keyframes fb-voice-warning {");
     expect(css).not.toMatch(/fb-voice-warning[^;]*infinite/);
-    expect(css).not.toMatch(/fb-voice-pulse/);
+    expect(css).toContain("@media (prefers-reduced-motion:reduce) { .fb-chat-voice-progress-fill { transition:none; } }");
   });
 });

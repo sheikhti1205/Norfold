@@ -211,6 +211,12 @@
 .fb-chat-message-klipy.fb-chat-message-own { background:transparent; color:var(--fb-on-surface); }
 .fb-chat-message-klipy .fb-chat-message-status { color:var(--fb-on-surface-variant); }
 .fb-chat-message-klipy.fb-chat-flash-a, .fb-chat-message-klipy.fb-chat-flash-b { border-radius:.85rem; }
+/* A bare document is one message surface, not a card inside a bubble: the file
+   row itself paints nothing (components/ChatFile.css), so the bubble keeps its
+   fill and only tightens its own inset. The receipt line stays in normal flow
+   and sits close, scoped to this kind so no other bubble or gutter moves. */
+.fb-chat-message.fb-chat-message-document { padding:.5rem; }
+.fb-chat-message.fb-chat-message-document > .fb-chat-message-status { margin-top:.125rem; }
 /* A Klipy GIF or sticker keeps its own animation and source URL: only its box is
    bounded, and the bubble has to be the picture. A bare URL's bubble was sized
    by the picture's own intrinsic width: at 1440 the picture painted at 352
@@ -548,11 +554,9 @@ a.fb-chat-context:hover, a.fb-chat-context:focus-visible { text-decoration:under
 .fb-chat-context-banner { display:flex; align-items:center; flex-wrap:wrap; gap:.25rem .75rem; margin:0;
   padding:.25rem .8rem; font-size:.8rem; color:var(--fb-on-surface-variant); }
 .fb-chat-context-banner button { min-height:44px; text-decoration:underline; }
-.fb-chat-report-card { display:flex; align-items:flex-start; gap:.65rem; }
-.fb-chat-report-card img { flex:none; width:3.5rem; height:3.5rem; object-fit:cover; border-radius:.35rem; }
-.fb-chat-report-copy { min-width:0; display:flex; flex-direction:column; gap:.2rem; }
-.fb-chat-report-copy strong { overflow-wrap:anywhere; font-size:.9rem; }
-.fb-chat-report-meta { display:flex; align-items:center; flex-wrap:wrap; gap:.3rem .6rem; font-size:.75rem; }
+/* The ready shared-report card is components/ChatReportPreview.css. It lives
+   beside the bubble instead of a second painted card here, so the two owners
+   cannot diverge or layer a background, border and padding ring. */
 .fb-chat-location-composer { padding:.9rem; display:flex; flex-direction:column; gap:.9rem; min-width:0; }
 .fb-chat-row-context { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.75rem; color:var(--fb-on-surface-variant); }
 .fb-chat-row-meta { display:flex; flex-direction:column; align-items:flex-end; flex:none; gap:.3rem; font-size:.75rem; color:var(--fb-on-surface-variant); }

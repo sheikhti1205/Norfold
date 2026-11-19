@@ -197,7 +197,11 @@ it("keeps the measured capture clock while the preview is still settling", async
   expect(screen.getByRole("group", { name: "Recording voice message" })).toBeTruthy();
   await act(async () => { recorder.deliver(); });
   expect(await screen.findByRole("group", { name: "Voice message ready" })).toBeTruthy();
-  expect(screen.getByText("0:03")).toBeTruthy();
+  // Review opens at the start of the take: 0:00 elapsed, with the recorded
+  // length still named as what is left to play.
+  const ready = screen.getByRole("group", { name: "Voice message ready" });
+  expect(ready.querySelector(".fb-chat-voice-time")?.textContent).toBe("0:00");
+  expect(ready.querySelector(".fb-chat-voice-remaining")?.textContent).toBe("0:03 left");
   expect(m.voice).not.toHaveBeenCalled();
 });
 it("stops at the five-minute ceiling for review instead of sending", async () => {
@@ -211,7 +215,7 @@ it("stops at the five-minute ceiling for review instead of sending", async () =>
   now += 300_000;
   fireEvent.click(screen.getByRole("button", { name: "Pause recording" }));
   await screen.findByRole("group", { name: "Voice message ready" });
-  expect(screen.getByText("5:00")).toBeTruthy();
+  expect(screen.getByText("5:00 left")).toBeTruthy();
   // The ceiling stops the take; it never sends it.
   expect(screen.getByText(/5-minute limit reached/i)).toBeTruthy();
   expect((screen.getByRole("button", { name: "Send voice message" }) as HTMLButtonElement).disabled).toBe(false);
@@ -242,6 +246,157 @@ it("locks the strip behind a send that starts while the take is still open", asy
   // The press that owned the note is the only one that sent it, and the strip
   // leaves the screen once the note is admitted.
   await waitFor(() => expect(screen.queryByRole("group", { name: "Recording voice message" })).toBeNull());
+});
+
+/**
+ * One browser-shaped audio element for the real transcript player. It exposes
+ * only the clock and the events the owner actually listens for, so these
+ * regressions exercise the bubble seam (`currentId`) instead of a mocked player.
+ */
+function fakeVoiceAudio(durationSeconds = 3) {
+  class FakeAudio {
+    static latest: FakeAudio | null = null;
+    preload = "";
+    src = "";
+    currentTime = 0;
+    playbackRate = 1;
+    paused = true;
+    private readonly listeners = new Map<string, Set<() => void>>();
+    constructor() { FakeAudio.latest = this; }
+    get duration() { return durationSeconds; }
+    play() { this.paused = false; return Promise.resolve(); }
+    pause() { this.paused = true; }
+    load() { /* released */ }
+    removeAttribute() { this.src = ""; }
+    addEventListener(type: string, listener: () => void) {
+      const set = this.listeners.get(type) ?? new Set<() => void>();
+      set.add(listener);
+      this.listeners.set(type, set);
+    }
+    removeEventListener(type: string, listener: () => void) { this.listeners.get(type)?.delete(listener); }
+    fire(type: "timeupdate" | "ended" | "error" | "loadedmetadata") {
+      for (const listener of this.listeners.get(type) ?? []) listener();
+    }
+  }
+  vi.stubGlobal("Audio", FakeAudio);
+  return FakeAudio;
+}
+function voiceRow(id: string, sequence: number) {
+  return { id, conversationId: "chat", authorId: "peer", recipientId: "account", body: "",
+    messageType: "VOICE", createdAt: 1_000 * sequence, server: { eventId: `event-${id}`, sequence } };
+}
+function voiceAttachment(id: string, durationMs: number) {
+  return { id: `voice-${id}`, messageId: id, direction: "IN", state: "READY",
+    width: 1, height: 1, mime: "audio/webm", durationMs, expiresAt: null };
+}
+function voiceClock(row: HTMLElement) {
+  return {
+    elapsed: row.querySelector(".fb-chat-voice-time")?.textContent,
+    left: row.querySelector(".fb-chat-voice-remaining")?.textContent,
+  };
+}
+
+it("keeps a paused voice bubble on its own stopped clock instead of zeroing it", async () => {
+  m.messages = [voiceRow("message-a", 1)];
+  m.media = [voiceAttachment("message-a", 3_000)];
+  m.read.mockResolvedValue(new ArrayBuffer(1));
+  const Audio = fakeVoiceAudio();
+  await open();
+  const play = await screen.findByRole("button", { name: "Play voice message" });
+  await waitFor(() => expect((play as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(play);
+  await act(async () => {});
+  Audio.latest!.currentTime = 1.4;
+  await act(async () => { Audio.latest!.fire("timeupdate"); });
+  const row = document.querySelector<HTMLElement>('[data-chat-message="message-a"]')!;
+  expect(voiceClock(row)).toEqual({ elapsed: "0:01", left: "0:02 left" });
+  fireEvent.click(screen.getByRole("button", { name: "Pause voice message" }));
+  await act(async () => {});
+  // The element still holds this note after pause, so the stopped position
+  // stays on screen instead of flashing back to 0:00.
+  expect(voiceClock(row)).toEqual({ elapsed: "0:01", left: "0:02 left" });
+  expect(screen.getByRole("button", { name: "Play voice message" })).toBeTruthy();
+});
+
+it("reads a voice bubble's full length after the note ends", async () => {
+  m.messages = [voiceRow("message-a", 1)];
+  m.media = [voiceAttachment("message-a", 3_000)];
+  m.read.mockResolvedValue(new ArrayBuffer(1));
+  const Audio = fakeVoiceAudio();
+  await open();
+  const play = await screen.findByRole("button", { name: "Play voice message" });
+  await waitFor(() => expect((play as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(play);
+  await act(async () => {});
+  Audio.latest!.currentTime = 3;
+  await act(async () => { Audio.latest!.fire("timeupdate"); });
+  await act(async () => { Audio.latest!.fire("ended"); });
+  const row = document.querySelector<HTMLElement>('[data-chat-message="message-a"]')!;
+  // Ended is not reset: the note stays current at 100%, not a false 0:00.
+  expect(voiceClock(row)).toEqual({ elapsed: "0:03", left: "0:00 left" });
+  expect(screen.getByRole("button", { name: "Play voice message" })).toBeTruthy();
+});
+
+it("keeps each voice bubble on its own clock while another note plays", async () => {
+  m.messages = [voiceRow("message-a", 1), voiceRow("message-b", 2)];
+  m.media = [voiceAttachment("message-a", 3_000), voiceAttachment("message-b", 4_000)];
+  m.read.mockResolvedValue(new ArrayBuffer(1));
+  const Audio = fakeVoiceAudio();
+  await open();
+  const plays = await screen.findAllByRole("button", { name: "Play voice message" });
+  await waitFor(() => expect(plays.every((button) => !(button as HTMLButtonElement).disabled)).toBe(true));
+  fireEvent.click(plays[0]!);
+  await act(async () => {});
+  Audio.latest!.currentTime = 2;
+  await act(async () => { Audio.latest!.fire("timeupdate"); });
+  const first = document.querySelector<HTMLElement>('[data-chat-message="message-a"]')!;
+  const second = document.querySelector<HTMLElement>('[data-chat-message="message-b"]')!;
+  expect(voiceClock(first)).toEqual({ elapsed: "0:02", left: "0:01 left" });
+  // The second note takes the one element. The first bubble keeps its own last
+  // position instead of reading the new note's zero.
+  fireEvent.click(screen.getByRole("button", { name: "Play voice message" }));
+  await act(async () => {});
+  expect(voiceClock(first)).toEqual({ elapsed: "0:02", left: "0:01 left" });
+  expect(voiceClock(second)).toEqual({ elapsed: "0:00", left: "0:04 left" });
+});
+
+it("keeps the review clock after a paused preview instead of zeroing the take", async () => {
+  let now = Date.now();
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  fakeVoiceRecorder();
+  const Audio = fakeVoiceAudio();
+  m.voice.mockReset().mockResolvedValue("voice-saved");
+  m.messages = [voiceRow("message-a", 1)];
+  m.media = [voiceAttachment("message-a", 4_000)];
+  m.read.mockResolvedValue(new ArrayBuffer(1));
+  await open();
+  fireEvent.click(screen.getByRole("button", { name: "Voice message" }));
+  await screen.findByRole("button", { name: "Pause recording" });
+  now += 3_000;
+  fireEvent.click(screen.getByRole("button", { name: "Pause recording" }));
+  const panel = await screen.findByRole("group", { name: "Voice message ready" });
+  expect(voiceClock(panel)).toEqual({ elapsed: "0:00", left: "0:03 left" });
+  const preview = within(panel).getByRole("button", { name: "Play voice preview" });
+  await waitFor(() => expect((preview as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(preview);
+  await act(async () => {});
+  Audio.latest!.currentTime = 1.2;
+  await act(async () => { Audio.latest!.fire("timeupdate"); });
+  expect(voiceClock(panel)).toEqual({ elapsed: "0:01", left: "0:02 left" });
+  fireEvent.click(within(panel).getByRole("button", { name: "Pause voice preview" }));
+  await act(async () => {});
+  // The take still owns the element while paused, so its clock holds.
+  expect(voiceClock(panel)).toEqual({ elapsed: "0:01", left: "0:02 left" });
+  const delivered = document.querySelector<HTMLElement>('[data-chat-message="message-a"]')!;
+  const deliveredPlay = screen.getByRole("button", { name: "Play voice message" });
+  await waitFor(() => expect((deliveredPlay as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(deliveredPlay);
+  await act(async () => {});
+  // A delivered note now holds the element. The review take keeps its own
+  // clock instead of folding to the stranger's zero.
+  expect(voiceClock(panel)).toEqual({ elapsed: "0:01", left: "0:02 left" });
+  expect(voiceClock(delivered)).toEqual({ elapsed: "0:00", left: "0:04 left" });
+  expect(m.voice).not.toHaveBeenCalled();
 });
 
 it("collapses desktop conversation details without replacing the transcript or draft", async () => {

@@ -11,8 +11,7 @@ import { useAuth } from "../auth";
 import { UserAvatar } from "../components/UserAvatar";
 import { ChatIdentity } from "../components/ChatIdentity";
 import { PostLink } from "../components/PostNavigation";
-import { StatusChip } from "../components/StatusChip";
-import { formatChatDay, formatEventDate, timeAgo } from "../utils/dates";
+import { formatChatDay, timeAgo } from "../utils/dates";
 import { klipyPreviewLabel, messagePreview } from "../utils/messagePreview";
 import { haptic } from "../utils/haptics";
 import { convertEmoticons, isEmojiOnly } from "../utils/emoji";
@@ -21,9 +20,10 @@ import type { KlipyItem } from "../services/klipy";
 import {
   chatFileBody, chatFileCaption, chatFilePreview, parseChatFileMarker, removeChatFile, uploadChatFile, validateChatFile,
 } from "../services/messaging/files";
-import { ChatFile } from "../components/ChatFile";
+import { ChatFile, isDocumentChatFile } from "../components/ChatFile";
 import { ChatMessageText } from "../components/ChatMessageText";
-import { copyableMessageText, isBareKlipyMediaBody, isChatFileMarkerBody } from "../utils/messageCopy";
+import { ChatReportPreview } from "../components/ChatReportPreview";
+import { isBareKlipyMediaBody, isChatFileMarkerBody, messageCopyActions } from "../utils/messageCopy";
 import { SplitView, type SplitPaneState } from "../components/SplitView";
 import { CHAT_PANE, type PaneBounds } from "../components/panePreference";
 import { registerBackInterceptor } from "../components/backNavigation";
@@ -33,7 +33,7 @@ import { ChatDetailsLayout } from "../components/ChatDetailsLayout";
 import { BlockControl } from "../components/BlockControl";
 import { useHoverLabel } from "../components/HoverLabel";
 import { PreferenceSwitchRow } from "../components/settings";
-import { ActionMenu, type MenuAction } from "../components/ActionMenu";
+import { ActionMenu, type MenuAction, type MenuGroup } from "../components/ActionMenu";
 import { LongPressArea } from "../components/LongPressArea";
 import { AppBar } from "../components/AppBar";
 import { TopUtilities } from "../components/TopUtilities";
@@ -45,7 +45,6 @@ import { ChatLocationComposer } from "../components/ChatLocationComposer";
 import { AdaptiveTaskSurface, ConfirmDialog } from "../components/AdaptiveTaskSurface";
 import { ReportSheet } from "../components/ReportSheet";
 import { MediaViewer, type MediaViewerItem } from "../components/MediaViewer";
-import { normalizePeaks, resamplePeaks, VOICE_BARS, cachedVoicePeaks, rememberVoicePeaks, queueVoicePeaks } from "../services/messaging/voicePeaks";
 import { VoiceMessagePlayer, VoiceRecordingPanel } from "../components/VoiceNote";
 import { useMediaUrl } from "../services/media/privateMedia";
 import { announce } from "../components/LiveRegion";
@@ -127,7 +126,9 @@ function ReceiptTicks({ read }: { read: boolean }) {
 
 /** Live report subject for a report-linked message. Only the id travels with the
  * message; readability is resolved here, so a later-hidden report reads
- * "Report unavailable" instead of showing a stale private snapshot. */
+ * "Report unavailable" instead of showing a stale private snapshot. In a
+ * message every state keeps the canonical report route as a link, so a body
+ * whose only content was the URL still navigates instead of going dead. */
 export function ChatReportContext({ reportId, preview = false, safetyKey = "" }: {
   reportId: string;
   preview?: boolean;
@@ -180,23 +181,18 @@ function ReportContextSession({ reportId, preview }: { reportId: string; preview
       ? state.post?.attachments?.find((attachment) => attachment.mimeType.startsWith("image/"))?.fileUrl
       : undefined;
   const firstImageSrc = useMediaUrl(firstImageUrl);
+  const reportRoute = `/posts/${encodeURIComponent(reportId)}`;
   if (preview && state.status !== "ready") return <span className="fb-chat-row-context">{state.status === "loading" ? "Loading report…" : "Report unavailable"}</span>;
-  if (state.status === "loading") return <p className="fb-chat-context fb-chat-secondary">Loading report…</p>;
-  if (state.status === "unavailable") return <p className="fb-chat-context fb-chat-secondary" data-chat-report="unavailable">
-    Report unavailable</p>;
+  // Loading and unavailable are still the report: the canonical route stays one
+  // reachable link and no title, photo or place is invented before authority
+  // resolves.
+  if (state.status === "loading") return <PostLink className="fb-chat-report-preview fb-chat-report-preview-state"
+    to={reportRoute} data-chat-report="loading">Loading report…</PostLink>;
+  if (state.status === "unavailable") return <PostLink className="fb-chat-report-preview fb-chat-report-preview-state"
+    to={reportRoute} data-chat-report="unavailable">Report unavailable</PostLink>;
   const post = state.post!;
   if (preview) return <span className="fb-chat-row-context" dir="auto">{post.type === "LOST" ? "Lost" : "Found"} report · {post.title}</span>;
-  return <PostLink className="fb-chat-context fb-chat-report-card" to={`/posts/${encodeURIComponent(reportId)}`} data-chat-report={reportId}>
-    {firstImageSrc && <img src={firstImageSrc} alt={post.title} loading="lazy" />}
-    <span className="fb-chat-report-copy">
-      <span className="fb-chat-secondary">{post.type === "LOST" ? "Lost" : "Found"} report</span>
-      <strong dir="auto">{post.title}</strong>
-      {post.locationLabel && <span className="fb-chat-secondary" dir="auto">{post.locationLabel}</span>}
-      <span className="fb-chat-report-meta"><StatusChip post={post} />
-        {post.eventDate && <time dateTime={post.eventDate}>{formatEventDate(post.eventDate)}</time>}
-      </span>
-    </span>
-  </PostLink>;
+  return <ChatReportPreview post={post} reportId={reportId} coverSrc={firstImageSrc} />;
 }
 
 /** One static coordinate set the sender chose to share. No live position. */
@@ -447,25 +443,6 @@ function ChatQuotePhoto({ accountId, attachment }: { accountId: string; attachme
  * second note pauses the first. A length shown here is the stored duration, not
  * a container guess (WebM often reports `Infinity`).
  */
-/**
- * One voice note in the transcript. Bytes come from the same verified store as
- * a photo; playback is delegated to the single transcript player so starting a
- * second note pauses the first. The bars are measured from that audio, never
- * invented: see `voicePeaks.ts` for how a container becomes an envelope.
- */
-/**
- * The last `VOICE_BARS` measurements of a note in progress.
- *
- * A recording fills from the left and then scrolls, the way a live level meter
- * reads. Padding the *end* with silence is what produces that: padding the
- * start would make the first seconds appear at the right edge.
- */
-function livePeaks(values: readonly number[]): number[] {
-  const normalized = normalizePeaks(values);
-  const window = normalized.slice(-VOICE_BARS);
-  return window.length < VOICE_BARS ? [...window, ...new Array(VOICE_BARS - window.length).fill(0)] : window;
-}
-
 function ChatVoice({ accountId, conversationId, attachment, playback, snapshot, authorName, avatarUrl }: {
   accountId: string; conversationId: string; attachment: MediaAttachment;
   playback: VoicePlaybackPort; snapshot: VoicePlaybackSnapshot;
@@ -475,7 +452,6 @@ function ChatVoice({ accountId, conversationId, attachment, playback, snapshot, 
   const [state, setState] = useState<"loading" | "ready" | "missing" | "failed" | "unavailable">("loading");
   const [version, setVersion] = useState(0);
   const [rate, setRate] = useState(1);
-  const [peaks, setPeaks] = useState<number[]>(() => cachedVoicePeaks(attachment.id)?.bars ?? []);
   const durationMs = attachment.durationMs ?? 0;
   const canDownload = attachment.expiresAt !== null && attachment.expiresAt !== undefined
     && attachment.expiresAt > Date.now()
@@ -494,16 +470,8 @@ function ChatVoice({ accountId, conversationId, attachment, playback, snapshot, 
       made = URL.createObjectURL(new Blob([bytes.slice(0)], { type: attachment.mime }));
       setUrl(made);
       // The player loads metadata on demand; the stored duration is what the
-      // clock shows, so no decode is required to call it ready. The envelope is
-      // measured separately, once per note, through the shared decode queue.
+      // clock shows, so no decode is required to call it ready.
       setState("ready");
-      const known = cachedVoicePeaks(attachment.id);
-      if (known) setPeaks(known.bars);
-      else void queueVoicePeaks(bytes).then((measured) => {
-        if (cancelled || !measured) return;
-        rememberVoicePeaks(attachment.id, { bars: measured, measured: true });
-        setPeaks(measured);
-      });
     }).catch(() => { if (!cancelled) setState("failed"); });
     return () => { cancelled = true; if (made) URL.revokeObjectURL(made); setUrl(null); };
   }, [accountId, attachment.id, attachment.mime, attachment.state, attachment.expiresAt, version]);
@@ -513,7 +481,11 @@ function ChatVoice({ accountId, conversationId, attachment, playback, snapshot, 
     catch (error) { setState(error instanceof PhotoUnavailableError ? "unavailable" : "failed"); }
   }
   const playing = snapshot.playingId === attachment.id;
-  const position = playing ? Math.min(snapshot.positionMs, durationMs) : 0;
+  // The element keeps the note it holds while paused or ended, so the clock
+  // below is this bubble's whenever it owns `currentId`. A stranger's playback
+  // withholds the clock rather than painting that note's position here.
+  const ownsPosition = (snapshot.currentId ?? snapshot.playingId) === attachment.id;
+  const position = ownsPosition ? Math.min(snapshot.positionMs, durationMs) : undefined;
   async function toggle() {
     if (!url) return;
     if (playing) { playback.pause(); return; }
@@ -522,7 +494,7 @@ function ChatVoice({ accountId, conversationId, attachment, playback, snapshot, 
     await playback.play();
   }
   return <div data-receipt-message={state === "ready" && attachment.state === "READY" ? attachment.messageId : undefined}>
-    <VoiceMessagePlayer peaks={peaks} playing={playing} ready={!!url} durationMs={durationMs} positionMs={position}
+    <VoiceMessagePlayer playing={playing} ready={!!url} durationMs={durationMs} positionMs={position}
       avatar={<UserAvatar username={authorName} avatarUrl={avatarUrl} size={40} />}
       onToggle={() => void toggle()} rate={rate} onRate={() => {
         const next = rate === 1 ? 1.5 : rate === 1.5 ? 2 : 1;
@@ -551,32 +523,15 @@ function VoiceDraft({ recorder, status, recording, notice, url, snapshot, sendin
   // and flashing the strip back to 0:00 while it lands reads as a lost take.
   // Only a take that ended or failed clears it.
   const [captureElapsed, setCaptureElapsed] = useState(0);
-  const [live, setLive] = useState<number[]>([]);
-  const [decoded, setDecoded] = useState<number[]>([]);
   useEffect(() => {
-    if (status === "idle" || status === "error") { setCaptureElapsed(0); setLive([]); return; }
+    if (status === "idle" || status === "error") { setCaptureElapsed(0); return; }
     if (recorder.state.status === "recording") {
-      setCaptureElapsed(recorder.state.elapsedMs); setLive(recorder.state.peaks);
+      setCaptureElapsed(recorder.state.elapsedMs);
     }
     return recorder.subscribe((next) => {
-      if (next.status === "recording") { setCaptureElapsed(next.elapsedMs); setLive(next.peaks); }
+      if (next.status === "recording") setCaptureElapsed(next.elapsedMs);
     });
   }, [recorder, status]);
-  // A note recorded where the live meter is unavailable still gets a real
-  // envelope: the finished container is decoded instead.
-  useEffect(() => {
-    setDecoded([]);
-    if (status !== "review" || !recording || recording.peaks.length > 0) return;
-    let cancelled = false;
-    void recording.blob.arrayBuffer()
-      .then((bytes) => queueVoicePeaks(bytes))
-      .then((measured) => { if (!cancelled && measured) setDecoded(measured); })
-      .catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [status, recording]);
-  const reviewPeaks = recording
-    ? (recording.peaks.length > 0 ? resamplePeaks(recording.peaks) : decoded)
-    : [];
   if (status === "idle") return null;
   if (status === "error") return <div className="fb-chat-voice-draft" role="status">
     <span>{notice ?? "That recording didn’t save. Try again."}</span>
@@ -588,12 +543,15 @@ function VoiceDraft({ recorder, status, recording, notice, url, snapshot, sendin
   </div>;
   if (status === "review" && recording) {
     const playing = snapshot.playingId === "voice-draft";
-    const position = playing ? Math.min(snapshot.positionMs, recording.durationMs) : 0;
-    // The preview clock may sit anywhere; the minute sweep and the ceiling
-    // always read the capture clock that produced this take.
+    // The preview clock is this take's only while the element holds it; a
+    // stranger's playback withholds it and the panel keeps its own last tick.
+    const ownsPosition = (snapshot.currentId ?? snapshot.playingId) === "voice-draft";
+    const position = ownsPosition ? Math.min(snapshot.positionMs, recording.durationMs) : undefined;
+    // The minute sweep and the ceiling always read the recorded take.
     return <>
-      <VoiceRecordingPanel phase="review" peaks={reviewPeaks} playing={playing}
-        elapsedMs={playing ? position : recording.durationMs} percent={voiceProgressPercent(position, recording.durationMs)}
+      <VoiceRecordingPanel phase="review" playing={playing} positionMs={position}
+        durationMs={recording.durationMs} elapsedMs={recording.durationMs}
+        percent={voiceProgressPercent(position ?? 0, recording.durationMs)}
         captureElapsedMs={recording.durationMs} captureLimitMs={VOICE_MAX_MS}
         previewReady={!!url} canResume={recorder.canResume} sending={sending} allowed={allowed}
         onPreview={onPreview} onPause={onStop} onResume={onResume} onDiscard={onDiscard} onSend={onSend} />
@@ -603,7 +561,7 @@ function VoiceDraft({ recorder, status, recording, notice, url, snapshot, sendin
     </>;
   }
   return <VoiceRecordingPanel phase={status === "pausing" ? "pausing" : "recording"}
-    peaks={livePeaks(live)} elapsedMs={captureElapsed} percent={0} playing={false}
+    elapsedMs={captureElapsed} percent={0} playing={false}
     captureElapsedMs={captureElapsed} captureLimitMs={VOICE_MAX_MS}
     sending={sending} allowed={allowed}
     onPreview={onPreview} onPause={onStop} onResume={onResume} onDiscard={onDiscard} onSend={onSend} />;
@@ -2374,33 +2332,47 @@ export function ThreadSession({
       if (alive.current) setError("That message could not be opened for reporting.");
     }
   }
+  /** One honest clipboard boundary for every copy action: a missing, throwing
+   *  or refusing clipboard reports failure and never announces a copy that did
+   *  not happen. The call stays inside the user gesture. */
+  function copyToClipboard(value: string, done: string, failure: string) {
+    const clipboard: Clipboard | undefined = navigator.clipboard;
+    if (!clipboard || typeof clipboard.writeText !== "function") { setError(failure); return; }
+    try {
+      void clipboard.writeText(value).then(() => announce(done), () => setError(failure));
+    } catch {
+      setError(failure);
+    }
+  }
   /**
    * The actions that annotate one message. This is the same `ActionMenu` the
    * feed and the report card use, so keyboard, collision placement, dismissal
    * and styling are the app's existing ones rather than a second implementation.
    */
-  function messageActions(message: StoredHumanMessage, own: boolean): MenuAction[] {
-    const items: MenuAction[] = [];
+  function messageActions(message: StoredHumanMessage, own: boolean): Array<MenuAction | MenuGroup> {
+    const items: Array<MenuAction | MenuGroup> = [];
     // The pointer gesture is a swipe; the menu is the keyboard and desktop path
     // to the same reply, so the capability is never gesture-only.
     if (message.unsentAt === undefined) {
       items.push({ id: "reply", label: "Reply", onAction: () => startReply(message) });
     }
-    // Copy writes only what is visible (R19-1): a bare GIF/sticker URL, a
-    // marker with no caption, a malformed marker or an unsent body has nothing
-    // honest to copy, so the action is absent rather than a silent no-op.
-    const copyText = copyableMessageText(message);
-    if (copyText !== null) {
-      items.push({ id: "copy", label: "Copy text", onAction: () => {
-        const clipboard: Clipboard | undefined = navigator.clipboard;
-        if (!clipboard || typeof clipboard.writeText !== "function") {
-          setError("Could not copy this message."); return;
-        }
-        void clipboard.writeText(copyText).then(
-          () => announce("Message copied."),
-          () => setError("Could not copy this message."),
-        );
-      } });
+    // Copy follows what the message actually shows (R19-1): visible prose, each
+    // safe link, and the report context's canonical public URL. A bare URL is
+    // never copied as "text", a serialized marker never escapes, and an unsent
+    // body exposes nothing.
+    for (const action of messageCopyActions(message)) {
+      if (action.kind === "text") {
+        items.push({ id: action.id, label: action.label,
+          onAction: () => copyToClipboard(action.text, "Message copied.", "Could not copy this message.") });
+      } else if (action.kind === "link") {
+        items.push({ id: action.id, label: action.label,
+          onAction: () => copyToClipboard(action.url, "Link copied.", "Could not copy this link.") });
+      } else {
+        items.push({ id: action.id, label: action.label, items: action.links.map((link) => ({
+          id: link.id, label: link.url,
+          onAction: () => copyToClipboard(link.url, "Link copied.", "Could not copy this link."),
+        })) });
+      }
     }
     // Connected conversations share one pin list (max three). An unsent message
     // is never pinnable; the server also drops its pin when it is unsent.
@@ -2659,6 +2631,12 @@ export function ThreadSession({
           const klipyKind = message.unsentAt === undefined && isBareKlipyMediaBody(message.body)
             ? klipyMessageKind(message.body) : null;
           const file = message.unsentAt === undefined ? parseChatFileMarker(message.body) : null;
+          // A bare document file is the message itself: only the untouched file
+          // row earns the compact surface. A caption, quote, report context or
+          // location is real bubble content, and every media kind keeps its own
+          // renderer, so all of those retain the ordinary padded bubble.
+          const documentOnly = file !== null && isDocumentChatFile(file) && !message.replyToId
+            && !message.contextReportId && !message.location && chatFileCaption(message.body) === "";
           const flashClass = flash?.id === message.id ? ` fb-chat-flash-${flash.nonce % 2 ? "a" : "b"}` : "";
           return <div key={message.id} data-chat-message={message.id} tabIndex={-1}
             className={`fb-chat-line-row${wideFirst && member === 0 ? " fb-chat-line-row-wide" : ""}`}>
@@ -2670,7 +2648,7 @@ export function ThreadSession({
               onOpen={() => { setSelectedMessageId(message.id); haptic("commit"); }}>
             {({ open, setOpen }) => <>
             <div data-receipt-message={message.messageType === "TEXT" && message.body && message.unsentAt === undefined ? message.id : undefined}
-              className={`fb-chat-message${own ? " fb-chat-message-own" : ""}${message.messageType === "VOICE" && attachment && message.unsentAt === undefined ? " fb-chat-message-voice" : ""}${emojiOnly ? " fb-chat-message-emoji" : ""}${klipyOnly ? " fb-chat-message-klipy" : ""}${mediaOnly ? " fb-chat-message-media" : ""}${flashClass}`}>
+              className={`fb-chat-message${own ? " fb-chat-message-own" : ""}${message.messageType === "VOICE" && attachment && message.unsentAt === undefined ? " fb-chat-message-voice" : ""}${emojiOnly ? " fb-chat-message-emoji" : ""}${klipyOnly ? " fb-chat-message-klipy" : ""}${mediaOnly ? " fb-chat-message-media" : ""}${documentOnly ? " fb-chat-message-document" : ""}${flashClass}`}>
             <span className="sr-only">{own ? "You: " : `${name || "Member"}: `}</span>
             {message.unsentAt === undefined && message.replyToId && <button type="button" className="fb-chat-quote"
               onClick={() => { transcript.suspend(); setJumpTo(message.replyToId!); }}

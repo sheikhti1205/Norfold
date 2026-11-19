@@ -1,11 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CHAT_FILE_MARKER_PREFIX,
   chatFileBody,
   encodeChatFileMarker,
   type ChatFileMeta,
 } from "../services/messaging/files";
-import { copyableMessageText, isBareKlipyMediaBody } from "./messageCopy";
+import {
+  copyableMessageLinks,
+  copyableMessageText,
+  isBareKlipyMediaBody,
+  messageCopyActions,
+} from "./messageCopy";
 
 const meta: ChatFileMeta = {
   key: "files/u-1/c-1/00000000-0000-4000-8000-000000000000-report.pdf",
@@ -141,5 +146,271 @@ describe("message Copy policy", () => {
   it("returns null for empty and whitespace-only bodies", () => {
     expect(copyableMessageText({ body: "" })).toBeNull();
     expect(copyableMessageText({ body: "   \n\t " })).toBeNull();
+  });
+});
+
+describe("message copy actions", () => {
+  const origin = "https://findbackapp.social";
+  const reportId = "5b6f7c8d-1234-4abc-8def-123456789012";
+  const reportUrl = `${origin}/r/${reportId}`;
+
+  it("offers one exact Copy text action for plain prose", () => {
+    const body = "  keep\nthis exactly 🎉  ";
+    expect(messageCopyActions({ body })).toEqual([
+      { id: "copy-text", kind: "text", label: "Copy text", text: body },
+    ]);
+  });
+
+  it("offers Copy link, never Copy text, for one bare safe URL", () => {
+    const url = "https://example.com/report/123?ref=chat";
+    expect(messageCopyActions({ body: url })).toEqual([
+      { id: "copy-link", kind: "link", label: "Copy link", url },
+    ]);
+  });
+
+  it("splits prose from one link into two actions without hiding the URL", () => {
+    const url = "https://example.com/a?x=1";
+    expect(messageCopyActions({ body: `Read ${url} and reply` })).toEqual([
+      { id: "copy-text", kind: "text", label: "Copy text", text: "Read and reply" },
+      { id: "copy-link", kind: "link", label: "Copy link", url },
+    ]);
+  });
+
+  it("keeps line breaks and the other prose slices exactly", () => {
+    const url = "https://example.com/x";
+    expect(messageCopyActions({ body: `line one\n${url}\nline two` })).toEqual([
+      { id: "copy-text", kind: "text", label: "Copy text", text: "line one\nline two" },
+      { id: "copy-link", kind: "link", label: "Copy link", url },
+    ]);
+  });
+
+  it("does not offer a punctuation-only Copy text beside a bare URL", () => {
+    expect(messageCopyActions({ body: "https://example.com/x." })).toEqual([
+      { id: "copy-link", kind: "link", label: "Copy link", url: "https://example.com/x" },
+    ]);
+    expect(messageCopyActions({ body: "\"https://example.com/x\"" })).toEqual([
+      { id: "copy-link", kind: "link", label: "Copy link", url: "https://example.com/x" },
+    ]);
+  });
+
+  it("keeps a real symbol or emoji beside a link copyable as text", () => {
+    expect(messageCopyActions({ body: "🎉 https://example.com/x" })).toEqual([
+      { id: "copy-text", kind: "text", label: "Copy text", text: "🎉" },
+      { id: "copy-link", kind: "link", label: "Copy link", url: "https://example.com/x" },
+    ]);
+    expect(messageCopyActions({ body: "→ https://example.com/x" })).toEqual([
+      { id: "copy-text", kind: "text", label: "Copy text", text: "→" },
+      { id: "copy-link", kind: "link", label: "Copy link", url: "https://example.com/x" },
+    ]);
+  });
+
+  it("offers one clear Copy link action per distinct URL, in order, with repeats removed", () => {
+    const first = "https://a.example/one";
+    const second = "https://b.example/two";
+    expect(messageCopyActions({ body: `Compare ${first} with ${second} first` })).toEqual([
+      { id: "copy-text", kind: "text", label: "Copy text", text: "Compare with first" },
+      {
+        id: "copy-links", kind: "link-menu", label: "Copy link",
+        links: [{ id: "copy-link-1", url: first }, { id: "copy-link-2", url: second }],
+      },
+    ]);
+  });
+
+  it("dedupes a repeated URL into one direct Copy link", () => {
+    const url = "https://example.com/one";
+    expect(messageCopyActions({ body: `${url} again ${url}` })).toEqual([
+      { id: "copy-text", kind: "text", label: "Copy text", text: "again" },
+      { id: "copy-link", kind: "link", label: "Copy link", url },
+    ]);
+  });
+
+  it("keeps the URL exactly as written, including percent encoding and a fragment", () => {
+    const url = "https://example.com/a%20b?q=x%26y#frag";
+    expect(messageCopyActions({ body: `See ${url} now` })).toEqual([
+      { id: "copy-text", kind: "text", label: "Copy text", text: "See now" },
+      { id: "copy-link", kind: "link", label: "Copy link", url },
+    ]);
+  });
+
+  it("never treats an unsafe scheme as a link", () => {
+    expect(messageCopyActions({ body: "javascript:alert(1)" })).toEqual([
+      { id: "copy-text", kind: "text", label: "Copy text", text: "javascript:alert(1)" },
+    ]);
+    expect(messageCopyActions({ body: "data:text/html,<b>x</b>" })).toEqual([
+      { id: "copy-text", kind: "text", label: "Copy text", text: "data:text/html,<b>x</b>" },
+    ]);
+    expect(messageCopyActions({ body: "javascript:alert(1) then https://example.com/x" })).toEqual([
+      { id: "copy-text", kind: "text", label: "Copy text", text: "javascript:alert(1) then" },
+      { id: "copy-link", kind: "link", label: "Copy link", url: "https://example.com/x" },
+    ]);
+  });
+
+  it("keeps a visible provider link copyable while a bare media body is not", () => {
+    const url = "https://media.klipy.com/a.gif";
+    expect(messageCopyActions({ body: `See ${url} now` })).toEqual([
+      { id: "copy-text", kind: "text", label: "Copy text", text: "See now" },
+      { id: "copy-link", kind: "link", label: "Copy link", url },
+    ]);
+    expect(copyableMessageLinks(`See ${url} now`)).toEqual([{ id: "copy-link-1", url }]);
+    for (const body of [
+      url,
+      `${url}#norfold-media=gif`,
+      "https://media.klipy.com/s.webp#norfold-media=sticker",
+    ]) {
+      expect(messageCopyActions({ body })).toEqual([]);
+      expect(copyableMessageLinks(body)).toEqual([]);
+    }
+  });
+
+  it("copies only the caption of a file and keeps its visible link separate", () => {
+    const url = "https://example.com/report/1";
+    expect(messageCopyActions({ body: chatFileBody(meta, `Please read ${url} now`) })).toEqual([
+      { id: "copy-text", kind: "text", label: "Copy text", text: "Please read now" },
+      { id: "copy-link", kind: "link", label: "Copy link", url },
+    ]);
+    expect(messageCopyActions({ body: chatFileBody(meta, ` ${url} `) })).toEqual([
+      { id: "copy-link", kind: "link", label: "Copy link", url },
+    ]);
+  });
+
+  it("never exposes the payload of a reserved or malformed marker", () => {
+    const malformed = "norfold-file:v1:!!!not-base64 https://evil.example/x";
+    expect(messageCopyActions({ body: malformed })).toEqual([]);
+    expect(copyableMessageLinks(malformed)).toEqual([]);
+    expect(messageCopyActions({ body: "norfold-file:v2:AAAA" })).toEqual([]);
+  });
+
+  it("never copies unsent work, empty bodies or whitespace", () => {
+    expect(messageCopyActions({ body: "https://example.com/x", unsentAt: 5 })).toEqual([]);
+    expect(messageCopyActions({ body: "Gone", unsentAt: 5 })).toEqual([]);
+    expect(messageCopyActions({ body: "" })).toEqual([]);
+    expect(messageCopyActions({ body: "  \n\t " })).toEqual([]);
+    expect(copyableMessageLinks("")).toEqual([]);
+  });
+
+  it("uses the exact visible report share URL instead of the internal report id", () => {
+    expect(messageCopyActions({ body: reportUrl }, { reportOrigin: origin })).toEqual([
+      { id: "copy-link", kind: "link", label: "Copy link", url: reportUrl },
+    ]);
+    expect(copyableMessageLinks(reportUrl, { reportOrigin: origin })).toEqual([
+      { id: "copy-link-1", url: reportUrl, reportId },
+    ]);
+    // The app's own share endpoint is the same visible link, copied as written.
+    const share = `${origin}/api/share/${reportId}`;
+    expect(copyableMessageLinks(share, { reportOrigin: origin })).toEqual([
+      { id: "copy-link-1", url: share, reportId },
+    ]);
+  });
+
+  it("reports the visible link projection in first-occurrence order", () => {
+    const first = "https://a.example/one";
+    const second = "https://b.example/two";
+    expect(copyableMessageLinks(`Nothing here`)).toEqual([]);
+    expect(copyableMessageLinks(`${second} ${first} ${second}`)).toEqual([
+      { id: "copy-link-1", url: second },
+      { id: "copy-link-2", url: first },
+    ]);
+  });
+});
+
+describe("message copy actions with a report context", () => {
+  const origin = "https://findbackapp.social";
+  const reportId = "5b6f7c8d-1234-4abc-8def-123456789012";
+  const shareUrl = `${origin}/api/share/${reportId}`;
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("offers the canonical report share link for a context-only message", () => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    expect(messageCopyActions({ body: "", contextReportId: reportId })).toEqual([
+      { id: "copy-link", kind: "link", label: "Copy link", url: shareUrl },
+    ]);
+    expect(messageCopyActions({ body: "  \n\t ", contextReportId: reportId })).toEqual([
+      { id: "copy-link", kind: "link", label: "Copy link", url: shareUrl },
+    ]);
+  });
+
+  it("keeps prose and adds the report link separately", () => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    expect(messageCopyActions({ body: "About this report", contextReportId: reportId })).toEqual([
+      { id: "copy-text", kind: "text", label: "Copy text", text: "About this report" },
+      { id: "copy-link", kind: "link", label: "Copy link", url: shareUrl },
+    ]);
+  });
+
+  it("keeps a file caption and the report link, never the serialized marker", () => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    const body = chatFileBody(meta, "See the photo");
+    expect(messageCopyActions({ body, contextReportId: reportId })).toEqual([
+      { id: "copy-text", kind: "text", label: "Copy text", text: "See the photo" },
+      { id: "copy-link", kind: "link", label: "Copy link", url: shareUrl },
+    ]);
+    const copied = messageCopyActions({ body, contextReportId: reportId });
+    expect(JSON.stringify(copied)).not.toContain(CHAT_FILE_MARKER_PREFIX);
+  });
+
+  it("offers only the report link for a bare sticker body, never the media URL", () => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    for (const body of [
+      "https://media.klipy.com/a.gif",
+      "https://media.klipy.com/s.webp#norfold-media=sticker",
+    ]) {
+      expect(messageCopyActions({ body, contextReportId: reportId })).toEqual([
+        { id: "copy-link", kind: "link", label: "Copy link", url: shareUrl },
+      ]);
+    }
+    // Without a context the bare media body still exposes nothing.
+    expect(messageCopyActions({ body: "https://media.klipy.com/a.gif" })).toEqual([]);
+  });
+
+  it("does not duplicate a report link the body already shows", () => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    for (const bodyUrl of [`${origin}/r/${reportId}`, shareUrl]) {
+      expect(messageCopyActions({ body: bodyUrl, contextReportId: reportId })).toEqual([
+        { id: "copy-link", kind: "link", label: "Copy link", url: bodyUrl },
+      ]);
+    }
+  });
+
+  it("keeps a distinct body report link and the context link apart", () => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    const other = "11111111-2222-4333-8444-555555555555";
+    const bodyUrl = `${origin}/r/${other}`;
+    expect(messageCopyActions({ body: bodyUrl, contextReportId: reportId })).toEqual([
+      {
+        id: "copy-links", kind: "link-menu", label: "Copy link",
+        links: [
+          { id: "copy-link-1", url: bodyUrl, reportId: other },
+          { id: "copy-link-2", url: shareUrl, reportId },
+        ],
+      },
+    ]);
+  });
+
+  it("never derives a link from an unknown or malformed context id", () => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    for (const contextReportId of ["not-a-report", "../../evil", `${reportId}/x`, " "]) {
+      expect(messageCopyActions({ body: "Keep this prose", contextReportId })).toEqual([
+        { id: "copy-text", kind: "text", label: "Copy text", text: "Keep this prose" },
+      ]);
+    }
+  });
+
+  it("never invents an origin when the public share origin is unset or invalid", () => {
+    for (const value of ["", "http://localhost:5173", "https://localhost"]) {
+      vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", value);
+      expect(messageCopyActions({ body: "Keep this prose", contextReportId: reportId })).toEqual([
+        { id: "copy-text", kind: "text", label: "Copy text", text: "Keep this prose" },
+      ]);
+      expect(messageCopyActions({ body: "", contextReportId: reportId })).toEqual([]);
+    }
+  });
+
+  it("still offers nothing for an unsent message that carries a context", () => {
+    vi.stubEnv("VITE_PUBLIC_SHARE_ORIGIN", origin);
+    expect(messageCopyActions({ body: "", contextReportId: reportId, unsentAt: 5 })).toEqual([]);
+    expect(messageCopyActions({
+      body: `${origin}/r/${reportId}`, contextReportId: reportId, unsentAt: 5,
+    })).toEqual([]);
   });
 });

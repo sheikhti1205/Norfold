@@ -162,10 +162,11 @@ it("keeps an unsupported preview honest and still downloads the fetched bytes", 
   expect(saved[0]).toEqual({ href: "blob:private", name: "sticker.gif" });
 });
 
-it("keeps a non-raster file on the download path instead of inline", () => {
+it("keeps a non-raster file on the document path instead of inline", () => {
   render(<ChatFile meta={meta("image/svg+xml", "art.svg")} />);
-  expect(screen.getByRole("button", { name: "Open art.svg" })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "View art.svg" })).toBeNull();
+  expect(screen.getByRole("button", { name: "View art.svg" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Save art.svg" })).toBeTruthy();
+  expect(screen.queryByRole("img")).toBeNull();
   expect(screen.queryByRole("button", { name: "Download art.svg" })).toBeNull();
 });
 
