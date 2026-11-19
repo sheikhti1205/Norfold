@@ -28,7 +28,11 @@ it("a real block confirmation revokes a third-author report preview without chan
   fireEvent.click(screen.getByRole("button", { name: "Block Sam" }));
   confirmBlock("Block");
   expect(await screen.findByText("Report unavailable")).toBeTruthy();
-  expect(screen.queryByRole("link")).toBeNull();
+  const state = screen.getByRole("link", { name: "Report unavailable" });
+  expect(state.getAttribute("data-chat-report")).toBe("unavailable");
+  expect(state.getAttribute("href")).toBe("/posts/third-report");
+  expect(state.textContent).not.toContain("Third author wallet");
+  expect(screen.queryByText("Third author wallet")).toBeNull();
   expect(screen.queryByRole("img")).toBeNull();
   expect(screen.queryByText("Private place")).toBeNull();
 });
