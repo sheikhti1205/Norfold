@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 
 /**
  * Authoritative modal-layer stack for keyboard Escape.
@@ -51,6 +51,26 @@ export function subscribeModalLayers(listener: (count: number) => void): () => v
 
 export function isTopModalLayer(id: string): boolean {
   return stack.length > 0 && stack[stack.length - 1] === id;
+}
+
+function anyModalLayerOpen(): boolean {
+  return stack.length > 0;
+}
+
+function subscribeAnyModalLayer(listener: () => void): () => void {
+  return subscribeModalLayers(listener);
+}
+
+/**
+ * Re-render with the answer to "is any modal layer open right now?".
+ *
+ * A surface that must pause live work (receipt observation, for example) while
+ * the reader is inside a dialog, sheet, menu or lightbox reads this instead of
+ * sampling `modalLayerCount()` on unrelated renders. The snapshot is a
+ * primitive, so a push/pop only re-renders when the answer actually changes.
+ */
+export function useAnyModalLayerOpen(): boolean {
+  return useSyncExternalStore(subscribeAnyModalLayer, anyModalLayerOpen, anyModalLayerOpen);
 }
 
 /** Test helper. */

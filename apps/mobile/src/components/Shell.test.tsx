@@ -9,6 +9,7 @@ import { AppBar } from "./AppBar";
 import { HoverLabelProvider } from "./HoverLabel";
 import { TabTapProvider } from "./TabTap";
 import { resetBackInterceptors } from "./backNavigation";
+import { closeGlobalSearch, openGlobalSearch, resetGlobalSearch } from "./globalSearch";
 import { APPEARANCE_STORAGE_KEY, DEFAULT_APPEARANCE, loadAppearance } from "../appearance";
 import { COMPACT_MAX_PX } from "./responsive";
 import { readFileSync } from "node:fs";
@@ -20,6 +21,14 @@ vi.mock("./RoleOfferNotice", () => ({ RoleOfferNotice: () => null }));
 vi.mock("./SettingsWindow", () => ({
   SettingsWindow: ({ open, initialPath, onClose }: { open: boolean; initialPath?: string; onClose: () => void }) =>
     open ? <div data-testid="settings-window">{initialPath}<button aria-label="Close window" onClick={onClose} /></div> : null,
+}));
+// R19 T3 owns the shell's mount contract only. The dock itself (store, launcher,
+// thread) is another writer's module, so it is mocked down to the two frozen
+// props instead of running the real chat runtime inside a navigation test.
+vi.mock("./ChatDock", () => ({
+  ChatDock: ({ hostOccluded, bottomNavVisible }: { hostOccluded: boolean; bottomNavVisible: boolean }) => (
+    <div data-testid="chat-dock" data-occluded={String(hostOccluded)} data-bottom-nav={String(bottomNavVisible)} />
+  ),
 }));
 
 afterEach(() => { cleanup(); resetBackInterceptors(); document.body.style.overflow = ""; });
@@ -942,5 +951,167 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     } finally {
       style.remove();
     }
+  });
+});
+
+describe("Shell chat dock host (R19 T3)", () => {
+  const initialWidth = window.innerWidth;
+  const bottomInset = "calc(66px + env(safe-area-inset-bottom) + 8px)";
+  const restingInset = "max(12px, env(safe-area-inset-bottom))";
+
+  function setWidth(width: number) {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+  }
+
+  function storeNavLayout(navLayout: "auto" | "bottom" | "rail") {
+    localStorage.setItem(
+      APPEARANCE_STORAGE_KEY,
+      JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout, navLayoutChosen: true }),
+    );
+  }
+
+  function viewportInset() {
+    return document.querySelector<HTMLElement>(".fb-app-viewport")!.style.getPropertyValue("--fb-chat-dock-bottom");
+  }
+
+  function dockState() {
+    const dock = screen.getByTestId("chat-dock");
+    return {
+      dock,
+      occluded: dock.getAttribute("data-occluded"),
+      bottomNav: dock.getAttribute("data-bottom-nav"),
+    };
+  }
+
+  afterEach(() => {
+    localStorage.clear();
+    act(() => resetGlobalSearch());
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, value: null });
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: initialWidth });
+  });
+
+  it("mounts one host beside <main> and publishes the bottom-bar inset", () => {
+    setWidth(1200);
+    storeNavLayout("bottom");
+    renderShell("/");
+    const viewport = document.querySelector<HTMLElement>(".fb-app-viewport");
+    expect(viewportInset()).toBe(bottomInset);
+    const { dock, occluded, bottomNav } = dockState();
+    expect(screen.getAllByTestId("chat-dock")).toHaveLength(1);
+    expect(occluded).toBe("false");
+    expect(bottomNav).toBe("true");
+    // A shell sibling of the routed page, never part of it.
+    expect(dock.parentElement).toBe(viewport);
+    expect(screen.getByRole("main").contains(dock)).toBe(false);
+    expect(
+      screen.getByRole("main").compareDocumentPosition(dock) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("uses the resting inset when a rail is painted instead of the bar", () => {
+    setWidth(800);
+    storeNavLayout("rail");
+    renderShell("/");
+    expect(screen.getByRole("navigation", { name: "Primary" }).getAttribute("data-layout")).toBe("rail");
+    expect(viewportInset()).toBe(restingInset);
+    expect(dockState().bottomNav).toBe("false");
+  });
+
+  it("reports no bottom bar and keeps the host on a chrome-free route", () => {
+    setWidth(393);
+    storeNavLayout("bottom");
+    renderShell("/help");
+    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
+    expect(viewportInset()).toBe(restingInset);
+    expect(dockState().bottomNav).toBe("false");
+  });
+
+  it("occludes the host while the settings window is open, and only then", () => {
+    setWidth(1200);
+    storeNavLayout("bottom");
+    renderShell("/");
+    expect(dockState().occluded).toBe("false");
+    fireEvent.click(screen.getByRole("link", { name: "Settings" }));
+    expect(dockState().occluded).toBe("true");
+    // DOM order matches the z-order scale: the dock, then the window above it.
+    const dock = screen.getByTestId("chat-dock");
+    const settings = screen.getByTestId("settings-window");
+    expect(dock.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close window" }));
+    expect(dockState().occluded).toBe("false");
+    expect(screen.getByText("Home screen")).toBeTruthy();
+  });
+
+  it("occludes the host while global search is open", () => {
+    storeNavLayout("bottom");
+    renderShell("/");
+    expect(dockState().occluded).toBe("false");
+    act(() => openGlobalSearch(document.body));
+    expect(dockState().occluded).toBe("true");
+    act(() => closeGlobalSearch());
+    expect(dockState().occluded).toBe("false");
+  });
+
+  it("occludes the host while the phone navigation drawer is open", () => {
+    setWidth(390);
+    storeNavLayout("rail");
+    renderShell("/");
+    expect(dockState().occluded).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Open navigation" }));
+    expect(dockState().occluded).toBe("true");
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: "Navigation" })).getByRole("button", { name: "Close navigation" }),
+    );
+    expect(dockState().occluded).toBe("false");
+  });
+
+  it("takes its fullscreen signal from the shell's one probe", () => {
+    storeNavLayout("bottom");
+    renderShell("/");
+    expect(dockState().occluded).toBe("false");
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, value: document.body });
+    act(() => document.dispatchEvent(new Event("fullscreenchange")));
+    // One probe, one event: the nav and the dock agree in the same commit.
+    expect(dockState().occluded).toBe("true");
+    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, value: null });
+    act(() => document.dispatchEvent(new Event("fullscreenchange")));
+    expect(dockState().occluded).toBe("false");
+    expect(screen.getByRole("navigation", { name: "Primary" })).toBeTruthy();
+  });
+
+  it("stays visible when the host leaves fullscreenElement undefined", () => {
+    // A webview or a test document need not implement the Fullscreen API, so
+    // the property can be undefined rather than null. Only a truthy element is
+    // fullscreen, exactly as the nav's old probe read it; undefined must not
+    // hide the nav or occlude the dock.
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, value: undefined });
+    storeNavLayout("bottom");
+    renderShell("/");
+    expect(dockState().occluded).toBe("false");
+    expect(screen.getByRole("navigation", { name: "Primary" })).toBeTruthy();
+    act(() => document.dispatchEvent(new Event("fullscreenchange")));
+    expect(dockState().occluded).toBe("false");
+    expect(screen.getByRole("navigation", { name: "Primary" })).toBeTruthy();
+  });
+
+  it("leaves the one host mounted across a chat route so a draft is not discarded", () => {
+    setWidth(393);
+    storeNavLayout("bottom");
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes><Route element={<Shell />}>
+          <Route index element={<Link to="/chats/c-1">Open thread</Link>} />
+          <Route path="/chats/:id" element={<><p>Chat thread</p><Link to="/">Home</Link></>} />
+        </Route></Routes>
+      </MemoryRouter>,
+    );
+    const first = screen.getByTestId("chat-dock");
+    fireEvent.click(screen.getByRole("link", { name: "Open thread" }));
+    // Route eligibility belongs to the dock; the shell never unmounts it.
+    expect(screen.getByTestId("chat-dock")).toBe(first);
+    expect(screen.queryAllByTestId("chat-dock")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("link", { name: "Home" }));
+    expect(screen.getByTestId("chat-dock")).toBe(first);
   });
 });

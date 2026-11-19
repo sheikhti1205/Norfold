@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { Capacitor } from "@capacitor/core";
 import { Link, UNSAFE_NavigationContext, useLocation, useNavigate } from "react-router";
 import { AnimatePresence, motion } from "framer-motion";
@@ -18,6 +18,7 @@ import { BrandMark } from "./BrandMark";
 import { NavOutsideBrand } from "./NavOutsideBrand";
 import { useHoverLabel } from "./HoverLabel";
 import { SettingsWindow } from "./SettingsWindow";
+import { ChatDock } from "./ChatDock";
 import { GlobalSearchOverlay } from "./GlobalSearchOverlay";
 import { openGlobalSearch, toggleGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
 import {
@@ -190,6 +191,29 @@ export function Shell() {
   }, [navigationContext, openSettingsWindow]);
   const searchOpen = useGlobalSearchOpen();
 
+  // One fullscreen probe for the whole shell (R19 T3). The primary nav and the
+  // chat dock read this value; neither arms a listener of its own, so the two
+  // can never disagree about whether the page is covered. Truthiness, not
+  // `!== null`: a webview or test document can leave `fullscreenElement`
+  // undefined, which is "not fullscreen", never a fullscreen session.
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    const update = () => setFullscreen(Boolean(document.fullscreenElement));
+    update();
+    document.addEventListener("fullscreenchange", update);
+    return () => document.removeEventListener("fullscreenchange", update);
+  }, []);
+
+  // What the chat window must sit behind. The dock decides its own route
+  // eligibility; the shell reports only the surfaces it owns.
+  const dockOccluded = settingsWindow !== null || searchOpen || railOpen || fullscreen;
+  // The same condition that paints the bar (`showNav && !rail`), published once
+  // so the dock's launcher and panel share one inset with the real navigation.
+  const bottomNavVisible = showNav && !rail;
+  const dockBottom = bottomNavVisible
+    ? "calc(66px + env(safe-area-inset-bottom) + 8px)"
+    : "max(12px, env(safe-area-inset-bottom))";
+
   // Typing anywhere that is not a field opens the one search surface with that
   // first character, so search never needs the reader to aim at an icon first.
   // A report surface takes the keystroke for its comment box before this runs
@@ -276,6 +300,7 @@ export function Shell() {
     <TabTapProvider>
       <div
         data-global-search={searchOpen ? "true" : undefined}
+        style={{ "--fb-chat-dock-bottom": dockBottom } as CSSProperties}
         className={`fb-app-viewport flex w-full bg-surface text-on-surface ${
           inlineRail ? "flex-row" : `mx-auto flex-col ${column}`
         }`}
@@ -302,7 +327,7 @@ export function Shell() {
             between screens (owner direction 2026-11-18). */}
         <div className="fb-rail-anchor">
           <AnimatePresence key={`fb-rail-boundary-${navLayout}`} initial={false}>
-            {showNav && inlineRail && <PrimaryNav key="fb-rail-nav" layout="rail" onOpenSettings={openSettingsWindow} />}
+            {showNav && inlineRail && <PrimaryNav key="fb-rail-nav" layout="rail" onOpenSettings={openSettingsWindow} fullscreen={fullscreen} />}
           </AnimatePresence>
           <NavOutsideBrand />
         </div>
@@ -361,7 +386,7 @@ export function Shell() {
                     transition={{ duration: motionDurations.standard, ease: motionEasings.out }}
                   >
                     <PrimaryNav layout="rail" drawer onCloseDrawer={() => closeRail()}
-                      onOpenSettings={openSettingsWindow} />
+                      onOpenSettings={openSettingsWindow} fullscreen={fullscreen} />
                   </motion.div>
                 </motion.div>
               )}
@@ -369,9 +394,14 @@ export function Shell() {
           </>
         )}
         <AnimatePresence key={`fb-bottom-boundary-${navLayout}`} initial={false}>
-          {showNav && !rail && <PrimaryNav key="fb-bottom-nav" layout="bottom" onOpenSettings={openSettingsWindow} />}
+          {showNav && !rail && <PrimaryNav key="fb-bottom-nav" layout="bottom" onOpenSettings={openSettingsWindow} fullscreen={fullscreen} />}
         </AnimatePresence>
         <LiveRegion />
+        {/* R19 T3: one chat window host for the whole app. It is a sibling of
+            <main>, painted above the page and below the settings window in the
+            shell's z-order scale. The dock owns route eligibility itself, so a
+            navigation never unmounts it and discards a draft. */}
+        <ChatDock hostOccluded={dockOccluded} bottomNavVisible={bottomNavVisible} />
         <SettingsWindow key={settingsWindow?.id} open={settingsWindow !== null} initialPath={settingsWindow?.path ?? "/settings"}
           onClose={() => setSettingsWindow(null)}
           onExit={(path) => { setSettingsWindow(null); navigate(path); }} />
@@ -399,6 +429,7 @@ export function PrimaryNav({
   drawer = false,
   onOpenSettings,
   onCloseDrawer,
+  fullscreen = false,
 }: {
   layout?: NavLayout;
   activePath?: string;
@@ -416,6 +447,11 @@ export function PrimaryNav({
   onOpenSettings?: (path?: string) => void;
   /** Closes the temporary drawer; the shell owns focus restoration. */
   onCloseDrawer?: () => void;
+  /**
+   * Fullscreen is probed once by the shell and handed down (R19 T3). The nav
+   * never arms a second listener: the dock reads the same value.
+   */
+  fullscreen?: boolean;
 }) {
   const { notifyTabTap } = useTabTap();
   const { pathname, search } = useLocation();
@@ -478,7 +514,6 @@ export function PrimaryNav({
     else if (event.key === "End") { event.preventDefault(); commitRailWidth(RAIL_WIDTH_MAX); }
   };
   const [keyboardOpen, setKeyboardOpen] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
     const isEditable = () => {
@@ -501,16 +536,13 @@ export function PrimaryNav({
       // is simply not Android, never a crash in the shell's keyboard probe.
       const androidKeyboard = Capacitor.getPlatform?.() === "android" && isEditable();
       setKeyboardOpen(viewportShrank || androidKeyboard);
-      setFullscreen(!!document.fullscreenElement);
     };
     update();
     window.visualViewport?.addEventListener("resize", update);
-    document.addEventListener("fullscreenchange", update);
     document.addEventListener("focusin", update);
     document.addEventListener("focusout", update);
     return () => {
       window.visualViewport?.removeEventListener("resize", update);
-      document.removeEventListener("fullscreenchange", update);
       document.removeEventListener("focusin", update);
       document.removeEventListener("focusout", update);
     };
@@ -520,6 +552,8 @@ export function PrimaryNav({
   // The bottom bar sits where the keyboard appears, so it yields that space.
   // The rail is a column beside the content: the keyboard cannot cover it, and
   // hiding it would widen <main> by 6.5rem and pull it back, so it stays.
+  // Fullscreen is not probed here (R19 T3): the shell owns that one listener and
+  // passes the value down, so the dock and the nav hide together.
   // (This early return sits AFTER every hook in this component: a conditional
   // return above the hover-intent state changed the hook order the moment the
   // keyboard or fullscreen flipped.)

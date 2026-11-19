@@ -1,0 +1,344 @@
+/* The one compact chat window.
+   Every dock-specific geometry rule lives here, scoped to `.fb-chat-dock` or
+   `.fb-chat-launcher`. The canonical styles keep the transcript, the composer
+   and the conversation header; nothing here declares a second one. */
+
+.fb-chat-launcher,
+.fb-chat-dock {
+  /* One inset for the launcher and the panel. The shell publishes
+     `--fb-chat-dock-bottom` on `.fb-app-viewport`; the data-nav fallback
+     repeats the shell's own two values so a harness outside the shell still
+     clears the navigation instead of guessing. Safe-area reads mirror
+     index.css, the app's single viewport owner, never a second source. */
+  --fb-dock-bottom: var(--fb-chat-dock-bottom, max(12px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))));
+  z-index: 62;
+}
+.fb-chat-launcher[data-nav="visible"],
+.fb-chat-dock[data-nav="visible"] {
+  --fb-dock-bottom: var(--fb-chat-dock-bottom, calc(66px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 8px));
+}
+
+/* The `hidden` attribute is the only hiding mechanism: a mounted thread must
+   keep its draft, staged media and recorder, and `display` from these rules
+   would otherwise beat the user-agent `[hidden]` style. */
+.fb-chat-launcher[hidden],
+.fb-chat-dock[hidden] { display: none !important; }
+
+/* ---------------------------------------------------------------- launcher */
+
+.fb-chat-launcher {
+  position: fixed;
+  inset-inline-end: max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
+  inset-block-end: var(--fb-dock-bottom);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  /* Three fixed circular controls (44 + 44 + 52 + gaps) stay one row and
+     clear both edges even at 320px; the bound only guards the cluster. */
+  max-width: calc(100vw - 24px);
+}
+
+.fb-chat-launcher-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 999px;
+  background: var(--fb-surface-container-high);
+  color: var(--fb-on-surface);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+}
+.fb-chat-launcher-button:hover { background: var(--fb-surface-container); }
+
+.fb-chat-launcher-badge {
+  position: absolute;
+  inset-block-start: -3px;
+  inset-inline-end: -3px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--fb-primary);
+  color: var(--fb-on-primary);
+  box-shadow: 0 0 0 2px var(--fb-surface);
+  font-size: .6875rem;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.fb-chat-launcher-action {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 999px;
+  background: var(--fb-surface-container);
+  color: var(--fb-on-surface-variant);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+.fb-chat-launcher-action:hover {
+  background: var(--fb-surface-container-high);
+  color: var(--fb-on-surface);
+}
+
+.fb-chat-launcher button:focus-visible {
+  outline: 2px solid var(--fb-focus);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------- panel */
+
+.fb-chat-dock {
+  position: fixed;
+  inset-inline-end: max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
+  inset-block-end: var(--fb-dock-bottom);
+  display: flex;
+  flex-direction: column;
+  width: min(24rem, calc(100vw - 24px));
+  /* Height is the bound for the whole canonical chain (workspace -> page):
+     no inner wrapper may grow past it, and only the transcript scrolls. */
+  height: min(34rem, calc(100vh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
+  height: min(34rem, calc(100dvh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
+  background: var(--fb-surface);
+  color: var(--fb-on-surface);
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 20px;
+  box-shadow: var(--shadow-lg);
+  isolation: isolate;
+}
+
+/* The panel is not a clipping box: the composer's expression panel resolves
+   against the composer and may need to open above a short dock. The rounded
+   corners are painted by the surfaces that fill the panel instead. */
+.fb-chat-dock .fb-chat-page,
+.fb-chat-picker { border-radius: 19px; }
+
+.fb-chat-dock > * { flex: 1 1 auto; min-height: 0; }
+
+/* The canonical workspace is `height:100%`; inside a flex column that is the
+   dock's content box, which is exactly the bound above. */
+.fb-chat-dock > .fb-chat-workspace { height: 100%; min-height: 0; }
+
+.fb-chat-dock :is(button, a, input, textarea):focus-visible {
+  outline: 2px solid var(--fb-focus);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------- minimized */
+
+/* Retain the mounted canonical header ONLY, so the restore control survives
+   without a second conversation header in the host. */
+.fb-chat-dock[data-phase="minimized"] .fb-chat-page > :not(header) { display: none; }
+.fb-chat-dock[data-phase="minimized"] {
+  height: auto;
+}
+.fb-chat-dock[data-phase="minimized"] > *,
+.fb-chat-dock[data-phase="minimized"] > .fb-chat-workspace,
+.fb-chat-dock[data-phase="minimized"] .fb-chat-page {
+  height: auto;
+  flex: 0 0 auto;
+}
+/* The details pane and its resize strip are a third pane; there is no width
+   for them in a one-header strip. */
+.fb-chat-dock[data-phase="minimized"] .fb-chat-workspace {
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: 0;
+}
+.fb-chat-dock[data-phase="minimized"] .fb-chat-details,
+.fb-chat-dock[data-phase="minimized"] .fb-chat-details-resize { display: none; }
+
+/* Four 44px header controls must wrap rather than crush the identity at
+   320px or large text. The canonical header keeps its own order; only the
+   wrap and the identity's shrink floor are added. */
+.fb-chat-dock .fb-chat-header {
+  flex-wrap: wrap;
+  row-gap: .25rem;
+}
+.fb-chat-dock .fb-chat-header > .fb-chat-heading {
+  flex: 1 1 5rem;
+  min-width: min(100%, 5rem);
+}
+
+/* ------------------------------------------------------------------ picker */
+
+.fb-chat-picker {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.fb-chat-dock-header {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex: none;
+  min-height: 52px;
+  padding: .25rem .4rem .25rem .85rem;
+  border-bottom: 1px solid var(--fb-outline-variant);
+}
+.fb-chat-dock-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+.fb-chat-dock-header .fb-chat-icon { color: var(--fb-on-surface-variant); }
+
+.fb-chat-dock-search {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex: none;
+  margin: .5rem .6rem 0;
+  padding: 0 .6rem;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: .75rem;
+  background: var(--fb-surface-container);
+}
+.fb-chat-dock-search svg { flex: none; color: var(--fb-on-surface-variant); }
+.fb-chat-dock-search input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: .5rem 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: .9375rem;
+}
+.fb-chat-dock-search input:focus,
+.fb-chat-dock-search input:focus-visible { outline: none; }
+/* The frame is the focus owner: a ring on the bare input would paint a square
+   around the rounded field. */
+.fb-chat-dock-search:focus-within {
+  border-color: var(--fb-primary);
+  outline: 2px solid var(--fb-focus);
+  outline-offset: 2px;
+}
+
+.fb-chat-dock-body {
+  flex: 1;
+  min-height: 0;
+  padding: .35rem .6rem .75rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.fb-chat-dock-section {
+  margin: .35rem .45rem .25rem;
+  font-size: .8125rem;
+  font-weight: 650;
+  color: var(--fb-on-surface-variant);
+}
+
+.fb-chat-dock-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fb-chat-dock-person {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  width: 100%;
+  min-height: 52px;
+  padding: .35rem .45rem;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.fb-chat-dock-person:hover { background: var(--fb-surface-container); }
+.fb-chat-dock-person:disabled { opacity: .6; cursor: default; }
+
+.fb-chat-dock-person-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+.fb-chat-dock-person-name,
+.fb-chat-dock-person-handle,
+.fb-chat-dock-person-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fb-chat-dock-person-name { font-weight: 600; }
+.fb-chat-dock-person-handle,
+.fb-chat-dock-person-preview {
+  font-size: .8125rem;
+  color: var(--fb-on-surface-variant);
+}
+
+.fb-chat-dock-unread {
+  flex: none;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--fb-primary);
+  color: var(--fb-on-primary);
+  font-size: .6875rem;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.fb-chat-dock-note {
+  margin: .35rem .45rem;
+  font-size: .875rem;
+  line-height: 1.45;
+  color: var(--fb-on-surface-variant);
+  overflow-wrap: anywhere;
+}
+
+.fb-chat-dock-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .5rem;
+  margin: .35rem .45rem;
+}
+.fb-chat-dock-notice p {
+  margin: 0;
+  font-size: .875rem;
+  line-height: 1.45;
+  color: var(--fb-on-surface-variant);
+  overflow-wrap: anywhere;
+}
+.fb-chat-dock-notice p[role="alert"] { color: var(--fb-error); }
+
+/* ------------------------------------------------------------------- motion */
+
+/* One short fade on mount. Minimize is a geometry change, not a transition,
+   so the header never slides away from the control the reader just pressed. */
+@media (prefers-reduced-motion: no-preference) {
+  .fb-chat-dock { animation: fb-chat-dock-enter .16s cubic-bezier(.2, 0, 0, 1); }
+}
+@keyframes fb-chat-dock-enter {
+  from { opacity: 0; }
+}
