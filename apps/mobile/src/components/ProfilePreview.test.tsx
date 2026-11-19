@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ProfilePreview, clearProfilePreviewCache } from "./ProfilePreview";
@@ -23,12 +23,18 @@ const profile = {
   locationLabel: "Central Library", createdAt: "2026-01-01T00:00:00.000Z",
 };
 
+function RouteProbe() {
+  const location = useLocation();
+  return <output data-testid="route">{location.pathname + location.search}</output>;
+}
+
 function mount() {
   const view = render(
     <MemoryRouter>
       <ProfilePreview person={person}>
         <a href="/u/samira">Samira</a>
       </ProfilePreview>
+      <RouteProbe />
     </MemoryRouter>,
   );
   const trigger = view.container.querySelector(".fb-profile-preview-trigger") as HTMLElement | null;
@@ -48,12 +54,31 @@ it("opens on a tap when the device has no hover", async () => {
   mocks.fine = false;
   mount();
   const identity = screen.getByRole("link", { name: "Samira" });
-  // A keyboard or assistive activation carries no pointer detail: it keeps the
-  // link's direct destination instead of forcing a card step.
+  // A keyboard activation carries no pointer detail: it keeps the link's direct
+  // destination instead of forcing a card step.
   fireEvent.click(identity, { detail: 0 });
   expect(screen.queryByTestId("profile-preview")).toBeNull();
   fireEvent.click(identity, { detail: 1 });
   expect(await screen.findByTestId("profile-preview")).toBeTruthy();
+});
+
+// A touch tap must hand focus into the card it opened; otherwise the reader is
+// left behind the surface that just appeared in front of them.
+it("moves focus into the card on a touch tap", async () => {
+  mocks.fine = false;
+  mount();
+  fireEvent.click(screen.getByRole("link", { name: "Samira" }), { detail: 1 });
+  const card = await screen.findByTestId("profile-preview");
+  const close = within(card).getByRole("button", { name: "Close profile preview" });
+  await waitFor(() => expect(document.activeElement).toBe(close));
+  expect(card.contains(document.activeElement)).toBe(true);
+});
+
+it("opens on a fine-pointer rest without moving focus", async () => {
+  const { trigger } = mount();
+  fireEvent.pointerOver(trigger, { pointerType: "mouse" });
+  const card = await screen.findByTestId("profile-preview");
+  expect(card.contains(document.activeElement)).toBe(false);
 });
 
 it("opens after a rest and shows the facts, the action and both destinations", async () => {
@@ -128,6 +153,8 @@ it("opens on key focus, moves into the card and Escape returns to the link", asy
   fireEvent.keyDown(document.activeElement as Element, { key: "Escape" });
   await waitFor(() => expect(screen.queryByTestId("profile-preview")).toBeNull());
   await waitFor(() => expect(document.activeElement).toBe(identity));
+  // Focus landing back on the link is not a second open.
+  expect(screen.queryByTestId("profile-preview")).toBeNull();
   expect(card).toBeTruthy();
   expect(trigger.contains(identity)).toBe(true);
 });
@@ -169,4 +196,54 @@ it("closes on the close button and on a press outside the card", async () => {
   await screen.findByTestId("profile-preview");
   fireEvent.pointerDown(document.body);
   await waitFor(() => expect(screen.queryByTestId("profile-preview")).toBeNull());
+});
+
+// The panel portals to the body but stays inside this trigger's React tree, so
+// the trigger's capture handler sees taps on the card's own controls. Reading
+// one as a trigger tap cancels the destination on a phone.
+it("keeps the card's own View full profile working on a touch tap", async () => {
+  mocks.fine = false;
+  mount();
+  fireEvent.click(screen.getByRole("link", { name: "Samira" }), { detail: 1 });
+  const card = await screen.findByTestId("profile-preview");
+  await waitFor(() => expect(card.contains(document.activeElement)).toBe(true));
+
+  fireEvent.click(within(card).getByRole("link", { name: "View full profile" }), { detail: 1 });
+
+  await waitFor(() => expect(screen.getByTestId("route").textContent).toBe("/u/samira"));
+});
+
+it("closes from the card's own Close on a touch tap", async () => {
+  mocks.fine = false;
+  mount();
+  fireEvent.click(screen.getByRole("link", { name: "Samira" }), { detail: 1 });
+  const close = await screen.findByRole("button", { name: "Close profile preview" });
+
+  fireEvent.click(close, { detail: 1 });
+
+  await waitFor(() => expect(screen.queryByTestId("profile-preview")).toBeNull());
+  expect(screen.getByTestId("route").textContent).toBe("/");
+});
+
+// Escape and Close both hand focus back to the identity link. Landing there is
+// not a second tap, so the card must stay shut rather than reopen on focus.
+it("returns focus to the identity from a touch card's Escape and Close", async () => {
+  mocks.fine = false;
+  mount();
+  const identity = screen.getByRole("link", { name: "Samira" });
+
+  fireEvent.click(identity, { detail: 1 });
+  const card = await screen.findByTestId("profile-preview");
+  await waitFor(() => expect(card.contains(document.activeElement)).toBe(true));
+  fireEvent.keyDown(document.activeElement as Element, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByTestId("profile-preview")).toBeNull());
+  expect(document.activeElement).toBe(identity);
+  expect(screen.queryByTestId("profile-preview")).toBeNull();
+
+  fireEvent.click(identity, { detail: 1 });
+  const again = await screen.findByTestId("profile-preview");
+  fireEvent.click(within(again).getByRole("button", { name: "Close profile preview" }), { detail: 1 });
+  await waitFor(() => expect(screen.queryByTestId("profile-preview")).toBeNull());
+  expect(document.activeElement).toBe(identity);
+  expect(screen.queryByTestId("profile-preview")).toBeNull();
 });

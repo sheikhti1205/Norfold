@@ -448,7 +448,9 @@ export function PrimaryNav({
     setRailWidthState(clamped);
     saveAppearance({ ...loadAppearance(), railWidth: clamped });
   };
-  useEffect(() => {
+  // The column reads this variable; writing it before paint means the first
+  // frame already carries the stored width instead of the 192px fallback.
+  useLayoutEffect(() => {
     document.documentElement.style.setProperty("--fb-rail-w", `${railWidthState}px`);
   }, [railWidthState]);
   const onResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -674,7 +676,6 @@ export function PrimaryNav({
         data-pinned={railPinned ? "true" : "false"}
         data-hover-expanded={hoverExpanded ? "true" : "false"}
         className="fb-nav-rail shrink-0"
-        style={railPinned && !drawer ? { width: railWidthState } : undefined}
         onPointerEnter={scheduleHoverExpand}
         onPointerLeave={() => { cancelHoverExpand(); dismissHoverLabel(); }}
         onPointerDown={() => { cancelHoverExpand(); dismissHoverLabel(); }}

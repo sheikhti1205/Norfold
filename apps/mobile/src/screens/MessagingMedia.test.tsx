@@ -284,7 +284,7 @@ it("saves a new message without waiting for a failed thread refresh", async () =
   const field = screen.getByRole("textbox", { name: "Message" });
   fireEvent.change(field, { target: { value: "Continue offline" } });
   fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-  await waitFor(() => expect(m.text).toHaveBeenCalledWith("account", "chat", "peer", "Continue offline", undefined, undefined, expect.any(String)));
+  await waitFor(() => expect(m.text).toHaveBeenCalledWith("account", "chat", "peer", "Continue offline", undefined, undefined, expect.any(String), expect.any(Function)));
   await waitFor(() => expect(field).toHaveProperty("value", ""));
 });
 
@@ -357,8 +357,12 @@ it("offers retry when a reconciled transcript cannot be read instead of remainin
 });
 
 it("keeps the composer usable and preserves newer typing while a text is still being admitted", async () => {
+  const admissions: Array<() => void> = [];
   const resolvers: Array<(value: string) => void> = [];
-  m.text.mockReset().mockImplementation(() => new Promise<string>((resolve) => { resolvers.push(resolve); }));
+  m.text.mockReset().mockImplementation((...args: unknown[]) => {
+    admissions.push(args[7] as () => void);
+    return new Promise<string>((resolve) => { resolvers.push(resolve); });
+  });
   await open();
   const field = screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement;
   fireEvent.change(field, { target: { value: "First" } });
@@ -367,14 +371,23 @@ it("keeps the composer usable and preserves newer typing while a text is still b
   expect(field.disabled).toBe(false);
   fireEvent.change(field, { target: { value: "Second" } });
   fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-  await waitFor(() => expect(m.text).toHaveBeenCalledTimes(2));
-  expect(m.text).toHaveBeenLastCalledWith("account", "chat", "peer", "Second", undefined, undefined, expect.any(String));
+  // Typing and editing stay available, but a second durable admission waits for
+  // the first one's committed boundary, which is still inside the runtime.
+  expect(m.text).toHaveBeenCalledTimes(1);
   expect(field.value).toBe("Second");
-  // The first admission settling must not wipe input the person typed after it.
+  // The durable callback fires before the blocked view read resolves; only then
+  // does the next deliberate send become admissible.
+  await act(async () => { admissions[0]!(); });
+  expect(field.value).toBe("Second");
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(m.text).toHaveBeenCalledTimes(2));
+  expect(m.text).toHaveBeenLastCalledWith("account", "chat", "peer", "Second", undefined, undefined, expect.any(String), expect.any(Function));
+  // The first view read is still unresolved; the second admission is legitimate.
   await act(async () => { resolvers[0]!("saved"); });
   await waitFor(() => expect(field.value).toBe("Second"));
-  await act(async () => { resolvers[1]!("saved"); });
+  await act(async () => { admissions[1]!(); });
   await waitFor(() => expect(field.value).toBe(""));
+  await act(async () => { resolvers[1]!("saved"); });
   expect(screen.queryAllByText("Message saved. Sending.")).toHaveLength(0);
 });
 it("preserves a newer draft even when its text equals the in-flight admission", async () => {
@@ -498,11 +511,11 @@ it("attaches a report-origin subject to the first text only", async () => {
   render(thread(`?report=${report}`)); await waitFor(() => expect(screen.queryByText("Opening messages…")).toBeNull());
   const field = screen.getByRole("textbox", { name: "Message" });
   fireEvent.change(field, { target: { value: "About this report" } }); fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-  await waitFor(() => expect(m.text).toHaveBeenCalledExactlyOnceWith("account", "chat", "peer", "About this report", report, undefined, expect.any(String)));
+  await waitFor(() => expect(m.text).toHaveBeenCalledExactlyOnceWith("account", "chat", "peer", "About this report", report, undefined, expect.any(String), expect.any(Function)));
   await waitFor(() => expect(field).toHaveProperty("value", ""));
   await waitFor(() => expect(screen.getByTestId("query").textContent).toBe(""));
   fireEvent.change(field, { target: { value: "Now ordinary text" } }); fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-  await waitFor(() => expect(m.text).toHaveBeenLastCalledWith("account", "chat", "peer", "Now ordinary text", undefined, undefined, expect.any(String)));
+  await waitFor(() => expect(m.text).toHaveBeenLastCalledWith("account", "chat", "peer", "Now ordinary text", undefined, undefined, expect.any(String), expect.any(Function)));
 });
 
 function geolocation() {
@@ -715,7 +728,7 @@ it("sends desktop Enter once but preserves Shift+Enter and IME composition", asy
   fireEvent.keyDown(field,{key:"Enter",shiftKey:true});expect(m.text).not.toHaveBeenCalled();
   fireEvent.compositionStart(field);fireEvent.keyDown(field,{key:"Enter"});expect(m.text).not.toHaveBeenCalled();
   fireEvent.compositionEnd(field);fireEvent.keyDown(field,{key:"Enter"});
-  await waitFor(()=>expect(m.text).toHaveBeenCalledExactlyOnceWith("account","chat","peer","Hello",undefined,undefined,expect.any(String)));
+  await waitFor(()=>expect(m.text).toHaveBeenCalledExactlyOnceWith("account","chat","peer","Hello",undefined,undefined,expect.any(String),expect.any(Function)));
   await waitFor(()=>expect(field).toHaveProperty("value",""));
 });
 it("offers an accessible photo picker in a connected conversation", async () => {

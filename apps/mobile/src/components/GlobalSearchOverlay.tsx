@@ -27,6 +27,8 @@ import { CATEGORY_OPTIONS } from "./CategoryField";
 import { POST_TYPE_OPTIONS, STATUS_OPTIONS, statusLabel } from "./Segmented";
 import { UserAvatar } from "./UserAvatar";
 import { PostLink } from "./PostNavigation";
+import { identityHref } from "./identity";
+import { ProfilePreview } from "./ProfilePreview";
 import { ReportDatePicker } from "./ReportDatePicker";
 import { ReportPhotoPreview } from "./ReportPhotoPreview";
 import { SearchField } from "./SearchField";
@@ -266,10 +268,10 @@ function SearchSurface() {
   const { user } = useAuth();
   const accountId = user?.id ?? null;
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const location = useLocation();
   // Opened from My reports, the one search surface searches that owner's
   // reports: same pill filters, no people, and `/search` keeps the scope.
-  const myReports = pathname === "/my";
+  const myReports = location.pathname === "/my";
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<SearchFilters>(EMPTY_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -304,6 +306,16 @@ function SearchSurface() {
     const seeded = takeGlobalSearchSeed();
     if (seeded) setQuery(seeded);
   }, []);
+
+  // A card opened from a result portals out of this surface, so its own
+  // destinations (the avatar, the name, View full profile) never pass through
+  // the result row's click. Taking one still leaves search, and the card's
+  // Close stays a card-only dismissal, so the navigation is the signal. The
+  // location key changes even when the destination is the page already open.
+  const entryLocationKey = useRef(location.key);
+  useEffect(() => {
+    if (location.key !== entryLocationKey.current) closeGlobalSearch();
+  }, [location.key]);
 
   const trimmed = query.trim();
   const deferred = useDebounced(trimmed, 220);
@@ -721,13 +733,22 @@ function SearchSurface() {
               <SearchReportRow report={report} onPick={pickResult} />
             </li>)}
             {people.map((person) => <li key={`person-${person.id}`}>
-              <Link to={`/u/${encodeURIComponent(person.username)}`} className="fb-gsearch-row" onClick={pickResult}>
-                <UserAvatar username={person.displayName?.trim() || person.username} avatarUrl={person.avatarUrl} size={32} />
-                <span className="fb-gsearch-row-copy">
-                  <span className="fb-gsearch-row-title">{person.displayName?.trim() || person.username}</span>
-                  <span className="fb-gsearch-row-meta">@{person.username}</span>
-                </span>
-              </Link>
+              {/* The same person card the people directory carries: a rest or a
+                  tap answers "who is this?" in place, and the row itself is the
+                  destination only when the card did not take the gesture. */}
+              <ProfilePreview person={person} className="w-full" openOnFocus={false}>
+                <Link
+                  to={identityHref(person)}
+                  className="fb-gsearch-row"
+                  onClick={(event) => { if (!event.defaultPrevented) pickResult(); }}
+                >
+                  <UserAvatar username={person.displayName?.trim() || person.username} avatarUrl={person.avatarUrl} size={32} />
+                  <span className="fb-gsearch-row-copy">
+                    <span className="fb-gsearch-row-title">{person.displayName?.trim() || person.username}</span>
+                    <span className="fb-gsearch-row-meta">@{person.username}</span>
+                  </span>
+                </Link>
+              </ProfilePreview>
             </li>)}
           </ul>}
           {showEmpty && <div className="fb-search-note">
@@ -745,7 +766,8 @@ function SearchSurface() {
  * One report result. The report's own photo sits in a fixed, avatar-sized box
  * beside the left-aligned title (never a magnifier pinned to the far end), and
  * the one shared hover card from `ReportPhotoPreview` is the only preview on
- * this row. Recent searches and people keep their own rows.
+ * this row. Recent searches keep their own rows; a person's row carries the
+ * person card instead.
  */
 function SearchReportRow({ report, onPick }: { report: PostItem; onPick: () => void }) {
   return <ReportPhotoPreview post={report}>

@@ -3,31 +3,54 @@ package com.findback.app.media;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.Intent;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.provider.OpenableColumns;
+import android.util.Base64;
 import androidx.activity.result.ActivityResult;
 import androidx.core.content.FileProvider;
+import androidx.core.view.inputmethod.InputConnectionCompat;
+import androidx.core.view.inputmethod.InputContentInfoCompat;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.RandomAccessFile;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
 import org.json.JSONArray;
 
 /** Native permissionless photo picker/document picker and delegated camera capture. */
 @CapacitorPlugin(name = "FindbackMedia")
 public final class FindbackMediaPlugin extends Plugin {
     private static final MediaRequestState.Registry REGISTRY = new MediaRequestState.Registry();
+    /** Equal to the canonical request-id shape used by the JS admission owner. */
+    private static final Pattern REQUEST_ID = Pattern.compile("[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}");
+    /** Enough of a header to reach the still/animation chunk without decoding. */
+    private static final int SNIFF_PREFIX_BYTES = 256 * 1024;
     private final MediaRequestState requests = new MediaRequestState(REGISTRY);
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    /**
+     * Keyboard insertions keep their own queue: a 20 MB copy must never delay
+     * the picker's preparation, and one queue per plugin preserves the order in
+     * which the IME committed items.
+     */
+    private final ExecutorService keyboardWorker = Executors.newSingleThreadExecutor();
+    private final KeyboardMediaIntake.Receiver keyboardReceiver = this::receiveKeyboardMedia;
 
     @PluginMethod public void chooseImage(PluginCall call) {
         String source = call.getString("source", "photos");
@@ -204,6 +227,382 @@ public final class FindbackMediaPlugin extends Plugin {
             } finally { finish(request); }
         }); } catch (RuntimeException e) { finish(request); call.reject("Photo preparation was interrupted. Please choose the photo again.", "MEDIA_INTERRUPTED"); }
     }
+
+    /**
+     * Advertise, replace or withdraw the live composer's ability to receive
+     * keyboard/provider images. A different owner always starts a new
+     * generation, so a copy that began under the previous conversation can
+     * never be published into the new one.
+     */
+    @PluginMethod public void setKeyboardMediaEligibility(PluginCall call) {
+        boolean eligible = Boolean.TRUE.equals(call.getBoolean("eligible", false));
+        JSObject out = new JSObject();
+        if (!eligible) {
+            revokeKeyboard();
+            out.put("eligible", false);
+            call.resolve(out);
+            return;
+        }
+        String accountId = call.getString("accountId");
+        String conversationId = call.getString("conversationId");
+        if (accountId == null || accountId.isEmpty() || conversationId == null || conversationId.isEmpty()) {
+            // A half-specified owner is never advertised: refuse instead of
+            // accepting bytes that cannot be attributed to a conversation.
+            revokeKeyboard();
+            out.put("eligible", false);
+            call.resolve(out);
+            return;
+        }
+        KeyboardMediaState shared = KeyboardMediaState.shared();
+        KeyboardMediaState.Owner previous = shared.owner();
+        KeyboardMediaState.Owner owner = shared.enable(accountId, conversationId);
+        if (previous != null && (!previous.accountId.equals(owner.accountId)
+                || !previous.conversationId.equals(owner.conversationId))) {
+            discardKeyboard();
+        } else {
+            sweepKeyboard();
+        }
+        KeyboardMediaIntake.register(keyboardReceiver);
+        out.put("eligible", true);
+        call.resolve(out);
+    }
+
+    /**
+     * Pull one request's bytes in bounded chunks. The request id is the only
+     * handle; native owns the path and re-checks the owner generation on every
+     * read, so a paused, replaced or destroyed composer cannot read.
+     */
+    @PluginMethod public void readKeyboardMedia(PluginCall call) {
+        final String requestId = call.getString("requestId");
+        final Integer offset = call.getInt("offset");
+        final Integer length = call.getInt("length");
+        if (requestId == null || !REQUEST_ID.matcher(requestId).matches()
+                || offset == null || offset < 0
+                || length == null || length <= 0 || length > KeyboardMediaState.MAX_CHUNK_BYTES) {
+            call.reject("That item is no longer available.", "KEYBOARD_MEDIA_UNAVAILABLE");
+            return;
+        }
+        final int from = offset;
+        final int count = length;
+        try {
+            keyboardWorker.execute(() -> {
+                KeyboardMediaState state = KeyboardMediaState.shared();
+                KeyboardMediaState.Entry entry = state.find(requestId);
+                if (entry == null || !state.authorized(entry) || from + (long) count > entry.byteLength) {
+                    call.reject("That item is no longer available.", "KEYBOARD_MEDIA_UNAVAILABLE");
+                    return;
+                }
+                byte[] buffer = new byte[count];
+                try (RandomAccessFile file = new RandomAccessFile(entry.file, "r")) {
+                    file.seek(from);
+                    file.readFully(buffer, 0, count);
+                } catch (IOException unavailable) {
+                    state.remove(requestId);
+                    deleteQuietly(entry.file);
+                    call.reject("That item is no longer available.", "KEYBOARD_MEDIA_UNAVAILABLE");
+                    return;
+                }
+                JSObject out = new JSObject();
+                out.put("base64", Base64.encodeToString(buffer, Base64.NO_WRAP));
+                out.put("nextOffset", from + count);
+                out.put("byteLength", entry.byteLength);
+                call.resolve(out);
+            });
+        } catch (RuntimeException stopped) {
+            call.reject("That item is no longer available.", "KEYBOARD_MEDIA_UNAVAILABLE");
+        }
+    }
+
+    @PluginMethod public void releaseKeyboardMedia(PluginCall call) {
+        String requestId = call.getString("requestId");
+        KeyboardMediaState.Entry entry = requestId == null ? null : KeyboardMediaState.shared().remove(requestId);
+        if (entry != null) deleteQuietly(entry.file);
+        JSObject out = new JSObject();
+        out.put("released", entry != null);
+        call.resolve(out);
+    }
+
+    /** Called by the host activity before the WebView goes to the background. */
+    public void onHostPaused() {
+        boolean wasEligible = KeyboardMediaState.shared().eligible();
+        revokeKeyboard();
+        if (!wasEligible) return;
+        JSObject payload = new JSObject();
+        payload.put("eligible", false);
+        notifyListeners("keyboardMediaEligibility", payload);
+    }
+
+    /** Withdraw the capability and reclaim every cached request immediately. */
+    private void revokeKeyboard() {
+        KeyboardMediaState.shared().disable();
+        KeyboardMediaIntake.unregister(keyboardReceiver);
+        discardKeyboard();
+    }
+
+    /**
+     * Entry point for one committed IME item. Runs on the UI thread and returns
+     * as soon as the copy is queued; the grant is released by the worker.
+     *
+     * The admission slot is reserved BEFORE the queue, so the bound covers
+     * published, queued and running copies together: a burst of insertions
+     * cannot build an unbounded executor queue behind an empty cache. A refused
+     * slot is a visible refusal; the WebView then releases its grant once.
+     */
+    private boolean receiveKeyboardMedia(InputContentInfoCompat content, int flags, Bundle opts) {
+        KeyboardMediaState state = KeyboardMediaState.shared();
+        if (!state.eligible() || content == null) return false;
+        Uri uri = content.getContentUri();
+        if (uri == null || !"content".equals(uri.getScheme()) || uri.getAuthority() == null) {
+            rejectKeyboard(state.owner(), "unsupported");
+            return false;
+        }
+        sweepKeyboard();
+        KeyboardMediaState.Owner owner = state.owner();
+        if (owner == null) return false;
+        final KeyboardMediaState.Reservation reservation;
+        try {
+            reservation = state.reserve(owner);
+        } catch (KeyboardMediaState.TooManyRequests busy) {
+            rejectKeyboard(owner, "busy");
+            return false;
+        } catch (KeyboardMediaState.NotEligible gone) {
+            return false;
+        }
+        try {
+            keyboardWorker.execute(() -> copyKeyboardMedia(owner, reservation, content, flags));
+        } catch (RuntimeException stopped) {
+            // The task never ran: this is the only release this slot gets.
+            state.release(reservation);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * A committed item the reader asked for was refused. Only the live owner is
+     * told, so a worker that finishes after a route change, blur or destroy
+     * never raises an error in a screen that no longer asked for it.
+     */
+    private void rejectKeyboard(KeyboardMediaState.Owner owner, String reason) {
+        KeyboardMediaState state = KeyboardMediaState.shared();
+        if (!state.eligible() || (owner != null && !state.current(owner))) return;
+        JSObject payload = new JSObject();
+        payload.put("reason", reason);
+        notifyListeners("keyboardMediaRejected", payload);
+    }
+
+    /**
+     * Copy one committed item under the owner captured before the queue. A
+     * still is prepared by the canonical native processor (bounded derivative,
+     * alpha preserved); animation candidates keep their original frames and
+     * are only accepted under the existing private file-lane ceiling. Both are
+     * re-sniffed from the copied bytes, so the announcement describes what was
+     * actually stored.
+     *
+     * A stale task (blur, route change, cache clear, destroy) returns before it
+     * touches the provider at all. The reservation is released exactly once in
+     * {@code finally}: after a successful publish, after every refusal, after a
+     * stale early return, and after an ownership change — where the same
+     * finally still releases the URI grant.
+     */
+    private void copyKeyboardMedia(KeyboardMediaState.Owner owner, KeyboardMediaState.Reservation reservation,
+                                   InputContentInfoCompat content, int flags) {
+        Uri uri = content.getContentUri();
+        File produced = null;
+        try {
+            // Returning from inside the try is what keeps the grant and the
+            // physical slot owned: a queued task that lost its owner must not
+            // read the provider, but it must still run this finally.
+            if (!KeyboardMediaState.shared().current(owner)) return;
+            long knownLength = providerLength(uri);
+            MediaStreams.Probe probe;
+            try (InputStream input = openSource(uri)) {
+                probe = MediaStreams.probe(input, knownLength);
+            }
+            long total = probe.total;
+            if (total <= 0) { rejectKeyboard(owner, "unreadable"); return; }
+            KeyboardMediaSniff.Info info = KeyboardMediaSniff.sniff(probe.prefix);
+            if (info == null || !info.conclusive) {
+                info = KeyboardMediaSniff.sniff(readPrefix(uri, SNIFF_PREFIX_BYTES));
+            }
+            if (info == null || !info.conclusive || info.width <= 0 || info.height <= 0) {
+                rejectKeyboard(owner, "unsupported");
+                return;
+            }
+            String requestId = UUID.randomUUID().toString();
+            File directory = keyboardDirectory();
+            if (info.animated) {
+                // Animation keeps its bytes: a decode here would flatten frames.
+                if (total > KeyboardMediaState.MAX_ANIMATION_BYTES) { rejectKeyboard(owner, "too-large"); return; }
+                File target = new File(directory, requestId + ".bin");
+                // The partial file belongs to this worker from the moment it is
+                // named: a failed open, a provider read error or the size cap
+                // must delete it in finally, never leave it unnamed in cache.
+                produced = target;
+                long length;
+                try (InputStream input = openSource(uri)) {
+                    length = KeyboardMediaFiles.store(input, target, KeyboardMediaState.MAX_ANIMATION_BYTES);
+                }
+                if (length != total) {
+                    // Only a preserved animation is compared with the probe: a
+                    // truncated, padded or changed source is refused rather
+                    // than sent as a shorter animation. A still derivative is
+                    // re-encoded, so its length is never the source's.
+                    rejectKeyboard(owner, "unreadable");
+                    return;
+                }
+                KeyboardMediaSniff.Info stored = KeyboardMediaSniff.sniff(readFilePrefix(target, SNIFF_PREFIX_BYTES));
+                if (stored == null || !stored.animated || stored.kind != info.kind
+                        || stored.width != info.width || stored.height != info.height || length <= 0) {
+                    rejectKeyboard(owner, "unreadable");
+                    return;
+                }
+                if (publish(owner, reservation, requestId, target, true, info.mime, info.width, info.height, length)) {
+                    produced = null;
+                } else {
+                    rejectKeyboard(owner, "busy");
+                }
+            } else {
+                JSObject derivative = new NativeImageProcessor(getContext().getContentResolver(), directory).prepare(uri, false);
+                String encoded = derivative.getString("derivativeBase64");
+                String mime = derivative.getString("mimeType");
+                int width = derivative.getInt("width");
+                int height = derivative.getInt("height");
+                byte[] bytes = Base64.decode(encoded, Base64.NO_WRAP);
+                if (bytes.length == 0) { rejectKeyboard(owner, "unreadable"); return; }
+                File target = new File(directory, requestId + ".bin");
+                // Same rule as the animation branch: the target is owned before
+                // the write starts. The derivative is re-encoded, so its length
+                // is never compared with the source.
+                produced = target;
+                KeyboardMediaFiles.store(new ByteArrayInputStream(bytes), target, bytes.length);
+                KeyboardMediaSniff.Info stored = KeyboardMediaSniff.sniff(readFilePrefix(target, SNIFF_PREFIX_BYTES));
+                if (stored == null || stored.animated || !stored.mime.equals(mime)
+                        || stored.width != width || stored.height != height) {
+                    rejectKeyboard(owner, "unreadable");
+                    return;
+                }
+                if (publish(owner, reservation, requestId, target, false, mime, width, height, bytes.length)) {
+                    produced = null;
+                } else {
+                    rejectKeyboard(owner, "busy");
+                }
+            }
+        } catch (Exception | OutOfMemoryError refused) {
+            // Nothing was published: tell the live owner the item was refused
+            // instead of leaving the insert silently doing nothing.
+            rejectKeyboard(owner, "unreadable");
+        } finally {
+            if (produced != null) deleteQuietly(produced);
+            releaseKeyboardGrant(content, flags);
+            KeyboardMediaState.shared().release(reservation);
+        }
+    }
+
+    private boolean publish(KeyboardMediaState.Owner owner, KeyboardMediaState.Reservation reservation,
+                            String requestId, File file, boolean animated,
+                            String mime, int width, int height, long length) {
+        KeyboardMediaState.Entry entry;
+        try {
+            // Transfer this worker's own slot into the entry in one step. The
+            // item was already counted by reserve(), so its own slot can never
+            // refuse it and the entry is never counted twice; the finally
+            // release of the transferred token is then a no-op.
+            entry = KeyboardMediaState.shared().add(requestId, owner, reservation, file, animated, mime,
+                    width, height, length, System.currentTimeMillis());
+        } catch (KeyboardMediaState.TooManyRequests | KeyboardMediaState.NotEligible
+                 | IllegalArgumentException refused) {
+            return false;
+        }
+        JSObject payload = new JSObject();
+        payload.put("requestId", entry.id);
+        payload.put("kind", animated ? "animation" : "still");
+        payload.put("mime", entry.mime);
+        payload.put("width", entry.width);
+        payload.put("height", entry.height);
+        payload.put("byteLength", entry.byteLength);
+        notifyListeners("keyboardMedia", payload);
+        return true;
+    }
+
+    private static void releaseKeyboardGrant(InputContentInfoCompat content, int flags) {
+        if ((flags & InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION) == 0) return;
+        try { content.releasePermission(); } catch (Exception ignored) { /* already lapsed */ }
+    }
+
+    private void sweepKeyboard() {
+        for (KeyboardMediaState.Entry entry : KeyboardMediaState.shared().sweep(System.currentTimeMillis())) {
+            deleteQuietly(entry.file);
+        }
+    }
+
+    private void discardKeyboard() {
+        for (KeyboardMediaState.Entry entry : KeyboardMediaState.shared().clear()) deleteQuietly(entry.file);
+    }
+
+    private static void deleteQuietly(File file) {
+        try { if (file != null) file.delete(); } catch (RuntimeException ignored) { /* cache cleanup is best effort */ }
+    }
+
+    private InputStream openSource(Uri uri) throws IOException {
+        InputStream input = getContext().getContentResolver().openInputStream(uri);
+        if (input == null) throw new IOException("This item isn't available.");
+        return input;
+    }
+
+    /** Provider length hint, or -1 when it has none; same rule as the photo intake. */
+    private long providerLength(Uri uri) {
+        try (Cursor cursor = getContext().getContentResolver().query(
+                uri, new String[] { OpenableColumns.SIZE }, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int index = cursor.getColumnIndex(OpenableColumns.SIZE);
+                if (index >= 0 && !cursor.isNull(index)) {
+                    long size = cursor.getLong(index);
+                    if (size >= 0) return size;
+                }
+            }
+        } catch (RuntimeException ignored) { /* the counting probe is the backstop */ }
+        return -1;
+    }
+
+    private byte[] readPrefix(Uri uri, int maximum) {
+        try (InputStream input = openSource(uri)) {
+            byte[] buffer = new byte[maximum];
+            int at = 0;
+            while (at < maximum) {
+                int read = input.read(buffer, at, maximum - at);
+                if (read < 0) break;
+                at += read;
+            }
+            return at == buffer.length ? buffer : Arrays.copyOf(buffer, at);
+        } catch (IOException refused) {
+            return new byte[0];
+        }
+    }
+
+    private static byte[] readFilePrefix(File file, int maximum) {
+        try (InputStream input = new java.io.FileInputStream(file)) {
+            byte[] buffer = new byte[maximum];
+            int at = 0;
+            while (at < maximum) {
+                int read = input.read(buffer, at, maximum - at);
+                if (read < 0) break;
+                at += read;
+            }
+            return at == buffer.length ? buffer : Arrays.copyOf(buffer, at);
+        } catch (IOException refused) {
+            return new byte[0];
+        }
+    }
+
+    private File keyboardDirectory() throws IOException {
+        File directory = new File(getContext().getCacheDir(), "findback-keyboard");
+        if (!directory.isDirectory() && !directory.mkdir() && !directory.isDirectory()) {
+            throw new IOException("Couldn't prepare temporary media storage");
+        }
+        return directory;
+    }
+
     private File directory(String id) throws java.io.IOException {
         File directory = new File(getContext().getCacheDir(), "findback-media-" + id);
         if (!directory.isDirectory() && !directory.mkdir()) throw new java.io.IOException("Couldn't prepare temporary photo storage");
@@ -255,6 +654,8 @@ public final class FindbackMediaPlugin extends Plugin {
         // Processing always finishes its own cleanup, even when its result is cancelled on restore.
         MediaRequestState.Request request = requests.current();
         if (!getActivity().isChangingConfigurations() && request != null && requests.owns(request.id, MediaRequestState.Phase.PICKING)) finish(request);
+        revokeKeyboard();
         worker.shutdown();
+        keyboardWorker.shutdown();
     }
 }

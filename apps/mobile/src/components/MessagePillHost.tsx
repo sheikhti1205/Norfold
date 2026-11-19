@@ -2,6 +2,7 @@ import { useState } from "react";
 import { matchPath, useLocation, useNavigate } from "react-router";
 import { useAuth } from "../auth";
 import { useMessaging } from "../services/messaging/useMessaging";
+import { messagePreview } from "../utils/messagePreview";
 import { MessagePill } from "./MessagePill";
 
 const publicPaths = new Set(["/privacy", "/terms", "/community-guidelines", "/auth", "/signin", "/register", "/verify", "/forgot", "/recovery", "/create-password", "/complete-profile", "/onboarding", "/splash", "/__fixture"]);
@@ -27,8 +28,7 @@ export function MessagePillHost() {
   if (!row?.lastMessage) return null;
 
   const message = row.lastMessage;
-  const preview = message.body || (message.messageType === "LOCATION" ? "Location shared"
-    : message.messageType === "MEDIA" ? "Photo" : message.messageType === "VOICE" ? "Voice message" : "Message");
+  const preview = messagePreview(message);
   return <MessagePill person={{ name: "Member", username: "" }} preview={preview}
     onOpen={() => navigate(`/chats/${row.conversationId}`)}
     onDismiss={() => setDismissed((previous) => ({ ...previous,

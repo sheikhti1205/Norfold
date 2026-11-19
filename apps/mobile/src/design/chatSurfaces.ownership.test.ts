@@ -8,10 +8,15 @@ import { CHAT_PANE } from "../components/panePreference";
  *
  * jsdom has no layout engine, so these assertions cannot measure a rounded
  * corner or a gutter. What they pin is the mechanism that decides who moves:
- * the inset stays scoped to Chat, the 64px avatar rail is never narrowed, the
- * details gap only exists with the open grid class, and the shared Settings
- * split, chat scroll ownership and content dividers are not rewritten.
- * Rendered geometry remains the lead's deployed-browser acceptance item.
+ * the inset stays scoped to Chat, the 64px avatar rail keeps its column budget
+ * but takes the 4px its outer face was missing beside the shell's rail plus the
+ * shared 8px foot, the details gap only exists with the open grid class, the
+ * splitter sits inside one 8px surface gap, and the rail column beside it
+ * shares that same 8px band (4px frame + 4px pane inset). The expanded list,
+ * the hidden list, non-chat splits and the phone layout keep their geometry,
+ * and the shared Settings split, chat scroll ownership and content dividers are
+ * not rewritten. Rendered geometry remains the lead's deployed-browser
+ * acceptance item.
  *
  * Rule bodies are read by exact selector, not by the first match in the file:
  * a shared selector list or a second rule for the same selector must not hide
@@ -21,8 +26,11 @@ import { CHAT_PANE } from "../components/panePreference";
 type CssRule = { selectors: string[]; body: string };
 
 const splitCss = readFileSync(new URL("../components/adaptiveFoundation.css", import.meta.url), "utf8");
+const navCss = readFileSync(new URL("../components/Shell.nav.css", import.meta.url), "utf8");
 const chatCss = readFileSync(new URL("../screens/Messaging.css", import.meta.url), "utf8");
 const detailsCss = readFileSync(new URL("../components/chatDetailsLayout.css", import.meta.url), "utf8");
+const splitViewSource = readFileSync(new URL("../components/SplitView.tsx", import.meta.url), "utf8");
+const DIVIDER_WIDTH = Number(/const DIVIDER_WIDTH = (\d+);/.exec(splitViewSource)?.[1] ?? "");
 
 const FOCUS_RING = /box-shadow\s*:\s*0 0 0 2px var\(--fb-focus\)/;
 
@@ -84,12 +92,57 @@ describe("R19 chat surfaces stay chat-scoped", () => {
     expect(splitCss).not.toMatch(/\.fb-chat-rail\s*\{[^}]*padding/);
   });
 
+  it("puts the splitter inside one 8px chat surface gap", () => {
+    const guard = ":has(> .fb-split-resize)";
+    expect(splitGutters).toMatch(/\.fb-split-wide:has\(\.fb-chat-page\):has\(> \.fb-split-resize\) \{\s*column-gap: 0\.5px;/);
+    const listWide = bodiesFor(splitRules, `.fb-split-wide:has(.fb-chat-page)${guard} > .fb-split-list:has(> .fb-chat-page:not(.fb-chat-rail))`);
+    const detailWide = bodiesFor(splitRules, `.fb-split-wide:has(.fb-chat-page)${guard} > .fb-split-detail:has(> .fb-chat-workspace)`);
+    const emptyWide = bodiesFor(splitRules, `.fb-split-wide:has(.fb-chat-page)${guard} > .fb-split-detail:has(> .fb-chat-empty)`);
+    expect(listWide.some(body => declared(body, "padding-inline", "8px 0"))).toBe(true);
+    expect(detailWide.some(body => declared(body, "padding-inline", "0 8px"))).toBe(true);
+    expect(emptyWide.some(body => declared(body, "padding-inline", "0 8px"))).toBe(true);
+    // Half a pixel of grid gap either side of the 7px track is the same 8px
+    // surface gap the rail/list edge and the details pane use.
+    expect(DIVIDER_WIDTH).toBe(7);
+    const halfGap = Number(/column-gap:\s*([.\d]+)px;/.exec(splitGutters)?.[1] ?? "");
+    expect(halfGap).toBe(0.5);
+    expect(halfGap * 2 + DIVIDER_WIDTH).toBe(8);
+    expect(splitGutters).toMatch(/\.fb-split-list:has\(> \.fb-chat-page:not\(\.fb-chat-rail\)\) \{\s*padding: 0 8px 8px;/);
+    expect(splitGutters).toMatch(/\.fb-split-detail:has\(> \.fb-chat-workspace\),\s*\.fb-split-detail:has\(> \.fb-chat-empty\) \{\s*padding: 0 8px 8px;/);
+    // Only the state that renders the splitter changes; a collapsed 64px rail
+    // and a single pane keep the base 8px gutters.
+    expect(splitGutters).not.toMatch(/\.fb-split-wide:has\(\.fb-chat-page\)(?!:has\(> \.fb-split-resize\))/);
+    // Rail/list is the same 8px band, measured surface to surface: the column
+    // paints a 4px frame and the pane beside it adds 4px, not another 8.
+    const railFrame = Number(/\.fb-rail-anchor:has\(> \.fb-nav-rail\) \{[^}]*padding: 0 (\d+)px 8px;/.exec(navCss)?.[1] ?? "");
+    const railList = bodiesFor(splitRules, ".fb-app-viewport:has(.fb-rail-anchor > .fb-nav-rail) .fb-split-list:has(> .fb-chat-page:not(.fb-chat-rail))");
+    const railDetail = bodiesFor(splitRules, ".fb-app-viewport:has(.fb-rail-anchor > .fb-nav-rail) .fb-split-list[hidden] ~ .fb-split-detail:has(> .fb-chat-workspace)");
+    const railEmpty = bodiesFor(splitRules, ".fb-app-viewport:has(.fb-rail-anchor > .fb-nav-rail) .fb-split-list[hidden] ~ .fb-split-detail:has(> .fb-chat-empty)");
+    expect(railFrame).toBe(4);
+    expect(railList.some(body => declared(body, "padding-inline-start", "4px"))).toBe(true);
+    expect(railDetail.some(body => declared(body, "padding-inline-start", "4px"))).toBe(true);
+    expect(railEmpty.some(body => declared(body, "padding-inline-start", "4px"))).toBe(true);
+    expect(railFrame + 4).toBe(halfGap * 2 + DIVIDER_WIDTH);
+    // Only the pane beside the column moves. The wide split and the collapsed
+    // conversation rail keep their splitter gap and their own 8px edges.
+    expect(splitCss).not.toContain(".fb-nav-rail) .fb-split-detail");
+    // The override lands after the splitter's own padding rule, so the guarded
+    // 8px/0 does not out-order it at equal specificity.
+    const overrideAt = splitCss.indexOf(".fb-app-viewport:has(.fb-rail-anchor > .fb-nav-rail)");
+    const guardedAt = splitCss.indexOf(":has(> .fb-split-resize) > .fb-split-list");
+    expect(overrideAt).toBeGreaterThan(guardedAt);
+  });
+
   it("rounds the chat canvases with the existing 20px language", () => {
     expect(chatSurfaces).toMatch(/border-radius: 20px;/);
     expect(chatSurfaces).toMatch(/\.fb-split-detail > \.fb-chat-empty \{[^}]*background: var\(--fb-surface\);[^}]*min-height: 100%;/);
     expect(detailsSurfaces).toMatch(/\.fb-chat-details \{\s*border-radius: 20px;/);
     expect(chatCss).not.toContain(".fb-settings-root");
-    expect(splitCss).not.toContain(".fb-nav-rail");
+    // The split never styles the rail itself. It may only ask whether the
+    // shell's in-flow rail exists, because that is what makes the rail column
+    // and the list share one 8px band; the rail's own paint stays in
+    // Shell.nav.css.
+    expect(splitCss).not.toMatch(/\.fb-nav-rail\s*(?:,|\{)/);
   });
 
   it("opens the details gap only while the details grid is open", () => {
@@ -110,6 +163,10 @@ describe("R19 chat surfaces stay chat-scoped", () => {
   it("centres the details grip in the 8px gap on its 7px target", () => {
     expect(detailsCss).toMatch(/\.fb-chat-details-resize \{[^}]*right:calc\(var\(--fb-details-w, 320px\) \+ \.5px\);[^}]*width:7px;/);
     expect(detailsCss).toMatch(/\.fb-chat-details-resize::before \{[^}]*top:50%;[^}]*transform:translate\(-50%, -50%\);/);
+    // 0.5px either side of the 7px target is the same 8px surface gap, and the
+    // grip's centre lands on the gap's centre.
+    expect(0.5 + DIVIDER_WIDTH + 0.5).toBe(8);
+    expect(0.5 + DIVIDER_WIDTH / 2).toBe(8 / 2);
   });
 
   it("aligns the chat splitter track with the details track's 8px foot inset", () => {
@@ -188,10 +245,35 @@ describe("R19 chat surfaces stay chat-scoped", () => {
     expect(splitCss).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.fb-split-view:has\(\.fb-chat-page\) > \.fb-split-resize::before \{ transition\s*:\s*none;/);
   });
 
-  it("keeps the collapsed rail at its 64px bound and outside the inset", () => {
+  it("keeps the collapsed rail's 64px budget and gives it the shared 8px band", () => {
     expect(CHAT_PANE.collapsedWidth).toBe(64);
+    // The expanded list keeps its inner inset; the rail page never takes it.
     const listInset = /\.fb-split-list:has\(> \.fb-chat-page:not\(\.fb-chat-rail\)\) \{([^}]*)\}/.exec(splitCss)?.[1] ?? "";
     expect(listInset).toContain("padding: 0 8px 8px;");
+    expect(splitCss).not.toMatch(/\.fb-chat-rail\s*\{[^}]*padding/);
+    // Beside the shell's column the rail's outer face takes only the 4px it was
+    // missing: the column's frame supplies the other 4px, so the band matches
+    // the thread's 8px gutter and the 8px foot ends both surfaces together.
+    const collapsed = bodiesFor(splitRules, ".fb-app-viewport:has(.fb-rail-anchor > .fb-nav-rail) .fb-split-list:has(> .fb-chat-page.fb-chat-rail)");
+    expect(collapsed).toHaveLength(1);
+    const body = collapsed[0] ?? "";
+    expect(declared(body, "padding-inline-start", "4px")).toBe(true);
+    expect(declared(body, "padding-bottom", "8px")).toBe(true);
+    // The 64px column is the budget: the inset never rewrites it.
+    expect(body).not.toMatch(/(?:^|[;\s])(?:width|min-width|max-width)\s*:/);
+    const railFrame = Number(/\.fb-rail-anchor:has\(> \.fb-nav-rail\) \{[^}]*padding: 0 (\d+)px 8px;/.exec(navCss)?.[1] ?? "");
+    expect(railFrame + 4).toBe(8);
+    expect(splitGutters).toMatch(/\.fb-split-detail:has\(> \.fb-chat-workspace\),\s*\.fb-split-detail:has\(> \.fb-chat-empty\) \{\s*padding: 0 8px 8px;/);
+    // Every split rule that addresses the collapsed rail is gated on the
+    // in-flow rail, so the phone drawer and non-shell routes keep their own
+    // geometry.
+    const railRules = splitRules.filter(rule => rule.selectors.some(selector => selector.includes(".fb-chat-page.fb-chat-rail")));
+    expect(railRules.length).toBeGreaterThan(0);
+    for (const rule of railRules) {
+      for (const selector of rule.selectors.filter(text => text.includes(".fb-chat-page.fb-chat-rail"))) {
+        expect(selector).toContain(".fb-app-viewport:has(.fb-rail-anchor > .fb-nav-rail)");
+      }
+    }
   });
 
   it("keeps the selector and declaration helpers honest", () => {

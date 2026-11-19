@@ -1,12 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  App-owned Capacitor content view.
+
+  BridgeActivity inflates the library layout first and then calls the
+  overridable load(); MainActivity replaces it with this file before
+  super.load(), so Bridge.Builder.create() finds the app's
+  KeyboardMediaWebView at the canonical @id/webview and wires the bridge to
+  it. Nothing else about the activity or its plugins changes.
+-->
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-    <WebView
+    <com.findback.app.KeyboardMediaWebView
+        android:id="@+id/webview"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
+
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

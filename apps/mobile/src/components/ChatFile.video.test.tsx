@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { StrictMode, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatFile } from "./ChatFile";
 import { VideoPlayerProvider, useVideoPlayer, type VideoPlayerApi } from "./media/VideoPlayerProvider";
 import type { ChatFileMeta } from "../services/messaging/files";
@@ -201,7 +202,7 @@ it("re-opens the docked video from the row without downloading it again", async 
   expect(m.create).toHaveBeenCalledTimes(1);
 });
 
-it("paints the inline frame at the source's own ratio as metadata arrives", async () => {
+it("holds a compact loading band until this source's own metadata arrives", async () => {
   m.download.mockResolvedValue(new Blob(["x"], { type: "video/mp4" }));
   renderVideo();
 
@@ -211,15 +212,19 @@ it("paints the inline frame at the source's own ratio as metadata arrives", asyn
   const frame = document.querySelector(".fb-chat-video-frame") as HTMLElement;
   const element = document.querySelector("video") as HTMLVideoElement;
 
-  // Nothing has been measured yet: the familiar 16:9 frame stands in.
-  expect(card.style.getPropertyValue("--fb-chat-video-ratio")).toBe(String(16 / 9));
+  // Nothing has been measured yet, and the file name is not a shape: no 16:9
+  // ratio is written at all. The frame stays a compact loading band instead of
+  // a wide box that would collapse into a tall portrait.
+  expect(card.style.getPropertyValue("--fb-chat-video-ratio")).toBe("");
   expect(frame.getAttribute("data-active")).toBe("true");
+  expect(frame.getAttribute("data-pending")).toBe("true");
 
   setIntrinsicSize(element, 1080, 1920);
   reportSize(element);
   await waitFor(() => expect(
     card.style.getPropertyValue("--fb-chat-video-ratio"),
   ).toBe(String(1080 / 1920)));
+  expect(frame.getAttribute("data-pending")).toBeNull();
 
   // A later size change (rotation, adaptive stream) re-shapes the same frame.
   setIntrinsicSize(element, 1920, 1080);
@@ -227,6 +232,85 @@ it("paints the inline frame at the source's own ratio as metadata arrives", asyn
   await waitFor(() => expect(
     card.style.getPropertyValue("--fb-chat-video-ratio"),
   ).toBe(String(1920 / 1080)));
+  expect(frame.getAttribute("data-pending")).toBeNull();
+});
+
+describe("source ratios in the message frame", () => {
+  for (const [label, width, height] of [
+    ["9:16 portrait", 1080, 1920],
+    ["9:21 tall portrait", 1080, 2520],
+    ["16:9 landscape", 1920, 1080],
+  ] as const) {
+    it(`paints a ${label} source at its own ratio`, async () => {
+      m.download.mockResolvedValue(new Blob(["x"], { type: "video/mp4" }));
+      renderVideo();
+
+      fireEvent.click(screen.getByRole("button", { name: "Play clip.mp4" }));
+      await screen.findByRole("group", { name: "Video player: clip.mp4" });
+      const card = document.querySelector(".fb-chat-video") as HTMLElement;
+      const element = document.querySelector("video") as HTMLVideoElement;
+
+      setIntrinsicSize(element, width, height);
+      reportSize(element);
+      await waitFor(() => expect(
+        card.style.getPropertyValue("--fb-chat-video-ratio"),
+      ).toBe(String(width / height)));
+      expect(document.querySelectorAll("video")).toHaveLength(1);
+    });
+  }
+});
+
+it("carries the measured portrait shape into the overlay without a second player", async () => {
+  m.download.mockResolvedValue(new Blob(["x"], { type: "video/mp4" }));
+  renderVideo();
+
+  fireEvent.click(screen.getByRole("button", { name: "Play clip.mp4" }));
+  const group = await screen.findByRole("group", { name: "Video player: clip.mp4" });
+  const element = document.querySelector("video") as HTMLVideoElement;
+  setIntrinsicSize(element, 1080, 1920);
+  reportSize(element);
+  await waitFor(() => expect(group.style.getPropertyValue("--fb-vp-ratio")).toBe(String(1080 / 1920)));
+  element.currentTime = 7;
+
+  fireEvent.click(screen.getByRole("button", { name: "Expand video" }));
+  const dialog = await screen.findByRole("dialog", { name: "Video: clip.mp4" });
+  expect(dialog.style.getPropertyValue("--fb-vp-ratio")).toBe(String(1080 / 1920));
+  expect(document.querySelectorAll("video")).toHaveLength(1);
+  expect(document.querySelector("video")).toBe(element);
+  expect(element.currentTime).toBe(7);
+
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  const mini = await screen.findByRole("group", { name: "Video player: clip.mp4" });
+  expect(mini.style.getPropertyValue("--fb-vp-ratio")).toBe(String(1080 / 1920));
+  expect(document.querySelector("video")).toBe(element);
+});
+
+it("starts a replacement source pending again instead of inheriting the old shape", async () => {
+  m.download.mockResolvedValue(new Blob(["x"], { type: "video/mp4" }));
+  m.create.mockReturnValueOnce("blob:first").mockReturnValueOnce("blob:second");
+  const second: ChatFileMeta = { ...video, key: "files/account/chat/second.mp4", name: "second.mp4" };
+  render(<VideoPlayerProvider><ChatFile meta={video} /><ChatFile meta={second} /></VideoPlayerProvider>);
+
+  fireEvent.click(screen.getByRole("button", { name: "Play clip.mp4" }));
+  await screen.findByRole("group", { name: "Video player: clip.mp4" });
+  const firstCard = document.querySelector(".fb-chat-video") as HTMLElement;
+  const element = document.querySelector("video") as HTMLVideoElement;
+  setIntrinsicSize(element, 1080, 1920);
+  reportSize(element);
+  await waitFor(() => expect(
+    firstCard.style.getPropertyValue("--fb-chat-video-ratio"),
+  ).toBe(String(1080 / 1920)));
+
+  fireEvent.click(screen.getByRole("button", { name: "Play second.mp4" }));
+  const secondCard = (await screen.findByRole("group", { name: "Video player: second.mp4" }))
+    .closest(".fb-chat-video") as HTMLElement;
+  const secondFrame = secondCard.querySelector(".fb-chat-video-frame") as HTMLElement;
+  // The old ratio is tagged to the old src; the replacement reports unknown and
+  // goes back to the compact band until its own metadata arrives.
+  expect(secondCard.style.getPropertyValue("--fb-chat-video-ratio")).toBe("");
+  expect(secondFrame.getAttribute("data-pending")).toBe("true");
+  expect(document.querySelectorAll("video")).toHaveLength(1);
+  expect(document.querySelector("video")).toBe(element);
 });
 
 function PlayerHarness() {
@@ -355,4 +439,39 @@ it("still starts audio under StrictMode's setup, cleanup and setup", async () =>
   await waitFor(() => expect(document.querySelector("audio")?.getAttribute("src")).toBe("blob:chat-video"));
   expect(playSpy).toHaveBeenCalled();
   expect(m.create).toHaveBeenCalledTimes(1);
+});
+
+/**
+ * jsdom has no layout, so these read the declarations that own the frame's two
+ * unmeasured states. Rendered pixels at 320dp with large text remain a
+ * deployed-browser item.
+ */
+describe("message frame declarations", () => {
+  const css = readFileSync("src/components/ChatFile.css", "utf8");
+
+  function block(selector: string): string {
+    const start = css.indexOf(`${selector} {`);
+    if (start < 0) throw new Error(`missing rule ${selector}`);
+    return css.slice(start, css.indexOf("}", start) + 1);
+  }
+
+  it("keeps a compact band before metadata and lets a refused file grow", () => {
+    const pending = block('.fb-chat-video-frame[data-active="true"][data-pending="true"]');
+    expect(pending).toContain("height: 144px;");
+    expect(pending).toContain("aspect-ratio: auto;");
+
+    const failed = block('.fb-chat-video-frame[data-active="true"]:has(.fb-vp-error)');
+    expect(failed).toContain("height: auto;");
+    expect(failed).toContain("aspect-ratio: auto;");
+
+    // The message and its Download join the frame's own height instead of
+    // being centred behind the transport, so a narrow frame or a large text
+    // scale grows the band rather than clipping the only recovery control.
+    expect(block('.fb-chat-video-frame[data-active="true"]:has(.fb-vp-error) .fb-vp-error'))
+      .toContain("position: static;");
+    expect(block('.fb-chat-video-frame[data-active="true"]:has(.fb-vp-error) .fb-vp-stage'))
+      .toContain("padding-block-end: 56px;");
+    expect(block('.fb-chat-video-frame[data-active="true"]:has(.fb-vp-error) .fb-vp-track'))
+      .toContain("display: none;");
+  });
 });

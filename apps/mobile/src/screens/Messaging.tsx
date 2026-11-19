@@ -1,7 +1,7 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { motion, type PanInfo } from "framer-motion";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { Archive, ArrowLeft, BellOff, ChevronDown, Ellipsis, Flag, ImageOff, Images, ListFilter, LogOut, MapPin, PanelLeftClose, PanelLeftOpen, Pin, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound, X } from "lucide-react";
+import { Archive, ArrowLeft, BellOff, ChevronDown, Flag, ImageOff, Images, ListFilter, LogOut, MapPin, PanelLeftClose, PanelLeftOpen, Pin, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound, X } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import type { PostItem } from "@norfold/shared";
 import { copyStaticLocation, isUuid } from "../services/messaging/validation";
@@ -13,13 +13,16 @@ import { ChatIdentity } from "../components/ChatIdentity";
 import { PostLink } from "../components/PostNavigation";
 import { StatusChip } from "../components/StatusChip";
 import { formatChatDay, formatEventDate, timeAgo } from "../utils/dates";
+import { messagePreview } from "../utils/messagePreview";
 import { haptic } from "../utils/haptics";
 import { convertEmoticons, isEmojiOnly } from "../utils/emoji";
-import { isKlipyMediaUrl, type KlipyItem } from "../services/klipy";
+import type { KlipyItem } from "../services/klipy";
 import {
   chatFileBody, chatFileCaption, chatFilePreview, parseChatFileMarker, removeChatFile, uploadChatFile, validateChatFile,
 } from "../services/messaging/files";
 import { ChatFile } from "../components/ChatFile";
+import { ChatMessageText } from "../components/ChatMessageText";
+import { copyableMessageText, isBareKlipyMediaBody, isChatFileMarkerBody } from "../utils/messageCopy";
 import { SplitView, type SplitPaneState } from "../components/SplitView";
 import { CHAT_PANE } from "../components/panePreference";
 import { registerBackInterceptor } from "../components/backNavigation";
@@ -59,6 +62,10 @@ import {
 } from "../services/messaging/runtime";
 import type { MediaAttachment, OutboxEntry, StaticLocation, StoredHumanMessage } from "../services/messaging/history";
 import { prepareMessagingPhoto, type PreparedMessagingPhoto } from "../services/messaging/preparePhoto";
+import {
+  classifyClipboardImage, createKeyboardMediaSession, readClipboardAnimation,
+  type KeyboardMediaSession, type VerifiedKeyboardMedia,
+} from "../services/messaging/keyboardMedia";
 import { sha256Hex, VOICE_SENTINEL_EDGE, type MediaMetadata, type MediaMime } from "../services/messaging/media";
 import {
   browserVoiceDeps, createVoiceRecorder, voiceRecordingSupported,
@@ -71,7 +78,32 @@ import {
 import { storedVoiceMime } from "../services/messaging/voice";
 import { PhotoUnavailableError } from "../services/messaging/mediaTransport";
 import { chooseNativeImage, chooseNativeImages, importNativeImageUri, importedImageToFile } from "../services/media/nativeMedia";
+import { FOLLOW_PX, JUMP_PX, useTranscriptAnchor } from "../hooks/useTranscriptAnchor";
 import "./Messaging.css";
+
+/**
+ * A photo that is the whole message: no caption, quote, report, location or
+ * status control. It owns the bubble's padding and fill so the picture sits
+ * flush with its rounded edge, while every content or control state keeps the
+ * ordinary padded bubble. CSS additionally requires the picture to exist, so a
+ * loading, missing or downloadable photo keeps the in-flow status row it needs.
+ */
+export function isMediaOnlyMessage(message: {
+  unsentAt?: number;
+  messageType?: string;
+  server?: unknown;
+  body?: string;
+  replyToId?: string;
+  contextReportId?: string;
+  location?: unknown;
+}, attachment: { state: string } | undefined, status: { actionable: boolean }): boolean {
+  if (message.unsentAt !== undefined || message.messageType !== "MEDIA" || !attachment || !message.server) return false;
+  if (message.body || message.replyToId || message.contextReportId || message.location) return false;
+  // Retry, Remove, Review, Sending and saved-failure states stay in the padded
+  // bubble: a control or an honest sentence is never painted over the picture.
+  if (status.actionable) return false;
+  return attachment.state === "READY" || attachment.state === "EVICTED";
+}
 
 /**
  * Read state as ticks, not words.
@@ -236,10 +268,16 @@ export function replyPreview(message: StoredHumanMessage): string {
   if (message.messageType === "MEDIA") return "Photo";
   if (message.messageType === "VOICE") return "Voice message";
   if (message.messageType === "LOCATION") return "Location";
-  // A Klipy message is a bare media URL; quote what it is, never the link.
-  if (isKlipyMediaUrl(message.body.trim())) return "GIF";
+  // A Klipy message is one bare media URL; prose that merely contains one is
+  // still quoted exactly, and the link is never mistaken for the message.
+  if (isBareKlipyMediaBody(message.body)) return "GIF";
   // A file message is a marker in the body; quote its name, never the payload.
-  return chatFilePreview(message.body) ?? message.body;
+  const file = chatFilePreview(message.body);
+  if (file) return file;
+  // A reserved marker that does not parse (malformed, truncated or a future
+  // version) is still opaque: quote its family name rather than its payload.
+  if (isChatFileMarkerBody(message.body)) return "File";
+  return message.body;
 }
 
 function RetrySync({ accountId, labelled = false }: { accountId: string; labelled?: boolean }) {
@@ -255,6 +293,17 @@ function RetrySync({ accountId, labelled = false }: { accountId: string; labelle
       }}><RefreshCw size={19} aria-hidden="true" className={busy ? "fb-chat-refreshing" : ""} />{labelled && <span>Sync messages</span>}</button>
     {error && <span role="status" className="fb-chat-secondary">Could not sync.</span>}
   </>;
+}
+
+/**
+ * The width/height the shared photo bounds divide by. CSS cannot divide two
+ * lengths inside a custom property, so the numeric ratio travels alongside the
+ * intrinsic `aspectRatio`; a zero, negative or non-finite pair falls back to a
+ * square instead of leaking `NaN` into `calc()`.
+ */
+function chatPhotoRatio(attachment: { width: number; height: number }): number {
+  const ratio = attachment.width / attachment.height;
+  return Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
 }
 
 function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady }: {
@@ -307,8 +356,9 @@ function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady }: {
     try { await downloadMessagingMedia(accountId, conversationId, attachment.id); setVersion((v) => v + 1); }
     catch (error) { setState(error instanceof PhotoUnavailableError ? "unavailable" : "failed"); }
   }
+  const ratio = chatPhotoRatio(attachment);
   return <div ref={host} className="fb-chat-photo" data-loading={content && !loaded ? "true" : undefined}
-    style={{ aspectRatio: `${attachment.width} / ${attachment.height}` }}>
+    style={{ aspectRatio: `${attachment.width} / ${attachment.height}`, "--fb-chat-photo-ratio": ratio } as CSSProperties}>
     {content ? <button type="button" aria-label="View photo" onClick={() => onOpen(attachment.messageId, content.bytes, attachment.mime)}>
       <img src={content.url} alt="" loading="lazy" decoding="async" onLoad={() => setLoaded(true)} onError={() => { onReady(attachment.id, null); setContent(null); setState("failed"); }}
         data-receipt-message={loaded && attachment.state === "READY" ? attachment.messageId : undefined} />
@@ -644,12 +694,7 @@ function ConnectionsSession({ accountId, selectedId, pane }: {
                 <span className="fb-chat-row-identity" aria-hidden="true">
                   <strong>{name || person?.username || "Member"}</strong>
                 </span>
-                <span className="fb-chat-preview">{row.lastMessage?.unsentAt !== undefined ? "Message unsent"
-                  : row.lastMessage?.body
-                    ? (isKlipyMediaUrl(row.lastMessage.body.trim()) ? "GIF" : row.lastMessage.body)
-                    : (row.lastMessage?.messageType === "LOCATION" ? "Location shared"
-                      : row.lastMessage?.messageType === "MEDIA" ? "Photo"
-                        : row.lastMessage?.messageType === "VOICE" ? "Voice message" : state)}</span>
+                <span className="fb-chat-preview">{row.lastMessage ? messagePreview(row.lastMessage) : state}</span>
                 {row.lastMessage?.contextReportId && row.lastMessage.unsentAt === undefined && <ChatReportContext reportId={row.lastMessage.contextReportId} safetyKey={view?.ownBlocked ? "blocked" : "clear"} preview />}
               </div>
               <span className="fb-chat-row-meta">
@@ -684,8 +729,16 @@ const OPEN_LAYER_SELECTOR = "[aria-modal='true'], [role='menu'], [role='listbox'
 
 interface StagedChatPhoto {
   key: string;
+  /** `photo` uses the canonical still media lane; `animation` keeps its bytes
+   *  for the existing private file lane so frames/alpha are not flattened. */
+  kind?: "photo" | "animation";
   source?: File;
   prepared?: PreparedMessagingPhoto;
+  /** Animation bytes (GIF/WebP/APNG), already sanitized and bounded. */
+  file?: File;
+  animated?: boolean;
+  width?: number;
+  height?: number;
   /** Object URL of the prepared bytes; only present once preparation succeeded. */
   url?: string;
   error?: boolean;
@@ -698,7 +751,7 @@ export function MessagingThread() {
   return user ? <ThreadSession key={`${user.id}:${conversationId}`} accountId={user.id} conversationId={conversationId} /> : null;
 }
 
-function ThreadSession({ accountId, conversationId }: { accountId: string; conversationId: string }) {
+export function ThreadSession({ accountId, conversationId }: { accountId: string; conversationId: string }) {
   const { user } = useAuth();
   // On the wide split the app utilities live at the top-right of the thread,
   // not in the conversation sidebar. On a phone the list page owns them.
@@ -720,6 +773,10 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   // `threadLive` gates server authority (mark-read, receipts, media upload);
   // the screen itself stays readable and writable from durable local state.
   const threadLive = threadReconciled && !threadReadFailed;
+  // A ready-state failure is one of the runtime's fixed, consumer-safe sentences
+  // (sync, send or media). The thread that is reading must see it and can retry;
+  // a background media pass never relabels an already saved bubble as failed.
+  const runtimeNotice = chat.status === "ready" ? chat.error : null;
   // Kept for the server-side effects below, which must not act on authority the
   // client does not currently hold.
   const threadBlocked = !threadLive;
@@ -730,8 +787,8 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const labels = useLabels(accountId, row ? [row.peerId] : []);
   const person = row ? labels.get(row.peerId) : undefined;
   const name = person?.displayName || person?.username;
-  // Long-press is the phone's way into the message actions; the visible
-  // ellipsis is a desktop affordance and is hidden from coarse pointers.
+  // Long-press is the phone's way into the message actions; the corner chevron
+  // is a pointer/keyboard affordance and is hidden from coarse pointers.
   const [storedMessages, setMessages] = useState<StoredHumanMessage[]>(cached?.messages ?? []);
   const [localEchoes, setLocalEchoes] = useState<Array<{ message: StoredHumanMessage; failed: boolean }>>([]);
   const messages = useMemo(() => {
@@ -745,6 +802,15 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const draftRevision = useRef(0);
   const textAttempts = useRef(new Map<number, string>());
   const textInFlight = useRef(new Set<number>());
+  // One synchronous admission owner for this composer. React state is too late
+  // for two activations in the same turn (Enter plus a click, a repeated key, a
+  // picker item fired twice), so text, photos, files and stickers share this
+  // latch. It is one admission at a time: the field stays editable and newer
+  // typing is preserved, but a second durable admission waits until this one's
+  // committed callback, rejection or finally releases it. The value is a
+  // per-send token, so an earlier send whose refresh is still settling can never
+  // release a later send's admission.
+  const admissionLatch = useRef<symbol | null>(null);
   // A report-linked entry carries the subject once; the first send consumes it so
   // a later ordinary message is never silently tagged with the same report.
   const route = useLocation();
@@ -787,6 +853,22 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   // bulk pick with a review surface, so each pick appends an item and every
   // item is reviewed, removed and sent on its own terms.
   const [photos, setPhotos] = useState<StagedChatPhoto[]>([]);
+  // The tray is also read from async keyboard/paste completions. A ref keeps
+  // the cap and ordering check against the list the reader actually sees.
+  const photosRef = useRef<StagedChatPhoto[]>([]);
+  photosRef.current = photos;
+  // Captured before every await and compared again at tray mutation and send.
+  const conversationOwner = useRef({ accountId, conversationId });
+  conversationOwner.current = { accountId, conversationId };
+  // Per-animation admission ids survive an uncertain send, so a retry of the
+  // same staged GIF is never a second message.
+  const animationAdmissions = useRef(new Map<string, { messageId: string; createdAt: number }>());
+  const [composerFocused, setComposerFocused] = useState(false);
+  // A press on the composer is an earlier signal than its focus event, so the
+  // native flag can be set while the IME is still opening. It only widens WHEN
+  // arrival is advertised; commit still requires the live owner below.
+  const [composerIntent, setComposerIntent] = useState(false);
+  const keyboardSession = useRef<KeyboardMediaSession | null>(null);
   const [photoSending, setPhotoSending] = useState(false);
   // A reply to an incoming request accepts it first. While that one round trip
   // runs, the composer is read-only so a draft typed during the wait cannot be
@@ -831,9 +913,10 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   // either way.
   const voiceAtRisk = voiceActive && voiceSendPhase !== "sending";
   const hasUnsentWork = draft.trim() !== "" || photos.length > 0 || voiceAtRisk;
+  const stagedAttachments = photos.some((item) => item.kind === "animation");
   const unsentParts = [
     draft.trim() !== "" ? "message" : null,
-    photos.length > 0 ? "photos" : null,
+    photos.length > 0 ? (stagedAttachments ? "attachments" : "photos") : null,
     voiceAtRisk ? "recording" : null,
   ].filter((part): part is string => part !== null);
   const unsentCopy = unsentParts.length === 1 ? `Your unsent ${unsentParts[0]} will be discarded.`
@@ -962,7 +1045,18 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   const confirmedObservations = useRef(new Set<string>());
   const composer = useRef<HTMLTextAreaElement>(null);
   const scroll = useRef<HTMLDivElement>(null);
-  const nearBottom = useRef(true);
+  // One owner for follow intent and the visible message: message commits,
+  // media reflow, resize and visibility resume all restore this point. The id
+  // list keeps its identity across unrelated renders so typing a draft never
+  // rebuilds the anchor key.
+  const messageIds = useMemo(() => messages.map((message) => message.id), [messages]);
+  const transcript = useTranscriptAnchor({
+    container: scroll,
+    conversationKey: `${accountId}:${conversationId}`,
+    messageIds,
+    enabled: loaded,
+    onDistance: (distance) => setShowJump(distance > JUMP_PX),
+  });
   const lastMarked = useRef(0);
   const alive = useRef(true);
   useEffect(() => {
@@ -976,6 +1070,13 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       stagedUrls.current.clear();
     };
   }, []);
+  // A late result may only touch the thread it was submitted to. The session is
+  // keyed by account and conversation, so another thread normally remounts;
+  // this fence keeps a reused instance from writing the previous thread's
+  // draft, notice, reply or report context into the new one.
+  const ownsThread = (owner: { accountId: string; conversationId: string }) =>
+    alive.current && conversationOwner.current.accountId === owner.accountId
+    && conversationOwner.current.conversationId === owner.conversationId;
   useLayoutEffect(() => {
     if (photoAllowed) return;
     // A native picker that is still open must survive the projection refresh
@@ -1036,7 +1137,9 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   // The staged tray reuses the same inspection surface as the feed: swipe,
   // thumbnails, zoom and counter, over the photos about to be sent.
   const draftViewerItems: MediaViewerItem[] = photos.flatMap((item) => item.url
-    ? [{ id: item.key, src: item.url, width: item.prepared?.width ?? null, height: item.prepared?.height ?? null, alt: "Photo to send" }]
+    ? [{ id: item.key, src: item.url, width: item.width ?? item.prepared?.width ?? null,
+        height: item.height ?? item.prepared?.height ?? null,
+        alt: item.kind === "animation" ? "Attachment to send" : "Photo to send" }]
     : []);
   const draftViewerIndex = draftViewer ? draftViewerItems.findIndex((item) => item.id === draftViewer.key) : -1;
   useLayoutEffect(() => {
@@ -1118,6 +1221,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       const item = list.find((entry) => entry.key === key);
       if (item) releaseStagedUrl(item);
       photoAdmissions.current.delete(key);
+      animationAdmissions.current.delete(key);
       return list.filter((entry) => entry.key !== key);
     });
     setAdmissionFailed(false);
@@ -1144,8 +1248,97 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   async function retryStaged(item: StagedChatPhoto) {
     if (!item.source) { removeStaged(item.key); return; }
     photoAdmissions.current.delete(item.key);
+    animationAdmissions.current.delete(item.key);
     setPhotos((list) => list.map((entry) => entry.key === item.key ? { ...entry, preparing: true, error: false } : entry));
     await prepareStaged(item, item.source);
+  }
+  /**
+   * One admission path for keyboard/provider arrivals and pasted animations.
+   * The bytes are verified and sanitized before they reach the tray; nothing
+   * is uploaded or sent here, and a completion from a previous owner is
+   * discarded instead of staged.
+   */
+  async function stageKeyboardMedia(media: VerifiedKeyboardMedia): Promise<void> {
+    const owner = { ...conversationOwner.current };
+    if (!alive.current || !photoAuthority.current) return;
+    if (photosRef.current.length >= MAX_STAGED_PHOTOS) {
+      setError(`You can send up to ${MAX_STAGED_PHOTOS} attachments at once.`);
+      return;
+    }
+    const key = `staged-${crypto.randomUUID()}`;
+    const mime = media.mime;
+    try {
+      if (media.kind === "still") {
+        // Stills go to the canonical photo lane; every GIF is an animation.
+        if (mime !== "image/jpeg" && mime !== "image/png" && mime !== "image/webp") return;
+        const bytes = media.bytes.slice();
+        const buffer = bytes.buffer as ArrayBuffer;
+        const sha256 = await sha256Hex(buffer);
+        if (!alive.current || !photoAuthority.current
+          || conversationOwner.current.accountId !== owner.accountId
+          || conversationOwner.current.conversationId !== owner.conversationId) return;
+        const prepared: PreparedMessagingPhoto = {
+          bytes: buffer, sha256, mime, byteSize: buffer.byteLength,
+          width: media.width, height: media.height,
+        };
+        const url = URL.createObjectURL(new Blob([buffer], { type: mime }));
+        stagedUrls.current.add(url);
+        setPhotos((list) => {
+          if (list.length >= MAX_STAGED_PHOTOS) { URL.revokeObjectURL(url); stagedUrls.current.delete(url); return list; }
+          return [...list, { key, kind: "photo", prepared, url, preparing: false, width: media.width, height: media.height }];
+        });
+        return;
+      }
+      const extension = mime === "image/webp" ? "webp" : mime === "image/png" ? "png" : "gif";
+      const copy = media.bytes.slice();
+      const buffer = copy.buffer as ArrayBuffer;
+      const file = new File([buffer], `norfold-sticker.${extension}`, { type: mime });
+      const url = URL.createObjectURL(new Blob([buffer], { type: mime }));
+      stagedUrls.current.add(url);
+      setPhotos((list) => {
+        if (list.length >= MAX_STAGED_PHOTOS) { URL.revokeObjectURL(url); stagedUrls.current.delete(url); return list; }
+        return [...list, { key, kind: "animation", file, url, animated: true, width: media.width, height: media.height, preparing: false }];
+      });
+    } catch {
+      if (alive.current) setError("That image couldn't be added. Try another one.");
+    }
+  }
+  /** Image-only DOM paste: the same gates and owners as a keyboard arrival. */
+  async function stagePastedImages(files: File[]): Promise<void> {
+    if (!runtimeOpen || !row) return;
+    if (!photoAllowed) { setError("Photos are available when you're friends."); return; }
+    if (photoSending || filesSending || admissionFailed || requestAccepting || voiceSending) {
+      setError("Wait for the current send to finish before adding an image.");
+      return;
+    }
+    const owner = { ...conversationOwner.current };
+    const room = Math.max(0, MAX_STAGED_PHOTOS - photosRef.current.length);
+    const accepted = files.slice(0, room);
+    if (accepted.length === 0) { setError(`You can send up to ${MAX_STAGED_PHOTOS} attachments at once.`); return; }
+    for (const file of accepted) {
+      try {
+        const kind = await classifyClipboardImage(file);
+        if (!alive.current || conversationOwner.current.accountId !== owner.accountId
+          || conversationOwner.current.conversationId !== owner.conversationId) return;
+        if (kind === null) { setError("That image format can't be added here."); continue; }
+        if (kind === "animation") {
+          const media = await readClipboardAnimation(file);
+          // The read is the last async step before staging: a route change
+          // during it must discard the paste instead of filing it elsewhere.
+          if (!alive.current || conversationOwner.current.accountId !== owner.accountId
+            || conversationOwner.current.conversationId !== owner.conversationId) return;
+          await stageKeyboardMedia(media);
+        } else {
+          const [slot] = reserveStaged(1);
+          if (slot) await prepareStaged(slot, file);
+        }
+      } catch {
+        if (alive.current) setError("That image couldn't be added. Try another one.");
+      }
+    }
+    if (accepted.length < files.length) {
+      setError(`Only ${MAX_STAGED_PHOTOS} attachments can be reviewed at once. The first ${accepted.length} were added.`);
+    }
   }
   async function choosePhoto(source: "photos" | "camera") {
     if (Capacitor.getPlatform() !== "android") {
@@ -1209,6 +1402,29 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     document.addEventListener("visibilitychange", update);
     return () => document.removeEventListener("visibilitychange", update);
   }, []);
+  // Keyboard/provider insertion is advertised only while this composer is the
+  // live, writable target of a connected conversation. `composerIntent` is the
+  // press-before-focus prearm: it widens admission earlier in the same
+  // interaction, never the send authority. The same session owns pasted
+  // animations, so both arrivals share one admission path.
+  const keyboardMediaEligible = photoAllowed && runtimeOpen && visible
+    && (composerFocused || composerIntent)
+    && !voiceActive && !requestAccepting && !photoSending && !filesSending && !voiceSending && !admissionFailed;
+  // Layout order matters: the session must exist before the advertisement
+  // effect below, or an already-focused composer would never advertise on its
+  // first frame (the sync would find no session and nothing changes until the
+  // reader blurs and refocuses).
+  useLayoutEffect(() => {
+    const session = createKeyboardMediaSession({
+      onMedia: (media) => stageKeyboardMedia(media),
+      onRejected: (message) => { if (alive.current) setError(message); },
+    });
+    keyboardSession.current = session;
+    return () => { session.destroy(); keyboardSession.current = null; };
+  }, []);
+  useLayoutEffect(() => {
+    keyboardSession.current?.sync(keyboardMediaEligible ? { accountId, conversationId } : null);
+  }, [keyboardMediaEligible, accountId, conversationId]);
   useEffect(() => {
     if (chat.accountId !== accountId || (chat.status === "opening" && !chat.localReady) || chat.status === "closed") return;
     let cancelled = false;
@@ -1224,9 +1440,6 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [accountId, conversationId, chat.accountId, chat.status, chat.localReady, chat.revision, threadReadRetry]);
-  useLayoutEffect(() => {
-    if (nearBottom.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
-  }, [messages]);
   /**
    * The messages a person report may carry: accepted, sent by this peer, not
    * unsent, and newest first. A local pending row has no server position and a
@@ -1287,9 +1500,10 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     if (!area || !loaded || threadBlocked) return;
     const checkRead = () => {
       const distance = area.scrollHeight - area.scrollTop - area.clientHeight;
-      nearBottom.current = distance < 32;
-      setShowJump(distance > 400);
-      if (document.visibilityState !== "visible" || !nearBottom.current || highest <= lastMarked.current) return;
+      // Follow comes from the transcript hook, so a reader who scrolled up
+      // is never marked read just because new content arrived.
+      if (document.visibilityState !== "visible" || !transcript.following.current
+        || distance >= FOLLOW_PX || highest <= lastMarked.current) return;
       lastMarked.current = highest;
       void markMessagingConversationRead(accountId, conversationId, highest).catch(() => { lastMarked.current = 0; });
     };
@@ -1462,7 +1676,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   async function shareLocation(location: StaticLocation) {
     if (!row || !locationAllowed || !alive.current) throw new Error("Conversation unavailable");
     await sendMessagingLocation(accountId, conversationId, row.peerId, copyStaticLocation(location));
-    if (alive.current) nearBottom.current = true;
+    if (alive.current) transcript.followLatest();
   }
   /** A discarded note is gone: a later note must not reuse its attachment id. */
   function discardVoice() {
@@ -1527,7 +1741,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       setVoiceSendPhase("sending");
       await sendMessagingVoice(accountId, conversationId, row.peerId, attempt.metadata, bytes, replyTo?.id);
       if (!alive.current) return;
-      nearBottom.current = true;
+      transcript.followLatest();
       admission.current = null;
       setAdmissionFailed(false);
       setReplyTo(null);
@@ -1545,18 +1759,23 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
    * message, the draft clears, and the next message can start immediately. Only
    * authority/destructive actions take `busy`.
    */
-  async function admitText(message: StoredHumanMessage) {
+  async function admitText(message: StoredHumanMessage, onAdmitted?: () => void) {
+    // Once the durable boundary reported, nothing later may relabel the row as
+    // an admission failure: the outbox owns it and retrying would duplicate it.
+    let admitted = false;
+    const settle = onAdmitted === undefined ? undefined : () => { admitted = true; onAdmitted(); };
     setLocalEchoes(previous => {
       const entry = { message, failed: false };
       return previous.some(item => item.message.id === message.id)
         ? previous.map(item => item.message.id === message.id ? entry : item)
         : [...previous, entry];
     });
-    nearBottom.current = true;
+    transcript.followLatest();
     try {
       return await sendMessagingText(accountId, conversationId, message.recipientId, message.body,
-        message.contextReportId, message.replyToId, message.id);
+        message.contextReportId, message.replyToId, message.id, settle);
     } catch (error) {
+      if (admitted) return message.id;
       if (alive.current) setLocalEchoes(previous => previous.map(item =>
         item.message.id === message.id ? { ...item, failed: true } : item));
       throw error;
@@ -1574,6 +1793,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     // second accept: the server would reject the already-connected second one
     // and paint an error over a message that actually went out.
     if (requestAcceptingRef.current) return false;
+    const owner = { ...conversationOwner.current };
     requestAcceptingRef.current = true;
     setRequestAccepting(true);
     setSendStatus("Accepting this request…");
@@ -1581,7 +1801,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
       await changeMessagingRelationship(accountId, conversationId, "accept");
       return true;
     } catch {
-      if (alive.current) setError("That request could not be accepted. Try again.");
+      if (ownsThread(owner)) setError("That request could not be accepted. Try again.");
       return false;
     } finally {
       requestAcceptingRef.current = false;
@@ -1590,81 +1810,145 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
   }
 
   async function send() {
-    if (!runtimeOpen || !row || photoSending || requestAccepting) return;
-    const ready = photos.filter((item): item is StagedChatPhoto & { prepared: PreparedMessagingPhoto } => !!item.prepared);
+    if (!runtimeOpen || !row || photoSending || requestAccepting || filesSending) return;
+    // The composer admits one send at a time. Typing stays editable, and the
+    // next admission begins as soon as this one is durable (its callback) or
+    // settles; never in parallel with an uncommitted one.
+    if (admissionLatch.current) return;
+    // Every staged item must be ready. Stills travel the photo lane; animations
+    // keep their frames through the existing private file lane.
+    const ready = photos.filter((item) => !!item.prepared || !!item.file);
     if (photos.length > 0 && ready.length !== photos.length) return;
     if (photos.length > 0 && (view?.mode !== "CONNECTED" || view.ownBlocked)) return;
     if (photos.length === 0 && !draft.trim()) return;
-    // Only an incoming request needs the accept round trip. Every other send
-    // must stay synchronous up to admission, or a queued draft would lose its
-    // place to the next keystroke while this turn yields.
-    if (view?.mode === "REQUEST" && view.request === "INCOMING"
-      && !(await acceptIncomingRequestForReply())) return;
-    const body = convertEmoticons(draft), sendingRevision = draftRevision.current;
-    if (ready.length === 0 && textInFlight.current.has(sendingRevision)) return;
-    if (ready.length === 0) textInFlight.current.add(sendingRevision);
-    // Captured once: the reply belongs to this send, and a later gesture while
-    // the message is in flight is newer intent for the next message.
+    // Taken before the first await: accepting an incoming request is a round
+    // trip, and a second activation during it must not admit the reply twice.
+    const latch = Symbol("send");
+    admissionLatch.current = latch;
+    const releaseAdmission = () => { if (admissionLatch.current === latch) admissionLatch.current = null; };
+    // Captured before the first await, together with the body and revision it
+    // carries. The accept round trip yields, and whatever the field holds when
+    // it returns must never become the message this activation submitted: that
+    // would stamp the old draft with a newer revision and clear the new words.
+    const owner = { ...conversationOwner.current };
+    const submittedReport = reportContext;
     const replyTargetId = replyTo?.id;
+    const body = convertEmoticons(draft);
+    const sendingRevision = draftRevision.current;
+    const stillOwner = () => ownsThread(owner);
+    // Only the invocation that added the revision may release it.
+    let ownedTextRevision: number | null = null;
     setError(null); setSendStatus(null);
     try {
+      // Only an incoming request needs the accept round trip. Every other send
+      // must stay synchronous up to admission, or a queued draft would lose its
+      // place to the next keystroke while this turn yields.
+      if (view?.mode === "REQUEST" && view.request === "INCOMING"
+        && !(await acceptIncomingRequestForReply())) return;
+      if (ready.length === 0 && textInFlight.current.has(sendingRevision)) return;
+      if (ready.length === 0) { textInFlight.current.add(sendingRevision); ownedTextRevision = sendingRevision; }
       if (ready.length === 0) {
         const messageId = textAttempts.current.get(sendingRevision) ?? crypto.randomUUID();
         textAttempts.current.set(sendingRevision, messageId);
+        // The durable outbox commit, not the view read, ends this send's
+        // ownership of the submitted text. Clearing on that boundary means a
+        // slow or failed refresh cannot leave a sent draft looking unsent.
         const result = await admitText({ id: messageId, conversationId, authorId: accountId, recipientId: row.peerId,
           body, messageType: "TEXT", createdAt: Date.now(),
-          ...(reportContext ? { contextReportId: reportContext } : {}), ...(replyTargetId ? { replyToId: replyTargetId } : {}) });
-        textAttempts.current.delete(sendingRevision);
-        if (alive.current) {
-          nearBottom.current = true;
+          ...(submittedReport ? { contextReportId: submittedReport } : {}), ...(replyTargetId ? { replyToId: replyTargetId } : {}) }, () => {
+          if (!stillOwner()) return;
           // Only clear what this draft owned: typing that arrived while it was
           // in flight is newer intent and must survive.
           if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
-          if (reportContext) clearReportContext(reportContext);
-          setReplyTo(null);
+          if (submittedReport) clearReportContext(submittedReport);
+          setReplyTo(previous => previous?.id === replyTargetId ? null : previous);
+          // The message is durable and its draft is settled: the next deliberate
+          // send may begin while this view refresh finishes.
+          releaseAdmission();
+        });
+        textAttempts.current.delete(sendingRevision);
+        if (stillOwner()) {
+          transcript.followLatest();
+          // Also settle here when the caller returned without an admission
+          // callback: the resolved result still proves the row committed.
+          if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+          if (submittedReport) clearReportContext(submittedReport);
+          setReplyTo(previous => previous?.id === replyTargetId ? null : previous);
           setAdmissionFailed(false);
           if (typeof result !== "string" && result.viewStale) setSendStatus("Message saved to send. The view may be out of date.");
         }
       } else {
         setPhotoSending(true);
-        // Each photo is its own message, so a failed one leaves the rest of the
-        // stack intact. The caption rides the first photo only.
-        // A retry keeps the instant of the admission that already left.
-        const batchCreatedAt = photoAdmissions.current.size > 0
-          ? Math.min(...Array.from(photoAdmissions.current.values(), (entry) => entry.createdAt))
+        // Each item is its own message, so a failed one leaves the rest of the
+        // stack intact. The caption rides the first message that actually
+        // leaves, whichever lane carries it. A retry keeps the instant (and,
+        // for an animation, the message id) of the admission that already left.
+        const prior = [...photoAdmissions.current.values(), ...animationAdmissions.current.values()];
+        const batchCreatedAt = prior.length > 0
+          ? Math.min(...prior.map((entry) => entry.createdAt))
           : Date.now();
         let consumed = false;
-        for (const [index, item] of ready.entries()) {
+        for (const item of photos) {
           const admissionKey = item.key;
-          const { bytes, ...info } = item.prepared;
-          const attempt = photoAdmissions.current.get(admissionKey) ?? { caption: index === 0 ? body : "",
-            // Keep the send instant across retries.
-            createdAt: batchCreatedAt,
-            metadata: { ...info, durationMs: null,
-              id: crypto.randomUUID(), messageId: crypto.randomUUID(), direction: "OUT" as const, expiresAt: null } };
-          photoAdmissions.current.set(admissionKey, attempt);
-          await sendMessagingMedia(accountId, conversationId, row.peerId, attempt.caption, attempt.metadata, bytes, replyTargetId, attempt.createdAt);
-          photoAdmissions.current.delete(admissionKey);
+          const caption = consumed ? "" : body;
+          if (item.prepared) {
+            const { bytes, ...info } = item.prepared;
+            const attempt = photoAdmissions.current.get(admissionKey) ?? { caption,
+              // Keep the send instant across retries.
+              createdAt: batchCreatedAt,
+              metadata: { ...info, durationMs: null,
+                id: crypto.randomUUID(), messageId: crypto.randomUUID(), direction: "OUT" as const, expiresAt: null } };
+            photoAdmissions.current.set(admissionKey, attempt);
+            await sendMessagingMedia(accountId, conversationId, row.peerId, attempt.caption, attempt.metadata, bytes, replyTargetId, attempt.createdAt);
+            photoAdmissions.current.delete(admissionKey);
+          } else if (item.file) {
+            const problem = validateChatFile(item.file);
+            if (problem) throw new Error(problem);
+            const admission = animationAdmissions.current.get(admissionKey) ?? {
+              messageId: crypto.randomUUID(), createdAt: batchCreatedAt,
+            };
+            animationAdmissions.current.set(admissionKey, admission);
+            const meta = await uploadChatFile(item.file, { userId: accountId, conversationId });
+            try {
+              await sendMessagingText(accountId, conversationId, row.peerId,
+                chatFileBody(meta, caption), undefined, replyTargetId, admission.messageId);
+            } catch (error) {
+              // A refusal removes the object it uploaded, so retry never leaves
+              // bytes the transcript cannot name.
+              await removeChatFile(meta.key);
+              throw error;
+            }
+            animationAdmissions.current.delete(admissionKey);
+          } else {
+            // The readiness guard above makes this unreachable; never send a
+            // half-prepared item.
+            throw new Error("Attachment not ready");
+          }
           // The caption belonged to the first message that actually left, so
           // clear the draft as soon as it is carried, not at the end of a bulk
-          // send that may still fail on a later photo.
-          if (!consumed && alive.current) {
+          // send that may still fail on a later item.
+          if (!consumed && stillOwner()) {
             consumed = true;
-            nearBottom.current = true;
+            transcript.followLatest();
             if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
             setReplyTo(null);
           }
-          if (alive.current) setPhotos((list) => {
+          if (stillOwner()) setPhotos((list) => {
             const removed = list.find((entry) => entry.key === admissionKey);
             if (removed) releaseStagedUrl(removed);
             return list.filter((entry) => entry.key !== admissionKey);
           });
         }
-        if (alive.current) { nearBottom.current = true; setAdmissionFailed(false); }
+        if (stillOwner()) { transcript.followLatest(); setAdmissionFailed(false); }
       }
     } catch {
-      if (alive.current) {
-        if (photos.length > 0) { setAdmissionFailed(true); setError("Those photos could not all be saved. The unsent ones are still here."); }
+      if (stillOwner()) {
+        if (photos.length > 0) {
+          setAdmissionFailed(true);
+          setError(stagedAttachments
+            ? "Those attachments could not all be saved. The unsent ones are still here."
+            : "Those photos could not all be saved. The unsent ones are still here.");
+        }
         else {
           // The optimistic bubble IS the draft now: it stays in the transcript
           // marked "Not sent" with Retry, so the field must not also hold a
@@ -1675,7 +1959,10 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         }
       }
     } finally {
-      if (ready.length === 0) textInFlight.current.delete(sendingRevision);
+      releaseAdmission();
+      if (ownedTextRevision !== null) textInFlight.current.delete(ownedTextRevision);
+      // Releasing a busy flag is always safe and is never a write into the new
+      // thread's intent: not releasing it would leave a reused composer wedged.
       if (alive.current) setPhotoSending(false);
     }
   }
@@ -1687,21 +1974,29 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
    * accepts still JPEG/PNG/WebP.
    */
   function sendKlipy(item: KlipyItem) {
-    if (!runtimeOpen || !row) return;
+    if (!runtimeOpen || !row || admissionLatch.current) return;
+    // A sticker is a complete message: a doubled provider pick is a doubled
+    // admission unless the composer refuses the second one synchronously.
+    const latch = Symbol("sticker");
+    admissionLatch.current = latch;
+    const releaseAdmission = () => { if (admissionLatch.current === latch) admissionLatch.current = null; };
     const replyTargetId = replyTo?.id;
     setError(null); setSendStatus(null);
     void (async () => {
-      if (view?.mode === "REQUEST" && view.request === "INCOMING"
-        && !(await acceptIncomingRequestForReply())) return;
       try {
+        if (view?.mode === "REQUEST" && view.request === "INCOMING"
+          && !(await acceptIncomingRequestForReply())) return;
         await admitText({ id: crypto.randomUUID(), conversationId, authorId: accountId, recipientId: row.peerId,
-          body: item.mediaUrl, messageType: "TEXT", createdAt: Date.now(), ...(replyTargetId ? { replyToId: replyTargetId } : {}) });
+          body: item.mediaUrl, messageType: "TEXT", createdAt: Date.now(), ...(replyTargetId ? { replyToId: replyTargetId } : {}) },
+          releaseAdmission);
         if (!alive.current) return;
-        nearBottom.current = true;
-        setReplyTo(null);
+        transcript.followLatest();
+        setReplyTo(previous => previous?.id === replyTargetId ? null : previous);
         setAdmissionFailed(false);
       } catch {
         if (alive.current) setError("Your sticker was not sent. Try again.");
+      } finally {
+        releaseAdmission();
       }
     })();
   }
@@ -1713,11 +2008,16 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
    * transcript cannot name.
    */
   async function sendFiles(picked: File[]) {
-    if (!runtimeOpen || !row || filesSending || photoSending) return;
+    if (!runtimeOpen || !row || admissionLatch.current || filesSending || photoSending) return;
     if (view?.mode !== "CONNECTED" || view.ownBlocked) {
       setError("Files send once you're friends.");
       return;
     }
+    // The whole picked batch keeps the composer until it settles: a text send
+    // interleaved with the remaining files would race the shared caption.
+    const latch = Symbol("files");
+    admissionLatch.current = latch;
+    const releaseAdmission = () => { if (admissionLatch.current === latch) admissionLatch.current = null; };
     const sendingRevision = draftRevision.current;
     const replyTargetId = replyTo?.id;
     let caption = draft.trim();
@@ -1738,14 +2038,15 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         caption = "";
       }
       if (leaving && alive.current) {
-        nearBottom.current = true;
+        transcript.followLatest();
         if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
-        setReplyTo(null);
+        setReplyTo(previous => previous?.id === replyTargetId ? null : previous);
         setAdmissionFailed(false);
       }
     } catch {
       if (alive.current) setError("That file was not sent. Try again.");
     } finally {
+      releaseAdmission();
       if (alive.current) setFilesSending(false);
     }
   }
@@ -1779,9 +2080,17 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     if (message.unsentAt === undefined) {
       items.push({ id: "reply", label: "Reply", onAction: () => startReply(message) });
     }
-    if (message.unsentAt === undefined && message.body) {
+    // Copy writes only what is visible (R19-1): a bare GIF/sticker URL, a
+    // marker with no caption, a malformed marker or an unsent body has nothing
+    // honest to copy, so the action is absent rather than a silent no-op.
+    const copyText = copyableMessageText(message);
+    if (copyText !== null) {
       items.push({ id: "copy", label: "Copy text", onAction: () => {
-        void navigator.clipboard?.writeText(message.body).then(
+        const clipboard: Clipboard | undefined = navigator.clipboard;
+        if (!clipboard || typeof clipboard.writeText !== "function") {
+          setError("Could not copy this message."); return;
+        }
+        void clipboard.writeText(copyText).then(
           () => announce("Message copied."),
           () => setError("Could not copy this message."),
         );
@@ -1807,6 +2116,13 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     }
     return items;
   }
+
+  /**
+   * A report link inside a message body reuses the one live context card, with
+   * the current block authority, instead of a second owner of report data.
+   */
+  const reportPreview = (reportId: string) => <ChatReportContext reportId={reportId}
+    safetyKey={view?.ownBlocked ? "blocked" : "clear"} />;
 
   const selectedMessage = messages.find((message) => message.id === selectedMessageId);
   const selectedNeedsReview = selectedMessage?.authorId === accountId && !selectedMessage.server
@@ -1889,7 +2205,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         const author = message.authorId === accountId ? "You" : name || "Member";
         const preview = replyPreview(message);
         return <button key={id} type="button" className="fb-chat-pin"
-          onClick={() => { nearBottom.current = false; setJumpTo(id); }}
+          onClick={() => { transcript.suspend(); setJumpTo(id); }}
           aria-label={`Pinned message from ${author}: ${preview}. Show message`}>
           <Pin size={14} aria-hidden="true" />
           <span className="fb-chat-pin-author">{author}</span>
@@ -1903,13 +2219,18 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     {/* Owner direction 2026-11-06: a device that is more than ten messages
         behind holds the screen — blurred, non-dismissible — while the missing
         messages are restored from the account, then releases on its own. */}
-    {(threadReadFailed || threadSync?.mode === "error") && <div className="fb-chat-statusline" role="status">
+    {(threadReadFailed || threadSync?.mode === "error" || runtimeNotice) && <div className="fb-chat-statusline" role="status">
       <RefreshCw size={15} aria-hidden="true" />
-      <span>Showing your saved messages. New changes will load when you reconnect.</span>
+      <span>{runtimeNotice ?? "Showing your saved messages. New changes will load when you reconnect."}</span>
       <button type="button" onClick={() => {
         setThreadReadRetry(value => value + 1); void refreshMessaging(accountId).catch(() => undefined);
       }}>Try again</button>
     </div>}
+    {/* The floating latest control is a sibling of the scroller, not a child:
+        it is positioned against this viewport box, whose bottom edge is the top
+        of the composer stack, so its offset never has to guess the composer's
+        height. The scroller keeps its own ref and the one anchor owner. */}
+    <div className="fb-chat-viewport">
     <div className="fb-chat-messages" ref={scroll}>
       <p className="fb-chat-sync" role="status">{sendStatus ?? (chat.status === "offline" ? "Messages are saved here and will send when you reconnect." : "")}</p>
       {!loaded && <p role="status" className="fb-chat-secondary">Opening messages…</p>}
@@ -1942,6 +2263,11 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
           });
           const removableMembers = statusMembers.filter((entry) => (entry.messageType === "MEDIA" || entry.messageType === "VOICE")
             && media.some((item) => item.messageId === entry.id) && !entry.server);
+          // A caption, quote, report, location, failure or control keeps the
+          // padded bubble readable; only a bare delivered photo owns the surface.
+          const mediaOnly = isMediaOnlyMessage(message, attachment, {
+            actionable: !!localFailed || !!reviewMember || !!failedMember || removableMembers.length > 0,
+          });
           // One day chip per calendar day keeps a long thread readable without
           // making every bubble carry a date.
           const day = message.createdAt ? formatChatDay(message.createdAt) : "";
@@ -1958,7 +2284,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
           // padding, no frame around it (owner direction 2026-11-18).
           const klipyOnly = message.unsentAt === undefined && message.messageType === "TEXT"
             && !attachment && !message.replyToId && !message.contextReportId && !message.location
-            && isKlipyMediaUrl(message.body.trim());
+            && isBareKlipyMediaBody(message.body);
           const file = message.unsentAt === undefined ? parseChatFileMarker(message.body) : null;
           const flashClass = flash?.id === message.id ? ` fb-chat-flash-${flash.nonce % 2 ? "a" : "b"}` : "";
           return <Fragment key={message.id}>
@@ -1982,10 +2308,10 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
               onOpen={() => { setSelectedMessageId(message.id); haptic("commit"); }}>
             {({ open, setOpen }) => <>
             <div data-receipt-message={message.messageType === "TEXT" && message.body && message.unsentAt === undefined ? message.id : undefined}
-              className={`fb-chat-message${own ? " fb-chat-message-own" : ""}${message.messageType === "VOICE" && attachment && message.unsentAt === undefined ? " fb-chat-message-voice" : ""}${emojiOnly ? " fb-chat-message-emoji" : ""}${klipyOnly ? " fb-chat-message-klipy" : ""}${flashClass}`}>
+              className={`fb-chat-message${own ? " fb-chat-message-own" : ""}${message.messageType === "VOICE" && attachment && message.unsentAt === undefined ? " fb-chat-message-voice" : ""}${emojiOnly ? " fb-chat-message-emoji" : ""}${klipyOnly ? " fb-chat-message-klipy" : ""}${mediaOnly ? " fb-chat-message-media" : ""}${flashClass}`}>
             <span className="sr-only">{own ? "You: " : `${name || "Member"}: `}</span>
             {message.unsentAt === undefined && message.replyToId && <button type="button" className="fb-chat-quote"
-              onClick={() => { nearBottom.current = false; setJumpTo(message.replyToId!); }}
+              onClick={() => { transcript.suspend(); setJumpTo(message.replyToId!); }}
               aria-label={`Quoted message from ${quoted ? (quoted.authorId === accountId ? "you" : name || "this member") : "an unavailable message"}: ${quoted ? replyPreview(quoted) : "unavailable"}. Show original`}>
               {photoAllowed && quotedAttachment && quotedAttachment.state !== "EVICTED"
                 && <ChatQuotePhoto accountId={accountId} attachment={quotedAttachment} />}
@@ -2004,11 +2330,16 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
             {message.location && <ChatLocation location={message.location} />}
             {file ? <>
               <ChatFile meta={file} />
-              {chatFileCaption(message.body) !== "" && <p dir="auto">{chatFileCaption(message.body)}</p>}
-            </> : message.body && message.unsentAt === undefined && isKlipyMediaUrl(message.body.trim())
+              {chatFileCaption(message.body) !== "" && <ChatMessageText body={chatFileCaption(message.body)}
+                contextReportId={message.contextReportId} renderReportPreview={reportPreview} />}
+            </> : message.body && message.unsentAt === undefined && isBareKlipyMediaBody(message.body)
               ? <img className="fb-chat-klipy" src={message.body.trim()} alt="Sticker or GIF"
                   loading="lazy" referrerPolicy="no-referrer" />
-              : message.body ? <p dir="auto" className={emojiOnly ? "fb-chat-emoji-only" : undefined}>{message.body}</p>
+              : message.body ? (isChatFileMarkerBody(message.body)
+                  ? <p dir="auto" className={emojiOnly ? "fb-chat-emoji-only" : undefined}>{message.body}</p>
+                  : <ChatMessageText body={message.body}
+                      className={emojiOnly ? "fb-chat-emoji-only" : undefined}
+                      contextReportId={message.contextReportId} renderReportPreview={reportPreview} />)
               : message.messageType === "LOCATION" ? (!message.location && <p>Location unavailable</p>)
               : !attachment && <p>{missingAttachmentCopy(message)}</p>}
             {!attachment && !message.body && missingAttachmentStale(message) && <button type="button" onClick={() => {
@@ -2065,12 +2396,17 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
               })();
             }}>Remove</button>}
             </>}
+            {message.server && <button type="button" className="fb-chat-message-options"
+              aria-label={own ? "Options for your message" : "Options for received message"}
+              aria-haspopup="menu" aria-expanded={open}
+              onClick={() => { setOpen(true); setSelectedMessageId(message.id); haptic("commit"); }}>
+              <ChevronDown size={16} aria-hidden="true" />
+            </button>}
             </div>
             {message.server && <>
-              {/* The popover is anchored to the bubble itself: the trigger is an
-                  invisible anchor over the long-press surface, so the menu opens
-                  where the message is rather than beside a 44 px control. The
-                  visible affordance below is the named control for pointers. */}
+              {/* One menu, anchored with an invisible anchor over the whole
+                  long-press surface; the visible chevron lives in the bubble's
+                  own corner and opens this same controlled menu. */}
               <ActionMenu anchor label="Message actions"
                 placement={own ? "bottom end" : "bottom start"}
                 open={open}
@@ -2082,12 +2418,6 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
                   if (next) { setSelectedMessageId(message.id); haptic("commit"); }
                 }}
                 items={messageActions(message, own)} />
-              <button type="button" className="fb-chat-icon fb-chat-message-options"
-                aria-label={own ? "Options for your message" : "Options for received message"}
-                aria-haspopup="menu" aria-expanded={open}
-                onClick={() => { setOpen(true); setSelectedMessageId(message.id); haptic("commit"); }}>
-                <Ellipsis size={16} aria-hidden="true" />
-              </button>
             </>}
             </>}
             </LongPressArea>
@@ -2100,16 +2430,18 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
     {showJump && <button type="button" className="fb-chat-jump" aria-label="Jump to latest message" onClick={() => {
       const area = scroll.current;
       if (area) area.scrollTo({ top: area.scrollHeight, behavior: shouldReduceMotion() ? "auto" : "smooth" });
-      nearBottom.current = true; setShowJump(false);
+      transcript.followLatest();
+      setShowJump(false);
     }} {...hoverLabel("Jump to latest")}><ChevronDown size={20} aria-hidden="true" /></button>}
+    </div>
     {error && !sheet && <p className="fb-chat-error" role="alert">{error}</p>}
     {photos.length > 0 && <div className="fb-chat-photo-draft" role="group"
-      aria-label={`${photos.length} photo${photos.length === 1 ? "" : "s"} to send`}>
+      aria-label={`${photos.length} ${stagedAttachments ? "attachment" : "photo"}${photos.length === 1 ? "" : "s"} to send`}>
       <ul className="fb-chat-photo-strip">
         {photos.map((item, index) => <li key={item.key} className="fb-chat-photo-slot">
-          {item.url && item.prepared
+          {item.url && (item.prepared || item.file)
             ? (photoAllowed
-                ? <button type="button" className="fb-chat-photo-open" aria-label={`Review photo ${index + 1} of ${photos.length}`}
+                ? <button type="button" className="fb-chat-photo-open" aria-label={`Review ${stagedAttachments ? "attachment" : "photo"} ${index + 1} of ${photos.length}`}
                     onClick={() => { setViewer(null); setDraftViewer({ key: item.key }); }}>
                     <img src={item.url} alt="" />
                   </button>
@@ -2118,17 +2450,18 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
                 {item.error ? <ImageOff size={20} aria-hidden="true" /> : <span className="fb-chat-photo-spinner" aria-hidden="true" />}
                 <span className="sr-only">{item.error ? "Could not prepare photo" : "Preparing photo"}</span>
               </span>}
-          <button type="button" className="fb-chat-photo-remove" aria-label={`Remove photo ${index + 1}`}
-            disabled={photoSending || admissionFailed} onClick={() => removeStaged(item.key)} {...hoverLabel("Remove photo")}><X size={14} aria-hidden="true" /></button>
+          <button type="button" className="fb-chat-photo-remove" aria-label={`Remove ${stagedAttachments ? "attachment" : "photo"} ${index + 1}`}
+            disabled={photoSending || admissionFailed} onClick={() => removeStaged(item.key)}
+            {...hoverLabel(stagedAttachments ? "Remove attachment" : "Remove photo")}><X size={14} aria-hidden="true" /></button>
         </li>)}
       </ul>
       <div className="fb-chat-photo-options">
         <p role="status" className="fb-chat-secondary">
-          {!photoAllowed ? "Photos are available when you're friends."
-            : photoSending ? "Sending photos…"
-            : photos.some(item => item.preparing) ? "Preparing photos…"
-            : photos.some(item => item.error) ? "Some photos could not be prepared. Retry or remove them."
-            : `${photos.length} photo${photos.length === 1 ? "" : "s"} ready. Tap one to review.`}
+          {!photoAllowed ? `${stagedAttachments ? "Attachments" : "Photos"} are available when you're friends.`
+            : photoSending ? `Sending ${stagedAttachments ? "attachments" : "photos"}…`
+            : photos.some(item => item.preparing) ? "Preparing attachments…"
+            : photos.some(item => item.error) ? "Some attachments could not be prepared. Retry or remove them."
+            : `${photos.length} ${stagedAttachments ? "attachment" : "photo"}${photos.length === 1 ? "" : "s"} ready. Tap one to review.`}
         </p>
         {photoAllowed && photos.some(item => item.error) && <button type="button" disabled={photoSending}
           onClick={() => { for (const item of photos) if (item.error) void retryStaged(item); }}>Retry</button>}
@@ -2149,13 +2482,16 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         </>}
       <PeerChatComposer value={draft} onChange={value => { draftRevision.current++; setDraft(value); }} onSend={() => void send()} inputRef={composer}
         busy={false} locked={!runtimeOpen || requestAccepting || photoSending || voiceSending} attachmentsLocked={photoSending || admissionFailed}
-        canSend={runtimeOpen && !requestAccepting && (photos.length > 0 ? photoAllowed && photos.every(item => !!item.prepared) : !!draft.trim())}
+        canSend={runtimeOpen && !requestAccepting && (photos.length > 0 ? photoAllowed && photos.every(item => !!item.prepared || !!item.file) : !!draft.trim())}
         photoAllowed={view?.mode === "CONNECTED"}
         onCamera={() => void choosePhoto("camera")} onPhotos={() => void choosePhoto("photos")}
         onFiles={(files) => void sendFiles(files)} fileSending={filesSending}
         onLocation={locationAllowed ? () => setSheet("location") : undefined}
         voiceAvailable={voiceAllowed} onVoice={toggleVoiceCapture}
         onPickKlipy={sendKlipy} userId={accountId}
+        onPasteImages={view?.mode === "CONNECTED" ? (files) => void stagePastedImages(files) : undefined}
+        onFocusChange={setComposerFocused}
+        onKeyboardIntentChange={setComposerIntent}
         context={<>
           {replyTo && <div className="fb-chat-reply-chip" role="status" data-chat-reply-to={replyTo.id}>
             <span className="fb-chat-reply-copy">
@@ -2203,7 +2539,7 @@ function ThreadSession({ accountId, conversationId }: { accountId: string; conve
         <label className="fb-chat-search"><Search size={17} aria-hidden="true" /><input type="search" aria-label="Search saved messages" value={messageQuery} onChange={event => setMessageQuery(event.target.value)} /></label>
         <p role="status" className="fb-chat-secondary">{!searchTerm ? "Search the messages saved on this device." : `${searchMatches.length} ${searchMatches.length === 1 ? "message" : "messages"} found${searchMatches.length > 100 ? ". Showing the first 100." : ""}`}</p>
         <ul className="fb-chat-search-results">{searchMatches.slice(0, 100).map(message => <li key={message.id}>
-          <button type="button" onClick={() => { nearBottom.current = false; setJumpTo(message.id); setSheet(null); }}><span className="fb-chat-secondary">{message.authorId === accountId ? "You" : name || "Member"}</span><span dir="auto">{message.body}</span></button>
+          <button type="button" onClick={() => { transcript.suspend(); setJumpTo(message.id); setSheet(null); }}><span className="fb-chat-secondary">{message.authorId === accountId ? "You" : name || "Member"}</span><span dir="auto">{messagePreview(message)}</span></button>
         </li>)}</ul>
       </div> : sheet === "media" ? !photoAllowed ? <p>Photos are available when you're friends.</p> : gallery.length === 0 ? <p>No photos in this conversation yet.</p> : <ul className="fb-chat-gallery" aria-label="Conversation photos">
         {gallery.map(attachment => <li key={attachment.id}><ChatPhoto accountId={accountId} conversationId={conversationId} attachment={attachment} onOpen={openPhoto} onReady={ignorePhotoReadiness} /></li>)}

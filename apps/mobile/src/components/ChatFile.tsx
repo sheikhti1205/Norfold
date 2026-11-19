@@ -243,10 +243,10 @@ function ChatDocument({ meta }: { meta: ChatFileMeta }) {
  * A sent video stays a compact, honest file row until the reader presses play:
  * the film mark below is a kind label, never a fabricated poster, and mounting
  * the row fetches nothing. Once fetched, the blob URL belongs to the global
- * player until it is closed. The message frame reserves the shared chat media
- * width only while that player is actually here, and follows the source's own
- * measured ratio, so the real video paints at a useful size instead of an
- * empty enlarged box.
+ * player until it is closed. The message frame holds the shared chat media
+ * width while that player is here, stays a compact band until the source's own
+ * metadata exists, and then follows its measured ratio, so the real video
+ * paints at a useful size instead of an empty enlarged box.
  */
 function ChatVideo({ meta }: { meta: ChatFileMeta }) {
   const player = useVideoPlayer();
@@ -259,11 +259,13 @@ function ChatVideo({ meta }: { meta: ChatFileMeta }) {
 
   const mine = player.video?.id === id;
   const inlineHere = mine && player.mode === "inline";
-  // Until this source's own metadata arrives the familiar 16:9 frame stands
-  // in; a measured ratio only applies while the player is painted here.
+  // Only this source's own measured shape is written. Before metadata there is
+  // nothing honest to reserve, so the frame stays a compact loading band; a
+  // guessed 16:9 box would collapse into a tall portrait the moment the real
+  // size arrived and move the whole transcript twice.
   const measured = inlineHere && player.aspect && Number.isFinite(player.aspect) && player.aspect > 0
     ? player.aspect
-    : 16 / 9;
+    : null;
 
   // Latest API without re-running effects on every playback tick.
   const apiRef = useRef(player);
@@ -318,8 +320,9 @@ function ChatVideo({ meta }: { meta: ChatFileMeta }) {
   }
 
   return <div className="fb-chat-video" data-kind="video"
-    style={inlineHere ? { "--fb-chat-video-ratio": String(measured) } as CSSProperties : undefined}>
-    <div className="fb-chat-video-frame" ref={slotRef} data-active={inlineHere ? "true" : undefined}>
+    style={measured === null ? undefined : { "--fb-chat-video-ratio": String(measured) } as CSSProperties}>
+    <div className="fb-chat-video-frame" ref={slotRef} data-active={inlineHere ? "true" : undefined}
+      data-pending={inlineHere && measured === null ? "true" : undefined}>
       {!inlineHere && <button type="button" className="fb-chat-video-launch" disabled={status === "loading"}
         onClick={() => void start()}
         aria-label={mine ? `Show ${meta.name} in the conversation` : `Play ${meta.name}`}>
