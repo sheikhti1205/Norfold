@@ -246,7 +246,7 @@ function proseText(segments: readonly ChatTextSegment[]): string {
  * outside this set - a letter, a number, an emoji, a symbol - is content a
  * user typed and can ask for again, so it keeps the Copy text action.
  */
-const LINK_RESIDUE = /^[\s.,!;:?…»›’“”"'()<>\[\]{}]+$/u;
+const LINK_RESIDUE = /^[\s.,!;:?…»›’“”"'()<>[\]{}]+$/u;
 
 /** True when the prose carries real content, not just stray link punctuation. */
 function hasProse(text: string): boolean {

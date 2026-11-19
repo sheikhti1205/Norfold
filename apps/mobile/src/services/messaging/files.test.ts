@@ -398,6 +398,7 @@ describe("chat file export identity", () => {
 
   it("removes Windows-forbidden characters, bidi overrides, NUL and trailing dots/spaces", () => {
     const result = identity('a<b>c:"d"|e?f*.pdf', "application/pdf");
+    // eslint-disable-next-line no-control-regex
     expect(result.name).not.toMatch(/[<>:"|?*\u0000]/);
     expect(result.name.endsWith(".pdf")).toBe(true);
     expect(identity("report\u202Efdp.pdf", "application/pdf").name).toBe("reportfdp.pdf");
