@@ -1084,3 +1084,172 @@ describe("foreground fast path", () => {
     });
   });
 });
+
+describe("composition instant passthrough", () => {
+  const wire = (messageId: string) => sent.find((fields) => fields.messageId === messageId);
+  const ready = async () => {
+    runtime.setMessagingAccount(A);
+    await waitForState((state) => state.status === "ready" && !!state.currentProjections);
+  };
+
+  it("carries an explicit composition instant to the SEND wire unchanged", async () => {
+    await ready();
+    // A batch item can wait behind a slow upload. The relay must receive the
+    // selection instant, never the moment the queue drained.
+    const instant = Date.now() - 5 * 60_000;
+    await expect(runtime.sendMessagingText(A, CONV, B, "Batch item", undefined, undefined, id(107), undefined, instant))
+      .resolves.toBe(id(107));
+    await vi.waitFor(() => expect(wire(id(107))).toBeDefined(), { timeout: 3000 });
+    expect(wire(id(107))?.createdAt).toBe(instant);
+  });
+
+  it("stamps the send time when no composition instant is supplied", async () => {
+    await ready();
+    const before = Date.now();
+    await runtime.sendMessagingText(A, CONV, B, "Ordinary text", undefined, undefined, id(108));
+    const after = Date.now();
+    await vi.waitFor(() => expect(wire(id(108))).toBeDefined(), { timeout: 3000 });
+    expect(typeof wire(id(108))?.createdAt).toBe("number");
+    expect(wire(id(108))?.createdAt as number).toBeGreaterThanOrEqual(before);
+    expect(wire(id(108))?.createdAt as number).toBeLessThanOrEqual(after);
+  });
+
+  it("keeps one identity and one composition instant when the same send is retried", async () => {
+    await ready();
+    const first = Date.now() - 5 * 60_000;
+    await expect(runtime.sendMessagingText(A, CONV, B, "Batch item", undefined, undefined, id(109), undefined, first))
+      .resolves.toBe(id(109));
+    await vi.waitFor(() => expect(wire(id(109))).toBeDefined(), { timeout: 3000 });
+    // A retry minutes later is still the same selection: the admitted instant is
+    // never re-stamped, so the run the receiver already grouped does not split.
+    await expect(runtime.sendMessagingText(A, CONV, B, "Batch item", undefined, undefined, id(109), undefined, Date.now()))
+      .resolves.toBe(id(109));
+    const rows = (await runtime.readMessagingThreadState(A, CONV)).messages.filter((message) => message.id === id(109));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.createdAt).toBe(first);
+    expect(wire(id(109))?.createdAt).toBe(first);
+  });
+
+  it.each([Number.NaN, -1, 1.5])("refuses an invalid composition instant (%s) through canonical validation", async (invalid) => {
+    await ready();
+    await expect(runtime.sendMessagingText(A, CONV, B, "Bad instant", undefined, undefined, id(110), undefined, invalid))
+      .rejects.toThrow("Invalid messaging time");
+    // Nothing is admitted, so a bad batch value can never become a stored row or
+    // a relayed message with an invented time.
+    expect(sent).toEqual([]);
+    expect(await runtime.readMessagingThreadState(A, CONV)).toEqual({ messages: [], outbox: [], media: [] });
+  });
+});
+
+describe("routine refresh presentation versus live authority", () => {
+  const state = () => runtime.getMessagingRuntimeSnapshot();
+  const displayOf = () => state().displayProjections?.[CONV];
+  async function readyWithDisplay() {
+    runtime.setMessagingAccount(A);
+    await waitForState((value) => value.status === "ready" && !!value.currentProjections);
+  }
+  /** Park the next full pass in its media GET so the mid-refresh snapshot is
+   * observable instead of racing the local reload. */
+  async function holdInboundMedia() {
+    const inbound = await mediaFixture(id(202), id(102), { direction: "IN", expiresAt: Date.now() + 60_000 });
+    remote.set(id(202), inbound);
+    await boundary.handles[0]!.history.persistInbound({ accountId: A, deviceId: DEVICE, mailboxId: id(402),
+      event: { kind: "TEXT", eventId: id(302), sequence: 2,
+        message: { id: id(102), conversationId: CONV, authorId: B, recipientId: A, body: "" } } });
+    deliveryGate = deferred();
+  }
+
+  it("carries the accepted display through a focus refresh while authority stays revoked", async () => {
+    await readyWithDisplay();
+    const accepted = displayOf();
+    expect(accepted?.mode).toBe("CONNECTED");
+    await holdInboundMedia();
+    const published: boolean[] = [];
+    const stop = runtime.subscribeMessagingRuntime(() => {
+      if (state().accountId === A) published.push(!!state().displayProjections);
+    });
+    try {
+      window.dispatchEvent(new Event("focus"));
+      await vi.waitFor(() => expect(requestLog).toContain(`GET:${id(202)}`), { timeout: 3000 });
+      const mid = state();
+      expect(mid.status).toBe("ready");
+      // Live authority is genuinely revoked for the pass...
+      expect(mid.currentProjections).toBeNull();
+      // ...while presentation keeps the exact last accepted view.
+      expect(mid.displayProjections?.[CONV]).toBe(accepted);
+      // Presentation is not permission: the gated actions still refuse.
+      await expect(runtime.setMessagingMuted(A, CONV, true)).rejects.toThrow(/Sync this chat/);
+      await expect(runtime.fetchMessagingReceiptView(A, CONV, [id(102)], new AbortController().signal))
+        .rejects.toThrow("Receipt context unavailable");
+      expect(requestLog).not.toContain("MUTE");
+    } finally { stop(); deliveryGate.resolve(); }
+    await waitForState((value) => value.status === "ready" && !!value.currentProjections);
+    expect(published.every(Boolean)).toBe(true);
+    expect(displayOf()?.mode).toBe("CONNECTED");
+  });
+
+  it("coalesces duplicate routine wakes without blanking presentation", async () => {
+    await readyWithDisplay();
+    await holdInboundMedia();
+    const blanks: string[] = [];
+    const stop = runtime.subscribeMessagingRuntime(() => {
+      if (!state().displayProjections) blanks.push("blank");
+    });
+    try {
+      window.dispatchEvent(new Event("focus"));
+      await vi.waitFor(() => expect(requestLog).toContain(`GET:${id(202)}`), { timeout: 3000 });
+      // The two later wakes arrive while the first pass is still running; they
+      // coalesce into one follow-up instead of starting competing passes.
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("online"));
+      expect(state().currentProjections).toBeNull();
+      expect(state().displayProjections).not.toBeNull();
+    } finally { stop(); deliveryGate.resolve(); }
+    // The superseded pass publishes no authority, so only the coalesced
+    // follow-up can restore it.
+    await waitForState((value) => value.status === "ready" && !!value.currentProjections);
+    expect(blanks).toEqual([]);
+    expect(displayOf()?.mode).toBe("CONNECTED");
+  });
+
+  it("revokes presentation with a relationship mutation and never repaints it from the queued pass", async () => {
+    await readyWithDisplay();
+    const accepted = displayOf();
+    await holdInboundMedia();
+    mutationGate = deferred();
+    let ending: Promise<void> | undefined;
+    try {
+      window.dispatchEvent(new Event("focus"));
+      await vi.waitFor(() => expect(requestLog).toContain(`GET:${id(202)}`), { timeout: 3000 });
+      ending = runtime.changeMessagingRelationship(A, CONV, "end");
+      await mutationEntered.promise;
+      const revoked = state();
+      expect(revoked.currentProjections).toBeNull();
+      // A blocked/ended relationship may not keep offering its old affordances.
+      expect(revoked.displayProjections).toBeNull();
+      const repainted: Array<string | null> = [];
+      const stop = runtime.subscribeMessagingRuntime(() => {
+        repainted.push(state().displayProjections?.[CONV]?.mode ?? null);
+      });
+      try {
+        mutationGate.resolve(); deliveryGate.resolve();
+        // The END refresh coalesces behind the running pass, so the routine
+        // completion is the point where a stale display could have come back.
+        await ending;
+        await waitForState((value) => value.status === "ready" && value.currentProjections?.[CONV]?.mode === "REQUEST");
+        expect(repainted).not.toContain("CONNECTED");
+        expect(displayOf()?.mode).toBe("REQUEST");
+      } finally { stop(); }
+    } finally { deliveryGate.resolve(); mutationGate?.resolve(); await ending?.catch(() => undefined); }
+    expect(accepted?.mode).toBe("CONNECTED");
+  });
+
+  it("clears presentation on offline so no stale action affordance survives", async () => {
+    await readyWithDisplay();
+    expect(displayOf()).not.toBeNull();
+    online = false;
+    window.dispatchEvent(new Event("offline"));
+    expect(state().currentProjections).toBeNull();
+    expect(state().displayProjections).toBeNull();
+  });
+});
