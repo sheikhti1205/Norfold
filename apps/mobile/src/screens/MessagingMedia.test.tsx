@@ -142,17 +142,16 @@ function fakeVoiceRecorder(options: { deferTrailer?: boolean; deferStop?: boolea
   vi.stubGlobal("navigator", { userAgent: navigator.userAgent, mediaDevices: {
     getUserMedia: async () => ({ getTracks: () => [track] }),
   } });
-  let instance: {
-    ondataavailable: ((event: { data: Blob }) => void) | null;
-    deliverStop: () => void;
-  } | null = null;
   class Recorder {
     static isTypeSupported() { return true; }
+    /** The one recorder the app constructs, kept on the fake itself so the
+     *  harness can drive its trailer and stop without aliasing `this`. */
+    static latest: Recorder | null = null;
     mimeType = "audio/webm";
     state = "inactive";
     ondataavailable: ((event: { data: Blob }) => void) | null = null;
     onstop: (() => void) | null = null;
-    constructor() { instance = this; }
+    constructor() { Recorder.latest = this; }
     start() { this.state = "recording"; }
     pause() { this.state = "paused"; }
     resume() { this.state = "recording"; }
@@ -165,8 +164,8 @@ function fakeVoiceRecorder(options: { deferTrailer?: boolean; deferStop?: boolea
   vi.stubGlobal("MediaRecorder", Recorder);
   return {
     track,
-    deliver: () => instance?.ondataavailable?.({ data: new Blob(["audio"]) }),
-    deliverStop: () => instance?.deliverStop(),
+    deliver: () => Recorder.latest?.ondataavailable?.({ data: new Blob(["audio"]) }),
+    deliverStop: () => Recorder.latest?.deliverStop(),
   };
 }
 it("keeps the measured capture clock while the preview is still settling", async () => {
