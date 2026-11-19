@@ -10,11 +10,12 @@ import { describe, expect, it } from "vitest";
  * a photo-only preferred width inside the existing 34rem bubble cap, the
  * unitless inline ratio that shrinks the box until it fits the shared height
  * cap (so the contain-fitted picture paints edge to edge with no letterbox
- * bars), a compact status branch that keeps the old media width and no
- * intrinsic ratio, the unchanged shared token read by files, video, stickers
- * and the grouped grid, the existing parent width chain, and the unchanged
- * group arrangements. Rendered geometry remains a deployed browser acceptance
- * item, not a claim from this file.
+ * bars), a flush bubble whose width owner is the picture box rather than the
+ * bitmap's intrinsic width, a compact status branch that keeps the old media
+ * width and no intrinsic ratio, the unchanged shared token read by files, video,
+ * stickers and the grouped grid, the existing parent width chain, and the
+ * unchanged group arrangements. Rendered geometry remains a deployed browser
+ * acceptance item, not a claim from this file.
  */
 type CssRule = { selectors: string[]; body: string };
 
@@ -371,6 +372,81 @@ describe("R19 chat photo sizing ownership", () => {
 
     const minHeightDecoy = ".fb-chat-photo { min-height:min(30rem, 80vh); }";
     expect(CAP_PATTERN.exec(bodiesFor(cssRules(minHeightDecoy), ".fb-chat-photo")[0] ?? "")).toBeNull();
+  });
+});
+
+/**
+ * R19 flush photo width ownership (deployed 7c5e6489). The surface sizes to
+ * `max-content` and the bubble declares no width, so the bubble takes the
+ * in-flow photo's contribution. The base photo width carries a percentage,
+ * which cannot resolve during intrinsic sizing: the contribution fell back to
+ * the bitmap's own width, the 34rem cap set the bubble to 544, and the photo
+ * resolved to 512 inside it. The corner chip then anchored to the bubble strip
+ * (chip right 1414.4 against the picture right 1387.2). A flush bubble restates
+ * the width without that percentage, so the picture owns the width; the
+ * absolutely positioned long-press anchor is asserted as the reason no sibling
+ * competes for it. Declarations only: rendered acceptance stays in the deployed
+ * browser.
+ */
+describe("R19 flush photo width ownership", () => {
+  const flushPhotoSelector = ".fb-chat-message-media:has(> .fb-chat-photo > button) > .fb-chat-photo";
+  const flushPhoto = bodies(flushPhotoSelector).join("\n");
+  const base = photoRule();
+  const surface = bodies(".fb-chat-message-surface").join("\n");
+  const bubble = bodies(".fb-chat-message").find(body => body.includes("max-width:min(100%, 34rem);")) ?? "";
+  const flushBubble = /\.fb-chat-message-media:has\(> \.fb-chat-photo > button\)\s*\{([^{}]*)\}/.exec(chatCss)?.[1] ?? "";
+  const longPressCss = readFileSync(new URL("../components/longPress.css", import.meta.url), "utf8");
+
+  it("restates a definite photo width inside a flush bubble only", () => {
+    expect(flushPhoto).toContain("width:min(var(--fb-chat-photo-width, 32rem), calc(min(30rem, 80vh) * var(--fb-chat-photo-ratio)))");
+    // The percentage is the term intrinsic sizing cannot resolve; leaving it in
+    // is what let the bitmap, not the box, size the bubble.
+    expect(flushPhoto).not.toContain("100%,");
+    // Scoped to a flush bubble: captions, status cards, the gallery and the
+    // grouped cells keep the base guard.
+    expect(flushPhotoSelector).toContain(".fb-chat-message-media:has(> .fb-chat-photo > button)");
+    expect(flushPhotoSelector).not.toContain(".fb-chat-gallery");
+    expect(base).toContain("width:min(var(--fb-chat-photo-width, 32rem), 100%, calc(min(30rem, 80vh) * var(--fb-chat-photo-ratio)))");
+    // The override must win by cascade as well as by specificity. The same
+    // selector already exists for `border-radius`, so compare the declaration.
+    const overrideAt = chatCss.indexOf("width:min(var(--fb-chat-photo-width, 32rem), calc(");
+    const baseAt = chatCss.indexOf(".fb-chat-photo { --fb-chat-photo-ratio");
+    expect(overrideAt).toBeGreaterThan(baseAt);
+    expect((flushPhotoSelector.match(/\./g) ?? []).length)
+      .toBeGreaterThan((".fb-chat-photo".match(/\./g) ?? []).length);
+  });
+
+  it("leaves the picture as the only width owner in the flush chain", () => {
+    // Surface: max-content context. Bubble: no width of its own. Flush bubble:
+    // no width and no padding. The long-press/menu anchor is out of flow.
+    expect(surface).toContain("width:max-content;");
+    expect(bubble).not.toMatch(/(?:^|[;\s])width\s*:/);
+    expect(flushBubble).toContain("padding:0;");
+    expect(flushBubble).not.toMatch(/(?:^|[;\s])width\s*:/);
+    expect(longPressCss).toMatch(/\.fb-longpress-anchor\s*\{[^}]*position:\s*absolute;/);
+    expect(longPressCss).toMatch(/\.fb-longpress-anchor\s*\{[^}]*inset:\s*0;/);
+  });
+
+  it("keeps the 34rem figure a maximum and the narrow-pane clamp intact", () => {
+    expect(surface).toContain("max-width:min(100%, 34rem);");
+    expect(bubble).toContain("max-width:min(100%, 34rem);");
+    expect(base).toContain("max-width:100%;");
+    // 320px phone: the parent clamp still wins over the definite width, so the
+    // flush bubble can never overflow its pane.
+    const narrow = photoPaint(320, 640, 1672 / 941);
+    expect(narrow.boxWidth).toBeCloseTo(294.4, 5);
+    expect(narrow.boxWidth).toBeLessThan(320);
+  });
+
+  it("keeps the accepted 1672x941 photo at 512 with no second width", () => {
+    const accepted = photoPaint(1440, 900, 1672 / 941);
+    expect(accepted.boxWidth).toBeCloseTo(512, 5);
+    expect(accepted.height).toBeCloseTo(512 / (1672 / 941), 5);
+    expect(accepted.height).toBeGreaterThan(288);
+    expect(accepted.height).toBeLessThan(289);
+    // The picture box and the bubble now share the one definite width, so the
+    // chip's inline-end inset and the picture edge are the same edge.
+    expect(flushPhoto).toContain("var(--fb-chat-photo-width, 32rem)");
   });
 });
 
