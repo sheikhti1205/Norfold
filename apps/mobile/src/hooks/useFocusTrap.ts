@@ -5,16 +5,28 @@ import { isTopModalLayer, popModalLayer, pushModalLayer } from "./modalLayers";
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
 
+/** The element that owns focus right now, or null when none does (body). */
+function readLauncher(): HTMLElement | null {
+  const active = document.activeElement;
+  return active instanceof HTMLElement && active !== document.body ? active : null;
+}
+
 /**
  * Keeps keyboard focus inside a modal container while it is mounted.
  *
- * - Moves focus into the container on mount (first focusable, else the container).
+ * - Records the launcher, then moves focus into the container on mount (first
+ *   focusable, else the container).
  * - Wraps Tab / Shift+Tab at the edges.
  * - Calls onClose on Escape.
- * - Restores focus to the element that was focused before mount on unmount.
+ * - Restores focus to the launcher on unmount.
  *   The caller can set `previouslyFocusedRef.current` to the trigger element
- *   before enabling the trap. If not set, the hook captures the current focus
- *   when the trap becomes enabled.
+ *   before enabling the trap; a supplied launcher always wins. Otherwise the
+ *   hook records the focused element itself when the trap activates.
+ *   The launcher is recorded during render rather than in an effect: effects
+ *   run after the whole subtree's own effects, so a child that autofocuses on
+ *   mount (react-aria's Calendar focuses the focused day) would already own
+ *   focus and the launcher would be lost. React Aria's own FocusScope records
+ *   it in render for the same reason.
  *
  * Usage:
  *   const ref = useRef<HTMLDivElement>(null);
@@ -41,10 +53,32 @@ export function useFocusTrap(
     layerIdRef.current = `focus-trap-${Math.random().toString(36).slice(2)}`;
   }
   const [container, setContainer] = useState<HTMLElement | null>(null);
-  const enabledRef = useRef(false);
-  enabledRef.current = enabled;
-  // Internal ref to store previously focused element when caller doesn't provide one
+  // Internal ref to store the launcher when the caller doesn't provide one.
   const internalPreviouslyFocusedRef = useRef<HTMLElement | null>(null);
+  // Whether this activation's launcher has been recorded. Only a disabled
+  // render ends an activation; an effect cleanup never does, so a StrictMode
+  // replay or a container swap keeps the launcher it captured.
+  const activeRef = useRef(false);
+
+  if (typeof document !== "undefined") {
+    if (!enabled) {
+      // End the activation for the next enable edge. The recorded launcher is
+      // deliberately kept: this commit's effect cleanup still restores it.
+      activeRef.current = false;
+    } else if (!activeRef.current) {
+      activeRef.current = true;
+      const target = previouslyFocusedRef ?? internalPreviouslyFocusedRef;
+      // While the previous trap still owns focus (an enable flip whose cleanup
+      // has not committed yet) its launcher stays valid; recording now would
+      // capture an inner dialog node instead.
+      const stillHoldingFocus = Boolean(containerRef.current?.contains(document.activeElement));
+      if (!stillHoldingFocus && (target.current === null || target === internalPreviouslyFocusedRef)) {
+        // A fresh activation records afresh, so reopening from a different
+        // trigger returns focus to that trigger rather than the first one.
+        target.current = readLauncher();
+      }
+    }
+  }
 
   // Track the container element via a callback ref so we can re-run the effect
   // when the element becomes available (e.g. when a portal mounts).
@@ -61,34 +95,12 @@ export function useFocusTrap(
     }
   }, [containerRef, container]);
 
-  // Capture the previously focused element when the trap becomes enabled.
-  // Use caller's ref if provided, otherwise use internal ref.
-  useEffect(() => {
-    if (enabled && !enabledRef.current) {
-      // Trap just became enabled - capture current focus
-      const previouslyFocused =
-        document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      if (previouslyFocusedRef) {
-        if (previouslyFocusedRef.current === null) {
-          previouslyFocusedRef.current = previouslyFocused;
-        }
-      } else {
-        internalPreviouslyFocusedRef.current = previouslyFocused;
-      }
-    }
-    enabledRef.current = enabled;
-  }, [enabled, previouslyFocusedRef]);
-
   useEffect(() => {
     if (!enabled || !container) return;
 
-    // Capture previously focused element if not already captured
-    const previousRef = previouslyFocusedRef ?? internalPreviouslyFocusedRef;
-    if (previousRef.current === null) {
-      const previouslyFocused =
-        document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      previousRef.current = previouslyFocused;
-    }
+    // The launcher this activation restores. Snapshot it so a later ref change
+    // cannot redirect — or lose — the restore.
+    const launcher = previouslyFocusedRef?.current ?? internalPreviouslyFocusedRef.current;
 
     const isUnavailable = (element: HTMLElement): boolean =>
       element.matches(':disabled, input[type="hidden"]') ||
@@ -172,9 +184,8 @@ export function useFocusTrap(
       observer.disconnect();
       popModalLayer(layerIdRef.current!);
       document.removeEventListener("keydown", handleKeyDown);
-      // Use caller's ref if provided, otherwise use internal ref
-      const previous = previouslyFocusedRef?.current ?? internalPreviouslyFocusedRef.current;
-      if (previous && document.contains(previous)) previous.focus();
+      // Only this activation's launcher, and only if it is still mounted.
+      if (launcher && document.contains(launcher)) launcher.focus();
     };
   }, [container, enabled, previouslyFocusedRef]);
 
