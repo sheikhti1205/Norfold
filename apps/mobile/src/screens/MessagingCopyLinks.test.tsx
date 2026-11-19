@@ -324,8 +324,11 @@ describe("R19 canonical previews", () => {
     expect(replyPreview({ ...previewBase, messageType: "LOCATION" })).toBe("Location");
   });
 
-  it("keeps a bare Klipy body as GIF and prose containing its URL exact", () => {
-    expect(replyPreview({ ...previewBase, body: "https://media.klipy.com/a.gif" })).toBe("GIF");
+  it("names a proven Klipy kind and keeps prose containing its URL exact", () => {
+    expect(replyPreview({ ...previewBase, body: "https://media.klipy.com/a.gif#norfold-media=gif" })).toBe("GIF");
+    expect(replyPreview({ ...previewBase, body: "https://media.klipy.com/s.webp#norfold-media=sticker" })).toBe("Sticker");
+    // A pre-marker body proves no kind; it is named for both rather than guessed.
+    expect(replyPreview({ ...previewBase, body: "https://media.klipy.com/a.gif" })).toBe("Sticker/GIF");
     expect(replyPreview({ ...previewBase, body: "See https://media.klipy.com/a.gif now" })).toBe("See https://media.klipy.com/a.gif now");
   });
 
@@ -334,7 +337,9 @@ describe("R19 canonical previews", () => {
     { name: "a file after leading whitespace", body: `\n${chatFileBody(fileMeta)}`, shown: "report.pdf" },
     { name: "a malformed reserved body", body: "norfold-file:v1:!!!not-base64 https://evil.example/x", shown: "File" },
     { name: "a future reserved body", body: "norfold-file:v2:abcd", shown: "File" },
-    { name: "a bare GIF", body: "https://media.klipy.com/a.gif", shown: "GIF" },
+    { name: "a bare Klipy body before the kind marker", body: "https://media.klipy.com/a.gif", shown: "Sticker/GIF" },
+    { name: "a tagged sticker", body: "https://media.klipy.com/s.webp#norfold-media=sticker", shown: "Sticker" },
+    { name: "a tagged GIF", body: "https://media.klipy.com/a.gif#norfold-media=gif", shown: "GIF" },
     { name: "prose containing a provider URL", body: "See https://media.klipy.com/a.gif now", shown: "See https://media.klipy.com/a.gif now" },
     { name: "an unsent row", body: "Gone", unsentAt: 5, shown: "Message unsent" },
     { name: "ordinary text", body: "  keep\nthis  ", shown: "  keep\nthis  " },

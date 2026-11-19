@@ -3,19 +3,29 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 /**
- * Static ownership contract for R19 photo sizing.
+ * Static ownership contract for R19 photo, GIF and sticker sizing.
  *
  * jsdom has no layout engine, so this file cannot measure a rendered photo.
  * It pins the declared mechanism and evaluates its bounds as a paint model:
- * a photo-only preferred width inside the existing 34rem bubble cap, the
- * unitless inline ratio that shrinks the box until it fits the shared height
- * cap (so the contain-fitted picture paints edge to edge with no letterbox
- * bars), a flush bubble whose width owner is the picture box rather than the
- * bitmap's intrinsic width, a compact status branch that keeps the old media
- * width and no intrinsic ratio, the unchanged shared token read by files, video,
- * stickers and the grouped grid, the existing parent width chain, and the
- * unchanged group arrangements. Rendered geometry remains a deployed browser
- * acceptance item, not a claim from this file.
+ * one 70% message cap written once against the usable transcript, a compact
+ * shared preview whose caps are lengths (so a 200% text setting cannot inflate
+ * them), a photo-only width preference inside the same bubble cap, the unitless
+ * inline ratio that shrinks the box until it fits the shared height bound (so
+ * the contain-fitted picture paints edge to edge with no letterbox bars), a
+ * flush bubble whose width owner is the picture box rather than the bitmap's
+ * intrinsic width, an expressive bubble whose own plain-length cap bounds the
+ * max-content measurement that a percentage cap could not, a compact status
+ * branch that keeps the shared preview width and no intrinsic ratio, the
+ * existing parent width chain, and the unchanged group arrangements.
+ *
+ * The deployed page is `border-box` everywhere: `src/main.tsx` imports
+ * `src/index.css`, whose first line is `@import "tailwindcss"`, and Tailwind
+ * Preflight's base layer declares `*,:after,:before,::backdrop{box-sizing:border-box}`.
+ * Every declared max-width below is therefore a border box. A padded bubble
+ * hands its picture the cap minus its own side padding; a padded photo bubble
+ * only ever holds a no-bytes card, because a painted single photo is the flush
+ * media-only bubble and takes the whole cap. Rendered geometry
+ * remains a deployed browser acceptance item, not a claim from this file.
  */
 type CssRule = { selectors: string[]; body: string };
 
@@ -87,71 +97,173 @@ function withWidth(selector: string) {
   return bodies(selector).find(body => body.includes("width:var(--fb-chat-media-width);")) ?? "";
 }
 
-/** The single photo box: its own wider preference and the ratio-aware shrink. */
+/** The single photo box: its own preference and the ratio-aware shrink. */
 function photoRule() {
   return bodies(".fb-chat-photo").find(body => body.includes("width:min(var(--fb-chat-photo-width")) ?? "";
 }
 
 /** Bounds read from the source, not measured pixels. */
 const REM_PX = 16;
-const WIDTH_PATTERN = /--fb-chat-media-width\s*:\s*min\(([\d.]+)rem,\s*([\d.]+)vw\)\s*;/;
-const PHOTO_WIDTH_PATTERN = /--fb-chat-photo-width\s*:\s*([\d.]+)rem\s*;/;
-const CAP_PATTERN = /max-height:\s*min\(([\d.]+)rem,\s*([\d.]+)vh\)\s*;/;
-const width = WIDTH_PATTERN.exec(chatCss);
+const MEDIA_WIDTH_PATTERN = /--fb-chat-media-width\s*:\s*([\d.]+)px\s*;/;
+const PHOTO_WIDTH_PATTERN = /--fb-chat-photo-width\s*:\s*([\d.]+)px\s*;/;
+const PHOTO_HEIGHT_PATTERN = /--fb-chat-photo-height\s*:\s*min\(([\d.]+)px,\s*([\d.]+)vh\)\s*;/;
+const KLIPY_WIDTH_PATTERN = /--fb-chat-klipy-width\s*:\s*([\d.]+)px\s*;/;
+const KLIPY_HEIGHT_PATTERN = /--fb-chat-klipy-height\s*:\s*min\(([\d.]+)px,\s*([\d.]+)vh\)\s*;/;
+const STICKER_WIDTH_PATTERN = /--fb-chat-sticker-width\s*:\s*([\d.]+)px\s*;/;
+const STICKER_HEIGHT_PATTERN = /--fb-chat-sticker-height\s*:\s*min\(([\d.]+)px,\s*([\d.]+)vh\)\s*;/;
+const MESSAGE_CAP_PATTERN = /\.fb-chat-line > \.fb-chat-line-row \{ max-width:([\d.]+)%; \}/;
+
+const mediaWidth = MEDIA_WIDTH_PATTERN.exec(chatCss);
 const photoWidth = PHOTO_WIDTH_PATTERN.exec(chatCss);
-const cap = CAP_PATTERN.exec(photoRule());
-const preferredRem = Number(width?.[1] ?? 0);
-const preferredVwPercent = Number(width?.[2] ?? 0);
-const photoPreferredRem = Number(photoWidth?.[1] ?? 0);
-const capRem = Number(cap?.[1] ?? 0);
-const capVhPercent = Number(cap?.[2] ?? 0);
+const photoHeight = PHOTO_HEIGHT_PATTERN.exec(chatCss);
+const klipyWidth = KLIPY_WIDTH_PATTERN.exec(chatCss);
+const klipyHeight = KLIPY_HEIGHT_PATTERN.exec(chatCss);
+const stickerWidth = STICKER_WIDTH_PATTERN.exec(chatCss);
+const stickerHeight = STICKER_HEIGHT_PATTERN.exec(chatCss);
+const messageCap = MESSAGE_CAP_PATTERN.exec(chatCss);
+
+const mediaWidthPx = Number(mediaWidth?.[1] ?? 0);
+const photoWidthPx = Number(photoWidth?.[1] ?? 0);
+const photoHeightPx = Number(photoHeight?.[1] ?? 0);
+const photoHeightVh = Number(photoHeight?.[2] ?? 0);
+const klipyWidthPx = Number(klipyWidth?.[1] ?? 0);
+const klipyHeightPx = Number(klipyHeight?.[1] ?? 0);
+const klipyHeightVh = Number(klipyHeight?.[2] ?? 0);
+const stickerWidthPx = Number(stickerWidth?.[1] ?? 0);
+const stickerHeightPx = Number(stickerHeight?.[1] ?? 0);
+const stickerHeightVh = Number(stickerHeight?.[2] ?? 0);
+const messageCapPercent = Number(messageCap?.[1] ?? 0);
+
+/** The transcript's inline padding, read from `.fb-chat-messages`. */
+const listRule = bodies(".fb-chat-messages").find(body => body.includes("padding:.5rem .8rem;")) ?? "";
+const listPaddingRem = Number(/padding:[\d.]+rem ([\d.]+)rem;/.exec(listRule)?.[1] ?? 0);
+
+/** The expressive bubble's side padding, read from `.fb-chat-message-klipy`. */
+const klipyBubbleRule = bodies(".fb-chat-message-klipy").find(body => body.includes("padding:0 .1rem;")) ?? "";
+const klipyPaddingPx = Number(/padding:0 ([\d.]+)rem;/.exec(klipyBubbleRule)?.[1] ?? 0) * REM_PX;
 
 /**
- * The paint model of the declared photo bounds: ratio is width / height. The
- * photo preference, the bubble's content box (100%) and the height cap times
- * the inline ratio compete, and the smallest wins. A tall picture therefore
- * narrows until it fits the cap, so the box and the contain-fitted image agree
- * and no letterbox bars remain. This is arithmetic on CSS values, not layout
- * measurement; the parent chain can only reduce the box width further.
+ * The padded bubble's side padding, read from `.fb-chat-message`. Tailwind
+ * Preflight (`src/index.css` imports `tailwindcss`, whose base layer declares
+ * `* { box-sizing:border-box }`) makes this padding part of the declared
+ * max-width, so a 544px bubble carries 518.4px of picture width, not 544.
  */
-function photoPaint(viewportWidth: number, viewportHeight: number, ratio: number) {
-  const heightCap = Math.min(capRem * REM_PX, (capVhPercent / 100) * viewportHeight);
-  // A flush media bubble owns no inline padding; only the transcript gutter
-  // stays outside the photo, and the 34rem bubble cap bounds the rest.
-  const availableWidth = Math.min(viewportWidth - 2 * 0.8 * REM_PX, 34 * REM_PX);
-  const boxWidth = Math.min(photoPreferredRem * REM_PX, availableWidth, heightCap * ratio);
-  return { boxWidth, availableWidth, heightCap, width: boxWidth, height: boxWidth / ratio };
+const bubbleRule = bodies(".fb-chat-message").find(body => body.includes("padding:.6rem .8rem;")) ?? "";
+const bubblePaddingPx = Number(/padding:[\d.]+rem ([\d.]+)rem;/.exec(bubbleRule)?.[1] ?? 0) * REM_PX;
+
+/**
+ * What a message may occupy. `scrollerWidth` is the message scroller's
+ * clientWidth, the number the deployed pane reports: the 70% cap resolves
+ * against the transcript's content box, never the window, so a split pane, a
+ * phone and a full-width monitor all read the same rule.
+ */
+function transcript(scrollerWidth: number) {
+  const usable = scrollerWidth - 2 * listPaddingRem * REM_PX;
+  return { usable, cap: (usable * messageCapPercent) / 100 };
+}
+
+/**
+ * The paint model of the declared photo bounds: ratio is width / height.
+ * The deployed page is `border-box` everywhere (Tailwind Preflight), so a
+ * declared max-width bounds the bubble's border box. A painted single photo
+ * bubble is the flush media-only bubble, `.fb-chat-message-media:has(>
+ * .fb-chat-photo > button)`, which declares `padding:0`: the cap is all picture,
+ * which is why `flush` is the default. Only a no-bytes card keeps the base
+ * `.fb-chat-message` padding, and it takes the shared media width instead of the
+ * ratio solve. The photo preference, the one 70% message cap, the readable 34rem
+ * measure, that padding and the height bound times the inline ratio compete, and
+ * the smallest wins. A tall picture therefore narrows until it fits the bound,
+ * so the box and the contain-fitted image agree. This is arithmetic on declared
+ * values, not layout measurement.
+ */
+function photoPaint(scrollerWidth: number, viewportHeight: number, ratio: number, flush = true) {
+  const { usable, cap } = transcript(scrollerWidth);
+  const heightCap = Math.min(photoHeightPx, (photoHeightVh / 100) * viewportHeight);
+  const bubbleCap = Math.min(cap, 34 * REM_PX);
+  const content = flush ? bubbleCap : bubbleCap - 2 * bubblePaddingPx;
+  const boxWidth = Math.min(photoWidthPx, content, heightCap * ratio);
+  return { boxWidth, bubbleCap, content, heightCap, usable, width: boxWidth, height: boxWidth / ratio };
+}
+
+/** The caps an expressive picture may read, per the kind the sender preserved. */
+function expressiveCaps(viewportHeight: number) {
+  const height = (px: number, vh: number) => Math.min(px, (vh / 100) * viewportHeight);
+  return {
+    unknown: { width: klipyWidthPx, height: height(klipyHeightPx, klipyHeightVh) },
+    gif: { width: photoWidthPx, height: height(photoHeightPx, photoHeightVh) },
+    sticker: { width: stickerWidthPx, height: height(stickerHeightPx, stickerHeightVh) },
+  };
+}
+
+/**
+ * The paint model of one bare Klipy picture. The page is `border-box`
+ * everywhere, so the bubble's plain-length cap is a border-box width: a 192px
+ * cap leaves 188.8px of picture after the declared 0.1rem side padding. That
+ * plain length is what bounds the max-content measurement, because a percentage
+ * cap cannot resolve there; the picture's own percentage then only shrinks it
+ * inside a narrow pane. A replaced element under a max-height bound shrinks
+ * along its own ratio, so nothing is squashed. This is arithmetic on declared
+ * values, not a layout measurement.
+ */
+function klipyPaint(
+  scrollerWidth: number,
+  natural: { width: number; height: number },
+  cap: { width: number; height: number },
+) {
+  const { usable, cap: messageCapPx } = transcript(scrollerWidth);
+  const rowMax = Math.min(messageCapPx, 34 * REM_PX);
+  const bubbleMax = Math.min(cap.width, 34 * REM_PX);
+  const outerLimit = Math.min(bubbleMax, rowMax);
+  // The cap is the border box; the row may clamp it further.
+  const needed = Math.min(natural.width, cap.width) + 2 * klipyPaddingPx;
+  const bubble = Math.min(needed, outerLimit);
+  const content = bubble - 2 * klipyPaddingPx;
+  let width = Math.min(natural.width, cap.width, content);
+  let height = (width * natural.height) / natural.width;
+  if (height > cap.height) {
+    height = cap.height;
+    width = (height * natural.width) / natural.height;
+  }
+  return { usable, rowMax, bubbleMax, outerLimit, content, bubble, width, height };
 }
 
 describe("R19 chat photo sizing ownership", () => {
-  it("keeps the shared media width and gives photos their own wider preference", () => {
+  it("keeps one shared preview scale and a photo preference that matches it", () => {
     expect(chatCss.match(/--fb-chat-media-width\s*:/g)).toHaveLength(1);
-    expect(bodies(".fb-chat-page").some(body => WIDTH_PATTERN.test(body))).toBe(true);
-    expect(preferredRem).toBe(22);
-    expect(preferredVwPercent).toBe(78);
-    // Photos opt into their own preference without editing the token that
-    // video, files, stickers and the grouped grid read, and they stay under the
+    expect(bodies(".fb-chat-page").some(body => MEDIA_WIDTH_PATTERN.test(body))).toBe(true);
+    expect(mediaWidthPx).toBe(320);
+    // 20rem at the default root: the owner's compact preview, written as a
+    // length so a 200% text setting cannot inflate it past the row it must fit.
+    expect(mediaWidthPx).toBe(20 * REM_PX);
+    // Photos opt into their own preference without editing the token that video,
+    // files, stickers and the grouped grid read, and they stay under the
     // existing 34rem bubble/surface cap.
     expect(chatCss.match(/--fb-chat-photo-width\s*:/g)).toHaveLength(1);
-    expect(photoPreferredRem).toBe(32);
-    expect(photoPreferredRem).toBeLessThan(34);
+    expect(photoWidthPx).toBe(320);
+    expect(photoWidthPx).toBeLessThan(34 * REM_PX);
     expect(withWidth(".fb-chat-photo-grid")).toContain("var(--fb-chat-media-width)");
     expect(photoRule()).not.toContain("--fb-chat-media-width");
+    // The superseded sizing is gone: no viewport-fraction preview, no wider
+    // photo preference that outgrew the bubble beside it, and no 30rem/80vh
+    // height cap that let one picture fill the screen.
     expect(chatCss).not.toMatch(/min\(15rem, 65vw\)/);
     expect(chatCss).not.toMatch(/min\(18rem, 78vw\)/);
+    expect(chatCss).not.toMatch(/--fb-chat-photo-width:\s*32rem/);
+    expect(chatCss).not.toMatch(/min\(30rem, 80vh\)/);
+    expect(chatCss).not.toMatch(/--fb-chat-media-width:\s*min\(/);
   });
 
   it("gives a single photo its own preference without losing its bounds", () => {
     const single = photoRule();
     expect(single).toContain("max-width:100%;");
-    expect(single).toContain("max-height:min(");
+    expect(single).toContain("max-height:var(--fb-chat-photo-height");
     expect(single).toContain("100%,");
     expect(single).toContain("var(--fb-chat-photo-ratio");
     expect(single).not.toContain("max-height:20rem;");
     expect(single).not.toMatch(/max-height\s*:\s*none/);
     expect(single).not.toMatch(/min-width\s*:/);
     expect(single.match(/(?:^|[;\s])width\s*:/g)).toHaveLength(1);
-    // The details gallery keeps its own 20rem cap, so the taller photo bound
+    // The details gallery keeps its own 20rem cap, so the shared photo bound
     // only changes photos inside message bubbles.
     expect(bodies(".fb-chat-gallery .fb-chat-photo").join("\n")).toContain("max-height:20rem;");
   });
@@ -166,66 +278,71 @@ describe("R19 chat photo sizing ownership", () => {
     expect(grid).not.toMatch(/aspect-ratio\s*:/);
   });
 
-  it("shrinks the box by the inline ratio so the height cap never letterboxes", () => {
+  it("shrinks the box by the inline ratio so the height bound never letterboxes", () => {
     const single = photoRule();
     // --fb-chat-photo-ratio is the unitless width/height number ChatPhoto
     // publishes on the same inline style as attachment.width / attachment.height;
     // the 1 default matches its invalid-dimensions fallback.
     expect(single).toContain("--fb-chat-photo-ratio: 1;");
-    expect(single).toMatch(/width:min\(var\(--fb-chat-photo-width, 32rem\), 100%, calc\(min\(30rem, 80vh\) \* var\(--fb-chat-photo-ratio\)\)\)/);
+    expect(single).toContain("width:min(var(--fb-chat-photo-width, 320px), 100%, calc(var(--fb-chat-photo-height, min(320px, 50vh)) * var(--fb-chat-photo-ratio)))");
     expect(messagingTsx).toContain("aspectRatio: `${attachment.width} / ${attachment.height}`");
-    expect(capRem).toBe(30);
-    expect(capVhPercent).toBe(80);
+    expect(photoHeightPx).toBe(320);
+    expect(photoHeightVh).toBe(50);
   });
 
-  it("paints a 3:4 portrait larger than the old 240x320 box at desktop", () => {
-    const desktop = photoPaint(1440, 900, 3 / 4);
-    // The 30rem cap times 3/4 gives a 22.5rem (360px) box: wider than the old
-    // 352px preference and taller than its 469px letterboxed rendering, and the
-    // contain-fitted picture now fills the box exactly.
-    expect(desktop.boxWidth).toBeCloseTo(360, 5);
+  it("bounds a 3:4 portrait to the shared height bound at desktop", () => {
+    const desktop = photoPaint(804, 727, 3 / 4);
+    // The 320px bound times 3/4 gives a 240x320 box: the owner's compact
+    // preview, and the contain-fitted picture fills the box exactly.
+    expect(desktop.boxWidth).toBeCloseTo(240, 5);
+    expect(desktop.height).toBeCloseTo(320, 5);
     expect(desktop.width).toBeCloseTo(desktop.boxWidth, 5);
-    expect(desktop.height).toBeCloseTo(480, 5);
-    expect(desktop.width).toBeGreaterThan(240);
-    expect(desktop.height).toBeGreaterThan(320);
     expect(Math.abs(desktop.width / desktop.height - 3 / 4)).toBeLessThan(1e-9);
+    // The row's 70% and the readable 34rem measure are both maxima above it.
+    expect(desktop.usable).toBeCloseTo(778.4, 5);
+    // The 34rem cap is a border box. A painted photo bubble is flush and
+    // declares no padding, so the picture gets all 544px; the base bubble's
+    // 12.8px gutter each side would leave 518.4px, which only a padded
+    // no-bytes card sees.
+    expect(desktop.bubbleCap).toBeCloseTo(544, 5);
+    expect(desktop.content).toBeCloseTo(544, 5);
+    expect(desktop.bubbleCap - 2 * bubblePaddingPx).toBeCloseTo(518.4, 5);
   });
 
   it("keeps a 320px phone inside the viewport without overflowing the bubble", () => {
     const phone = photoPaint(320, 640, 3 / 4);
-    // The bubble no longer reserves width beside it for the menu control, so
-    // the phone's whole content box holds the photo. The paddings are read from
-    // source rather than assumed: list padding, then bubble padding.
-    const list = bodies(".fb-chat-messages").find(body => body.includes("padding:.5rem .8rem;")) ?? "";
     const bubble = bodies(".fb-chat-message").find(body => body.includes("max-width:min(100%, 34rem);")) ?? "";
-    const listInline = Number(/padding:[\d.]+rem ([\d.]+)rem;/.exec(list)?.[1] ?? 0);
     const bubbleInline = Number(/padding:[\d.]+rem ([\d.]+)rem;/.exec(bubble)?.[1] ?? 0);
-    expect(listInline).toBe(0.8);
+    expect(listPaddingRem).toBe(0.8);
     expect(bubbleInline).toBe(0.8);
     expect(bodies(".fb-chat-message-surface").join(" ")).toContain("max-width:min(100%, 34rem);");
     expect(bodies(".fb-chat-message-surface").join(" ")).not.toContain("2.75rem");
-    // A flush media bubble owns no inline padding of its own: 320 - 2*0.8rem =
-    // 294.4px. That parent 100% term is narrower than the photo preference and
-    // the 3:4 height solve, so it wins and nothing overflows sideways.
-    const flushAvailable = 320 - listInline * 2 * REM_PX;
-    const paddedAvailable = flushAvailable - bubbleInline * 2 * REM_PX;
-    expect(flushAvailable).toBeCloseTo(294.4, 5);
-    expect(paddedAvailable).toBeCloseTo(268.8, 5);
-    expect(phone.boxWidth).toBeCloseTo(flushAvailable, 5);
+    // The deployed 320 base: a 320 scroller with its 0.8rem gutters leaves
+    // 294.4px and the one 70% cap is 206.08px of border box. A painted photo
+    // bubble is the flush media-only bubble, so `padding:0` leaves the picture
+    // the whole 206.08px. Only a no-bytes card keeps the base 12.8px gutter
+    // each side, and its content bound is 180.48px; the card takes the shared
+    // media width and is clamped by that bound, it never runs the ratio solve.
+    expect(phone.usable).toBeCloseTo(294.4, 5);
+    expect(phone.bubbleCap).toBeCloseTo(206.08, 5);
+    expect(phone.boxWidth).toBeCloseTo(206.08, 5);
     expect(phone.boxWidth).toBeLessThan(320);
     expect(phone.height).toBeLessThan(640);
-    // The no-bytes status card keeps the old compact media width inside the
-    // padded bubble instead of growing to the photo preference.
+    const padded = photoPaint(320, 640, 3 / 4, false);
+    expect(padded.bubbleCap - 2 * bubblePaddingPx).toBeCloseTo(180.48, 5);
+    expect(padded.content).toBeCloseTo(180.48, 5);
+    // The no-bytes status card keeps the shared preview width inside the padded
+    // bubble instead of growing to the photo preference.
     const compact = bodies('.fb-chat-message .fb-chat-photo:not(.fb-chat-photo-grouped):has(> div[role="status"])').join("\n");
     expect(compact).toContain("width:var(--fb-chat-media-width);");
-    expect((preferredVwPercent / 100) * 320).toBeLessThanOrEqual(paddedAvailable);
+    expect(mediaWidthPx).toBe(320);
     expect(photoRule()).not.toMatch(/min-width\s*:/);
     expect(bubble).toContain("min-width:0;");
   });
 
   it("bounds a short viewport with the viewport term", () => {
     const short = photoPaint(1024, 400, 3 / 4);
-    expect(short.heightCap).toBeCloseTo(0.8 * 400, 5);
+    expect(short.heightCap).toBeCloseTo((photoHeightVh / 100) * 400, 5);
     expect(short.height).toBeCloseTo(short.heightCap, 5);
     expect(short.width).toBeCloseTo(short.heightCap * (3 / 4), 5);
     expect(short.height).toBeLessThan(photoPaint(1024, 900, 3 / 4).height);
@@ -233,22 +350,22 @@ describe("R19 chat photo sizing ownership", () => {
 
   it("bounds a very tall image without stretching it or painting bars", () => {
     const tall = photoPaint(1440, 900, 9 / 16);
-    expect(tall.height).toBeCloseTo(capRem * REM_PX, 5);
-    expect(tall.width).toBeCloseTo(tall.height * (9 / 16), 5);
-    expect(tall.boxWidth).toBeLessThan(photoPreferredRem * REM_PX);
+    expect(tall.height).toBeCloseTo(photoHeightPx, 5);
+    expect(tall.width).toBeCloseTo(180, 5);
+    expect(tall.boxWidth).toBeLessThan(photoWidthPx);
     expect(tall.width / tall.height).toBeCloseTo(9 / 16, 5);
-    // The box itself is the picture: 270x480 at the 480px cap, not a 512px
-    // frame carrying 121px of background on each side.
+    // The box itself is the picture: 180x320 at the 320px bound, not a 320px
+    // frame carrying background on each side.
     expect(tall.boxWidth).toBeCloseTo(tall.width, 5);
   });
 
   it("does not clamp a square or a 4:3 landscape at a tall viewport", () => {
     const square = photoPaint(1440, 900, 1);
-    expect(square.width).toBeCloseTo(480, 5);
-    expect(square.height).toBeCloseTo(480, 5);
+    expect(square.width).toBeCloseTo(320, 5);
+    expect(square.height).toBeCloseTo(320, 5);
     const landscape = photoPaint(1440, 900, 4 / 3);
-    expect(landscape.width).toBeCloseTo(512, 5);
-    expect(landscape.height).toBeCloseTo(384, 5);
+    expect(landscape.width).toBeCloseTo(320, 5);
+    expect(landscape.height).toBeCloseTo(240, 5);
   });
 
   it("keeps the inline intrinsic ratio and the contain/cover fitting", () => {
@@ -268,13 +385,13 @@ describe("R19 chat photo sizing ownership", () => {
   it("keeps a wide panorama uncropped, unletterboxed and unclamped", () => {
     const panorama = photoPaint(1440, 900, 4);
     // The preference is a width, not an aspect clamp: a 4:1 picture takes the
-    // full 32rem and keeps its ratio, with no invented minimum height.
-    expect(panorama.width).toBeCloseTo(512, 5);
-    expect(panorama.height).toBeCloseTo(128, 5);
+    // full preview width and keeps its ratio, with no invented minimum height.
+    expect(panorama.width).toBeCloseTo(320, 5);
+    expect(panorama.height).toBeCloseTo(80, 5);
     expect(panorama.height).toBeLessThan(panorama.heightCap);
     expect(Math.abs(panorama.width / panorama.height - 4)).toBeLessThan(1e-9);
     // No invented minimum height and no CSS aspect clamp: the inline ratio and
-    // the height cap are the only bounds.
+    // the height bound are the only bounds.
     expect(photoRule()).not.toMatch(/(?:^|[;\s])min-height\s*:/);
     expect(photoRule()).not.toMatch(/aspect-ratio\s*:/);
   });
@@ -335,9 +452,9 @@ describe("R19 chat photo sizing ownership", () => {
     expect(compact).toContain("aspect-ratio:auto");
     expect(compact).toContain("!important");
     expect(chatCss).toContain('.fb-chat-photo:has(> div[role="status"]) { aspect-ratio:auto !important; }');
-    // A standalone no-bytes card keeps the shared media width instead of the
-    // wider photo preference, so loading/missing/retry states stay compact and
-    // padded. Grouped cells and the gallery own their box and are excluded.
+    // A standalone no-bytes card keeps the shared preview width instead of a
+    // photo-shaped box, so loading/missing/retry states stay compact and padded.
+    // Grouped cells and the gallery own their box and are excluded.
     const compactWidth = bodies('.fb-chat-message .fb-chat-photo:not(.fb-chat-photo-grouped):has(> div[role="status"])').join("\n");
     expect(compactWidth).toContain("width:var(--fb-chat-media-width);");
     // ChatPhoto is the only owner of this root: a painted photo renders a
@@ -364,14 +481,70 @@ describe("R19 chat photo sizing ownership", () => {
     expect(bodiesFor(cssRules(repeated), ".fb-chat-photo")
       .some(body => body.includes("width:var(--fb-chat-media-width);"))).toBe(true);
 
+    // The height bound is read from the token, so a decoy declaration on the
+    // box itself can never satisfy it.
     const capDecoy = ".fb-chat-photo:hover { max-height:min(30rem, 80vh); }\n"
       + ".fb-chat-photo { max-height:20rem; }";
     const base = bodiesFor(cssRules(capDecoy), ".fb-chat-photo")[0] ?? "";
     expect(base).toContain("max-height:20rem;");
-    expect(base).not.toContain("30rem");
+    expect(PHOTO_HEIGHT_PATTERN.test(base)).toBe(false);
 
-    const minHeightDecoy = ".fb-chat-photo { min-height:min(30rem, 80vh); }";
-    expect(CAP_PATTERN.exec(bodiesFor(cssRules(minHeightDecoy), ".fb-chat-photo")[0] ?? "")).toBeNull();
+    const minHeightDecoy = ".fb-chat-photo { min-height:min(320px, 50vh); }";
+    expect(PHOTO_HEIGHT_PATTERN.test(minHeightDecoy)).toBe(false);
+    expect(MESSAGE_CAP_PATTERN.test(".fb-chat-line-row { max-width:100%; }")).toBe(false);
+  });
+});
+
+/**
+ * R19 one 70% message cap. The row is the only element that reads the
+ * percentage, and its containing block is the full-width line, so the cap
+ * resolves once against the usable transcript. The line keeps the pane width so
+ * an own message still ends on the opposite edge, and every box below the row
+ * reads 100% of what it is given, so the cap cannot compound.
+ */
+describe("R19 one 70% message cap", () => {
+  it("writes the cap once, on the row whose containing block is the line", () => {
+    expect(messageCapPercent).toBe(70);
+    expect(chatCss.match(/max-width:70%/g)).toHaveLength(2);
+    // The line keeps the full pane width and the own/received edges.
+    expect(bodies(".fb-chat-line").join("\n")).toContain("max-width:100%;");
+    expect(bodies(".fb-chat-line-own").join("\n")).toContain("flex-direction:row-reverse;");
+    // Nothing inside the row repeats the percentage.
+    expect(bodies(".fb-chat-message-surface").join("\n")).not.toContain("70%");
+    expect(bodies(".fb-chat-message").join("\n")).not.toContain("70%");
+    expect(bodies(".fb-chat-photo").join("\n")).not.toContain("70%");
+    expect(bodies(".fb-chat-photo-grid").join("\n")).not.toContain("70%");
+  });
+
+  it("gives an album the same single cap and keeps its cells at 100%", () => {
+    expect(withWidth(".fb-chat-run")).toContain("max-width:70%;");
+    expect(bodies(".fb-chat-run > .fb-chat-line-row").join("\n")).toContain("align-items:flex-start;");
+    expect(bodies(".fb-chat-run .fb-chat-message-surface").join("\n")).toContain("width:100%;");
+    expect(chatCss).not.toMatch(/\.fb-chat-run > \.fb-chat-line-row \{[^}]*max-width:70%/);
+    expect(bodies(".fb-chat-run-own").join("\n")).toContain("margin-inline-start:auto;");
+  });
+
+  it("resolves the cap against the transcript at every pane width", () => {
+    for (const scroller of [320, 390, 804, 1112]) {
+      const { usable, cap } = transcript(scroller);
+      expect(usable).toBeCloseTo(scroller - 25.6, 5);
+      expect(cap).toBeCloseTo(usable * 0.7, 5);
+      expect(cap).toBeLessThanOrEqual(usable);
+    }
+    // The deployed numbers: a 320 pane allows 294.4px and 206.08px per message;
+    // the 1440 desktop pane allows 778.4px and 544.88px, where the readable
+    // 34rem (544px) measure binds first.
+    expect(transcript(320).cap).toBeCloseTo(206.08, 5);
+    expect(transcript(390).cap).toBeCloseTo(255.08, 5);
+    expect(transcript(804).cap).toBeCloseTo(544.88, 5);
+    expect(transcript(1112).cap).toBeCloseTo(760.48, 5);
+    const desktop = photoPaint(804, 727, 1672 / 941, true);
+    const wide = photoPaint(1112, 727, 1672 / 941, true);
+    const full = photoPaint(2000, 1250, 1672 / 941, true);
+    // A preview stops at its own cap: a wider pane never inflates it.
+    expect(desktop.boxWidth).toBe(320);
+    expect(wide.boxWidth).toBe(320);
+    expect(full.boxWidth).toBe(320);
   });
 });
 
@@ -381,12 +554,11 @@ describe("R19 chat photo sizing ownership", () => {
  * in-flow photo's contribution. The base photo width carries a percentage,
  * which cannot resolve during intrinsic sizing: the contribution fell back to
  * the bitmap's own width, the 34rem cap set the bubble to 544, and the photo
- * resolved to 512 inside it. The corner chip then anchored to the bubble strip
- * (chip right 1414.4 against the picture right 1387.2). A flush bubble restates
- * the width without that percentage, so the picture owns the width; the
- * absolutely positioned long-press anchor is asserted as the reason no sibling
- * competes for it. Declarations only: rendered acceptance stays in the deployed
- * browser.
+ * resolved inside it. A 512px picture sat in a 544px bubble with a blank strip
+ * beside it. A flush bubble restates the width without that percentage, so the
+ * picture owns the width; the absolutely positioned long-press anchor is
+ * asserted as the reason no sibling competes for it. Declarations only:
+ * rendered acceptance stays in the deployed browser.
  */
 describe("R19 flush photo width ownership", () => {
   const flushPhotoSelector = ".fb-chat-message-media:has(> .fb-chat-photo > button) > .fb-chat-photo";
@@ -398,7 +570,7 @@ describe("R19 flush photo width ownership", () => {
   const longPressCss = readFileSync(new URL("../components/longPress.css", import.meta.url), "utf8");
 
   it("restates a definite photo width inside a flush bubble only", () => {
-    expect(flushPhoto).toContain("width:min(var(--fb-chat-photo-width, 32rem), calc(min(30rem, 80vh) * var(--fb-chat-photo-ratio)))");
+    expect(flushPhoto).toContain("width:min(var(--fb-chat-photo-width, 320px), calc(var(--fb-chat-photo-height, min(320px, 50vh)) * var(--fb-chat-photo-ratio)))");
     // The percentage is the term intrinsic sizing cannot resolve; leaving it in
     // is what let the bitmap, not the box, size the bubble.
     expect(flushPhoto).not.toContain("100%,");
@@ -406,10 +578,10 @@ describe("R19 flush photo width ownership", () => {
     // grouped cells keep the base guard.
     expect(flushPhotoSelector).toContain(".fb-chat-message-media:has(> .fb-chat-photo > button)");
     expect(flushPhotoSelector).not.toContain(".fb-chat-gallery");
-    expect(base).toContain("width:min(var(--fb-chat-photo-width, 32rem), 100%, calc(min(30rem, 80vh) * var(--fb-chat-photo-ratio)))");
+    expect(base).toContain("width:min(var(--fb-chat-photo-width, 320px), 100%, calc(var(--fb-chat-photo-height, min(320px, 50vh)) * var(--fb-chat-photo-ratio)))");
     // The override must win by cascade as well as by specificity. The same
     // selector already exists for `border-radius`, so compare the declaration.
-    const overrideAt = chatCss.indexOf("width:min(var(--fb-chat-photo-width, 32rem), calc(");
+    const overrideAt = chatCss.indexOf("width:min(var(--fb-chat-photo-width, 320px), calc(");
     const baseAt = chatCss.indexOf(".fb-chat-photo { --fb-chat-photo-ratio");
     expect(overrideAt).toBeGreaterThan(baseAt);
     expect((flushPhotoSelector.match(/\./g) ?? []).length)
@@ -431,22 +603,192 @@ describe("R19 flush photo width ownership", () => {
     expect(surface).toContain("max-width:min(100%, 34rem);");
     expect(bubble).toContain("max-width:min(100%, 34rem);");
     expect(base).toContain("max-width:100%;");
-    // 320px phone: the parent clamp still wins over the definite width, so the
-    // flush bubble can never overflow its pane.
-    const narrow = photoPaint(320, 640, 1672 / 941);
-    expect(narrow.boxWidth).toBeCloseTo(294.4, 5);
+    // 320px phone: the 70% row still wins over the definite photo width, so the
+    // flush bubble can never overflow its pane. A flush bubble declares no
+    // padding, so the whole 206.08px border box is picture.
+    const narrow = photoPaint(320, 640, 1672 / 941, true);
+    expect(narrow.boxWidth).toBeCloseTo(206.08, 5);
     expect(narrow.boxWidth).toBeLessThan(320);
   });
 
-  it("keeps the accepted 1672x941 photo at 512 with no second width", () => {
-    const accepted = photoPaint(1440, 900, 1672 / 941);
-    expect(accepted.boxWidth).toBeCloseTo(512, 5);
-    expect(accepted.height).toBeCloseTo(512 / (1672 / 941), 5);
-    expect(accepted.height).toBeGreaterThan(288);
-    expect(accepted.height).toBeLessThan(289);
-    // The picture box and the bubble now share the one definite width, so the
+  it("brings the accepted 1672x941 photo down to the shared preview width", () => {
+    const accepted = photoPaint(804, 727, 1672 / 941, true);
+    expect(accepted.boxWidth).toBeCloseTo(320, 5);
+    expect(accepted.height).toBeCloseTo(320 / (1672 / 941), 5);
+    expect(accepted.height).toBeGreaterThan(179);
+    expect(accepted.height).toBeLessThan(181);
+    // The picture box and the bubble share the one definite width, so the
     // chip's inline-end inset and the picture edge are the same edge.
-    expect(flushPhoto).toContain("var(--fb-chat-photo-width, 32rem)");
+    expect(flushPhoto).toContain("var(--fb-chat-photo-width, 320px)");
+  });
+});
+
+/**
+ * R19 expressive preview bounds. A bare Klipy URL stores no kind, so the picture
+ * must stay compact and the bubble must be the picture. Where the sender did
+ * preserve a kind, `data-media-kind` on the `img.fb-chat-klipy` may take a
+ * different cap: a GIF is preview media and reads like a photo, a sticker is
+ * expression and stays smaller. The CSS never generates the label or the kind; it
+ * only sizes what the renderer states.
+ *
+ * The bubble states its cap as a plain length because a percentage cap is
+ * unreadable while the max-content surface measures it, which is what let a
+ * 480px bitmap size a 483px bubble. The picture keeps the percentage only as the
+ * guard that shrinks it inside a narrow pane.
+ */
+describe("R19 expressive preview bounds", () => {
+  const unknownRule = /\.fb-chat-message \.fb-chat-klipy\s*\{([^{}]*)\}/.exec(chatCss)?.[1] ?? "";
+  const gifRule = /\.fb-chat-message \.fb-chat-klipy\[data-media-kind="gif"\]\s*\{([^{}]*)\}/.exec(chatCss)?.[1] ?? "";
+  const stickerRule = /\.fb-chat-message \.fb-chat-klipy\[data-media-kind="sticker"\]\s*\{([^{}]*)\}/.exec(chatCss)?.[1] ?? "";
+  const unknownBubble = /\.fb-chat-message\.fb-chat-message-klipy\s*\{([^{}]*)\}/.exec(chatCss)?.[1] ?? "";
+  const gifBubble = /\.fb-chat-message\.fb-chat-message-klipy:has\(\.fb-chat-klipy\[data-media-kind="gif"\]\)\s*\{([^{}]*)\}/.exec(chatCss)?.[1] ?? "";
+  const stickerBubble = /\.fb-chat-message\.fb-chat-message-klipy:has\(\.fb-chat-klipy\[data-media-kind="sticker"\]\)\s*\{([^{}]*)\}/.exec(chatCss)?.[1] ?? "";
+
+  it("bounds the bubble with a plain length the measurement can read", () => {
+    // A percentage max-width cannot resolve against a max-content surface, so
+    // the browser dropped the whole cap and the bitmap sized the bubble. The
+    // bubble therefore states only a plain length, and the picture keeps the
+    // percentage as its own narrow-pane guard.
+    expect(unknownBubble).toContain("max-width:var(--fb-chat-klipy-width, 192px);");
+    expect(unknownBubble).not.toContain("100%");
+    expect(gifBubble).toContain("max-width:var(--fb-chat-photo-width, 320px);");
+    expect(gifBubble).not.toContain("100%");
+    expect(stickerBubble).toContain("max-width:var(--fb-chat-sticker-width, 176px);");
+    expect(stickerBubble).not.toContain("100%");
+    // One attribute location: the picture states its kind, the bubble reads it.
+    // A bare URL keeps the compact fallback rather than guessing from a URL path,
+    // a file extension or an alpha channel.
+    expect(chatCss).not.toMatch(/\.fb-chat-message-klipy\[data-media-kind/);
+    expect(chatCss).not.toMatch(/\.fb-chat-klipy\[href/);
+    expect(chatCss).not.toMatch(/data-media-kind="(?:image|photo|unknown)"/);
+    // The row keeps no stated width: a fixed row outlived a small sticker and
+    // left the status line on an empty strip. The line keeps the pane width and
+    // the row keeps the one 70% cap, so a content-sized row still ends on the
+    // sender's edge.
+    expect(chatCss).not.toMatch(/\.fb-chat-line[^{}]*\{[^{}]*width:min\(var\(--fb-chat-(?:klipy|photo|sticker)-width/);
+    expect(chatCss).not.toContain(
+      ".fb-chat-line-own > .fb-chat-line-row > .fb-chat-message-surface { margin-inline-start:auto; }");
+    expect(bodies(".fb-chat-line").join("\n")).toContain("max-width:100%;");
+    expect(bodies(".fb-chat-line-own").join("\n")).toContain("flex-direction:row-reverse;");
+    expect(MESSAGE_CAP_PATTERN.test(chatCss)).toBe(true);
+  });
+
+  it("caps an unknown bare Klipy picture at the compact scale", () => {
+    expect(klipyWidthPx).toBe(192);
+    expect(klipyWidthPx).toBe(12 * REM_PX);
+    expect(klipyHeightPx).toBe(224);
+    expect(klipyHeightVh).toBe(40);
+    expect(unknownRule).toContain("max-width:min(var(--fb-chat-klipy-width, 192px), 100%);");
+    expect(unknownRule).toContain("max-height:var(--fb-chat-klipy-height, min(224px, 40vh));");
+    expect(unknownRule).toContain("width:auto;");
+    expect(unknownRule).toContain("height:auto;");
+    expect(unknownRule).not.toContain("object-fit");
+    expect(unknownRule).not.toContain("aspect-ratio");
+    // The renderer states the kind on the picture element and answers `unknown`
+    // for pre-marker history, which is exactly the compact branch above: CSS
+    // never guesses a kind from a URL path, an extension or an alpha channel.
+    expect(messagingTsx).toContain('data-media-kind={klipyKind ?? "unknown"}');
+    expect(messagingTsx).toContain("src={klipyMessageUrl(message.body)}");
+    expect(messagingTsx).toContain("? klipyMessageKind(message.body) : null");
+    expect(chatCss).not.toMatch(/\[data-media-kind="unknown"\]/);
+  });
+
+  it("makes the bubble the picture instead of the picture's intrinsic width", () => {
+    const caps = expressiveCaps(727);
+    // The measured defect: a 480px source painted at 352 inside a 483px bubble
+    // at 1440, and at 249.59 inside a full-width 294.4px bubble at 320.
+    const desktop = klipyPaint(804, { width: 480, height: 480 }, caps.unknown);
+    // Border-box: the declared 192px cap is the bubble, so the picture receives
+    // 192 - 2 x 1.6 = 188.8. The picture and the bubble still share one edge.
+    expect(desktop.bubbleMax).toBe(192);
+    expect(desktop.bubble).toBeCloseTo(192, 5);
+    expect(desktop.width).toBeCloseTo(188.8, 5);
+    expect(desktop.height).toBeCloseTo(188.8, 5);
+    expect(desktop.bubble).toBeCloseTo(desktop.width + 2 * klipyPaddingPx, 5);
+    expect(desktop.bubble).toBeLessThan(400);
+    const phone = klipyPaint(320, { width: 480, height: 480 }, caps.unknown);
+    expect(phone.bubble).toBeCloseTo(desktop.bubble, 5);
+    expect(phone.bubble).toBeLessThanOrEqual(phone.rowMax);
+    expect(phone.rowMax).toBeCloseTo(206.08, 5);
+    // Small art is never upscaled: the picture keeps its own size and the bubble
+    // shrinks to it.
+    const small = klipyPaint(804, { width: 96, height: 96 }, caps.unknown);
+    expect(small.width).toBe(96);
+    expect(small.bubble).toBeCloseTo(99.2, 5);
+    expect(small.bubble).toBeCloseTo(small.width + 2 * klipyPaddingPx, 5);
+  });
+
+  it("keeps a tall expressive picture inside the height bound without squashing it", () => {
+    const caps = expressiveCaps(727);
+    const tall = klipyPaint(804, { width: 300, height: 800 }, caps.unknown);
+    // Only the declared bounds are asserted. Whether Chromium's max-content
+    // contribution also transfers the max-height back into the bubble's width
+    // (narrowing it toward the 84px picture instead of leaving it at its 192px
+    // cap) is a rendered-geometry question this file cannot answer, so no
+    // assertion claims the bubble hugs a tall picture: the picture is proven
+    // only to stay inside both declared bounds at its own ratio.
+    expect(tall.height).toBeCloseTo(224, 5);
+    expect(tall.width).toBeCloseTo((224 * 300) / 800, 5);
+    expect(tall.width / tall.height).toBeCloseTo(300 / 800, 5);
+    expect(tall.height).toBeLessThanOrEqual(caps.unknown.height);
+    expect(tall.width).toBeLessThanOrEqual(caps.unknown.width);
+    const short = expressiveCaps(400);
+    // The viewport term owns a short window: 40% of 400 is 160.
+    expect(short.unknown.height).toBeCloseTo(160, 5);
+  });
+
+  it("lets only a preserved kind take a different cap", () => {
+    const caps = expressiveCaps(727);
+    expect(caps.unknown.width).toBe(192);
+    expect(caps.gif.width).toBe(photoWidthPx);
+    expect(caps.gif.height).toBe(photoHeightPx);
+    expect(caps.sticker.width).toBe(176);
+    expect(caps.sticker.width).toBe(11 * REM_PX);
+    // A sticker stays clearly smaller than a GIF, and both stay under the photo
+    // preference, so the three never compete visually.
+    expect(caps.sticker.width).toBeLessThan(caps.gif.width);
+    expect(caps.gif.width).toBeLessThanOrEqual(photoWidthPx);
+    expect(gifRule).toContain("max-width:min(var(--fb-chat-photo-width, 320px), 100%);");
+    expect(gifRule).toContain("max-height:var(--fb-chat-photo-height, min(320px, 50vh));");
+    expect(stickerRule).toContain("max-width:min(var(--fb-chat-sticker-width, 176px), 100%);");
+    expect(stickerRule).toContain("max-height:var(--fb-chat-sticker-height, min(176px, 34vh));");
+    // A known GIF is preview media, so at a 320 phone the single 70% cap is what
+    // bounds it: the bubble and the picture agree exactly, with no strip left
+    // for the status line and no overflow past the pane.
+    const narrowGif = klipyPaint(320, { width: 480, height: 270 }, caps.gif);
+    expect(narrowGif.bubble).toBeCloseTo(206.08, 5);
+    expect(narrowGif.width).toBeCloseTo(202.88, 5);
+    expect(narrowGif.bubble).toBeCloseTo(narrowGif.width + 2 * klipyPaddingPx, 5);
+    expect(narrowGif.bubble).toBeLessThanOrEqual(narrowGif.rowMax);
+    // On a wide pane the same GIF takes its own cap; border-box leaves 316.8px
+    // of picture inside the declared 320px bubble.
+    const wideGif = klipyPaint(1112, { width: 480, height: 270 }, caps.gif);
+    expect(wideGif.bubble).toBeCloseTo(320, 5);
+    expect(wideGif.width).toBeCloseTo(316.8, 5);
+    expect(wideGif.height).toBeCloseTo((316.8 * 270) / 480, 5);
+    const wideSticker = klipyPaint(804, { width: 480, height: 480 }, caps.sticker);
+    expect(wideSticker.bubble).toBeCloseTo(176, 5);
+    expect(wideSticker.width).toBeCloseTo(172.8, 5);
+  });
+
+  it("holds its caps when the reader doubles the text size", () => {
+    // Every preview cap is a px length, so a doubled root font size cannot
+    // inflate a preview. The rem gutter and the percentage row cap do scale, and
+    // they only shrink the box the preview resolves against: at a 32px root a
+    // 320 pane has 268.8px usable and a 188.16px message cap, so the row binds
+    // before the preview cap can. The paint model itself runs at the 16px root;
+    // the doubled-root cap below is the smaller one that would bind.
+    const caps = expressiveCaps(1400);
+    expect(caps.gif.width).toBe(320);
+    expect(caps.unknown.width).toBe(192);
+    expect(caps.sticker.width).toBe(176);
+    for (const scroller of [320, 390, 804, 1112]) {
+      const doubledUsable = scroller - 2 * listPaddingRem * 2 * REM_PX;
+      const doubledCap = (doubledUsable * messageCapPercent) / 100;
+      expect(doubledCap).toBeLessThanOrEqual(transcript(scroller).cap);
+      if (scroller === 320) expect(doubledCap).toBeCloseTo(188.16, 5);
+    }
+    expect(chatCss).not.toMatch(/--fb-chat-(?:media|photo|klipy|sticker)-(?:width|height):\s*[\d.]+rem/);
   });
 });
 
@@ -606,16 +948,24 @@ describe("R19 media-only bubble ownership", () => {
     expect(predicate).toContain("message.contextReportId");
   });
 
-  it("bounds a Klipy sticker without cropping it or rewriting its source", () => {
-    const klipy = /\.fb-chat-message \.fb-chat-klipy\s*\{([^{}]*)\}/.exec(chatCss)?.[1] ?? "";
-    expect(klipy).toContain("max-width:min(100%, var(--fb-chat-media-width));");
-    expect(klipy).toContain("width:auto;");
-    expect(klipy).toContain("height:auto;");
-    expect(klipy).not.toContain("object-fit");
-    expect(klipy).not.toContain("aspect-ratio");
-    // The same 78vw term keeps a sticker inside the gutters of a 320px phone.
-    expect((preferredVwPercent / 100) * 320 + 2 * 0.8 * REM_PX).toBeLessThanOrEqual(320);
-    expect(messagingTsx).toContain("src={message.body.trim()}");
+  it("keeps the expressive bubble free of a second surface", () => {
+    // A bare Klipy picture is the message: no padding ring, no fill, no tail,
+    // and its receipt line keeps the reader's own text colour.
+    const klipyBubble = /\.fb-chat-message-klipy\s*\{([^{}]*)\}/.exec(chatCss)?.[1] ?? "";
+    expect(klipyBubble).toContain("padding:0 .1rem;");
+    expect(klipyBubble).toContain("background:transparent;");
+    expect(klipyBubble).toContain("border-radius:0;");
+    expect(chatCss).toContain(".fb-chat-message-klipy .fb-chat-message-status { color:var(--fb-on-surface-variant); }");
+    // The label the owner asked for sits after the timestamp in the existing
+    // status row, so CSS adds no badge, no pill and no generated text.
+    expect(chatCss).not.toContain("fb-chat-expressive-kind");
+    expect(chatCss).not.toMatch(/content:\s*["'](?:GIF|Sticker)["']/);
+    // The renderer supplies the plain text; it inherits the status row's .75rem
+    // scale and end alignment, and `.fb-chat-time`'s inline-end margin already
+    // separates it from the time.
+    expect(messagingTsx).toContain('<span className="fb-chat-expressive-kind">');
+    expect(bodies(".fb-chat-message-status").join("\n")).toContain("text-align:end;");
+    expect(bodies(".fb-chat-time").join("\n")).toContain("margin-inline-end:.35rem;");
   });
 });
 
@@ -705,9 +1055,10 @@ describe("R19 chat heading focus exception", () => {
 
 /**
  * R19 transcript alignment area. The transcript spans the thread's own inline
- * gutters instead of a centred 48rem rail; the 34rem bubble cap still bounds the
- * readable measure. The composer is not part of this rail: its own stylesheet
- * gives the real root `width: 100%`, so the screen must not clamp it.
+ * gutters instead of a centred 48rem rail; the 70% message cap and the 34rem
+ * bubble cap still bound the readable measure. The composer is not part of this
+ * rail: its own stylesheet gives the real root `width: 100%`, so the screen must
+ * not clamp it.
  */
 describe("R19 transcript alignment area", () => {
   it("lets the transcript own the pane gutters", () => {
@@ -768,6 +1119,8 @@ describe("R19 surface fit and scroll ownership", () => {
     // Voice sets its own width and a short text bubble keeps its natural width,
     // because max-content beats stretching to the cap.
     expect(chatCss).toContain("max-width:min(100%, 34rem);");
+    // The row's one 70% cap bounds that measure without repeating it below.
+    expect(chatCss).toContain(".fb-chat-line > .fb-chat-line-row { max-width:70%; }");
   });
 
   it("keeps one scroll owner in a hook module, not in the screen", () => {

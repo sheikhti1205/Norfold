@@ -59,6 +59,10 @@ describe("message Copy policy", () => {
     "  https://media.klipy.com/a.gif  ",
     "https://media.klipy.com/a.gif\n",
     "https://media.klipy.com/a%20b.gif",
+    // A new send tags its picker kind in the fragment. The body is still one
+    // bare provider URL, so Copy stays omitted instead of exposing the marker.
+    "https://media.klipy.com/a.gif#norfold-media=gif",
+    "https://media.klipy.com/s.webp#norfold-media=sticker",
   ])("disables Copy for a bare Klipy GIF or sticker body: %s", (body) => {
     expect(copyableMessageText({ body })).toBeNull();
   });
@@ -67,6 +71,9 @@ describe("message Copy policy", () => {
     expect(isBareKlipyMediaBody("https://media.klipy.com/a.gif")).toBe(true);
     expect(isBareKlipyMediaBody("  https://media.klipy.com/a.gif  ")).toBe(true);
     expect(isBareKlipyMediaBody("https://media.klipy.com/a%20b.gif")).toBe(true);
+    // The kind fragment never changes the transport class of the body.
+    expect(isBareKlipyMediaBody("https://media.klipy.com/a.gif#norfold-media=gif")).toBe(true);
+    expect(isBareKlipyMediaBody("https://media.klipy.com/s.webp#norfold-media=sticker")).toBe(true);
     expect(isBareKlipyMediaBody("https://media.klipy.com/a.gif and more")).toBe(false);
     expect(isBareKlipyMediaBody("https://media.klipy.com/a.gif\nmore")).toBe(false);
     expect(isBareKlipyMediaBody("https://example.com/a.gif")).toBe(false);

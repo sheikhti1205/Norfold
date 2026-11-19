@@ -65,8 +65,10 @@ it("mirrors the bubble direction for the reply swipe and names a quoted attachme
   expect(replyPreview({ ...base, messageType: "MEDIA" })).toBe("Photo");
   expect(replyPreview({ ...base, messageType: "LOCATION" })).toBe("Location");
   expect(replyPreview({ ...base, body: "Kept text" })).toBe("Kept text");
-  // A GIF/sticker is a bare provider URL; never quote the link.
-  expect(replyPreview({ ...base, body: "https://static.klipy.com/ii/abc/def/item.gif" })).toBe("GIF");
+  // A GIF/sticker is a bare provider URL; never quote the link. A body that
+  // proves no kind is named for what it is - sticker or GIF - not guessed.
+  expect(replyPreview({ ...base, body: "https://static.klipy.com/ii/abc/def/item.gif" })).toBe("Sticker/GIF");
+  expect(replyPreview({ ...base, body: "https://media.klipy.com/s.webp#norfold-media=sticker" })).toBe("Sticker");
   expect(replyPreview({ ...base, body: "Gone", unsentAt: 1 })).toBe("Message unsent");
 });
 it.each(["/connections", "/connections/chat"])("replaces legacy %s with the canonical destination and preserves query/hash", async path => {

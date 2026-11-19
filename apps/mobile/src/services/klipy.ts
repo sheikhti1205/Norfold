@@ -167,6 +167,94 @@ export function isKlipyMediaUrl(url: string): boolean {
 }
 
 /**
+ * Picker kind of one stored Klipy body (owner direction 2026-11-19).
+ *
+ * A GIF and a sticker travel as the same kind of value — one bare provider
+ * URL — so the message model cannot tell them apart. The kind is therefore
+ * carried in the URL fragment of a NEW send only:
+ *
+ *   https://media.klipy.com/a.gif          history: honest `unknown`
+ *   https://media.klipy.com/a.gif#norfold-media=sticker
+ *   https://media.klipy.com/a.gif#norfold-media=gif
+ *
+ * A fragment is inside the existing contract: `isKlipyMediaUrl` and the chat
+ * copy/album rules read protocol, host and whitespace only, so an old client
+ * still renders the body as media instead of text; the browser never sends a
+ * fragment to the provider, so the media request is byte-identical. Nothing
+ * is rewritten or backfilled: a body without the marker answers `unknown`
+ * rather than guessing a kind from its extension or bytes.
+ */
+const KLIPY_KIND_TOKEN = "norfold-media";
+
+/** The two picker kinds plus the honest answer for pre-marker history. */
+export type KlipyMessageKind = "sticker" | "gif" | "unknown";
+
+function splitFragment(url: string): [string, string[]] {
+  const hash = url.indexOf("#");
+  if (hash === -1) return [url, []];
+  const fragment = url.slice(hash + 1);
+  return [url.slice(0, hash), fragment === "" ? [] : fragment.split("&")];
+}
+
+function isKindToken(token: string): boolean {
+  return token === KLIPY_KIND_TOKEN || token.startsWith(`${KLIPY_KIND_TOKEN}=`);
+}
+
+/**
+ * The body a newly picked GIF or sticker is sent as: the provider URL plus its
+ * picker-kind fragment. URL surgery, not re-serialisation, so every provider
+ * byte and any provider fragment survive; only a previous `norfold-media`
+ * token is replaced, so encoding is idempotent. A URL outside the allowlist is
+ * returned untouched — it never gains a marker it did not earn.
+ */
+export function klipyMessageBody(item: Pick<KlipyItem, "kind" | "mediaUrl">): string {
+  const url = item.mediaUrl.trim();
+  if (!isKlipyMediaUrl(url)) return item.mediaUrl;
+  const [base, tokens] = splitFragment(url);
+  const kept = tokens.filter((token) => !isKindToken(token));
+  const kind = item.kind === "stickers" ? "sticker" : "gif";
+  return `${base}#${[...kept, `${KLIPY_KIND_TOKEN}=${kind}`].join("&")}`;
+}
+
+/**
+ * The kind a stored body proves, or null when the body is not one bare Klipy
+ * URL at all. Strict: surrounding text, an untrusted host or a non-https URL
+ * is not a Klipy message. Exactly one well-formed marker names its kind; a
+ * duplicated marker in any order, a marker with an unknown or malformed value,
+ * or a valid value beside another marker is `unknown` rather than a claim.
+ * Pure and total: never throws, never fetches.
+ */
+export function klipyMessageKind(body: string): KlipyMessageKind | null {
+  const url = body.trim();
+  if (url === "" || /\s/.test(url) || !isKlipyMediaUrl(url)) return null;
+  const [, tokens] = splitFragment(url);
+  // Only our own tokens count. Two of them contradict each other, so a
+  // hand-edited or merged fragment is never read as whichever came first.
+  const markers = tokens.filter(isKindToken);
+  if (markers.length === 0) return "unknown";
+  if (markers.length > 1) return "unknown";
+  const [marker] = markers;
+  if (marker === `${KLIPY_KIND_TOKEN}=sticker`) return "sticker";
+  if (marker === `${KLIPY_KIND_TOKEN}=gif`) return "gif";
+  return "unknown";
+}
+
+/**
+ * The URL a body is fetched and displayed from: the body with only our own
+ * kind token removed. Unrelated provider fragments stay, so the displayed
+ * bytes remain the provider's, and the composer's marker is never shown or
+ * loaded as part of the source.
+ */
+export function klipyMessageUrl(body: string): string {
+  const url = body.trim();
+  const hash = url.indexOf("#");
+  if (hash === -1) return url;
+  const base = url.slice(0, hash);
+  const kept = url.slice(hash + 1).split("&").filter((token) => token !== "" && !isKindToken(token));
+  return kept.length === 0 ? base : `${base}#${kept.join("&")}`;
+}
+
+/**
  * Normalize one provider item, tolerating Klipy's response variants. Never
  * throws: unparseable entries resolve to null and are skipped. Entries whose
  * media URL is not allowlisted (`isKlipyMediaUrl`) are rejected — a provider
