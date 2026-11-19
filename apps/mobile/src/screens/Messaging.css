@@ -40,7 +40,7 @@
 .fb-chat-search-results button { display:flex; flex-direction:column; gap:.25rem; width:100%; min-height:44px; padding:.75rem 0; text-align:start; overflow-wrap:anywhere; }
 .fb-chat-search-results button > [dir] { white-space:pre-wrap; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
 .fb-chat-gallery { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(8rem,100%),1fr)); gap:.5rem; list-style:none; margin:0; padding:0; }
-.fb-chat-gallery .fb-chat-photo { width:100%; }
+.fb-chat-gallery .fb-chat-photo { width:100%; max-height:20rem; }
 .fb-chat-line:focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }
 .fb-chat-heading { flex:1; min-width:0; }
 .fb-chat-heading p { margin:.1rem 0 0; }
@@ -205,7 +205,21 @@
 .fb-chat-sheet :is(button,a):focus-visible, .fb-chat-search-results button:focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }
 @media (prefers-reduced-motion:no-preference) { .fb-chat-refreshing { animation:fb-chat-spin 1s linear infinite; } }
 @keyframes fb-chat-spin { to { transform:rotate(360deg); } }
-.fb-chat-photo { position:relative; width:min(15rem, 65vw); max-width:100%; max-height:20rem; overflow:hidden; border-radius:.6rem; background:var(--fb-surface); }
+/* Sent media shares one preferred width: 22rem (352px) once the conversation
+   allows it, capped at 78vw so a 320px phone keeps its message padding and the
+   options reserve. The bubble's max-width and each photo's max-width:100% clamp
+   it further, so the preference never becomes an overflow minimum.
+   The height bound clears an ordinary 3:4 portrait at that width (352 / (3 / 4)
+   is 469px) and falls back to 80vh on a short screen. Content stays
+   contain-fitted, so anything taller is letterboxed, never cropped or stretched. */
+.fb-chat-page { --fb-chat-media-width: min(22rem, 78vw); }
+.fb-chat-photo { position:relative; width:var(--fb-chat-media-width); max-width:100%; max-height:min(30rem, 80vh); overflow:hidden; border-radius:.6rem; background:var(--fb-surface); }
+/* No bytes yet (loading, missing, failed, unavailable): the inline intrinsic
+   ratio would reserve a tall empty card for a picture that may never paint, so
+   the status text sizes itself instead. `!important` only because an inline
+   declaration cannot be beaten otherwise; a painted photo renders a button, so
+   this never matches real content. */
+.fb-chat-photo:has(> div[role="status"]) { aspect-ratio:auto !important; }
 /* Bytes can exist before the bitmap paints; without a skeleton the bubble is a
    blank rectangle and looks like a failed photo. The spinner is decorative —
    the placeholder copy still carries the status for assistive technology. */
@@ -225,7 +239,7 @@
    ChatPhoto control, so loading, retry, download and the shared viewer never
    diverge from a single photo. The 2-up cells are taller than they are wide so
    the phone screenshots people actually send stay readable. */
-.fb-chat-photo-grid { display:grid; width:min(18rem, 78vw); max-width:100%; gap:2px; overflow:hidden;
+.fb-chat-photo-grid { display:grid; width:var(--fb-chat-media-width); max-width:100%; gap:2px; overflow:hidden;
   border-radius:.6rem; background:var(--fb-surface); }
 .fb-chat-photo-grid-2 { grid-template-columns:repeat(2, minmax(0,1fr)); aspect-ratio:3 / 2; }
 .fb-chat-photo-grid-3 { grid-template-columns:repeat(2, minmax(0,1fr)); grid-template-rows:repeat(2, minmax(0,1fr)); aspect-ratio:1 / 1; }
