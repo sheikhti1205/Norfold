@@ -17,15 +17,18 @@
 .fb-chat-voice-rate::before { content:""; position:absolute; z-index:-1; inset:8px 0;
   background:color-mix(in srgb,currentColor 10%,transparent); border-radius:1.5rem; }
 .fb-chat-voice-timeline { min-width:0; display:grid; gap:.125rem; padding-top:.2rem; }
-.fb-chat-voice-track { position:relative; display:flex; align-items:center; gap:2px;
-  width:100%; min-width:0; height:1.75rem; }
-.fb-chat-voice-bar { flex:1 1 0; min-width:0; border-radius:999px;
+/* The gap is shared by every surface and stays fractional on purpose: 39 of
+   them must not consume a narrow delivered track. With 40 bars, a 60px track
+   still computes to about 1px per bar, while a wide track spreads the same
+   bars apart with space-between. */
+.fb-chat-voice-track { position:relative; display:flex; align-items:center; gap:0.5px;
+  justify-content:space-between; width:100%; min-width:0; height:1.75rem; }
+/* One measured envelope owns every voice surface: the recorder, the paused
+   preview and the delivered note all paint this bar, so the 2px cap belongs to
+   the shared rule. A cap scoped to `.fb-chat-voice` never reaches the recorder. */
+.fb-chat-voice-bar { flex:0 1 2px; min-width:0; max-width:2px; border-radius:999px;
   background:color-mix(in srgb,currentColor 40%,transparent); }
 .fb-chat-voice-bar[data-played] { background:var(--fb-primary); }
-/* Delivered notes read lighter than the recorder: the same measured envelope,
-   drawn at a 2px maximum and spread across the bubble instead of a short tail. */
-.fb-chat-voice .fb-chat-voice-track { justify-content:space-between; }
-.fb-chat-voice .fb-chat-voice-track .fb-chat-voice-bar { flex:1 1 2px; max-width:2px; }
 .fb-chat-voice-cursor { position:absolute; width:9px; height:9px; border-radius:50%; background:var(--fb-primary); }
 .fb-chat-voice-time { font-size:.75rem; line-height:1.2; font-variant-numeric:tabular-nums; color:inherit; opacity:.7; }
 .fb-chat-message-voice { position:relative; padding:.35rem .5rem; }
@@ -46,9 +49,11 @@
    sweep, and five compact marks for the minutes already banked. */
 .fb-voice-capture-track { position:relative; flex:1; min-width:0; height:2rem; }
 .fb-voice-capture-track .fb-chat-voice-track { position:relative; z-index:1; height:100%; }
+/* One horizontal rule growing 0..100% over the minute, then restarting. No end
+   border: a full-height vertical edge beside it drew an L and read as graph
+   axes rather than the Messenger minute fill. */
 .fb-voice-capture-fill { position:absolute; inset-block:0; inset-inline-start:0; box-sizing:border-box;
   border-block-end:2px solid var(--fb-primary); }
-.fb-voice-capture-fill[data-active] { border-inline-end:2px solid var(--fb-primary); }
 .fb-voice-panel-clock { flex:0 1 auto; min-width:0; max-width:45%; display:grid; justify-items:end; gap:.1rem; }
 .fb-voice-panel-clock .fb-chat-voice-time { display:block; text-align:end; }
 .fb-voice-panel-remaining { color:var(--fb-error); font-size:.75rem; font-weight:600;
