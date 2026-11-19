@@ -1149,21 +1149,24 @@ describe("routine refresh presentation versus live authority", () => {
     await waitForState((value) => value.status === "ready" && !!value.currentProjections);
   }
   /** Park the next full pass in its media GET so the mid-refresh snapshot is
-   * observable instead of racing the local reload. */
+   * observable instead of racing the local reload. Returns the same non-null
+   * deferred the harness waits on, so each test releases its own gate. */
   async function holdInboundMedia() {
     const inbound = await mediaFixture(id(202), id(102), { direction: "IN", expiresAt: Date.now() + 60_000 });
     remote.set(id(202), inbound);
     await boundary.handles[0]!.history.persistInbound({ accountId: A, deviceId: DEVICE, mailboxId: id(402),
       event: { kind: "TEXT", eventId: id(302), sequence: 2,
         message: { id: id(102), conversationId: CONV, authorId: B, recipientId: A, body: "" } } });
-    deliveryGate = deferred();
+    const gate = deferred();
+    deliveryGate = gate;
+    return gate;
   }
 
   it("carries the accepted display through a focus refresh while authority stays revoked", async () => {
     await readyWithDisplay();
     const accepted = displayOf();
     expect(accepted?.mode).toBe("CONNECTED");
-    await holdInboundMedia();
+    const gate = await holdInboundMedia();
     const published: boolean[] = [];
     const stop = runtime.subscribeMessagingRuntime(() => {
       if (state().accountId === A) published.push(!!state().displayProjections);
@@ -1182,7 +1185,7 @@ describe("routine refresh presentation versus live authority", () => {
       await expect(runtime.fetchMessagingReceiptView(A, CONV, [id(102)], new AbortController().signal))
         .rejects.toThrow("Receipt context unavailable");
       expect(requestLog).not.toContain("MUTE");
-    } finally { stop(); deliveryGate.resolve(); }
+    } finally { stop(); gate.resolve(); }
     await waitForState((value) => value.status === "ready" && !!value.currentProjections);
     expect(published.every(Boolean)).toBe(true);
     expect(displayOf()?.mode).toBe("CONNECTED");
@@ -1190,7 +1193,7 @@ describe("routine refresh presentation versus live authority", () => {
 
   it("coalesces duplicate routine wakes without blanking presentation", async () => {
     await readyWithDisplay();
-    await holdInboundMedia();
+    const gate = await holdInboundMedia();
     const blanks: string[] = [];
     const stop = runtime.subscribeMessagingRuntime(() => {
       if (!state().displayProjections) blanks.push("blank");
@@ -1204,7 +1207,7 @@ describe("routine refresh presentation versus live authority", () => {
       window.dispatchEvent(new Event("online"));
       expect(state().currentProjections).toBeNull();
       expect(state().displayProjections).not.toBeNull();
-    } finally { stop(); deliveryGate.resolve(); }
+    } finally { stop(); gate.resolve(); }
     // The superseded pass publishes no authority, so only the coalesced
     // follow-up can restore it.
     await waitForState((value) => value.status === "ready" && !!value.currentProjections);
@@ -1215,7 +1218,7 @@ describe("routine refresh presentation versus live authority", () => {
   it("revokes presentation with a relationship mutation and never repaints it from the queued pass", async () => {
     await readyWithDisplay();
     const accepted = displayOf();
-    await holdInboundMedia();
+    const gate = await holdInboundMedia();
     mutationGate = deferred();
     let ending: Promise<void> | undefined;
     try {
@@ -1232,7 +1235,7 @@ describe("routine refresh presentation versus live authority", () => {
         repainted.push(state().displayProjections?.[CONV]?.mode ?? null);
       });
       try {
-        mutationGate.resolve(); deliveryGate.resolve();
+        mutationGate.resolve(); gate.resolve();
         // The END refresh coalesces behind the running pass, so the routine
         // completion is the point where a stale display could have come back.
         await ending;
@@ -1240,7 +1243,7 @@ describe("routine refresh presentation versus live authority", () => {
         expect(repainted).not.toContain("CONNECTED");
         expect(displayOf()?.mode).toBe("REQUEST");
       } finally { stop(); }
-    } finally { deliveryGate.resolve(); mutationGate?.resolve(); await ending?.catch(() => undefined); }
+    } finally { gate.resolve(); mutationGate?.resolve(); await ending?.catch(() => undefined); }
     expect(accepted?.mode).toBe("CONNECTED");
   });
 
