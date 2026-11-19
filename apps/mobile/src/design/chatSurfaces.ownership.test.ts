@@ -12,10 +12,19 @@ import { CHAT_PANE } from "../components/panePreference";
  * details gap only exists with the open grid class, and the shared Settings
  * split, chat scroll ownership and content dividers are not rewritten.
  * Rendered geometry remains the lead's deployed-browser acceptance item.
+ *
+ * Rule bodies are read by exact selector, not by the first match in the file:
+ * a shared selector list or a second rule for the same selector must not hide
+ * the declaration under test. Declaration checks tolerate insignificant
+ * whitespace but keep the numeric value exact.
  */
+type CssRule = { selectors: string[]; body: string };
+
 const splitCss = readFileSync(new URL("../components/adaptiveFoundation.css", import.meta.url), "utf8");
 const chatCss = readFileSync(new URL("../screens/Messaging.css", import.meta.url), "utf8");
 const detailsCss = readFileSync(new URL("../components/chatDetailsLayout.css", import.meta.url), "utf8");
+
+const FOCUS_RING = /box-shadow\s*:\s*0 0 0 2px var\(--fb-focus\)/;
 
 function mediaBlock(css: string, query: string) {
   const start = css.indexOf(query);
@@ -32,6 +41,36 @@ function mediaBlock(css: string, query: string) {
   return "";
 }
 
+/**
+ * Bounded leaf-rule reader: comments are removed, then every brace-free body
+ * is paired with its comma-separated selector list. At-rule wrappers contain
+ * a nested brace, so they are skipped and their inner rules are read normally.
+ */
+function cssRules(css: string): CssRule[] {
+  const clean = css.replace(/\/\*[\s\S]*?\*\//g, " ");
+  const rules: CssRule[] = [];
+  for (const match of clean.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const [, selectorText = "", body = ""] = match;
+    rules.push({
+      selectors: selectorText.split(",").map(selector => selector.replace(/\s+/g, " ").trim()),
+      body,
+    });
+  }
+  return rules;
+}
+
+/** All bodies for one exact selector, including members of a selector list. */
+function bodiesFor(rules: CssRule[], selector: string) {
+  return rules.filter(rule => rule.selectors.includes(selector)).map(rule => rule.body);
+}
+
+/** Exact numeric declaration, tolerant only of spacing around ':', value, ';'. */
+function declared(body: string, property: string, value: string) {
+  return new RegExp(`(?:^|[;\\s])${property}\\s*:\\s*${value}\\s*(?:;|$)`).test(body);
+}
+
+const splitRules = cssRules(splitCss);
+const detailsRules = cssRules(detailsCss);
 const splitGutters = mediaBlock(splitCss, "@media (min-width: 600px)");
 const chatSurfaces = mediaBlock(chatCss, "@media (min-width: 600px)");
 const detailsSurfaces = mediaBlock(detailsCss, "@media (min-width: 600px)");
@@ -81,28 +120,52 @@ describe("R19 chat surfaces stay chat-scoped", () => {
 
   it("keeps the 7px divider track and uses a compact grip", () => {
     expect(splitCss).toMatch(/\.fb-split-resize \{ position: relative; width: 7px;/);
-    const splitGrip = /\.fb-split-view:has\(\.fb-chat-page\) > \.fb-split-resize::before \{([^}]*)\}/.exec(splitCss)?.[1] ?? "";
-    expect(splitGrip).toContain("width: 3px;");
-    expect(splitGrip).toContain("height: 32px;");
-    const detailsGrip = /\.fb-chat-details-resize::before \{([^}]*)\}/.exec(detailsCss)?.[1] ?? "";
-    expect(detailsGrip).toContain("width: 3px;");
-    expect(detailsGrip).toContain("height: 32px;");
+    const splitGrip = bodiesFor(splitRules, ".fb-split-view:has(.fb-chat-page) > .fb-split-resize::before");
+    expect(splitGrip.some(body => declared(body, "width", "3px") && declared(body, "height", "32px"))).toBe(true);
+    const detailsGrip = bodiesFor(detailsRules, ".fb-chat-details-resize::before");
+    expect(detailsGrip.some(body => declared(body, "width", "3px") && declared(body, "height", "32px"))).toBe(true);
     expect(detailsCss).not.toMatch(/height:\s*50%/);
   });
 
   it("replaces only the chat splitter's full-height focus outline with the pill ring", () => {
-    expect(splitCss).toMatch(/\.fb-split-resize:focus-visible \{ outline: 2px solid var\(--fb-focus\); outline-offset: -2px; \}/);
-    expect(splitCss).toMatch(/\.fb-split-view:has\(\.fb-chat-page\) > \.fb-split-resize:focus-visible \{ outline: 0; \}/);
-    const focusPill = /\.fb-split-view:has\(\.fb-chat-page\) > \.fb-split-resize:focus-visible::before \{([^}]*)\}/.exec(splitCss)?.[1] ?? "";
-    expect(focusPill).toContain("box-shadow: 0 0 0 2px var(--fb-focus);");
-    expect(detailsCss).toMatch(/\.fb-chat-details-resize:focus-visible \{ outline:none; \}/);
-    expect(detailsCss).toMatch(/\.fb-chat-details-resize:focus-visible::before \{[^}]*box-shadow:0 0 0 2px var\(--fb-focus\);/);
+    const sharedOutline = bodiesFor(splitRules, ".fb-split-resize:focus-visible");
+    expect(sharedOutline.some(body => (
+      /outline\s*:\s*2px solid var\(--fb-focus\)/.test(body)
+      && declared(body, "outline-offset", "-2px")
+    ))).toBe(true);
+    const chatOutline = bodiesFor(splitRules, ".fb-split-view:has(.fb-chat-page) > .fb-split-resize:focus-visible");
+    expect(chatOutline.some(body => declared(body, "outline", "0"))).toBe(true);
+    const focusPill = bodiesFor(splitRules, ".fb-split-view:has(.fb-chat-page) > .fb-split-resize:focus-visible::before");
+    expect(focusPill.length).toBeGreaterThan(0);
+    expect(focusPill.some(body => FOCUS_RING.test(body))).toBe(true);
+    const detailsOutline = bodiesFor(detailsRules, ".fb-chat-details-resize:focus-visible");
+    expect(detailsOutline.some(body => /outline\s*:\s*none/.test(body))).toBe(true);
+    const detailsRing = bodiesFor(detailsRules, ".fb-chat-details-resize:focus-visible::before");
+    expect(detailsRing.some(body => FOCUS_RING.test(body))).toBe(true);
   });
 
   it("keeps the collapsed rail at its 64px bound and outside the inset", () => {
     expect(CHAT_PANE.collapsedWidth).toBe(64);
     const listInset = /\.fb-split-list:has\(> \.fb-chat-page:not\(\.fb-chat-rail\)\) \{([^}]*)\}/.exec(splitCss)?.[1] ?? "";
     expect(listInset).toContain("padding: 0 8px 8px;");
+  });
+
+  it("keeps the selector and declaration helpers honest", () => {
+    // CI failed on width:3px vs width: 3px. Spacing is insignificant; value is not.
+    expect(declared("width:3px; height:32px;", "width", "3px")).toBe(true);
+    expect(declared("width: 3px ; height: 32px ;", "height", "32px")).toBe(true);
+    expect(declared("width:4px;", "width", "3px")).toBe(false);
+    expect(declared("height:32px;", "width", "3px")).toBe(false);
+    expect(declared("min-width:3px;", "width", "3px")).toBe(false);
+    // A ring on a hover arm must not satisfy the focus selector.
+    const decoy = ".grip:hover::before { box-shadow: 0 0 0 2px var(--fb-focus); }\n"
+      + ".grip:focus-visible::before { width:3px; }";
+    expect(bodiesFor(cssRules(decoy), ".grip:focus-visible::before").some(body => FOCUS_RING.test(body))).toBe(false);
+    // Every rule for the same focus selector is inspected, not just the first.
+    const repeated = ".grip:focus-visible::before { width:3px; }\n"
+      + ".grip:focus-visible::before { box-shadow: 0 0 0 2px var(--fb-focus); }";
+    expect(bodiesFor(cssRules(repeated), ".grip:focus-visible::before").some(body => FOCUS_RING.test(body))).toBe(true);
+    expect(FOCUS_RING.test("box-shadow: 0 0 0 1px var(--fb-focus);")).toBe(false);
   });
 
   it("preserves the panes' existing vertical-only scroll ownership", () => {
