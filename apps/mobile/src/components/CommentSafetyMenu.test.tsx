@@ -81,7 +81,10 @@ it("provides compact access to the canonical block control for the comment autho
   render(<CommentSafetyMenu {...base} canDelete={false} />);
   fireEvent.click(screen.getByRole("button", { name: "Actions for comment by Sam" }));
   fireEvent.click(screen.getByRole("menuitem", { name: "Block account" }));
-  expect(screen.getByRole("dialog", { name: "Block account" })).toBeTruthy();
+  const dialog = screen.getByRole("dialog", { name: "Block account" });
+  expect(dialog).toBeTruthy();
+  // One block trigger: the compact measure, not 44rem.
+  expect(dialog.closest(".fb-modal-panel")?.classList.contains("fb-compact-panel")).toBe(true);
   expect(await screen.findByRole("button", { name: "Block Sam" })).toBeTruthy();
   expect(listBlocks).toHaveBeenCalled();
 });

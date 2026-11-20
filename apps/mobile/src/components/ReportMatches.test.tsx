@@ -51,6 +51,8 @@ describe("report matching consumer flow", () => {
     expect(ports.propose).not.toHaveBeenCalled();
     const dialog = screen.getByRole("dialog", { name: /propose this match/i });
     expect(within(dialog).getByText(/other owner must also agree/i)).toBeTruthy();
+    // One explanation and one action: the compact measure, not 44rem.
+    expect(dialog.closest(".fb-modal-panel")?.classList.contains("fb-compact-panel")).toBe(true);
     fireEvent.click(within(dialog).getByRole("button", { name: /send proposal/i }));
     await waitFor(() => expect(ports.propose).toHaveBeenCalledWith("A", "mine", "peer"));
     await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));

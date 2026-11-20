@@ -365,6 +365,8 @@ describe("RecoverySheet", () => {
   it("refuses a FOUND report inside the sheet itself", () => {
     render(<RecoverySheet open post={lostPost({ type: "FOUND" })} onClose={() => {}} />);
     expect(screen.getByText(/only a lost-item report can be marked recovered/i)).toBeTruthy();
+    // A refusal sentence and Close: the compact measure, not 44rem.
+    expect(screen.getByRole("dialog", { name: "Mark recovered" }).closest(".fb-modal-panel")?.classList.contains("fb-compact-panel")).toBe(true);
     expect(screen.queryByRole("button", { name: /mark recovered/i })).toBeNull();
     expect(mockMarkRecovered).not.toHaveBeenCalled();
   });

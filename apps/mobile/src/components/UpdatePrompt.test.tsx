@@ -93,7 +93,10 @@ describe("update prompt", () => {
   it("shows the pending release and offers a non-forcing choice", () => {
     runtime.snapshot = snapshot({ pending: release(), popupEnabled: true });
     renderPrompt();
-    expect(screen.getByRole("dialog")).toBeTruthy();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeTruthy();
+    // One paragraph and two choices: a short prompt, not a 44rem task.
+    expect(dialog.closest(".fb-modal-panel")?.classList.contains("fb-compact-panel")).toBe(true);
     expect(screen.getByText("0.15.0-beta.1 is ready")).toBeTruthy();
     expect(screen.getByText(/The chat update: replies you can jump to/)).toBeTruthy();
     // The catalogue summary is a CI commit subject and is never shown to a reader.

@@ -64,7 +64,7 @@ function ScopedSafetyActions({ content, person, reportPerson = false, className,
         ...(canReport && person ? [{ id: "block", label: "Block account", destructive: true, icon: <UserRoundMinus size={18} aria-hidden="true" />, onAction: () => setBlockOpen(true) }] : []),
       ]} />
       <ReportSheet open={reportOpen} target={target} onClose={() => setReportOpen(false)} />
-      <AdaptiveTaskSurface open={blockOpen} title="Block account" onClose={() => setBlockOpen(false)}>
+      <AdaptiveTaskSurface open={blockOpen} title="Block account" onClose={() => setBlockOpen(false)} width="compact">
         {blockOpen && person && <BlockControl userId={person.userId} name={person.name} />}
       </AdaptiveTaskSurface>
     </div>

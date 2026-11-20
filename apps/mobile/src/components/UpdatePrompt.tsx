@@ -58,6 +58,7 @@ export function UpdatePrompt() {
       title={`${shown.versionName} is ready`}
       description="A newer version of Norfold is available. Nothing changes until you choose."
       onClose={dismiss}
+      width="compact"
       footer={
         <>
           <Button variant="text" onClick={dismiss}>
