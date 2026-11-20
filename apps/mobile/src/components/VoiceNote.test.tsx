@@ -394,11 +394,23 @@ describe("voice-note compact and motion contract", () => {
   // before, so the CSS contract uses the same absolute path as the others.
   const css = readFileSync(resolve(process.cwd(), "src/components/voiceNote.css"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\s+/g, " ").trim();
+  /** The composer sheet this recorder shares geometry with, read the same way. */
+  const composerCss = readFileSync(resolve(process.cwd(), "src/components/peerComposer.css"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\s+/g, " ").trim();
 
   /** Declarations of the one rule whose selector is exactly `selector`. */
-  function ruleBody(selector: string): string | undefined {
+  function ruleBody(selector: string, sheet = css): string | undefined {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp(`(?:^|\\}\\s*)${escaped}\\s*\\{([^{}]*)\\}`).exec(css)?.[1];
+    return new RegExp(`(?:^|\\}\\s*)${escaped}\\s*\\{([^{}]*)\\}`).exec(sheet)?.[1];
+  }
+
+  /** One value for both inline edges of a `margin`/`padding` shorthand: the
+   * second token when two or more are present, otherwise the single value.
+   * Reading only the leading tokens keeps a trailing `max(...)` whole. */
+  function inlineInset(shorthand: string | undefined): string | undefined {
+    if (!shorthand) return undefined;
+    const [first, second] = shorthand.trim().split(/\s+/);
+    return second ?? first;
   }
 
   /** Every rule in the sheet. A whole match always fills both required groups;
@@ -426,11 +438,21 @@ describe("voice-note compact and motion contract", () => {
     expect(ruleBody(".fb-chat-voice-panel .fb-chat-voice-progress")).toMatch(/margin-top:\.35rem/);
   });
 
-  it("keeps the delivered and recorder widths compact and pixel-bounded", () => {
+  it("keeps the delivered note compact and stretches the recorder to the composer width", () => {
     expect(ruleBody(".fb-chat-voice")).toMatch(/width:260px/);
     expect(ruleBody(".fb-chat-voice")).toMatch(/max-width:100%/);
-    expect(ruleBody(".fb-chat-voice-panel")).toMatch(/max-width:300px/);
-    expect(ruleBody(".fb-chat-voice-panel")).toMatch(/align-self:flex-start/);
+    // The recorder replaces the composer row, so it must span that row instead
+    // of clamping to a card, and its inline inset must be the row's own. Both
+    // values are read from the sheets so they cannot drift apart silently.
+    const panel = ruleBody(".fb-chat-voice-panel") ?? "";
+    expect(panel).not.toMatch(/max-width:300px|align-self:flex-start|calc\(100% - 1\.1rem\)/);
+    expect(panel).toMatch(/align-self:stretch/);
+    expect(panel).toMatch(/width:auto/);
+    const panelInset = inlineInset(/(?:^|;)\s*margin\s*:\s*([^;]+)/.exec(panel)?.[1]);
+    const rowInset = inlineInset(/(?:^|;)\s*padding\s*:\s*([^;]+)/.exec(ruleBody(".fb-peer-composer-row", composerCss) ?? "")?.[1]);
+    expect(panelInset).toBeDefined();
+    expect(rowInset).toBeDefined();
+    expect(panelInset).toBe(rowInset);
     expect(css).not.toMatch(/18\.5rem|54px 44px|max-width:45%/);
   });
 

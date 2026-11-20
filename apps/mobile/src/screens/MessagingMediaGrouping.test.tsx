@@ -89,38 +89,61 @@ async function open() {
   return rendered;
 }
 
-it("renders one album for photos sent together and keeps each caption on its own item", async () => {
+it("keeps two nearby photos as separate message rows", async () => {
   const first = photo("photo-1", 1_000, "First caption");
   const second = photo("photo-2", 1_400, "Second caption");
   m.messages = [first.message, second.message];
   m.media = [first.attachment, second.attachment];
   m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  const album = screen.getByRole("listitem", { name: "2 photos" });
-  // The album is a native list item with a name, not a second group node: the
-  // grid and the one-level anchor walk both depend on that shape.
-  expect(album.tagName).toBe("LI");
-  expect(album.parentElement?.tagName).toBe("OL");
-  expect(album.getAttribute("role")).toBeNull();
+  // Owner direction 2026-11-20: WhatsApp Desktop keeps three nearby photos as
+  // three messages, so an album needs at least four media items and a pair stays
+  // two ordinary rows - no album list item, no album label.
+  expect(screen.queryByRole("listitem", { name: /photos/i })).toBeNull();
+  expect(document.querySelector(".fb-chat-run")).toBeNull();
+  expect(document.querySelectorAll("li.fb-chat-line")).toHaveLength(2);
   expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(2);
-  // A caption never moves to a leader: each one stays inside its own row.
+  // A caption never moves to a neighbour: each stays inside its own row.
   expect(document.querySelector('[data-chat-message="photo-1"]')?.textContent).toContain("First caption");
   expect(document.querySelector('[data-chat-message="photo-1"]')?.textContent).not.toContain("Second caption");
   expect(document.querySelector('[data-chat-message="photo-2"]')?.textContent).toContain("Second caption");
 });
 
-it("labels a mixed album honestly and renders the clip beside the photo", async () => {
+it("keeps each caption on its own cell in a four-photo album", async () => {
+  const shots = [photo("photo-1", 1_000, "First caption"), photo("photo-2", 1_400),
+    photo("photo-3", 1_800, "Third caption"), photo("photo-4", 2_200)];
+  m.messages = shots.map((shot) => shot.message);
+  m.media = shots.map((shot) => shot.attachment);
+  m.read.mockResolvedValue(new Uint8Array([1]).buffer);
+  await open();
+  // Four items do form the album (owner direction 2026-11-20); it is a native
+  // list item with a name, not a second group node, and a caption never moves
+  // to a leader or to a neighbour.
+  const album = screen.getByRole("listitem", { name: "4 photos" });
+  expect(album.tagName).toBe("LI");
+  expect(album.parentElement?.tagName).toBe("OL");
+  expect(album.getAttribute("role")).toBeNull();
+  expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(4);
+  expect(document.querySelector('[data-chat-message="photo-1"]')?.textContent).toContain("First caption");
+  expect(document.querySelector('[data-chat-message="photo-1"]')?.textContent).not.toContain("Third caption");
+  expect(document.querySelector('[data-chat-message="photo-3"]')?.textContent).toContain("Third caption");
+});
+
+it("keeps a nearby photo and video as separate message rows", async () => {
   const still = photo("photo-1", 2_000);
   m.messages = [still.message, video("clip-1", 2_400)];
   m.media = [still.attachment];
   m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  expect(screen.getByRole("listitem", { name: "1 photo and 1 video" })).toBeTruthy();
+  // Owner direction 2026-11-20: two media items stay separate, so there is no
+  // album and no "1 photo and 1 video" label; the clip keeps its own row.
+  expect(screen.queryByRole("listitem", { name: /photo|video/i })).toBeNull();
+  expect(document.querySelector(".fb-chat-run")).toBeNull();
   expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(2);
   expect(screen.getByText("clip-1.mp4")).toBeTruthy();
 });
 
-it("keeps a text message between two photos as its own row and closes the album", async () => {
+it("keeps a text message between two photos as its own row", async () => {
   const first = photo("photo-1", 1_000);
   const second = photo("photo-2", 1_200);
   m.messages = [first.message,
@@ -136,7 +159,7 @@ it("keeps a text message between two photos as its own row and closes the album"
   expect(screen.getByText("In between")).toBeTruthy();
 });
 
-it("keeps a singleton's own picture element when a second photo joins its album", async () => {
+it("keeps a singleton's own picture element when an album forms around it", async () => {
   const first = photo("photo-1", 1_000);
   m.messages = [first.message];
   m.media = [first.attachment];
@@ -144,34 +167,38 @@ it("keeps a singleton's own picture element when a second photo joins its album"
   const rendered = await open();
   const before = document.querySelector('[data-chat-message="photo-1"] .fb-chat-photo');
   expect(before).toBeTruthy();
-  const second = photo("photo-2", 1_200);
-  m.messages = [first.message, second.message];
-  m.media = [first.attachment, second.attachment];
+  // Owner direction 2026-11-20: one to three items stay separate, so an album
+  // only forms when a fourth photo joins.
+  const rest = [photo("photo-2", 1_200), photo("photo-3", 1_400), photo("photo-4", 1_600)];
+  m.messages = [first.message, ...rest.map((shot) => shot.message)];
+  m.media = [first.attachment, ...rest.map((shot) => shot.attachment)];
   m.chat.revision++;
   rendered.rerender(thread());
-  await waitFor(() => expect(screen.getByRole("listitem", { name: "2 photos" })).toBeTruthy());
+  await waitFor(() => expect(screen.getByRole("listitem", { name: "4 photos" })).toBeTruthy());
   // The album is a new container, never a remount: the first picture, its
   // player and its scroll anchor stay the same element.
   expect(document.querySelector('[data-chat-message="photo-1"] .fb-chat-photo')).toBe(before);
 });
 
 it("collapses an album back to a plain row when only one member remains", async () => {
-  const first = photo("photo-1", 1_000);
-  const second = photo("photo-2", 1_200);
-  m.messages = [first.message, second.message];
-  m.media = [first.attachment, second.attachment];
+  const shots = [photo("photo-1", 1_000), photo("photo-2", 1_200), photo("photo-3", 1_400), photo("photo-4", 1_600)];
+  m.messages = shots.map((shot) => shot.message);
+  m.media = shots.map((shot) => shot.attachment);
   m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   const rendered = await open();
-  expect(screen.getByRole("listitem", { name: "2 photos" })).toBeTruthy();
-  m.messages = [first.message];
-  m.media = [first.attachment];
+  // Four items are a real album under the owner rule; deleting three members
+  // must collapse it rather than leave a one-cell album behind.
+  expect(screen.getByRole("listitem", { name: "4 photos" })).toBeTruthy();
+  m.messages = [shots[0]!.message];
+  m.media = [shots[0]!.attachment];
   m.chat.revision++;
   rendered.rerender(thread());
   await waitFor(() => expect(screen.queryByRole("listitem", { name: /photos/i })).toBeNull());
   expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(1);
+  expect(document.querySelector(".fb-chat-run")).toBeNull();
 });
 
-/** A run of n stored outgoing photos, 400ms apart, all inside one album. */
+/** A run of n stored outgoing photos, 400ms apart, inside one rolling media run. */
 function photoAlbum(n: number) {
   const shots = Array.from({ length: n }, (_, index) => photo(`photo-${index + 1}`, 1_000 + index * 400));
   m.messages = shots.map((shot) => shot.message);
@@ -250,14 +277,18 @@ it("shows four photos with no overflow overlay", async () => {
   expect(album.querySelectorAll(".fb-chat-line-row-wide")).toHaveLength(0);
 });
 
-it("keeps three photos on the existing wide-first arrangement", async () => {
+it("keeps three photos as three separate rows", async () => {
   photoAlbum(3);
   await open();
-  const album = screen.getByRole("listitem", { name: "3 photos" });
-  expect(album.querySelectorAll(":scope > .fb-chat-line-row")).toHaveLength(3);
-  expect(document.querySelector(".fb-chat-photo-more")).toBeNull();
-  expect(album.querySelectorAll(".fb-chat-line-row-wide")).toHaveLength(1);
-  expect(album.querySelector(".fb-chat-line-row-wide")).toBe(album.querySelector('[data-chat-message="photo-1"]'));
+  // Owner direction 2026-11-20: three items are below the four-item album
+  // threshold, so each is an ordinary row with its own bubble, receipt and
+  // menu - never an album, and never a wide opening cell.
+  expect(screen.queryByRole("listitem", { name: /photos/i })).toBeNull();
+  expect(document.querySelector(".fb-chat-run")).toBeNull();
+  expect(document.querySelectorAll("li.fb-chat-line")).toHaveLength(3);
+  expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(3);
+  expect(document.querySelector(".fb-chat-line-row-wide")).toBeNull();
+  expect(screen.getAllByRole("button", { name: "Options for your message" })).toHaveLength(3);
 });
 
 it("caps a mixed photo/video album and keeps a bare clip as a compact tile", async () => {

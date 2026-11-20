@@ -1255,11 +1255,15 @@ it("shows only live image attachments from photo or legacy messages in shared ph
   await waitFor(() => expect(within(gallery).getAllByRole("button", { name: "View photo" })).toHaveLength(2));
   expect(m.read.mock.calls.map((call) => call[1]).sort()).toEqual(["legacy", "photo"]);
 });
-it("groups nearby photos from one selection while each keeps its own actions", async () => {
+it("keeps nearby photos from one selection as separate rows with their own actions", async () => {
   const run = photoRun(3); run.messages[2]!.readByPeer = true;
   m.messages = run.messages; m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  expect(screen.getByRole("listitem", { name: "3 photos" })).toBeTruthy();
+  // Owner direction 2026-11-20: fewer than four items never collapse into an
+  // album, so each photo keeps its own row, caption, receipt and menu.
+  expect(screen.queryByRole("listitem", { name: /photos/i })).toBeNull();
+  expect(document.querySelector(".fb-chat-run")).toBeNull();
+  expect(document.querySelectorAll("li.fb-chat-line")).toHaveLength(3);
   expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(3);
   expect(screen.getAllByText("Two shots")).toHaveLength(1);
   expect(screen.getByRole("img", { name: "Read" })).toBeTruthy();
@@ -1267,10 +1271,12 @@ it("groups nearby photos from one selection while each keeps its own actions", a
   expect(screen.getAllByRole("button", { name: "Options for your message" })).toHaveLength(3);
   expect(document.querySelector('[data-chat-message="photo-2"]')).toBeTruthy();
 });
-it("deletes only the selected sent photo inside a grouped selection", async () => {
-  const run = photoRun(2);
+it("deletes only the selected sent photo inside a capped album", async () => {
+  const run = photoRun(5);
   m.messages = run.messages; m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
+  // Five items are a real capped album; the target stays a visible cell.
+  expect(screen.getByRole("listitem", { name: "5 photos" })).toBeTruthy();
   const second = document.querySelector<HTMLElement>('[data-chat-message="photo-2"]')!;
   fireEvent.click(within(second).getByRole("button", { name: "Options for your message" }));
   fireEvent.click(screen.getByRole("menuitem", { name: "Delete for me" }));
@@ -1278,20 +1284,20 @@ it("deletes only the selected sent photo inside a grouped selection", async () =
   fireEvent.click(within(dialog).getByRole("button", { name: "Delete for me" }));
   await waitFor(() => expect(m.remove.mock.calls).toEqual([["account", "chat", "photo-2", false]]));
 });
-it("keeps each grouped photo's own caption instead of promoting one", async () => {
-  const run = photoRun(1);
-  m.messages = [...run.messages,
-    { id: "second", conversationId: "chat", authorId: "account", recipientId: "peer", body: "And this",
-      messageType: "MEDIA", createdAt: 1_500, server: { eventId: "event-second", sequence: 2 } }];
-  m.media = [...run.media, { id: "media-2", messageId: "second", direction: "OUT", state: "READY", width: 2, height: 1, mime: "image/jpeg" }];
-  m.read.mockResolvedValue(new Uint8Array([1]).buffer);
+it("keeps each photo's own caption instead of promoting one inside an album", async () => {
+  const run = photoRun(4);
+  // Captions on two non-adjacent members, inside a four-item album.
+  run.messages[0]!.body = "Two shots";
+  run.messages[2]!.body = "And this";
+  m.messages = run.messages; m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  // The second send is inside the rolling window, so both share one bounded
-  // group; a caption never breaks the run, and never moves to another item.
-  expect(screen.getByRole("listitem", { name: "2 photos" })).toBeTruthy();
-  expect(screen.getAllByText("Two shots")).toHaveLength(1);
-  expect(screen.getByText("And this")).toBeTruthy();
-  expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(2);
+  // Owner direction 2026-11-20: four items form the album, and a caption never
+  // moves to a leader or to a neighbour - each stays inside its own cell.
+  expect(screen.getByRole("listitem", { name: "4 photos" })).toBeTruthy();
+  expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(4);
+  expect(document.querySelector('[data-chat-message="photo-1"]')?.textContent).toContain("Two shots");
+  expect(document.querySelector('[data-chat-message="photo-1"]')?.textContent).not.toContain("And this");
+  expect(document.querySelector('[data-chat-message="photo-3"]')?.textContent).toContain("And this");
 });
 it("does not preview a quoted photo while the conversation hides photos", async () => {
   m.view.mode = "REQUEST";
@@ -1851,13 +1857,15 @@ it("keeps a quoted Klipy row and its summary free of the encoded kind", async ()
 });
 
 it("keeps a Klipy row out of a photo album and leaves photo timestamps alone", async () => {
-  const run = photoRun(2);
+  const run = photoRun(4);
   m.messages = [...run.messages, klipyRow("sticker", "https://media.klipy.com/s.webp#norfold-media=sticker",
     { authorId: "account", recipientId: "peer", createdAt: 9_000, server: { eventId: "event-sticker", sequence: 9 } })];
   m.media = run.media;
   m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  const album = screen.getByRole("listitem", { name: "2 photos" });
+  // Four photos are a real album under the owner rule, and the expressive row
+  // is not media, so it stays outside the album untouched.
+  const album = screen.getByRole("listitem", { name: "4 photos" });
   expect(album.textContent).not.toContain("norfold-media");
   expect(album.querySelector(".fb-chat-expressive-kind")).toBeNull();
   const row = document.querySelector('[data-chat-message="sticker"]')!;
