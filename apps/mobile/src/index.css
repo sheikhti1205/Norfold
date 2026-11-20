@@ -352,6 +352,9 @@ html.fb-reduce-motion .fb-morph-bar {
 .tiptap a { color: var(--fb-mention); text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 2px; word-break: break-all; }
 .tiptap ::selection { background: var(--fb-surface-container-high); }
 .tiptap:focus-visible { outline: 2px solid var(--fb-on-surface); outline-offset: 2px; }
+/* Full-screen report editor: the overlay keeps the whole canvas, but the
+ * editable field stays a readable writing column instead of full-width lines. */
+#report-editor-overlay .tiptap { max-width: 44rem; margin-inline: auto; }
 
 /* U2 hybrid visual rollout (Home Variant A editorial / Search Variant B compact).
  * Large surfaces stay grayscale; colour only on links/buttons/meaningful status. */
