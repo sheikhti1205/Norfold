@@ -13,6 +13,11 @@
      still clears the navigation instead of guessing. Safe-area reads mirror
      index.css, the app's single viewport owner, never a second source. */
   --fb-dock-bottom: var(--fb-chat-dock-bottom, max(12px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))));
+  /* `ChatDock` measures a page composer that reaches the launcher's own column
+     and publishes the lift as `--fb-composer-clearance`. Every dock surface
+     adds it to the same inset, so the launcher, the rail and the window row
+     move as one anchor instead of gaining a second competing inset. */
+  --fb-dock-composer: var(--fb-composer-clearance, 0px);
   z-index: 62;
 }
 .fb-chat-launcher[data-nav="visible"],
@@ -33,7 +38,7 @@
 .fb-chat-launcher {
   position: fixed;
   inset-inline-end: max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
-  inset-block-end: var(--fb-dock-bottom);
+  inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer));
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -108,7 +113,7 @@
 .fb-chat-dock {
   position: fixed;
   inset-inline-end: max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
-  inset-block-end: var(--fb-dock-bottom);
+  inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer));
   max-width: calc(100vw - 24px);
 }
 .fb-chat-dock-stack {
@@ -124,13 +129,14 @@
   inset-inline-end: calc(max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px))) + 60px);
 }
 /* A visible compose launcher at the foot owns the bottom strip; the window row
-   and the rail move one control higher so neither paints over it. */
+   and the rail move one control higher so neither paints over it, and both take
+   the same measured composer lift the launcher takes. */
 .fb-chat-dock[data-launcher="above"] {
-  inset-block-end: calc(var(--fb-dock-bottom) + 60px);
+  inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer) + 60px);
 }
 .fb-chat-dock[data-launcher="above"] .fb-chat-dock-window {
-  height: min(34rem, calc(100vh - var(--fb-dock-bottom) - 60px - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
-  height: min(34rem, calc(100dvh - var(--fb-dock-bottom) - 60px - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
+  height: min(34rem, 66vh, calc(100vh - 2 * var(--fb-dock-bottom) - var(--fb-dock-composer) - 60px - 6rem), calc(100vh - var(--fb-dock-bottom) - var(--fb-dock-composer) - 60px - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
+  height: min(34rem, 66dvh, calc(100dvh - 2 * var(--fb-dock-bottom) - var(--fb-dock-composer) - 60px - 6rem), calc(100dvh - var(--fb-dock-bottom) - var(--fb-dock-composer) - 60px - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
 }
 
 .fb-chat-dock-window {
@@ -141,9 +147,12 @@
   flex-direction: column;
   width: min(24rem, calc(100vw - 24px));
   /* Height is the bound for the whole canonical chain (workspace -> page):
-     no inner wrapper may grow past it, and only the transcript scrolls. */
-  height: min(34rem, calc(100vh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
-  height: min(34rem, calc(100dvh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
+     no inner wrapper may grow past it, and only the transcript scrolls. The
+     544px card is the ceiling, never the target: on a short viewport the
+     window keeps two thirds of the screen and always leaves both insets plus
+     6rem of page, so a floating popup never takes the height it could. */
+  height: min(34rem, 66vh, calc(100vh - 2 * var(--fb-dock-bottom) - 6rem), calc(100vh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
+  height: min(34rem, 66dvh, calc(100dvh - 2 * var(--fb-dock-bottom) - 6rem), calc(100dvh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
   min-width: 0;
   min-height: 0;
   background: var(--fb-surface);
@@ -154,21 +163,25 @@
   isolation: isolate;
 }
 
-/* The picker is a chooser, not a transcript: it sizes to its rows instead of
-   reserving the full conversation height. 28rem caps header + 44px search +
-   the Recent label + five 52px rows, so a fifth row is visible and a sixth
-   scrolls inside `.fb-chat-dock-body`. The viewport bound is the same one the
-   thread uses; only the picker opts out of the fixed thread height. */
+/* The picker is a chooser, not a transcript: a definite four-to-five-row frame
+   instead of the full conversation height, so a two-row Recent list cannot
+   collapse it to two rows. 52dvh moves it towards five rows on a tall viewport
+   inside the 23rem/28rem bounds; the rest scrolls inside `.fb-chat-dock-body`.
+   28rem caps header + 44px search + the Recent label + five 52px rows. */
 .fb-chat-dock-window[data-view="picker"] {
-  height: auto;
-  max-height: min(28rem, calc(100vh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
-  max-height: min(28rem, calc(100dvh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
+  height: clamp(23rem, 52vh, 28rem);
+  height: clamp(23rem, 52dvh, 28rem);
+  max-height: min(28rem, calc(100vh - 2 * var(--fb-dock-bottom) - 6rem), calc(100vh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
+  max-height: min(28rem, calc(100dvh - 2 * var(--fb-dock-bottom) - 6rem), calc(100dvh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
 }
-/* The chooser keeps its content height when the launcher lifts the row. */
+/* The chooser takes the same lift when the launcher sits above it. It restates
+   the four-to-five-row frame because the lifted thread height above is a more
+   specific selector. */
 .fb-chat-dock[data-launcher="above"] .fb-chat-dock-window[data-view="picker"] {
-  height: auto;
-  max-height: min(28rem, calc(100vh - var(--fb-dock-bottom) - 60px - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
-  max-height: min(28rem, calc(100dvh - var(--fb-dock-bottom) - 60px - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
+  height: clamp(23rem, 52vh, 28rem);
+  height: clamp(23rem, 52dvh, 28rem);
+  max-height: min(28rem, calc(100vh - 2 * var(--fb-dock-bottom) - var(--fb-dock-composer) - 60px - 6rem), calc(100vh - var(--fb-dock-bottom) - var(--fb-dock-composer) - 60px - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
+  max-height: min(28rem, calc(100dvh - 2 * var(--fb-dock-bottom) - var(--fb-dock-composer) - 60px - 6rem), calc(100dvh - var(--fb-dock-bottom) - var(--fb-dock-composer) - 60px - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
 }
 
 /* The window is not a clipping box: the composer's expression panel resolves
@@ -196,8 +209,9 @@
 .fb-chat-dock-rail {
   position: fixed;
   inset-inline-end: max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
-  /* One 52px launcher and its 8px gap sit below the rail. */
-  inset-block-end: calc(var(--fb-dock-bottom) + 60px);
+  /* One 52px launcher and its 8px gap sit below the rail, plus whatever the
+     launcher had to lift for a page composer. */
+  inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer) + 60px);
   display: flex;
   flex-direction: column;
   align-items: center;

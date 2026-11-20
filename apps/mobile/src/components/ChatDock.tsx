@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type { SearchedProfile } from "@norfold/shared";
 import { MessageSquareText, Pencil, Search, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
@@ -45,6 +45,8 @@ const DESKTOP_MAX_WINDOWS = 3;
 const RAIL_HEAD_SIZE = 48;
 const RAIL_GAP = 8;
 const RAIL_MAX_HEADS = 5;
+/** Air kept between the launcher and a page composer pinned at the foot. */
+const COMPOSER_CLEARANCE_GAP = 8;
 const NO_ENTRIES: readonly ChatDockEntry[] = [];
 
 /** Desktop windows side by side, capped at three; a phone shows one at a time. */
@@ -146,6 +148,15 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
   const [railOffset, setRailOffset] = useState(0);
   const [focusAfterRestore, setFocusAfterRestore] = useState<string | null>(null);
 
+  // A page composer pinned at the foot — the report page's comment bar — would
+  // otherwise sit underneath the launcher, and a tap on its Send button would
+  // land on the launcher instead. Its height is measured, never assumed: the
+  // lift is published on the dock's own surfaces so the launcher, the rail and
+  // an open window keep one bottom anchor and move together.
+  const launcherNode = useRef<HTMLDivElement | null>(null);
+  const clearanceRef = useRef(0);
+  const [composerClearance, setComposerClearance] = useState(0);
+
   // An account change discards every in-memory window and its draft. The hook
   // is already fenced by viewer, so this clears the store itself as well.
   useEffect(() => {
@@ -221,6 +232,97 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
     setFocusAfterRestore(null);
   }, [focusAfterRestore, entries]);
 
+  // Clearing a page composer is a geometry question, so it is measured. The
+  // dock's own thread owns its composer (`#fb-chat-dock` is excluded below), so
+  // a window can never lift the launcher that opened it.
+  useEffect(() => {
+    const launcher = launcherNode.current;
+    // A hidden launcher has no box to measure and nothing to clear; dropping
+    // the lift here is what keeps a covered page from staying shifted.
+    if (!launcher || !launcherVisible) {
+      if (clearanceRef.current !== 0) {
+        clearanceRef.current = 0;
+        setComposerClearance(0);
+      }
+      return;
+    }
+    const pageComposers = () => Array.from(
+      document.querySelectorAll<HTMLElement>(".fb-comment-composer"),
+    ).filter((node) => node.closest(`#${DOCK_ID}`) === null);
+    let applied = clearanceRef.current;
+    let frame = 0;
+    // The composer can arrive after this effect (a report's data loads) or
+    // change height on its own (attachments, reply context, the keyboard), so
+    // its own box is observed rather than one window resize.
+    const Observer = typeof ResizeObserver === "function" ? ResizeObserver : null;
+    const observed = new Set<Element>();
+    let sizes: ResizeObserver | null = null;
+    const rescan = () => {
+      for (const composer of pageComposers()) {
+        if (observed.has(composer)) continue;
+        observed.add(composer);
+        sizes?.observe(composer);
+      }
+      for (const composer of observed) {
+        if (composer.isConnected) continue;
+        observed.delete(composer);
+        sizes?.unobserve(composer);
+      }
+    };
+    const measure = () => {
+      frame = 0;
+      rescan();
+      const box = launcher.getBoundingClientRect();
+      if (box.width === 0 || box.height === 0) return;
+      // The measured box already carries the lift from the previous pass; take
+      // it back out so repeated measurements cannot compound into a climb.
+      const top = box.top + applied;
+      const bottom = box.bottom + applied;
+      let next = 0;
+      for (const composer of pageComposers()) {
+        const rect = composer.getBoundingClientRect();
+        // Only a composer in the launcher's own columns can be covered by it;
+        // a narrow centred column on a wide canvas is already clear.
+        if (rect.right <= box.left || rect.left >= box.right) continue;
+        if (rect.bottom <= top || rect.top >= bottom) continue;
+        next = Math.max(next, Math.round(bottom - rect.top + COMPOSER_CLEARANCE_GAP));
+      }
+      if (next === applied) return;
+      applied = next;
+      clearanceRef.current = next;
+      setComposerClearance(next);
+    };
+    const schedule = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(measure);
+    };
+    sizes = Observer ? new Observer(measure) : null;
+    // A report's composer arrives with its data, long after this effect. Only a
+    // record that adds or drops a composer may cost a scan: the app mutates a
+    // live transcript continuously and none of it can move the launcher.
+    const holdsComposer = (node: Node) => node.nodeType === 1
+      && ((node as Element).matches(".fb-comment-composer")
+        || (node as Element).querySelector(".fb-comment-composer") !== null);
+    const mutations = typeof MutationObserver === "function"
+      ? new MutationObserver((records) => {
+        if (records.some((record) => [...record.addedNodes, ...record.removedNodes].some(holdsComposer))) {
+          schedule();
+        }
+      })
+      : null;
+    mutations?.observe(document.body, { childList: true, subtree: true });
+    measure();
+    window.addEventListener("resize", schedule);
+    window.addEventListener("scroll", schedule, true);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      sizes?.disconnect();
+      mutations?.disconnect();
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", schedule, true);
+    };
+  }, [launcherVisible, pathname]);
+
   const minimizeEntry = useCallback((conversationId: string) => {
     if (accountId) minimizeChatDock(accountId, conversationId);
   }, [accountId]);
@@ -262,6 +364,12 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
 
   const unreadName = unreadRow ? nameOf(unreadRow.peerId) || "Member" : "";
   const unreadCount = unreadRow?.unreadCount ?? 0;
+  // One measured lift, published on every fixed dock surface. Absent when no
+  // page composer reaches the launcher, so each inset keeps its own fallback.
+  const clearance = launcherVisible ? composerClearance : 0;
+  const composerStyle = clearance > 0
+    ? ({ "--fb-composer-clearance": `${clearance}px` } as CSSProperties)
+    : undefined;
 
   return (
     <>
@@ -275,8 +383,9 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
           conversation. The dismiss control is keyed to the message, so it
           removes only this notice; the pencil and the avatar never depend on
           it. */}
-      <div className="fb-chat-launcher"
+      <div className="fb-chat-launcher" ref={launcherNode}
         data-nav={bottomNavVisible ? "visible" : "hidden"}
+        style={composerStyle}
         hidden={!launcherVisible}>
         {unreadRow && (
           <button type="button" className="fb-chat-launcher-action"
@@ -330,6 +439,7 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
       </div>
       {railVisible && (
         <div className="fb-chat-dock-rail" data-nav={bottomNavVisible ? "visible" : "hidden"}
+          style={composerStyle}
           role="group" aria-label="Minimized chats">
           {above > 0 && (
             <button type="button" className="fb-chat-dock-rail-more"
@@ -375,6 +485,7 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
           data-nav={bottomNavVisible ? "visible" : "hidden"}
           data-rail={railVisible ? "true" : undefined}
           data-launcher={launcherVisible && panelMounted ? "above" : undefined}
+          style={composerStyle}
           hidden={!visible}
           role="complementary" aria-label="Chat">
           {entries.map((entry) => {
