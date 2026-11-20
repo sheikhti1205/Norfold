@@ -44,7 +44,12 @@ export interface VideoPlayerApi {
    * tied to the source it was measured from.
    */
   aspect: number | null;
-  open: (source: VideoPlayerSource) => void;
+  /**
+   * Opens a source. Without options it keeps the inline presentation (or the
+   * dock when the source has no slot); `mode: "expanded"` asks for the
+   * full-viewport overlay directly, even without a slot.
+   */
+  open: (source: VideoPlayerSource, options?: { mode?: VideoPlayerMode }) => void;
   minimize: () => void;
   expand: () => void;
   close: () => void;
@@ -90,19 +95,21 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
     ? (state.mode === "inline" && !state.source.slot ? "mini" : state.mode)
     : "inline";
 
-  const open = useCallback((source: VideoPlayerSource) => {
+  const open = useCallback((source: VideoPlayerSource, options?: { mode?: VideoPlayerMode }) => {
+    const requested: VideoPlayerMode = options?.mode ?? "inline";
     // A replacement starts with an unknown shape; a same-src re-home keeps the
     // measurement this video already earned.
     setAspectSample((current) => (current && current.src === source.src ? current : null));
     setState((current) => {
       if (current.source && current.source.id === source.id && current.source.src === source.src) {
-        // Same media, re-homed: keep the element and the playhead.
+        // Same media, re-homed: keep the element and the playhead, and apply
+        // the presentation this caller asked for (inline unless it says more).
         return {
           source: { ...current.source, slot: source.slot ?? current.source.slot, name: source.name },
-          mode: "inline",
+          mode: requested,
         };
       }
-      return { source, mode: "inline" };
+      return { source, mode: requested };
     });
   }, []);
 

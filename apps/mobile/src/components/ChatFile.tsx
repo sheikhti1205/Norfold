@@ -39,8 +39,8 @@ const INLINE_RASTER_MAX_EDGE = 8192;
  * external viewer or a real save, so this row holds no bytes, object URL or
  * embedded preview of its own.
  */
-export function ChatFile({ meta }: { meta: ChatFileMeta }) {
-  if (meta.kind === "video") return <ChatVideo meta={meta} />;
+export function ChatFile({ meta, tile = false }: { meta: ChatFileMeta; tile?: boolean }) {
+  if (meta.kind === "video") return <ChatVideo meta={meta} tile={tile} />;
   if (meta.kind === "audio") return <ChatAudio meta={meta} />;
   return isDocumentChatFile(meta) ? <ChatDocument meta={meta} /> : <ChatImageFile meta={meta} />;
 }
@@ -372,9 +372,11 @@ function ChatDocument({ meta }: { meta: ChatFileMeta }) {
  * player until it is closed. The message frame holds the shared chat media
  * width while that player is here, stays a compact band until the source's own
  * metadata exists, and then follows its measured ratio, so the real video
- * paints at a useful size instead of an empty enlarged box.
+ * paints at a useful size instead of an empty enlarged box. In a 4-up album
+ * the cell is the surface: `tile` swaps this row for one tappable frame that
+ * opens the same player expanded and never claims an inline slot.
  */
-function ChatVideo({ meta }: { meta: ChatFileMeta }) {
+function ChatVideo({ meta, tile = false }: { meta: ChatFileMeta; tile?: boolean }) {
   const player = useVideoPlayer();
   const id = useId();
   const slotRef = useRef<HTMLDivElement | null>(null);
@@ -396,6 +398,19 @@ function ChatVideo({ meta }: { meta: ChatFileMeta }) {
   // Latest API without re-running effects on every playback tick.
   const apiRef = useRef(player);
   apiRef.current = player;
+
+  // A row can become an album tile when more media joins the message. That
+  // commit removes its inline frame, so an active inline player is handed to
+  // the dock instead of painting into a detached slot. A fresh tile and the
+  // tap path both ask for the expanded player, so neither needs a transition.
+  const wasTile = useRef(tile);
+  useEffect(() => {
+    const becameTile = tile && !wasTile.current;
+    wasTile.current = tile;
+    if (!becameTile) return;
+    const api = apiRef.current;
+    if (api.video?.id === id && api.mode === "inline") api.minimize();
+  }, [tile, id]);
 
   // StrictMode runs setup → cleanup → setup on this instance: the cleanup
   // clears liveness, so setup must re-arm it or a resumed download is dropped.
@@ -425,11 +440,20 @@ function ChatVideo({ meta }: { meta: ChatFileMeta }) {
     setStatus(next);
   }
 
+  function launch(src: string) {
+    const source = { id, src, name: meta.name, revokeOnClose: true };
+    // A tile has no inline frame, so it asks the one app-wide player for the
+    // expanded presentation directly. The inline row keeps re-homing into its
+    // own slot exactly as before.
+    if (tile) player.open(source, { mode: "expanded" });
+    else player.open({ ...source, slot: slotRef.current });
+  }
+
   async function start() {
     if (statusRef.current === "loading") return;
     if (statusRef.current === "ready" && srcRef.current) {
       // Same media, re-homed: the provider moves the existing element back.
-      player.open({ id, src: srcRef.current, name: meta.name, slot: slotRef.current, revokeOnClose: true });
+      launch(srcRef.current);
       return;
     }
     updateStatus("loading");
@@ -439,10 +463,28 @@ function ChatVideo({ meta }: { meta: ChatFileMeta }) {
       const url = URL.createObjectURL(blob);
       srcRef.current = url;
       updateStatus("ready");
-      player.open({ id, src: url, name: meta.name, slot: slotRef.current, revokeOnClose: true });
+      launch(url);
     } catch {
       if (aliveRef.current) updateStatus("error");
     }
+  }
+
+  if (tile) {
+    // One album cell: a real, labelled play target over the dark frame. There
+    // is no poster to invent and no inline transport to squeeze in; the press
+    // hands the file to the same player, which opens expanded. The spinner is
+    // the existing one and a refused file leaves the tile in place to retry.
+    return <div className="fb-chat-video fb-chat-video-tile" data-kind="video">
+      <button type="button" className="fb-chat-video-tile-button" aria-label={`Play ${meta.name}`}
+        disabled={status === "loading"} onClick={() => void start()}>
+        <span className="fb-chat-video-play" aria-hidden="true">
+          {status === "loading" ? <LoaderCircle className="fb-chat-video-spin" size={18} />
+            : <Play size={18} fill="currentColor" />}
+        </span>
+        <span className="fb-chat-video-tile-name">{meta.name}</span>
+      </button>
+      {status === "error" && <p role="status" className="fb-chat-video-tile-error">That file is no longer available.</p>}
+    </div>;
   }
 
   return <div className="fb-chat-video" data-kind="video"

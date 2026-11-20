@@ -15,6 +15,7 @@ import { formatChatDay, timeAgo } from "../utils/dates";
 import { klipyPreviewLabel, messagePreview } from "../utils/messagePreview";
 import { haptic } from "../utils/haptics";
 import { convertEmoticons, isEmojiOnly } from "../utils/emoji";
+import { isStandalonePreviewBody } from "../utils/chatPreviewBody";
 import { klipyMessageBody, klipyMessageKind, klipyMessageUrl } from "../services/klipy";
 import type { KlipyItem } from "../services/klipy";
 import {
@@ -315,6 +316,9 @@ export function replyPreview(message: StoredHumanMessage): string {
   return message.body;
 }
 
+/** A grouped album never paints more than the four cells it was designed for. */
+const MEDIA_RUN_VISIBLE_LIMIT = 4;
+
 /**
  * What one album of media rows calls itself. The label names only what the run
  * actually holds, so a mixed selection never reads as "3 photos" when one of
@@ -358,10 +362,12 @@ function chatPhotoRatio(attachment: { width: number; height: number }): number {
   return Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
 }
 
-function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady }: {
+function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady, overflowCount }: {
   accountId: string; conversationId: string; attachment: MediaAttachment;
   onOpen: (id: string, bytes: ArrayBuffer, mime: string) => void;
   onReady: (id: string, content: { bytes: ArrayBuffer; mime: string } | null) => void;
+  /** Members an album holds beyond its four cells; only the last cell carries it. */
+  overflowCount?: number;
 }) {
   const [content, setContent] = useState<{ url: string; bytes: ArrayBuffer } | null>(null);
   const [state, setState] = useState<"loading" | "missing" | "failed" | "unavailable">("loading");
@@ -411,10 +417,20 @@ function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady }: {
   const ratio = chatPhotoRatio(attachment);
   return <div ref={host} className="fb-chat-photo" data-loading={content && !loaded ? "true" : undefined}
     style={{ aspectRatio: `${attachment.width} / ${attachment.height}`, "--fb-chat-photo-ratio": ratio } as CSSProperties}>
-    {content ? <button type="button" aria-label="View photo" onClick={() => onOpen(attachment.messageId, content.bytes, attachment.mime)}>
-      <img src={content.url} alt="" loading="lazy" decoding="async" onLoad={() => setLoaded(true)} onError={() => { onReady(attachment.id, null); setContent(null); setState("failed"); }}
-        data-receipt-message={loaded && attachment.state === "READY" ? attachment.messageId : undefined} />
-    </button> : <div role="status">{state === "loading" ? "Photo loading…" : state === "failed" ? "Could not load photo." : "Photo unavailable"}
+    {content ? <>
+      <button type="button" aria-label="View photo"
+        // The base control keeps its one label; a counted album cell overrides
+        // it with the real hidden total, and no other cell ever carries the prop.
+        {...(overflowCount && overflowCount > 0 ? { "aria-label": `View photo, ${overflowCount} more` } : {})}
+        onClick={() => onOpen(attachment.messageId, content.bytes, attachment.mime)}>
+        <img src={content.url} alt="" loading="lazy" decoding="async" onLoad={() => setLoaded(true)} onError={() => { onReady(attachment.id, null); setContent(null); setState("failed"); }}
+          data-receipt-message={loaded && attachment.state === "READY" ? attachment.messageId : undefined} />
+      </button>
+      {/* The count only describes a picture that is actually shown: a loading,
+          failed or unavailable cell keeps its status card and its retry control
+          unobscured. */}
+      {overflowCount && overflowCount > 0 ? <span className="fb-chat-photo-more" aria-hidden="true">+{overflowCount}</span> : null}
+    </> : <div role="status">{state === "loading" ? "Photo loading…" : state === "failed" ? "Could not load photo." : "Photo unavailable"}
       {canDownload && (state === "missing" || state === "failed") && <button type="button" onClick={() => void download()}>Download again</button>}
     </div>}
   </div>;
@@ -1717,18 +1733,26 @@ export function ThreadSession({
     const frame = requestAnimationFrame(() => {
       const target = Array.from(scroll.current?.querySelectorAll<HTMLElement>("[data-chat-message]") ?? [])
         .find(element => element.dataset.chatMessage === targetId);
+      // An album paints at most four cells, so a reply, pin or search hit on a
+      // hidden fifth member has no row to land on. The album still lists every
+      // member id, so the jump lands on the album itself instead of a row that
+      // was never rendered.
+      const album = target ? null : Array.from(scroll.current?.querySelectorAll<HTMLElement>("[data-chat-run-members]") ?? [])
+        .find(element => (element.dataset.chatRunMembers ?? "").split(" ").includes(targetId));
+      const destination = target ?? album;
       // A long smooth travel spends the whole ring before the original is even
       // on screen. Snap when the target is more than a viewport away and keep
       // the travel only for the short, legible case.
-      const box = target?.getBoundingClientRect();
+      const box = destination?.getBoundingClientRect();
       const viewport = scroll.current?.getBoundingClientRect();
       const travel = box && viewport && !shouldReduceMotion()
         ? Math.abs((box.top + box.bottom) / 2 - (viewport.top + viewport.bottom) / 2) : Infinity;
       const snap = shouldReduceMotion() || travel > (viewport?.height ?? 0);
-      target?.scrollIntoView?.({ block: "center", inline: "nearest", behavior: snap ? "auto" : "smooth" });
-      target?.focus({ preventScroll: true });
+      destination?.scrollIntoView?.({ block: "center", inline: "nearest", behavior: snap ? "auto" : "smooth" });
+      destination?.focus({ preventScroll: true });
       // A ring, not a second screen: the original is already here, it only has
-      // to be findable after a long scroll.
+      // to be findable after a long scroll. Only a real row rings; the album is
+      // the honest fallback and must not flash a member it does not paint.
       if (target) setFlash(previous => ({ id: targetId, nonce: (previous?.nonce ?? 0) + 1 }));
       setJumpTo(null);
     });
@@ -2006,7 +2030,7 @@ export function ThreadSession({
    * message, the draft clears, and the next message can start immediately. Only
    * authority/destructive actions take `busy`.
    */
-  async function admitText(message: StoredHumanMessage, onAdmitted?: () => void) {
+  async function admitText(message: StoredHumanMessage, onAdmitted?: () => void, createdAt?: number) {
     // Once the durable boundary reported, nothing later may relabel the row as
     // an admission failure: the outbox owns it and retrying would duplicate it.
     let admitted = false;
@@ -2019,8 +2043,14 @@ export function ThreadSession({
     });
     transcript.followLatest();
     try {
+      // Ordinary sends keep the runtime's own commit instant and the exact
+      // argument list; only a split link needs to place itself after a batch.
+      if (createdAt === undefined) {
+        return await sendMessagingText(accountId, conversationId, message.recipientId, message.body,
+          message.contextReportId, message.replyToId, message.id, settle);
+      }
       return await sendMessagingText(accountId, conversationId, message.recipientId, message.body,
-        message.contextReportId, message.replyToId, message.id, settle);
+        message.contextReportId, message.replyToId, message.id, settle, createdAt);
     } catch (error) {
       if (admitted) return message.id;
       if (alive.current) setLocalEchoes(previous => previous.map(item =>
@@ -2134,10 +2164,13 @@ export function ThreadSession({
         const batchCreatedAt = prior.length > 0
           ? Math.min(...prior.map((entry) => entry.createdAt))
           : Date.now();
+        // A bare preview link is its own message, not a caption for the first
+        // photo: the batch stays captionless and the link follows as text.
+        const splitPreviewLink = isStandalonePreviewBody(body);
         let consumed = false;
         for (const item of photos) {
           const admissionKey = item.key;
-          const caption = consumed ? "" : body;
+          const caption = consumed || splitPreviewLink ? "" : body;
           // The caption this item actually carries. A retry reuses the caption
           // its first attempt stored, so text typed after the failure is not
           // silently dropped by the success that clears the field below.
@@ -2187,7 +2220,10 @@ export function ThreadSession({
           if (!consumed && stillOwner()) {
             consumed = true;
             transcript.followLatest();
-            if (sentCaption === body && draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+            // A split link leaves after the batch; only then does the draft clear.
+            if (!splitPreviewLink && sentCaption === body && draftRevision.current === sendingRevision) {
+              draftRevision.current++; setDraft("");
+            }
             setReplyTo(null);
           }
           if (stillOwner()) setPhotos((list) => {
@@ -2195,6 +2231,38 @@ export function ThreadSession({
             if (removed) releaseStagedUrl(removed);
             return list.filter((entry) => entry.key !== admissionKey);
           });
+        }
+        // The batch is complete. A standalone preview body now leaves as the
+        // text message it is, with a fresh instant so it sorts after the media
+        // and ends the run. Only that admission clears the draft.
+        if (splitPreviewLink && stillOwner()) {
+          const linkRevision = sendingRevision;
+          textInFlight.current.add(linkRevision);
+          ownedTextRevision = linkRevision;
+          const messageId = textAttempts.current.get(linkRevision) ?? crypto.randomUUID();
+          textAttempts.current.set(linkRevision, messageId);
+          const linkCreatedAt = Math.max(Date.now(), batchCreatedAt + 1);
+          try {
+            await admitText({ id: messageId, conversationId, authorId: accountId, recipientId: row.peerId,
+              body, messageType: "TEXT", createdAt: linkCreatedAt }, () => {
+              // Clear on the durable boundary, but keep the latch: the next send
+              // may begin only once this split admission has fully settled.
+              if (!stillOwner()) return;
+              if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+            }, linkCreatedAt);
+            textAttempts.current.delete(linkRevision);
+            if (stillOwner()) {
+              transcript.followLatest();
+              if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+              setAdmissionFailed(false);
+            }
+          } catch {
+            // The media already left; keep the draft and the stored id so the
+            // same link can retry instead of re-merging into the next media.
+            if (stillOwner()) {
+              setError("Your attachments were sent, but the link was not. Tap Send to try again.");
+            }
+          }
         }
         if (stillOwner()) { transcript.followLatest(); setAdmissionFailed(false); }
       }
@@ -2280,8 +2348,12 @@ export function ThreadSession({
     // One pick is one composition: every file it carries is stamped with the
     // same instant, taken before the first upload yields.
     const batchCreatedAt = Date.now();
-    let caption = draft.trim();
+    // A bare preview link is its own message, not a caption for the file.
+    const body = convertEmoticons(draft);
+    const splitPreviewLink = isStandalonePreviewBody(body);
+    let caption = splitPreviewLink ? "" : draft.trim();
     let leaving = false;
+    let ownedLinkRevision: number | null = null;
     setError(null); setSendStatus(null); setFilesSending(true);
     try {
       for (const file of picked) {
@@ -2302,14 +2374,45 @@ export function ThreadSession({
         caption = "";
       }
       if (leaving && alive.current) {
-        transcript.followLatest();
-        if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+        if (splitPreviewLink) {
+          // The files left without the link caption; send that link now as its
+          // own message, after the batch and with a stable retry identity.
+          const linkRevision = sendingRevision;
+          textInFlight.current.add(linkRevision);
+          ownedLinkRevision = linkRevision;
+          const messageId = textAttempts.current.get(linkRevision) ?? crypto.randomUUID();
+          textAttempts.current.set(linkRevision, messageId);
+          const linkCreatedAt = Math.max(Date.now(), batchCreatedAt + 1);
+          try {
+            await admitText({ id: messageId, conversationId, authorId: accountId, recipientId: row.peerId,
+              body, messageType: "TEXT", createdAt: linkCreatedAt }, () => {
+              // Clear on the durable boundary; the latch stays held until the
+              // split admission settles, so files and text cannot interleave.
+              if (!alive.current) return;
+              if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+            }, linkCreatedAt);
+            textAttempts.current.delete(linkRevision);
+            if (alive.current) {
+              transcript.followLatest();
+              if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+              setAdmissionFailed(false);
+            }
+          } catch {
+            if (alive.current) {
+              setError("Your attachments were sent, but the link was not. Tap Send to try again.");
+            }
+          }
+        } else {
+          transcript.followLatest();
+          if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+          setAdmissionFailed(false);
+        }
         setReplyTo(previous => previous?.id === replyTargetId ? null : previous);
-        setAdmissionFailed(false);
       }
     } catch {
       if (alive.current) setError("That file was not sent. Try again.");
     } finally {
+      if (ownedLinkRevision !== null) textInFlight.current.delete(ownedLinkRevision);
       releaseAdmission();
       if (alive.current) setFilesSending(false);
     }
@@ -2559,18 +2662,28 @@ export function ThreadSession({
           const day = first.createdAt ? formatChatDay(first.createdAt) : "";
           const before = firstIndex > 0 ? messages[firstIndex - 1] : undefined;
           const opensDay = !!day && day !== (before?.createdAt ? formatChatDay(before.createdAt) : "");
+          // A grouped album paints at most four members. The album's own label
+          // and the durable run keep the true total; the extra members stay in
+          // the transcript (and the viewer) and are counted on the last cell.
+          const visibleMembers = grouped ? run.messages.slice(0, MEDIA_RUN_VISIBLE_LIMIT) : run.messages;
+          const overflowCount = grouped ? run.messages.length - visibleMembers.length : 0;
           // An odd album opens with one wide cell, so a three-photo album reads
           // as a tall-left 3-up instead of ending in a hole. An album that
-          // carries anything wider than a picture stacks in one column: a clip
-          // needs the full width for its own transport, and a caption, quote or
-          // report card needs it to stay readable and attached to its own item.
-          const stacked = grouped && run.messages.some((message) => {
+          // carries anything wider than a picture stacks in one column: a caption,
+          // quote or report card needs it to stay readable and attached to its
+          // own item. A bare grouped clip is the exception: it renders as a
+          // compact album tile, so it neither needs nor forces the full width.
+          const stacked = grouped && visibleMembers.some((message) => {
             const marker = parseChatFileMarker(message.body);
-            if (marker?.kind === "video") return true;
+            if (marker?.kind === "video") {
+              const bareVideo = !message.replyToId && !message.contextReportId
+                && chatFileCaption(message.body).trim() === "";
+              return !bareVideo;
+            }
             const caption = marker ? chatFileCaption(message.body) : message.body;
             return caption.trim() !== "" || !!message.replyToId || !!message.contextReportId;
           });
-          const wideFirst = grouped && !stacked && run.messages.length % 2 === 1;
+          const wideFirst = grouped && !stacked && visibleMembers.length % 2 === 1;
           const ownRun = first.authorId === accountId;
           return <Fragment key={first.id}>
             {opensDay && <li className="fb-chat-day" role="presentation"><span>{day}</span></li>}
@@ -2583,6 +2696,8 @@ export function ThreadSession({
                 single-message gesture: inside an album the long-press and the
                 corner menu carry the same actions. */}
             <motion.li aria-label={grouped ? mediaRunLabel(run.messages) : undefined}
+              data-chat-run-members={grouped ? run.messages.map((message) => message.id).join(" ") : undefined}
+              tabIndex={grouped ? -1 : undefined}
               drag={!grouped && canCompose && first.unsentAt === undefined ? "x" : false}
               dragDirectionLock dragConstraints={{ left: 0, right: 0 }} dragElastic={0.18}
               onDragEnd={(_event, info: PanInfo) => {
@@ -2591,7 +2706,7 @@ export function ThreadSession({
               }}
               className={grouped ? `fb-chat-run${stacked ? " fb-chat-run-stack" : ""}${ownRun ? " fb-chat-run-own" : ""}`
                 : ownRun ? "fb-chat-line fb-chat-line-own" : "fb-chat-line"}>
-            {run.messages.map((message, member) => {
+            {visibleMembers.map((message, member) => {
           const own = message.authorId === accountId;
           const attachment = media.find((entry) => entry.messageId === message.id);
           const statusMembers = [message];
@@ -2631,6 +2746,19 @@ export function ThreadSession({
           const klipyKind = message.unsentAt === undefined && isBareKlipyMediaBody(message.body)
             ? klipyMessageKind(message.body) : null;
           const file = message.unsentAt === undefined ? parseChatFileMarker(message.body) : null;
+          // A bare grouped clip is a compact album tile: it has no caption,
+          // quote or report context to keep readable, so it fills a square cell
+          // instead of forcing the full-width stacked player.
+          const bareVideo = grouped && file?.kind === "video" && !message.replyToId
+            && !message.contextReportId && chatFileCaption(message.body).trim() === "";
+          const lastVisible = member === visibleMembers.length - 1;
+          // Only a real, viewable photo owns a picture to count over. Every
+          // other last cell (a grouped bare clip, a photo without bytes, a
+          // restricted photo) keeps its transport or status row untouched and
+          // pins a compact badge beside it instead.
+          const photoOverflow = lastVisible && overflowCount > 0 && message.messageType === "MEDIA"
+            && !!attachment && photoAllowed;
+          const rowOverflow = lastVisible && overflowCount > 0 && !photoOverflow;
           // A bare document file is the message itself: only the untouched file
           // row earns the compact surface. A caption, quote, report context or
           // location is real bubble content, and every media kind keeps its own
@@ -2639,7 +2767,7 @@ export function ThreadSession({
             && !message.contextReportId && !message.location && chatFileCaption(message.body) === "";
           const flashClass = flash?.id === message.id ? ` fb-chat-flash-${flash.nonce % 2 ? "a" : "b"}` : "";
           return <div key={message.id} data-chat-message={message.id} tabIndex={-1}
-            className={`fb-chat-line-row${wideFirst && member === 0 ? " fb-chat-line-row-wide" : ""}`}>
+            className={`fb-chat-line-row${wideFirst && member === 0 ? " fb-chat-line-row-wide" : ""}${rowOverflow ? " fb-chat-run-more" : ""}`}>
             {/* The same contextual layer the feed and the report card use: a
                 400 ms hold (or right-click / Shift+F10) opens the app's own
                 menu anchored to this bubble, never a bottom sheet. */}
@@ -2648,7 +2776,7 @@ export function ThreadSession({
               onOpen={() => { setSelectedMessageId(message.id); haptic("commit"); }}>
             {({ open, setOpen }) => <>
             <div data-receipt-message={message.messageType === "TEXT" && message.body && message.unsentAt === undefined ? message.id : undefined}
-              className={`fb-chat-message${own ? " fb-chat-message-own" : ""}${message.messageType === "VOICE" && attachment && message.unsentAt === undefined ? " fb-chat-message-voice" : ""}${emojiOnly ? " fb-chat-message-emoji" : ""}${klipyOnly ? " fb-chat-message-klipy" : ""}${mediaOnly ? " fb-chat-message-media" : ""}${documentOnly ? " fb-chat-message-document" : ""}${flashClass}`}>
+              className={`fb-chat-message${own ? " fb-chat-message-own" : ""}${message.messageType === "VOICE" && attachment && message.unsentAt === undefined ? " fb-chat-message-voice" : ""}${emojiOnly ? " fb-chat-message-emoji" : ""}${klipyOnly ? " fb-chat-message-klipy" : ""}${mediaOnly ? " fb-chat-message-media" : ""}${bareVideo ? " fb-chat-message-video" : ""}${documentOnly ? " fb-chat-message-document" : ""}${flashClass}`}>
             <span className="sr-only">{own ? "You: " : `${name || "Member"}: `}</span>
             {message.unsentAt === undefined && message.replyToId && <button type="button" className="fb-chat-quote"
               onClick={() => { transcript.suspend(); setJumpTo(message.replyToId!); }}
@@ -2661,7 +2789,7 @@ export function ThreadSession({
               </span>
             </button>}
             {message.unsentAt !== undefined ? <p>Message unsent</p> : <>
-            {message.messageType === "MEDIA" && attachment && photoAllowed && <ChatPhoto key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} onOpen={openPhoto} onReady={rememberPhoto} />}
+            {message.messageType === "MEDIA" && attachment && photoAllowed && <ChatPhoto key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} onOpen={openPhoto} onReady={rememberPhoto} overflowCount={photoOverflow ? overflowCount : undefined} />}
             {message.messageType === "MEDIA" && attachment && !photoAllowed && <p>Photos are available when you're friends.</p>}
             {message.messageType === "VOICE" && attachment && photoAllowed && <ChatVoice key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} playback={voice.player} snapshot={playbackSnapshot}
               authorName={own ? user?.displayName || user?.username : name} avatarUrl={own ? user?.avatarUrl : person?.avatarUrl} />}
@@ -2669,7 +2797,7 @@ export function ThreadSession({
             {message.contextReportId && <ChatReportContext reportId={message.contextReportId} safetyKey={view?.ownBlocked ? "blocked" : "clear"} />}
             {message.location && <ChatLocation location={message.location} />}
             {file ? <>
-              <ChatFile meta={file} />
+              <ChatFile meta={file} tile={bareVideo} />
               {chatFileCaption(message.body) !== "" && <ChatMessageText body={chatFileCaption(message.body)}
                 contextReportId={message.contextReportId} renderReportPreview={reportPreview} />}
             </> : message.body && message.unsentAt === undefined && isBareKlipyMediaBody(message.body)
@@ -2764,6 +2892,7 @@ export function ThreadSession({
             </>}
             </>}
             </LongPressArea>
+            {rowOverflow && <span className="fb-chat-run-more-badge" aria-hidden="true">+{overflowCount}</span>}
           </div>;
             })}
             </motion.li>

@@ -3,14 +3,13 @@ import Lightbox, { createModule, MODULE_NO_SCROLL, useController, useLightboxSta
 import { FocusScope } from "react-aria/FocusScope";
 import Zoom from "yet-another-react-lightbox/plugins/zoom";
 import Fullscreen from "yet-another-react-lightbox/plugins/fullscreen";
-import Thumbnails from "yet-another-react-lightbox/plugins/thumbnails";
 import { ImageOff, RotateCcw } from "lucide-react";
 import { OverlayStackBridge, useOverlayDepth } from "./overlayFoundation";
+import { ViewerFilmstrip } from "./ViewerFilmstrip";
 import { isPrivateMediaKey, peekMediaUrl, privateCommentMediaKey, resolveMediaUrl } from "../services/media/privateMedia";
 import { getSupabase } from "../services/supabaseClient";
 import { useShouldReduceMotion } from "./uiMotion";
 import "yet-another-react-lightbox/styles.css";
-import "yet-another-react-lightbox/plugins/thumbnails.css";
 import "./MediaViewer.css";
 
 export interface MediaViewerItem {
@@ -30,14 +29,19 @@ export interface MediaViewerProps {
   onClose: () => void;
 }
 
+/** The engine's `SlideImage` has no thumbnail field of its own (the removed
+ * Thumbnails plugin declared one). The viewer's slides carry the grid's thumb
+ * so the filmstrip can paint it instead of the full-size photo. */
+export type MediaViewerSlide = SlideImage & { thumbnail?: string };
+
 // Reuse React Aria's scope tree for containment and restoration, inside the
-// portal around the full viewport (including Fullscreen and Thumbnails).
+// portal around the full viewport (including Fullscreen).
 function ViewerFocusScope({ children }: ComponentProps) {
   return <FocusScope contain restoreFocus>{children}</FocusScope>;
 }
 const focusScopeModule = createModule("NorfoldFocusScope", ViewerFocusScope);
 const containFocus: Plugin = ({ addParent }) => addParent(MODULE_NO_SCROLL, focusScopeModule);
-const plugins = [Zoom, Fullscreen, Thumbnails, containFocus];
+const plugins = [Zoom, Fullscreen, containFocus];
 const RetryPhoto = createContext<(() => void) | null>(null);
 
 function RetrySlide({ children, available }: { children: ReactNode; available: boolean }) {
@@ -59,12 +63,6 @@ function UnavailablePhoto() {
 function PhotoCounter() {
   const { currentIndex, slides } = useLightboxState();
   return <span className="fb-viewer-counter" role="status">Photo {currentIndex + 1} of {slides.length}</span>;
-}
-
-function PhotoThumbnail({ src }: { src: string }) {
-  const [failed, setFailed] = useState(false);
-  return !src || failed ? <ImageOff size={20} aria-hidden="true" />
-    : <img src={src} alt="" className="fb-viewer-thumbnail" onError={() => setFailed(true)} />;
 }
 
 /** One inspection owner. YARL owns focus entry, inert siblings, scroll lock and
@@ -110,7 +108,7 @@ function OpenMediaViewer({ items, index, onIndexChange, onClose }: MediaViewerPr
     }).data.subscription : undefined;
     return () => { live = false; ++generation; window.clearInterval(timer); subscription?.unsubscribe(); };
   }, [srcKey]);
-  const slides = useMemo<SlideImage[]>(() => items.map((item) => ({
+  const slides = useMemo<MediaViewerSlide[]>(() => items.map((item) => ({
     src: peekMediaUrl(item.src) ?? signedSrcs[item.src] ?? (privateCommentMediaKey(item.src) ? "" : item.src), alt: item.alt, title: item.title ?? undefined,
     thumbnail: item.thumbnailSrc ?? undefined,
     width: item.width && item.width > 0 ? item.width : undefined,
@@ -141,15 +139,13 @@ function OpenMediaViewer({ items, index, onIndexChange, onClose }: MediaViewerPr
     controller={{ closeOnEscape: false, closeOnPullDown: false, closeOnPullUp: false, closeOnBackdropClick: false }}
     animation={{ fade: reduced ? 0 : 180, swipe: reduced ? 0 : 250, zoom: reduced ? 0 : 180 }}
     zoom={{ ref: zoom, scrollToZoom: false, maxZoomPixelRatio: 2 }}
-    thumbnails={{ width: 72, height: 48, gap: 8, padding: 2, border: 2, vignette: false }}
     toolbar={{ buttons: [<PhotoCounter key="counter" />, "zoom", <button key="fit" type="button" className="yarl__button fb-viewer-fit" title="Fit photo" aria-label="Fit photo" onClick={() => zoom.current?.changeZoom(1)}><RotateCcw size={24} aria-hidden="true" /></button>, "fullscreen", "close"] }}
     on={{ view: ({ index: next }) => { onIndexChange?.(next); }, click: () => setChromeHidden((hidden) => !hidden) }}
     render={{
-      controls: () => <OverlayStackBridge onClose={onClose} />,
+      controls: () => <><OverlayStackBridge onClose={onClose} /><ViewerFilmstrip /></>,
       slideContainer: ({ slide, children }) => <RetrySlide available={!!slide.src}>{children}</RetrySlide>,
       slide: ({ slide }) => !slide.src ? <UnavailablePhoto /> : undefined,
       iconError: () => <UnavailablePhoto />,
-      thumbnail: ({ slide }) => <PhotoThumbnail key={slide.thumbnail ?? slide.src} src={slide.thumbnail ?? slide.src} />,
     }}
   />;
 }

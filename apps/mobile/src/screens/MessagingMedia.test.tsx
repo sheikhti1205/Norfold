@@ -1060,6 +1060,135 @@ it("keeps the same photo and caption on retry after uncertain admission", async 
   await waitFor(() => expect(m.send).toHaveBeenCalledTimes(2));
   expect(m.send.mock.calls[1]).toEqual(m.send.mock.calls[0]);
 });
+
+/** Stage one prepared still and wait for its review frame. */
+async function stagePhoto(name = "p.jpg") {
+  fireEvent.change(screen.getByLabelText("Photo file input"), { target: { files: [new File(["x"], name, { type: "image/jpeg" })] } });
+  await screen.findByRole("button", { name: /^Review photo 1 of 1$/ });
+}
+/** A rendered YouTube link asks oEmbed for a title; a test never does. */
+function stubPreviewFetch() {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({}) }));
+}
+
+it("sends a bare YouTube link after a photo instead of as its caption", async () => {
+  const link = "https://youtu.be/dQw4w9WgXcQ";
+  stubPreviewFetch();
+  m.prepare.mockResolvedValue({ bytes: new Uint8Array([1]).buffer, sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
+  await open();
+  await stagePhoto();
+  const field = screen.getByLabelText("Message");
+  fireEvent.change(field, { target: { value: link } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(m.send).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(m.text).toHaveBeenCalledTimes(1));
+  // The photo bubble never carries the link as its caption.
+  expect(m.send.mock.calls[0]?.[3]).toBe("");
+  expect(m.text.mock.calls[0]?.[3]).toBe(link);
+  // The link is a separate message after the media, with its own fresh instant.
+  expect(m.send.mock.invocationCallOrder[0]).toBeLessThan(m.text.mock.invocationCallOrder[0]!);
+  expect(typeof m.text.mock.calls[0]?.[8]).toBe("number");
+  await waitFor(() => expect(field).toHaveProperty("value", ""));
+});
+
+it("sends a document without a bare YouTube caption and posts the link separately", async () => {
+  const link = "https://youtu.be/dQw4w9WgXcQ";
+  stubPreviewFetch();
+  m.upload.mockResolvedValue({ key: "files/account/chat/notes.pdf", name: "notes.pdf", mime: "application/pdf", byteSize: 3, kind: "pdf" });
+  await open();
+  fireEvent.change(screen.getByLabelText("Message"), { target: { value: link } });
+  fireEvent.change(screen.getByLabelText("Choose document"), { target: { files: [new File(["pdf"], "notes.pdf", { type: "application/pdf" })] } });
+  await waitFor(() => expect(m.text).toHaveBeenCalledTimes(2));
+  const fileBody = String(m.text.mock.calls[0]?.[3]);
+  // The file message is the marker only; the link is the next message.
+  expect(fileBody.startsWith("norfold-file:v1:")).toBe(true);
+  expect(fileBody).not.toContain(link);
+  expect(m.text.mock.calls[1]?.[3]).toBe(link);
+  await waitFor(() => expect(screen.getByLabelText("Message")).toHaveProperty("value", ""));
+});
+
+it("keeps a prose caption on the photo and sends no separate text", async () => {
+  const caption = "look at this https://youtu.be/dQw4w9WgXcQ";
+  stubPreviewFetch();
+  m.prepare.mockResolvedValue({ bytes: new Uint8Array([1]).buffer, sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
+  await open();
+  await stagePhoto();
+  fireEvent.change(screen.getByLabelText("Message"), { target: { value: caption } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(m.send).toHaveBeenCalledTimes(1));
+  expect(m.send.mock.calls[0]?.[3]).toBe(caption);
+  expect(m.text).not.toHaveBeenCalled();
+});
+
+it("keeps the draft and the link identity when only the split link fails", async () => {
+  const link = "https://youtu.be/dQw4w9WgXcQ";
+  stubPreviewFetch();
+  m.prepare.mockResolvedValue({ bytes: new Uint8Array([1]).buffer, sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
+  m.text.mockRejectedValueOnce(new Error("link refused"));
+  await open();
+  await stagePhoto();
+  const field = screen.getByLabelText("Message");
+  fireEvent.change(field, { target: { value: link } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(m.send).toHaveBeenCalledTimes(1));
+  expect(await screen.findByText("Your attachments were sent, but the link was not. Tap Send to try again.")).toBeTruthy();
+  // The media success is kept; the draft keeps the exact link for the retry.
+  expect(screen.queryByRole("button", { name: /remove photo/i })).toBeNull();
+  expect(field).toHaveProperty("value", link);
+  expect(m.text).toHaveBeenCalledTimes(1);
+  const firstId = m.text.mock.calls[0]?.[6];
+  expect(typeof firstId).toBe("string");
+  // With the tray empty, the retry is the ordinary text send of the same draft
+  // revision and must reuse the failed link admission's identity.
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(m.text).toHaveBeenCalledTimes(2));
+  expect(m.text.mock.calls[1]?.[6]).toBe(firstId);
+  await waitFor(() => expect(field).toHaveProperty("value", ""));
+});
+
+it("sends two photos captionless and one link message after both", async () => {
+  const link = "https://youtu.be/dQw4w9WgXcQ";
+  stubPreviewFetch();
+  m.prepare.mockResolvedValue({ bytes: new Uint8Array([1]).buffer, sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
+  await open();
+  fireEvent.change(screen.getByLabelText("Photo file input"), { target: { files: [
+    new File(["a"], "a.jpg", { type: "image/jpeg" }),
+    new File(["b"], "b.jpg", { type: "image/jpeg" }),
+  ] } });
+  await screen.findByRole("button", { name: /^Review photo 2 of 2$/ });
+  const field = screen.getByLabelText("Message");
+  fireEvent.change(field, { target: { value: link } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(m.send).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(m.text).toHaveBeenCalledTimes(1));
+  expect(m.send.mock.calls.map((call) => call[3])).toEqual(["", ""]);
+  expect(m.text.mock.calls[0]?.[3]).toBe(link);
+  expect(Math.max(...m.send.mock.invocationCallOrder)).toBeLessThan(m.text.mock.invocationCallOrder[0]!);
+  await waitFor(() => expect(field).toHaveProperty("value", ""));
+});
+
+it("sends a staged video without a bare link caption and posts the link separately", async () => {
+  const link = "https://youtu.be/dQw4w9WgXcQ";
+  stubPreviewFetch();
+  m.upload.mockResolvedValue({ key: "files/account/chat/clip.mp4", name: "clip.mp4", mime: "video/mp4", byteSize: 12, kind: "video" });
+  await open();
+  fireEvent.change(screen.getByLabelText("Choose video"), { target: { files: [new File(["video"], "clip.mp4", { type: "video/mp4" })] } });
+  await screen.findByText("1 attachment ready. Tap Send to share.");
+  const field = screen.getByLabelText("Message");
+  fireEvent.change(field, { target: { value: link } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(m.text).toHaveBeenCalledTimes(2));
+  // The staged video is the file lane inside the media send: marker only, then
+  // the link as its own message.
+  expect(m.upload).toHaveBeenCalledTimes(1);
+  const fileBody = String(m.text.mock.calls[0]?.[3]);
+  expect(fileBody.startsWith("norfold-file:v1:")).toBe(true);
+  expect(fileBody).not.toContain(link);
+  expect(m.text.mock.calls[1]?.[3]).toBe(link);
+  expect(m.text.mock.invocationCallOrder[0]).toBeLessThan(m.text.mock.invocationCallOrder[1]!);
+  await waitFor(() => expect(field).toHaveProperty("value", ""));
+});
+
 it("shows an image-only message as a loading photo until metadata arrives", async () => {
   m.messages = [{ id: "message", conversationId: "chat", authorId: "peer", recipientId: "account", body: "", messageType: "MEDIA", server: { eventId: "event", sequence: 1 } }];
   await open();
@@ -1179,15 +1308,23 @@ it("does not preview a quoted photo while the conversation hides photos", async 
   expect(quote.querySelector("img.fb-chat-quote-thumb")).toBeNull();
   expect(within(quote).getByText("Photo")).toBeTruthy();
 });
-it("keeps a long selection whole inside one bounded album", async () => {
+it("caps a five-photo selection at four cells and counts the hidden one", async () => {
   const run = photoRun(5);
   m.messages = run.messages; m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  // Five photos from one selection are one album, not five separate cards, and
-  // no member is hidden: every message keeps its own surface and its own menu.
+  // One selection is one album that still names the real total, but only the
+  // first four members are painted: the tail keeps its place in the run and is
+  // counted by the +1 overlay instead of taking a fifth cell and menu.
   expect(screen.getByRole("listitem", { name: "5 photos" })).toBeTruthy();
-  expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(5);
-  expect(screen.getAllByRole("button", { name: "Options for your message" })).toHaveLength(5);
+  expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(4);
+  expect(document.querySelector('[data-chat-message="photo-5"]')).toBeNull();
+  expect(screen.getAllByRole("button", { name: "Options for your message" })).toHaveLength(4);
+  const fourth = document.querySelector<HTMLElement>('[data-chat-message="photo-4"]')!;
+  const more = fourth.querySelector(".fb-chat-photo-more");
+  expect(more?.textContent).toBe("+1");
+  expect(fourth.querySelector(".fb-chat-photo")?.lastElementChild).toBe(more);
+  expect(document.querySelectorAll(".fb-chat-photo-more")).toHaveLength(1);
+  expect(await screen.findByRole("button", { name: "View photo, 1 more" })).toBeTruthy();
 });
 it("jumps a quote to the exact photo and rings it", async () => {
   const run = photoRun(3);

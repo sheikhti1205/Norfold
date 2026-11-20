@@ -11,20 +11,21 @@
 .fb-media-viewer .yarl__button { min-width: 44px; min-height: 44px; padding: 10px; }
 .fb-media-viewer button:focus-visible { outline: 2px solid #fff; outline-offset: -4px; border-radius: 8px; }
 .fb-viewer-counter { margin-inline-end: auto; padding: 8px; color: #fff; font-size: .875rem; line-height: 1.3; font-variant-numeric: tabular-nums; }
-.fb-media-viewer .yarl__slide { padding-top: 64px; padding-bottom: 8px; }
-.fb-media-viewer .yarl__thumbnails_container { padding: 8px 8px max(8px, env(safe-area-inset-bottom)); }
-.fb-media-viewer .yarl__thumbnails_thumbnail_active { box-shadow: 0 0 0 1px #fff; }
-.fb-viewer-thumbnail { width: 100%; height: 100%; object-fit: cover; }
+/* The photo area stops above the app-owned filmstrip: 8px strip padding, a
+   52px thumb, 8px strip padding, and the device's safe area on top of that. */
+.fb-media-viewer .yarl__slide { padding-top: 64px; padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
 .fb-viewer-unavailable { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px; color: #fff; font-size: 1rem; line-height: 1.4; }
 .fb-viewer-unavailable p { margin: 0; }
 .fb-viewer-unavailable button { min-height: 44px; padding: 8px 16px; border: 1px solid #aaa; border-radius: 8px; color: #fff; background: #222; }
 @media (max-width: 600px) {
   .fb-media-viewer .yarl__toolbar > :not(.fb-viewer-counter):not([aria-label="Close photo viewer"]) { display: none; }
-  .fb-media-viewer .yarl__thumbnails_container { display: none; }
-  .fb-media-viewer .yarl__slide { padding-top: max(56px, env(safe-area-inset-top)); padding-bottom: env(safe-area-inset-bottom); }
+  /* The phone strip is 6px + a 44px press target + 6px; the photo never sits
+     under it, and the safe area is added to both sides of the reservation. */
+  .fb-media-viewer .yarl__slide { padding-top: max(56px, env(safe-area-inset-top)); padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
   .fb-viewer-chrome-hidden .yarl__toolbar,
   .fb-viewer-chrome-hidden .yarl__navigation_prev,
-  .fb-viewer-chrome-hidden .yarl__navigation_next { visibility: hidden; }
+  .fb-viewer-chrome-hidden .yarl__navigation_next,
+  .fb-viewer-chrome-hidden .fb-viewer-filmstrip { visibility: hidden; }
 }
 @media (prefers-reduced-motion: reduce) {
   .fb-media-viewer *, .fb-media-viewer *::before, .fb-media-viewer *::after { animation-duration: 0s !important; transition-duration: 0s !important; }

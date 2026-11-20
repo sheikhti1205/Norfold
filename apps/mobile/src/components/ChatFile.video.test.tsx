@@ -323,9 +323,106 @@ function PlayerHarness() {
     <button type="button" onClick={() => player.open({ id: "b", src: "blob:two", name: "two.mp4", revokeOnClose: true })}>
       open two
     </button>
+    <button type="button" onClick={() => player.open(
+      { id: "three", src: "blob:three", name: "three.mp4", revokeOnClose: true },
+      { mode: "expanded" },
+    )}>
+      open three expanded
+    </button>
     <button type="button" onClick={() => player.close()}>close player</button>
   </>;
 }
+
+/** Reads the live API without painting anything, for slot/mode assertions. */
+function PlayerProbe() {
+  playerApi = useVideoPlayer();
+  return null;
+}
+
+it("opens a source straight into the expanded overlay without a slot", async () => {
+  render(<VideoPlayerProvider><PlayerHarness /></VideoPlayerProvider>);
+  fireEvent.click(screen.getByRole("button", { name: "open three expanded" }));
+
+  const dialog = await screen.findByRole("dialog", { name: "Video: three.mp4" });
+  expect(dialog.querySelectorAll("video")).toHaveLength(1);
+  expect(document.querySelectorAll("video")).toHaveLength(1);
+  expect(playerApi?.mode).toBe("expanded");
+  expect(screen.queryByRole("group", { name: "Video player: three.mp4" })).toBeNull();
+});
+
+it("renders a grouped video as one tile that opens the expanded player", async () => {
+  m.download.mockResolvedValue(new Blob(["x"], { type: "video/mp4" }));
+  render(<VideoPlayerProvider><ChatFile meta={video} tile /><PlayerProbe /></VideoPlayerProvider>);
+
+  expect(document.querySelector(".fb-chat-video.fb-chat-video-tile")).toBeTruthy();
+  // A tile is not the inline row: no frame, no transport, nothing fetched yet.
+  expect(document.querySelector(".fb-chat-video-frame")).toBeNull();
+  expect(document.querySelector("video")).toBeNull();
+  expect(m.download).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "Play clip.mp4" }));
+  const dialog = await screen.findByRole("dialog", { name: "Video: clip.mp4" });
+
+  expect(m.download).toHaveBeenCalledTimes(1);
+  expect(m.download).toHaveBeenCalledWith(video.key);
+  expect(m.create).toHaveBeenCalledTimes(1);
+  expect(dialog.querySelectorAll("video")).toHaveLength(1);
+  expect(document.querySelectorAll("video")).toHaveLength(1);
+  expect(playerApi?.mode).toBe("expanded");
+  // The tile never claims an inline slot; the provider only has the source.
+  expect(playerApi?.video?.slot).toBeUndefined();
+  expect(document.querySelector(".fb-chat-video-frame")).toBeNull();
+});
+
+it("keeps the tile for a retry when its download fails", async () => {
+  m.download.mockRejectedValueOnce(new Error("gone"))
+    .mockResolvedValueOnce(new Blob(["x"], { type: "video/mp4" }));
+  render(<VideoPlayerProvider><ChatFile meta={video} tile /></VideoPlayerProvider>);
+
+  fireEvent.click(screen.getByRole("button", { name: "Play clip.mp4" }));
+  expect(await screen.findByText("That file is no longer available.")).toBeTruthy();
+  expect(document.querySelector(".fb-chat-video-tile")).toBeTruthy();
+  expect(document.querySelector("video")).toBeNull();
+  expect(m.create).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "Play clip.mp4" }));
+  await screen.findByRole("dialog", { name: "Video: clip.mp4" });
+  await waitFor(() => expect(screen.queryByText("That file is no longer available.")).toBeNull());
+  expect(m.download).toHaveBeenCalledTimes(2);
+  expect(document.querySelectorAll("video")).toHaveLength(1);
+});
+
+it("ignores tile for a non-video file", () => {
+  render(<ChatFile meta={audio} tile />);
+
+  expect(document.querySelector(".fb-chat-video-tile")).toBeNull();
+  expect(screen.getByRole("button", { name: "Play voice.m4a" })).toBeTruthy();
+});
+
+it("docks an inline player when its message becomes an album tile", async () => {
+  m.download.mockResolvedValue(new Blob(["x"], { type: "video/mp4" }));
+  function Toggle() {
+    const [grouped, setGrouped] = useState(false);
+    return <VideoPlayerProvider>
+      <ChatFile meta={video} tile={grouped} />
+      <button type="button" onClick={() => setGrouped(true)}>group it</button>
+    </VideoPlayerProvider>;
+  }
+  render(<Toggle />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Play clip.mp4" }));
+  await screen.findByRole("group", { name: "Video player: clip.mp4" });
+  const element = document.querySelector("video");
+  expect(element?.closest(".fb-chat-video-frame")).toBeTruthy();
+
+  // The album owns the cell now, so the frame is gone. The player must stay
+  // reachable in the dock rather than painting into the removed slot.
+  fireEvent.click(screen.getByRole("button", { name: "group it" }));
+  await waitFor(() => expect(document.querySelector(".fb-chat-video-frame")).toBeNull());
+  expect(await screen.findByRole("group", { name: "Video player: clip.mp4" })).toBeTruthy();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(document.querySelector("video")).toBe(element);
+});
 
 it("keeps the measured ratio through modes and a same-src re-home, then clears on close", async () => {
   render(<VideoPlayerProvider><PlayerHarness /></VideoPlayerProvider>);
@@ -473,5 +570,19 @@ describe("message frame declarations", () => {
       .toContain("padding-block-end: 56px;");
     expect(block('.fb-chat-video-frame[data-active="true"]:has(.fb-vp-error) .fb-vp-track'))
       .toContain("display: none;");
+  });
+
+  it("lets the album tile fill its cell with a 44px focusable play target", () => {
+    const tile = block(".fb-chat-video-tile");
+    expect(tile).toContain("width: 100%;");
+    expect(tile).toContain("height: 100%;");
+    expect(tile).toContain("aspect-ratio: 1;");
+    expect(tile).toContain("overflow: hidden;");
+    expect(tile).toContain("border-radius: inherit;");
+
+    const button = block(".fb-chat-video-tile-button");
+    expect(button).toContain("min-width: 44px;");
+    expect(button).toContain("min-height: 44px;");
+    expect(block(".fb-chat-video-tile-button:focus-visible")).toContain("var(--fb-focus)");
   });
 });
