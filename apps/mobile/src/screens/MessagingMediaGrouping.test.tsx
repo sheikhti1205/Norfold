@@ -224,7 +224,7 @@ it("keeps the fourth cell's status card intact when its photo has no bytes", asy
   for (const hidden of ["photo-5", "photo-6", "photo-7"]) {
     expect(document.querySelector(`[data-chat-message="${hidden}"]`)).toBeNull();
   }
-  const fourth = document.querySelector('[data-chat-message="photo-4"]')!;
+  const fourth = document.querySelector<HTMLElement>('[data-chat-message="photo-4"]')!;
   expect(await within(fourth).findByText("Photo unavailable")).toBeTruthy();
   expect(fourth.querySelector('.fb-chat-photo [role="status"]')).toBeTruthy();
   expect(document.querySelectorAll(".fb-chat-photo-more")).toHaveLength(0);

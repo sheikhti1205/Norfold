@@ -464,7 +464,9 @@ describe("R19 chat photo sizing ownership", () => {
     // button, the no-bytes branch renders the div this selector requires.
     expect(messagingTsx).toContain('className="fb-chat-photo"');
     expect(messagingTsx).toContain('<div role="status">');
-    expect(messagingTsx).toContain('{content ? <button type="button" aria-label="View photo"');
+    expect(messagingTsx).toContain('<button type="button" aria-label={openLabel}');
+    expect(messagingTsx).toContain('const openLabel = overflowCount && overflowCount > 0 ? `View photo, ${overflowCount} more` : "View photo";');
+    expect(messagingTsx).not.toContain('"aria-label": `View photo');
     // The compact branch keeps its existing minimum and the base box keeps no
     // filler height of its own.
     expect(bodies(".fb-chat-photo > div").join("\n")).toContain("min-height:5rem;");
