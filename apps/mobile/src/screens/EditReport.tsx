@@ -323,7 +323,7 @@ function EditReportSession({ id, userId }: { id: string; userId?: string }) {
       onClose={leave}
       title="Edit report"
       description={saved ? "Saved." : "Change the details of your report."}
-      width="report"
+      width="report-form"
       busy={saving}
     >
     <div className="flex flex-col gap-4" data-testid="edit-report">

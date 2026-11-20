@@ -144,6 +144,31 @@ it("gives the compact width its own panel and leaves the shared task measure alo
   expect(filters.closest(".fb-modal-panel")?.classList.contains("fb-task-panel")).toBe(true);
 });
 
+it("gives the report form its own narrow panel and leaves the report viewer alone", async () => {
+  const form = render(<AdaptiveTaskSurface open onClose={() => {}} title="Create report" width="report-form"><input aria-label="Report title" /></AdaptiveTaskSurface>);
+  const create = await screen.findByRole("dialog", { name: "Create report" });
+  const panel = create.closest(".fb-modal-panel");
+  expect(panel?.classList.contains("fb-report-form-panel")).toBe(true);
+  expect(panel?.classList.contains("fb-report-panel")).toBe(false);
+  expect(panel?.classList.contains("fb-task-panel")).toBe(false);
+  form.unmount();
+
+  render(<AdaptiveTaskSurface open onClose={() => {}} title="Report" headerless width="report"><p>Viewer</p></AdaptiveTaskSurface>);
+  const viewer = await screen.findByRole("dialog", { name: "Report" });
+  expect(viewer.closest(".fb-modal-panel")?.classList.contains("fb-report-panel")).toBe(true);
+});
+
+it("takes the whole phone screen only when a surface opts in", async () => {
+  const card = render(<AdaptiveTaskSurface open onClose={() => {}} title="Report a problem"><p>Card</p></AdaptiveTaskSurface>);
+  const plain = await screen.findByRole("dialog", { name: "Report a problem" });
+  expect(plain.closest(".fb-modal-panel")?.hasAttribute("data-immersive")).toBe(false);
+  card.unmount();
+
+  render(<AdaptiveTaskSurface open onClose={() => {}} title="Take photo" immersive><p>Viewfinder</p></AdaptiveTaskSurface>);
+  const immersive = await screen.findByRole("dialog", { name: "Take photo" });
+  expect(immersive.closest(".fb-modal-panel")?.getAttribute("data-immersive")).toBe("true");
+});
+
 describe("compact surface declarations", () => {
   const css = readFileSync("src/components/adaptiveFoundation.css", "utf8");
 
@@ -151,6 +176,25 @@ describe("compact surface declarations", () => {
     const start = css.indexOf(`${selector} {`);
     if (start < 0) throw new Error(`missing rule ${selector}`);
     return css.slice(start, css.indexOf("}", start) + 1);
+  }
+
+  /** Brace-matched text of one media block, so nested rules read exactly. */
+  function media(query: string): string {
+    const start = css.indexOf(`@media (${query}) {`);
+    if (start < 0) throw new Error(`missing media ${query}`);
+    let depth = 0;
+    for (let i = css.indexOf("{", start); i < css.length; i += 1) {
+      if (css[i] === "{") depth += 1;
+      else if (css[i] === "}" && --depth === 0) return css.slice(start, i + 1);
+    }
+    throw new Error(`unterminated media ${query}`);
+  }
+
+  function phoneRule(selector: string): string {
+    const block = media("max-width: 767px");
+    const start = block.indexOf(`${selector} {`);
+    if (start < 0) throw new Error(`missing phone rule ${selector}`);
+    return block.slice(start, block.indexOf("}", start) + 1);
   }
 
   it("narrows only the compact panel and keeps the shared measures", () => {
@@ -162,5 +206,74 @@ describe("compact surface declarations", () => {
   it("scopes the tighter chrome under the compact panel", () => {
     expect(rule(".fb-compact-panel .fb-surface-header")).toContain("padding: 10px 12px;");
     expect(rule(".fb-compact-panel .fb-surface-body")).toContain("padding: 8px;");
+  });
+
+  it("caps every dialog short of the viewport and keeps the body the only scroller", () => {
+    expect(rule(".fb-modal-panel")).toContain("max-height: min(86%, 46rem);");
+    expect(rule(".fb-surface-dialog")).toContain("min-height: 0;");
+    expect(rule(".fb-surface-body")).toContain("min-height: 0;");
+    expect(rule(".fb-surface-body")).toContain("overflow: auto;");
+  });
+
+  it("gives the compact menu a tighter ceiling than the shared cap", () => {
+    expect(rule(".fb-compact-panel")).toContain("max-height: min(72vh, 34rem);");
+  });
+
+  it("keeps the report form content-sized at the reader's measure", () => {
+    const formPanel = rule(".fb-report-form-panel");
+    expect(formPanel).toContain("max-width: min(40rem, 100%);");
+    expect(formPanel).toContain("height: auto;");
+    expect(formPanel).not.toMatch(/height:\s*(min\(|\d+px)/);
+  });
+
+  it("leaves the report viewer on its own height and sizes comments to the thread", () => {
+    expect(rule(".fb-report-panel")).toContain("max-width: min(1280px, 100%);");
+    expect(rule(".fb-report-panel")).toContain("height: min(92%, 960px);");
+    expect(rule(".fb-report-panel")).toContain("max-height: 100%;");
+    // A thread is as tall as its comments, never a reserved 760px panel.
+    expect(rule(".fb-comments-panel")).toContain("height: auto;");
+    expect(rule(".fb-comments-panel")).toContain("max-height: min(86%, 46rem);");
+    expect(rule(".fb-comments-panel")).toContain("border-radius: 24px;");
+    expect(rule(".fb-comments-panel")).toContain("overflow: hidden;");
+    // The panel is auto-height, so the body needs an intrinsic (auto) basis: a
+    // zero-basis `flex: 1` body would shrink the panel to its header.
+    const commentsBody = rule(".fb-surface-body.fb-comments-body");
+    expect(commentsBody).toContain("flex: 1 1 auto;");
+    expect(commentsBody).not.toContain("flex: 1;");
+  });
+
+  it("keeps a phone task dialog a card instead of a full screen", () => {
+    expect(phoneRule(".fb-modal-backdrop:has(.fb-task-panel)")).toContain(
+      "padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));",
+    );
+    const taskPanel = phoneRule(".fb-task-panel");
+    expect(taskPanel).toContain("height: auto;");
+    expect(taskPanel).toContain("border-radius: 20px;");
+    // The shared ceiling still binds; no phone rule may restore the full bleed.
+    expect(taskPanel).not.toContain("height: 100%");
+    expect(taskPanel).not.toContain("max-height");
+    expect(rule(".fb-modal-panel")).toContain("max-height: min(86%, 46rem);");
+    // The dialog may shrink inside the capped panel and its body scrolls.
+    expect(phoneRule(".fb-task-panel .fb-surface-dialog")).toContain("min-height: 0;");
+    const body = phoneRule(".fb-task-panel .fb-surface-body");
+    expect(body).toContain("min-height: 0;");
+    expect(body).toContain("overflow: auto;");
+  });
+
+  it("gives the one full-bleed phone surface an explicit opt-in", () => {
+    const immersive = phoneRule('.fb-modal-panel[data-immersive="true"]');
+    expect(immersive).toContain("height: 100%;");
+    expect(immersive).toContain("max-height: 100%;");
+    expect(immersive).toContain("border-radius: 0;");
+    expect(phoneRule('.fb-modal-backdrop:has(.fb-modal-panel[data-immersive="true"])')).toContain("padding: 0;");
+
+    // Every screen-height rule in the phone block belongs to the opt-in.
+    const block = media("max-width: 767px");
+    const inner = block.slice(block.indexOf("{") + 1, block.lastIndexOf("}"));
+    const fullBleed = [...inner.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+      .filter(([, , body]) => /(^|;)\s*height:\s*100%\s*;/.test(body ?? ""))
+      .map(([, selector]) => (selector ?? "").trim().replace(/\s+/g, " "));
+    expect(fullBleed.length).toBeGreaterThan(0);
+    for (const selector of fullBleed) expect(selector).toContain('[data-immersive="true"]');
   });
 });

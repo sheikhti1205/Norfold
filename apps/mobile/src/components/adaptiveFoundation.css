@@ -51,28 +51,46 @@
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
   background: var(--scrim); padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
 }
-.fb-modal-panel { position: relative; display: flex; flex-direction: column; width: 100%; min-width: 0; max-height: 100%; border-radius: 20px; background: var(--fb-surface); color: var(--fb-on-surface); box-shadow: var(--shadow-md); }
+/* One height ceiling for the whole dialog system: no surface may approach the
+   viewport, so a short dialog stays short and a tall one scrolls its own body
+   instead of running down the window. The body is the only scroller; the
+   header and footer stay put. The report viewer keeps its own height and
+   restores `max-height: 100%`, so the shared ceiling does not clamp it. */
+.fb-modal-panel { position: relative; display: flex; flex-direction: column; width: 100%; min-width: 0; max-height: min(86%, 46rem); border-radius: 20px; background: var(--fb-surface); color: var(--fb-on-surface); box-shadow: var(--shadow-md); }
 .fb-task-panel { max-width: 44rem; }
 /* Conversation info is a short action list, not a wide task. The narrow measure
    and the tighter chrome keep it a contact sheet instead of a 44rem modal with
-   a column of empty row. Only this variant changes; the shared task, report and
-   comments measures stay as they are. */
-.fb-compact-panel { max-width: 26rem; }
+   a column of empty row. Its own ceiling is tighter than the shared one, so a
+   long account/action list scrolls inside the menu instead of down the window;
+   the 44px row targets are untouched. Only this variant changes; the shared
+   task, report and comments measures stay as they are. */
+.fb-compact-panel { max-width: 26rem; max-height: min(72vh, 34rem); }
 .fb-compact-panel .fb-surface-header { padding: 10px 12px; }
 .fb-compact-panel .fb-surface-body { padding: 8px; }
 .fb-confirm-panel { max-width: 26rem; }
 /* The report is one floating surface at every width: a squircle that keeps a
    visible gutter and never grows past the visual viewport. `height: min(92%,
    960px)` resolves against the backdrop's measured content box, so an open
-   keyboard shrinks the surface instead of hiding it behind the IME. */
-.fb-report-panel { max-width: min(1280px, 100%); height: min(92%, 960px); border-radius: 28px; overflow: hidden; }
+   keyboard shrinks the surface instead of hiding it behind the IME.
+   `max-height: 100%` keeps that deliberate height: it restores the base rule
+   this variant used to inherit before the shared ceiling existed, so the
+   immersive viewer is not clamped to the task-dialog cap. */
+.fb-report-panel { max-width: min(1280px, 100%); height: min(92%, 960px); max-height: 100%; border-radius: 28px; overflow: hidden; }
+/* The create/edit form is a task, not a viewer: it keeps the reader's measure
+   (40rem, half the viewer's 1280px), stays centered by the backdrop, and grows
+   only as tall as its fields. The shared `max-height` cap still applies, so a
+   long or invalid form scrolls its own body instead of filling the window. */
+.fb-report-form-panel { max-width: min(40rem, 100%); height: auto; }
 /* Comments at narrow widths are their own floating surface, smaller than the
-   report it opened from so the report still reads as the parent. */
-.fb-comments-panel { max-width: 36rem; height: min(86%, 760px); border-radius: 24px; overflow: hidden; }
+   report it opened from so the report still reads as the parent. It is as tall
+   as the thread it actually holds, capped by the shared ceiling: a report with
+   one comment must not reserve a screen of empty thread. The thread body stays
+   the scroller and the composer stays at its foot. */
+.fb-comments-panel { max-width: 36rem; height: auto; max-height: min(86%, 46rem); border-radius: 24px; overflow: hidden; }
 .fb-report-panel .fb-surface-dialog, .fb-comments-panel .fb-surface-dialog { height: 100%; }
 /* The comment surface scrolls its thread; the composer stays at the foot of
    the same body, above the keyboard and above the safe area. */
-.fb-surface-body.fb-comments-body { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 12px 16px 0; }
+.fb-surface-body.fb-comments-body { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; padding: 12px 16px 0; }
 /* The popup's header already names the thread. The wide split pane has no
    header, so it keeps the section's own heading; only the popup drops the
    duplicate. */
@@ -268,14 +286,26 @@
   .fb-composer-send { grid-column: 2; grid-row: 2; }
 }
 @media (max-width: 767px) {
-  /* Phone: a task surface fills the screen. The report deliberately does NOT:
-     the owner asked for the same floating squircle at every width, so it keeps
-     the backdrop's gutter and rounded corners. The comments surface opened
-     from it floats for the same reason. */
-  .fb-modal-backdrop:has(.fb-task-panel) { padding: 0; }
-  .fb-task-panel { height: 100%; max-height: 100%; border-radius: 0; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
-  .fb-task-panel .fb-surface-dialog { height: 100%; }
-  .fb-task-panel .fb-surface-body { flex: 1; }
+  /* Phone: a task surface is a card, not a page. It keeps the backdrop's
+     gutter, its rounded corner and the shared height ceiling from
+     `.fb-modal-panel`, so a five-row sheet does not become a full screen of
+     empty surface. A long task stops short of the edges and scrolls its body;
+     the header and footer stay put. No `max-height` here: the shared
+     min(86%, 46rem) ceiling is the one that binds. */
+  .fb-modal-backdrop:has(.fb-task-panel) { padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom)); }
+  .fb-task-panel { height: auto; border-radius: 20px; }
+  .fb-task-panel .fb-surface-dialog { min-height: 0; }
+  .fb-task-panel .fb-surface-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+  /* The one explicit exception: a surface whose content a card would make
+     unusable opts in with `data-immersive="true"`. Only then does the panel
+     take the whole phone screen, keep its safe-area insets and drop the
+     radius; its backdrop drops the gutter. */
+  .fb-modal-backdrop:has(.fb-modal-panel[data-immersive="true"]) { padding: 0; }
+  .fb-modal-panel[data-immersive="true"] {
+    height: 100%; max-height: 100%; border-radius: 0;
+    padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+  }
+  .fb-modal-panel[data-immersive="true"] .fb-surface-dialog { height: 100%; }
 }
 /* No spatial entrance travel: effective reduced motion has no hidden animation
    path. Feedback is local background/focus state, not springing whole panels. */

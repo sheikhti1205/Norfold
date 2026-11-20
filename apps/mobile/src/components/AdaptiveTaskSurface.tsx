@@ -13,8 +13,14 @@ interface SurfaceProps {
   children: ReactNode;
   footer?: ReactNode;
   busy?: boolean;
-  width?: "standard" | "compact" | "report" | "comments";
+  width?: "standard" | "compact" | "report" | "report-form" | "comments";
   bodyClassName?: string;
+  /**
+   * Take the whole phone screen. Phone task dialogs are cards by default; only
+   * a surface whose content a card would make unusable (a live viewfinder)
+   * opts in, and it is the only full-bleed rule left. Inert on desktop.
+   */
+  immersive?: boolean;
   /**
    * The report owns its headline: the report's title is the first thing the
    * reader sees, so a generic bar above it would be a second title. The bar is
@@ -29,11 +35,12 @@ function panelClass(width: SurfaceProps["width"], confirmation: boolean) {
   if (confirmation) return "fb-confirm-panel";
   if (width === "compact") return "fb-compact-panel";
   if (width === "report") return "fb-report-panel";
+  if (width === "report-form") return "fb-report-form-panel";
   if (width === "comments") return "fb-comments-panel";
   return "fb-task-panel";
 }
 
-function DialogSurface({ open, onClose, title, description, children, footer, busy = false, confirmation = false, width = "standard", bodyClassName, headerless = false }: SurfaceProps & { confirmation?: boolean }) {
+function DialogSurface({ open, onClose, title, description, children, footer, busy = false, confirmation = false, width = "standard", bodyClassName, headerless = false, immersive = false }: SurfaceProps & { confirmation?: boolean }) {
   const depth = useOverlayDepth();
   const descriptionId = useId();
   const viewport = useKeyboardInset();
@@ -46,7 +53,7 @@ function DialogSurface({ open, onClose, title, description, children, footer, bu
       top: Math.max(0, window.innerHeight - viewport.insetPx - viewport.viewportHeightPx),
       bottom: "auto",
     }}>
-    <Modal className={`fb-modal-panel ${panelClass(width, confirmation)}`}>
+    <Modal className={`fb-modal-panel ${panelClass(width, confirmation)}`} data-immersive={immersive ? "true" : undefined}>
       <OverlayDepthProvider depth={depth}>
         <OverlayStackBridge onClose={onClose} dismissible={!busy} />
         <Dialog role={confirmation ? "alertdialog" : "dialog"}
