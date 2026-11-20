@@ -16,8 +16,12 @@ import { UserIdentityTrigger } from "./UserIdentityTrigger";
  * runtime.
  *
  * `variant="dock"` is the window's Messenger-style hierarchy: a 40px circular
- * avatar behind the same single profile link. The full-page heading keeps its
- * 44px squircle. Shape and size stay here because the avatar is part of the
+ * avatar beside ONE copy column that stacks the name and the relationship
+ * line. The status line moves inside the identity copy for the dock only, so
+ * the 40px avatar and both text lines are a single ~44px row instead of three
+ * lines hanging under the avatar. It is a `span` there because the copy sits
+ * inside the heading link; the full-page heading keeps its status paragraph
+ * below the `h1`. Shape and size stay here because the avatar is part of the
  * identity link; the header chrome is owned by the caller's stylesheet.
  */
 export function ChatIdentity({ peerId, name, username = name, avatarUrl, status, muted = false, conversationId, variant }: {
@@ -30,10 +34,24 @@ export function ChatIdentity({ peerId, name, username = name, avatarUrl, status,
   const label = name || username || "Conversation";
   const dock = variant === "dock";
   useEffect(() => { heading.current?.focus({ preventScroll: true }); }, []);
+  const relationship = (
+    <>
+      {status}
+      {muted && (
+        <span className="fb-chat-muted" role="img" aria-label="Notifications muted">
+          <BellOff size={13} aria-hidden="true" />
+          <span aria-hidden="true">Muted</span>
+        </span>
+      )}
+    </>
+  );
   const identity = (
     <span className="fb-chat-identity">
       <UserAvatar username={label} avatarUrl={avatarUrl} size={dock ? 40 : 44} shape={dock ? "circle" : "squircle"} />
-      <span className="fb-chat-identity-copy"><span className="fb-chat-identity-name">{label}</span></span>
+      <span className="fb-chat-identity-copy">
+        <span className="fb-chat-identity-name">{label}</span>
+        {dock && <span className="fb-chat-secondary">{relationship}</span>}
+      </span>
     </span>
   );
   return (
@@ -43,15 +61,7 @@ export function ChatIdentity({ peerId, name, username = name, avatarUrl, status,
           ? <UserIdentityTrigger person={{ id: peerId, username, displayName: name, avatarUrl, contextConversationId: conversationId }} trigger={identity} />
           : identity}
         </h1>
-        <p className="fb-chat-secondary">
-          {status}
-          {muted && (
-            <span className="fb-chat-muted" role="img" aria-label="Notifications muted">
-              <BellOff size={13} aria-hidden="true" />
-              <span aria-hidden="true">Muted</span>
-            </span>
-          )}
-        </p>
+        {!dock && <p className="fb-chat-secondary">{relationship}</p>}
       </div>
     </>
   );

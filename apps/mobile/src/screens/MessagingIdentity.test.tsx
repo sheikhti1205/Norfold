@@ -64,3 +64,34 @@ it("renders the dock variant as a 40px circle behind the one identity link", () 
   expect(screen.getByRole("img", { name: "Notifications muted" })).toBeTruthy();
   expect(screen.queryByText(/active now/i)).toBeNull();
 });
+
+it("stacks the dock relationship line inside the identity copy, beside the avatar", () => {
+  render(<MemoryRouter><ChatIdentity variant="dock" peerId="peer" username="peer_name" name="peer_name" status="Friends" muted /></MemoryRouter>);
+  const copy = document.querySelector(".fb-chat-identity-copy") as HTMLElement | null;
+  const status = copy?.querySelector(".fb-chat-secondary") as HTMLElement | null;
+  expect(status).toBeTruthy();
+  // A span, not a paragraph: the copy sits inside the heading link.
+  expect(status!.tagName).toBe("SPAN");
+  expect(status!.textContent).toContain("Friends");
+  // One copy column: the name first, the relationship line directly under it.
+  expect(copy!.firstElementChild?.classList.contains("fb-chat-identity-name")).toBe(true);
+  expect(copy!.lastElementChild).toBe(status);
+  // Still inside the one heading, so the avatar and both lines are one row.
+  expect(copy!.closest("h1")).toBeTruthy();
+  expect(document.querySelectorAll(".fb-chat-heading .fb-chat-secondary")).toHaveLength(1);
+  // Nothing hangs below the heading identity: no second status block.
+  expect(document.querySelector(".fb-chat-heading > p.fb-chat-secondary")).toBeNull();
+});
+
+it("keeps the full-page relationship line below the heading, outside the h1", () => {
+  render(<MemoryRouter><ChatIdentity peerId="peer" username="peer_name" name="peer_name" status="Friends" /></MemoryRouter>);
+  const heading = document.querySelector(".fb-chat-heading") as HTMLElement;
+  const h1 = heading.querySelector("h1") as HTMLElement;
+  const status = heading.querySelector("p.fb-chat-secondary") as HTMLElement | null;
+  expect(status).toBeTruthy();
+  expect(status!.tagName).toBe("P");
+  expect(h1.contains(status)).toBe(false);
+  // The copy holds the name only; the dock-only stacking never reaches the page.
+  expect(document.querySelector(".fb-chat-identity-copy .fb-chat-secondary")).toBeNull();
+  expect(document.querySelector(".fb-chat-identity-copy")!.children).toHaveLength(1);
+});
