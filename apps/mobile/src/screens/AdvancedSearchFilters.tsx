@@ -290,7 +290,7 @@ export function AdvancedSearchFilters({
               {!compactTrigger && <>Filters{activeCount > 0 ? ` (${activeCount})` : ""}</>}
               {compactTrigger && activeCount > 0 && <span aria-hidden="true" data-testid="filters-active-count" className="fb-filter-count">{activeCount}</span>}
             </Button>
-            {width >= COMPACT_MAX_PX ? <LayeredPopover placement="bottom end" maxHeight={680} className="fb-search-filter-popover">
+            {width >= COMPACT_MAX_PX ? <LayeredPopover placement="bottom end" maxHeight={480} className="fb-search-filter-popover">
               <Dialog className="fb-search-filter-dialog">
                 <header className="fb-surface-header"><Heading slot="title" className="fb-surface-title">Filters</Heading>
                   <Button autoFocus aria-label="Close" className="fb-icon-control" onPress={() => setSheetOpen(false)}><X size={20} aria-hidden /></Button>

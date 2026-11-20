@@ -19,7 +19,7 @@
 .fb-search-filter-clear { white-space:nowrap; }
 .fb-filter-trigger { position:relative; flex:none; }
 .fb-filter-count { position:absolute; right:0; top:0; min-width:18px; border-radius:1rem; background:var(--fb-on-surface); color:var(--fb-surface); font-size:.6875rem; padding:0 .2rem; }
-.fb-popover.fb-search-filter-popover { display:flex; flex-direction:column; width:380px; overflow:hidden; }
+.fb-popover.fb-search-filter-popover { display:flex; flex-direction:column; width:min(22rem,calc(100vw - 16px)); overflow:hidden; }
 .fb-search-filter-dialog { display:flex; flex-direction:column; min-height:0; max-height:inherit; outline:none; }
 .fb-search-filter-body { min-height:0; overflow:auto; overscroll-behavior:contain; padding:0 1rem 1rem; }
 .fb-filter-fields { display:flex; flex-direction:column; gap:.65rem; min-width:0; }
