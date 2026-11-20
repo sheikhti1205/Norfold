@@ -51,6 +51,7 @@ import { DROPPED_CATEGORY_NOTE } from "../services/reportSuggestionNotes";
 import {
   suggestReportFields,
   type ReportFieldSuggestion,
+  type ReportSuggestionField,
 } from "../services/reportFieldSuggestions";
 import {
   suggestCategoryForText,
@@ -236,6 +237,26 @@ const KEYBOARD_PHOTO_FRACTION = 0.4;
 const KEYBOARD_PHOTO_MIN_PX = 120;
 const KEYBOARD_TAIL_PX = 8;
 
+/**
+ * A field suggestion that would overwrite what the person already wrote. The
+ * write waits on the app's canonical alert dialog, so the question keeps the
+ * task surface's layering, focus return and Back consumption instead of a
+ * native browser prompt.
+ */
+interface AiFieldReplacement {
+  /** Suggestion key this write resolves once it lands. */
+  resolveKey: string;
+  field: ReportSuggestionField;
+  value: string;
+}
+
+const REPLACE_SUGGESTION_TITLE: Record<ReportSuggestionField, string> = {
+  title: "Replace the existing title with this suggestion?",
+  description: "Replace the existing description with this suggestion?",
+  date: "Replace the existing date with this suggestion?",
+  category: "Replace the existing category with this suggestion?",
+};
+
 export function CreateReport() {
   const { user } = useAuth();
   // A mounted route can outlive an auth change. Unmount its entire form/editor
@@ -326,6 +347,8 @@ function ReportForm() {
   const [editorResetKey, setEditorResetKey] = useState(0);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [confirmRemovePhotos, setConfirmRemovePhotos] = useState(false);
+  // The pending suggestion write that would replace existing field content.
+  const [aiConfirmReplace, setAiConfirmReplace] = useState<AiFieldReplacement | null>(null);
   const [previewPhotoId, setPreviewPhotoId] = useState<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const hashRegistryRef = useRef(createHashRegistry());
@@ -475,48 +498,70 @@ function ReportForm() {
     setAiSuggestResolved((previous) => ({ ...previous, [key]: true }));
   }
 
+  /** Commit one reviewed suggestion and retire its chip. */
+  function aiSuggestWrite(replacement: AiFieldReplacement): void {
+    if (replacement.field === "title") {
+      setTitle(replacement.value);
+    } else if (replacement.field === "description") {
+      descriptionLiveRef.current = replacement.value;
+      setDescription(replacement.value);
+    } else if (replacement.field === "date") {
+      setEventDate(replacement.value);
+    } else {
+      setCategory(replacement.value as Category);
+    }
+    aiSuggestResolve(replacement.resolveKey);
+  }
+
   function aiSuggestApplyField(patch: ReportFieldSuggestion): void {
+    const replacement: AiFieldReplacement = {
+      resolveKey: `field:${patch.field}`,
+      field: patch.field,
+      value: patch.suggestedValue,
+    };
     if (patch.field === "title") {
+      // An empty field takes the suggestion silently; replacing typed content asks.
       if (title.trim() && patch.suggestedValue !== title) {
-        if (!window.confirm("Replace the existing title with this suggestion?")) return;
+        setAiConfirmReplace(replacement);
+        return;
       }
-      setTitle(patch.suggestedValue);
-      aiSuggestResolve(`field:${patch.field}`);
     } else if (patch.field === "description") {
       if (description.trim() && patch.suggestedValue !== description) {
-        if (!window.confirm("Replace the existing description with this suggestion?")) return;
+        setAiConfirmReplace(replacement);
+        return;
       }
-      descriptionLiveRef.current = patch.suggestedValue;
-      setDescription(patch.suggestedValue);
-      aiSuggestResolve(`field:${patch.field}`);
     } else if (patch.field === "date") {
       // Validation gates are preserved: only a real, non-future calendar date
       // may land in the form. Free-text date hints ("yesterday") stay manual.
       if (!isValidCalendarDate(patch.suggestedValue) || isFutureDate(patch.suggestedValue)) return;
       if (eventDate !== patch.suggestedValue) {
-        if (!window.confirm("Replace the existing date with this suggestion?")) return;
+        setAiConfirmReplace(replacement);
+        return;
       }
-      setEventDate(patch.suggestedValue);
-      aiSuggestResolve(`field:${patch.field}`);
     } else if (patch.field === "category") {
       // Double-guard: built patches are released, but the form never accepts
       // an unreleased value even if a service regresses.
       if (!isReleasedCategory(patch.suggestedValue)) return;
       if (category && patch.suggestedValue !== category) {
-        if (!window.confirm("Replace the existing category with this suggestion?")) return;
+        setAiConfirmReplace(replacement);
+        return;
       }
-      setCategory(patch.suggestedValue as Category);
-      aiSuggestResolve(`field:${patch.field}`);
     }
+    aiSuggestWrite(replacement);
   }
 
   function aiSuggestApplyCategory(suggestion: CategorySuggestion): void {
     if (!isReleasedCategory(suggestion.suggestedCategory)) return;
+    const replacement: AiFieldReplacement = {
+      resolveKey: "categorySuggestion",
+      field: "category",
+      value: suggestion.suggestedCategory,
+    };
     if (category && suggestion.suggestedCategory !== category) {
-      if (!window.confirm("Replace the existing category with this suggestion?")) return;
+      setAiConfirmReplace(replacement);
+      return;
     }
-    setCategory(suggestion.suggestedCategory);
-    aiSuggestResolve("categorySuggestion");
+    aiSuggestWrite(replacement);
   }
 
   function aiSuggestStop(): void {
@@ -1608,8 +1653,9 @@ function ReportForm() {
   }
 
   return (
-    // A real compact task: full screen on a phone, a readable dialog when the
-    // window has room. The body scrolls; the draft survives closing it.
+    // A real compact task: a centered form at the reader's measure, not the
+    // report viewer's 1280px stage. The body scrolls; the draft survives closing
+    // it.
     <AdaptiveTaskSurface
       open
       onClose={closeSurface}
@@ -1617,7 +1663,7 @@ function ReportForm() {
       description={
         user?.username ? `Posting as @${user.username}. Be specific — details help reunions.` : undefined
       }
-      width="report"
+      width="report-form"
       busy={busy}
     >
       <form
@@ -2023,6 +2069,20 @@ function ReportForm() {
       >
         <p>You continue with the recovered photos. Your title, description, date and location are kept.</p>
       </ConfirmDialog>
+
+      <ConfirmDialog
+        open={aiConfirmReplace !== null}
+        onClose={() => setAiConfirmReplace(null)}
+        title={aiConfirmReplace ? REPLACE_SUGGESTION_TITLE[aiConfirmReplace.field] : ""}
+        confirmLabel="Replace"
+        cancelLabel="Keep mine"
+        destructive
+        onConfirm={() => {
+          const pending = aiConfirmReplace;
+          setAiConfirmReplace(null);
+          if (pending) aiSuggestWrite(pending);
+        }}
+      />
 
       <ConfirmDialog
         open={confirmDiscard}

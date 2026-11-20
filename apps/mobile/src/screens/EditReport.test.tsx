@@ -313,6 +313,11 @@ describe("EditReport", () => {
     );
     expect(screen.getByTestId("category-trigger").textContent).toContain("Electronics");
     expect(screen.getByRole("button", { name: /no changes to save/i })).toBeTruthy();
+    // The edit form is the same narrow surface as the create form, not the
+    // report viewer's 1280px stage.
+    const panel = screen.getByRole("dialog", { name: "Edit report" }).closest(".fb-modal-panel");
+    expect(panel?.classList.contains("fb-report-form-panel")).toBe(true);
+    expect(panel?.classList.contains("fb-report-panel")).toBe(false);
   });
 
   it("shows the stored YouTube link as an editable field and saves the replacement", async () => {

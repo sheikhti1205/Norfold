@@ -127,7 +127,6 @@ beforeEach(() => {
   clearPhotoStore();
   (URL as unknown as Record<string, unknown>).createObjectURL = vi.fn(() => "blob:preview");
   (URL as unknown as Record<string, unknown>).revokeObjectURL = vi.fn();
-  vi.spyOn(window, "confirm").mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -215,14 +214,24 @@ describe("CreateReport field suggestions from description", () => {
     await screen.findByText("Black umbrella");
 
     // Land the description suggestion first, so the description field holds
-    // content that a stray write during the title cancel would destroy.
+    // content that a stray write during the title cancel would destroy. The
+    // filled field asks before it is replaced, through the canonical dialog.
     fireEvent.click(screen.getByRole("button", { name: "Use this description" }));
+    const replaceDescription = await screen.findByRole("alertdialog", {
+      name: "Replace the existing description with this suggestion?",
+    });
+    fireEvent.click(within(replaceDescription).getByRole("button", { name: "Replace" }));
     const descriptionText = () =>
       document.querySelector('[contenteditable="true"]')?.textContent ?? "";
     expect(descriptionText()).toContain("Lost near the market");
 
-    vi.mocked(window.confirm).mockReturnValue(false);
+    // The replace question is the app's own alert dialog, never window.confirm.
     fireEvent.click(screen.getByRole("button", { name: "Use this title" }));
+    const decline = await screen.findByRole("alertdialog", {
+      name: "Replace the existing title with this suggestion?",
+    });
+    fireEvent.click(within(decline).getByRole("button", { name: "Keep mine" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect((screen.getByLabelText(/what did you lose/i) as HTMLInputElement).value).toBe("My own title");
     expect(screen.getByText("Suggested title")).toBeTruthy();
     // A refusal is a cancel, not a partial apply: the retry-6 K6 class was a
@@ -230,8 +239,11 @@ describe("CreateReport field suggestions from description", () => {
     // be exactly what it was.
     expect(descriptionText()).toContain("Lost near the market");
 
-    vi.mocked(window.confirm).mockReturnValue(true);
     fireEvent.click(screen.getByRole("button", { name: "Use this title" }));
+    const accept = await screen.findByRole("alertdialog", {
+      name: "Replace the existing title with this suggestion?",
+    });
+    fireEvent.click(within(accept).getByRole("button", { name: "Replace" }));
     expect((screen.getByLabelText(/what did you lose/i) as HTMLInputElement).value).toBe("Black umbrella");
   });
 
