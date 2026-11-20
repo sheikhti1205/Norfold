@@ -85,6 +85,19 @@ const FIELDS_OK = {
   },
 } as const;
 
+/** A second run whose description differs from what the field already holds. */
+const FIELDS_SECOND = {
+  ...FIELDS_OK,
+  value: {
+    ...FIELDS_OK.value,
+    suggestions: [
+      { field: "title", suggestedValue: "Black umbrella", source: "extract-report-fields" },
+      { field: "description", suggestedValue: "Lost near the river", source: "extract-report-fields" },
+      { field: "date", suggestedValue: "yesterday", source: "extract-report-fields" },
+    ],
+  },
+} as const;
+
 const CATEGORY_OK = {
   ok: true,
   value: {
@@ -207,23 +220,29 @@ describe("CreateReport field suggestions from description", () => {
     render(<CreateReport />);
     await screen.findByRole("toolbar", { name: /description formatting/i });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), { target: { value: "My own title" } });
-    fireEvent.change(screen.getByLabelText(/describe the item/i), {
-      target: { value: "Black umbrella lost yesterday." },
-    });
     fireEvent.click(screen.getByRole("button", { name: /^fill missing details$/i }));
     await screen.findByText("Black umbrella");
 
-    // Land the description suggestion first, so the description field holds
-    // content that a stray write during the title cancel would destroy. The
-    // filled field asks before it is replaced, through the canonical dialog.
+    // The description field starts empty, so its first suggestion applies
+    // silently. The editor text is the observable result: typing into the
+    // TipTap surface is not what fills the form state.
+    fireEvent.click(screen.getByRole("button", { name: "Use this description" }));
+    const descriptionText = () =>
+      document.querySelector('[contenteditable="true"]')?.textContent ?? "";
+    expect(descriptionText()).toContain("Lost near the market");
+
+    // A second run suggests a different description, so the filled field now
+    // holds content that a stray write during the title cancel would destroy,
+    // and replacing it must ask through the canonical dialog.
+    suggestFieldsMock.mockImplementation(cancellable(FIELDS_SECOND));
+    fireEvent.click(screen.getByRole("button", { name: /^(filling…|fill missing details)$/i }));
+    await screen.findByText("Lost near the river");
     fireEvent.click(screen.getByRole("button", { name: "Use this description" }));
     const replaceDescription = await screen.findByRole("alertdialog", {
       name: "Replace the existing description with this suggestion?",
     });
     fireEvent.click(within(replaceDescription).getByRole("button", { name: "Replace" }));
-    const descriptionText = () =>
-      document.querySelector('[contenteditable="true"]')?.textContent ?? "";
-    expect(descriptionText()).toContain("Lost near the market");
+    expect(descriptionText()).toContain("Lost near the river");
 
     // The replace question is the app's own alert dialog, never window.confirm.
     fireEvent.click(screen.getByRole("button", { name: "Use this title" }));
@@ -237,7 +256,7 @@ describe("CreateReport field suggestions from description", () => {
     // A refusal is a cancel, not a partial apply: the retry-6 K6 class was a
     // title cancel that also wrote an unrelated field, so the description must
     // be exactly what it was.
-    expect(descriptionText()).toContain("Lost near the market");
+    expect(descriptionText()).toContain("Lost near the river");
 
     fireEvent.click(screen.getByRole("button", { name: "Use this title" }));
     const accept = await screen.findByRole("alertdialog", {
