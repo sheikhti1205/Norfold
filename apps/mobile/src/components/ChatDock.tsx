@@ -248,6 +248,7 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
       </div>
       {panelMounted && dock && (
         <div ref={panel} id={DOCK_ID} className="fb-chat-dock" data-phase={phase}
+          data-view={pickerOpen ? "picker" : "thread"}
           data-nav={bottomNavVisible ? "visible" : "hidden"} hidden={!visible}
           role="complementary" aria-label="Chat">
           {pickerOpen
