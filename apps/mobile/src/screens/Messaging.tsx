@@ -415,13 +415,13 @@ function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady, ove
     catch (error) { setState(error instanceof PhotoUnavailableError ? "unavailable" : "failed"); }
   }
   const ratio = chatPhotoRatio(attachment);
+  // The base control carries one label; the counted album cell names the real
+  // hidden total.
+  const openLabel = overflowCount && overflowCount > 0 ? `View photo, ${overflowCount} more` : "View photo";
   return <div ref={host} className="fb-chat-photo" data-loading={content && !loaded ? "true" : undefined}
     style={{ aspectRatio: `${attachment.width} / ${attachment.height}`, "--fb-chat-photo-ratio": ratio } as CSSProperties}>
     {content ? <>
-      <button type="button" aria-label="View photo"
-        // The base control keeps its one label; a counted album cell overrides
-        // it with the real hidden total, and no other cell ever carries the prop.
-        {...(overflowCount && overflowCount > 0 ? { "aria-label": `View photo, ${overflowCount} more` } : {})}
+      <button type="button" aria-label={openLabel}
         onClick={() => onOpen(attachment.messageId, content.bytes, attachment.mime)}>
         <img src={content.url} alt="" loading="lazy" decoding="async" onLoad={() => setLoaded(true)} onError={() => { onReady(attachment.id, null); setContent(null); setState("failed"); }}
           data-receipt-message={loaded && attachment.state === "READY" ? attachment.messageId : undefined} />
