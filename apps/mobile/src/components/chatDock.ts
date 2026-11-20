@@ -94,7 +94,7 @@ function focusEntry(accountId: string, conversationId: string | null, limit: num
   const entry = state.entries.find((candidate) => candidate.conversationId === conversationId);
   if (!entry) return;
   const seq = state.seq + 1;
-  const entries = state.entries.map((candidate) => (
+  const entries: ChatDockEntry[] = state.entries.map((candidate) => (
     candidate === entry ? { ...candidate, phase: "open", seq } : candidate
   ));
   state = { accountId, seq, entries: applyLimit(entries, seq, limit) };
@@ -153,7 +153,7 @@ export function openConversation(
   if (!state || state.accountId !== accountId) return;
   const existing = state.entries.find((entry) => entry.conversationId === conversationId);
   const seq = state.seq + 1;
-  const entries = withoutPicker(state.entries).map((entry) => (
+  const entries: ChatDockEntry[] = withoutPicker(state.entries).map((entry) => (
     entry === existing ? { ...entry, phase: "open", seq } : entry
   ));
   if (!existing) entries.push({ conversationId, phase: "open", seq });
