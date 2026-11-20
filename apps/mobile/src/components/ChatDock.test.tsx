@@ -712,8 +712,8 @@ describe("ChatDock surface sizing", () => {
     const clean = dockCss.replace(/\/\*[\s\S]*?\*\//g, " ");
     const picker = /\.fb-chat-dock-window\[data-view="picker"\]\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
     expect(picker).not.toBe("");
-    // Content height while a fifth 52px row is visible; the sixth scrolls.
-    expect(picker).toMatch(/(?:^|[;\s])height\s*:\s*auto\s*;/);
+    // A definite four-to-five-row frame; the sixth row scrolls in the body.
+    expect(picker).toMatch(/height:\s*clamp\(\s*23rem\s*,\s*52dvh\s*,\s*28rem\s*\)/);
     const cap = Number(/(?:^|[;\s])max-height\s*:\s*min\(\s*([\d.]+)rem\s*,/.exec(picker)?.[1] ?? NaN);
     expect(cap).toBeGreaterThanOrEqual(25);
     expect(cap).toBeLessThanOrEqual(30);
@@ -750,6 +750,198 @@ describe("ChatDock surface sizing", () => {
     // Only the picker body scrolls; the picker itself never clips a menu.
     const body = /\.fb-chat-dock-body\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
     expect(body).toContain("overflow-y: auto");
+  });
+
+  it("caps the window and the chooser at a compact share of a short viewport", () => {
+    const clean = dockCss.replace(/\/\*[\s\S]*?\*\//g, " ");
+    const windowRule = /(?:^|\})\s*\.fb-chat-dock-window\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
+    // 544px stays the ceiling, never the target: at 720px of viewport the card
+    // is two thirds, not the 76% the owner measured, and 6rem of page plus both
+    // insets always remain.
+    expect(windowRule).toContain("height: min(34rem, 66dvh");
+    expect(windowRule).toContain("calc(100dvh - 2 * var(--fb-dock-bottom) - 6rem)");
+    expect(720 * 0.66).toBeLessThan(544);
+
+    const picker = /\.fb-chat-dock-window\[data-view="picker"\]\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
+    const frame = /height:\s*clamp\(\s*([\d.]+)rem\s*,\s*([\d.]+)dvh\s*,\s*([\d.]+)rem\s*\)/.exec(picker);
+    expect(frame).not.toBeNull();
+    const [, low = "", share = "", high = ""] = frame ?? [];
+    // Four to five 52px rows inside ~154px of chrome (52px header, 44px search
+    // with its 8px gap, the Recent label and the body padding) at the heights
+    // the owner measured. Static arithmetic over the declarations, not layout.
+    const chrome = 154;
+    for (const height of [720, 800, 900]) {
+      const box = Math.min(Math.max(Number(low) * 16, height * Number(share) / 100), Number(high) * 16);
+      const rows = (box - chrome) / 52;
+      expect(rows, `${height}px`).toBeGreaterThanOrEqual(4);
+      expect(rows, `${height}px`).toBeLessThan(6);
+    }
+  });
+});
+
+type Box = { top: number; bottom: number; left: number; right: number };
+
+function rectOf(box: Box): DOMRect {
+  return {
+    x: box.left, y: box.top, top: box.top, bottom: box.bottom,
+    left: box.left, right: box.right,
+    width: box.right - box.left, height: box.bottom - box.top,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
+/**
+ * jsdom has no layout, so the two boxes the clearance reads are supplied here.
+ * The launcher's box is the one the declarations produce: a test that moves it
+ * after a lift models the real element, and that is what proves a repeated
+ * measurement cannot compound into a climb.
+ */
+function stubDockBoxes(launcher: Box, composer: Box) {
+  return vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    if (this.classList.contains("fb-chat-launcher")) return rectOf(launcher);
+    if (this.classList.contains("fb-comment-composer")) return rectOf(composer);
+    return rectOf({ top: 0, bottom: 0, left: 0, right: 0 });
+  });
+}
+
+/** The observer the dock creates, with a handle to fire its callback. */
+class FakeResizeObserver {
+  static instances: FakeResizeObserver[] = [];
+  readonly targets = new Set<Element>();
+  readonly callback: () => void;
+  constructor(callback: () => void) {
+    this.callback = callback;
+    FakeResizeObserver.instances.push(this);
+  }
+  observe = (target: Element) => { this.targets.add(target); };
+  unobserve = (target: Element) => { this.targets.delete(target); };
+  disconnect = () => { this.targets.clear(); };
+}
+
+function pageComposer() {
+  const composer = document.createElement("div");
+  composer.className = "fb-comment-composer";
+  document.body.appendChild(composer);
+  return composer;
+}
+
+function launcherNode() {
+  return document.querySelector<HTMLElement>(".fb-chat-launcher");
+}
+
+function clearanceOf(node: HTMLElement | null) {
+  return node?.style.getPropertyValue("--fb-composer-clearance") ?? "";
+}
+
+describe("ChatDock page composer clearance", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    document.querySelectorAll(".fb-comment-composer").forEach((node) => node.remove());
+  });
+
+  it("lifts the launcher clear of a page composer at both phone widths", () => {
+    const cases = [
+      // The deployed measurement: 390x844, composer top 780, launcher bottom 832.
+      { width: 390, height: 844, composer: 780, launcher: 832, lift: 60 },
+      // 320 wide: the lift is the composer's own overlap, so the launcher stays
+      // inside the viewport instead of being pushed past the top edge.
+      { width: 320, height: 640, composer: 560, launcher: 628, lift: 76 },
+    ];
+    for (const item of cases) {
+      viewport(item.width, item.height);
+      pageComposer();
+      stubDockBoxes(
+        { top: item.launcher - 52, bottom: item.launcher, left: item.width - 64, right: item.width - 12 },
+        { top: item.composer, bottom: item.height, left: 0, right: item.width },
+      );
+      mount("/");
+      // The composer's top edge plus the dock's own 8px gap.
+      expect(clearanceOf(launcherNode())).toBe(`${item.lift}px`);
+      expect(item.launcher - item.lift - 52, `${item.width}px wide`).toBeGreaterThan(0);
+      cleanup();
+      vi.restoreAllMocks();
+      document.querySelectorAll(".fb-comment-composer").forEach((node) => node.remove());
+    }
+  });
+
+  it("leaves the launcher alone when the composer is outside its column", () => {
+    viewport(1024, 768);
+    pageComposer();
+    // A centred 44rem readable column: the launcher is not over it.
+    stubDockBoxes(
+      { top: 704, bottom: 756, left: 960, right: 1012 },
+      { top: 690, bottom: 768, left: 160, right: 864 },
+    );
+    mount("/");
+    expect(clearanceOf(launcherNode())).toBe("");
+  });
+
+  it("observes the composer and turns a taller box into a taller lift, once", () => {
+    viewport(390, 844);
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+    FakeResizeObserver.instances = [];
+    const composer = pageComposer();
+    const launcher: Box = { top: 780, bottom: 832, left: 326, right: 378 };
+    const box: Box = { top: 780, bottom: 844, left: 0, right: 390 };
+    stubDockBoxes(launcher, box);
+    mount("/");
+    expect(clearanceOf(launcherNode())).toBe("60px");
+
+    const observer = FakeResizeObserver.instances.at(-1);
+    expect(observer?.targets.has(composer)).toBe(true);
+
+    // The composer grew and the launcher sits where the first lift put it.
+    box.top = 700;
+    launcher.top = 720;
+    launcher.bottom = 772;
+    act(() => observer?.callback());
+    expect(clearanceOf(launcherNode())).toBe("140px");
+
+    // The measured box carries that lift, so it is taken back out: a second
+    // observation of the same boxes keeps the same clearance.
+    launcher.top = 640;
+    launcher.bottom = 692;
+    act(() => observer?.callback());
+    expect(clearanceOf(launcherNode())).toBe("140px");
+  });
+
+  it("never counts the dock's own composer as the page composer", () => {
+    viewport(1024, 768);
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+    FakeResizeObserver.instances = [];
+    // This box would shift the launcher 74px if it were counted.
+    stubDockBoxes(
+      { top: 704, bottom: 756, left: 960, right: 1012 },
+      { top: 690, bottom: 768, left: 900, right: 1024 },
+    );
+    mount("/");
+    act(() => openChatDock("me", null, "c1", 2));
+    const dockComposer = document.createElement("div");
+    dockComposer.className = "fb-comment-composer";
+    panel()?.appendChild(dockComposer);
+    const observer = FakeResizeObserver.instances.at(-1);
+    act(() => observer?.callback());
+    expect(observer?.targets.has(dockComposer)).toBe(false);
+    expect(clearanceOf(launcherNode())).toBe("");
+  });
+
+  it("drops the lift on a phone while a window is open, as the launcher hides", () => {
+    viewport(390, 844);
+    pageComposer();
+    stubDockBoxes(
+      { top: 780, bottom: 832, left: 326, right: 378 },
+      { top: 780, bottom: 844, left: 0, right: 390 },
+    );
+    mount("/");
+    expect(clearanceOf(launcherNode())).toBe("60px");
+
+    act(() => openChatDock("me", null, "c1", 1));
+    const launcher = launcherNode();
+    expect(launcher?.hidden).toBe(true);
+    expect(clearanceOf(launcher)).toBe("");
+    expect(rail()).toBeNull();
+    expect(panel()?.getAttribute("data-launcher")).toBeNull();
   });
 });
 
