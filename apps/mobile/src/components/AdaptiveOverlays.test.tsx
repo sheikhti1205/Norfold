@@ -173,9 +173,13 @@ describe("compact surface declarations", () => {
   const css = readFileSync("src/components/adaptiveFoundation.css", "utf8");
 
   function rule(selector: string): string {
-    const start = css.indexOf(`${selector} {`);
+    // Match at a rule boundary. A plain substring search finds
+    // `.fb-surface-dialog {` inside the shared
+    // `.fb-report-panel .fb-surface-dialog, .fb-comments-panel .fb-surface-dialog`
+    // list and reads that rule instead of the standalone one below it.
+    const start = css.indexOf(`\n${selector} {`);
     if (start < 0) throw new Error(`missing rule ${selector}`);
-    return css.slice(start, css.indexOf("}", start) + 1);
+    return css.slice(start + 1, css.indexOf("}", start) + 1);
   }
 
   /** Brace-matched text of one media block, so nested rules read exactly. */
