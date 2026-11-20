@@ -41,12 +41,19 @@ import { isVoiceMime } from "./media";
  * transcript from these runs without losing text, voice, location or files.
  * A `group` always holds at least two media rows; deleting members can only
  * collapse it back to `single`.
+ *
+ * Display is a separate decision (owner direction 2026-11-20): an album needs
+ * at least four items. One to three consecutive photos/videos stay separate -
+ * each its own ordinary message row with its own bubble, time, receipt and
+ * actions - so `splitSmallMediaRuns` expands those groups just before render.
+ * The run boundary above is untouched.
  */
 
 /** Longest accepted gap between two media items in one run. */
 export const MEDIA_RUN_MAX_GAP_MS = 60_000;
 
-/** One transcript run: a lone message, or an album of at least two media rows. */
+/** One transcript run: a lone message, or a grouped media run of at least two
+ * rows (rendered as an album only when it reaches four). */
 export type MediaRun =
   | { kind: "single"; key: string; messages: StoredHumanMessage[] }
   | { kind: "group"; key: string; messages: StoredHumanMessage[] };
@@ -150,4 +157,31 @@ export function buildMediaRuns(
   }
   closeOpenRun();
   return runs;
+}
+
+/**
+ * Expand runs that are too small to be an album into ordinary single rows.
+ *
+ * Display policy, not transcript truth (owner direction 2026-11-20): the owner
+ * wants one to three consecutive photos/videos kept separate, the way WhatsApp
+ * Desktop shows three nearby photos as three messages; only a run of four or
+ * more collapses into the capped album. `buildMediaRuns` still discovers the
+ * boundaries and every message object passes through unchanged and in order.
+ *
+ * A `group` shorter than `minimum` becomes one `single` per member; every other
+ * run (including a group at or above the minimum) is returned as the same
+ * object, so a caller can memoise on the array identity.
+ */
+export function splitSmallMediaRuns(runs: readonly MediaRun[], minimum = 4): MediaRun[] {
+  const display: MediaRun[] = [];
+  for (const run of runs) {
+    if (run.kind === "group" && run.messages.length < minimum) {
+      for (const message of run.messages) {
+        display.push({ kind: "single", key: `single:${message.id}`, messages: [message] });
+      }
+      continue;
+    }
+    display.push(run);
+  }
+  return display;
 }

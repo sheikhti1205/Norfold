@@ -64,7 +64,7 @@ import {
 import type { MediaAttachment, OutboxEntry, StaticLocation, StoredHumanMessage } from "../services/messaging/history";
 import type { ConversationProjection } from "../services/messaging/conversationIndex";
 import { prepareMessagingPhoto, type PreparedMessagingPhoto } from "../services/messaging/preparePhoto";
-import { buildMediaRuns } from "../services/messaging/mediaRuns";
+import { buildMediaRuns, splitSmallMediaRuns } from "../services/messaging/mediaRuns";
 import {
   classifyClipboardImage, createKeyboardMediaSession, readClipboardAnimation,
   type KeyboardMediaSession, type VerifiedKeyboardMedia,
@@ -2545,10 +2545,14 @@ export function ThreadSession({
     .flatMap(message => { const attachment = media.find(item => item.messageId === message.id); return attachment ? [attachment] : []; }) : [];
   const confirming = sheet === "end" || sheet === "delete" || sheet === "unsend" || sheet === "clear";
   // One ordered partition of the transcript: a lone message is its own row, and
-  // consecutive photos/videos inside the rolling window become one bounded
-  // album. The window is the only grouping key the stored rows carry; it is not
+  // consecutive photos/videos inside the rolling window form one bound media
+  // run. The window is the only grouping key the stored rows carry; it is not
   // proof of a real picker batch, so two quick separate sends can share a run.
   const mediaRuns = useMemo(() => buildMediaRuns(messages, media), [messages, media]);
+  // Display rule (owner direction 2026-11-20): a run below the album size stays
+  // separate - each item is its own message row with its own bubble, time,
+  // receipt, swipe and menu - and only four or more collapse into the album.
+  const renderRuns = useMemo(() => splitSmallMediaRuns(mediaRuns, MEDIA_RUN_VISIBLE_LIMIT), [mediaRuns]);
   const messageIndexes = useMemo(() => new Map(messages.map((message, index) => [message.id, index] as const)), [messages]);
   const confirmationTitle = sheet === "end" ? "Remove friend?" : sheet === "unsend" ? "Unsend message?" : sheet === "clear" ? "Clear chat for me?" : "Delete for me?";
   // One action list, rendered in the wide third pane and in the compact sheet.
@@ -2652,7 +2656,7 @@ export function ThreadSession({
         </div>}
       </div>}
       <ol className="fb-chat-transcript" aria-label="Messages">
-        {mediaRuns.map((run) => {
+        {renderRuns.map((run) => {
           const first = run.messages[0]!;
           const grouped = run.kind === "group";
           const firstIndex = messageIndexes.get(first.id) ?? 0;
@@ -2667,8 +2671,8 @@ export function ThreadSession({
           // the transcript (and the viewer) and are counted on the last cell.
           const visibleMembers = grouped ? run.messages.slice(0, MEDIA_RUN_VISIBLE_LIMIT) : run.messages;
           const overflowCount = grouped ? run.messages.length - visibleMembers.length : 0;
-          // An odd album opens with one wide cell, so a three-photo album reads
-          // as a tall-left 3-up instead of ending in a hole. An album that
+          // A grouped album always paints its four visible cells, so it stays a
+          // plain 2x2 grid and never opens with a wide cell. An album that
           // carries anything wider than a picture stacks in one column: a caption,
           // quote or report card needs it to stay readable and attached to its
           // own item. A bare grouped clip is the exception: it renders as a
@@ -2687,11 +2691,12 @@ export function ThreadSession({
           const ownRun = first.authorId === accountId;
           return <Fragment key={first.id}>
             {opensDay && <li className="fb-chat-day" role="presentation"><span>{day}</span></li>}
-            {/* Consecutive media inside one rolling window is one bounded
-                album; a lone message is the ordinary line. The album stays a
+            {/* Four or more consecutive media inside one rolling window is one
+                bounded album; a lone message, or a run of one to three, is the
+                ordinary line. The album stays a
                 native list item with a name, so its members are never wrapped
                 in a second node. The row inside keeps the same element in both
-                shapes, so gaining a second photo never remounts the first
+                shapes, so gaining a fourth photo never remounts the first
                 picture, its player or its scroll anchor. The swipe is a
                 single-message gesture: inside an album the long-press and the
                 corner menu carry the same actions. */}

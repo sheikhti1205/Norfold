@@ -32,10 +32,11 @@
 .fb-chat-voice-state { display:flex; flex-wrap:wrap; align-items:center; gap:.25rem .5rem;
   margin-top:.2rem; font-size:.8125rem; color:var(--fb-on-surface-variant); }
 .fb-chat-voice-state button { min-height:44px; min-width:44px; padding:.2rem .35rem; text-decoration:underline; }
-/* The recorder starts at the composer edge, stays compact on a wide window and
-   uses the available width on a phone. */
-.fb-chat-voice-panel { box-sizing:border-box; flex:none; align-self:flex-start; width:calc(100% - 1.1rem);
-  max-width:300px; min-width:0; margin:0 .55rem max(.5rem, env(safe-area-inset-bottom));
+/* The recorder replaces the composer row, so it owns that row's full width and
+   its 4px inline inset at every pane width: one bar on a wide window and on a
+   phone, never a capped floating card. Only the controls stay compact. */
+.fb-chat-voice-panel { box-sizing:border-box; flex:none; align-self:stretch; width:auto;
+  min-width:0; margin:0 4px max(.5rem, env(safe-area-inset-bottom));
   padding:.5rem .55rem; border-radius:1.25rem; background:var(--fb-surface-container); color:var(--fb-on-surface); }
 .fb-voice-panel-actions { display:flex; flex-wrap:wrap; align-items:center; gap:.2rem .3rem; min-width:0; }
 .fb-voice-panel-actions button { display:flex; align-items:center; justify-content:center; gap:.4rem;

@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { chatFileBody, type ChatFileMeta } from "./files";
 import type { MediaAttachment, StoredHumanMessage } from "./history";
-import { buildMediaRuns, MEDIA_RUN_MAX_GAP_MS, type MediaRun } from "./mediaRuns";
+import { buildMediaRuns, MEDIA_RUN_MAX_GAP_MS, splitSmallMediaRuns, type MediaRun } from "./mediaRuns";
 
 const AUTHOR = "00000000-0000-4000-8000-0000000000a1";
 const PEER = "00000000-0000-4000-8000-0000000000b1";
@@ -346,5 +346,65 @@ describe("media runs", () => {
     expect(runs[2]!.messages[0]).toBe(last);
     expect(runs[2]!.messages[0]!.createdAt).toBe(AT + 2_000);
     expect(runs[2]!.messages[0]!.body).toBe(last.body);
+  });
+});
+
+describe("small media runs stay separate", () => {
+  it("expands a two-item group into two singles in order", () => {
+    const first = photo();
+    const second = photo({ createdAt: AT + 1_000 });
+    const runs = buildMediaRuns([first, second], []);
+    expect(runs[0]!.kind).toBe("group");
+    const display = splitSmallMediaRuns(runs);
+    // Owner direction 2026-11-20: WhatsApp Desktop keeps three nearby photos as
+    // three messages, so an album needs at least four items and a pair is two
+    // ordinary rows. The transcript objects themselves never change.
+    expect(kinds(display)).toEqual(["single", "single"]);
+    expect(display[0]!.key).toBe(`single:${first.id}`);
+    expect(display[1]!.key).toBe(`single:${second.id}`);
+    expect(display[0]!.messages[0]).toBe(first);
+    expect(display[1]!.messages[0]).toBe(second);
+  });
+
+  it("expands a three-item group into three singles in order", () => {
+    const first = photo();
+    const second = photo({ createdAt: AT + 1_000 });
+    const third = photo({ createdAt: AT + 2_000 });
+    const display = splitSmallMediaRuns(buildMediaRuns([first, second, third], []));
+    expect(kinds(display)).toEqual(["single", "single", "single"]);
+    expect(display.map((run) => run.messages[0]!.id)).toEqual([first.id, second.id, third.id]);
+    expect(display.every((run) => run.messages.length === 1)).toBe(true);
+  });
+
+  it("leaves a four-item group intact", () => {
+    const shots = Array.from({ length: 4 }, (_, index) => photo({ createdAt: AT + index * 1_000 }));
+    const runs = buildMediaRuns(shots, []);
+    expect(runs).toHaveLength(1);
+    const display = splitSmallMediaRuns(runs);
+    expect(display).toHaveLength(1);
+    // Four items are the album threshold: the very same run passes through.
+    expect(display[0]).toBe(runs[0]);
+    expect(display[0]!.kind).toBe("group");
+    expect(display[0]!.messages).toHaveLength(4);
+  });
+
+  it("keeps a lone single a single", () => {
+    const unsent = photo({ unsentAt: AT + 1 });
+    const runs = buildMediaRuns([unsent], []);
+    expect(runs[0]!.kind).toBe("single");
+    const display = splitSmallMediaRuns(runs);
+    expect(display).toHaveLength(1);
+    expect(display[0]).toBe(runs[0]);
+  });
+
+  it("keeps surrounding runs in order while expanding only the small ones", () => {
+    const pair = [photo(), photo({ createdAt: AT + 1_000 })];
+    const middle = text({ createdAt: AT + 2_000 });
+    const four = Array.from({ length: 4 }, (_, index) => photo({ createdAt: AT + 3_000 + index * 1_000 }));
+    const runs = buildMediaRuns([...pair, middle, ...four], []);
+    expect(kinds(runs)).toEqual(["group", "single", "group"]);
+    const display = splitSmallMediaRuns(runs);
+    expect(kinds(display)).toEqual(["single", "single", "single", "group"]);
+    expect(display[3]).toBe(runs[2]);
   });
 });
