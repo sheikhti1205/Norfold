@@ -72,6 +72,7 @@ export function HistorySheet({
       onClose={onClose}
       title="Chat history"
       description="Your saved conversations on this device."
+      height="medium"
     >
       <div data-testid="history-sheet" className="flex flex-col gap-3">
         <div className="flex items-center gap-2">

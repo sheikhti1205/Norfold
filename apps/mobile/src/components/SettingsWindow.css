@@ -18,7 +18,7 @@
    uses) hands the surface the whole canvas, because a floating card at phone
    width has nothing left to show. */
 .fb-settings-window {
-  width: min(1040px, calc(100vw - 64px)); height: min(760px, calc(100dvh - 64px)); max-height: calc(100dvh - 64px);
+  width: min(960px, calc(100vw - 48px)); height: min(720px, calc(100dvh - 48px)); max-height: calc(100dvh - 48px);
   padding: 0; border: 1px solid var(--fb-outline-variant); border-radius: 16px;
   /* The page stays visible through the window, blurred: the surface is a
      frosted pane, not an opaque wall (owner order 2026-11-13). */
