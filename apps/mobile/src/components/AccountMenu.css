@@ -29,8 +29,11 @@
 .fb-account-menu {
   display: flex; flex-direction: column;
   width: var(--fb-rail-w, 192px); max-width: calc(100vw - 24px);
-  max-height: min(44rem, calc(100vh - 1.5rem));
-  max-height: min(44rem, calc(100dvh - 1.5rem), var(--available-height, 100dvh));
+  /* Owner ruling 2026-11-20: no excess height. 30rem holds the seven rows at
+     normal text; a longer sub-panel scrolls this card's dialog, never shrinks
+     a row. */
+  max-height: min(30rem, calc(100vh - 1.5rem));
+  max-height: min(30rem, calc(100dvh - 1.5rem), var(--available-height, 100dvh));
   padding: 8px; border-radius: 18px; background: var(--fb-surface);
   border: 1px solid var(--fb-outline-variant); box-shadow: var(--shadow-md);
 }
