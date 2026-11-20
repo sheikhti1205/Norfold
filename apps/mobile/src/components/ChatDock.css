@@ -1,20 +1,23 @@
-/* The one compact chat window.
-   Every dock-specific geometry rule lives here, scoped to `.fb-chat-dock` or
-   `.fb-chat-launcher`. The canonical styles keep the transcript, the composer
-   and the conversation header; nothing here declares a second one. */
+/* The chat windows and their minimized rail.
+   Every dock-specific geometry rule lives here, scoped to `.fb-chat-dock`,
+   `.fb-chat-dock-rail` or `.fb-chat-launcher`. The canonical styles keep the
+   transcript, the composer and the conversation header; nothing here declares
+   a second one. */
 
 .fb-chat-launcher,
-.fb-chat-dock {
-  /* One inset for the launcher and the panel. The shell publishes
-     `--fb-chat-dock-bottom` on `.fb-app-viewport`; the data-nav fallback
-     repeats the shell's own two values so a harness outside the shell still
-     clears the navigation instead of guessing. Safe-area reads mirror
+.fb-chat-dock,
+.fb-chat-dock-rail {
+  /* One inset for the launcher, the window row and the rail. The shell
+     publishes `--fb-chat-dock-bottom` on `.fb-app-viewport`; the data-nav
+     fallback repeats the shell's own two values so a harness outside the shell
+     still clears the navigation instead of guessing. Safe-area reads mirror
      index.css, the app's single viewport owner, never a second source. */
   --fb-dock-bottom: var(--fb-chat-dock-bottom, max(12px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))));
   z-index: 62;
 }
 .fb-chat-launcher[data-nav="visible"],
-.fb-chat-dock[data-nav="visible"] {
+.fb-chat-dock[data-nav="visible"],
+.fb-chat-dock-rail[data-nav="visible"] {
   --fb-dock-bottom: var(--fb-chat-dock-bottom, calc(66px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 8px));
 }
 
@@ -22,7 +25,8 @@
    keep its draft, staged media and recorder, and `display` from these rules
    would otherwise beat the user-agent `[hidden]` style. */
 .fb-chat-launcher[hidden],
-.fb-chat-dock[hidden] { display: none !important; }
+.fb-chat-dock[hidden],
+.fb-chat-dock-window[hidden] { display: none !important; }
 
 /* ---------------------------------------------------------------- launcher */
 
@@ -97,19 +101,51 @@
   outline-offset: 2px;
 }
 
-/* ------------------------------------------------------------------- panel */
+/* -------------------------------------------------------------- window row */
 
+/* The host anchors every window in one bottom-right row. A window's own card
+   carries the surface, border and shadow; the host is only the anchor. */
 .fb-chat-dock {
   position: fixed;
   inset-inline-end: max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
   inset-block-end: var(--fb-dock-bottom);
+  max-width: calc(100vw - 24px);
+}
+.fb-chat-dock-stack {
   display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 12px;
+}
+/* The rail owns one 48px column plus its 12px edge gaps, so the window row
+   steps left instead of painting underneath the heads. */
+.fb-chat-dock[data-rail="true"] {
+  inset-inline-end: calc(max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px))) + 60px);
+}
+/* A visible compose launcher at the foot owns the bottom strip; the window row
+   and the rail move one control higher so neither paints over it. */
+.fb-chat-dock[data-launcher="above"] {
+  inset-block-end: calc(var(--fb-dock-bottom) + 60px);
+}
+.fb-chat-dock[data-launcher="above"] .fb-chat-dock-window {
+  height: min(34rem, calc(100vh - var(--fb-dock-bottom) - 60px - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
+  height: min(34rem, calc(100dvh - var(--fb-dock-bottom) - 60px - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
+}
+
+.fb-chat-dock-window {
+  display: flex;
+  /* Shrink only when the rail column leaves less room than the capacity
+     formula assumed; the preferred width stays the 24rem card. */
+  flex: 0 1 auto;
   flex-direction: column;
   width: min(24rem, calc(100vw - 24px));
   /* Height is the bound for the whole canonical chain (workspace -> page):
      no inner wrapper may grow past it, and only the transcript scrolls. */
   height: min(34rem, calc(100vh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
   height: min(34rem, calc(100dvh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
+  min-width: 0;
+  min-height: 0;
   background: var(--fb-surface);
   color: var(--fb-on-surface);
   border: 1px solid var(--fb-outline-variant);
@@ -123,51 +159,121 @@
    the Recent label + five 52px rows, so a fifth row is visible and a sixth
    scrolls inside `.fb-chat-dock-body`. The viewport bound is the same one the
    thread uses; only the picker opts out of the fixed thread height. */
-.fb-chat-dock[data-view="picker"] {
+.fb-chat-dock-window[data-view="picker"] {
   height: auto;
   max-height: min(28rem, calc(100vh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
   max-height: min(28rem, calc(100dvh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
 }
+/* The chooser keeps its content height when the launcher lifts the row. */
+.fb-chat-dock[data-launcher="above"] .fb-chat-dock-window[data-view="picker"] {
+  height: auto;
+  max-height: min(28rem, calc(100vh - var(--fb-dock-bottom) - 60px - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
+  max-height: min(28rem, calc(100dvh - var(--fb-dock-bottom) - 60px - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
+}
 
-/* The panel is not a clipping box: the composer's expression panel resolves
+/* The window is not a clipping box: the composer's expression panel resolves
    against the composer and may need to open above a short dock. The rounded
-   corners are painted by the surfaces that fill the panel instead. */
+   corners are painted by the surfaces that fill the window instead. */
 .fb-chat-dock .fb-chat-page,
 .fb-chat-picker { border-radius: 19px; }
 
-.fb-chat-dock > * { flex: 1 1 auto; min-height: 0; }
+.fb-chat-dock-window > * { flex: 1 1 auto; min-height: 0; }
 
 /* The canonical workspace is `height:100%`; inside a flex column that is the
-   dock's content box, which is exactly the bound above. */
-.fb-chat-dock > .fb-chat-workspace { height: 100%; min-height: 0; }
+   window's content box, which is exactly the bound above. */
+.fb-chat-dock-window > .fb-chat-workspace { height: 100%; min-height: 0; }
 
 .fb-chat-dock :is(button, a, input, textarea):focus-visible {
   outline: 2px solid var(--fb-focus);
   outline-offset: 2px;
 }
 
-/* --------------------------------------------------------------- minimized */
+/* -------------------------------------------------------------------- rail */
 
-/* Retain the mounted canonical header ONLY, so the restore control survives
-   without a second conversation header in the host. */
-.fb-chat-dock[data-phase="minimized"] .fb-chat-page > :not(header) { display: none; }
-.fb-chat-dock[data-phase="minimized"] {
-  height: auto;
+/* Minimized windows become one vertical column of circular heads at the right
+   edge, above the compose launcher. The rail is a sibling of the window row,
+   never a replacement for it. */
+.fb-chat-dock-rail {
+  position: fixed;
+  inset-inline-end: max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
+  /* One 52px launcher and its 8px gap sit below the rail. */
+  inset-block-end: calc(var(--fb-dock-bottom) + 60px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
-.fb-chat-dock[data-phase="minimized"] > *,
-.fb-chat-dock[data-phase="minimized"] > .fb-chat-workspace,
-.fb-chat-dock[data-phase="minimized"] .fb-chat-page {
-  height: auto;
-  flex: 0 0 auto;
+.fb-chat-dock-rail-heads {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  /* Second guard, heads only: the batch math in ChatDock.tsx already fits the
+     heads and both page chips inside half the viewport. */
+  max-block-size: 50vh;
+  max-block-size: 50dvh;
 }
-/* The details pane and its resize strip are a third pane; there is no width
-   for them in a one-header strip. */
-.fb-chat-dock[data-phase="minimized"] .fb-chat-workspace {
-  grid-template-columns: minmax(0, 1fr);
-  column-gap: 0;
+.fb-chat-dock-rail-head {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 999px;
+  background: var(--fb-surface-container-high);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
 }
-.fb-chat-dock[data-phase="minimized"] .fb-chat-details,
-.fb-chat-dock[data-phase="minimized"] .fb-chat-details-resize { display: none; }
+.fb-chat-dock-rail-head:hover { background: var(--fb-surface-container); }
+
+.fb-chat-dock-rail-badge {
+  position: absolute;
+  inset-block-start: -2px;
+  inset-inline-end: -2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--fb-primary);
+  color: var(--fb-on-primary);
+  box-shadow: 0 0 0 2px var(--fb-surface);
+  font-size: .625rem;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The page counter is a control, not a head: same column width, smaller, and
+   it names the count it hides. */
+.fb-chat-dock-rail-more {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 999px;
+  background: var(--fb-surface-container);
+  color: var(--fb-on-surface-variant);
+  box-shadow: var(--shadow-sm);
+  font-size: .8125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.fb-chat-dock-rail-more:hover {
+  background: var(--fb-surface-container-high);
+  color: var(--fb-on-surface);
+}
+.fb-chat-dock-rail button:focus-visible {
+  outline: 2px solid var(--fb-focus);
+  outline-offset: 2px;
+}
 
 /* Four 44px header controls must wrap rather than crush the identity at
    320px or large text. The canonical header keeps its own order; only the
@@ -363,10 +469,11 @@
 
 /* ------------------------------------------------------------------- motion */
 
-/* One short fade on mount. Minimize is a geometry change, not a transition,
-   so the header never slides away from the control the reader just pressed. */
+/* One short fade when a window joins the row. Minimize is a geometry change,
+   not a transition, so the header never slides away from the control the
+   reader just pressed. */
 @media (prefers-reduced-motion: no-preference) {
-  .fb-chat-dock { animation: fb-chat-dock-enter .16s cubic-bezier(.2, 0, 0, 1); }
+  .fb-chat-dock-window { animation: fb-chat-dock-enter .16s cubic-bezier(.2, 0, 0, 1); }
 }
 @keyframes fb-chat-dock-enter {
   from { opacity: 0; }

@@ -2591,7 +2591,7 @@ export function ThreadSession({
         onClick={(event) => { if (unsentWork.current) { event.preventDefault(); requestLeave.current("route"); } }}
         {...hoverLabel("Back to chats")}><ArrowLeft size={22} aria-hidden="true" /></Link>}
       <ChatIdentity peerId={row?.peerId} name={name} username={person?.username} avatarUrl={person?.avatarUrl} muted={presentationView?.ownMuted === true}
-        conversationId={conversationId}
+        conversationId={conversationId} variant={surface === "dock" ? "dock" : undefined}
         status={!presentationView ? "Saved chat" : presentationView.mode === "CONNECTED" ? "Friends" : "Message request"} />
       {detailsToggle}
       {/* The dock reuses the canonical header and adds window controls; it never

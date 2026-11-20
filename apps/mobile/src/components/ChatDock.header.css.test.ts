@@ -191,13 +191,13 @@ describe("ChatDock header, narrow two-row contract", () => {
         expect(control(selector), selector).toBe(false);
       }
     }
-    // The dock's only hiding rules remove the `hidden` panel, the alternate
-    // details pane, or minimized page content. None narrows a control.
+    // The dock's only hiding rules remove the `hidden` launcher, host or
+    // window. None narrows a control.
     const hidingSelectors = dockRules.filter(rule => hiding.test(rule.body)).flatMap(rule => rule.selectors);
     expect(hidingSelectors).toEqual(expect.arrayContaining([
       ".fb-chat-launcher[hidden]",
       ".fb-chat-dock[hidden]",
-      '.fb-chat-dock[data-phase="minimized"] .fb-chat-page > :not(header)',
+      ".fb-chat-dock-window[hidden]",
     ]));
     for (const selector of hidingSelectors) {
       expect(selector).toMatch(/\[hidden\]|:not\(header\)|\.fb-chat-details/);
@@ -216,5 +216,42 @@ describe("ChatDock header, narrow two-row contract", () => {
     const icon = singleRule(chatRules, ".fb-chat-icon").body;
     expect(px(declaration(icon, "min-width"))).toBe(44);
     expect(px(declaration(icon, "min-height"))).toBe(44);
+  });
+
+  it("dresses only the dock surface with the Messenger chrome", () => {
+    const dockHeader = singleRule(chatRules, '[data-surface="dock"] .fb-chat-header').body;
+    const headerHeight = px(declaration(dockHeader, "min-height"));
+    expect(headerHeight).toBeGreaterThanOrEqual(60);
+    expect(headerHeight).toBeLessThanOrEqual(68);
+
+    const name = singleRule(chatRules, '[data-surface="dock"] .fb-chat-heading h1').body;
+    const nameSize = px(declaration(name, "font-size"));
+    expect(nameSize).toBeGreaterThanOrEqual(15.2);
+    expect(nameSize).toBeLessThanOrEqual(16);
+    // Weight stays the canonical 650 from the shared heading rule.
+    expect(declaration(singleRule(chatRules, ".fb-chat-header h1").body, "font-weight")).toBe("650");
+
+    const identity = singleRule(chatRules, '[data-surface="dock"] .fb-chat-identity').body;
+    expect(px(declaration(identity, "gap"))).toBe(8);
+
+    // The name stays one clipped line in both surfaces.
+    const nameLine = singleRule(chatRules, ".fb-chat-identity-name").body;
+    expect(declaration(nameLine, "white-space")).toBe("nowrap");
+    expect(declaration(nameLine, "text-overflow")).toBe("ellipsis");
+    expect(declaration(nameLine, "overflow")).toBe("hidden");
+
+    const secondary = singleRule(chatRules, '[data-surface="dock"] .fb-chat-heading .fb-chat-secondary').body;
+    const secondarySize = px(declaration(secondary, "font-size"));
+    expect(secondarySize).toBeGreaterThanOrEqual(12);
+    expect(secondarySize).toBeLessThanOrEqual(13);
+    expect(declaration(secondary, "white-space")).toBe("nowrap");
+    expect(declaration(secondary, "text-overflow")).toBe("ellipsis");
+    expect(declaration(secondary, "overflow")).toBe("hidden");
+    expect(declaration(secondary, "min-width")).toBe("0");
+
+    // Chrome only: no new paint, elevation, glass or gradient in the scoped rules.
+    for (const body of [dockHeader, name, identity, secondary]) {
+      expect(body).not.toMatch(/(?:^|[;\s])(?:background(?:-color)?|box-shadow|color|filter|backdrop-filter|linear-gradient|radial-gradient)\s*:/);
+    }
   });
 });

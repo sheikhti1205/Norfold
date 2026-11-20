@@ -12,18 +12,20 @@ import { searchPeople } from "../services/people";
 import { messagePreview } from "../utils/messagePreview";
 import { useSafetyLifetime } from "../utils/useSafetyLifetime";
 import {
-  closeChatDock, openChatDock, openConversation, resetChatDock,
-  toggleChatDockCompact, useChatDock,
+  closeChatDockEntry, focusChatDock, minimizeChatDock,
+  openChatDock, openConversation, resetChatDock, restoreChatDock, useChatDock,
+  type ChatDockEntry,
 } from "./chatDock";
+import { useHoverLabel } from "./HoverLabel";
 import { UserAvatar } from "./UserAvatar";
 import "./ChatDock.css";
 
 /**
- * The one chat window that follows the reader across non-chat pages.
+ * The chat windows that follow the reader across non-chat pages.
  *
- * This module owns presentation and route eligibility only. The transcript,
+ * This module owns presentation, focus and the minimized rail. The transcript,
  * composer, receipts, media and every send belong to the exported
- * `ThreadSession`, which is rendered unchanged with `surface="dock"`.
+ * `ThreadSession`, rendered unchanged with `surface="dock"`.
  *
  * Hiding is a `hidden` attribute, never an unmount: a minimized or occluded
  * window keeps the component (and its draft, staged photos and recorder) alive,
@@ -34,6 +36,46 @@ import "./ChatDock.css";
 const CHAT_SURFACE = /^\/(?:chats|connections)(?:\/|$)/;
 const DOCK_ID = "fb-chat-dock";
 const SEARCH_DEBOUNCE_MS = 250;
+const DESKTOP_MIN_WIDTH = 768;
+/** 24rem at the 16px design root, plus the row's gap. */
+const WINDOW_WIDTH = 384;
+const WINDOW_GAP = 12;
+const DESKTOP_MAX_WINDOWS = 3;
+/** Rail head geometry; the batch math and the CSS rule share these numbers. */
+const RAIL_HEAD_SIZE = 48;
+const RAIL_GAP = 8;
+const RAIL_MAX_HEADS = 5;
+const NO_ENTRIES: readonly ChatDockEntry[] = [];
+
+/** Desktop windows side by side, capped at three; a phone shows one at a time. */
+function openWindowLimit(width: number): number {
+  if (width < DESKTOP_MIN_WIDTH) return 1;
+  return Math.min(DESKTOP_MAX_WINDOWS, Math.max(1, Math.floor((width - 24) / (WINDOW_WIDTH + WINDOW_GAP))));
+}
+
+/**
+ * Heads per rail batch: the column, including the page chips at both ends, must
+ * stay inside half the viewport height. Worst case is both chips visible, so
+ * reserve 44 + 8 above the heads and 8 + 44 below before fitting them in.
+ */
+function railBatch(height: number): number {
+  const reserved = 2 * (44 + RAIL_GAP);
+  const fit = Math.floor((0.5 * height - reserved + RAIL_GAP) / (RAIL_HEAD_SIZE + RAIL_GAP));
+  return Math.max(1, Math.min(RAIL_MAX_HEADS, fit));
+}
+
+function useViewportSize() {
+  const [size, setSize] = useState(() => ({
+    width: typeof window === "undefined" ? DESKTOP_MIN_WIDTH : window.innerWidth,
+    height: typeof window === "undefined" ? 0 : window.innerHeight,
+  }));
+  useEffect(() => {
+    const update = () => setSize({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  return size;
+}
 
 /** The fields the picker reads from a conversation summary. */
 type DockConversation = Pick<ConversationSummary,
@@ -75,48 +117,45 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
   const dock = useChatDock(user?.id ?? null);
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const launcher = useRef<HTMLButtonElement>(null);
-  const compose = useRef<HTMLButtonElement>(null);
-  /** The control that opened the panel, so close returns focus to it. */
-  const opener = useRef<HTMLButtonElement>(null);
-  const panel = useRef<HTMLDivElement>(null);
-  const unsentWork = useRef(false);
-  const previousPhase = useRef<"closed" | "open" | "minimized">("closed");
+  const { hoverLabel } = useHoverLabel();
+  const viewport = useViewportSize();
+  const capacity = openWindowLimit(viewport.width);
+  const phone = viewport.width < DESKTOP_MIN_WIDTH;
+
+  const entries = dock?.entries ?? NO_ENTRIES;
+  const openEntries = entries.filter((entry) => entry.phase === "open");
+  const minimized = entries.filter((entry) => entry.phase === "minimized");
+  const panelMounted = entries.length > 0;
+  const visible = !CHAT_SURFACE.test(pathname) && !hostOccluded;
+  const focusedSeq = openEntries.reduce((max, entry) => Math.max(max, entry.seq), -1);
+  // The rail is a pointer surface; while a window is open on a phone there is
+  // no room beside it, so the rail waits until the reader minimizes.
+  const railVisible = visible && minimized.length > 0 && (!phone || openEntries.length === 0);
+  // Desktop keeps the compose control at the foot while windows are open: that
+  // is the only surface that can open a second conversation, and the row above
+  // it already reserves the 60px. A phone still gives the one window the whole
+  // screen and brings the launcher back as soon as nothing is open.
+  const launcherVisible = visible && (!phone || openEntries.length === 0)
+    && (minimized.length > 0 || !panelMounted || !phone);
+
+  const windowNodes = useRef(new Map<string, HTMLDivElement>());
   const previousViewer = useRef<string | null>(null);
   // Session-local only, keyed by account + conversation + message, so a
   // dismissal never leaks across viewers and a newer message announces again.
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set<string>());
+  const [railOffset, setRailOffset] = useState(0);
+  const [focusAfterRestore, setFocusAfterRestore] = useState<string | null>(null);
 
-  const phase = dock?.phase ?? "closed";
-  const panelMounted = dock !== null && (phase === "open" || phase === "minimized");
-  const visible = !CHAT_SURFACE.test(pathname) && !hostOccluded;
-  const pickerOpen = phase === "open" && dock?.conversationId === null;
-  const threadId = dock?.conversationId ?? null;
-
-  // An account change discards the in-memory panel and its draft. The hook is
-  // already fenced by viewer, so this clears the store itself as well.
+  // An account change discards every in-memory window and its draft. The hook
+  // is already fenced by viewer, so this clears the store itself as well.
   useEffect(() => {
     const viewer = user?.id ?? null;
     if (previousViewer.current !== null && previousViewer.current !== viewer) resetChatDock();
     previousViewer.current = viewer;
   }, [user?.id]);
 
-  // Focus return is a host concern: the launcher node stays mounted (hidden)
-  // while the window is up, so it can take focus back after the commit.
-  useEffect(() => {
-    if (previousPhase.current !== "closed" && phase === "closed") {
-      // The launcher and the new-message action are two triggers for one
-      // window; focus goes back to whichever one the reader used.
-      (opener.current ?? launcher.current)?.focus({ preventScroll: true });
-    }
-    if (previousPhase.current === "minimized" && phase === "open") {
-      // The reader asked to type again; the field is the honest destination.
-      panel.current?.querySelector<HTMLTextAreaElement>(".fb-peer-field textarea")?.focus({ preventScroll: true });
-    }
-    previousPhase.current = phase;
-  }, [phase]);
-
   const rows: ConversationSummary[] = chat.accountId === accountId ? chat.conversations : [];
+  const peerOf = new Map(rows.map((row) => [row.conversationId, row.peerId] as const));
   // Real unread truth: the viewer's own message, unsent messages and private
   // states are excluded. The count itself stays the summary's authority. A
   // dismissal names this exact message, so the shortcut goes away while the
@@ -145,31 +184,68 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
     const view = chat.currentProjections?.[conversation.conversationId] ?? conversation.cachedProjection;
     return !view?.ownHidden && !view?.ownDeclined && !view?.ownBlocked && !view?.ownMuted;
   });
+  const pickerOpen = entries.some((entry) => entry.conversationId === null);
+  const windowPeers = entries.flatMap((entry) => {
+    if (entry.conversationId === null) return [];
+    const peerId = peerOf.get(entry.conversationId);
+    return peerId ? [peerId] : [];
+  });
   const identities = useDockIdentities(accountId, [
     ...(unreadRow ? [unreadRow.peerId] : []),
     ...(pickerOpen ? recent.map((row) => row.peerId) : []),
+    ...windowPeers,
   ]);
 
-  // The flag describes the mounted thread only. A new thread starts clear, so a
-  // closed conversation can never leave a stale veto behind in the picker.
-  useEffect(() => { unsentWork.current = false; }, [threadId]);
+  // Oldest first, so the newest minimized head renders at the bottom of the
+  // column, nearest the launcher. `railOffset` counts the hidden newer heads
+  // the reader has paged away from; the visible slice is the batch immediately
+  // above that gap, and never outlives a shorter rail.
+  const railOrder = [...minimized].sort((a, b) => a.seq - b.seq);
+  const batch = Math.max(1, Math.min(railBatch(viewport.height), railOrder.length));
+  const maxFromNewest = Math.max(0, railOrder.length - batch);
+  const fromNewest = Math.min(railOffset, maxFromNewest);
+  const start = railOrder.length - batch - fromNewest;
+  const heads = railOrder.slice(start, start + batch);
+  const above = start;
+  const below = Math.max(0, railOrder.length - start - batch);
+  useEffect(() => {
+    if (railOffset > maxFromNewest) setRailOffset(maxFromNewest);
+  }, [railOffset, maxFromNewest]);
 
-  const onUnsentWorkChange = useCallback((value: boolean) => { unsentWork.current = value; }, []);
-  const close = useCallback(() => { if (accountId) closeChatDock(accountId); }, [accountId]);
-  const toggleCompact = useCallback(() => { if (accountId) toggleChatDockCompact(accountId); }, [accountId]);
-  const expand = useCallback(() => {
-    if (!accountId || !threadId) return;
-    closeChatDock(accountId);
-    // A push, not a replace: Back returns the reader to the page the dock was
-    // floating over, with the dock already closed.
-    void navigate(`/chats/${encodeURIComponent(threadId)}`);
-  }, [accountId, threadId, navigate]);
-  // Selection is legal only with no mounted thread. The canonical guard is the
-  // only thing that may unmount one, so a stale unsent flag refuses here too.
-  const select = useCallback((conversationId: string) => {
-    if (!accountId || unsentWork.current) return;
-    openConversation(accountId, conversationId);
+  // Restoring asks to type again: the field is the honest destination, after
+  // the window is visible rather than while it is still `hidden`.
+  useEffect(() => {
+    if (focusAfterRestore === null) return;
+    windowNodes.current.get(focusAfterRestore)
+      ?.querySelector<HTMLTextAreaElement>(".fb-peer-field textarea")?.focus({ preventScroll: true });
+    setFocusAfterRestore(null);
+  }, [focusAfterRestore, entries]);
+
+  const minimizeEntry = useCallback((conversationId: string) => {
+    if (accountId) minimizeChatDock(accountId, conversationId);
   }, [accountId]);
+  const restoreEntry = useCallback((conversationId: string) => {
+    if (!accountId) return;
+    restoreChatDock(accountId, conversationId, capacity);
+    setFocusAfterRestore(conversationId);
+  }, [accountId, capacity]);
+  const closeEntry = useCallback((conversationId: string | null) => {
+    if (accountId) closeChatDockEntry(accountId, conversationId);
+  }, [accountId]);
+  const focusEntry = useCallback((conversationId: string | null) => {
+    if (accountId) focusChatDock(accountId, conversationId);
+  }, [accountId]);
+  const expandEntry = useCallback((conversationId: string) => {
+    if (!accountId) return;
+    closeChatDockEntry(accountId, conversationId);
+    // A push, not a replace: Back returns the reader to the page the dock was
+    // floating over, with this window already closed.
+    void navigate(`/chats/${encodeURIComponent(conversationId)}`);
+  }, [accountId, navigate]);
+  // Selection never replaces a mounted thread: it opens or focuses one window.
+  const select = useCallback((conversationId: string) => {
+    if (accountId) openConversation(accountId, conversationId, capacity);
+  }, [accountId, capacity]);
 
   if (!user || booting || needsProfile) return null;
 
@@ -177,22 +253,31 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
     const person = identities.get(peerId);
     return person?.displayName?.trim() || person?.username || "";
   };
+  const nameFor = (conversationId: string | null) => {
+    const peerId = conversationId ? peerOf.get(conversationId) : undefined;
+    return (peerId ? nameOf(peerId) : "") || "Member";
+  };
+  const isFocused = (entry: ChatDockEntry) => entry.phase === "open"
+    && entry.seq === focusedSeq && visible;
+
   const unreadName = unreadRow ? nameOf(unreadRow.peerId) || "Member" : "";
   const unreadCount = unreadRow?.unreadCount ?? 0;
 
   return (
     <>
-      {/* The launcher stays mounted while the window is open so the store's
-          remembered trigger is still connected when the window closes; it is
-          hidden, so it leaves the page, the accessibility tree and the tab
-          order exactly as an unmounted control would. One compact cluster
-          carries all three actions: dismiss this shortcut, open the
-          new-message picker, and open the unread peer's conversation. The
-          dismiss control is keyed to the message, so it removes only this
-          notice; the pencil and the avatar never depend on it. */}
+      {/* The launcher stays mounted for the whole dock lifetime so the store's
+          remembered trigger is still connected when a window closes. A phone
+          hides it behind an open window; desktop keeps it at the foot as the
+          way to start another conversation. When hidden it leaves the page,
+          the accessibility tree and the tab order exactly as an unmounted
+          control would. One compact cluster carries all three actions: dismiss
+          this shortcut, open the new-message picker, and open the unread peer's
+          conversation. The dismiss control is keyed to the message, so it
+          removes only this notice; the pencil and the avatar never depend on
+          it. */}
       <div className="fb-chat-launcher"
         data-nav={bottomNavVisible ? "visible" : "hidden"}
-        hidden={!visible || panelMounted}>
+        hidden={!launcherVisible}>
         {unreadRow && (
           <button type="button" className="fb-chat-launcher-action"
             aria-label="Dismiss unread shortcut"
@@ -209,24 +294,22 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
           </button>
         )}
         {hasUnread && (
-          <button ref={compose} type="button" className="fb-chat-launcher-action"
+          <button type="button" className="fb-chat-launcher-action"
             aria-label="New message"
-            onClick={() => {
+            onClick={(event) => {
               if (!accountId) return;
-              opener.current = compose.current;
-              openChatDock(accountId, compose.current, null);
+              openChatDock(accountId, event.currentTarget, null, capacity);
             }}>
             <Pencil size={19} aria-hidden="true" />
           </button>
         )}
         {unreadRow ? (
-          <button ref={launcher} type="button" className="fb-chat-launcher-button"
+          <button type="button" className="fb-chat-launcher-button"
             aria-label={`Open chat with ${unreadName}`}
             aria-describedby="fb-chat-launcher-unread"
-            onClick={() => {
+            onClick={(event) => {
               if (!accountId) return;
-              opener.current = launcher.current;
-              openChatDock(accountId, launcher.current, unreadRow.conversationId);
+              openChatDock(accountId, event.currentTarget, unreadRow.conversationId, capacity);
             }}>
             <UserAvatar username={unreadName} avatarUrl={identities.get(unreadRow.peerId)?.avatarUrl} size={46} shape="circle" />
             <span className="fb-chat-launcher-badge" aria-hidden="true">
@@ -234,33 +317,97 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
             </span>
           </button>
         ) : hasUnread ? null : (
-          <button ref={launcher} type="button" className="fb-chat-launcher-button"
+          <button type="button" className="fb-chat-launcher-button"
             aria-label="Open messages"
-            onClick={() => {
+            onClick={(event) => {
               if (!accountId) return;
-              opener.current = launcher.current;
-              openChatDock(accountId, launcher.current, null);
+              openChatDock(accountId, event.currentTarget, null, capacity);
             }}>
             <MessageSquareText size={22} aria-hidden="true" />
           </button>
         )}
         {unreadRow && <span id="fb-chat-launcher-unread" className="sr-only">{`${unreadCount} unread`}</span>}
       </div>
+      {railVisible && (
+        <div className="fb-chat-dock-rail" data-nav={bottomNavVisible ? "visible" : "hidden"}
+          role="group" aria-label="Minimized chats">
+          {above > 0 && (
+            <button type="button" className="fb-chat-dock-rail-more"
+              aria-label={`Show ${above} older minimized ${above === 1 ? "chat" : "chats"}`}
+              onClick={() => setRailOffset(Math.min(maxFromNewest, fromNewest + batch))}>
+              {`+${above}`}
+            </button>
+          )}
+          <div className="fb-chat-dock-rail-heads">
+            {heads.map((entry) => {
+              const conversationId = entry.conversationId as string;
+              const name = nameFor(conversationId);
+              const unread = rows.find((row) => row.conversationId === conversationId)?.unreadCount ?? 0;
+              const peerId = peerOf.get(conversationId);
+              return (
+                <button key={conversationId} type="button" className="fb-chat-dock-rail-head"
+                  data-entry={conversationId}
+                  aria-label={`Restore chat with ${name}`}
+                  onClick={() => restoreEntry(conversationId)}
+                  {...hoverLabel(name, "right")}>
+                  <UserAvatar username={name} avatarUrl={peerId ? identities.get(peerId)?.avatarUrl : null}
+                    size={44} shape="circle" />
+                  {unread > 0 && (
+                    <span className="fb-chat-dock-rail-badge" aria-hidden="true">
+                      {unread > 99 ? "99+" : unread}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          {below > 0 && (
+            <button type="button" className="fb-chat-dock-rail-more"
+              aria-label={`Show ${below} newer minimized ${below === 1 ? "chat" : "chats"}`}
+              onClick={() => setRailOffset(Math.max(0, fromNewest - batch))}>
+              {`+${below}`}
+            </button>
+          )}
+        </div>
+      )}
       {panelMounted && dock && (
-        <div ref={panel} id={DOCK_ID} className="fb-chat-dock" data-phase={phase}
-          data-view={pickerOpen ? "picker" : "thread"}
-          data-nav={bottomNavVisible ? "visible" : "hidden"} hidden={!visible}
+        <div id={DOCK_ID} className="fb-chat-dock fb-chat-dock-stack"
+          data-nav={bottomNavVisible ? "visible" : "hidden"}
+          data-rail={railVisible ? "true" : undefined}
+          data-launcher={launcherVisible && panelMounted ? "above" : undefined}
+          hidden={!visible}
           role="complementary" aria-label="Chat">
-          {pickerOpen
-            ? <ChatDockPicker accountId={accountId} active={visible} recent={recent} identities={identities}
-              onSelect={select} onClose={close} />
-            : dock.conversationId !== null && (
-              <ThreadSession key={`${dock.accountId}:${dock.conversationId}`} accountId={dock.accountId}
-                conversationId={dock.conversationId} surface="dock"
-                active={phase === "open" && visible}
-                onToggleCompact={toggleCompact} onClose={close} onExpand={expand}
-                onUnsentWorkChange={onUnsentWorkChange} />
-            )}
+          {entries.map((entry) => {
+            const conversationId = entry.conversationId;
+            if (conversationId === null) {
+              return (
+                <div key="picker" className="fb-chat-dock-window"
+                  data-entry="picker" data-phase="open" data-view="picker"
+                  hidden={!visible}
+                  onPointerDownCapture={() => focusEntry(null)}>
+                  <ChatDockPicker accountId={accountId} active={isFocused(entry)}
+                    recent={recent} identities={identities} onSelect={select} onClose={() => closeEntry(null)} />
+                </div>
+              );
+            }
+            return (
+              <div key={`${dock.accountId}:${conversationId}`} className="fb-chat-dock-window"
+                ref={(node) => {
+                  if (node) windowNodes.current.set(conversationId, node);
+                  else windowNodes.current.delete(conversationId);
+                }}
+                data-entry={conversationId} data-phase={entry.phase} data-view="thread"
+                hidden={entry.phase === "minimized" || !visible}
+                onPointerDownCapture={() => focusEntry(conversationId)}>
+                <ThreadSession key={`${dock.accountId}:${conversationId}`} accountId={dock.accountId}
+                  conversationId={conversationId} surface="dock"
+                  active={isFocused(entry)}
+                  onToggleCompact={() => minimizeEntry(conversationId)}
+                  onClose={() => closeEntry(conversationId)}
+                  onExpand={() => expandEntry(conversationId)} />
+              </div>
+            );
+          })}
         </div>
       )}
     </>
@@ -347,7 +494,7 @@ function ChatDockPicker({ accountId, active, recent, identities, onSelect, onClo
       const conversationId = await requestMessagingConversation(accountId, person.id);
       // A completion that arrives after the panel closed, the route hid it or
       // the account changed must never open a window or a thread on its own.
-      if (alive.current && live.current) openConversation(accountId, conversationId);
+      if (alive.current && live.current) onSelect(conversationId);
     } catch {
       if (alive.current) setNote("Couldn't start this conversation. Check your connection and try again.");
     } finally {
