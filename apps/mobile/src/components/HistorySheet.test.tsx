@@ -39,7 +39,10 @@ describe("HistorySheet popup", () => {
   it("lists chats as a popup with search, not a sidebar", () => {
     render(<HistorySheet {...baseProps()} />);
     expect(screen.getByTestId("history-sheet")).toBeTruthy();
-    expect(screen.getByRole("dialog", { name: "Chat history" })).toBeTruthy();
+    // A search field plus a few rows: the sheet opens compact and the handle's
+    // drag, already part of the primitive, still expands it.
+    const dialog = screen.getByRole("dialog", { name: "Chat history" });
+    expect(dialog.getAttribute("data-height")).toBe("medium");
     expect(screen.getByText("Lost keys")).toBeTruthy();
     expect(screen.getByText("Found wallet")).toBeTruthy();
     expect(screen.getByLabelText("Search chats")).toBeTruthy();
