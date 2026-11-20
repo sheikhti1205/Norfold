@@ -168,7 +168,7 @@ describe("ChatDock header, narrow two-row contract", () => {
     }
     const canonical = singleRule(chatRules, ".fb-chat-header").body;
     expect(canonical).toContain("display:flex;");
-    expect(canonical).toContain("align-items:center;");
+    expect(canonical).toContain("align-items:flex-start;");
     expect(canonical).toContain("gap:.5rem;");
     expect(canonical).toContain("flex:none;");
     expect(canonical).toContain("padding:.4rem .6rem;");
@@ -202,5 +202,19 @@ describe("ChatDock header, narrow two-row contract", () => {
     for (const selector of hidingSelectors) {
       expect(selector).toMatch(/\[hidden\]|:not\(header\)|\.fb-chat-details/);
     }
+  });
+
+  it("starts the 44px identity row and every header control on one top line", () => {
+    const canonical = singleRule(chatRules, ".fb-chat-header").body;
+    expect(declaration(canonical, "align-items")).toBe("flex-start");
+    // The dock reuses this header inside its own wrap container, so it must
+    // inherit the top line instead of centring the controls again.
+    const dockHeader = singleRule(dockRules, HEADER).body;
+    expect(declaration(dockHeader, "align-items")).toBeNull();
+    // One 44px line: the avatar/name identity and every icon control.
+    expect(px(declaration(singleRule(chatRules, ".fb-chat-identity").body, "min-height"))).toBe(44);
+    const icon = singleRule(chatRules, ".fb-chat-icon").body;
+    expect(px(declaration(icon, "min-width"))).toBe(44);
+    expect(px(declaration(icon, "min-height"))).toBe(44);
   });
 });

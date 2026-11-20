@@ -8,9 +8,12 @@ import { Notifications } from "../screens/Notifications";
 export function NotificationPopover({ trigger }: { trigger: ReactNode }) {
   const [open, setOpen] = useState(false);
   const { hoverLabel } = useHoverLabel();
+  // 440px is the whole panel: ~94px header and filters, a 44px "See all"
+  // footer, and ~300px of scrolling activity (3-4 rows). The quick inbox is a
+  // preview, not a second route, so it must not claim the window.
   return <DialogTrigger isOpen={open} onOpenChange={setOpen}>
     <Button aria-label="Notifications" className="fb-icon-control relative" {...hoverLabel("Notifications")}>{trigger}</Button>
-    <LayeredPopover placement="bottom end" offset={6} maxHeight={680} className="fb-notification-popover">
+    <LayeredPopover placement="bottom end" offset={6} maxHeight={440} className="fb-notification-popover">
       <Dialog className="fb-notification-dialog">
         <Notifications preview onNavigate={() => setOpen(false)} />
       </Dialog>

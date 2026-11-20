@@ -118,6 +118,17 @@
   isolation: isolate;
 }
 
+/* The picker is a chooser, not a transcript: it sizes to its rows instead of
+   reserving the full conversation height. 28rem caps header + 44px search +
+   the Recent label + five 52px rows, so a fifth row is visible and a sixth
+   scrolls inside `.fb-chat-dock-body`. The viewport bound is the same one the
+   thread uses; only the picker opts out of the fixed thread height. */
+.fb-chat-dock[data-view="picker"] {
+  height: auto;
+  max-height: min(28rem, calc(100vh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
+  max-height: min(28rem, calc(100dvh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
+}
+
 /* The panel is not a clipping box: the composer's expression panel resolves
    against the composer and may need to open above a short dock. The rounded
    corners are painted by the surfaces that fill the panel instead. */

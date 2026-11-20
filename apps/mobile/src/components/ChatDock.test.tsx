@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router";
@@ -509,6 +510,43 @@ describe("ChatDock picker", () => {
     await act(async () => { settle?.("c-late"); await Promise.resolve(); });
     expect(screen.queryByLabelText("Conversation c-late")).toBeNull();
     expect(screen.getByRole("button", { name: "Open messages" })).toBeTruthy();
+  });
+});
+
+const dockCss = readFileSync(new URL("./ChatDock.css", import.meta.url), "utf8");
+
+describe("ChatDock surface sizing", () => {
+  it("marks the open panel as the picker until a conversation takes it over", () => {
+    mount("/");
+    fireEvent.click(screen.getByRole("button", { name: "Open messages" }));
+    expect(panel()?.dataset.view).toBe("picker");
+    expect(panel()?.dataset.phase).toBe("open");
+
+    cleanup();
+    resetChatDock();
+    openUnread();
+    expect(panel()?.dataset.view).toBe("thread");
+  });
+
+  it("sizes the picker to its rows and leaves the thread height alone", () => {
+    const clean = dockCss.replace(/\/\*[\s\S]*?\*\//g, " ");
+    const picker = /\.fb-chat-dock\[data-view="picker"\]\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
+    expect(picker).not.toBe("");
+    // Content height while a fifth 52px row is visible; the sixth scrolls.
+    expect(picker).toMatch(/(?:^|[;\s])height\s*:\s*auto\s*;/);
+    const cap = Number(/(?:^|[;\s])max-height\s*:\s*min\(\s*([\d.]+)rem\s*,/.exec(picker)?.[1] ?? NaN);
+    expect(cap).toBeGreaterThanOrEqual(25);
+    expect(cap).toBeLessThanOrEqual(30);
+    // The viewport bound and the shared width are the ones the dock already had.
+    expect(picker).toContain("var(--fb-dock-bottom)");
+
+    // An open conversation keeps its fixed 544px panel.
+    const dockRule = /(?:^|\})\s*\.fb-chat-dock\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
+    expect(dockRule).toContain("height: min(34rem");
+    expect(dockRule).toContain("width: min(24rem");
+    // Only the picker body scrolls; the picker itself never clips a menu.
+    const body = /\.fb-chat-dock-body\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
+    expect(body).toContain("overflow-y: auto");
   });
 });
 
