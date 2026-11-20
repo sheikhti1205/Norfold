@@ -505,6 +505,7 @@ it("labels from the accepted presentation and never revives a cleared relationsh
   // from it: the mute switch renders and stays disabled without live authority.
   fireEvent.click(screen.getByRole("button", { name: "Conversation options" }));
   const info = await screen.findByRole("dialog", { name: "Conversation info" });
+  expect(info.closest(".fb-modal-panel")?.classList.contains("fb-compact-panel")).toBe(true);
   expect(within(info).getByRole("switch", { name: "Mute notifications" })).toHaveProperty("disabled", true);
   fireEvent.click(within(info).getByRole("button", { name: "Close" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
