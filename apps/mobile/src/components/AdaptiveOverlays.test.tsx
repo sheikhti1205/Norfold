@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ActionMenu } from "./ActionMenu";
 import { AdaptiveTaskSurface, ConfirmDialog } from "./AdaptiveTaskSurface";
 import { BottomSheet } from "./BottomSheet";
@@ -128,4 +129,38 @@ it("only the upper layer closes over a legacy task sheet and focus returns to it
   await waitFor(() => expect(screen.queryByRole("dialog", { name: "Filters" })).toBeNull());
   expect(screen.getByRole("dialog", { name: "Parent task" })).toBeTruthy();
   await waitFor(() => expect(document.activeElement).toBe(launcher));
+});
+
+it("gives the compact width its own panel and leaves the shared task measure alone", async () => {
+  const compact = render(<AdaptiveTaskSurface open onClose={() => {}} title="Conversation info" width="compact"><button>Search chat</button></AdaptiveTaskSurface>);
+  const info = await screen.findByRole("dialog", { name: "Conversation info" });
+  const panel = info.closest(".fb-modal-panel");
+  expect(panel?.classList.contains("fb-compact-panel")).toBe(true);
+  expect(panel?.classList.contains("fb-task-panel")).toBe(false);
+  compact.unmount();
+
+  render(<AdaptiveTaskSurface open onClose={() => {}} title="Filters"><input aria-label="Filter text" /></AdaptiveTaskSurface>);
+  const filters = await screen.findByRole("dialog", { name: "Filters" });
+  expect(filters.closest(".fb-modal-panel")?.classList.contains("fb-task-panel")).toBe(true);
+});
+
+describe("compact surface declarations", () => {
+  const css = readFileSync("src/components/adaptiveFoundation.css", "utf8");
+
+  function rule(selector: string): string {
+    const start = css.indexOf(`${selector} {`);
+    if (start < 0) throw new Error(`missing rule ${selector}`);
+    return css.slice(start, css.indexOf("}", start) + 1);
+  }
+
+  it("narrows only the compact panel and keeps the shared measures", () => {
+    expect(rule(".fb-compact-panel")).toContain("max-width: 26rem;");
+    expect(rule(".fb-task-panel")).toContain("max-width: 44rem;");
+    expect(rule(".fb-confirm-panel")).toContain("max-width: 26rem;");
+  });
+
+  it("scopes the tighter chrome under the compact panel", () => {
+    expect(rule(".fb-compact-panel .fb-surface-header")).toContain("padding: 10px 12px;");
+    expect(rule(".fb-compact-panel .fb-surface-body")).toContain("padding: 8px;");
+  });
 });

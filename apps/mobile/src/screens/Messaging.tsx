@@ -3022,6 +3022,7 @@ export function ThreadSession({
       {unsentCopy && <p>{unsentCopy}</p>}
     </ConfirmDialog>
     <AdaptiveTaskSurface open={sheet !== null && sheet !== "location" && !confirming} onClose={() => setSheet(null)} busy={busy}
+      width={sheet === "actions" ? "compact" : "standard"}
       title={sheet === "search" ? "Search chat" : sheet === "media" ? "Conversation media" : sheet === "review" ? "Review message" : "Conversation info"}>
       {sheet === "actions" ? conversationInfo : sheet === "search" ? <div className="fb-chat-search-task">
         <label className="fb-chat-search"><Search size={17} aria-hidden="true" /><input type="search" aria-label="Search saved messages" value={messageQuery} onChange={event => setMessageQuery(event.target.value)} /></label>

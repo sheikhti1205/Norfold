@@ -53,6 +53,13 @@
 }
 .fb-modal-panel { position: relative; display: flex; flex-direction: column; width: 100%; min-width: 0; max-height: 100%; border-radius: 20px; background: var(--fb-surface); color: var(--fb-on-surface); box-shadow: var(--shadow-md); }
 .fb-task-panel { max-width: 44rem; }
+/* Conversation info is a short action list, not a wide task. The narrow measure
+   and the tighter chrome keep it a contact sheet instead of a 44rem modal with
+   a column of empty row. Only this variant changes; the shared task, report and
+   comments measures stay as they are. */
+.fb-compact-panel { max-width: 26rem; }
+.fb-compact-panel .fb-surface-header { padding: 10px 12px; }
+.fb-compact-panel .fb-surface-body { padding: 8px; }
 .fb-confirm-panel { max-width: 26rem; }
 /* The report is one floating surface at every width: a squircle that keeps a
    visible gutter and never grows past the visual viewport. `height: min(92%,

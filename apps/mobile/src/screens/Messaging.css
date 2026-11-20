@@ -359,6 +359,11 @@
 .fb-chat-info-block > div { flex:1; }
 .fb-chat-info-block > div > button { width:100%; min-height:44px; padding:.5rem 0; border:0; border-radius:0; text-align:start; justify-content:flex-start; font-size:.875rem; font-weight:400; }
 .fb-chat-sheet :is(button,a):focus-visible, .fb-chat-search-results button:focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }
+/* Inside the compact info panel only: the same 44px rows and 20px icons, with a
+   tighter gutter and divider so a short menu does not read as empty space. The
+   wide details pane keeps the base density. */
+.fb-compact-panel .fb-chat-info-row, .fb-compact-panel .fb-chat-info-block { gap:.65rem; }
+.fb-compact-panel .fb-chat-info-divider { margin:.3rem 0; }
 @media (prefers-reduced-motion:no-preference) { .fb-chat-refreshing { animation:fb-chat-spin 1s linear infinite; } }
 @keyframes fb-chat-spin { to { transform:rotate(360deg); } }
 /* One compact preview scale for the whole conversation. Every value is a

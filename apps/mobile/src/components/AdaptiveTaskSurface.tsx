@@ -13,7 +13,7 @@ interface SurfaceProps {
   children: ReactNode;
   footer?: ReactNode;
   busy?: boolean;
-  width?: "standard" | "report" | "comments";
+  width?: "standard" | "compact" | "report" | "comments";
   bodyClassName?: string;
   /**
    * The report owns its headline: the report's title is the first thing the
@@ -27,6 +27,7 @@ interface SurfaceProps {
 
 function panelClass(width: SurfaceProps["width"], confirmation: boolean) {
   if (confirmation) return "fb-confirm-panel";
+  if (width === "compact") return "fb-compact-panel";
   if (width === "report") return "fb-report-panel";
   if (width === "comments") return "fb-comments-panel";
   return "fb-task-panel";
