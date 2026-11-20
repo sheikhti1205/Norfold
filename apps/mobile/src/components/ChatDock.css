@@ -290,12 +290,13 @@
   flex: 1 1 5rem;
   min-width: min(100%, 5rem);
 }
-/* Below 22rem the identity and four 44px controls cannot sit on one row; the
-   old wrap split them three-and-one and left Close alone above a dead band.
-   The identity takes the whole first line, and the auto inline-start margin
-   on the first control starts the entire group at the second line's end. The
-   column gap stays .5rem (8px) and the row gap stays .25rem (4px). */
-@container fb-chat-dock-header (max-width: 22rem) {
+/* One row needs 288px of content: the 80px identity floor plus four 44px
+   controls and four 8px gaps. Below 18rem (288px) that row cannot fit; the old
+   wrap split it three-and-one and left Close alone above a dead band. The
+   identity takes the whole first line, and the auto inline-start margin on the
+   first control starts the entire group at the second line's end. The column
+   gap stays .5rem (8px) and the row gap stays .25rem (4px). */
+@container fb-chat-dock-header (max-width: 18rem) {
   .fb-chat-dock .fb-chat-header > .fb-chat-heading {
     flex: 1 0 100%;
     min-width: 0;
@@ -304,6 +305,13 @@
     margin-inline-start: auto;
   }
 }
+
+/* The dock stacks the relationship line inside the identity copy, directly
+   under the name, so the avatar and both lines form one 44px row. Because that
+   copy now lives inside the heading link, the status would inherit the name's
+   650 weight; the relationship line stays the page's regular secondary line,
+   with no extra margin between the two lines. */
+.fb-chat-dock .fb-chat-identity-copy .fb-chat-secondary { font-weight: 400; }
 
 /* ------------------------------------------------------------------ picker */
 

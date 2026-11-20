@@ -7,15 +7,17 @@ import { describe, expect, it } from "vitest";
  *
  * The served 320px / root16 and root32 screenshots wrapped the identity row
  * with three controls and left "Close chat" alone on a third line. These
- * assertions pin the replacement geometry in the real declarations: below the
- * dock header's own 22rem container width the canonical identity owns line one
- * and every dock control starts a right-aligned group on line two, at 44px,
- * with the wrap spacing the dock already uses. The full-page header keeps its
- * own rule untouched.
+ * assertions pin the replacement geometry in the real declarations: the dock
+ * header is its own container, and only below its 18rem content width — the
+ * 288px a single row actually needs (80px heading floor, four 44px controls
+ * and four 8px gaps) — does the canonical identity own line one and every dock
+ * control start a right-aligned group on line two, at 44px, with the wrap
+ * spacing the dock already uses. The full-page header keeps its own rule
+ * untouched.
  *
- * Static declarations only. Rendered proof (no overflow, no dead band, both
- * root sizes, light/dark/true-black) is a deployed-browser check and is not
- * claimed here.
+ * Static declarations only. Rendered proof (the 60-68px one-row header, no
+ * overflow, no dead band, both root sizes, light/dark/true-black) is a
+ * deployed-browser check and is not claimed here.
  */
 type CssRule = { context: string | null; selectors: string[]; body: string };
 
@@ -83,7 +85,7 @@ function singleRule(rules: CssRule[], selector: string): CssRule {
 const HEADER = ".fb-chat-dock .fb-chat-header";
 const HEADING = ".fb-chat-dock .fb-chat-header > .fb-chat-heading";
 const FIRST_CONTROL = ".fb-chat-dock .fb-chat-header > :nth-child(2)";
-const CONTAINER_QUERY = "@container fb-chat-dock-header (max-width: 22rem)";
+const CONTAINER_QUERY = "@container fb-chat-dock-header (max-width: 18rem)";
 
 describe("ChatDock header, narrow two-row contract", () => {
   it("makes the dock header its own container and keeps the wrap spacing", () => {
@@ -100,14 +102,17 @@ describe("ChatDock header, narrow two-row contract", () => {
     expect(canonicalGap).toBeLessThanOrEqual(8);
   });
 
-  it("scopes the compact header to a 22rem dock container query", () => {
+  it("scopes the compact header to an 18rem dock container query", () => {
     const narrowRules = dockRules.filter(rule => rule.context?.startsWith("@container"));
     expect(narrowRules.length).toBeGreaterThan(0);
     const contexts = [...new Set(narrowRules.map(rule => rule.context ?? ""))];
     expect(contexts).toEqual([CONTAINER_QUERY]);
     const [context = ""] = contexts;
     const limit = /max-width\s*:\s*([\d.]+)rem/.exec(context);
-    expect(Number(limit?.[1] ?? NaN)).toBeLessThanOrEqual(22);
+    // 18rem is exactly the 288px one row occupies (80px heading floor, four
+    // 44px controls, four 8px gaps); wrapping at 22rem cost a second control
+    // row at the 366px phone window even though the row fit.
+    expect(Number(limit?.[1] ?? NaN)).toBe(18);
     // Only the dock header is a container: the full chat page is never queried.
     const containers = dockRules.filter(rule => /container-type\s*:/.test(rule.body));
     expect(containers.flatMap(rule => rule.selectors)).toEqual([HEADER]);
@@ -249,8 +254,13 @@ describe("ChatDock header, narrow two-row contract", () => {
     expect(declaration(secondary, "overflow")).toBe("hidden");
     expect(declaration(secondary, "min-width")).toBe("0");
 
+    // The dock folds that status into the heading link, so it would inherit the
+    // 650 name weight; the relationship line keeps the page's regular weight.
+    const stacked = singleRule(dockRules, ".fb-chat-dock .fb-chat-identity-copy .fb-chat-secondary").body;
+    expect(declaration(stacked, "font-weight")).toBe("400");
+
     // Chrome only: no new paint, elevation, glass or gradient in the scoped rules.
-    for (const body of [dockHeader, name, identity, secondary]) {
+    for (const body of [dockHeader, name, identity, secondary, stacked]) {
       expect(body).not.toMatch(/(?:^|[;\s])(?:background(?:-color)?|box-shadow|color|filter|backdrop-filter|linear-gradient|radial-gradient)\s*:/);
     }
   });
