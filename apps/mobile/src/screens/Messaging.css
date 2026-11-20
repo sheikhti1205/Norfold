@@ -57,6 +57,20 @@
 .fb-chat-identity { display:flex; align-items:center; gap:.6rem; width:100%; min-height:44px; text-align:start; }
 .fb-chat-identity-copy { min-width:0; flex:1; overflow:hidden; }
 .fb-chat-identity-name { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* Dock thread header (owner direction 2026-11-20): circular avatar, the name
+   and the real relationship line stacked in the identity, and the four
+   existing window controls on the same 44px top line, 8px apart. The header
+   is chrome, not a new surface: it adds no width, paint, elevation or filter
+   and reuses the page's text tokens. Messaging carries no presence signal, so
+   there is no dot and no "Active now" line; the secondary line stays the
+   relationship label plus its muted badge. The full-page header keeps every
+   rule above untouched. */
+[data-surface="dock"] .fb-chat-header { min-height:60px; }
+[data-surface="dock"] .fb-chat-heading h1 { font-size:.95rem; }
+[data-surface="dock"] .fb-chat-identity { gap:.5rem; }
+[data-surface="dock"] .fb-chat-heading .fb-chat-secondary { display:block; min-width:0; margin-top:0; overflow:hidden;
+  font-size:.8125rem; text-overflow:ellipsis; white-space:nowrap; }
+[data-surface="dock"] .fb-chat-header .fb-chat-icon > svg { width:20px; height:20px; }
 .fb-chat-full-name { padding:16px; overflow-wrap:anywhere; }
 .fb-chat-icon { display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; flex:none; border-radius:50%; }
 .fb-chat-icon:hover, .fb-chat-icon:active { background:var(--fb-surface-container); }

@@ -236,6 +236,26 @@ it("renders the canonical header without a back link and with window controls", 
   expect(screen.getByRole("button", { name: "Conversation options" })).toBeTruthy();
 });
 
+it("keeps only the four real window controls, with no call or presence chrome", async () => {
+  await openDock();
+  const header = document.querySelector(".fb-chat-header") as HTMLElement | null;
+  expect(header).toBeTruthy();
+  // Info, collapse/minimize, expand, close. Nothing is added to match the
+  // Messenger reference: the product has no call capability and no presence
+  // signal, so the phone/video buttons and the green dot stay out.
+  const controls = Array.from(header!.querySelectorAll(".fb-chat-icon"));
+  expect(controls).toHaveLength(4);
+  for (const control of controls) {
+    expect(control.getAttribute("aria-label")).toBeTruthy();
+    expect(control.querySelector("svg")).toBeTruthy();
+  }
+  expect(screen.queryByRole("button", { name: /call|video|phone/i })).toBeNull();
+  expect(header!.querySelector("[data-presence], .fb-chat-presence, .fb-chat-online")).toBeNull();
+  expect(screen.queryByText(/active now/i)).toBeNull();
+  // The secondary line stays the real relationship label.
+  expect(within(header!).getByText("Friends")).toBeTruthy();
+});
+
 it("keeps one compact control and labels it by activity", async () => {
   const onToggleCompact = vi.fn();
   const view = await openDock({ onToggleCompact });
