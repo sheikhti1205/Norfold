@@ -226,6 +226,10 @@ it("caps a seven-photo album at four cells and counts the rest over the fourth",
   const cells = album.querySelectorAll(":scope > .fb-chat-line-row");
   expect(cells).toHaveLength(4);
   expect(album.querySelectorAll(".fb-chat-line-row-wide")).toHaveLength(0);
+  // The overlay only paints once the stored bytes resolve, in the same commit
+  // that inserts the counted viewer action, so wait for that action instead of
+  // reading the overlay ahead of the media read.
+  const viewMore = await screen.findByRole("button", { name: "View photo, 3 more" });
   // Exactly one overlay, the last child inside the fourth picture, so it is
   // clipped to the photo instead of covering the receipt row.
   const fourth = document.querySelector('[data-chat-message="photo-4"]')!;
@@ -234,7 +238,7 @@ it("caps a seven-photo album at four cells and counts the rest over the fourth",
   expect(fourth.querySelector(".fb-chat-photo")?.lastElementChild).toBe(more);
   expect(document.querySelectorAll(".fb-chat-photo-more")).toHaveLength(1);
   // The picture keeps its viewer action and names the hidden count.
-  expect(await screen.findByRole("button", { name: "View photo, 3 more" })).toBeTruthy();
+  expect(viewMore).toBeTruthy();
 });
 
 it("keeps the fourth cell's status card intact when its photo has no bytes", async () => {
@@ -263,8 +267,11 @@ it("keeps five photos to four cells behind a +1 overlay", async () => {
   const album = screen.getByRole("listitem", { name: "5 photos" });
   expect(album.querySelectorAll(":scope > .fb-chat-line-row")).toHaveLength(4);
   expect(document.querySelector('[data-chat-message="photo-5"]')).toBeNull();
+  // The count paints with the resolved picture, in the same commit as its
+  // counted viewer action, so wait for that action before reading the overlay.
+  const oneMore = await screen.findByRole("button", { name: "View photo, 1 more" });
   expect(document.querySelector(".fb-chat-photo-more")?.textContent).toBe("+1");
-  expect(await screen.findByRole("button", { name: "View photo, 1 more" })).toBeTruthy();
+  expect(oneMore).toBeTruthy();
 });
 
 it("shows four photos with no overflow overlay", async () => {
@@ -273,6 +280,9 @@ it("shows four photos with no overflow overlay", async () => {
   const album = screen.getByRole("listitem", { name: "4 photos" });
   expect(album.querySelectorAll(":scope > .fb-chat-line-row")).toHaveLength(4);
   expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(4);
+  // An absent overlay only means something once every picture is painted: the
+  // resolved branch of each cell renders its viewer button.
+  await waitFor(() => expect(document.querySelectorAll(".fb-chat-photo > button")).toHaveLength(4));
   expect(document.querySelector(".fb-chat-photo-more")).toBeNull();
   expect(album.querySelectorAll(".fb-chat-line-row-wide")).toHaveLength(0);
 });
@@ -307,6 +317,9 @@ it("caps a mixed photo/video album and keeps a bare clip as a compact tile", asy
   // last visible cell is a photo, so the overflow sits on its picture.
   expect(await screen.findByRole("button", { name: "Play clip-1.mp4" })).toBeTruthy();
   expect(document.querySelector(".fb-chat-run-more-badge")).toBeNull();
+  // The last visible cell is a photo, so its count waits on its resolved bytes
+  // exactly like the capped album above.
+  expect(await screen.findByRole("button", { name: "View photo, 3 more" })).toBeTruthy();
   expect(document.querySelector(".fb-chat-photo-more")?.textContent).toBe("+3");
 });
 
