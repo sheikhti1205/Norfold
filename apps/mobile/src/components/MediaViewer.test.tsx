@@ -24,6 +24,16 @@ function Gallery({ initial = 0 }: { initial?: number }) {
     <MediaViewer items={items} index={index} onIndexChange={setIndex} onClose={() => setIndex(null)} /></>;
 }
 
+const album: MediaViewerItem[] = Array.from({ length: 13 }, (_, position) => ({
+  id: `photo-${position}`, src: `https://example.test/photo-${position + 1}.jpg`, alt: `Album photo ${position + 1}`,
+}));
+
+function Album({ initial }: { initial: number }) {
+  const [index, setIndex] = useState<number | null>(null);
+  return <><button onClick={() => setIndex(initial)}>Inspect album</button>
+    <MediaViewer items={album} index={index} onIndexChange={setIndex} onClose={() => setIndex(null)} /></>;
+}
+
 beforeEach(() => {
   sdk.getSession.mockResolvedValue({ data: { session: { user: { id: "reader" } } } });
   sdk.sign.mockResolvedValue({ data: { signedUrl: "https://signed.test/comment.jpg" }, error: null });
@@ -37,6 +47,7 @@ describe("MediaViewer boundary", () => {
     const src="https://nfjhpigbsyyoaaktfaev.supabase.co/storage/v1/object/authenticated/findback-comment-media/11111111-1111-4111-8111-111111111111/photo.jpg";
     render(<MediaViewer items={[{ id: "comment", src, alt: "Private attached photo" }]} index={0} onClose={() => {}} />);
     await waitFor(() => expect(screen.getByRole("img", { name: "Private attached photo" }).getAttribute("src")).toBe("https://signed.test/comment.jpg"));
+    expect(screen.queryByRole("navigation", { name: "Thumbnails" })).toBeNull();
     sdk.getSession.mockResolvedValue({ data: { session: null } });
     act(() => { sdk.onAuthStateChange.mock.calls.at(-1)![0]("SIGNED_OUT", null); });
     await waitFor(() => expect(screen.queryByRole("img", { name: "Private attached photo" })).toBeNull());
@@ -59,6 +70,22 @@ describe("MediaViewer boundary", () => {
     await waitFor(() => expect(screen.getByText("Photo 1 of 2")).toBeTruthy());
     expect(screen.getByRole("button", { name: "Previous photo" })).toHaveProperty("disabled", true);
     expect(within(screen.getByRole("group", { name: "1 of 2" })).getByRole("img", { name: "Blue wallet front" }).getAttribute("src")).toContain("front.jpg");
+  });
+
+  it("renders every previous and next photo in the filmstrip, not a three-photo window", async () => {
+    render(<Album initial={6} />);
+    fireEvent.click(screen.getByRole("button", { name: "Inspect album" }));
+    expect(await screen.findByText("Photo 7 of 13")).toBeTruthy();
+    const filmstrip = screen.getByRole("navigation", { name: "Thumbnails" });
+    expect(within(filmstrip).getAllByRole("button")).toHaveLength(13);
+    expect(within(filmstrip).getByRole("button", { name: "7 of 13" }).getAttribute("aria-current")).toBe("true");
+    expect(within(filmstrip).getByRole("button", { name: "1 of 13" }).getAttribute("aria-current")).toBeNull();
+    fireEvent.click(within(filmstrip).getByRole("button", { name: "12 of 13" }));
+    await waitFor(() => expect(screen.getByText("Photo 12 of 13")).toBeTruthy());
+    expect(within(filmstrip).getByRole("button", { name: "12 of 13" }).getAttribute("aria-current")).toBe("true");
+    fireEvent.click(within(filmstrip).getByRole("button", { name: "2 of 13" }));
+    await waitFor(() => expect(screen.getByText("Photo 2 of 13")).toBeTruthy());
+    expect(within(filmstrip).getByRole("button", { name: "2 of 13" }).getAttribute("aria-current")).toBe("true");
   });
 
   it("closes with Escape and restores the launcher, including the native Back bridge", async () => {

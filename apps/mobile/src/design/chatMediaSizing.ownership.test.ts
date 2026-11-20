@@ -13,18 +13,20 @@ import { describe, expect, it } from "vitest";
  * inline ratio that shrinks the box until it fits the shared height bound (so
  * the contain-fitted picture paints edge to edge with no letterbox bars), a
  * flush bubble whose width owner is the picture box rather than the bitmap's
- * intrinsic width, an expressive bubble whose own plain-length cap bounds the
- * max-content measurement that a percentage cap could not, a compact status
- * branch that keeps the shared preview width and no intrinsic ratio, the
- * existing parent width chain, and the unchanged group arrangements.
+ * intrinsic width, a direct-child message photo override that gives a padded,
+ * captioned bubble that same definite width, an expressive bubble whose own
+ * plain-length cap bounds the max-content measurement that a percentage cap
+ * could not, a compact status branch that keeps the shared preview width and
+ * no intrinsic ratio, the existing parent width chain, and the unchanged group
+ * arrangements.
  *
  * The deployed page is `border-box` everywhere: `src/main.tsx` imports
  * `src/index.css`, whose first line is `@import "tailwindcss"`, and Tailwind
  * Preflight's base layer declares `*,:after,:before,::backdrop{box-sizing:border-box}`.
  * Every declared max-width below is therefore a border box. A padded bubble
- * hands its picture the cap minus its own side padding; a padded photo bubble
- * only ever holds a no-bytes card, because a painted single photo is the flush
- * media-only bubble and takes the whole cap. Rendered geometry
+ * hands its picture the cap minus its own side padding, so a captioned photo's
+ * definite width is clamped by the base `max-width:100%`; a flush media-only
+ * bubble declares `padding:0` and takes the whole cap. Rendered geometry
  * remains a deployed browser acceptance item, not a claim from this file.
  */
 type CssRule = { selectors: string[]; body: string };
@@ -165,16 +167,17 @@ function transcript(scrollerWidth: number) {
 /**
  * The paint model of the declared photo bounds: ratio is width / height.
  * The deployed page is `border-box` everywhere (Tailwind Preflight), so a
- * declared max-width bounds the bubble's border box. A painted single photo
+ * declared max-width bounds the bubble's border box. A bare painted photo
  * bubble is the flush media-only bubble, `.fb-chat-message-media:has(>
  * .fb-chat-photo > button)`, which declares `padding:0`: the cap is all picture,
- * which is why `flush` is the default. Only a no-bytes card keeps the base
- * `.fb-chat-message` padding, and it takes the shared media width instead of the
- * ratio solve. The photo preference, the one 70% message cap, the readable 34rem
- * measure, that padding and the height bound times the inline ratio compete, and
- * the smallest wins. A tall picture therefore narrows until it fits the bound,
- * so the box and the contain-fitted image agree. This is arithmetic on declared
- * values, not layout measurement.
+ * which is why `flush` is the default. A captioned or otherwise padded bubble
+ * keeps the base `.fb-chat-message` padding, so the definite photo width is
+ * clamped by that content box; a no-bytes card instead takes the shared media
+ * width and no ratio solve. The photo preference, the one 70% message cap, the
+ * readable 34rem measure, that padding and the height bound times the inline
+ * ratio compete, and the smallest wins. A tall picture therefore narrows until
+ * it fits the bound, so the box and the contain-fitted image agree. This is
+ * arithmetic on declared values, not layout measurement.
  */
 function photoPaint(scrollerWidth: number, viewportHeight: number, ratio: number, flush = true) {
   const { usable, cap } = transcript(scrollerWidth);
@@ -569,13 +572,14 @@ describe("R19 flush photo width ownership", () => {
   const flushBubble = /\.fb-chat-message-media:has\(> \.fb-chat-photo > button\)\s*\{([^{}]*)\}/.exec(chatCss)?.[1] ?? "";
   const longPressCss = readFileSync(new URL("../components/longPress.css", import.meta.url), "utf8");
 
-  it("restates a definite photo width inside a flush bubble only", () => {
+  it("restates a definite photo width inside a flush bubble", () => {
     expect(flushPhoto).toContain("width:min(var(--fb-chat-photo-width, 320px), calc(var(--fb-chat-photo-height, min(320px, 50vh)) * var(--fb-chat-photo-ratio)))");
     // The percentage is the term intrinsic sizing cannot resolve; leaving it in
     // is what let the bitmap, not the box, size the bubble.
     expect(flushPhoto).not.toContain("100%,");
-    // Scoped to a flush bubble: captions, status cards, the gallery and the
-    // grouped cells keep the base guard.
+    // Scoped to the flush bubble alone: a padded or captioned bubble takes the
+    // direct-child message override below, and the gallery, the grouped cells
+    // and the no-bytes card keep their own width owners.
     expect(flushPhotoSelector).toContain(".fb-chat-message-media:has(> .fb-chat-photo > button)");
     expect(flushPhotoSelector).not.toContain(".fb-chat-gallery");
     expect(base).toContain("width:min(var(--fb-chat-photo-width, 320px), 100%, calc(var(--fb-chat-photo-height, min(320px, 50vh)) * var(--fb-chat-photo-ratio)))");
@@ -620,6 +624,110 @@ describe("R19 flush photo width ownership", () => {
     // The picture box and the bubble share the one definite width, so the
     // chip's inline-end inset and the picture edge are the same edge.
     expect(flushPhoto).toContain("var(--fb-chat-photo-width, 320px)");
+  });
+});
+
+/**
+ * R19 captioned photo width ownership (deployed acceptance, 2026-11-20). A
+ * MEDIA message that pairs a 320px photo with a bare YouTube-link caption
+ * rendered a 544x452 padded bubble at 1600, with the photo (320x145) and the
+ * 320x266 preview card both ending short of the bubble edge. The surface sizes
+ * to `max-content` and the base photo width carries a percentage that intrinsic
+ * sizing cannot resolve, so the bitmap's own width measured the bubble and the
+ * 34rem cap won. The direct-child override restates the flush pair's definite
+ * width for every message photo, while the base `max-width:100%` keeps the
+ * narrow-pane clamp. Declarations and arithmetic only: rendered geometry stays
+ * in the deployed browser.
+ */
+describe("R19 captioned photo width ownership", () => {
+  const messagePhotoSelector = ".fb-chat-message > .fb-chat-photo";
+  const messagePhoto = bodies(messagePhotoSelector).join("\n");
+  const compactSelector = '.fb-chat-message .fb-chat-photo:not(.fb-chat-photo-grouped):has(> div[role="status"])';
+  const surface = bodies(".fb-chat-message-surface").join("\n");
+  const bubble = bodies(".fb-chat-message").find(body => body.includes("max-width:min(100%, 34rem);")) ?? "";
+
+  /**
+   * Specificity as [ids, classes, types] for the flat selectors this file reads:
+   * `:not`/`:is`/`:has` contribute their argument, `:where()` contributes
+   * nothing, and an attribute shares the class bucket.
+   */
+  function specificity(selector: string): [number, number, number] {
+    const flatten = (part: string) => part
+      .replace(/:where\([^()]*\)/g, " ")
+      .replace(/:(?:not|is|has)\(([^()]*)\)/g, " $1 ");
+    let flat = selector;
+    for (let next = flatten(flat); next !== flat; next = flatten(flat)) flat = next;
+    const ids = (flat.match(/#[\w-]+/g) ?? []).length;
+    const classes = (flat.match(/\.[\w-]+/g) ?? []).length
+      + (flat.match(/\[[^\]]+\]/g) ?? []).length
+      + (flat.match(/:(?!:)[\w-]+/g) ?? []).length;
+    const types = (flat.replace(/\[[^\]]+\]/g, " ").match(/(?:^|[\s>+~])([a-z][\w-]*)/gi) ?? []).length;
+    return [ids, classes, types];
+  }
+
+  it("gives every direct message photo the definite flush width", () => {
+    expect(messagePhoto).toContain("width:min(var(--fb-chat-photo-width, 320px), calc(var(--fb-chat-photo-height, min(320px, 50vh)) * var(--fb-chat-photo-ratio)));");
+    // The percentage is the term intrinsic sizing cannot resolve; leaving it in
+    // is what let the bitmap, and then the 34rem cap, size a captioned bubble.
+    expect(messagePhoto).not.toContain("100%,");
+    expect(messagePhoto).not.toContain("100%");
+    // The base rule keeps the percentage-guarded preference and the narrow-pane
+    // clamp; this override replaces neither.
+    expect(photoRule()).toContain("width:min(var(--fb-chat-photo-width, 320px), 100%, calc(var(--fb-chat-photo-height, min(320px, 50vh)) * var(--fb-chat-photo-ratio)))");
+    expect(photoRule()).toContain("max-width:100%;");
+    // The flush pair keeps its own copy of the same value.
+    expect(bodies(".fb-chat-message-media:has(> .fb-chat-photo > button) > .fb-chat-photo").join("\n"))
+      .toContain("width:min(var(--fb-chat-photo-width, 320px), calc(");
+  });
+
+  it("scopes the override to direct children and leaves the other owners alone", () => {
+    expect(messagePhotoSelector).toContain(".fb-chat-message > .fb-chat-photo");
+    expect(messagePhotoSelector).not.toContain(".fb-chat-gallery");
+    expect(messagePhotoSelector).not.toContain(".fb-chat-photo-grouped");
+    // Cascade order: the base box, then the message override, then the album
+    // owners. An album cell is still a message bubble, so its later rule keeps
+    // the cell at 100% of the album column instead of the single-photo width.
+    const baseAt = chatCss.indexOf(".fb-chat-photo { --fb-chat-photo-ratio");
+    const messageAt = chatCss.indexOf(".fb-chat-message > .fb-chat-photo {");
+    const runAt = chatCss.indexOf(".fb-chat-run .fb-chat-photo,");
+    expect(baseAt).toBeGreaterThan(-1);
+    expect(messageAt).toBeGreaterThan(baseAt);
+    expect(runAt).toBeGreaterThan(messageAt);
+    // The gallery and the grouped cell still own their full-width box.
+    expect(bodies(".fb-chat-gallery .fb-chat-photo").join("\n")).toContain("width:100%;");
+    expect(bodies(".fb-chat-gallery .fb-chat-photo").join("\n")).toContain("max-height:20rem;");
+    expect(bodies(".fb-chat-photo-grouped").join("\n")).toContain("width:100%;");
+    expect(bodies(".fb-chat-photo-grouped").join("\n")).toContain("max-height:none;");
+  });
+
+  it("keeps the no-bytes card at the shared media width, more specific and later", () => {
+    const compact = bodies(compactSelector).join("\n");
+    expect(compact).toContain("width:var(--fb-chat-media-width);");
+    expect(compactSelector).toContain(":not(.fb-chat-photo-grouped)");
+    expect(compactSelector).toContain(':has(> div[role="status"])');
+    // (0,4,1) beats the direct-child override's (0,2,0), and the compact rule
+    // also comes later in the sheet, so neither specificity nor order can let
+    // the photo preference resize a loading or missing card.
+    expect(specificity(compactSelector)).toEqual([0, 4, 1]);
+    expect(specificity(messagePhotoSelector)).toEqual([0, 2, 0]);
+    expect(chatCss.indexOf(compactSelector)).toBeGreaterThan(chatCss.indexOf(messagePhotoSelector));
+  });
+
+  it("keeps the bubble, surface and row caps unchanged", () => {
+    expect(surface).toContain("max-width:min(100%, 34rem);");
+    expect(bubble).toContain("max-width:min(100%, 34rem);");
+    expect(messageCapPercent).toBe(70);
+    expect(chatCss).toContain(".fb-chat-line > .fb-chat-line-row { max-width:70%; }");
+    expect(chatCss.match(/max-width:70%/g)).toHaveLength(2);
+    // The 320px photo plus the padded bubble's two 12.8px gutters is 345.6px,
+    // well under the 544px cap: no strip beside the picture or the preview card.
+    expect(photoWidthPx + 2 * bubblePaddingPx).toBeCloseTo(345.6, 5);
+    expect(photoWidthPx + 2 * bubblePaddingPx).toBeLessThan(34 * REM_PX);
+    // On a phone the one 70% row cap still wins, so the bubble cannot overflow.
+    expect(transcript(320).cap).toBeCloseTo(206.08, 5);
+    expect(transcript(390).cap).toBeCloseTo(255.08, 5);
+    expect(Math.min(photoWidthPx + 2 * bubblePaddingPx, transcript(320).cap)).toBeCloseTo(206.08, 5);
+    expect(Math.min(photoWidthPx + 2 * bubblePaddingPx, transcript(390).cap)).toBeCloseTo(255.08, 5);
   });
 });
 
