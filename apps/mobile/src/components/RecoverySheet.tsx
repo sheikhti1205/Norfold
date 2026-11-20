@@ -172,7 +172,7 @@ export function RecoverySheet({
 
   if (eligibilityRefusal) {
     return (
-      <AdaptiveTaskSurface open={open} onClose={onClose} title="Mark recovered">
+      <AdaptiveTaskSurface open={open} onClose={onClose} title="Mark recovered" width="compact">
         <div className="flex flex-col gap-3 py-2">
           <p role="alert" data-testid="recovery-error" className="text-sm text-error">
             {eligibilityRefusal}

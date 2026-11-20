@@ -165,6 +165,7 @@ export function ReportSheet({ open, onClose, target, onReported }: ReportSheetPr
       onClose={onClose}
       title="Report a problem"
       description={`Tell us what is wrong with ${subject}.`}
+      width="compact"
     >
       {sent ? (
         <div className="flex flex-col gap-3 py-2" data-testid="report-receipt">

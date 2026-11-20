@@ -87,7 +87,10 @@ describe("the one report sheet", () => {
 
   it("names what is being reported, in the reader's words", () => {
     renderSheet("COMMENT");
-    expect(screen.getByRole("dialog", { name: /report a problem/i })).toBeTruthy();
+    const dialog = screen.getByRole("dialog", { name: /report a problem/i });
+    expect(dialog).toBeTruthy();
+    // A short reason list and an optional note: the narrow task measure, not 44rem.
+    expect(dialog.closest(".fb-modal-panel")?.classList.contains("fb-compact-panel")).toBe(true);
     expect(document.body.textContent).toContain("this comment");
   });
 

@@ -86,6 +86,9 @@ describe("the safety overflow on a report or comment", () => {
     openActions();
     expect(screen.getByRole("menuitem", { name: "Report post" })).toBeTruthy();
     fireEvent.click(screen.getByRole("menuitem", { name: "Block account" }));
+    // One block trigger: the compact measure, not 44rem.
+    const blockDialog = await screen.findByRole("dialog", { name: "Block account" });
+    expect(blockDialog.closest(".fb-modal-panel")?.classList.contains("fb-compact-panel")).toBe(true);
     expect(await screen.findByRole("button", { name: "Block Sam" })).toBeTruthy();
     expect(listMyBlocks).toHaveBeenCalledTimes(1);
   });

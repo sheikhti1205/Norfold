@@ -152,7 +152,7 @@ function ScopedReportMatches({ accountId, post, onChanged }: Props) {
         onClick={() => void load({ at: last.proposedAt, id: last.matchId })}>Load earlier activity</Button>}
     </>}
     {post.status === "OPEN" && <PossibleMatches post={post} onConfirmMatch={owner ? (candidate) => review({ kind: "propose", candidate }) : undefined} />}
-    <AdaptiveTaskSurface open={action !== null} title={title} busy={sending} onClose={() => { if (!sending) setAction(null); }}>
+    <AdaptiveTaskSurface open={action !== null} title={title} busy={sending} width="compact" onClose={() => { if (!sending) setAction(null); }}>
       <div className="flex min-w-0 flex-col gap-4">
         <p className="break-words text-sm font-medium">{action?.kind === "propose" ? action.candidate.post.title : action?.match.peerTitle ?? "Other report unavailable"}</p>
         <p className="text-sm text-on-surface-variant">{action?.kind === "propose" ? "Only propose this if you believe the reports describe the same item. The other owner must also agree before either report is marked matched."

@@ -42,7 +42,7 @@ function ScopedCommentSafetyMenu({ commentId, authorId, authorName, viewerId, ca
     <div className="relative shrink-0">
       <ActionMenu label={`Actions for comment by ${authorName}`} items={items} />
       <ReportSheet open={reportOpen && mayReport} target={{ targetType: "COMMENT", targetId: commentId }} onClose={() => setReportOpen(false)} onReported={onReported} />
-      <AdaptiveTaskSurface open={blockOpen && mayReport} title="Block account" onClose={() => setBlockOpen(false)}>
+      <AdaptiveTaskSurface open={blockOpen && mayReport} title="Block account" onClose={() => setBlockOpen(false)} width="compact">
         {blockOpen && <BlockControl userId={authorId} name={authorName} />}
       </AdaptiveTaskSurface>
     </div>

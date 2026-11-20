@@ -106,7 +106,7 @@ export function ReportShareButton({ postId, title }: { postId: string; title: st
         </p>
       )}
       {manualLink && (
-        <AdaptiveTaskSurface open onClose={() => setManualLink(null)} title="Copy link">
+        <AdaptiveTaskSurface open onClose={() => setManualLink(null)} title="Copy link" width="compact">
           <div className="mt-1 flex min-w-0 flex-col gap-1">
             <label htmlFor={fieldId} className="text-xs text-on-surface-variant">
               Report link

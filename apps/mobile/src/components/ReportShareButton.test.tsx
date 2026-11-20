@@ -107,6 +107,9 @@ describe("ReportShareButton", () => {
       const field = (await screen.findByLabelText("Report link")) as HTMLInputElement;
       expect(field.value).toBe(url);
       expect(field.readOnly).toBe(true);
+      // One read-only field and a hint: the compact measure, not 44rem.
+      const dialog = screen.getByRole("dialog", { name: "Copy link" });
+      expect(dialog.closest(".fb-modal-panel")?.classList.contains("fb-compact-panel")).toBe(true);
       // It must never claim a copy that did not happen.
       await waitFor(() => expect(heard.join(" ")).toMatch(/isn't available/i));
       expect(heard).not.toContain("Link copied.");
