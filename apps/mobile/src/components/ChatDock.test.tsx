@@ -513,7 +513,8 @@ describe("ChatDock picker", () => {
   });
 });
 
-const dockCss = readFileSync(new URL("./ChatDock.css", import.meta.url), "utf8");
+// Vitest runs with `apps/mobile` as its cwd; a jsdom module has no file: URL.
+const dockCss = readFileSync("src/components/ChatDock.css", "utf8");
 
 describe("ChatDock surface sizing", () => {
   it("marks the open panel as the picker until a conversation takes it over", () => {
