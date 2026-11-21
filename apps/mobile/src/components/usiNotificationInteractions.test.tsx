@@ -159,8 +159,9 @@ describe("notification interactions", () => {
   it("replaces the preview with the rail when the pointer leaves the preview target", async () => {
     mocks.fetch.mockResolvedValue([row({ thumbnailUrl: "https://example.com/a.jpg" })]);
     show();
+    const subject = await screen.findByText("Wallet");
     vi.useFakeTimers();
-    fireEvent.pointerOver(await screen.findByText("Wallet"), { pointerType: "mouse" });
+    fireEvent.pointerOver(subject, { pointerType: "mouse" });
     await act(async () => { await vi.advanceTimersByTimeAsync(220); });
     expect(document.querySelector(".fb-notification-card")).toBeTruthy();
     expect(screen.queryAllByRole("toolbar")).toHaveLength(0);
