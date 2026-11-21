@@ -128,6 +128,26 @@ describe("PostDetail inline comment threads", () => {
 
   afterEach(cleanup);
 
+  it("moves focus to the comment textarea on the Comments action and never autofocuses on load", async () => {
+    postsMock.fetchComments.mockResolvedValue([]);
+    const scrollIntoView = vi.fn();
+    const original = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scrollIntoView as unknown as typeof HTMLElement.prototype.scrollIntoView;
+    try {
+      renderDetail();
+      await screen.findByTestId("detail-comments");
+      expect(document.activeElement?.getAttribute("data-testid")).not.toBe("comment-input");
+
+      fireEvent.click(screen.getByRole("button", { name: /^Comments, / }));
+      await waitFor(() => {
+        expect(document.activeElement).toBe(screen.getByTestId("comment-input"));
+      });
+      expect(scrollIntoView).toHaveBeenCalled();
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
+    }
+  });
+
   it("renders the packet §4 row target: author + time, body, Reply and Like on touch targets", async () => {
     authState.user = { id: "u1", username: "u1" };
     postsMock.fetchComments.mockResolvedValue([makeComment("c1", "u1", "Could this be yours?")]);

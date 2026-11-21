@@ -31,6 +31,7 @@ import {
 import type { CommentAttachmentDescriptor } from "../services/posts";
 import { ApiError } from "../services/session";
 import { friendlyError } from "../utils/friendlyErrors";
+import { shouldReduceMotion } from "./uiMotion";
 import { interactionRefusalCopy } from "../utils/interactionRefusal";
 
 /**
@@ -240,7 +241,13 @@ export function CommentComposer({
   useEffect(() => {
     if (focusSignal <= 0 || focusSignal === handledFocus.current) return;
     handledFocus.current = focusSignal;
-    fieldRef.current?.focus({ preventScroll: true });
+    const field = fieldRef.current;
+    if (!field) return;
+    field.focus({ preventScroll: true });
+    if (typeof field.scrollIntoView === "function") {
+      const reduced = shouldReduceMotion();
+      field.scrollIntoView({ block: "center", behavior: reduced ? "instant" : "smooth" });
+    }
   }, [focusSignal]);
 
   // Typing anywhere on the report surface starts the comment, never a search.
