@@ -108,6 +108,10 @@
 .fb-settings-window-body { flex: 1; min-height: 0; overflow: hidden; }
 /* The settings split view fills the window; its own panes keep their scroll. */
 .fb-settings-window-body > * { height: 100%; }
+.fb-settings-window-body .fb-split-list {
+  scrollbar-width: thin;
+  scrollbar-color: var(--fb-on-surface-variant) transparent;
+}
 /* A page mounted directly in the window (Profile, Profile edit) owns the
    scroll here. Without this it was clipped by the body and the wheel did
    nothing (owner defect 2026-11-14). */

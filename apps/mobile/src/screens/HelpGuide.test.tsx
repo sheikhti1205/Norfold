@@ -10,6 +10,7 @@ vi.mock("../auth", () => ({
 }));
 
 import { HelpGuide } from "./HelpGuide";
+import { SettingsWindowQuery } from "../components/settingsWindowHost";
 
 function LocationProbe() {
   const location = useLocation();
@@ -88,5 +89,12 @@ describe("HelpGuide", () => {
     const results = screen.getByRole("list", { name: /settings search results/i });
     expect(within(results).getByRole("link", { name: "Notifications" })).toBeTruthy();
     expect(within(results).queryByRole("link", { name: /replay introduction/i })).toBeNull();
+  });
+
+  it("uses the window query to filter articles without a second search field", () => {
+    render(<MemoryRouter><SettingsWindowQuery.Provider value="notif"><HelpGuide /></SettingsWindowQuery.Provider></MemoryRouter>);
+    expect(screen.queryByRole("searchbox", { name: /search help topics/i })).toBeNull();
+    expect(screen.getByRole("link", { name: "Notifications" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /replay introduction/i })).toBeNull();
   });
 });

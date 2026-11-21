@@ -355,8 +355,8 @@ html.fb-reduce-motion .fb-rail-anchor:has(> .fb-nav-rail) { transition: none; }
    pinned, hover- or focus-expanded - the wordmark sits inside it beside the
    mark and the outside copy yields, so the name is never on screen twice.
    Hover and focus already widen the column over the page, so that copy only
-   becomes invisible: keeping its box means the route title does not jump while
-   the pointer crosses the rail. */
+   becomes invisible: header clearance stays, so titles do not jump while the
+   pointer crosses the rail. */
 .fb-app-viewport:has(.fb-nav-rail[data-hover-expanded="true"]) .fb-nav-outside-brand,
 .fb-app-viewport:has(.fb-nav-rail[data-pinned="false"] :focus-visible) .fb-nav-outside-brand {
   visibility: hidden;
@@ -432,7 +432,9 @@ body:has(#report-editor-overlay) .fb-nav-rail { display: none; }
 .fb-nav-drawer-trigger:active { transform: scale(0.96); }
 .fb-nav-drawer-trigger:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: 2px; }
 html.fb-reduce-motion .fb-nav-drawer-trigger:active { transform: none; }
-.fb-nav-drawer { position: fixed; inset: 0; z-index: 100; }
+/* The drawer sits above the dock and below search and modal surfaces. Its
+   account popover uses the overlay depth provider in Shell.tsx. */
+.fb-nav-drawer { position: fixed; inset: 0; z-index: 65; }
 .fb-nav-drawer-backdrop {
   position: absolute;
   inset: 0;

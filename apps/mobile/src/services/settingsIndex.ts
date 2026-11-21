@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Sparkles,
   UserRoundX,
+  UserRound,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -70,6 +71,8 @@ const SECTION_LABEL: Record<SettingsSection, SectionLabel> = {
  * that live under Privacy & safety.
  */
 const SEARCH_ONLY: readonly { id: string; section: SettingsSection; description?: string }[] = [
+  { id: "profile", section: "account" },
+  { id: "sign-in-security", section: "account" },
   { id: "blocked-accounts", section: "privacy", description: "Privacy · Safety" },
   { id: "safety-reports", section: "privacy", description: "Privacy · Safety" },
   { id: "appeals", section: "privacy", description: "Privacy · Safety" },
@@ -87,6 +90,7 @@ type Presentation = Readonly<{
 
 /** Icon and tone only. Never a title, route or alias. */
 const PRESENTATION: Record<string, Presentation> = {
+  profile: { icon: UserRound, iconTone: "account" },
   "recovered-items": { icon: RotateCcw, iconTone: "success" },
   "sign-in-security": { icon: KeyRound, iconTone: "privacy" },
   devices: { icon: MonitorSmartphone, iconTone: "teal" },

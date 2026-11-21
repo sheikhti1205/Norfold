@@ -15,3 +15,8 @@
   min-height: 0;
   outline: none;
 }
+
+.fb-category-dialog [data-testid="category-results"] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--fb-on-surface-variant) transparent;
+}

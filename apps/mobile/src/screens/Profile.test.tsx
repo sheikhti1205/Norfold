@@ -24,11 +24,11 @@ vi.mock("../services/accountProviders", () => ({ readLinkedProviders: mockReadPr
 vi.mock("../services/telegram", () => ({ getTelegramAccount: mockTelegram }));
 vi.mock("../services/profile", () => ({ updateMyProfile: mockUpdateProfile }));
 vi.mock("./AccountSettings", () => ({
-  AccountSecuritySections: () => <section aria-label="Sign-in controls">Password sign-in</section>,
-  MobileNumberRow: () => (
-    <a href="/profile/edit" className="fb-settings-row fb-profile-account-row">
+  AccountSecuritySections: () => <section id="profile-telegram-settings" tabIndex={-1} aria-label="Sign-in controls">Password sign-in</section>,
+  MobileNumberRow: ({ onManage }: { onManage: () => void }) => (
+    <button onClick={onManage} className="fb-settings-row fb-profile-account-row">
       <span className="fb-settings-row-title">Mobile number</span>
-    </a>
+    </button>
   ),
 }));
 
@@ -96,9 +96,7 @@ describe("Profile landing", () => {
       "/profile/edit",
     );
     expect(screen.getByText("Email verified")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Verify mobile" }).getAttribute("href")).toBe(
-      "/profile/edit",
-    );
+    expect(screen.getByRole("button", { name: "Verify mobile" })).toBeTruthy();
   });
 
   it("edits the name in place and keeps the other identity fields intact", async () => {
@@ -152,28 +150,32 @@ describe("Profile landing", () => {
     expect(within(region).queryByText("Connected")).toBeNull();
   });
 
-  it("shows Telegram status and opens the editor that owns verification", async () => {
+  it("shows Telegram status and focuses its existing controls", async () => {
     mockTelegram.mockResolvedValue({ linked: true, phone: null, username: "tester_tg" });
     renderProfile();
     const region = await screen.findByRole("region", { name: "Connected accounts" });
     expect(await within(region).findByText("@tester_tg")).toBeTruthy();
-    expect(within(region).getByRole("link", { name: "Telegram" }).getAttribute("href")).toBe(
-      "/profile/edit",
-    );
+    const target = screen.getByRole("region", { name: "Sign-in controls" });
+    target.scrollIntoView = vi.fn();
+    fireEvent.click(within(region).getByRole("button", { name: "Telegram" }));
+    expect(document.activeElement).toBe(target);
   });
 
   it("marks the mobile chip verified only from the Telegram account state", async () => {
     mockTelegram.mockResolvedValue({ linked: true, phone: "+8801912345678", username: "tester_tg" });
     renderProfile();
     expect(await screen.findByText("Mobile verified")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Verify mobile" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Verify mobile" })).toBeNull();
   });
 
   it("keeps the action label Verify mobile when Telegram has no number", async () => {
     mockTelegram.mockResolvedValue({ linked: true, phone: null, username: "tester_tg" });
     renderProfile();
-    const action = await screen.findByRole("link", { name: "Verify mobile" });
-    expect(action.getAttribute("href")).toBe("/profile/edit");
+    const action = await screen.findByRole("button", { name: "Verify mobile" });
+    const target = screen.getByRole("region", { name: "Sign-in controls" });
+    target.scrollIntoView = vi.fn();
+    fireEvent.click(action);
+    expect(document.activeElement).toBe(target);
     expect(screen.queryByText("Add mobile")).toBeNull();
   });
 
@@ -204,14 +206,11 @@ describe("Profile landing", () => {
     }
   });
 
-  it("shows security controls and devices without a redundant account link", async () => {
+  it("shows security controls without redundant account and device links", () => {
     renderProfile();
     expect(screen.getByRole("region", { name: "Sign-in controls" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Sign-in & security" })).toBeNull();
-    const region = await screen.findByRole("region", { name: "Devices" });
-    expect(within(region).getByRole("link", { name: "Devices" }).getAttribute("href")).toBe(
-      "/settings/devices",
-    );
+    expect(screen.queryByRole("link", { name: "Devices" })).toBeNull();
   });
 
   it("links to the public profile route for the signed-in user", () => {
@@ -229,26 +228,15 @@ describe("Profile landing", () => {
     for (const link of links) expect(link.getAttribute("href")).toBe("/verify");
   });
 
-  it("links My reports, Saved reports, Chats, Ratings, Public profile, Settings and Help to their canonical routes", () => {
+  it("keeps the public profile action without repeating primary navigation", () => {
     renderProfile();
     const nav = screen.getByRole("navigation", { name: "Profile actions" });
     const links = within(nav).getAllByRole("link");
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
-      "/my",
-      "/saved",
-      "/chats",
-      "/settings/returns",
       "/u/tester",
-      "/settings",
-      "/settings/help",
     ]);
     for (const link of links) expect(link.tagName).toBe("A");
     expect(within(nav).getByText("Public profile")).toBeTruthy();
-    expect(within(nav).getByText("My reports")).toBeTruthy();
-    expect(within(nav).getByText("Chats")).toBeTruthy();
-    expect(within(nav).getByText("Saved reports")).toBeTruthy();
-    expect(within(nav).getByText("Settings")).toBeTruthy();
-    expect(within(nav).getByText("Help & guide")).toBeTruthy();
   });
 
   it("keeps the mobile number and email out of the public identity hero", async () => {
@@ -264,12 +252,6 @@ describe("Profile landing", () => {
     const region = await screen.findByRole("region", { name: "Reputation" });
     expect(await within(region).findByText("Trusted")).toBeTruthy();
     expect(trust.fetchReputationTier).toHaveBeenCalledWith("u1");
-  });
-
-  it("reaches rating detail from Profile, not from Settings", async () => {
-    renderProfile();
-    const link = await screen.findByRole("link", { name: /ratings & recoveries/i });
-    expect(link.getAttribute("href")).toBe("/settings/returns");
   });
 
   it("keeps trust honest while loading and when the server refuses", async () => {

@@ -1,26 +1,10 @@
-/* The app name painted outside a side rail while the column is an unnamed icon
-   strip (owner direction 2026-11-18).
-
-   The shell owns this copy. `Shell.tsx` renders the name inside
-   `.fb-rail-anchor`, the box that also holds the rail, so both are positioned
-   from the same geometry: the name starts at the rail column's inline-end edge
-   and is centred on the rail head's logo. It is never placed by a route
-   header, so changing screens cannot move it to a different content origin,
-   and a wide canvas' centring cannot push it into the feed.
-
-   `Shell.nav.css` owns when it may paint: visible only while the rail is an
-   unnamed icon column, hidden the moment the panel names itself. */
+/* The shell owns the name beside the collapsed rail, aligned to its mark. */
 .fb-rail-anchor {
   position: relative;
   display: flex;
   flex: none;
   min-width: 0;
 }
-/* One wordmark hierarchy: the same 1.125rem/700/-0.02em the rail's own name
-   uses, and the same 1.125rem an AppBar screen title uses. The owner rejected
-   a version smaller than the Chat title, so the name keeps the title's size
-   and only its weight is heavier. The header reservation below is rem-based so
-   the band scales with it at 20px text instead of needing a guessed margin. */
 .fb-nav-outside-label {
   flex: none;
   font-size: 1.125rem;
@@ -30,17 +14,6 @@
   color: var(--fb-on-surface);
   white-space: nowrap;
 }
-/* `inset-inline-start: 100%` is the anchor box's inline-end edge in both writing
-   directions, so the rail column's own width - collapsed 64px, 72px on a wide
-   window - is the reference rather than a guessed offset. The name's text sits
-   14px from the rail SURFACE edge (4px column frame + 7px offset + 3px
-   padding), not 14px from the mark: the mark keeps its own inset inside the
-   surface, so the glyph-to-glyph gap is a different number and this copy does
-   not move to chase it. The surface background is a knockout, not a chip: a
-   feed that scrolls under this band (Home's row is inside its own scroller)
-   must not make the name unreadable.
-   The copy is inert: it never takes a pointer event or a tab stop, and it
-   paints above the route's row so a header background cannot dim it. */
 .fb-nav-outside-brand {
   position: absolute;
   inset-inline-start: 100%;
@@ -52,16 +25,12 @@
   background: var(--fb-surface);
   z-index: 31;
   pointer-events: none;
+  max-inline-size: calc(5rem - 7px);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-/* A route's first row starts at the rail's edge (a wide canvas) or, on a
-   readable column, where its centring gutter runs out. Reserve the name's own
-   single-line band: 7px lead + 3px padding + a 1.125rem/700 "Norfold" (about
-   64px after tracking in the widest fallback family) + 3px padding is ~77px,
-   so the band is 5rem (80px, and 100px at a 20px root). 4.75rem sat inside
-   that box. The gutter the 44rem column leaves on each side is written once,
-   and each header takes the larger of its own resting inset and what the name
-   needs. Both sides are rem, so the band follows the reader's text scale with
-   the column. Rendered clearance is checked in the browser, not here. */
+/* Reserve only the leading part of headers which can meet the wordmark.
+   Readable pages may already have a centred gutter; do not move them twice. */
 .fb-app-viewport:has(.fb-rail-anchor .fb-nav-rail[data-pinned="false"]) {
   --fb-reader-gutter: max(0px, (100vw - var(--fb-rail-collapsed) - 44rem) / 2);
 }
@@ -75,31 +44,21 @@
 .fb-app-viewport:has(.fb-rail-anchor .fb-nav-rail[data-pinned="false"]) > main[data-canvas="readable"] .fb-saved-reports-header {
   padding-inline-start: max(1rem, calc(5rem - var(--fb-reader-gutter)));
 }
-/* A settings-style page rendered in the canvas — a public profile, the owner's
-   profile, About — puts its back control at the canvas edge, under the name.
-   The sticky bar cancels its page padding with a negative margin, so the control
-   already starts half a rem left of the content box; this moves only that
-   control past the name. The bar's own box and background stay where they
-   were, and the copy that follows the control moves with it. */
 .fb-app-viewport:has(.fb-rail-anchor .fb-nav-rail[data-pinned="false"]) > main[data-canvas="readable"] .fb-settings-sticky > button {
   margin-inline-start: max(-0.5rem, calc(5rem - var(--fb-reader-gutter)));
 }
-/* Chat keeps the shell's one name in both split layouts; the secondary chrome
-   reserves the band instead:
-   - Collapsed conversation rail: the rail is only 64px wide, so a leading gap
-     is not available. Its single head control starts below the head-centre
-     band instead, leaving that top slot to the name.
-   - One-pane thread: the hidden list puts the detail header at the canvas edge,
-     so the header takes the same leading gap a wide route's bar takes.
-   A chat header never renders the name itself. */
+/* The collapsed conversation list is too narrow for a leading inset. Move
+   its control down, and clear the portion of the name extending into the
+   neighbouring detail header. The one-pane thread needs the full inset. */
 .fb-app-viewport:has(.fb-rail-anchor .fb-nav-rail[data-pinned="false"]) .fb-chat-rail-header {
   padding-block-start: calc(var(--fb-rail-head-center) + 1rem);
+}
+.fb-app-viewport:has(.fb-rail-anchor .fb-nav-rail[data-pinned="false"]) .fb-split-list:has(> .fb-chat-rail) ~ .fb-split-detail .fb-chat-header {
+  padding-inline-start: calc(0.6rem + max(0px, 5rem - 64px));
 }
 .fb-app-viewport:has(.fb-rail-anchor .fb-nav-rail[data-pinned="false"]) .fb-split-list[hidden] ~ .fb-split-detail .fb-chat-header {
   padding-inline-start: 5rem;
 }
-/* The one surface that still owns the whole row: an open Home search field
-   covers it end to end, so the name does not paint over the field. */
 .fb-app-viewport:has(.fb-home-search-field) .fb-nav-outside-brand {
   display: none;
 }

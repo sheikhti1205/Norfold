@@ -18,6 +18,7 @@ import { BrandMark } from "./BrandMark";
 import { NavOutsideBrand } from "./NavOutsideBrand";
 import { useHoverLabel } from "./HoverLabel";
 import { SettingsWindow } from "./SettingsWindow";
+import { OverlayDepthProvider } from "./overlayFoundation";
 import { ChatDock } from "./ChatDock";
 import { GlobalSearchOverlay } from "./GlobalSearchOverlay";
 import { openGlobalSearch, toggleGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
@@ -164,9 +165,12 @@ export function Shell() {
   // page behind it.
   const [settingsWindow, setSettingsWindow] = useState<{ path: string; id: number } | null>(null);
   const settingsWindowId = useRef(0);
+  const settingsFromDrawer = useRef(false);
   const openSettingsWindow = useCallback((path = "/settings") => {
+    settingsFromDrawer.current = railOpen;
+    setRailOpen(false);
     setSettingsWindow({ path, id: ++settingsWindowId.current });
-  }, []);
+  }, [railOpen]);
   const navigationContext = useContext(UNSAFE_NavigationContext);
   const windowNavigation = useMemo(() => {
     const navigator = navigationContext.navigator;
@@ -403,8 +407,14 @@ export function Shell() {
             navigation never unmounts it and discards a draft. */}
         <ChatDock hostOccluded={dockOccluded} bottomNavVisible={bottomNavVisible} />
         <SettingsWindow key={settingsWindow?.id} open={settingsWindow !== null} initialPath={settingsWindow?.path ?? "/settings"}
-          onClose={() => setSettingsWindow(null)}
-          onExit={(path) => { setSettingsWindow(null); navigate(path); }} />
+          onClose={() => {
+            setSettingsWindow(null);
+            if (settingsFromDrawer.current) {
+              settingsFromDrawer.current = false;
+              requestAnimationFrame(() => railTrigger.current?.focus({ preventScroll: true }));
+            }
+          }}
+          onExit={(path) => { settingsFromDrawer.current = false; setSettingsWindow(null); navigate(path); }} />
         <GlobalSearchOverlay />
       </div>
     </TabTapProvider>
@@ -762,7 +772,9 @@ export function PrimaryNav({
             <div className="fb-nav-rail-list">{railOthers}</div>
           </div>
         </div>
-        <AccountMenu onOpenSettings={onOpenSettings} />
+        {drawer
+          ? <OverlayDepthProvider depth={4}><AccountMenu onOpenSettings={onOpenSettings} /></OverlayDepthProvider>
+          : <AccountMenu onOpenSettings={onOpenSettings} />}
         {railPinned && !drawer && <div role="separator" aria-orientation="vertical" aria-label="Resize navigation"
           aria-valuenow={railWidthState} aria-valuemin={RAIL_WIDTH_MIN} aria-valuemax={RAIL_WIDTH_MAX}
           aria-valuetext={`${railWidthState} pixels`} tabIndex={0} className="fb-nav-rail-resize"

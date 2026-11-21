@@ -221,28 +221,20 @@ describe("R19-4 inset navigation rail", () => {
     expect(appBarCss).toMatch(/\.fb-app-bar-title :is\(h1, h2\) \{[^}]*font-size: 1\.125rem;/);
   });
 
-  it("keeps the wordmark's header reservation rem-based for 20px text", () => {
+  it("reserves only colliding headers and both chat split states", () => {
     expect(outsideCss).toContain("--fb-reader-gutter: max(0px, (100vw - var(--fb-rail-collapsed) - 44rem) / 2);");
-    expect(outsideCss).toMatch(/padding-inline-start: max\(0\.75rem, 5rem\);/);
-    expect(outsideCss).toMatch(/padding-inline-start: max\(0\.75rem, calc\(5rem - var\(--fb-reader-gutter\)\)\);/);
-    expect(outsideCss).toMatch(/padding-inline-start: max\(1rem, calc\(5rem - var\(--fb-reader-gutter\)\)\);/);
-    expect(outsideCss).toMatch(/margin-inline-start: max\(-0\.5rem, calc\(5rem - var\(--fb-reader-gutter\)\)\);/);
-    // The one-pane thread reserves the same band.
-    expect(outsideCss).toMatch(/\.fb-chat-header \{\s*padding-inline-start: 5rem;/);
-    // 4.75rem sat inside the 1.125rem name's box, so the band is the measured
-    // single-line width rounded up to the next quarter rem. The history stays
-    // in the comment; no reservation may still use the old value.
-    expect(outsideCss).not.toMatch(/(?:padding-inline-start|margin-inline-start)[^;]*\b4\.75rem/);
-    const box = (wordPx: number) => 7 + 3 + wordPx + 3;
-    // 64px is the widest measured 1.125rem/700 advance after tracking; the
-    // 7px lead and 3px padding do not scale with the root.
-    expect(box(64)).toBe(77);
-    expect(box(64)).toBeLessThanOrEqual(80);
-    // The offsets stay px while the word scales with the root.
-    expect(box(64 * (22.5 / 18))).toBeLessThanOrEqual(100);
-    // A px reservation would stop growing when the label's rem font grows.
-    expect(outsideCss).not.toMatch(/padding-inline-start: 80px/);
-    expect(outsideCss).not.toMatch(/padding-inline-start: 100px/);
+    expect(outsideCss).toMatch(/main\[data-canvas="wide"\] \.fb-app-bar \{\s*padding-inline-start: max\(0\.75rem, 5rem\);/);
+    expect(outsideCss).toMatch(/\.fb-notification-header \{\s*padding-inline-start: max\(0\.75rem, calc\(5rem - var\(--fb-reader-gutter\)\)\);/);
+    expect(outsideCss).toMatch(/\.fb-saved-reports-header \{\s*padding-inline-start:/);
+    expect(outsideCss).toMatch(/\.fb-settings-sticky > button \{\s*margin-inline-start:/);
+    expect(outsideCss).toMatch(/\.fb-chat-rail-header \{\s*padding-block-start:/);
+    expect(outsideCss).toMatch(/\.fb-split-list:has\(> \.fb-chat-rail\) ~ \.fb-split-detail \.fb-chat-header \{\s*padding-inline-start: calc\(0\.6rem \+ max\(0px, 5rem - 64px\)\);/);
+    expect(outsideCss).toMatch(/\.fb-split-list\[hidden\] ~ \.fb-split-detail \.fb-chat-header \{\s*padding-inline-start: 5rem;/);
+    expect(outsideCss).toMatch(/\.fb-nav-outside-brand \{[^}]*max-inline-size: calc\(5rem - 7px\);[^}]*overflow: hidden;[^}]*text-overflow: ellipsis;/);
+    expect(outsideCss).toMatch(/\.fb-nav-outside-brand \{[^}]*pointer-events: none;/);
+    expect(outsideCss).not.toContain("--fb-outside-band");
+    expect(outsideCss).not.toMatch(/\.fb-rail-anchor[^{}]*::after/);
+    expect(outsideCss).not.toMatch(/> main \{\s*padding-block-start/);
   });
 
   it("turns the frame transition off with the rail's reduced motion", () => {
@@ -264,5 +256,7 @@ describe("R19-4 inset navigation rail", () => {
     expect(drawerRail).toContain("border-inline-end: 1px solid var(--fb-outline-variant);");
     expect(railSurface).not.toContain("data-drawer");
     expect(railColumn).not.toContain("data-drawer");
+    expect(navCss).toMatch(/\.fb-nav-drawer \{[^}]*z-index: 65;/);
+    expect(navCss).not.toMatch(/body:has\(\.fb-nav-drawer\)\s+\.fb-hover-label/);
   });
 });
