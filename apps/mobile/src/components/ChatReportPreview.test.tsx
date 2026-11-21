@@ -74,7 +74,7 @@ describe("ChatReportPreview", () => {
     expect(screen.getByText("Near the station")).toBeTruthy();
     expect(screen.getByText("Recovered")).toBeTruthy();
     expect(link.querySelector("time")?.getAttribute("datetime")).toBe("2026-10-20");
-    expect(screen.getByText("findbackapp.social")).toBeTruthy();
+    expect(screen.queryByText("findbackapp.social")).toBeNull();
   });
 
   it("does not repeat the Lost/Found fact as a second badge while the report is open", () => {
@@ -99,6 +99,15 @@ describe("ChatReportPreview", () => {
 
     expect(container.querySelector("img")).toBeNull();
     expect(screen.getByText("Blue wallet")).toBeTruthy();
+  });
+
+  it("keeps long report facts in the reserved preview", () => {
+    const title = "A long report title ".repeat(20).trim();
+    const locationLabel = "A long location ".repeat(20).trim();
+    const { container } = render(frame(<ChatReportPreview post={post({ title, locationLabel })} reportId={REPORT} />));
+    expect(screen.getByText(title)).toBeTruthy();
+    expect(screen.getByText(locationLabel)).toBeTruthy();
+    expect(container.querySelector(".fb-chat-report-preview-media")?.getAttribute("aria-hidden")).toBe("true");
   });
 
   it("omits the place line when the report has no location label", () => {

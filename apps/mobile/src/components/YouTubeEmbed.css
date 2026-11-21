@@ -81,6 +81,7 @@
   align-items: flex-start;
   gap: .4rem;
   min-width: 0;
+  min-height: 6rem;
 }
 
 .fb-yt-text {
@@ -95,10 +96,7 @@
    or pushes the message text. It keeps the bubble's own text colour so the
    same card works in an incoming and an outgoing bubble. */
 .fb-yt-title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
+  display: block;
   font-size: .8125rem;
   line-height: 1.35;
   font-weight: 500;

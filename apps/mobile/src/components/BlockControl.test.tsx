@@ -59,6 +59,17 @@ function confirmBlock(label: "Block" | "Unblock") {
   fireEvent.click(within(dialog).getByRole("button", { name: label }));
 }
 
+it("cancels a block without changing the relationship", async () => {
+  render(<BlockControl {...props} blocked={false} />);
+  fireEvent.click(screen.getByRole("button", { name: "Block Sam" }));
+  const dialog = screen.getByRole("alertdialog", { name: "Block Sam?" });
+  expect(dialog.textContent).toMatch(/Public reports and comments remain behind a warning/);
+  fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  expect(mocks.block).not.toHaveBeenCalled();
+  await act(async () => {});
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+});
+
 it("uses outgoing membership even if incoming-only mutual blocking exists", async () => {
   mocks.mutual.mockResolvedValue(true);
   render(<BlockControl {...props} />);

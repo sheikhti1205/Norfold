@@ -157,9 +157,9 @@
   width: 100%;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid var(--fb-outline-variant);
-  border-radius: 14px;
-  background: var(--fb-surface-container-low);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 /* Only a player that is actually here paints media. The frame takes the
    source's own ratio under the shared height cap and centres when that is

@@ -232,9 +232,16 @@ function proseText(segments: readonly ChatTextSegment[]): string {
   let afterLink = false;
   for (const segment of segments) {
     if (segment.kind === "link") { afterLink = true; continue; }
-    const slice = afterLink && /\s$/.test(text) && /^\s/.test(segment.text)
-      ? segment.text.replace(/^\s+/, "")
-      : segment.text;
+    let slice = segment.text;
+    if (afterLink) {
+      text = text.replace(/[ \t]+$/, "");
+      if (/[\r\n][ \t]*$/.test(text)) slice = slice.replace(/^[ \t]*\r?\n/, "");
+      else if (!/^[ \t]*\r?\n/.test(slice) && text !== "") {
+        slice = slice.replace(/^[ \t]*/, "");
+        if (slice && !`)]}>"'”’.,;:!?…»›—–-`.includes(slice[0]!)
+          && !/\s$/.test(text) && !`([{<"'“‘,;:.`.includes(text[text.length - 1]!)) slice = ` ${slice}`;
+      }
+    }
     text += slice;
     afterLink = false;
   }

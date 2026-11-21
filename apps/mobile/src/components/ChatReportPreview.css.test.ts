@@ -53,6 +53,9 @@ describe("chat report preview surface", () => {
     const copy = bodies(previewCss, ".fb-chat-report-preview-copy");
     expect(copy).toContain("flex: 1 1 9rem;");
     expect(copy).toContain("min-width: 0;");
+    expect(copy).toContain("min-height: 6rem;");
+    expect(bodies(previewCss, ".fb-chat-report-preview-title")).not.toContain("line-clamp");
+    expect(bodies(previewCss, ".fb-chat-report-preview-place")).not.toContain("white-space: nowrap");
   });
 
   it("leaves the preview grid capped at the bubble width with no self-alignment", () => {

@@ -288,7 +288,7 @@ describe("R19 chat photo sizing ownership", () => {
     // the 1 default matches its invalid-dimensions fallback.
     expect(single).toContain("--fb-chat-photo-ratio: 1;");
     expect(single).toContain("width:min(var(--fb-chat-photo-width, 320px), 100%, calc(var(--fb-chat-photo-height, min(320px, 50vh)) * var(--fb-chat-photo-ratio)))");
-    expect(messagingTsx).toContain("aspectRatio: `${attachment.width} / ${attachment.height}`");
+    expect(messagingTsx).toContain("aspectRatio: String(ratio)");
     expect(photoHeightPx).toBe(320);
     expect(photoHeightVh).toBe(50);
   });
@@ -337,7 +337,7 @@ describe("R19 chat photo sizing ownership", () => {
     // The no-bytes status card keeps the shared preview width inside the padded
     // bubble instead of growing to the photo preference.
     const compact = bodies('.fb-chat-message .fb-chat-photo:not(.fb-chat-photo-grouped):has(> div[role="status"])').join("\n");
-    expect(compact).toContain("width:var(--fb-chat-media-width);");
+    expect(compact).not.toContain("width:var(--fb-chat-media-width);");
     expect(mediaWidthPx).toBe(320);
     expect(photoRule()).not.toMatch(/min-width\s*:/);
     expect(bubble).toContain("min-width:0;");
@@ -374,12 +374,12 @@ describe("R19 chat photo sizing ownership", () => {
   it("keeps the inline intrinsic ratio and the contain/cover fitting", () => {
     // ChatPhoto's frozen style publishes both the CSS aspect ratio and the
     // numeric ratio the width solve multiplies by; neither key is renamed.
-    expect(messagingTsx).toContain("aspectRatio: `${attachment.width} / ${attachment.height}`");
+    expect(messagingTsx).toContain("aspectRatio: String(ratio)");
     expect(messagingTsx).toContain('"--fb-chat-photo-ratio": ratio');
     expect(messagingTsx).toContain("const ratio = chatPhotoRatio(attachment);");
     const helper = /function chatPhotoRatio\([\s\S]*?\n\}/.exec(messagingTsx)?.[0] ?? "";
     expect(helper).toContain("const ratio = attachment.width / attachment.height;");
-    expect(helper).toContain("Number.isFinite(ratio) && ratio > 0 ? ratio : 1");
+    expect(helper).toContain("attachment.width > 0 && attachment.height > 0 && Number.isFinite(ratio) ? ratio : 4 / 3");
     expect(photoRule()).toContain("var(--fb-chat-photo-ratio");
     expect(bodies(".fb-chat-photo img").join("\n")).toContain("object-fit:contain;");
     expect(bodies(".fb-chat-photo-grouped img").join("\n")).toContain("object-fit:cover;");
@@ -446,20 +446,19 @@ describe("R19 chat photo sizing ownership", () => {
     expect(single).not.toMatch(/(?:^|[;\s])min-height\s*:/);
     expect(single).not.toMatch(/(?:^|[;\s])padding\s*:/);
     const status = bodies(".fb-chat-photo > div").join("\n");
-    expect(status).toContain("min-height:5rem;");
+    expect(status).toContain("min-height:0;");
+    expect(status).toContain("overflow:auto;");
     expect(status).toContain("padding:.5rem;");
   });
 
   it("keeps a photo with no bytes compact instead of reserving the ratio", () => {
     const compact = bodies('.fb-chat-photo:has(> div[role="status"])').join("\n");
-    expect(compact).toContain("aspect-ratio:auto");
-    expect(compact).toContain("!important");
-    expect(chatCss).toContain('.fb-chat-photo:has(> div[role="status"]) { aspect-ratio:auto !important; }');
+    expect(compact).not.toContain("aspect-ratio:auto");
     // A standalone no-bytes card keeps the shared preview width instead of a
     // photo-shaped box, so loading/missing/retry states stay compact and padded.
     // Grouped cells and the gallery own their box and are excluded.
     const compactWidth = bodies('.fb-chat-message .fb-chat-photo:not(.fb-chat-photo-grouped):has(> div[role="status"])').join("\n");
-    expect(compactWidth).toContain("width:var(--fb-chat-media-width);");
+    expect(compactWidth).not.toContain("width:var(--fb-chat-media-width);");
     // ChatPhoto is the only owner of this root: a painted photo renders a
     // button, the no-bytes branch renders the div this selector requires.
     expect(messagingTsx).toContain('className="fb-chat-photo"');
@@ -469,7 +468,7 @@ describe("R19 chat photo sizing ownership", () => {
     expect(messagingTsx).not.toContain('"aria-label": `View photo');
     // The compact branch keeps its existing minimum and the base box keeps no
     // filler height of its own.
-    expect(bodies(".fb-chat-photo > div").join("\n")).toContain("min-height:5rem;");
+    expect(bodies(".fb-chat-photo > div").join("\n")).toContain("overflow:auto;");
     expect(bodies(".fb-chat-photo").join("\n")).not.toMatch(/(?:^|[;\s])min-height\s*:/);
     // Fail closed: a loose aspect-ratio reset on the base box is not this rule.
     expect(bodiesFor(cssRules(".fb-chat-photo { aspect-ratio:auto !important; }"),
@@ -571,7 +570,7 @@ describe("R19 flush photo width ownership", () => {
   const base = photoRule();
   const surface = bodies(".fb-chat-message-surface").join("\n");
   const bubble = bodies(".fb-chat-message").find(body => body.includes("max-width:min(100%, 34rem);")) ?? "";
-  const flushBubble = /\.fb-chat-message-media:has\(> \.fb-chat-photo > button\)\s*\{([^{}]*)\}/.exec(chatCss)?.[1] ?? "";
+  const flushBubble = /\.fb-chat-message-media:has\(> \.fb-chat-photo\)\s*\{([^{}]*)\}/.exec(chatCss)?.[1] ?? "";
   const longPressCss = readFileSync(new URL("../components/longPress.css", import.meta.url), "utf8");
 
   it("restates a definite photo width inside a flush bubble", () => {
@@ -704,7 +703,7 @@ describe("R19 captioned photo width ownership", () => {
 
   it("keeps the no-bytes card at the shared media width, more specific and later", () => {
     const compact = bodies(compactSelector).join("\n");
-    expect(compact).toContain("width:var(--fb-chat-media-width);");
+    expect(compact).not.toContain("width:var(--fb-chat-media-width);");
     expect(compactSelector).toContain(":not(.fb-chat-photo-grouped)");
     expect(compactSelector).toContain(':has(> div[role="status"])');
     // (0,4,1) beats the direct-child override's (0,2,0), and the compact rule
@@ -712,7 +711,7 @@ describe("R19 captioned photo width ownership", () => {
     // the photo preference resize a loading or missing card.
     expect(specificity(compactSelector)).toEqual([0, 4, 1]);
     expect(specificity(messagePhotoSelector)).toEqual([0, 2, 0]);
-    expect(chatCss.indexOf(compactSelector)).toBeGreaterThan(chatCss.indexOf(messagePhotoSelector));
+    expect(chatCss.indexOf(compactSelector)).toBe(-1);
   });
 
   it("keeps the bubble, surface and row caps unchanged", () => {
@@ -788,12 +787,11 @@ describe("R19 expressive preview bounds", () => {
     expect(klipyWidthPx).toBe(12 * REM_PX);
     expect(klipyHeightPx).toBe(224);
     expect(klipyHeightVh).toBe(40);
-    expect(unknownRule).toContain("max-width:min(var(--fb-chat-klipy-width, 192px), 100%);");
-    expect(unknownRule).toContain("max-height:var(--fb-chat-klipy-height, min(224px, 40vh));");
-    expect(unknownRule).toContain("width:auto;");
+    expect(unknownRule).toContain("max-width:100%;");
+    expect(unknownRule).toContain("width:var(--fb-chat-klipy-width, 192px);");
     expect(unknownRule).toContain("height:auto;");
-    expect(unknownRule).not.toContain("object-fit");
-    expect(unknownRule).not.toContain("aspect-ratio");
+    expect(unknownRule).toContain("object-fit:contain;");
+    expect(unknownRule).toContain("aspect-ratio:1;");
     // The renderer states the kind on the picture element and answers `unknown`
     // for pre-marker history, which is exactly the compact branch above: CSS
     // never guesses a kind from a URL path, an extension or an alpha channel.
@@ -858,9 +856,9 @@ describe("R19 expressive preview bounds", () => {
     // preference, so the three never compete visually.
     expect(caps.sticker.width).toBeLessThan(caps.gif.width);
     expect(caps.gif.width).toBeLessThanOrEqual(photoWidthPx);
-    expect(gifRule).toContain("max-width:min(var(--fb-chat-photo-width, 320px), 100%);");
+    expect(gifRule).toContain("width:var(--fb-chat-photo-width, 320px);");
     expect(gifRule).toContain("max-height:var(--fb-chat-photo-height, min(320px, 50vh));");
-    expect(stickerRule).toContain("max-width:min(var(--fb-chat-sticker-width, 176px), 100%);");
+    expect(stickerRule).toContain("width:var(--fb-chat-sticker-width, 176px);");
     expect(stickerRule).toContain("max-height:var(--fb-chat-sticker-height, min(176px, 34vh));");
     // A known GIF is preview media, so at a 320 phone the single 70% cap is what
     // bounds it: the bubble and the picture agree exactly, with no strip left
@@ -1011,9 +1009,9 @@ describe("R19 inside-corner message menu ownership", () => {
  */
 describe("R19 media-only bubble ownership", () => {
   const flushSelector = ".fb-chat-message-media:has(> .fb-chat-photo > button)";
-  const flush = /\.fb-chat-message-media:has\(> \.fb-chat-photo > button\)\s*\{([^{}]*)\}/.exec(chatCss)?.[1] ?? "";
-  const flushOwn = /\.fb-chat-message-media:has\(> \.fb-chat-photo > button\)\.fb-chat-message-own\s*\{([^{}]*)\}/.exec(chatCss)?.[1] ?? "";
-  const overlay = /\.fb-chat-message-media:has\(> \.fb-chat-photo > button\) > \.fb-chat-message-status\s*\{([^{}]*)\}/.exec(chatCss)?.[1] ?? "";
+  const flush = /\.fb-chat-message-media:has\(> \.fb-chat-photo\)\s*\{([^{}]*)\}/.exec(chatCss)?.[1] ?? "";
+  const flushOwn = /\.fb-chat-message-media:has\(> \.fb-chat-photo\)\.fb-chat-message-own\s*\{([^{}]*)\}/.exec(chatCss)?.[1] ?? "";
+  const overlay = /\.fb-chat-message-media:has\(> \.fb-chat-photo\) > \.fb-chat-message-status\s*\{([^{}]*)\}/.exec(chatCss)?.[1] ?? "";
 
   it("takes the padding ring, the fill and the mismatched tail off a bare photo", () => {
     expect(flush).toContain("padding:0;");
@@ -1032,7 +1030,7 @@ describe("R19 media-only bubble ownership", () => {
     // no direct `button`, so CSS keeps the ordinary padded bubble there.
     expect(flushSelector).toContain(":has(> .fb-chat-photo > button)");
     expect(bodies(".fb-chat-message").join("\n")).toContain("padding:.6rem .8rem;");
-    expect(chatCss).toContain('.fb-chat-photo:has(> div[role="status"]) { aspect-ratio:auto !important; }');
+    expect(chatCss).not.toContain('.fb-chat-photo:has(> div[role="status"]) { aspect-ratio:auto !important; }');
   });
 
   it("overlays only the passive time and receipt ticks", () => {
@@ -1097,7 +1095,7 @@ describe("R19 flush photo focus and menu contrast", () => {
   const discFocus = bodies(`${flushSelector} .fb-chat-message-options:focus-visible::before`).join("\n");
   const glyph = bodies(`${flushSelector} .fb-chat-message-options`).join("\n");
   const glyphFocus = bodies(`${flushSelector} .fb-chat-message-options:focus-visible`).join("\n");
-  const overlay = bodies(`${flushSelector} > .fb-chat-message-status`).join("\n");
+  const overlay = bodies(".fb-chat-message-media:has(> .fb-chat-photo) > .fb-chat-message-status").join("\n");
 
   it("draws the photo focus ring inside the clipped picture edge", () => {
     expect(photoFocus).toContain("outline:2px solid var(--fb-focus)");

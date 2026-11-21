@@ -80,6 +80,14 @@ describe("YouTubeEmbed compact press targets", () => {
     expect(media).toContain("aspect-ratio: 16 / 9;");
   });
 
+  it("reserves metadata space without clipping a long title", () => {
+    expect(bodies(".fb-yt-meta")).toContain("min-height: 6rem;");
+    const title = bodies(".fb-yt-title");
+    expect(title).toContain("overflow-wrap: anywhere;");
+    expect(title).not.toContain("line-clamp");
+    expect(title).not.toContain("overflow: hidden");
+  });
+
   it("paints no second card inside the bubble", () => {
     for (const selector of [".fb-yt-preview", ".fb-yt-media"]) {
       const body = bodies(selector);

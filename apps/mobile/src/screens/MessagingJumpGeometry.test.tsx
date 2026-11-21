@@ -90,7 +90,8 @@ function expectViewportOwnership() {
   const composer = page.querySelector<HTMLFormElement>("form.fb-peer-composer");
   expect(viewport).toBeTruthy();
   expect(scroller.parentElement).toBe(viewport);
-  expect(jump.parentElement).toBe(viewport);
+  expect(jump.parentElement?.classList.contains("fb-chat-jump-row")).toBe(true);
+  expect(jump.parentElement?.parentElement).toBe(viewport);
   expect(jump.closest(".fb-chat-messages")).toBeNull();
   expect(page.contains(jump)).toBe(true);
   expect(jump.parentElement).not.toBe(page);
