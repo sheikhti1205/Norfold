@@ -164,7 +164,7 @@ describe("Notifications inbox", () => {
     pointerState.fine = true;
     fetchMock.mockResolvedValue([item({ thumbnailUrl: "/thumb.png" })]);
     renderNotifications();
-    const row = await screen.findByTestId("notification-row");
+    await screen.findByTestId("notification-row");
     const link = screen.getByRole("link", { name: /bob.*lost wallet/i });
     vi.useFakeTimers();
     fireEvent.focus(link);
