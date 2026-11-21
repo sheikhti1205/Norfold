@@ -6,6 +6,7 @@ import { useAuth } from "../auth";
 import { useWideViewport } from "./responsive";
 import { ConfirmDialog } from "./AdaptiveTaskSurface";
 import { LayeredPopover } from "./overlayFoundation";
+import { layeredPopoverMaxHeight } from "./popoverViewportCap";
 import { useHoverLabel } from "./HoverLabel";
 import { UserAvatar } from "./UserAvatar";
 import { VerifiedBadge } from "./VerifiedBadge";
@@ -16,6 +17,9 @@ import { beginAddAccountIntent } from "../utils/addAccountIntent";
 import { rememberAuthReturnTo } from "../utils/authReturnTo";
 import { PersonalizationPanel, SwitchAccountPanel } from "./AccountPreviews";
 import "./AccountMenu.css";
+
+/** Owner ruling 2026-11-20: no excess height; the menu never exceeds half the viewport, never above the 30rem ceiling. */
+const ACCOUNT_MENU_MAX_HEIGHT_PX = 480;
 
 type PanelId = "switch" | "personalization" | null;
 
@@ -48,6 +52,9 @@ export function AccountMenu({ onOpenSettings = () => {} }: { onOpenSettings?: (p
   const [accounts, setAccounts] = useState<RememberedAccount[]>(readRememberedAccounts);
   const [switching, setSwitching] = useState<string | null>(null);
   const [switchError, setSwitchError] = useState<string | null>(null);
+  const [viewportHeight, setViewportHeight] = useState(() =>
+    typeof window === "undefined" ? 0 : Math.round(window.innerHeight),
+  );
 
   const name = user?.displayName?.trim() || user?.username || "Account";
   const verification = user as { emailVerified?: boolean; phoneVerified?: boolean; telegramPhoneVerified?: boolean } | null;
@@ -69,6 +76,12 @@ export function AccountMenu({ onOpenSettings = () => {} }: { onOpenSettings?: (p
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [panel]);
+  useEffect(() => {
+    const onResize = () => setViewportHeight(Math.round(window.innerHeight));
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const closeAll = () => { setPanel(null); setOpen(false); };
   // Every settings row lands in the floating window at that section, so the
@@ -108,6 +121,8 @@ export function AccountMenu({ onOpenSettings = () => {} }: { onOpenSettings?: (p
       .finally(() => setSwitching(null));
   };
 
+  const accountMenuMaxHeight = layeredPopoverMaxHeight(viewportHeight, ACCOUNT_MENU_MAX_HEIGHT_PX);
+
   return <div className="fb-account-rail">
     <DialogTrigger isOpen={open} onOpenChange={(next) => { setOpen(next); if (!next) setPanel(null); }}>
       {/* A signed-out rail has no name to add; "Account, Account" is not a
@@ -128,7 +143,7 @@ export function AccountMenu({ onOpenSettings = () => {} }: { onOpenSettings?: (p
           menu is the rail's width and rises over the destinations, like the
           reference. Compact: above and end-aligned; a right-side placement put
           a 287px popover at x=347 on a 390px phone, entirely off-screen. */}
-      <LayeredPopover placement={wide ? "top" : "top end"} offset={8} className="fb-account-menu">
+      <LayeredPopover placement={wide ? "top" : "top end"} offset={8} maxHeight={accountMenuMaxHeight} className="fb-account-menu">
         <Dialog aria-label="Account" className="fb-account-dialog">
           {panel === "switch" ? <PanelShell title="Switch account" onBack={() => setPanel(null)}>
             <SwitchAccountPanel current={{ id: user?.id ?? "", name, username: user?.username ?? "" }} accounts={others}

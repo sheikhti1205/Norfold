@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, DialogTrigger } from "react-aria-components";
 import { LayeredPopover } from "./overlayFoundation";
+import { layeredPopoverMaxHeight } from "./popoverViewportCap";
 import { useHoverLabel } from "./HoverLabel";
 import { Notifications } from "../screens/Notifications";
 import { ReportSheet } from "./ReportSheet";
@@ -10,11 +11,6 @@ const PANEL_FOCUSABLE =
 
 /** The quick inbox is a preview, not a second route, so it must not claim the window. */
 const NOTIFICATION_POPOVER_MAX_HEIGHT_PX = 440;
-
-/** Half the live viewport, never above the 440px the panel has always kept. */
-function notificationPopoverMaxHeight(viewportHeightPx: number): number {
-  return Math.min(NOTIFICATION_POPOVER_MAX_HEIGHT_PX, Math.round(viewportHeightPx / 2));
-}
 
 /**
  * A quick inbox presentation, not a second data cache or mutation owner.
@@ -87,7 +83,7 @@ export function NotificationPopover({ trigger }: { trigger: ReactNode }) {
     return () => document.removeEventListener("keydown", keepDisclosureInOrder);
   }, [open, reportId]);
 
-  const popoverMaxHeight = notificationPopoverMaxHeight(viewportHeight);
+  const popoverMaxHeight = layeredPopoverMaxHeight(viewportHeight, NOTIFICATION_POPOVER_MAX_HEIGHT_PX);
   // The panel cap is viewport-relative and computed here from the live viewport
   // (half, never above 440px) and passed to the layered popover through its
   // maxHeight prop, which React Aria applies as the inline max-height the
