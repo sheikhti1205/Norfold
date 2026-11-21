@@ -32,9 +32,9 @@ function MatchPhoto({ post }: { post: MatchCandidate }) {
   const [failed, setFailed] = useState(false);
   const src = useMediaUrl(post.photoUrl);
   return post.photoUrl && !failed ? (
-    <img src={src} alt={`Photo for ${post.title}`} loading="lazy" onError={() => setFailed(true)} className="aspect-[4/3] w-full rounded-m3-sm object-cover" />
+    <img src={src} alt={`Photo for ${post.title}`} loading="lazy" onError={() => setFailed(true)} className="fb-media-shape aspect-[4/3] w-full object-cover" />
   ) : (
-    <div className="flex aspect-[4/3] flex-col items-center justify-center gap-1 rounded-m3-sm bg-surface-container text-xs text-on-surface-variant">
+    <div className="fb-media-shape flex aspect-[4/3] flex-col items-center justify-center gap-1 bg-surface-container text-xs text-on-surface-variant">
       <ImageOff size={18} aria-hidden />{failed ? "Photo unavailable" : "No photo"}
     </div>
   );

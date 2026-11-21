@@ -133,7 +133,7 @@
      source ratio itself is untouched. */
   min-height: min(var(--fb-vp-bar-height), var(--fb-vp-stage-max-height));
   aspect-ratio: var(--fb-vp-ratio);
-  border-radius: 14px;
+  border-radius: var(--fb-media-radius, 1.125rem);
 }
 .fb-vp--mini .fb-vp-stage {
   /* Same ratio as the message frame and the overlay, but the docked player

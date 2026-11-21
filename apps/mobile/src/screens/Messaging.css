@@ -274,7 +274,7 @@
   max-height:var(--fb-chat-sticker-height, min(176px, 34vh)); }
 /* A bare photo keeps the same frame while bytes load or are unavailable. */
 .fb-chat-message-media:has(> .fb-chat-photo) { padding:0; background:transparent;
-  overflow:hidden; border-radius:1rem; }
+  overflow:hidden; border-radius:var(--fb-media-radius, 1.125rem); }
 .fb-chat-message-media:has(> .fb-chat-photo).fb-chat-message-own { background:transparent; }
 .fb-chat-message-media:has(> .fb-chat-photo > button) > .fb-chat-photo { border-radius:inherit; }
 /* On a flush photo the menu glyph sits on picture pixels, where the ordinary
@@ -303,7 +303,7 @@
    band: the clip fills the cell and the receipt chip sits on it with the same
    scrim the flush photo uses. A caption, quote or report keeps the ordinary
    padded bubble and its full transport. */
-.fb-chat-message-video { padding:0; background:transparent; overflow:hidden; border-radius:1rem; }
+.fb-chat-message-video { padding:0; background:transparent; overflow:hidden; border-radius:var(--fb-media-radius, 1.125rem); }
 .fb-chat-message-video.fb-chat-message-own { background:transparent; }
 .fb-chat-message.fb-chat-message-video > .fb-chat-message-status {
   position:absolute; inset-block-end:.3rem; inset-inline-end:.3rem; z-index:2;

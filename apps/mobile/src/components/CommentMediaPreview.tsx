@@ -6,7 +6,7 @@ import { useMediaUrl } from "../services/media/privateMedia";
 export function CommentMediaPreview({ media }: { media: BodyMedia }) {
   const src = useMediaUrl(media.url);
   return media.kind === "video" ? <CommentVideo key={media.url} src={src} alt={media.alt} />
-    : <img src={src} alt={media.alt} loading="lazy" className="h-24 w-auto rounded-m3-sm border border-outline-variant object-cover" />;
+    : <img src={src} alt={media.alt} loading="lazy" className="fb-media-shape h-24 w-auto border border-outline-variant object-cover" />;
 }
 
 /** Updating a video's src resets native playback. Snapshot before assigning it,
@@ -39,5 +39,5 @@ function CommentVideo({ src, alt }: { src: string | undefined; alt: string | und
     video.src = src;
     return () => video.removeEventListener("loadedmetadata", restore);
   }, [src]);
-  return <video ref={element} controls playsInline preload="metadata" className="h-24 max-w-full rounded-m3-sm border border-outline-variant object-cover" aria-label={alt} />;
+  return <video ref={element} controls playsInline preload="metadata" className="fb-media-shape h-24 max-w-full border border-outline-variant object-cover" aria-label={alt} />;
 }

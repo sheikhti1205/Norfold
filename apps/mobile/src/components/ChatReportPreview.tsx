@@ -24,8 +24,8 @@ export function ChatReportPreview({ post, reportId, coverSrc }: ChatReportPrevie
   const resolved = post.status === "MATCHED" || post.status === "RECOVERED" || post.status === "CLOSED";
   return <PostLink className="fb-chat-report-preview" to={`/posts/${encodeURIComponent(reportId)}`}
     data-chat-report={reportId}>
-    {coverSrc ? <img className="fb-chat-report-preview-media" src={coverSrc} alt="" loading="lazy" />
-      : <span className="fb-chat-report-preview-media" aria-hidden="true" />}
+    {coverSrc ? <img className="fb-chat-report-preview-media fb-media-shape" src={coverSrc} alt="" loading="lazy" />
+      : <span className="fb-chat-report-preview-media fb-media-shape" aria-hidden="true" />}
     <span className="fb-chat-report-preview-copy">
       <span className="fb-chat-report-preview-kind">{post.type === "LOST" ? "Lost report" : "Found report"}</span>
       <strong className="fb-chat-report-preview-title" dir="auto">{post.title}</strong>

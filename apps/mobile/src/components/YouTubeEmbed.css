@@ -17,7 +17,6 @@
   aspect-ratio: 16 / 9;
   width: 100%;
   overflow: hidden;
-  border-radius: .6rem;
   background: var(--fb-surface-container);
 }
 

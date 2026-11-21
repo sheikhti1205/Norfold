@@ -47,7 +47,7 @@ export function DetailHeroGallery({ postId, title, images, onOpenLightbox }: Det
 
   return (
     <figure className="w-full">
-      <div className="relative w-full overflow-hidden rounded-[18px]" style={{ aspectRatio: "16 / 10" }}>
+      <div className="fb-media-shape relative w-full overflow-hidden" style={{ aspectRatio: "16 / 10" }}>
         <div
           ref={trackRef}
           data-testid="detail-hero-track"

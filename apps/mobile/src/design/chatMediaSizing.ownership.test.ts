@@ -1034,7 +1034,7 @@ describe("R19 media-only bubble ownership", () => {
     expect(flush).toContain("padding:0;");
     expect(flush).toContain("background:transparent;");
     expect(flush).toContain("overflow:hidden;");
-    expect(flush).toContain("border-radius:1rem;");
+    expect(flush).toContain("border-radius:var(--fb-media-radius, 1.125rem);");
     expect(flush).not.toContain(".25rem");
     expect(flushOwn).toContain("background:transparent;");
     // The picture inherits the bubble's rounded edge instead of carrying a
