@@ -184,6 +184,14 @@ describe("message copy actions", () => {
     ]);
   });
 
+  it("preserves blank lines after a previewed link", () => {
+    const url = "https://example.com/x";
+    expect(messageCopyActions({ body: `before ${url}\n\nafter` })).toEqual([
+      { id: "copy-text", kind: "text", label: "Copy text", text: "before\n\nafter" },
+      { id: "copy-link", kind: "link", label: "Copy link", url },
+    ]);
+  });
+
   it("does not offer a punctuation-only Copy text beside a bare URL", () => {
     expect(messageCopyActions({ body: "https://example.com/x." })).toEqual([
       { id: "copy-link", kind: "link", label: "Copy link", url: "https://example.com/x" },

@@ -1326,10 +1326,9 @@ it("caps a five-photo selection at four cells and counts the hidden one", async 
   expect(document.querySelector('[data-chat-message="photo-5"]')).toBeNull();
   expect(screen.getAllByRole("button", { name: "Options for your message" })).toHaveLength(4);
   const fourth = document.querySelector<HTMLElement>('[data-chat-message="photo-4"]')!;
-  const more = fourth.querySelector(".fb-chat-photo-more");
+  const more = fourth.querySelector(".fb-chat-run-more-badge");
   expect(more?.textContent).toBe("+1");
-  expect(fourth.querySelector(".fb-chat-photo")?.lastElementChild).toBe(more);
-  expect(document.querySelectorAll(".fb-chat-photo-more")).toHaveLength(1);
+  expect(document.querySelectorAll(".fb-chat-run-more-badge")).toHaveLength(1);
   expect(await screen.findByRole("button", { name: "View photo, 1 more" })).toBeTruthy();
 });
 it("jumps a quote to the exact photo and rings it", async () => {

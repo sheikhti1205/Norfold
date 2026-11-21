@@ -37,7 +37,7 @@ describe("media-only message semantics", () => {
     expect(isMediaOnlyMessage(base, { state: "READY" }, { actionable: true })).toBe(false);
     expect(isMediaOnlyMessage(base, { state: "FAILED" }, quiet)).toBe(false);
     expect(isMediaOnlyMessage(base, { state: "AWAITING_ACK" }, quiet)).toBe(false);
-    expect(isMediaOnlyMessage(base, undefined, quiet)).toBe(false);
+    expect(isMediaOnlyMessage(base, undefined, quiet)).toBe(true);
   });
 
   it("never treats an unsent, unaccepted or non-photo message as media-only", () => {

@@ -100,12 +100,12 @@ export function isMediaOnlyMessage(message: {
   contextReportId?: string;
   location?: unknown;
 }, attachment: { state: string } | undefined, status: { actionable: boolean }): boolean {
-  if (message.unsentAt !== undefined || message.messageType !== "MEDIA" || !attachment || !message.server) return false;
+  if (message.unsentAt !== undefined || message.messageType !== "MEDIA" || !message.server) return false;
   if (message.body || message.replyToId || message.contextReportId || message.location) return false;
   // Retry, Remove, Review, Sending and saved-failure states stay in the padded
   // bubble: a control or an honest sentence is never painted over the picture.
   if (status.actionable) return false;
-  return attachment.state === "READY" || attachment.state === "EVICTED";
+  return !attachment || attachment.state === "READY" || attachment.state === "EVICTED";
 }
 
 /**
@@ -187,10 +187,11 @@ function ReportContextSession({ reportId, preview }: { reportId: string; preview
   // Loading and unavailable are still the report: the canonical route stays one
   // reachable link and no title, photo or place is invented before authority
   // resolves.
-  if (state.status === "loading") return <PostLink className="fb-chat-report-preview fb-chat-report-preview-state"
-    to={reportRoute} data-chat-report="loading">Loading report…</PostLink>;
-  if (state.status === "unavailable") return <PostLink className="fb-chat-report-preview fb-chat-report-preview-state"
-    to={reportRoute} data-chat-report="unavailable">Report unavailable</PostLink>;
+  if (state.status !== "ready") return <PostLink className="fb-chat-report-preview fb-chat-report-preview-state"
+    to={reportRoute} data-chat-report={state.status}>
+    <span className="fb-chat-report-preview-media" aria-hidden="true" />
+    <span className="fb-chat-report-preview-copy">{state.status === "loading" ? "Loading report…" : "Report unavailable"}</span>
+  </PostLink>;
   const post = state.post!;
   if (preview) return <span className="fb-chat-row-context" dir="auto">{post.type === "LOST" ? "Lost" : "Found"} report · {post.title}</span>;
   return <ChatReportPreview post={post} reportId={reportId} coverSrc={firstImageSrc} />;
@@ -359,7 +360,10 @@ function RetrySync({ accountId, labelled = false }: { accountId: string; labelle
  */
 function chatPhotoRatio(attachment: { width: number; height: number }): number {
   const ratio = attachment.width / attachment.height;
-  return Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
+  // A stored shape is the only geometry a loading cell may reserve. A row with
+  // no usable dimensions keeps the classic 4:3 photo box instead of collapsing
+  // to its status text and reflowing the moment the bitmap paints.
+  return attachment.width > 0 && attachment.height > 0 && Number.isFinite(ratio) ? ratio : 4 / 3;
 }
 
 function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady, overflowCount }: {
@@ -419,17 +423,13 @@ function ChatPhoto({ accountId, conversationId, attachment, onOpen, onReady, ove
   // hidden total.
   const openLabel = overflowCount && overflowCount > 0 ? `View photo, ${overflowCount} more` : "View photo";
   return <div ref={host} className="fb-chat-photo" data-loading={content && !loaded ? "true" : undefined}
-    style={{ aspectRatio: `${attachment.width} / ${attachment.height}`, "--fb-chat-photo-ratio": ratio } as CSSProperties}>
+    style={{ aspectRatio: String(ratio), "--fb-chat-photo-ratio": ratio } as CSSProperties}>
     {content ? <>
       <button type="button" aria-label={openLabel}
         onClick={() => onOpen(attachment.messageId, content.bytes, attachment.mime)}>
         <img src={content.url} alt="" loading="lazy" decoding="async" onLoad={() => setLoaded(true)} onError={() => { onReady(attachment.id, null); setContent(null); setState("failed"); }}
           data-receipt-message={loaded && attachment.state === "READY" ? attachment.messageId : undefined} />
       </button>
-      {/* The count only describes a picture that is actually shown: a loading,
-          failed or unavailable cell keeps its status card and its retry control
-          unobscured. */}
-      {overflowCount && overflowCount > 0 ? <span className="fb-chat-photo-more" aria-hidden="true">+{overflowCount}</span> : null}
     </> : <div role="status">{state === "loading" ? "Photo loading…" : state === "failed" ? "Could not load photo." : "Photo unavailable"}
       {canDownload && (state === "missing" || state === "failed") && <button type="button" onClick={() => void download()}>Download again</button>}
     </div>}
@@ -2636,10 +2636,7 @@ export function ThreadSession({
         setThreadReadRetry(value => value + 1); void refreshMessaging(accountId).catch(() => undefined);
       }}>Try again</button>
     </div>}
-    {/* The floating latest control is a sibling of the scroller, not a child:
-        it is positioned against this viewport box, whose bottom edge is the top
-        of the composer stack, so its offset never has to guess the composer's
-        height. The scroller keeps its own ref and the one anchor owner. */}
+    {/* The latest control gets its own row between the scroller and composer. */}
     <div className="fb-chat-viewport">
     <div className="fb-chat-messages" ref={scroll}>
       <p className="fb-chat-sync" role="status">{sendStatus ?? (chat.status === "offline" ? "Messages are saved here and will send when you reconnect." : "")}</p>
@@ -2716,6 +2713,7 @@ export function ThreadSession({
           const attachment = media.find((entry) => entry.messageId === message.id);
           const statusMembers = [message];
           const statusMessage = statusMembers[statusMembers.length - 1]!;
+          const timeMessage = grouped ? run.messages[run.messages.length - 1]! : message;
           const statusPending = outbox.find((entry) => entry.messageId === statusMessage.id);
           const localFailed = !storedMessages.some(entry => entry.id === message.id)
             && localEchoes.some(entry => entry.message.id === message.id && entry.failed);
@@ -2757,13 +2755,9 @@ export function ThreadSession({
           const bareVideo = grouped && file?.kind === "video" && !message.replyToId
             && !message.contextReportId && chatFileCaption(message.body).trim() === "";
           const lastVisible = member === visibleMembers.length - 1;
-          // Only a real, viewable photo owns a picture to count over. Every
-          // other last cell (a grouped bare clip, a photo without bytes, a
-          // restricted photo) keeps its transport or status row untouched and
-          // pins a compact badge beside it instead.
-          const photoOverflow = lastVisible && overflowCount > 0 && message.messageType === "MEDIA"
-            && !!attachment && photoAllowed;
-          const rowOverflow = lastVisible && overflowCount > 0 && !photoOverflow;
+          // The message list proves the count even before media bytes arrive.
+          // Keep the badge outside the photo so it survives every loading state.
+          const rowOverflow = lastVisible && overflowCount > 0;
           // A bare document file is the message itself: only the untouched file
           // row earns the compact surface. A caption, quote, report context or
           // location is real bubble content, and every media kind keeps its own
@@ -2794,7 +2788,15 @@ export function ThreadSession({
               </span>
             </button>}
             {message.unsentAt !== undefined ? <p>Message unsent</p> : <>
-            {message.messageType === "MEDIA" && attachment && photoAllowed && <ChatPhoto key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} onOpen={openPhoto} onReady={rememberPhoto} overflowCount={photoOverflow ? overflowCount : undefined} />}
+            {message.messageType === "MEDIA" && !attachment && <div className="fb-chat-photo"
+              style={{ aspectRatio: String(4 / 3), "--fb-chat-photo-ratio": 4 / 3 } as CSSProperties}>
+              <div role="status">{missingAttachmentCopy(message)}
+                {missingAttachmentStale(message) && <button type="button" onClick={() => {
+                  void retryMessagingMedia(accountId).catch(() => setError("Could not check for this attachment. Try syncing again."));
+                }}>Check again</button>}
+              </div>
+            </div>}
+            {message.messageType === "MEDIA" && attachment && photoAllowed && <ChatPhoto key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} onOpen={openPhoto} onReady={rememberPhoto} overflowCount={rowOverflow ? overflowCount : undefined} />}
             {message.messageType === "MEDIA" && attachment && !photoAllowed && <p>Photos are available when you're friends.</p>}
             {message.messageType === "VOICE" && attachment && photoAllowed && <ChatVoice key={attachment.id} accountId={accountId} conversationId={conversationId} attachment={attachment} playback={voice.player} snapshot={playbackSnapshot}
               authorName={own ? user?.displayName || user?.username : name} avatarUrl={own ? user?.avatarUrl : person?.avatarUrl} />}
@@ -2816,15 +2818,15 @@ export function ThreadSession({
                       className={emojiOnly ? "fb-chat-emoji-only" : undefined}
                       contextReportId={message.contextReportId} renderReportPreview={reportPreview} />)
               : message.messageType === "LOCATION" ? (!message.location && <p>Location unavailable</p>)
-              : !attachment && <p>{missingAttachmentCopy(message)}</p>}
-            {!attachment && !message.body && missingAttachmentStale(message) && <button type="button" onClick={() => {
+              : !attachment && message.messageType !== "MEDIA" && <p>{missingAttachmentCopy(message)}</p>}
+            {!attachment && !message.body && message.messageType !== "MEDIA" && missingAttachmentStale(message) && <button type="button" onClick={() => {
               // A message whose attachment never arrived is not stuck loading:
               // ask for one full pass before telling the reader it is gone.
               void retryMessagingMedia(accountId).catch(() => setError("Could not check for this attachment. Try syncing again."));
             }}>Check again</button>}
             <span className="fb-chat-message-status">
-              {statusMessage.createdAt ? <time className="fb-chat-time" dateTime={new Date(statusMessage.createdAt).toISOString()}>
-                {new Date(statusMessage.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+              {(!grouped || lastVisible) && timeMessage.createdAt ? <time className="fb-chat-time" dateTime={new Date(timeMessage.createdAt).toISOString()}>
+                {new Date(timeMessage.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
               </time> : null}
               {klipyKind && <span className="fb-chat-expressive-kind">{klipyPreviewLabel(klipyKind)}</span>}
               {own && <>{localFailed ? "Not sent"
@@ -2906,12 +2908,12 @@ export function ThreadSession({
       </ol>
       {view?.ownBlocked && <p className="fb-chat-secondary">You’ve blocked this account. Manage blocked accounts in Privacy settings.</p>}
     </div>
-    {showJump && <button type="button" className="fb-chat-jump" aria-label="Jump to latest message" onClick={() => {
+    {showJump && <div className="fb-chat-jump-row"><button type="button" className="fb-chat-jump" aria-label="Jump to latest message" onClick={() => {
       const area = scroll.current;
       if (area) area.scrollTo({ top: area.scrollHeight, behavior: shouldReduceMotion() ? "auto" : "smooth" });
       transcript.followLatest();
       setShowJump(false);
-    }} {...hoverLabel("Jump to latest")}><ChevronDown size={20} aria-hidden="true" /></button>}
+    }} {...hoverLabel("Jump to latest")}><ChevronDown size={20} aria-hidden="true" /></button></div>}
     </div>
     {error && !sheet && <p className="fb-chat-error" role="alert">{error}</p>}
     {photos.length > 0 && <div className="fb-chat-photo-draft" role="group"
@@ -3022,10 +3024,11 @@ export function ThreadSession({
       {unsentCopy && <p>{unsentCopy}</p>}
     </ConfirmDialog>
     <AdaptiveTaskSurface open={sheet !== null && sheet !== "location" && !confirming} onClose={() => setSheet(null)} busy={busy}
-      width={sheet === "actions" ? "compact" : "standard"}
+      width={sheet === "actions" || sheet === "search" ? "compact" : "standard"}
+      bodyClassName={sheet === "actions" ? "fb-chat-info-scroll" : undefined}
       title={sheet === "search" ? "Search chat" : sheet === "media" ? "Conversation media" : sheet === "review" ? "Review message" : "Conversation info"}>
       {sheet === "actions" ? conversationInfo : sheet === "search" ? <div className="fb-chat-search-task">
-        <label className="fb-chat-search"><Search size={17} aria-hidden="true" /><input type="search" aria-label="Search saved messages" value={messageQuery} onChange={event => setMessageQuery(event.target.value)} /></label>
+        <label className="fb-chat-search"><Search size={17} aria-hidden="true" /><input type="search" aria-label="Search saved messages" placeholder="Search messages" value={messageQuery} onChange={event => setMessageQuery(event.target.value)} /></label>
         <p role="status" className="fb-chat-secondary">{!searchTerm ? "Search the messages saved on this device." : `${searchMatches.length} ${searchMatches.length === 1 ? "message" : "messages"} found${searchMatches.length > 100 ? ". Showing the first 100." : ""}`}</p>
         <ul className="fb-chat-search-results">{searchMatches.slice(0, 100).map(message => <li key={message.id}>
           <button type="button" onClick={() => { transcript.suspend(); setJumpTo(message.id); setSheet(null); }}><span className="fb-chat-secondary">{message.authorId === accountId ? "You" : name || "Member"}</span><span dir="auto">{messagePreview(message)}</span></button>

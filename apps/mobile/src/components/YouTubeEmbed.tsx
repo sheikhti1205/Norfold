@@ -265,7 +265,7 @@ export function YouTubeEmbed({ url, compact = false }: { url: string; compact?: 
         <div className="fb-yt-preview fb-yt-blocked">
           <span>Playback is blocked here.</span>
           <a className="fb-yt-domain" href={watchUrl} target="_blank" rel="noopener noreferrer">
-            youtube.com
+            YouTube
           </a>
         </div>
       );
@@ -331,7 +331,7 @@ export function YouTubeEmbed({ url, compact = false }: { url: string; compact?: 
           <span className="fb-yt-text">
             <span className="fb-yt-title">{title}</span>
             <a className="fb-yt-domain" href={watchUrl} target="_blank" rel="noopener noreferrer">
-              youtube.com
+              YouTube
             </a>
           </span>
           <button

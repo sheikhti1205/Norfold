@@ -2,7 +2,6 @@ import type { PostItem } from "@norfold/shared";
 import { PostLink } from "./PostNavigation";
 import { StatusChip } from "./StatusChip";
 import { formatEventDate } from "../utils/dates";
-import { reportLink } from "../utils/reportLinks";
 import "./ChatReportPreview.css";
 
 export interface ChatReportPreviewProps {
@@ -11,15 +10,6 @@ export interface ChatReportPreviewProps {
   reportId: string;
   /** Media URL already resolved by the parent; no second media owner here. */
   coverSrc?: string | null;
-}
-
-/** The real configured share host, never a fabricated string. */
-function shareDomain(reportId: string): string | null {
-  try {
-    return new URL(reportLink(reportId)).hostname;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -31,11 +21,11 @@ function shareDomain(reportId: string): string | null {
  * buttons.
  */
 export function ChatReportPreview({ post, reportId, coverSrc }: ChatReportPreviewProps) {
-  const domain = shareDomain(reportId);
   const resolved = post.status === "MATCHED" || post.status === "RECOVERED" || post.status === "CLOSED";
   return <PostLink className="fb-chat-report-preview" to={`/posts/${encodeURIComponent(reportId)}`}
     data-chat-report={reportId}>
-    {coverSrc && <img className="fb-chat-report-preview-media" src={coverSrc} alt="" loading="lazy" />}
+    {coverSrc ? <img className="fb-chat-report-preview-media" src={coverSrc} alt="" loading="lazy" />
+      : <span className="fb-chat-report-preview-media" aria-hidden="true" />}
     <span className="fb-chat-report-preview-copy">
       <span className="fb-chat-report-preview-kind">{post.type === "LOST" ? "Lost report" : "Found report"}</span>
       <strong className="fb-chat-report-preview-title" dir="auto">{post.title}</strong>
@@ -43,7 +33,6 @@ export function ChatReportPreview({ post, reportId, coverSrc }: ChatReportPrevie
       <span className="fb-chat-report-preview-meta">
         {resolved && <StatusChip post={post} />}
         {post.eventDate && <time dateTime={post.eventDate}>{formatEventDate(post.eventDate)}</time>}
-        {domain && <span className="fb-chat-report-preview-domain">{domain}</span>}
       </span>
     </span>
   </PostLink>;

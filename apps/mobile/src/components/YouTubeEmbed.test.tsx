@@ -137,7 +137,7 @@ describe("YouTubeEmbed compact preview", () => {
     expect(image?.getAttribute("referrerpolicy")).toBe("no-referrer");
     expect(image?.getAttribute("alt")).toBe("");
     expect(screen.getByText("YouTube video")).toBeTruthy();
-    const domain = screen.getByRole("link", { name: "youtube.com" });
+    const domain = screen.getByRole("link", { name: "YouTube" });
     expect(domain.getAttribute("href")).toBe("https://www.youtube.com/watch?v=thumb000001");
     expect(domain.getAttribute("target")).toBe("_blank");
     // The compact card replaces the duplicated watch footer and never prints
@@ -162,7 +162,7 @@ describe("YouTubeEmbed compact preview", () => {
     fireEvent.error(hq ?? document.createElement("img"));
     expect(container.querySelector("img")).toBeNull();
     expect(screen.getByText("Preview unavailable")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "youtube.com" }).getAttribute("href"))
+    expect(screen.getByRole("link", { name: "YouTube" }).getAttribute("href"))
       .toBe("https://www.youtube.com/watch?v=thumb000002");
   });
 

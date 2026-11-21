@@ -15,14 +15,14 @@ const m = vi.hoisted(() => {
     threadSync: { conversationId: "chat", mode: "ready", missing: 0 } as MessagingThreadSync | null,
     conversations: [{ conversationId: "chat", peerId: "peer", cachedProjection: view }], currentProjections: { chat: view } },
     messages: [] as unknown[], media: [] as unknown[], outbox: [] as unknown[], cached: null as null | { messages: unknown[]; media: unknown[]; outbox: unknown[] }, threadRead: vi.fn(),
-    voice: vi.fn(), location: vi.fn(), mute: vi.fn(), pin: vi.fn(), prepare: vi.fn(), relationship: vi.fn(), text: vi.fn(), send: vi.fn(), read: vi.fn(), download: vi.fn(), remove: vi.fn(), recover: vi.fn(), retry: vi.fn(), receipt: vi.fn(), observe: vi.fn(), refresh: vi.fn(), choose: vi.fn(), import: vi.fn(), file: vi.fn(), upload: vi.fn(), removeFile: vi.fn(),
+    voice: vi.fn(), location: vi.fn(), mute: vi.fn(), pin: vi.fn(), prepare: vi.fn(), relationship: vi.fn(), text: vi.fn(), send: vi.fn(), read: vi.fn(), download: vi.fn(), remove: vi.fn(), recover: vi.fn(), retry: vi.fn(), retryMedia: vi.fn(), receipt: vi.fn(), observe: vi.fn(), refresh: vi.fn(), choose: vi.fn(), import: vi.fn(), file: vi.fn(), upload: vi.fn(), removeFile: vi.fn(),
     holdIds: vi.fn(async () => [] as string[]), hold: vi.fn(async (): Promise<Record<string, unknown> | null> => null), purgeHold: vi.fn(async () => undefined),
     report: vi.fn(async (_input: unknown, _signal?: AbortSignal) => ({ reportId: "receipt" })) };
 });
 vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "account" } }) }));
 vi.mock("../services/accountLabels", () => ({ fetchAccountIdentities: async () => new Map(), readCachedAccountIdentities: () => new Map() }));
 vi.mock("../services/messaging/useMessaging", () => ({ useMessaging: () => m.chat }));
-vi.mock("../services/messaging/runtime", () => ({ getCachedMessagingThreadState: () => m.cached, watchMessagingThread: m.watch, sendMessagingVoice: m.voice, sendMessagingLocation: m.location, setMessagingMuted: m.mute, pinMessagingMessage: m.pin, readMessagingThreadState: () => m.threadRead(), fetchMessagingReceiptView: m.receipt, observeMessagingReceipt: m.observe, markMessagingConversationRead: async () => {}, refreshMessaging: m.refresh, sendMessagingText: m.text, sendMessagingMedia: m.send, readMessagingMedia: m.read, downloadMessagingMedia: m.download, changeMessagingRelationship: m.relationship, clearMessagingConversation: async () => {}, removeMessagingMessage: m.remove, recoverMessagingText: m.recover, retryMessagingMessage: m.retry, readMessagingUnsentHoldIds: m.holdIds, readMessagingUnsentHold: m.hold, purgeMessagingUnsentHold: m.purgeHold }));
+vi.mock("../services/messaging/runtime", () => ({ getCachedMessagingThreadState: () => m.cached, watchMessagingThread: m.watch, sendMessagingVoice: m.voice, sendMessagingLocation: m.location, setMessagingMuted: m.mute, pinMessagingMessage: m.pin, readMessagingThreadState: () => m.threadRead(), fetchMessagingReceiptView: m.receipt, observeMessagingReceipt: m.observe, markMessagingConversationRead: async () => {}, refreshMessaging: m.refresh, sendMessagingText: m.text, sendMessagingMedia: m.send, readMessagingMedia: m.read, downloadMessagingMedia: m.download, retryMessagingMedia: m.retryMedia, changeMessagingRelationship: m.relationship, clearMessagingConversation: async () => {}, removeMessagingMessage: m.remove, recoverMessagingText: m.recover, retryMessagingMessage: m.retry, readMessagingUnsentHoldIds: m.holdIds, readMessagingUnsentHold: m.hold, purgeMessagingUnsentHold: m.purgeHold }));
 vi.mock("../services/messaging/preparePhoto", () => ({ prepareMessagingPhoto: m.prepare }));
 vi.mock("../services/messaging/files", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../services/messaging/files")>()),
@@ -38,6 +38,7 @@ beforeEach(() => { vi.stubGlobal("URL", Object.assign(class extends URL {}, { cr
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ x: 0, y: 0, top: 0, left: 0, bottom: 200, right: 200, width: 200, height: 200, toJSON: () => ({}) });
   m.choose.mockReset(); m.import.mockReset(); m.file.mockReset();
   m.retry.mockReset().mockResolvedValue(undefined);
+  m.retryMedia.mockReset().mockResolvedValue(undefined);
   m.upload.mockReset();
   m.removeFile.mockReset().mockResolvedValue(undefined);
   m.text.mockReset().mockResolvedValue("saved");
@@ -88,6 +89,33 @@ async function open() {
   await waitFor(() => expect(screen.queryByText("Opening messages…")).toBeNull());
   return rendered;
 }
+
+it("reserves a fallback photo frame until attachment dimensions arrive", async () => {
+  const shot = photo("pending-photo", Date.now());
+  m.messages = [shot.message];
+  m.read.mockImplementation(() => new Promise(() => {}));
+  const rendered = await open();
+  const row = document.querySelector<HTMLElement>('[data-chat-message="pending-photo"]')!;
+  expect(within(row).getByRole("status").textContent).toContain("Photo loading");
+  expect(row.querySelector<HTMLElement>(".fb-chat-photo")?.style.aspectRatio).toBe(String(4 / 3));
+  m.media = [shot.attachment];
+  m.chat.revision++;
+  rendered.rerender(thread());
+  await waitFor(() => expect(row.querySelector<HTMLElement>(".fb-chat-photo")?.style.aspectRatio).toBe("2"));
+  expect(within(row).getByRole("status").textContent).toContain("Photo loading");
+});
+
+it("offers a check for stale missing metadata and reports a failed retry", async () => {
+  const shot = photo("missing-photo", Date.now() - 180_000);
+  m.messages = [shot.message];
+  m.retryMedia.mockRejectedValue(new Error("offline"));
+  await open();
+  const row = document.querySelector<HTMLElement>('[data-chat-message="missing-photo"]')!;
+  expect(within(row).getByRole("status").textContent).toContain("Photo unavailable");
+  fireEvent.click(within(row).getByRole("button", { name: "Check again" }));
+  expect(m.retryMedia).toHaveBeenCalledWith("account");
+  expect((await screen.findByRole("alert")).textContent).toContain("Could not check for this attachment");
+});
 
 it("keeps two nearby photos as separate message rows", async () => {
   const first = photo("photo-1", 1_000, "First caption");
@@ -226,18 +254,18 @@ it("caps a seven-photo album at four cells and counts the rest over the fourth",
   const cells = album.querySelectorAll(":scope > .fb-chat-line-row");
   expect(cells).toHaveLength(4);
   expect(album.querySelectorAll(".fb-chat-line-row-wide")).toHaveLength(0);
+  const times = album.querySelectorAll("time.fb-chat-time");
+  expect(times).toHaveLength(1);
+  expect(times[0]?.getAttribute("datetime")).toBe(new Date(3_400).toISOString());
   // The overlay only paints once the stored bytes resolve, in the same commit
   // that inserts the counted viewer action, so wait for that action instead of
   // reading the overlay ahead of the media read.
   const viewMore = await screen.findByRole("button", { name: "View photo, 3 more" });
-  // Exactly one overlay, the last child inside the fourth picture, so it is
-  // clipped to the photo instead of covering the receipt row.
+  // The count belongs to the row, independent of whether its bytes have loaded.
   const fourth = document.querySelector('[data-chat-message="photo-4"]')!;
-  const more = fourth.querySelector(".fb-chat-photo-more");
+  const more = fourth.querySelector(".fb-chat-run-more-badge");
   expect(more?.textContent).toBe("+3");
-  expect(fourth.querySelector(".fb-chat-photo")?.lastElementChild).toBe(more);
-  expect(document.querySelectorAll(".fb-chat-photo-more")).toHaveLength(1);
-  // The picture keeps its viewer action and names the hidden count.
+  expect(document.querySelectorAll(".fb-chat-run-more-badge")).toHaveLength(1);
   expect(viewMore).toBeTruthy();
 });
 
@@ -259,6 +287,17 @@ it("keeps the fourth cell's status card intact when its photo has no bytes", asy
   expect(await within(fourth).findByText("Photo unavailable")).toBeTruthy();
   expect(fourth.querySelector('.fb-chat-photo [role="status"]')).toBeTruthy();
   expect(document.querySelectorAll(".fb-chat-photo-more")).toHaveLength(0);
+  expect(fourth.querySelector(".fb-chat-run-more-badge")?.textContent).toBe("+3");
+});
+
+it("shows the album count before the photo read resolves", async () => {
+  photoAlbum(7);
+  m.read.mockImplementation(() => new Promise(() => {}));
+  await open();
+  const fourth = document.querySelector<HTMLElement>('[data-chat-message="photo-4"]')!;
+  expect(within(fourth).getByText("Photo loading…")).toBeTruthy();
+  expect(fourth.querySelector(".fb-chat-run-more-badge")?.textContent).toBe("+3");
+  expect(fourth.querySelector<HTMLElement>(".fb-chat-photo")?.style.aspectRatio).toBe("2");
 });
 
 it("keeps five photos to four cells behind a +1 overlay", async () => {
@@ -270,7 +309,7 @@ it("keeps five photos to four cells behind a +1 overlay", async () => {
   // The count paints with the resolved picture, in the same commit as its
   // counted viewer action, so wait for that action before reading the overlay.
   const oneMore = await screen.findByRole("button", { name: "View photo, 1 more" });
-  expect(document.querySelector(".fb-chat-photo-more")?.textContent).toBe("+1");
+  expect(document.querySelector(".fb-chat-run-more-badge")?.textContent).toBe("+1");
   expect(oneMore).toBeTruthy();
 });
 
@@ -316,11 +355,10 @@ it("caps a mixed photo/video album and keeps a bare clip as a compact tile", asy
   // The clip in the visible set renders the shared compact tile action, and the
   // last visible cell is a photo, so the overflow sits on its picture.
   expect(await screen.findByRole("button", { name: "Play clip-1.mp4" })).toBeTruthy();
-  expect(document.querySelector(".fb-chat-run-more-badge")).toBeNull();
   // The last visible cell is a photo, so its count waits on its resolved bytes
   // exactly like the capped album above.
   expect(await screen.findByRole("button", { name: "View photo, 3 more" })).toBeTruthy();
-  expect(document.querySelector(".fb-chat-photo-more")?.textContent).toBe("+3");
+  expect(document.querySelector(".fb-chat-run-more-badge")?.textContent).toBe("+3");
 });
 
 it("opens the shared viewer from the capped fourth cell and lists all seven photos", async () => {

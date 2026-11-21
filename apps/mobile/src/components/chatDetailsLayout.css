@@ -16,6 +16,7 @@
 
 .fb-chat-details {
   min-width:0; min-height:0; overflow-y:auto; overscroll-behavior:contain;
+  scrollbar-width:thin; scrollbar-color:var(--fb-outline) transparent;
   padding:.75rem 1rem;
   background:var(--fb-surface); color:var(--fb-on-surface);
   opacity:0; transform:translateX(6px);

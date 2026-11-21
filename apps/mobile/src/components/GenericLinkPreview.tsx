@@ -141,7 +141,7 @@ export function GenericLinkPreview({ href }: { href: string }) {
             decoding="async"
             onError={() => setBrokenImage(imageSrc)}
           />
-        ) : null}
+        ) : <span className="fb-linkp-thumb" aria-hidden="true" />}
         <span className="fb-linkp-text" dir="auto">
           <span className="fb-linkp-title">{title}</span>
           {preview?.description ? <span className="fb-linkp-description">{preview.description}</span> : null}

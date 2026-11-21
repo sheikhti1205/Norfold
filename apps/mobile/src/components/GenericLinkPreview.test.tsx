@@ -134,6 +134,20 @@ describe("GenericLinkPreview", () => {
     expect(container.querySelector("img")).toBeNull();
   });
 
+  it("retains long provider text while replacing the reserved loading slot", async () => {
+    const pending = deferred<LinkPreview | null>();
+    fetchPreviewMock.mockReturnValue(pending.promise);
+    const title = "A long title ".repeat(20).trim();
+    const description = "A detailed description ".repeat(30).trim();
+    const { container } = render(<GenericLinkPreview href="https://news.example.org/long" />);
+    expect(container.querySelector(".fb-linkp-thumb")?.tagName).toBe("SPAN");
+    await act(async () => { pending.resolve({ url: "https://news.example.org/long", title, description,
+      imageDataUrl: "data:image/png;base64,AAAA" }); });
+    expect(screen.getByText(title)).toBeTruthy();
+    expect(screen.getByText(description)).toBeTruthy();
+    expect(container.querySelector(".fb-linkp-thumb")?.tagName).toBe("IMG");
+  });
+
   it("never requests a remote image even if a caller hands one over", async () => {
     fetchPreviewMock.mockResolvedValue({
       url: "https://images.example.com/a",
@@ -258,13 +272,14 @@ describe("GenericLinkPreview surface contract", () => {
     expect(wrapper).not.toContain("radius");
 
     const link = /\.fb-linkp-link\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
-    expect(link).toContain("min-height: 44px");
+    expect(link).toContain("min-height: 6rem");
     expect(link).not.toContain("background");
     expect(link).not.toContain("border");
 
     const thumb = /\.fb-linkp-thumb\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
     expect(thumb).toContain("width: 76px");
     expect(thumb).not.toContain("background");
+    expect(css).not.toContain("-webkit-line-clamp");
 
     // A failed lookup must not grow a status row or a retry control.
     expect(css).not.toContain(".fb-linkp-state");
