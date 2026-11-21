@@ -204,7 +204,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
    * floating surface. The 900px boundary is the same one the report CSS uses,
    * so the DOM and the layout cannot disagree about which composition is live.
    */
-  const wideViewport = useViewportWidth() >= 900;
+  const wideViewport = useViewportWidth() > 900;
   const [commentsOpen, setCommentsOpen] = useState(false);
   // The comment action and a first keystroke both hand the caret to the
   // composer; the signals are counters so repeated requests stay distinct.

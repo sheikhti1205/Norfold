@@ -458,17 +458,68 @@ describe("consumer route map", () => {
     expect(screen.getByText("Notifications screen")).toBeTruthy();
   });
 
-  it("renders a direct report link standalone and never restores a different account background", async () => {
+  it("opens a direct report link as the popup over the feed and closes back to the feed", async () => {
     signedIn();
     renderAt("/posts/p1");
-    expect(await screen.findByText("PostDetail screen")).toBeTruthy();
-    expect(screen.queryByRole("dialog", { name: "Report" })).toBeNull();
+    const dialog = await screen.findByRole("dialog", { name: "Report" });
+    expect(dialog.textContent).toContain("PostDetail screen");
+    // The feed is the page beneath a URL entry; there is no standalone page.
+    expect(screen.getByText("Home screen")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Report" })).toBeNull());
+    expect(window.location.hash).toBe("#/");
+    expect(screen.getByText("Home screen")).toBeTruthy();
+  });
+
+  it("closes a reloaded report to Home even when history retains a positive index", async () => {
+    signedIn();
+    window.history.replaceState({ idx: 3 }, "", "/#/posts/p1");
+    router = createAppRouter();
+    render(<App router={router} />);
+    const dialog = await screen.findByRole("dialog", { name: "Report" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(window.location.hash).toBe("#/"));
+    expect(screen.getByText("Home screen")).toBeTruthy();
+  });
+
+  it("returns a reloaded report to its validated stated origin", async () => {
+    signedIn();
+    const origin = { pathname: "/notifications", search: "?filter=all", hash: "#older", key: "origin", state: null };
+    window.history.replaceState({ idx: 3, key: "report", usr: { postBackground: { location: origin, viewerId: "u1" } } }, "", "/#/posts/p1");
+    router = createAppRouter();
+    render(<App router={router} />);
+    const dialog = await screen.findByRole("dialog", { name: "Report" });
+    expect(screen.getByText("Notifications screen")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(window.location.hash).toBe("#/notifications?filter=all#older"));
+    expect(screen.getByText("Notifications screen")).toBeTruthy();
+  });
+
+  it("returns a replaced report to its stated origin rather than assuming history", async () => {
+    signedIn();
+    renderAt("/notifications");
+    await screen.findByText("Notifications screen");
+    const origin = router!.state.location;
+    await act(async () => { await router!.navigate("/posts/p1", {
+      replace: true, state: { postBackground: { location: origin, viewerId: "u1" } },
+    }); });
+    const dialog = await screen.findByRole("dialog", { name: "Report" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(window.location.hash).toBe("#/notifications"));
+    expect(screen.getByText("Notifications screen")).toBeTruthy();
+  });
+
+  it("never restores a different account's background under a report", async () => {
+    signedIn();
+    renderAt("/posts/p1");
+    expect(await screen.findByRole("dialog", { name: "Report" })).toBeTruthy();
     await act(async () => { await router!.navigate("/posts/p2", {
       state: { postBackground: { location: { pathname: "/", search: "", hash: "", key: "old", state: null }, viewerId: "other-account" } },
     }); });
-    expect(await screen.findByText("PostDetail screen")).toBeTruthy();
-    expect(screen.queryByText("Home screen")).toBeNull();
-    expect(screen.queryByRole("dialog", { name: "Report" })).toBeNull();
+    const dialogs = await screen.findAllByRole("dialog", { name: "Report" });
+    expect(dialogs).toHaveLength(1);
+    expect(dialogs[0]!.textContent).toContain("PostDetail screen");
+    expect(screen.getByText("Home screen")).toBeTruthy();
   });
 
   it("protects the actual cold hash Edit route on Android back, asking only once per press", async () => {
