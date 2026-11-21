@@ -58,6 +58,15 @@ beforeEach(() => { vi.stubGlobal("URL", Object.assign(class extends URL {}, { cr
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
+/**
+ * jsdom normalises an inline `aspect-ratio: 2` to the valid CSS form `2 / 1`.
+ * Read the declared number so the assertion checks the reserved frame, not the
+ * serialisation spelling.
+ */
+function declaredRatio(element: HTMLElement | null | undefined): number {
+  return Number.parseFloat(element?.style.aspectRatio ?? "");
+}
+
 /** One stored outgoing photo row plus the attachment metadata it needs. */
 function photo(id: string, createdAt: number, caption = "") {
   return {
@@ -97,11 +106,11 @@ it("reserves a fallback photo frame until attachment dimensions arrive", async (
   const rendered = await open();
   const row = document.querySelector<HTMLElement>('[data-chat-message="pending-photo"]')!;
   expect(within(row).getByRole("status").textContent).toContain("Photo loading");
-  expect(row.querySelector<HTMLElement>(".fb-chat-photo")?.style.aspectRatio).toBe(String(4 / 3));
+  expect(declaredRatio(row.querySelector<HTMLElement>(".fb-chat-photo"))).toBeCloseTo(4 / 3, 10);
   m.media = [shot.attachment];
   m.chat.revision++;
   rendered.rerender(thread());
-  await waitFor(() => expect(row.querySelector<HTMLElement>(".fb-chat-photo")?.style.aspectRatio).toBe("2"));
+  await waitFor(() => expect(declaredRatio(row.querySelector<HTMLElement>(".fb-chat-photo"))).toBe(2));
   expect(within(row).getByRole("status").textContent).toContain("Photo loading");
 });
 
@@ -297,7 +306,7 @@ it("shows the album count before the photo read resolves", async () => {
   const fourth = document.querySelector<HTMLElement>('[data-chat-message="photo-4"]')!;
   expect(within(fourth).getByText("Photo loading…")).toBeTruthy();
   expect(fourth.querySelector(".fb-chat-run-more-badge")?.textContent).toBe("+3");
-  expect(fourth.querySelector<HTMLElement>(".fb-chat-photo")?.style.aspectRatio).toBe("2");
+  expect(declaredRatio(fourth.querySelector<HTMLElement>(".fb-chat-photo"))).toBe(2);
 });
 
 it("keeps five photos to four cells behind a +1 overlay", async () => {

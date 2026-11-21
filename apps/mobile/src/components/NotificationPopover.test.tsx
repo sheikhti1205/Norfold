@@ -39,8 +39,9 @@ import { NotificationPopover } from "./NotificationPopover";
  * `.fb-notification-content`, which is what makes 440px mean "3-4 rows, the
  * rest reachable".
  */
-const source = readFileSync(new URL("./NotificationPopover.tsx", import.meta.url), "utf8");
-const css = readFileSync(new URL("../screens/Notifications.css", import.meta.url), "utf8");
+// Vitest runs with `apps/mobile` as its cwd; a jsdom module has no file: URL.
+const source = readFileSync("src/components/NotificationPopover.tsx", "utf8");
+const css = readFileSync("src/screens/Notifications.css", "utf8");
 
 afterEach(cleanup);
 

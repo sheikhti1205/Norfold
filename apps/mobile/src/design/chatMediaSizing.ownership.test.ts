@@ -711,7 +711,24 @@ describe("R19 captioned photo width ownership", () => {
     // the photo preference resize a loading or missing card.
     expect(specificity(compactSelector)).toEqual([0, 4, 1]);
     expect(specificity(messagePhotoSelector)).toEqual([0, 2, 0]);
-    expect(chatCss.indexOf(compactSelector)).toBe(-1);
+    // The unscoped standalone width rule is gone: match whole selectors. A
+    // plain indexOf found the album rule, which ENDS with this same selector
+    // text, and reported a false failure.
+    expect(bodiesFor(rules, compactSelector)).toHaveLength(0);
+    // A standalone no-bytes card has no width rule of its own, so it still
+    // inherits the definite metadata-derived frame from the direct-child photo
+    // rule: a loading or missing card cannot silently lose that shared width.
+    expect(bodies(messagePhotoSelector).join("\n")).toContain(
+      "width:min(var(--fb-chat-photo-width, 320px), calc(",
+    );
+    // The guard that remains: inside an album the no-bytes card is owned by
+    // the cell (100%), by a selector more specific than the direct-child photo
+    // override and declared after it, so a loading or missing card cannot
+    // silently take the photo preference or lose its shared frame.
+    const albumCompact = `.fb-chat-run ${compactSelector}`;
+    expect(bodies(albumCompact).join("\n")).toContain("width:100%;");
+    expect(specificity(albumCompact)[1]).toBeGreaterThan(specificity(messagePhotoSelector)[1]);
+    expect(chatCss.indexOf(albumCompact)).toBeGreaterThan(chatCss.indexOf(messagePhotoSelector));
   });
 
   it("keeps the bubble, surface and row caps unchanged", () => {

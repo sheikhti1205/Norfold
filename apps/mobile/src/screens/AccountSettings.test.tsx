@@ -234,10 +234,14 @@ describe("AccountSettings", () => {
     expect(screen.queryByText(/isn't available/i)).toBeNull();
   });
 
-  it("links the mobile row to the profile editor without inventing a number", async () => {
+  it("points the mobile row at the Telegram connection section without inventing a number", async () => {
     renderAccount();
-    const row = await screen.findByRole("link", { name: /mobile number/i });
-    expect(row.getAttribute("href")).toBe("/profile/edit");
+    const row = await screen.findByRole("button", { name: "Mobile number" });
+    const telegram = document.getElementById("profile-telegram-settings")!;
+    telegram.scrollIntoView = vi.fn();
+    fireEvent.click(row);
+    expect(telegram.scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "auto" });
+    expect(document.activeElement).toBe(telegram);
     // The typed signup number is retired: only Telegram can prove a number.
     await waitFor(() => expect(row.textContent).toContain("Not verified"));
     expect(row.textContent).not.toContain("+8801812345678");
@@ -409,16 +413,20 @@ describe("AccountSettings", () => {
   // Telegram owns phone verification; the old SMS replacement gate is gone.
   it("points the mobile row at Telegram without promising text messages", async () => {
     renderAccount();
-    const row = await screen.findByRole("link", { name: /mobile number/i });
+    const row = await screen.findByRole("button", { name: "Mobile number" });
     await waitFor(() => expect(row.textContent).toContain("Not verified"));
     expect(row.textContent).not.toMatch(/text messages/i);
-    expect(row.getAttribute("href")).toBe("/profile/edit");
+    const telegram = document.getElementById("profile-telegram-settings")!;
+    telegram.scrollIntoView = vi.fn();
+    fireEvent.click(row);
+    expect(telegram.scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "auto" });
+    expect(document.activeElement).toBe(telegram);
   });
 
   it("shows the server-verified Telegram number on the mobile row, verified once", async () => {
     mockTelegramAccount.mockResolvedValue({ linked: true, phone: "+8801912345678", username: "reader" });
     renderAccount();
-    const row = await screen.findByRole("link", { name: /mobile number/i });
+    const row = await screen.findByRole("button", { name: "Mobile number" });
     await waitFor(() => expect(row.textContent).toContain("+8801912345678"));
     // The identity chip says "Mobile verified"; a second badge in the row
     // squeezed the title onto three lines at 320dp, so it is not repeated.
@@ -429,7 +437,7 @@ describe("AccountSettings", () => {
   it("keeps the number unverified while Telegram waits for a contact", async () => {
     mockTelegramAccount.mockResolvedValue({ linked: true, phone: null, username: "reader" });
     renderAccount();
-    const row = await screen.findByRole("link", { name: /mobile number/i });
+    const row = await screen.findByRole("button", { name: "Mobile number" });
     await waitFor(() => expect(row.textContent).toContain("Not verified"));
     expect(row.textContent).not.toContain("+8801912345678");
   });
@@ -437,7 +445,7 @@ describe("AccountSettings", () => {
   it("stays honest when the Telegram state cannot be checked", async () => {
     mockTelegramAccount.mockRejectedValue(new Error("offline"));
     renderAccount();
-    const row = await screen.findByRole("link", { name: /mobile number/i });
+    const row = await screen.findByRole("button", { name: "Mobile number" });
     await waitFor(() => expect(row.textContent).toContain("Could not check"));
     expect(row.textContent).not.toContain("Verified");
   });
