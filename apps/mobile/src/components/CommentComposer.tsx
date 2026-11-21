@@ -240,7 +240,7 @@ export function CommentComposer({
   useEffect(() => {
     if (focusSignal <= 0 || focusSignal === handledFocus.current) return;
     handledFocus.current = focusSignal;
-    fieldRef.current?.focus();
+    fieldRef.current?.focus({ preventScroll: true });
   }, [focusSignal]);
 
   // Typing anywhere on the report surface starts the comment, never a search.
