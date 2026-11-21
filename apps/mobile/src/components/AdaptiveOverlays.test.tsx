@@ -230,10 +230,13 @@ describe("compact surface declarations", () => {
     expect(formPanel).not.toMatch(/height:\s*(min\(|\d+px)/);
   });
 
-  it("leaves the report viewer on its own height and sizes comments to the thread", () => {
-    expect(rule(".fb-report-panel")).toContain("max-width: min(1280px, 100%);");
-    expect(rule(".fb-report-panel")).toContain("height: min(92%, 960px);");
-    expect(rule(".fb-report-panel")).toContain("max-height: 100%;");
+  it("keeps the report viewer in the compact dialog family and sizes comments to the thread", () => {
+    const reportPanel = rule(".fb-report-panel");
+    expect(reportPanel).toContain("max-width: min(88%, 50rem);");
+    expect(reportPanel).toContain("height: auto;");
+    expect(reportPanel).toContain("max-height: min(86dvh, 44rem);");
+    expect(reportPanel).toContain("border-radius: 28px;");
+    expect(reportPanel).toContain("overflow: hidden;");
     // A thread is as tall as its comments, never a reserved 760px panel.
     expect(rule(".fb-comments-panel")).toContain("height: auto;");
     expect(rule(".fb-comments-panel")).toContain("max-height: min(86%, 46rem);");

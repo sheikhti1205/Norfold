@@ -16,18 +16,40 @@
     max(10px, 2vw, env(safe-area-inset-left));
 }
 
-.fb-surface-body.fb-rv-body { padding: 0; overflow: hidden; display: flex; flex: 1; min-height: 0; }
+/* The body is the panel's flex remainder. An `auto` basis lets the auto-height
+   report panel size to the report before its ceiling turns the column into a
+   scroller; a zero basis would collapse the panel to its chrome, as it does on
+   the comments surface. */
+.fb-surface-body.fb-rv-body { padding: 0; overflow: hidden; display: flex; flex: 1 1 auto; min-height: 0; }
 
-.fb-rv { display: flex; flex: 1; flex-direction: column; min-height: 0; min-width: 0; }
+.fb-rv { position: relative; display: flex; flex: 1; flex-direction: column; min-height: 0; min-width: 0; }
 .fb-rv-report {
   flex: 1; min-width: 0; min-height: 0;
   display: flex; flex-direction: column;
   overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-color: var(--fb-outline-variant) transparent;
+  /* Programmatic jumps (a linked section, a notification target) stop short of
+     the floor instead of landing flush against the panel edge. */
+  scroll-padding-block-end: 24px;
+}
+.fb-rv-report::-webkit-scrollbar { width: 6px; }
+.fb-rv-report::-webkit-scrollbar-thumb { background: var(--fb-outline-variant); border-radius: 999px; }
+/* Screen scrollbars are hidden app-wide, so the report column's edge carries
+   the scroll affordance: the seam fades into the surface instead of slicing a
+   card mid-height with no hint that the column continues. The 18px title inset
+   and the 32px content foot keep the fades on empty surface at rest and at the
+   end of the scroll. */
+.fb-rv::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 16px;
+  z-index: 1; pointer-events: none;
+  background: linear-gradient(to bottom, var(--fb-surface), transparent);
 }
 
-/* The report title is the surface's headline. It is centred and padded away
-   from the floating close control on both sides, so a long title wraps under
-   the control instead of colliding with it. */
+/* The report title is the surface's headline. In the one-pane popup it is
+   centred and padded away from the floating close control on both sides, so a
+   long title wraps under the control instead of colliding with it. The split
+   title drops that reservation: its close control sits on the panel corner,
+   not above the report column. */
 .fb-rv-title { flex: none; padding: 18px 56px 2px; text-align: center; }
 .fb-rv-title .fb-post-status, .fb-rv-title .fb-title-status { justify-content: center; }
 .fb-rv-title h1 { text-wrap: balance; }
@@ -39,10 +61,14 @@
 .fb-rv-media { flex: none; display: flex; justify-content: center; padding: 8px 16px 0; }
 .fb-rv-media > * { width: 100%; max-width: min(100%, 32rem); }
 
+/* One readable measure for the whole article: the text column matches the
+   capped hero (32rem), so a short description does not sit in an 800px band of
+   empty surface. The 32px foot gives the last card room above the floor and
+   under the edge fade instead of ending against it. */
 .fb-rv-report-content {
   display: flex; flex-direction: column; gap: .625rem;
-  width: 100%; max-width: 40rem; margin-inline: auto;
-  padding: 10px 16px 16px; min-width: 0;
+  width: 100%; max-width: min(100%, 32rem); margin-inline: auto;
+  padding: 10px 16px 32px; min-width: 0;
 }
 .fb-rv-report-content > * { min-width: 0; }
 
@@ -66,14 +92,26 @@
 
 /* The split is the wide-window composition. The screen chooses it from the same
    900px breakpoint used here, so the DOM and the CSS cannot disagree. */
-@media (min-width: 900px) {
+@media (width > 900px) {
   .fb-rv[data-conversation="split"] { flex-direction: row; }
   .fb-rv[data-conversation="split"] .fb-rv-conversation {
     width: clamp(360px, 40%, 44%); min-width: 360px;
     border-left: 1px solid var(--fb-outline-variant);
+    padding-top: 52px;
   }
-  /* The one close control belongs to the report, not to the thread. Anchoring
-     it to the conversation's left edge keeps it over the report's top-right
-     corner instead of floating inside the comments column. */
-  .fb-report-panel .fb-floating-close { right: calc(clamp(360px, 40%, 44%) + 8px); }
+  /* The close control is anchored to the panel's own top corner (the shared
+     `.fb-floating-close` rule); nothing justifies the old divider offset that
+     parked it mid-panel over the title/media seam. The split title takes the
+     report's 16px content inset instead of the popup's close reservation. */
+  .fb-rv[data-conversation="split"] .fb-rv-title { padding-inline: 16px; }
+  /* The fades stop at the divider: the conversation keeps its own opaque
+     footer and never fades under the report's edge. The split report column has
+     no sticky action row, so it carries the floor fade itself. */
+  .fb-rv[data-conversation="split"]::before,
+  .fb-rv[data-conversation="split"]::after { right: clamp(360px, 40%, 44%); }
+  .fb-rv[data-conversation="split"]::after {
+    content: ""; position: absolute; bottom: 0; left: 0; height: 28px;
+    z-index: 1; pointer-events: none;
+    background: linear-gradient(to top, var(--fb-surface), transparent);
+  }
 }

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { ReportViewerLayout, type ReportViewerLayoutProps } from "./ReportViewerLayout";
@@ -59,5 +60,24 @@ describe("ReportViewerLayout", () => {
     expect(within(report).getByTestId("report-viewer-inline-actions")).toBeTruthy();
     expect(within(report).getByText("Actions")).toBeTruthy();
     expect(screen.queryByText("Composer")).toBeNull();
+  });
+});
+
+describe("ReportViewerLayout surface contract", () => {
+  const css = readFileSync("src/components/ReportViewerLayout.css", "utf8");
+
+  it("keeps one readable measure and a foot clear of the panel floor", () => {
+    expect(css).toContain("max-width: min(100%, 32rem);");
+    expect(css).toContain("padding: 10px 16px 32px;");
+    expect(css).toContain("scroll-padding-block-end: 24px;");
+  });
+
+  it("anchors the close control to the panel corner, not the conversation divider", () => {
+    expect(css).not.toContain(".fb-report-panel .fb-floating-close");
+  });
+
+  it("fades the report column edges instead of slicing content at the seam", () => {
+    expect(css).toContain("linear-gradient(to bottom, var(--fb-surface), transparent)");
+    expect(css).toContain("linear-gradient(to top, var(--fb-surface), transparent)");
   });
 });

@@ -64,6 +64,7 @@ describe("ReportShareButton", () => {
       await waitFor(() => expect(share).toHaveBeenCalledWith({ title: "Norfold report", url }));
       expect(writeText).toHaveBeenCalledWith(url);
       await waitFor(() => expect(heard).toContain("Link copied and shared."));
+      expect(screen.getByText("Link copied and shared.")).toBeTruthy();
     } finally {
       stop();
     }
@@ -79,6 +80,7 @@ describe("ReportShareButton", () => {
       fireEvent.click(screen.getByRole("button", { name: "Share report" }));
       await waitFor(() => expect(writeText).toHaveBeenCalledWith(url));
       await waitFor(() => expect(heard).toContain("Link copied."));
+      expect(screen.getByText("Link copied.")).toBeTruthy();
     } finally {
       stop();
     }
@@ -206,5 +208,14 @@ describe("ReportShareButton lifetime", () => {
     await screen.findByLabelText("Report link");
     view.rerender(<ReportShareButton postId={second} title="B" />);
     await waitFor(() => expect(screen.queryByLabelText("Report link")).toBeNull());
+  });
+
+  it("clears a visible confirmation when the report changes", async () => {
+    stubNavigator({ writeText: vi.fn().mockResolvedValue(undefined) });
+    const view = render(<ReportShareButton postId={first} title="A" />);
+    fireEvent.click(screen.getByRole("button", { name: "Share report" }));
+    await screen.findByText("Link copied to clipboard.");
+    view.rerender(<ReportShareButton postId={second} title="B" />);
+    await waitFor(() => expect(screen.queryByText("Link copied to clipboard.")).toBeNull());
   });
 });

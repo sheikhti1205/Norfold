@@ -17,6 +17,7 @@ import { useHoverLabel } from "./HoverLabel";
 export function ReportShareButton({ postId, title }: { postId: string; title: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [manualLink, setManualLink] = useState<string | null>(null);
   const fieldId = useId();
   const { hoverLabel } = useHoverLabel();
@@ -44,8 +45,15 @@ export function ReportShareButton({ postId, title }: { postId: string; title: st
   useEffect(() => {
     setBusy(false);
     setError(null);
+    setNotice(null);
     setManualLink(null);
   }, [postId]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 3000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   async function onShare() {
     if (busy) return;
@@ -54,9 +62,11 @@ export function ReportShareButton({ postId, title }: { postId: string; title: st
     const live = () => mounted.current && identity.current === reportId && epoch.current === startedAt;
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       const message = await shareReport(reportId, title);
       if (!live()) return;
+      setNotice(message);
       announce(message);
     } catch {
       if (!live()) return;
@@ -69,6 +79,7 @@ export function ReportShareButton({ postId, title }: { postId: string; title: st
           setManualLink(result.url);
           announce("Sharing isn't available here. The link is ready to copy.");
         } else {
+          setNotice("Link copied to clipboard.");
           announce("Link copied to clipboard.");
         }
       } catch {
@@ -97,6 +108,11 @@ export function ReportShareButton({ postId, title }: { postId: string; title: st
         <Share2 size={24} aria-hidden />
         <span>Share</span>
       </button>
+      {notice && (
+        <p className="absolute bottom-full right-0 z-10 mb-1 w-max max-w-56 rounded-m3-sm bg-surface px-2 py-1 text-xs text-on-surface shadow-sm">
+          {notice}
+        </p>
+      )}
       {error && (
         <p
           role="alert"

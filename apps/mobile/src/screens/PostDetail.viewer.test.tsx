@@ -68,6 +68,21 @@ describe("PostDetail viewer layout", () => {
       Object.defineProperty(window, "innerWidth", { configurable: true, value: original });
     }
   });
+  it("keeps comments reachable in a separate surface at exactly 900px", async () => {
+    const original = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 900 });
+    try {
+      renderDetail(true);
+      await screen.findByTestId("report-viewer-report-pane");
+      expect(screen.queryByTestId("report-viewer-conversation-pane")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: /^Comments, / }));
+      const dialog = await screen.findByRole("dialog", { name: "Comments" }, { timeout: 10_000 });
+      expect(within(dialog).getByTestId("detail-comments")).toBeTruthy();
+      expect(within(dialog).getByTestId("viewer-composer")).toBeTruthy();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: original });
+    }
+  });
   it("places actions before the composer inside the conversation pane", async () => {
     renderDetail(true);
     const pane = await screen.findByTestId("report-viewer-conversation-pane");

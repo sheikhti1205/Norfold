@@ -1,6 +1,6 @@
-import { createHashRouter, Navigate, Route, RouterProvider, Routes, useLocation } from "react-router";
+import { createHashRouter, Navigate, Route, RouterProvider, Routes, useLocation, useNavigate, useNavigationType, type Location } from "react-router";
 import { MotionConfig } from "framer-motion";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { AuthProvider } from "./auth";
 import { ThemeProvider } from "./theme";
 import { motionConfigValueFor, useAppearance } from "./appearance";
@@ -51,12 +51,25 @@ import { useAuth } from "./auth";
 import { SavedReportsProvider } from "./hooks/useSavedReports";
 import { Connections, LegacyChatsRedirect, MessagingThread } from "./screens/Messaging";
 import { MessagingLifecycle } from "./components/MessagingLifecycle";
-import { PostNavigationProvider, useReportViewerBackground } from "./components/PostNavigation";
+import { PostNavigationProvider, postBackgroundLocation } from "./components/PostNavigation";
 import { PostModal } from "./components/PostModal";
 import { VideoPlayerProvider } from "./components/media/VideoPlayerProvider";
 import { SignedOutEntry } from "./screens/RememberedAccounts";
 import { clearAuthReturnTo, getAuthReturnRoute, peekAuthReturnTo } from "./utils/authReturnTo";
 
+/** `/posts/<id>` is the one address that is always a report surface. */
+const REPORT_PATH = /^\/posts\/[^/]+$/;
+/** Pages the popup may float over without borrowing another account's state. */
+const BACKGROUND_PATHS = ["/", "/search", "/my", "/saved", "/notifications"];
+function isBackgroundPath(pathname: string): boolean {
+  return BACKGROUND_PATHS.includes(pathname) || /^\/u\/[A-Za-z0-9_]+$/.test(pathname);
+}
+/**
+ * The feed is the one page the app can always rebuild, so it is what a report
+ * opened from a bare URL floats over. No viewer id, no key from another
+ * session: just the route the popup's Close returns to.
+ */
+const FEED_BACKGROUND = { pathname: "/", search: "", hash: "", key: "direct-report-feed", state: null } as const;
 function StartScreen() {
   const { user, booting, bootError, needsProfile } = useAuth();
   const location = useLocation();
@@ -143,11 +156,31 @@ export function App({ router }: { router: ReturnType<typeof createAppRouter> }) 
 
 function AppRouteTree() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, booting, needsProfile, needsPasswordSetup, passwordSetupSettled } = useAuth();
   useEffect(() => {
     if (user && peekAuthReturnTo() === `${location.pathname}${location.search}${location.hash}`) clearAuthReturnTo();
   }, [user, location.pathname, location.search, location.hash]);
-  const background = useReportViewerBackground(location, user?.id ?? null);
+  const reportPath = REPORT_PATH.test(location.pathname);
+  const lastPage = useRef<{ location: Location; viewerId: string } | null>(null);
+  const previousLocation = useRef<{ location: Location; closesToFeed: boolean } | null>(null);
+  const navigationType = useNavigationType();
+  const priorPage = user && lastPage.current?.viewerId === user.id ? lastPage.current.location : null;
+  const statedBackground = postBackgroundLocation(location, user?.id ?? null);
+  const background = reportPath ? statedBackground ?? priorPage ?? FEED_BACKGROUND : null;
+  // A history index survives reloads and does not identify the preceding route.
+  // Back is safe only when this session observed a push from the background page.
+  const historyIndex = (window.history.state as { idx?: unknown } | null)?.idx;
+  const closesToFeed = reportPath && (previousLocation.current?.location.key === location.key
+    ? previousLocation.current.closesToFeed
+    : !(navigationType === "PUSH" && typeof historyIndex === "number" && historyIndex > 0 &&
+      previousLocation.current?.location.key === background?.key));
+  useLayoutEffect(() => {
+    if (user && !reportPath && isBackgroundPath(location.pathname)) {
+      lastPage.current = { location, viewerId: user.id };
+    }
+    previousLocation.current = { location, closesToFeed };
+  }, [location, reportPath, user, closesToFeed]);
   if (passwordSetupSettled === false) return <Splash />;
   if (needsPasswordSetup) {
     return location.pathname === "/create-password"
@@ -254,7 +287,15 @@ function AppRouteTree() {
             <Route path="*" element={<Navigate to="/splash" replace />} />
            </Routes>
             {background && <Routes location={location}>
-              <Route path="/posts/:id" element={<RequireAuth><PostModal /></RequireAuth>} />
+              <Route path="/posts/:id" element={<RequireAuth>
+                <PostModal onClose={() => {
+                  if (!closesToFeed) { void navigate(-1); return; }
+                  void navigate(
+                    { pathname: background.pathname, search: background.search, hash: background.hash },
+                    { replace: true, state: background.state, preventScrollReset: true },
+                  );
+                }} />
+              </RequireAuth>} />
             </Routes>}
              </PostNavigationProvider>
             </ReportDeletionFeedbackProvider>
