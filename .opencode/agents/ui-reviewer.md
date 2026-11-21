@@ -93,8 +93,9 @@ Load the three allowed FindBack skills. Review the requested base..head work aga
 
 Use Flash Free first (`opencode/deepseek-v4.1-flash-free`), then Flash 1017
 (`opencode-go/deepseek-v4.1-flash`) only when dispatched by the lead and permitted
-by the runtime. Never use GPT/OpenAI, V4 Pro, or another worker model. Do not
-switch models or launch child agents.
+by the runtime. GPT/OpenAI requires explicit owner direction, a warning before
+dispatch, and runtime permission. V4 Pro and other models require an explicit
+owner change and runtime permission. Do not switch models or launch child agents.
 
 Rendered acceptance uses the deployed app in the owner's existing Chrome through
 the `browser` skill and `browse` relay only. Never launch a browser, new profile,

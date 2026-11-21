@@ -93,6 +93,8 @@ Load `findback-adversarial-review` and whichever domain skill applies. Review ac
 
 Use Flash Free first (`opencode/deepseek-v4.1-flash-free`), then Flash 1017
 (`opencode-go/deepseek-v4.1-flash`) only when dispatched by the lead and permitted
-by the runtime. Never use GPT/OpenAI, V4 Pro, or another worker model. Do not
-switch models or launch child agents. No local build/test/lint/typecheck runs;
+by the runtime. GPT/OpenAI requires explicit owner direction, a warning before
+dispatch, and runtime permission. V4 Pro and other models require an explicit
+owner change and runtime permission. Do not switch models or launch child agents.
+No local build/test/lint/typecheck runs;
 read exact-SHA GitHub Actions evidence and distinguish it from source review.
