@@ -118,6 +118,18 @@ export function MyPosts() {
     { userId: user?.id, category: advanced.category, status: advanced.status, sort: advanced.sort },
     { cacheKey: MY_CACHE_BASE, scrollRef },
   );
+  // The header states the server's total for the active filter. A status change
+  // made here removes the row from the filtered list at once but leaves that
+  // total on the last full load, so the header would keep counting a row the
+  // list no longer shows. Only loaded rows can have left the filter locally
+  // (a write can only move a row's status), so subtract exactly those: the
+  // count then matches the list on screen without inventing a number, and a
+  // refetch replaces `total` with the server's own count, which drops the
+  // subtraction back to zero.
+  const locallyFilteredOut = advanced.status
+    ? items.filter((item) => item.status !== advanced.status).length
+    : 0;
+  const displayedTotal = Math.max(0, total - locallyFilteredOut);
   const searchTerm = searchQuery.trim().toLocaleLowerCase();
   const visibleItems = searchTerm
     ? items.filter((item) => (!advanced.status || item.status === advanced.status) && [item.title, item.description, item.category, item.locationLabel]
@@ -552,7 +564,7 @@ export function MyPosts() {
   return (
     <div className="mx-auto flex h-full w-full max-w-[100rem] flex-col gap-4 py-5 lg:py-8">
       <AppBar backTo="/profile" backLabel="Back to profile" title="My reports"
-        subtitle={`${total} report${total === 1 ? "" : "s"} · manage the status of items you have reported.`}
+        subtitle={`${displayedTotal} report${displayedTotal === 1 ? "" : "s"} · manage the status of items you have reported.`}
         showUtilitySearch={false}
         actions={<button ref={searchTrigger} type="button" className="fb-icon-control"
           aria-label="Search" aria-expanded={searchOpen}

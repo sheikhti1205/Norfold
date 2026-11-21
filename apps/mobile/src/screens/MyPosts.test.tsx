@@ -866,6 +866,8 @@ describe("MyPosts management (owner row actions)", () => {
     await waitFor(() => expect(screen.queryByText("Report p1")).toBeNull());
     expect(screen.getByText(/1 report ·/)).toBeTruthy();
     expect(screen.getByText("Report p2")).toBeTruthy();
-    expect(fetchFeedMock).toHaveBeenCalledTimes(2);
+    // The filtered status is present at first render (it lives in the URL), so
+    // the mount is the only load; the row change above must not add another.
+    expect(fetchFeedMock).toHaveBeenCalledTimes(1);
   });
 });
