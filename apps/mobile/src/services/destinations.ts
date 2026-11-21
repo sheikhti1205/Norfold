@@ -70,6 +70,16 @@ export type SettingsSection =
 export const DESTINATIONS: readonly Destination[] = [
   // --- Account ------------------------------------------------------------
   {
+    id: "profile",
+    route: "/profile",
+    title: "Profile",
+    summary: "Your identity, connected accounts and mobile verification.",
+    keywords: ["profile", "identity", "telegram", "mobile", "phone"],
+    category: "account",
+    auth: "signed-in",
+    platforms: ["web", "android"],
+  },
+  {
     id: "recovered-items",
     route: "/settings/returns",
     title: "Recovered items",
@@ -83,8 +93,8 @@ export const DESTINATIONS: readonly Destination[] = [
     id: "sign-in-security",
     route: "/settings/account",
     title: "Sign-in & security",
-    summary: "Password, contact rules, sign-out and deleting your account.",
-    keywords: ["password", "sign", "in", "security", "contact", "rules", "delete", "log", "out", "email"],
+    summary: "Password, connected accounts, sign-out and deleting your account.",
+    keywords: ["password", "sign", "in", "security", "delete", "log", "out", "email"],
     category: "account",
     auth: "signed-in",
     platforms: ["web", "android"],

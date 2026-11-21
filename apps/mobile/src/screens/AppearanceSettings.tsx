@@ -70,13 +70,10 @@ export function AppearanceSettings() {
       </SettingsGroup>
 
       {trueBlackRelevant && (
-        <SettingsGroup
-          title="True black"
-          description="Only applies while dark mode is active."
-        >
+        <SettingsGroup>
           <PreferenceSwitchRow
             title="True black background"
-            description="Saves power on OLED screens."
+            description="Only applies while dark mode is active. Saves power on OLED screens."
             checked={trueBlackDark}
             onChange={setTrueBlackDark}
           />

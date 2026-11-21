@@ -54,8 +54,8 @@
 /* One height ceiling for the whole dialog system: no surface may approach the
    viewport, so a short dialog stays short and a tall one scrolls its own body
    instead of running down the window. The body is the only scroller; the
-   header and footer stay put. The report viewer keeps its own height and
-   restores `max-height: 100%`, so the shared ceiling does not clamp it. */
+   header and footer stay put. The report viewer sets its own tighter ceiling
+   below; it does not inherit this one. */
 .fb-modal-panel { position: relative; display: flex; flex-direction: column; width: 100%; min-width: 0; max-height: min(86%, 46rem); border-radius: 20px; background: var(--fb-surface); color: var(--fb-on-surface); box-shadow: var(--shadow-md); }
 .fb-task-panel { max-width: 44rem; }
 /* Conversation info is a short action list, not a wide task. The narrow measure
@@ -68,18 +68,18 @@
 .fb-compact-panel .fb-surface-header { padding: 10px 12px; }
 .fb-compact-panel .fb-surface-body { padding: 8px; }
 .fb-confirm-panel { max-width: 26rem; }
-/* The report is one floating surface at every width: a squircle that keeps a
-   visible gutter and never grows past the visual viewport. `height: min(92%,
-   960px)` resolves against the backdrop's measured content box, so an open
-   keyboard shrinks the surface instead of hiding it behind the IME.
-   `max-height: 100%` keeps that deliberate height: it restores the base rule
-   this variant used to inherit before the shared ceiling existed, so the
-   immersive viewer is not clamped to the task-dialog cap. */
-.fb-report-panel { max-width: min(1280px, 100%); height: min(92%, 960px); max-height: 100%; border-radius: 28px; overflow: hidden; }
+/* The report joins the compact dialog family: a 50rem squircle (half a desktop
+   window, 88% of a phone's width) that keeps a visible gutter and never becomes
+   a full-screen sheet. `height: auto` lets a short report stay short;
+   `max-height: min(86dvh, 44rem)` is its one ceiling, so a long report scrolls
+   inside its own panes instead of running down the window. The 44rem cap is
+   tighter than the shared dialog cap on purpose: this is a popup over the feed,
+   not a page. */
+.fb-report-panel { max-width: min(88%, 50rem); height: auto; max-height: min(86dvh, 44rem); border-radius: 28px; overflow: hidden; }
 /* The create/edit form is a task, not a viewer: it keeps the reader's measure
-   (40rem, half the viewer's 1280px), stays centered by the backdrop, and grows
-   only as tall as its fields. The shared `max-height` cap still applies, so a
-   long or invalid form scrolls its own body instead of filling the window. */
+   (40rem, tighter than the 50rem viewer), stays centered by the backdrop, and
+   grows only as tall as its fields. The shared `max-height` cap still applies,
+   so a long or invalid form scrolls its own body instead of filling the window. */
 .fb-report-form-panel { max-width: min(40rem, 100%); height: auto; }
 /* Comments at narrow widths are their own floating surface, smaller than the
    report it opened from so the report still reads as the parent. It is as tall

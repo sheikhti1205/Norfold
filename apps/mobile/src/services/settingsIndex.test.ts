@@ -13,6 +13,8 @@ describe("settingsIndex", () => {
     expect(routes).toEqual(
       [
         "/settings/about",
+        "/profile",
+        "/settings/account",
         "/settings/updates",
         "/settings/accessibility",
         // Device management (packet 05/06 consumer surface) postdates the
@@ -97,6 +99,16 @@ describe("settingsIndex", () => {
     expect(searchSettings("device").map((r) => r.id)).toContain("devices");
     expect(searchSettings("remove device").map((r) => r.id)).toContain("devices");
     expect(searchSettings("sign out").map((r) => r.id)).toContain("devices");
+  });
+
+  it("finds profile and existing sign-in controls without advertising 2FA", () => {
+    for (const term of ["profile", "telegram", "mobile"]) {
+      expect(searchSettings(term).map(row => row.route)).toContain("/profile");
+    }
+    for (const term of ["security", "password", "delete", "email"]) {
+      expect(searchSettings(term).map(row => row.route)).toContain("/settings/account");
+    }
+    expect(searchSettings("2fa")).toEqual([]);
   });
 
   it("is case-insensitive and trims whitespace", () => {    expect(searchSettings("  THEME ").map((r) => r.id)).toContain("appearance");

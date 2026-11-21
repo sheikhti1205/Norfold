@@ -12,6 +12,7 @@ import { createContext, useContext, useLayoutEffect } from "react";
  * drawn, never who may see it.
  */
 export const SettingsWindowHost = createContext(false);
+export const SettingsWindowQuery = createContext<string | null>(null);
 
 /** Whether the calling settings page is rendered inside the floating window. */
 export function useSettingsWindowHosted(): boolean {

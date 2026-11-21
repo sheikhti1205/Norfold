@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import {
   Bell,
   CloudUpload,
@@ -26,6 +26,7 @@ import {
 } from "../components/settings";
 import { destinationFor } from "../services/destinations";
 import { helpTopics, type HelpGroup, type HelpTopic } from "../services/helpTopics";
+import { SettingsWindowQuery } from "../components/settingsWindowHost";
 import "./HelpGuide.css";
 
 const PRESENTATION: Record<string, { icon: LucideIcon; iconTone: SettingIconTone }> = {
@@ -53,7 +54,9 @@ const PRESENTATION: Record<string, { icon: LucideIcon; iconTone: SettingIconTone
  * assistant is named as an optional provider chat rather than app support.
  */
 export function HelpGuide() {
-  const [query, setQuery] = useState("");
+  const hostedQuery = useContext(SettingsWindowQuery);
+  const [localQuery, setQuery] = useState("");
+  const query = hostedQuery ?? localQuery;
   const needle = query.trim().toLowerCase();
   const topics = useMemo(
     () => helpTopics({
@@ -90,14 +93,14 @@ export function HelpGuide() {
       backTo="/settings"
       description="Short guides for the everyday jobs in Norfold. These work without a connection or a provider key."
     >
-      <SettingsSearch
+      {hostedQuery === null && <SettingsSearch
         query={query}
         onQueryChange={setQuery}
         results={results}
         label="Search help topics"
         placeholder="Search help topics"
-      />
-      {needle.length === 0 ? (
+      />}
+      {hostedQuery !== null || needle.length === 0 ? (
         groups.map((group) => (
           <SettingsGroup key={group} title={group}>
             {filtered

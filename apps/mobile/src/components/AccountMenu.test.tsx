@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { AccountMenu } from "./AccountMenu";
+import { OverlayDepthProvider } from "./overlayFoundation";
 import { addAccountIntentAccount } from "../utils/addAccountIntent";
 import { peekAuthReturnTo } from "../utils/authReturnTo";
 
@@ -49,6 +50,11 @@ async function openMenu() {
 }
 
 describe("account menu", () => {
+  it("keeps a drawer-hosted account menu above the drawer layer", async () => {
+    render(<MemoryRouter><OverlayDepthProvider depth={4}><AccountMenu /></OverlayDepthProvider></MemoryRouter>);
+    const dialog = await openMenu();
+    expect(dialog.closest(".fb-account-menu")?.getAttribute("style")).toContain("z-index: 120");
+  });
   it("is one control carrying the avatar, name, handle and badge", async () => {
     renderMenu();
     const trigger = screen.getByRole("button", { name: "Account, Riley" });

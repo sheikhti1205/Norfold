@@ -17,7 +17,7 @@ import { Profile } from "../screens/Profile";
 import { ProfileEdit } from "../screens/ProfileEdit";
 import { settingsRouteElements } from "../screens/settingsRoutes";
 import { SettingsRow } from "./settings";
-import { SettingsWindowHost, SettingsWindowTitle } from "./settingsWindowHost";
+import { SettingsWindowHost, SettingsWindowQuery, SettingsWindowTitle } from "./settingsWindowHost";
 import { OverlayStackBridge } from "./overlayFoundation";
 import { RouterDepthProvider } from "./routerHistory";
 import { searchSettings } from "../services/settingsIndex";
@@ -82,7 +82,8 @@ function SettingsWindowSurface({ initialPath, onClose, onExit }: {
   if (historyRef.current === null) {
     // `v5Compat` is what makes push/replace notify the listener. With it off,
     // the window painted once and never followed a settings link or redirect.
-    historyRef.current = UNSAFE_createMemoryHistory({ initialEntries: [initialPath], v5Compat: true });
+    const initialEntries = initialPath === "/settings" ? [initialPath] : ["/settings", initialPath];
+    historyRef.current = UNSAFE_createMemoryHistory({ initialEntries, v5Compat: true });
   }
   const history = historyRef.current;
   const [state, setState] = useState(() => ({ action: history.action, location: history.location }));
@@ -111,6 +112,7 @@ function SettingsWindowSurface({ initialPath, onClose, onExit }: {
   const depth = useCallback(() => history.index, [history]);
 
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   // The window chrome carries the ONE visible page title. A hosted page reports
   // its own title here (the same string it would have shown as its H1), so the
   // window never says "Settings" while the reader is inside Notifications, and
@@ -163,7 +165,7 @@ function SettingsWindowSurface({ initialPath, onClose, onExit }: {
                 <Heading slot="title" className="fb-settings-window-title">{windowTitle}</Heading>
                 <div className="fb-settings-window-actions">
                   {searchOpen
-                    ? <SettingsWindowSearch onDismiss={closeSearch} onPicked={() => setSearchOpen(false)} />
+                     ? <SettingsWindowSearch query={searchQuery} setQuery={setSearchQuery} onDismiss={closeSearch} onPicked={() => { setSearchOpen(false); setSearchQuery(""); }} />
                     : <Button ref={searchToggle} aria-label="Search settings" className="fb-icon-control"
                         onPress={() => setSearchOpen(true)} {...hoverLabel("Search settings")}>
                         <Search size={18} aria-hidden="true" />
@@ -175,6 +177,7 @@ function SettingsWindowSurface({ initialPath, onClose, onExit }: {
               </header>
               <div className="fb-settings-window-body">
                 <SettingsWindowHost.Provider value>
+                  <SettingsWindowQuery.Provider value={searchQuery}>
                   <SettingsWindowTitle.Provider value={setPageTitle}>
                     <RouterDepthProvider depth={depth}>
                       <Routes>
@@ -188,6 +191,7 @@ function SettingsWindowSurface({ initialPath, onClose, onExit }: {
                       </Routes>
                     </RouterDepthProvider>
                   </SettingsWindowTitle.Provider>
+                  </SettingsWindowQuery.Provider>
                 </SettingsWindowHost.Provider>
               </div>
             </Dialog>
@@ -207,12 +211,13 @@ function SettingsWindowSurface({ initialPath, onClose, onExit }: {
  * tree does not have. Results are ordinary links in the window's own router,
  * so picking one changes the window and leaves the page behind untouched.
  */
-function SettingsWindowSearch({ onDismiss, onPicked }: {
+function SettingsWindowSearch({ query, setQuery, onDismiss, onPicked }: {
+  query: string;
+  setQuery: (value: string) => void;
   onDismiss: () => void;
   onPicked: () => void;
 }) {
   const { user } = useAuth();
-  const [query, setQuery] = useState("");
   const input = useRef<HTMLInputElement>(null);
   const area = useRef<HTMLDivElement>(null);
   const { hoverLabel } = useHoverLabel();

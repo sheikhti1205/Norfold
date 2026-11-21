@@ -45,7 +45,7 @@ export function AccountSettings() {
  * `users.phone` field: a typed number was never proof of ownership, so showing
  * it here would advertise a verification the account does not have.
  */
-export function MobileNumberRow({ account }: { account: TelegramAccountState }) {
+export function MobileNumberRow({ account, onManage }: { account: TelegramAccountState; onManage: () => void }) {
   const { user } = useAuth();
   if (!user) return null;
   const verifiedPhone = account.status === "ready" && account.account.linked
@@ -69,7 +69,7 @@ export function MobileNumberRow({ account }: { account: TelegramAccountState }) 
       iconNode={<Smartphone size={16} aria-hidden="true" />}
       value={verifiedPhone ?? undefined}
       badge={badge}
-      route="/profile/edit"
+      onClick={onManage}
     />
   );
 }
@@ -367,7 +367,7 @@ export function AccountSecuritySections() {
         )}
       </SettingsGroup>
 
-      <TelegramSettings key={userId} />
+      <div id="profile-telegram-settings" tabIndex={-1}><TelegramSettings key={userId} /></div>
 
       <Button
         variant="outline"

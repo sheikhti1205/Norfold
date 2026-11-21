@@ -71,6 +71,15 @@ describe("settings window", () => {
     expect(screen.getByText("Settings root")).toBeTruthy();
   });
 
+  it("returns to the settings root from a directly opened section", async () => {
+    const { onClose } = renderWindow("/settings/devices");
+    expect(await screen.findByText("Devices page")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await waitFor(() => expect(screen.queryByText("Devices page")).toBeNull());
+    expect(screen.getByText("Settings root")).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("follows a settings link inside the window instead of navigating the app", async () => {
     renderWindow();
     fireEvent.click(screen.getByRole("link", { name: "Account link" }));

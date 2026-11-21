@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { FINE_POINTER_QUERY, hasFinePointer } from "./inputCapabilities";
 import "./HoverLabel.css";
 
 /**
@@ -62,6 +63,20 @@ interface HoverLabelApi {
 
 const HoverLabelContext = createContext<HoverLabelApi | null>(null);
 
+/**
+ * A layer that replaces the page owns the pointer: a name hovering a control
+ * that is no longer the thing on screen is a lie. These are the app's overlay
+ * roots — dialogs/task surfaces, the photo viewer, and the picker layer.
+ */
+const OVERLAY_SELECTOR = [
+  '[role="dialog"]',
+  '[aria-modal="true"]',
+  "dialog[open]",
+  ".fb-media-viewer",
+  ".yarl__root",
+  ".fb-picker-layer",
+].join(", ");
+
 export function HoverLabelProvider({ children }: { children: ReactNode }) {
   const [active, setActive] = useState<ActiveLabel | null>(null);
   const activeRef = useRef<ActiveLabel | null>(null);
@@ -101,6 +116,9 @@ export function HoverLabelProvider({ children }: { children: ReactNode }) {
 
   const show = useCallback((anchor: HTMLElement, label: string, placement: HoverLabelPlacement, options?: { pinned?: boolean; immediate?: boolean }) => {
     clearShow();
+    // A name is a fine-pointer affordance, never a touch one: on a coarse
+    // pointer it would sit under the finger with no way to dismiss it.
+    if (!hasFinePointer()) return;
     const next: ActiveLabel = { label, placement, rect: anchor.getBoundingClientRect(), anchor, pinned: options?.pinned === true };
     const paint = () => {
       visible.current = true;
@@ -159,15 +177,65 @@ export function HoverLabelProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => () => clearShow(), [clearShow]);
 
+  // A name belongs to the control under the pointer, never to a surface that
+  // replaced the page. A press, a keystroke, or an overlay opening ends it —
+  // before it can float over a photo viewer or a dialog on a touch screen.
+  useEffect(() => {
+    const onPress = () => api.dismiss();
+    const onKey = () => api.dismiss();
+    document.addEventListener("pointerdown", onPress, true);
+    window.addEventListener("keydown", onKey, true);
+    const observer = typeof MutationObserver === "undefined"
+      ? null
+      : new MutationObserver((records) => {
+        for (const record of records) {
+          for (const node of record.addedNodes) {
+            if (node.nodeType !== 1) continue;
+            const element = node as Element;
+            if (element.matches(OVERLAY_SELECTOR) || element.querySelector(OVERLAY_SELECTOR) !== null) {
+              api.dismiss();
+              return;
+            }
+          }
+        }
+      });
+    observer?.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      document.removeEventListener("pointerdown", onPress, true);
+      window.removeEventListener("keydown", onKey, true);
+      observer?.disconnect();
+    };
+  }, [api]);
+
+  // The input can change under a mounted pill (a detachable keyboard, a
+  // tablet switching to touch). The name goes with it.
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia(FINE_POINTER_QUERY);
+    const onChange = () => { if (!query.matches) api.dismiss(); };
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, [api]);
+
   // Position after the pill has a measured width, before the browser paints:
   // no flicker, and no guessing the width of a wrapped label.
   useLayoutEffect(() => {
     const el = pill.current;
     if (!el || !active) return;
-    const box = el.getBoundingClientRect();
     const pad = 8;
     const gap = 10;
     const { rect, placement } = active;
+    // A pill wider than the viewport is clamped to the side instead of running
+    // off it. The stylesheet already caps the width; this is the guarantee for
+    // an environment with no stylesheet cap.
+    const available = Math.max(0, window.innerWidth - pad * 2);
+    el.style.maxWidth = "";
+    let box = el.getBoundingClientRect();
+    if (available > 0 && box.width > available) {
+      el.style.maxWidth = `${available}px`;
+      box = el.getBoundingClientRect();
+    }
+    const half = box.width / 2;
     let left: number;
     let top: number;
     let transform: string;
@@ -182,15 +250,23 @@ export function HoverLabelProvider({ children }: { children: ReactNode }) {
       );
     } else {
       transform = "translate(-50%, -100%)";
-      left = rect.left + rect.width / 2 - box.width / 2;
+      // The visual box is `left - width / 2`, because the transform centres it.
+      // Clamping the untransformed left edge pushed half the pill off the
+      // viewport at the left edge (a verified badge at x=0 rendered 120px
+      // outside at 900px wide).
+      left = rect.left + rect.width / 2;
       if (rect.top - gap - box.height < pad) {
         transform = "translate(-50%, 0)";
         top = rect.bottom + gap;
       } else {
         top = rect.top - gap;
       }
-      left = Math.min(Math.max(left, pad), Math.max(pad, window.innerWidth - pad - box.width));
-      top = Math.min(Math.max(top, pad), Math.max(pad, window.innerHeight - pad));
+      left = Math.min(Math.max(left, pad + half), Math.max(pad + half, window.innerWidth - pad - half));
+      if (transform === "translate(-50%, 0)") {
+        top = Math.min(Math.max(top, pad), Math.max(pad, window.innerHeight - pad - box.height));
+      } else {
+        top = Math.min(Math.max(top, pad + box.height), Math.max(pad + box.height, window.innerHeight - pad));
+      }
     }
     el.dataset.placement = placement;
     el.style.transform = transform;
@@ -230,6 +306,14 @@ export function useHoverLabel() {
       return {
         onPointerEnter: (event: ReactPointerEvent<HTMLElement>) => {
           if (event.pointerType === "touch") return;
+          // Named rail rows need no duplicate pill, which could cover the
+          // row when there is no room beside it. Portalled menus are separate.
+          const rail = event.currentTarget.closest<HTMLElement>(".fb-nav-rail");
+          if (event.currentTarget.matches(".fb-nav-link") && rail &&
+            (rail.dataset.pinned === "true" || rail.dataset.hoverExpanded === "true" || rail.matches(":has(:focus-visible)"))) {
+            api.dismiss();
+            return;
+          }
           api.show(event.currentTarget, label, placement);
         },
         onPointerLeave: () => api.hide(),

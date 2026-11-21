@@ -1,17 +1,10 @@
 import {
-  Bookmark,
   Camera,
   Check,
   CircleAlert,
   CircleCheck,
   Copy,
-  FileStack,
-  HelpCircle,
-  MessagesSquare,
-  MonitorSmartphone,
   Pencil,
-  Settings as SettingsIcon,
-  Star,
   UserRound,
   X,
 } from "lucide-react";
@@ -258,11 +251,13 @@ function VerificationChip({
   label,
   actionLabel,
   to,
+  onAction,
 }: {
   verified: boolean;
   label: string;
   actionLabel: string;
-  to: string;
+  to?: string;
+  onAction?: () => void;
 }) {
   if (verified) {
     return (
@@ -272,8 +267,14 @@ function VerificationChip({
       </span>
     );
   }
+  if (onAction) return (
+    <button type="button" className="fb-profile-chip fb-profile-chip--action" onClick={onAction}>
+      <CircleAlert size={14} aria-hidden="true" />
+      {actionLabel}
+    </button>
+  );
   return (
-    <Link className="fb-profile-chip fb-profile-chip--action" to={to}>
+    <Link className="fb-profile-chip fb-profile-chip--action" to={to!}>
       <CircleAlert size={14} aria-hidden="true" />
       {actionLabel}
     </Link>
@@ -295,8 +296,8 @@ function VerificationChip({
  * this page is identity, verification and sign-in security (owner order
  * 2026-11-14), never a second door to the same controls.
  *
- * Profile stays the ONE canonical trust surface: the reputation label and the
- * way into ratings live here, not scattered onto every card.
+ * The reputation label stays on Profile; ratings and recoveries have their own
+ * Settings destination.
  */
 export function Profile() {
   const { user } = useAuth();
@@ -304,6 +305,11 @@ export function Profile() {
   const providers = useLinkedProviders(user?.id);
   const telegram = useTelegramAccount(user?.id);
   const { hoverLabel } = useHoverLabel();
+  const manageTelegram = () => {
+    const target = document.getElementById("profile-telegram-settings");
+    target?.scrollIntoView({ block: "start", behavior: "auto" });
+    target?.focus({ preventScroll: true });
+  };
   if (!user) return null;
 
   const googleLinked = providers.status === "ready" && providers.value.has("google");
@@ -348,7 +354,7 @@ export function Profile() {
             verified={verifiedPhone !== null}
             label="Mobile verified"
             actionLabel="Verify mobile"
-            to="/profile/edit"
+            onAction={manageTelegram}
           />
         </div>
       </section>
@@ -368,13 +374,13 @@ export function Profile() {
             value={<span title={user.email}>{user.email}</span>}
             route={user.emailVerified ? undefined : "/verify"}
           />
-          <MobileNumberRow account={telegram} />
+          <MobileNumberRow account={telegram} onManage={manageTelegram} />
           <SettingsRow
             title="Telegram"
             className="fb-profile-account-row"
             iconNode={<TelegramMark size={16} />}
             value={telegramValue}
-            route="/profile/edit"
+            onClick={manageTelegram}
           />
         </SettingsGroup>
 
@@ -401,27 +407,11 @@ export function Profile() {
 
       <div className="fb-profile-groups">
         <AccountSecuritySections />
-        <SettingsGroup title="Devices">
-          <SettingsRow
-            title="Devices"
-            icon={MonitorSmartphone}
-            description="Phones, tablets and browsers signed in to Chat."
-            route="/settings/devices"
-          />
-        </SettingsGroup>
       </div>
 
       <nav aria-label="Profile actions" className="fb-profile-actions">
-        <SettingsGroup title="Activity">
-          <SettingsRow title="My reports" icon={FileStack} route="/my" />
-          <SettingsRow title="Saved reports" icon={Bookmark} route="/saved" />
-          <SettingsRow title="Chats" icon={MessagesSquare} route="/chats" />
-          <SettingsRow title="Ratings & recoveries" icon={Star} iconTone="amber" route="/settings/returns" />
-        </SettingsGroup>
         <SettingsGroup title="More">
           <SettingsRow title="Public profile" icon={UserRound} iconTone="blue" route={`/u/${user.username}`} />
-          <SettingsRow title="Settings" icon={SettingsIcon} route="/settings" />
-          <SettingsRow title="Help & guide" icon={HelpCircle} iconTone="help" route="/settings/help" />
         </SettingsGroup>
       </nav>
     </SettingsPage>
