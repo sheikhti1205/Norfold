@@ -324,7 +324,7 @@ describe("AdvancedSearchFilters optional type and place (Search only)", () => {
     );
     expect(screen.getByRole("button", { name: "Filters (1)" })).toBeTruthy();
     // The way out is offered too: the type IS a filter now.
-    expect(screen.getByRole("button", { name: "Clear all filters" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Clear filters" })).toBeTruthy();
   });
 
   it("shows no type chip when no type is chosen", () => {

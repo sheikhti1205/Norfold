@@ -31,6 +31,8 @@ export interface BottomSheetProps {
   /** Blurs what is behind a blocking pop-up. Opt-in so ordinary sheets are
    * unchanged. */
   backdropBlur?: boolean;
+  /** Center a compact dialog with viewport gutters instead of a bottom sheet. */
+  floating?: boolean;
   children: React.ReactNode;
 }
 
@@ -67,6 +69,7 @@ export function BottomSheet({
   header,
   contentScrollable = true,
   backdropBlur,
+  floating = false,
   children,
 }: BottomSheetProps) {
   return (
@@ -83,6 +86,7 @@ export function BottomSheet({
           header={header}
           contentScrollable={contentScrollable}
           backdropBlur={backdropBlur}
+          floating={floating}
         >
           {children}
         </BottomSheetDialog>
@@ -101,6 +105,7 @@ function BottomSheetDialog({
   header,
   contentScrollable = true,
   backdropBlur,
+  floating = false,
   children,
 }: Omit<BottomSheetProps, "open">) {
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -173,7 +178,7 @@ function BottomSheetDialog({
         data-testid="bottom-sheet"
         data-height={height}
         tabIndex={-1}
-        drag={dismissible ? "y" : false}
+        drag={dismissible && !floating ? "y" : false}
         dragListener={false}
         dragControls={dragControls}
         dragConstraints={{ top: 0 }}
@@ -188,14 +193,16 @@ function BottomSheetDialog({
             onCloseRef.current();
           }
         }}
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        exit={{ y: "100%" }}
+        initial={floating ? { opacity: 0 } : { y: "100%" }}
+        animate={floating ? { opacity: 1 } : { y: 0 }}
+        exit={floating ? { opacity: 0 } : { y: "100%" }}
         transition={sheetTransition}
-        style={{ maxHeight: MAX_HEIGHT[height], boxShadow: "var(--shadow-md)" }}
-        className="absolute inset-x-0 bottom-0 mx-auto flex w-full max-w-md flex-col rounded-t-m3-xl bg-surface pb-[env(safe-area-inset-bottom)] text-on-surface"
+        style={{ maxHeight: floating ? "calc(100dvh - 32px)" : MAX_HEIGHT[height], boxShadow: "var(--shadow-md)" }}
+        className={floating
+          ? "absolute inset-0 m-auto flex h-fit w-[calc(100%-32px)] max-w-md flex-col rounded-m3-xl bg-surface text-on-surface"
+          : "absolute inset-x-0 bottom-0 mx-auto flex w-full max-w-md flex-col rounded-t-m3-xl bg-surface pb-[env(safe-area-inset-bottom)] text-on-surface"}
       >
-        <div
+        {!floating && <div
           data-testid="bottom-sheet-handle"
           aria-hidden="true"
           onPointerDown={(event) => {
@@ -204,7 +211,7 @@ function BottomSheetDialog({
           className="flex min-h-[32px] shrink-0 cursor-grab touch-none items-center justify-center pt-2 active:cursor-grabbing"
         >
           <span className="h-1 w-10 rounded-full bg-outline-variant" />
-        </div>
+        </div>}
         <div className="flex shrink-0 items-start gap-2 px-4 pb-2">
           <div className="min-w-0 flex-1">
             <h2 id={titleId} className="min-w-0 break-words text-lg font-semibold">

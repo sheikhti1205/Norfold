@@ -145,6 +145,7 @@ export function ReportDatePicker({
 
   const [isOpen, setIsOpen] = useState(false);
   const [isJumpOpen, setIsJumpOpen] = useState(false);
+  const [isYearGridOpen, setIsYearGridOpen] = useState(false);
   useEffect(() => { if (disabled) { setIsOpen(false); setIsJumpOpen(false); } }, [disabled]);
   const [displayedValue, setDisplayedValue] = useState<CalendarDate | null>(() =>
     value ? parseISO(value) : null
@@ -167,8 +168,13 @@ export function ReportDatePicker({
   const prevMonthRef = useRef<HTMLButtonElement>(null);
   const nextMonthRef = useRef<HTMLButtonElement>(null);
   const monthYearRef = useRef<HTMLButtonElement>(null);
+  const yearButtonRef = useRef<HTMLButtonElement>(null);
+  const yearGridRef = useRef<HTMLDivElement>(null);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const suppressDaySelectUntilRef = useRef(0);
+  useEffect(() => {
+    if (isYearGridOpen) yearGridRef.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus();
+  }, [isYearGridOpen]);
 
   // Drives the month-travel slide only; the entrance above stays declarative.
   const monthControls = useAnimationControls();
@@ -270,10 +276,12 @@ export function ReportDatePicker({
 
   const closeJumpPanel = (): void => {
     setIsJumpOpen(false);
+    setIsYearGridOpen(false);
   };
 
   const openJumpPanel = (): void => {
     setJumpYear(clampJumpYear(headingDate.year));
+    setIsYearGridOpen(false);
     setIsJumpOpen(true);
   };
 
@@ -303,6 +311,11 @@ export function ReportDatePicker({
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
+      if (isYearGridOpen) {
+        setIsYearGridOpen(false);
+        yearButtonRef.current?.focus();
+        return;
+      }
       setIsJumpOpen(false);
       monthYearRef.current?.focus();
       return;
@@ -409,6 +422,7 @@ export function ReportDatePicker({
         title={title ?? `When was it ${expected?.toLowerCase() || "lost/found"}?`}
         description={description}
         height="large"
+        floating
         dismissible={true}
         closeLabel="Close"
       >
@@ -506,9 +520,11 @@ export function ReportDatePicker({
                 >
                   <ChevronLeft size={20} aria-hidden />
                 </button>
-                <span data-testid="calendar-jump-year" className="text-sm font-semibold tabular-nums text-on-surface">
+                <button ref={yearButtonRef} type="button" data-testid="calendar-jump-year" aria-label={`Choose year, ${jumpYear}`}
+                  aria-expanded={isYearGridOpen} onClick={() => setIsYearGridOpen(open => !open)}
+                  className="min-h-[44px] rounded-m3-sm px-2 text-sm font-semibold tabular-nums text-on-surface focus:ring-2 focus:ring-on-surface">
                   {jumpYear}
-                </span>
+                </button>
                 <button
                   type="button"
                   aria-label="Next year"
@@ -520,7 +536,16 @@ export function ReportDatePicker({
                 </button>
               </div>
 
-              <div className="mt-1 grid grid-cols-3 gap-1">
+              {isYearGridOpen ? <div ref={yearGridRef} className="mt-1 grid grid-cols-3 gap-1" role="group" aria-label="Choose year">
+                {Array.from({ length: 12 }, (_, index) => Math.floor(jumpYear / 10) * 10 - 1 + index).map(year =>
+                  <button key={year} type="button" disabled={year < minYear || year > maxJumpYear}
+                    aria-pressed={year === jumpYear}
+                    onClick={() => { setJumpYear(year); setIsYearGridOpen(false); yearButtonRef.current?.focus(); }}
+                    className="min-h-[44px] rounded-m3-sm text-sm text-on-surface hover:bg-surface-container-high disabled:opacity-40 focus:ring-2 focus:ring-on-surface">
+                    {year}
+                  </button>,
+                )}
+              </div> : <div className="mt-1 grid grid-cols-3 gap-1">
                 {MONTHS.map(({ month, short, long }) => {
                   const isVisibleMonth = jumpYear === headingDate.year && month === headingDate.month;
                   return (
@@ -538,7 +563,7 @@ export function ReportDatePicker({
                     </button>
                   );
                 })}
-              </div>
+              </div>}
             </div>
           )}
 

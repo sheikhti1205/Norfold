@@ -11,6 +11,7 @@ const io = vi.hoisted(() => ({
   searchPeople: vi.fn(),
   fetchProfile: vi.fn(),
   fetchConnections: vi.fn(),
+  extract: vi.fn(),
   user: { id: "searcher" } as { id: string } | null,
   pointer: { fine: false },
 }));
@@ -19,6 +20,10 @@ vi.mock("../auth", () => ({
   useOptionalAuth: () => ({ user: io.user }),
 }));
 vi.mock("../services/posts", () => ({ fetchFeed: io.fetchFeed }));
+vi.mock("../services/liveNarrowTasks", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../services/liveNarrowTasks")>(),
+  nlExtractLive: io.extract,
+}));
 vi.mock("../services/people", () => ({ searchPeople: io.searchPeople }));
 // The people row now carries the one person card. Its own reads are mocked so a
 // tap opens the card without reaching a real profile or connection endpoint.
@@ -220,6 +225,7 @@ beforeEach(() => {
   io.searchPeople.mockReset();
   io.fetchProfile.mockReset();
   io.fetchConnections.mockReset();
+  io.extract.mockReset().mockResolvedValue({});
   io.fetchFeed.mockResolvedValue({ items: [], nextCursor: null, total: 0 });
   io.searchPeople.mockResolvedValue({ items: [], nextCursor: null });
   io.fetchProfile.mockResolvedValue(publicProfile);
@@ -232,6 +238,32 @@ beforeEach(() => {
 afterEach(() => { cleanup(); resetGlobalSearch(); resetModalLayers(); vi.unstubAllGlobals(); });
 
 describe("app-wide search", () => {
+  it("automatically applies extracted filters without rewriting the search", async () => {
+    io.extract.mockResolvedValue({ category: "Electronics" });
+    render(<Harness />);
+    const { overlay } = await openSearch();
+    const field = within(overlay).getByRole("searchbox");
+    fireEvent.change(field, { target: { value: "lost phone" } });
+    await waitFor(() => expect(io.fetchFeed).toHaveBeenCalledWith(
+      expect.objectContaining({ q: "lost phone", category: "Electronics" }),
+    ));
+    expect(field).toHaveProperty("value", "lost phone");
+    expect(within(overlay).getByRole("button", { name: "Clear filters" })).toBeTruthy();
+  });
+
+  it("ignores an extraction that finishes after a manual filter selection", async () => {
+    let answer!: (value: { type: "FOUND"; postType: "FOUND" }) => void;
+    io.extract.mockImplementation(() => new Promise(resolve => { answer = resolve; }));
+    render(<Harness />);
+    const { overlay, bar } = await openFilters();
+    fireEvent.change(within(overlay).getByRole("searchbox"), { target: { value: "wallet" } });
+    await waitFor(() => expect(io.extract).toHaveBeenCalledWith("wallet"));
+    fireEvent.click(within(bar).getByRole("button", { name: "Type" }));
+    fireEvent.click(within(within(bar).getByRole("group", { name: "Type" })).getByRole("button", { name: "Lost" }));
+    answer({ type: "FOUND", postType: "FOUND" });
+    await waitFor(() => expect(io.fetchFeed).toHaveBeenCalledWith(expect.objectContaining({ type: "LOST" })));
+    expect(within(bar).getByRole("button", { name: "Type: Lost" })).toBeTruthy();
+  });
   it("keeps a visible focus ring on the filter pills", () => {
     expect(searchStyles).toMatch(/\.fb-search-pill:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--fb-focus\)/s);
     expect(searchStyles).not.toMatch(/\.fb-search-pill:focus-visible\s*\{[^}]*outline:\s*none/s);
@@ -715,7 +747,7 @@ describe("app-wide search", () => {
     expect(within(bar).getByRole("button", { name: "Type" })).toBeTruthy();
     expect(within(bar).getByRole("button", { name: "Status" })).toBeTruthy();
     expect(within(overlay).getByRole("searchbox")).toHaveProperty("value", "wallet");
-    expect(within(overlay).queryByRole("button", { name: "Clear filters" })).toBeNull();
+    expect((within(overlay).getByRole("button", { name: "Clear filters" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("closes the shared date sheet, the date panel, the filter row and the search one Escape at a time", async () => {

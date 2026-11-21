@@ -4,7 +4,7 @@
    is inset from the shell edge. The canvas keeps its readable cap, but it is
    anchored at the start, not floated to the middle. */
 .fb-search-screen { display:flex; flex-direction:column; height:100%; min-height:0; width:100%; }
-.fb-search-canvas { width:100%; max-width:1152px; }
+.fb-search-canvas { width:100%; max-width:1152px; padding-inline:12px; }
 /* Connect is a people list, not a feed: one readable directory column, the
    same 44rem cap as settings, so names do not stretch across a wide window. */
 .fb-connect-canvas { width:100%; max-width:44rem; }
@@ -16,12 +16,15 @@
    this wrapper a third child would auto-place on a new grid row and push the
    chips down. */
 .fb-search-filter-actions { display:flex; align-items:center; gap:.4rem; min-width:0; }
-.fb-search-filter-clear { white-space:nowrap; }
+.fb-search-filter-clear { white-space:nowrap; min-height:44px; border:1px solid var(--fb-outline-variant); background:var(--fb-surface-container-low); color:var(--fb-on-surface); text-decoration:none; }
+.fb-search-filter-clear:disabled { cursor:not-allowed; }
 .fb-filter-trigger { position:relative; flex:none; }
 .fb-filter-count { position:absolute; right:0; top:0; min-width:18px; border-radius:1rem; background:var(--fb-on-surface); color:var(--fb-surface); font-size:.6875rem; padding:0 .2rem; }
 .fb-popover.fb-search-filter-popover { display:flex; flex-direction:column; width:min(22rem,calc(100vw - 16px)); overflow:hidden; }
 .fb-search-filter-dialog { display:flex; flex-direction:column; min-height:0; max-height:inherit; outline:none; }
-.fb-search-filter-body { min-height:0; overflow:auto; overscroll-behavior:contain; padding:0 1rem 1rem; }
+.fb-search-filter-body { flex:1 1 auto; min-height:0; overflow:auto; overscroll-behavior:contain; padding:0 1rem 1rem; scrollbar-width:thin; }
+.fb-search-filter-body::-webkit-scrollbar { display:block; width:6px; }
+.fb-search-filter-body::-webkit-scrollbar-thumb { background:var(--fb-outline); border-radius:6px; }
 .fb-filter-fields { display:flex; flex-direction:column; gap:.65rem; min-width:0; }
 .fb-search-nearby { display:flex; flex-direction:column; gap:.4rem; min-width:0; padding-top:.5rem; border-top:1px solid var(--fb-outline-variant); }
 .fb-search-nearby legend { padding-top:.5rem; }
@@ -30,3 +33,19 @@
 .fb-search-filter-chips button:hover { background:var(--fb-surface-container); }
 .fb-search-filter-chips button svg { flex:none; }
 .fb-search-filter-chips button:focus-visible, .fb-search-nearby button:focus-visible { outline:2px solid var(--fb-focus); outline-offset:-2px; }
+.fb-search-result-list { list-style:none; margin:0; padding:0; }
+.fb-search-result-row { display:flex; align-items:center; gap:10px; min-width:0; min-height:52px; padding:8px 0; color:var(--fb-on-surface); border-radius:10px; }
+.fb-search-result-row:hover { background:var(--fb-surface-container); }
+.fb-search-result-row:focus-visible { outline:2px solid var(--fb-focus); outline-offset:-2px; }
+.fb-search-result-thumb { display:grid; place-items:center; flex:none; width:36px; height:36px; overflow:hidden; background:var(--fb-surface-container-high); color:var(--fb-on-surface-variant); }
+.fb-search-result-thumb img { display:block; width:100%; height:100%; object-fit:cover; }
+.fb-search-result-copy { display:flex; flex-direction:column; min-width:0; }
+.fb-search-result-title, .fb-search-result-meta { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fb-search-result-title { font-weight:600; }
+.fb-search-result-meta, .fb-search-result-note { font-size:.75rem; color:var(--fb-on-surface-variant); }
+.fb-search-result-banner { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.fb-search-result-skeleton-row { display:flex; align-items:center; gap:10px; min-height:52px; }
+.fb-search-result-skeleton-thumb { width:36px; height:36px; border-radius:8px; background:var(--fb-surface-container-high); }
+.fb-search-result-skeleton-copy { display:flex; flex-direction:column; gap:6px; flex:1; }
+.fb-search-result-skeleton-line { height:8px; width:40%; border-radius:4px; background:var(--fb-surface-container-high); }
+.fb-search-result-skeleton-line.is-meta { width:25%; }

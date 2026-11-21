@@ -22,6 +22,7 @@ import { fetchFeed } from "../services/posts";
 import { searchPeople } from "../services/people";
 import { useMediaUrl } from "../services/media/privateMedia";
 import { friendlyError } from "../utils/friendlyErrors";
+import { asNlExtractOutcome, nlExtractLive } from "../services/liveNarrowTasks";
 import { modalLayerCount } from "../hooks/modalLayers";
 import { CATEGORY_OPTIONS } from "./CategoryField";
 import { POST_TYPE_OPTIONS, STATUS_OPTIONS, statusLabel } from "./Segmented";
@@ -274,6 +275,7 @@ function SearchSurface() {
   const myReports = location.pathname === "/my";
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<SearchFilters>(EMPTY_FILTERS);
+  const filterRevision = useRef(0);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [openMenu, setOpenMenu] = useState<FilterMenuKey | null>(null);
   const [categoryQuery, setCategoryQuery] = useState("");
@@ -319,9 +321,37 @@ function SearchSurface() {
 
   const trimmed = query.trim();
   const deferred = useDebounced(trimmed, 220);
+  const settled = useDebounced(trimmed, 400);
   const range = appliedRange(filters);
   const activeCount = activeFilterCount(filters);
   const shouldSearch = deferred.length > 0 || activeCount > 0;
+
+  useEffect(() => {
+    if (!accountId || !settled || settled !== trimmed) return;
+    let cancelled = false;
+    const revision = filterRevision.current;
+    void nlExtractLive(settled).then((result) => {
+      if (cancelled || revision !== filterRevision.current) return;
+      const outcome = asNlExtractOutcome(result);
+      if (outcome.kind === "failed") return;
+      const patch = outcome.patch;
+      setFilters((current) => {
+        const validFrom = patch.dateFrom === undefined || validDay(patch.dateFrom);
+        const validTo = patch.dateTo === undefined || validDay(patch.dateTo);
+        const validRange = validFrom && validTo &&
+          !(patch.dateFrom && patch.dateTo && patch.dateFrom > patch.dateTo);
+        return {
+          ...current,
+          type: current.type || patch.postType || "",
+          category: current.category || patch.category || "",
+          status: current.status || patch.status || "",
+          dateFrom: !current.dateFrom && !current.dateTo && validRange ? patch.dateFrom || "" : current.dateFrom,
+          dateTo: !current.dateFrom && !current.dateTo && validRange ? patch.dateTo || "" : current.dateTo,
+        };
+      });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [accountId, settled, trimmed]);
 
   // The phone overlay sits 8px under the measured app bar, not under a guessed
   // height: 200% text makes the bar taller and must move the overlay with it.
@@ -466,6 +496,7 @@ function SearchSurface() {
   }
 
   function clearAll() {
+    filterRevision.current += 1;
     setQuery("");
     setFilters(EMPTY_FILTERS);
     setFiltersOpen(false);
@@ -474,6 +505,7 @@ function SearchSurface() {
   }
 
   function clearFilters() {
+    filterRevision.current += 1;
     setFilters(EMPTY_FILTERS);
     setOpenMenu(null);
     filterToggle.current?.focus();
@@ -484,6 +516,7 @@ function SearchSurface() {
   }
 
   function patchFilters(key: FilterMenuKey, patch: Partial<SearchFilters>, close = true) {
+    filterRevision.current += 1;
     setFilters((current) => ({ ...current, ...patch }));
     if (!close) return;
     setOpenMenu(null);
@@ -491,6 +524,7 @@ function SearchSurface() {
   }
 
   function choosePreset(preset: DatePreset) {
+    filterRevision.current += 1;
     const next = presetRange(preset);
     setFilters((current) => ({ ...current, dateFrom: next.from, dateTo: next.to }));
     setOpenMenu(null);
@@ -500,6 +534,7 @@ function SearchSurface() {
   /** The shared picker commits only on Confirm; its onChange is the one place
    *  a bound reaches the filters, so Cancel leaves the query untouched. */
   function applyDateBound(bound: DateBound, value: string) {
+    filterRevision.current += 1;
     setFilters((current) => (
       bound === "from" ? { ...current, dateFrom: value } : { ...current, dateTo: value }
     ));
@@ -599,16 +634,15 @@ function SearchSurface() {
         />
         {/* Clearing filters is a real control next to the filter button, not
             an underlined link hiding at the end of the pill row. */}
-        {activeCount > 0 && (
           <button
             type="button"
             className="fb-search-clear-filters"
             aria-label="Clear filters"
             onClick={clearFilters}
+            disabled={activeCount === 0}
           >
-            Clear
+            Clear filters
           </button>
-        )}
         <button
           ref={filterToggle}
           type="button"

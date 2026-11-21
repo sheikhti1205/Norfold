@@ -56,7 +56,7 @@ describe("SearchScreen filter sheet (G14)", () => {
     expect(screen.queryByLabelText("Sort")).toBeNull();
 
     // A Filters launcher opens the sheet, which now owns the type too.
-    const trigger = screen.getByRole("button", { name: /filters/i });
+    const trigger = screen.getByRole("button", { name: /^filters/i });
     fireEvent.click(trigger);
     expect(await screen.findByLabelText("Type")).toBeTruthy();
     expect(screen.getByLabelText("Category")).toBeTruthy();
@@ -101,7 +101,7 @@ describe("SearchScreen filter sheet (G14)", () => {
     expect(screen.getByRole("button", { name: /remove status filter/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /remove sort filter/i })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /clear all filters/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^clear filters$/i }));
     // The type is a CHIP in the same row as "Clear all filters" now, so
     // clearing every filter clears the type too. (This expectation changed
     // from "/search?type=FOUND&q=phone" when the type became a chip: the
@@ -113,6 +113,20 @@ describe("SearchScreen filter sheet (G14)", () => {
     expect(screen.queryByRole("button", { name: /remove status filter/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /remove sort filter/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /remove type filter/i })).toBeNull();
+  });
+
+  it("keeps one labelled clear control, disabled when empty and enabled after a selection", async () => {
+    renderSearch();
+    const clear = screen.getByRole("button", { name: "Clear filters" }) as HTMLButtonElement;
+    expect(clear.disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+    const dialog = await screen.findByRole("dialog", { name: "Filters" });
+    expect(screen.getAllByRole("button", { name: "Clear filters" })).toHaveLength(1);
+    expect((dialog.querySelector("button.fb-search-filter-clear") as HTMLButtonElement).disabled).toBe(true);
+    await chooseCategory("Electronics");
+    expect((dialog.querySelector("button.fb-search-filter-clear") as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(dialog.querySelector("button.fb-search-filter-clear")!);
+    await waitFor(() => expect(screen.queryByRole("button", { name: /remove category filter/i })).toBeNull());
   });
 
   it("deep-linked advanced filters restore chips without opening the sheet", async () => {

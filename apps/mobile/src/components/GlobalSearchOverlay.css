@@ -188,7 +188,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  flex: none;
+  flex: 0 1 auto;
   min-height: 0;
 }
 .fb-search-pills {
@@ -251,11 +251,11 @@
    force; it is not an underlined link under the pills. */
 .fb-search-clear-filters {
   flex: none;
-  min-height: 32px;
+  min-height: 44px;
   padding: 0 10px;
   border: 1px solid var(--fb-outline-variant);
   border-radius: 999px;
-  background: transparent;
+  background: var(--fb-surface-container-low);
   color: var(--fb-on-surface);
   font: inherit;
   font-size: 0.75rem;
@@ -263,13 +263,14 @@
   cursor: pointer;
 }
 .fb-search-clear-filters:hover { background: var(--fb-surface-container); border-color: var(--fb-outline); }
+.fb-search-clear-filters:disabled { opacity: .45; cursor: not-allowed; }
 .fb-search-clear-filters:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; }
 
 .fb-search-menu {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  flex: none;
+  flex: 0 1 auto;
   min-height: 0;
   max-height: min(360px, 52dvh);
   overflow-y: auto;
