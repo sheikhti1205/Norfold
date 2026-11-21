@@ -91,8 +91,7 @@
 .fb-notification-rail-divider { width: 1px; height: 18px; flex: none; background: var(--fb-outline-variant); }
 
 /* Hover preview card: a second, slower disclosure than the action pill. It
-   follows the pointer while it is on the row (the rail can be open beside it)
-   and disappears as soon as the pointer leaves. */
+   disappears as soon as the pointer leaves. */
 .fb-notification-card { position:fixed; z-index:90; display:flex; gap:.75rem; width:320px; max-width:calc(100vw - 16px); max-height:140px; overflow:hidden; padding:.75rem; background:var(--fb-surface); color:var(--fb-on-surface); border:1px solid var(--fb-outline-variant); border-radius:.6rem; box-shadow:0 4px 16px #0003; pointer-events:none; }
 .fb-notification-card img { width:72px; height:72px; object-fit:cover; flex:none; }
 .fb-notification-card p { margin-top:.35rem; overflow-wrap:anywhere; }

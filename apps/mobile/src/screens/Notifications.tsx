@@ -142,26 +142,33 @@ function startsInsideShield(event: Event): boolean {
 interface NotificationsProps {
   preview?: boolean;
   onNavigate?: () => void;
+  onReport?: (postId: string) => void;
 }
 
-export function Notifications({ preview = false, onNavigate }: NotificationsProps = {}) {
+export function Notifications({ preview = false, onNavigate, onReport }: NotificationsProps = {}) {
   const { user } = useAuth();
-  return user ? <AccountNotifications key={user.id} preview={preview} onNavigate={onNavigate} /> : null;
+  return user ? <AccountNotifications key={user.id} preview={preview} onNavigate={onNavigate} onReport={onReport} /> : null;
 }
 
-function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
+function AccountNotifications({ preview, onNavigate, onReport }: NotificationsProps) {
   const { user } = useAuth();
   const navigateReport = useReportNavigation();
   const [postActions, setPostActions] = useState<Record<string, { status: "OPEN" | "CLOSED"; pending: boolean }>>({});
   const requestedPosts = useRef(new Set<string>());
   const finePointer = useFinePointer();
   const [reportId, setReportId] = useState<string | null>(null);
-  const [card, setCard] = useState<{ item: NotificationItem; top: number; left: number } | null>(null);
   // `container` is the overlay the rail must live inside. A popover marks every
   // outside body sibling inert, so a body portal paints and hovers but can
   // never receive the click — it would fall through to the row's report link.
-  const [rail, setRail] = useState<{ id: string; top: number; right: number; container: HTMLElement } | null>(null);
+  const [disclosure, setDisclosure] = useState<
+    | { kind: "card"; item: NotificationItem; top: number; left: number }
+    | { kind: "rail"; id: string; top: number; right: number; container: HTMLElement }
+    | null
+  >(null);
+  const card = disclosure?.kind === "card" ? disclosure : null;
+  const rail = disclosure?.kind === "rail" ? disclosure : null;
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverIntent = useRef<{ row: HTMLElement; kind: "card" | "rail" } | null>(null);
   const railArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const railCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const railRow = useRef<HTMLElement | null>(null);
@@ -171,14 +178,18 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
   const holdStart = useRef<{ x: number; y: number } | null>(null);
   const held = useRef(false);
   const cancelHold = () => { if (holdTimer.current) clearTimeout(holdTimer.current); holdTimer.current = null; holdStart.current = null; };
-  const cancelHover = () => { if (hoverTimer.current) clearTimeout(hoverTimer.current); hoverTimer.current = null; setCard(null); };
+  const cancelHover = () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = null;
+    setDisclosure((current) => current?.kind === "card" ? null : current);
+  };
   const closeRail = useCallback(() => {
     if (railArmTimer.current) clearTimeout(railArmTimer.current);
     railArmTimer.current = null;
     if (railCloseTimer.current) clearTimeout(railCloseTimer.current);
     railCloseTimer.current = null;
     railRow.current = null;
-    setRail(null);
+    setDisclosure((current) => current?.kind === "rail" ? null : current);
   }, []);
   /**
    * The floating action pill. It is anchored to the row's trailing edge and
@@ -186,21 +197,13 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
    * `right` is a distance from the viewport edge, which keeps the pill's
    * trailing edge fixed while its width changes.
    */
-  const openRail = useCallback((row: HTMLElement, id: string, focusFirst = false, keepPreview = false) => {
+  const openRail = useCallback((row: HTMLElement, id: string, focusFirst = false) => {
     if (railArmTimer.current) clearTimeout(railArmTimer.current);
     railArmTimer.current = null;
     if (railCloseTimer.current) clearTimeout(railCloseTimer.current);
     railCloseTimer.current = null;
-    // A hover opens the rail beside the report preview: they are two different
-    // disclosures (what is this, and what can I do), and the owner needs the
-    // actions immediately, not after the preview has had its turn. Any other
-    // trigger dismisses the preview because the pointer is no longer just
-    // reading the row.
-    if (!keepPreview) {
-      if (hoverTimer.current) clearTimeout(hoverTimer.current);
-      hoverTimer.current = null;
-      setCard(null);
-    }
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = null;
     const rect = row.getBoundingClientRect();
     const right = Math.max(6, window.innerWidth - rect.right + 4);
     const top = Math.min(Math.max(rect.top + rect.height / 2, 46), window.innerHeight - 46);
@@ -209,7 +212,7 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
     // from the row's own trigger, while the keyboard/context-menu path started
     // at the row content and must return there.
     railOrigin.current = focusFirst ? "row" : "trigger";
-    setRail({ id, top, right, container: row.closest<HTMLElement>(".fb-popover") ?? document.body });
+    setDisclosure({ kind: "rail", id, top, right, container: row.closest<HTMLElement>(".fb-popover") ?? document.body });
     if (focusFirst) requestAnimationFrame(() => railRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true }));
   }, []);
   const scheduleRailClose = useCallback(() => {
@@ -223,9 +226,35 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
       // to the row's report link.
       if (railRef.current?.matches(":hover") || railRef.current?.contains(document.activeElement)) return;
       railRow.current = null;
-      setRail(null);
+      setDisclosure((current) => current?.kind === "rail" ? null : current);
     }, 220);
   }, []);
+  const armPreview = (row: HTMLElement, item: NotificationItem) => {
+    closeRail();
+    cancelHover();
+    hoverTimer.current = setTimeout(() => {
+      hoverTimer.current = null;
+      const rect = row.getBoundingClientRect();
+      const height = item.type === "COMMENT" || item.type === "MENTION" ? 180 : 140;
+      const top = window.innerHeight - rect.bottom >= height + 8 ? rect.bottom + 8 : rect.top >= height + 8 ? rect.top - height - 8 : -1;
+      if (top >= 0) setDisclosure({ kind: "card", item, top, left: Math.max(8, Math.min(rect.left, window.innerWidth - 328)) });
+    }, 200);
+  };
+  const updateHoverIntent = (row: HTMLElement, target: EventTarget | null, item: NotificationItem, eligible: boolean) => {
+    const kind = eligible && target instanceof Element && target.closest(".fb-notification-subject") ? "card" : "rail";
+    if (hoverIntent.current?.row === row && hoverIntent.current.kind === kind) return;
+    hoverIntent.current = { row, kind };
+    if (kind === "card") {
+      armPreview(row, item);
+    } else {
+      cancelHover();
+      closeRail();
+      railArmTimer.current = setTimeout(() => {
+        railArmTimer.current = null;
+        openRail(row, item.id);
+      }, ACTION_RAIL_HOVER_MS);
+    }
+  };
   useEffect(() => () => {
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
     if (holdTimer.current) clearTimeout(holdTimer.current);
@@ -270,7 +299,7 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
     };
   }, [rail, closeRail]);
   useEffect(() => {
-    const close = () => { if (hoverTimer.current) clearTimeout(hoverTimer.current); setCard(null); closeRail(); };
+    const close = () => { if (hoverTimer.current) clearTimeout(hoverTimer.current); hoverTimer.current = null; hoverIntent.current = null; setDisclosure(null); closeRail(); };
     window.addEventListener("scroll", close, true);
     window.addEventListener("resize", close);
     return () => { window.removeEventListener("scroll", close, true); window.removeEventListener("resize", close); };
@@ -678,6 +707,8 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
             // (including its link) sits INSIDE the shield, exactly like the
             // profile reports row does.
             const blocked = item.blockedActor === true;
+            const canPreview = !blocked && !!item.postId && !!item.postTitle && !!item.thumbnailUrl
+              && ["LIKE", "REACTION", "COMMENT", "MENTION", "STATUS"].includes(item.type);
             const route = notificationRoute(item);
             const body = item.postId ? (
               <PostLink
@@ -723,29 +754,28 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
                     const row = event.currentTarget;
                     holdTimer.current = setTimeout(() => { held.current = true; haptic("threshold"); openRail(row, item.id); }, 450);
                   }}
-                  onPointerMove={(event) => { if (holdStart.current && Math.hypot(event.clientX - holdStart.current.x, event.clientY - holdStart.current.y) > 8) cancelHold(); }}
+                  onPointerMove={(event) => {
+                    if (holdStart.current && Math.hypot(event.clientX - holdStart.current.x, event.clientY - holdStart.current.y) > 8) cancelHold();
+                    if (finePointer && event.pointerType !== "touch") updateHoverIntent(event.currentTarget, event.target, item, canPreview);
+                  }}
                   onPointerUp={cancelHold}
                   onPointerCancel={cancelHold}
                   onClickCapture={(event) => { if (held.current) { event.preventDefault(); event.stopPropagation(); held.current = false; } }}
                   onPointerEnter={(event) => {
                     if (!finePointer || event.pointerType === "touch") return;
-                    const row = event.currentTarget;
-                    // Both views: the Inbox rail acts on the notification and the
-                    // Deleted rail restores it. Hover is the trigger whenever a
-                    // fine pointer exists, so neither view needs a three-dot.
-                    railArmTimer.current = setTimeout(() => {
-                      railArmTimer.current = null;
-                      openRail(row, item.id, false, true);
-                    }, ACTION_RAIL_HOVER_MS);
-                    if (blocked || !item.postId || !item.thumbnailUrl || !["LIKE", "REACTION", "COMMENT", "MENTION", "STATUS"].includes(item.type)) return;
-                    hoverTimer.current = setTimeout(() => {
-                      const rect = row.getBoundingClientRect();
-                      const height = item.type === "COMMENT" || item.type === "MENTION" ? 180 : 140;
-                      const top = window.innerHeight - rect.bottom >= height + 8 ? rect.bottom + 8 : rect.top >= height + 8 ? rect.top - height - 8 : -1;
-                      if (top >= 0) setCard({ item, top, left: Math.max(8, Math.min(rect.left, window.innerWidth - 328)) });
-                    }, 200);
+                    updateHoverIntent(event.currentTarget, event.target, item, canPreview);
+                  }}
+                  onFocus={(event) => {
+                    if (canPreview && event.target instanceof Element && event.target.matches(".fb-notification-body")) {
+                      hoverIntent.current = null;
+                      armPreview(event.currentTarget, item);
+                    }
+                  }}
+                  onBlur={(event) => {
+                    if (event.target instanceof Element && event.target.matches(".fb-notification-body")) cancelHover();
                   }}
                   onPointerLeave={(event) => {
+                    hoverIntent.current = null;
                     cancelHover();
                     if (railArmTimer.current) { clearTimeout(railArmTimer.current); railArmTimer.current = null; }
                     // Moving onto the rail dispatches this row leave as well.
@@ -825,7 +855,7 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
       )}
       </StateSwap>
       </div>
-      <ReportSheet open={reportId !== null} target={reportId ? { targetType: "POST", targetId: reportId } : null} onClose={() => setReportId(null)} />
+      {!onReport && <ReportSheet open={reportId !== null} target={reportId ? { targetType: "POST", targetId: reportId } : null} onClose={() => setReportId(null)} />}
 
       {card && createPortal(<div className="fb-notification-card" style={{ top: card.top, left: card.left }} aria-hidden="true">
         <img src={card.item.thumbnailUrl} alt="" width={72} height={72} />
@@ -912,7 +942,7 @@ function AccountNotifications({ preview, onNavigate }: NotificationsProps) {
                 type="button"
                 className="fb-notification-rail-action"
                 aria-label="Report"
-                onClick={() => { closeRail(); setReportId(railItem.postId); }}
+                onClick={() => { closeRail(); if (onReport) onReport(railItem.postId!); else setReportId(railItem.postId); }}
               >
                 <Flag size={16} aria-hidden />
                 <span className="fb-notification-rail-label" aria-hidden="true">Report</span>

@@ -1,4 +1,5 @@
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../auth";
 import { useSafetyLifetime } from "../utils/useSafetyLifetime";
 import { AdaptiveTaskSurface } from "./AdaptiveTaskSurface";
@@ -44,6 +45,8 @@ export interface ReportSheetProps {
   target: ReportTarget | null;
   /** Called once the server has confirmed the report. */
   onReported?: (reportId: string) => void;
+  /** Stable fallback when the opening control belongs to a dismissible surface. */
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }
 
 /** The server's own bound on the note. The client refuses longer, never truncates. */
@@ -69,7 +72,7 @@ const DETAIL_MAX = 2000;
  * live on their own screen (Settings → Privacy → Reports you sent) — this
  * sheet never pretends to be a case tracker.
  */
-export function ReportSheet({ open, onClose, target, onReported }: ReportSheetProps) {
+export function ReportSheet({ open, onClose, target, onReported, returnFocusRef }: ReportSheetProps) {
   const { user } = useAuth();
   const alive = useSafetyLifetime();
   const generation = useRef(0);
@@ -102,6 +105,34 @@ export function ReportSheet({ open, onClose, target, onReported }: ReportSheetPr
     }
     return () => { controller.abort(); generation.current += 1; };
   }, [open, target?.targetType, target?.targetId, user?.id, evidence]);
+
+  // The invoker can vanish with the surface that opened the sheet (the inbox
+  // rail closes as the sheet opens). Remember it, and the dialog it belongs to,
+  // before that commit so closing the sheet still lands on a real control.
+  const returnTarget = useRef<HTMLElement | null>(null);
+  const returnHome = useRef<HTMLElement | null>(null);
+  const captured = useRef(false);
+  if (open && !captured.current && typeof document !== "undefined") {
+    captured.current = true;
+    const active = document.activeElement;
+    returnTarget.current = active instanceof HTMLElement && active !== document.body ? active : null;
+    returnHome.current = returnTarget.current?.closest<HTMLElement>(".fb-popover, [role=\"dialog\"]") ?? null;
+  }
+  useLayoutEffect(() => {
+    if (open || !captured.current) return;
+    captured.current = false;
+    const invoker = returnTarget.current;
+    const home = returnHome.current;
+    returnTarget.current = null;
+    returnHome.current = null;
+    const destination = invoker?.isConnected ? invoker
+      : returnFocusRef?.current?.isConnected ? returnFocusRef.current
+      : home?.isConnected ? home.querySelector<HTMLElement>("button:not([disabled]), a[href], [tabindex=\"0\"]")
+      : null;
+    if (!destination) return;
+    const frame = requestAnimationFrame(() => { if (destination.isConnected) destination.focus({ preventScroll: true }); });
+    return () => cancelAnimationFrame(frame);
+  }, [open, returnFocusRef]);
 
   if (!target) return null;
 
@@ -159,7 +190,9 @@ export function ReportSheet({ open, onClose, target, onReported }: ReportSheetPr
     }
   };
 
-  return (
+  // The portal keeps the modal outside clipping surfaces; callers that may
+  // unmount their opening surface must also own this component above it.
+  return createPortal(
     <AdaptiveTaskSurface
       open={open}
       onClose={onClose}
@@ -230,7 +263,8 @@ export function ReportSheet({ open, onClose, target, onReported }: ReportSheetPr
           </Button>
         </div>
       )}
-    </AdaptiveTaskSurface>
+    </AdaptiveTaskSurface>,
+    document.body,
   );
 }
 
