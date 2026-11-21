@@ -8,6 +8,14 @@ import { ReportSheet } from "./ReportSheet";
 const PANEL_FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/** The quick inbox is a preview, not a second route, so it must not claim the window. */
+const NOTIFICATION_POPOVER_MAX_HEIGHT_PX = 440;
+
+/** Half the live viewport, never above the 440px the panel has always kept. */
+function notificationPopoverMaxHeight(viewportHeightPx: number): number {
+  return Math.min(NOTIFICATION_POPOVER_MAX_HEIGHT_PX, Math.round(viewportHeightPx / 2));
+}
+
 /**
  * A quick inbox presentation, not a second data cache or mutation owner.
  *
@@ -28,6 +36,15 @@ export function NotificationPopover({ trigger }: { trigger: ReactNode }) {
   const { hoverLabel } = useHoverLabel();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLElement>(null);
+  const [viewportHeight, setViewportHeight] = useState(() =>
+    typeof window === "undefined" ? 0 : Math.round(window.innerHeight),
+  );
+  useEffect(() => {
+    const onResize = () => setViewportHeight(Math.round(window.innerHeight));
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const changeOpen = (next: boolean) => {
     setOpen(next);
@@ -70,14 +87,17 @@ export function NotificationPopover({ trigger }: { trigger: ReactNode }) {
     return () => document.removeEventListener("keydown", keepDisclosureInOrder);
   }, [open, reportId]);
 
-  // The panel cap is viewport-relative (max-height: min(50dvh, 440px) in
-  // Notifications.css) so it adapts to the viewport and never exceeds the
-  // previous 440px. It is a preview, not a second route, so it must not claim
-  // the window; ~3-4 rows show and the rest scrolls in the existing
-  // .fb-notification-content scroller.
+  const popoverMaxHeight = notificationPopoverMaxHeight(viewportHeight);
+  // The panel cap is viewport-relative and computed here from the live viewport
+  // (half, never above 440px) and passed to the layered popover through its
+  // maxHeight prop, which React Aria applies as the inline max-height the
+  // popover renders. A stylesheet max-height cannot outrank that inline value,
+  // so the prop is the real mechanism; the inner .fb-notification-content
+  // scroller stays the overflow owner, and ~3-4 rows show with the rest
+  // scrolling.
   return <><DialogTrigger isOpen={open} onOpenChange={changeOpen}>
-    <Button ref={triggerRef} aria-label="Notifications" className="fb-icon-control relative" {...hoverLabel("Notifications")}>{trigger}</Button>
-    <LayeredPopover isNonModal placement="bottom end" offset={6} className="fb-notification-popover">
+    <Button ref={triggerRef} aria-label="Notifications" aria-haspopup="dialog" className="fb-icon-control relative" {...hoverLabel("Notifications")}>{trigger}</Button>
+    <LayeredPopover isNonModal placement="bottom end" offset={6} maxHeight={popoverMaxHeight} className="fb-notification-popover">
       <section ref={panelRef} role="dialog" aria-label="Notifications" className="fb-notification-dialog">
         <Notifications preview onNavigate={() => changeOpen(false)} onReport={setReportId} />
       </section>

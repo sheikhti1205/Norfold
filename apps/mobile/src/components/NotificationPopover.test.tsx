@@ -27,7 +27,7 @@ vi.mock("../screens/Notifications", async () => {
   return { Notifications: StubInbox };
 });
 
-import { NotificationPopover } from "./NotificationPopover";
+import { NotificationPopover, notificationPopoverMaxHeight } from "./NotificationPopover";
 
 /**
  * Quick-inbox cap, source contract.
@@ -47,13 +47,23 @@ afterEach(cleanup);
 
 describe("notification quick inbox sizing", () => {
   it("caps the popover at a preview height, not most of the window", () => {
-    // The cap moved from the RAC maxHeight prop (a fixed px value) to a
-    // viewport-relative CSS max-height, so it adapts to the viewport and never
-    // exceeds the previous 440px. jsdom doesn't lay out, so assert the cap in
-    // source/CSS rather than a rendered scroll.
+    // The cap is computed in JS from the live viewport (half, never above 440px)
+    // and passed through the RAC maxHeight prop, which React Aria applies as the
+    // inline max-height the popover renders. A bare 440 or an unopposed stylesheet
+    // rule is not the mechanism, so the source is pinned rather than a rendered
+    // scroll (jsdom does not lay out).
     expect(source).not.toMatch(/maxHeight=\{440\}/);
     expect(source).not.toMatch(/maxHeight=\{680\}/);
-    expect(css).toMatch(/\.fb-popover\.fb-notification-popover\s*\{[^}]*max-height\s*:\s*min\(50dvh,\s*440px\)/);
+    expect(source).toMatch(/maxHeight=\{popoverMaxHeight\}/);
+    expect(source).toMatch(/Math\.min\(NOTIFICATION_POPOVER_MAX_HEIGHT_PX,\s*Math\.round\(viewportHeightPx \/ 2\)\)/);
+  });
+
+  it("computes the cap as half the live viewport, never above 440px", () => {
+    // 900px viewport -> min(440, 450) = 440; 390px -> min(440, 195) = 195; never
+    // above half the viewport, never above the previous 440px ceiling.
+    expect(notificationPopoverMaxHeight(900)).toBe(440);
+    expect(notificationPopoverMaxHeight(390)).toBe(195);
+    expect(notificationPopoverMaxHeight(800)).toBe(400);
   });
 
   it("keeps the preview scroller and fixed footer without widening the panel", () => {
@@ -79,6 +89,13 @@ describe("the notification bell", () => {
     // makes this press impossible, which is why the surface is non-modal.
     fireEvent.click(bell);
     await waitFor(() => expect(screen.queryByText("Quick inbox")).toBeNull());
+    expect(bell.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("declares a dialog popup on the bell trigger", () => {
+    render(<NotificationPopover trigger={<span aria-hidden="true" />} />);
+    const bell = screen.getByRole("button", { name: "Notifications" });
+    expect(bell.getAttribute("aria-haspopup")).toBe("dialog");
     expect(bell.getAttribute("aria-expanded")).toBe("false");
   });
 
