@@ -77,6 +77,11 @@ const OVERLAY_SELECTOR = [
   ".fb-picker-layer",
 ].join(", ");
 
+/** A layer that replaced the page is present right now, not just after a mutation. */
+function overlayOpen(): boolean {
+  return typeof document !== "undefined" && document.querySelector(OVERLAY_SELECTOR) !== null;
+}
+
 export function HoverLabelProvider({ children }: { children: ReactNode }) {
   const [active, setActive] = useState<ActiveLabel | null>(null);
   const activeRef = useRef<ActiveLabel | null>(null);
@@ -116,11 +121,13 @@ export function HoverLabelProvider({ children }: { children: ReactNode }) {
 
   const show = useCallback((anchor: HTMLElement, label: string, placement: HoverLabelPlacement, options?: { pinned?: boolean; immediate?: boolean }) => {
     clearShow();
-    // A name is a fine-pointer affordance, never a touch one: on a coarse
-    // pointer it would sit under the finger with no way to dismiss it.
-    if (!hasFinePointer()) return;
+    // Pointer capability is decided by the hover entry point, not here: focus
+    // and touch tap (useInfoLabel) must still name a control on a touch device.
     const next: ActiveLabel = { label, placement, rect: anchor.getBoundingClientRect(), anchor, pinned: options?.pinned === true };
     const paint = () => {
+      // Never paint over a layer that has replaced the page while the dwell
+      // was running. The observer below handles overlays that open later.
+      if (overlayOpen()) return;
       visible.current = true;
       activeRef.current = next;
       setActive(next);
@@ -306,11 +313,18 @@ export function useHoverLabel() {
       return {
         onPointerEnter: (event: ReactPointerEvent<HTMLElement>) => {
           if (event.pointerType === "touch") return;
-          // Named rail rows need no duplicate pill, which could cover the
-          // row when there is no room beside it. Portalled menus are separate.
+          // A compatibility mouse event on a touch screen must not paint a
+          // name. Hosts that cannot answer the capability query trust the
+          // explicit pointer type instead of treating every dwell as touch.
+          if (typeof window !== "undefined" && typeof window.matchMedia === "function" && !hasFinePointer()) return;
+          // Only a row whose own label is already painted in place is a
+          // duplicate. The collapsed rail's sr-only name is not: it still
+          // needs the fixed pill so the column never widens on dwell.
           const rail = event.currentTarget.closest<HTMLElement>(".fb-nav-rail");
-          if (event.currentTarget.matches(".fb-nav-link") && rail &&
-            (rail.dataset.pinned === "true" || rail.dataset.hoverExpanded === "true" || rail.matches(":has(:focus-visible)"))) {
+          const ownLabel = event.currentTarget.querySelector(".fb-nav-label");
+          const namedInPlace = ownLabel !== null && !ownLabel.classList.contains("sr-only");
+          if (event.currentTarget.matches(".fb-nav-link") && (namedInPlace
+            || rail?.dataset.pinned === "true" || rail?.dataset.hoverExpanded === "true")) {
             api.dismiss();
             return;
           }

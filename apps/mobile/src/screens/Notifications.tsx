@@ -139,6 +139,20 @@ function startsInsideShield(event: Event): boolean {
   return target.closest("[data-testid=\"blocked-shield\"]") !== null;
 }
 
+/**
+ * The context preview belongs to the report title, and only on rows that
+ * actually have a thumbnail. The rest of the row — including the body link —
+ * stays a rail target on purpose: the body fills the row, so making it a
+ * preview surface would leave the options unreachable by hover on exactly the
+ * rows that can preview. Moving from the rest of the row onto the title swaps
+ * the rail for the card; both still resolve to the one `disclosure` owner.
+ */
+function isPreviewTarget(target: EventTarget | null, eligible: boolean): boolean {
+  return eligible
+    && target instanceof Element
+    && target.closest(".fb-notification-subject") !== null;
+}
+
 interface NotificationsProps {
   preview?: boolean;
   onNavigate?: () => void;
@@ -241,19 +255,30 @@ function AccountNotifications({ preview, onNavigate, onReport }: NotificationsPr
     }, 200);
   };
   const updateHoverIntent = (row: HTMLElement, target: EventTarget | null, item: NotificationItem, eligible: boolean) => {
-    const kind = eligible && target instanceof Element && target.closest(".fb-notification-subject") ? "card" : "rail";
+    // One row, one disclosure, chosen by WHERE the pointer rests. The preview
+    // target asks for context; every other part of the row asks for the action
+    // options. Both go through the single `disclosure` owner, so a card can
+    // never overlap a rail and the delays stay the short ones already in use.
+    const kind = isPreviewTarget(target, eligible) ? "card" : "rail";
     if (hoverIntent.current?.row === row && hoverIntent.current.kind === kind) return;
     hoverIntent.current = { row, kind };
     if (kind === "card") {
-      armPreview(row, item);
-    } else {
-      cancelHover();
-      closeRail();
-      railArmTimer.current = setTimeout(() => {
-        railArmTimer.current = null;
-        openRail(row, item.id);
-      }, ACTION_RAIL_HOVER_MS);
+      armPreview(row, item); // closes any rail and cancels any pending rail
+      return;
     }
+    cancelHover();
+    // A rail opened by right-click, the context-menu key or long press is
+    // already the disclosure this hover asks for. Keep it: tearing it down
+    // here would leave a stationary pointer with nothing open.
+    if (rail?.id === item.id) {
+      if (railArmTimer.current) { clearTimeout(railArmTimer.current); railArmTimer.current = null; }
+      return;
+    }
+    closeRail();
+    railArmTimer.current = setTimeout(() => {
+      railArmTimer.current = null;
+      openRail(row, item.id);
+    }, ACTION_RAIL_HOVER_MS);
   };
   useEffect(() => () => {
     if (hoverTimer.current) clearTimeout(hoverTimer.current);

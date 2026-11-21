@@ -636,10 +636,16 @@ export function MyPosts() {
             hasMore={hasMore}
             onLoadMore={loadMore}
             onRetry={refresh}
-            emptyTitle={searchTerm ? "No matching loaded reports" : "You have no reports yet"}
+            emptyTitle={searchTerm
+              ? "No matching loaded reports"
+              : getActiveFilterCount(advanced) > 0
+                ? "No reports match these filters"
+                : "You have no reports yet"}
             emptySubtitle={searchTerm
               ? (hasMore ? "Load more reports to continue searching." : "Try another search.")
-              : "Tap Report to post a lost or found item."}
+              : getActiveFilterCount(advanced) > 0
+                ? "Remove a filter to see your reports."
+                : "Tap Report to post a lost or found item."}
             density="owner-feed"
             masonryColumns={ownerColumns}
           />
