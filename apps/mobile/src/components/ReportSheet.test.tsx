@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { REPORT_REASONS } from "../services/moderation";
@@ -236,5 +237,34 @@ describe("the one report sheet", () => {
     } finally {
       window.removeEventListener("findback:announce", listener);
     }
+  });
+
+  it("mounts outside the surface that opened it and returns focus to its invoker", async () => {
+    function Inbox() {
+      const [open, setOpen] = useState(false);
+      return (
+        <div className="fb-popover" data-testid="inbox-popover">
+          <button type="button" onClick={() => setOpen(true)}>Report this report</button>
+          <ReportSheet
+            open={open}
+            onClose={() => setOpen(false)}
+            target={open ? { targetType: "POST", targetId: "post-1" } : null}
+          />
+        </div>
+      );
+    }
+    const view = render(<Inbox />);
+    const invoker = screen.getByRole("button", { name: "Report this report" });
+    invoker.focus();
+    fireEvent.click(invoker);
+
+    const dialog = await screen.findByRole("dialog", { name: /report a problem/i });
+    // The DOM portal avoids clipping; survival on unmount requires a stable
+    // React owner and is covered by the notification popover test.
+    expect(view.container.contains(dialog)).toBe(false);
+    expect(dialog.closest(".fb-popover")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(document.activeElement).toBe(invoker));
   });
 });

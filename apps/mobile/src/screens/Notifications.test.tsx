@@ -12,6 +12,11 @@ const { fetchMock, markReadMock, markUnreadMock, deleteMock, restoreMock } = vi.
 }));
 const { authState } = vi.hoisted(() => ({ authState: { user: { id: "owner-a" } as { id: string } | null } }));
 const { fetchPostMock, updateStatusMock } = vi.hoisted(() => ({ fetchPostMock: vi.fn(), updateStatusMock: vi.fn() }));
+const { pointerState } = vi.hoisted(() => ({ pointerState: { fine: false } }));
+vi.mock("../components/inputCapabilities", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../components/inputCapabilities")>(),
+  useFinePointer: () => pointerState.fine,
+}));
 vi.mock("../auth", () => ({ useAuth: () => authState }));
 vi.mock("../services/posts", () => ({ fetchPost: fetchPostMock, updatePostStatus: updateStatusMock }));
 
@@ -78,6 +83,7 @@ async function openRowActions(actor = "bob") {
 }
 
 beforeEach(() => {
+  pointerState.fine = false;
   authState.user = { id: "owner-a" };
   fetchMock.mockReset();
   markReadMock.mockReset();
@@ -94,9 +100,81 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
 });
 
 describe("Notifications inbox", () => {
+  it("keeps hover and keyboard actions mutually exclusive after the intent delay", async () => {
+    pointerState.fine = true;
+    fetchMock.mockResolvedValue([item({ thumbnailUrl: "/thumb.png" })]);
+    renderNotifications();
+    const row = await screen.findByTestId("notification-row");
+    vi.useFakeTimers();
+    fireEvent.pointerEnter(row, { pointerType: "mouse" });
+    act(() => vi.advanceTimersByTime(179));
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    expect(document.querySelector(".fb-notification-card")).toBeNull();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.getByRole("toolbar", { name: /actions for bob/i })).toBeTruthy();
+    expect(row.getAttribute("data-rail-open")).toBe("true");
+    act(() => vi.advanceTimersByTime(50));
+    expect(document.querySelector(".fb-notification-card")).toBeNull();
+    fireEvent.keyDown(row, { key: "F10", shiftKey: true });
+    act(() => vi.advanceTimersByTime(250));
+    expect(screen.getAllByRole("toolbar")).toHaveLength(1);
+    expect(document.querySelector(".fb-notification-card")).toBeNull();
+  });
+
+  it("cancels pending hover disclosures when keyboard actions open first", async () => {
+    pointerState.fine = true;
+    fetchMock.mockResolvedValue([item({ thumbnailUrl: "/thumb.png" })]);
+    renderNotifications();
+    const row = await screen.findByTestId("notification-row");
+    vi.useFakeTimers();
+    fireEvent.pointerEnter(row, { pointerType: "mouse" });
+    fireEvent.keyDown(row, { key: "ContextMenu" });
+    expect(screen.getByRole("toolbar", { name: /actions for bob/i })).toBeTruthy();
+    act(() => vi.advanceTimersByTime(250));
+    expect(screen.getAllByRole("toolbar")).toHaveLength(1);
+    expect(document.querySelector(".fb-notification-card")).toBeNull();
+  });
+  it("opens the report preview on title hover, then switches to row actions", async () => {
+    pointerState.fine = true;
+    fetchMock.mockResolvedValue([item({ thumbnailUrl: "/thumb.png" })]);
+    renderNotifications();
+    const row = await screen.findByTestId("notification-row");
+    const title = row.querySelector<HTMLElement>(".fb-notification-subject")!;
+    vi.useFakeTimers();
+    fireEvent.pointerEnter(title, { pointerType: "mouse" });
+    fireEvent.pointerMove(title, { pointerType: "mouse" });
+    act(() => vi.advanceTimersByTime(199));
+    expect(document.querySelector(".fb-notification-card")).toBeNull();
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    act(() => vi.advanceTimersByTime(1));
+    expect(document.querySelector(".fb-notification-card")?.textContent).toContain("Lost wallet");
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    fireEvent.pointerMove(row, { pointerType: "mouse" });
+    expect(document.querySelector(".fb-notification-card")).toBeNull();
+    act(() => vi.advanceTimersByTime(180));
+    expect(screen.getByRole("toolbar", { name: /actions for bob/i })).toBeTruthy();
+    expect(document.querySelector(".fb-notification-card")).toBeNull();
+  });
+
+  it("offers preview on keyboard focus and replaces it with context-menu actions", async () => {
+    pointerState.fine = true;
+    fetchMock.mockResolvedValue([item({ thumbnailUrl: "/thumb.png" })]);
+    renderNotifications();
+    const row = await screen.findByTestId("notification-row");
+    const link = screen.getByRole("link", { name: /bob.*lost wallet/i });
+    vi.useFakeTimers();
+    fireEvent.focus(link);
+    act(() => vi.advanceTimersByTime(200));
+    expect(document.querySelector(".fb-notification-card")).toBeTruthy();
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    fireEvent.keyDown(link, { key: "ContextMenu" });
+    expect(document.querySelector(".fb-notification-card")).toBeNull();
+    expect(screen.getByRole("toolbar", { name: /actions for bob/i })).toBeTruthy();
+  });
   it("shows status actions only after confirming report ownership and supported status", async () => {
     fetchMock.mockResolvedValue([item()]);
     fetchPostMock.mockResolvedValue({ userId: "owner-a", type: "LOST", status: "OPEN" });
