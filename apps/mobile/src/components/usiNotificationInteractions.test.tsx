@@ -83,7 +83,9 @@ describe("notification interactions", () => {
     expect(await screen.findByRole("toolbar")).toBeTruthy();
     fireEvent.pointerEnter(screen.getByTestId("notification-row"), { pointerType: "mouse" });
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+    // The existing rail stays open: hover does not tear it down and re-arm it.
     expect(screen.getAllByRole("toolbar")).toHaveLength(1);
+    expect(document.querySelector(".fb-notification-card")).toBeNull();
   });
 
   it("opens from the keyboard context-menu key and returns focus on Escape", async () => {
@@ -125,13 +127,46 @@ describe("notification interactions", () => {
 
   it("previews only when a thumbnail exists", async () => {
     mocks.fetch.mockResolvedValue([row({ thumbnailUrl: "https://example.com/a.jpg" })]);
-    const view = show(); const element = await screen.findByTestId("notification-row");
-    fireEvent.pointerEnter(element, { pointerType: "mouse" });
+    const view = show();
+    // pointerover is the browser event React turns into onPointerEnter on the
+    // row, with the title itself as the target: that is the preview's owner.
+    const subject = await screen.findByText("Wallet");
+    fireEvent.pointerOver(subject, { pointerType: "mouse" });
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 220)); });
     expect(document.querySelector(".fb-notification-card img")).toBeTruthy();
+    expect(screen.queryAllByRole("toolbar")).toHaveLength(0);
     view.unmount(); mocks.fetch.mockResolvedValue([row()]); show();
-    fireEvent.pointerEnter(await screen.findByTestId("notification-row"), { pointerType: "mouse" });
+    const nextSubject = await screen.findByText("Wallet");
+    fireEvent.pointerOver(nextSubject, { pointerType: "mouse" });
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 220)); });
+    expect(document.querySelector(".fb-notification-card")).toBeNull();
+  });
+
+  it("still reaches the action rail by hovering the row of a previewable notification", async () => {
+    mocks.fetch.mockResolvedValue([row({ thumbnailUrl: "https://example.com/a.jpg" })]);
+    show();
+    const element = await screen.findByTestId("notification-row");
+    vi.useFakeTimers();
+    // pointerover on the row itself is the browser path React turns into the
+    // row's onPointerEnter; its target is the row, not the preview target.
+    fireEvent.pointerOver(element, { pointerType: "mouse" });
+    await act(async () => { await vi.advanceTimersByTimeAsync(ACTION_RAIL_HOVER_MS + 50); });
+    // The row outside the preview target keeps the options reachable by hover.
+    expect(screen.getAllByRole("toolbar")).toHaveLength(1);
+    expect(document.querySelector(".fb-notification-card")).toBeNull();
+  });
+
+  it("replaces the preview with the rail when the pointer leaves the preview target", async () => {
+    mocks.fetch.mockResolvedValue([row({ thumbnailUrl: "https://example.com/a.jpg" })]);
+    show();
+    vi.useFakeTimers();
+    fireEvent.pointerOver(await screen.findByText("Wallet"), { pointerType: "mouse" });
+    await act(async () => { await vi.advanceTimersByTimeAsync(220); });
+    expect(document.querySelector(".fb-notification-card")).toBeTruthy();
+    expect(screen.queryAllByRole("toolbar")).toHaveLength(0);
+    fireEvent.pointerOver(screen.getByTestId("notification-row"), { pointerType: "mouse" });
+    await act(async () => { await vi.advanceTimersByTimeAsync(ACTION_RAIL_HOVER_MS + 50); });
+    expect(screen.getAllByRole("toolbar")).toHaveLength(1);
     expect(document.querySelector(".fb-notification-card")).toBeNull();
   });
 

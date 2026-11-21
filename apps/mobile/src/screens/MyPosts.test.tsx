@@ -98,9 +98,9 @@ function post(id: string, status = "OPEN", type: "LOST" | "FOUND" = "LOST") {
   };
 }
 
-function renderMyPosts() {
+function renderMyPosts(entry = "/my-reports") {
   return render(
-    <MemoryRouter initialEntries={["/my-reports"]}>
+    <MemoryRouter initialEntries={[entry]}>
       <ReportDeletionFeedbackProvider><MyPosts /></ReportDeletionFeedbackProvider>
     </MemoryRouter>,
   );
@@ -176,12 +176,11 @@ describe("MyPosts (My Reports alignment)", () => {
     fetchFeedMock.mockImplementation(async (filters) => filters.status
       ? { items: [], nextCursor: null, total: 0 }
       : { items: [post("p1")], nextCursor: null, total: 1 });
-    renderMyPosts();
-    await screen.findByText("Report p1");
-    fireEvent.click(screen.getByRole("radio", { name: "Closed" }));
-    await screen.findByText("No reports with this status");
+    renderMyPosts("/my-reports?status=CLOSED");
+    expect(await screen.findByText("No reports match these filters")).toBeTruthy();
     expect(screen.queryByText("You have no reports yet")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
+    // The canonical active-filter chip clears the URL-driven status filter.
+    fireEvent.click(await screen.findByRole("button", { name: "Remove status filter: Closed" }));
     expect(await screen.findByText("Report p1")).toBeTruthy();
   });
 
@@ -193,40 +192,34 @@ describe("MyPosts (My Reports alignment)", () => {
     }
   });
 
-  it("exposes owner-status quick filters All|Open|Matched|Recovered|Closed", async () => {
-    renderMyPosts();
-    await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
-    const group = screen.getByRole("radiogroup", { name: /status/i });
-    const labels = within(group)
-      .getAllByRole("radio")
-      .map((el) => el.textContent);
-    expect(labels).toEqual(["All", "Open", "Matched", "Recovered", "Closed"]);
+  it("has no owner-status quick-filter row; status lives in the canonical filters", async () => {
+    renderMyPosts("/my-reports?status=CLOSED");
+    await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "u1", status: "CLOSED" }), undefined,
+    ));
+    // Owner direction removed the All|Open|Matched|Recovered|Closed chips.
+    expect(screen.queryByRole("radiogroup", { name: /status/i })).toBeNull();
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    // The applied status is surfaced once, as a removable active filter.
+    expect(await screen.findByRole("button", { name: "Remove status filter: Closed" })).toBeTruthy();
   });
 
   it("filters by each lifecycle status while preserving userId", async () => {
-    renderMyPosts();
-    await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
-    for (const [label, status] of [
-      ["Matched", "MATCHED"],
-      ["Recovered", "RECOVERED"],
-      ["Closed", "CLOSED"],
-      ["Open", "OPEN"],
-    ] as const) {
+    for (const status of ["MATCHED", "RECOVERED", "CLOSED", "OPEN"] as const) {
       fetchFeedMock.mockClear();
-      fireEvent.click(screen.getByRole("radio", { name: label }));
+      const view = renderMyPosts(`/my-reports?status=${status}`);
       await waitFor(() =>
         expect(fetchFeedMock).toHaveBeenCalledWith(
           expect.objectContaining({ userId: "u1", status }),
           undefined,
         ),
       );
+      view.unmount();
     }
-    // All clears the status restriction but keeps userId. Returning to a
-    // previously loaded filter restores its session cache without refetching
-    // (Detail→Back behavior), so clear the cache to prove the fetch contract.
+    // No status in the URL clears the restriction but keeps userId.
     clearFeedCaches();
     fetchFeedMock.mockClear();
-    fireEvent.click(screen.getByRole("radio", { name: "All" }));
+    renderMyPosts();
     await waitFor(() =>
       expect(fetchFeedMock).toHaveBeenCalledWith(
         expect.objectContaining({ userId: "u1" }),
@@ -244,18 +237,22 @@ describe("MyPosts (My Reports alignment)", () => {
     expect(document.querySelector("img.aspect-\\[4\\/3\\]")).toBeNull();
   });
 
-  it("uses a single keyboard tab stop and arrow selection for status filters", async () => {
-    renderMyPosts();
-    const group = screen.getByRole("radiogroup", { name: /status/i });
-    const options = within(group).getAllByRole("radio");
-    expect(options.map((option) => option.tabIndex)).toEqual([0, -1, -1, -1, -1]);
-    options[0]!.focus();
-    fireEvent.keyDown(group, { key: "ArrowRight" });
-    expect(document.activeElement).toBe(options[1]);
-    expect(options[1]!.getAttribute("aria-checked")).toBe("true");
-    await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: "u1", status: "OPEN" }), undefined,
-    ));
+  it("keeps the applied filter keyboard reachable without a status radio group", async () => {
+    renderMyPosts("/my-reports?status=CLOSED");
+    await waitFor(() => expect(fetchFeedMock).toHaveBeenCalled());
+    // No radiogroup tab stop exists any more; the one removable filter chip is
+    // an ordinary focusable button that clears the status through its URL.
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+    const chip = await screen.findByRole("button", { name: "Remove status filter: Closed" });
+    chip.focus();
+    expect(document.activeElement).toBe(chip);
+    fireEvent.click(chip);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Remove status filter: Closed" })).toBeNull());
+    await waitFor(() => {
+      const last = fetchFeedMock.mock.calls.at(-1)?.[0] as Record<string, unknown> | undefined;
+      expect(last?.status ?? "").toBe("");
+      expect(last).toMatchObject({ userId: "u1" });
+    });
   });
 
   it("keeps status prominent on every owner card", async () => {
@@ -860,9 +857,8 @@ describe("MyPosts management (owner row actions)", () => {
   });
 
   it("removes a changed report from a status-filtered list and its count, without a refetch", async () => {
-    renderMyPosts();
+    renderMyPosts("/my-reports?status=OPEN");
     await screen.findAllByTestId("owner-report-card");
-    fireEvent.click(screen.getByRole("radio", { name: "Open" }));
     await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledWith(expect.objectContaining({ status: "OPEN" }), undefined));
     fireEvent.click(within(openFirstRowMenu()).getByRole("menuitem", { name: /closed/i }));
     confirmRowAction(/close report/i);

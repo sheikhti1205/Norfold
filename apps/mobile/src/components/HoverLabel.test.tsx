@@ -207,20 +207,21 @@ describe("shared hover label", () => {
     expect(pill()).toBeNull();
   });
 
-  it("clears when an overlay opens instead of floating over it", () => {
+  it("clears when an overlay opens instead of floating over it", async () => {
     vi.useFakeTimers();
     render(<HoverLabelProvider><Probe /></HoverLabelProvider>);
     const button = screen.getByRole("button", { name: "Save" });
     fireEvent.pointerEnter(button, { pointerType: "mouse" });
     act(() => { vi.advanceTimersByTime(HOVER_LABEL_MS); });
     expect(pill()).not.toBeNull();
-    act(() => {
-      const dialog = document.createElement("div");
-      dialog.setAttribute("role", "dialog");
-      dialog.setAttribute("aria-label", "Photo viewer");
-      document.body.appendChild(dialog);
-    });
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-label", "Photo viewer");
+    // MutationObserver delivery is a microtask by spec; awaiting act lets the
+    // dismissal commit before the assertion, exactly as the sibling test does.
+    await act(async () => { document.body.appendChild(dialog); });
     expect(pill()).toBeNull();
+    dialog.remove();
   });
 
   it("cancels a pending dwell when an overlay opens", async () => {
