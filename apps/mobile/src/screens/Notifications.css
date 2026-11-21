@@ -63,7 +63,10 @@ a.fb-notification-body:hover { background:var(--fb-surface-container); }
 .fb-notification-see-all { display:flex; align-items:center; justify-content:center; flex:none; min-height:44px; padding:.5rem .75rem; font-size:.875rem; font-weight:600; border-radius:.6rem; }
 .fb-notification-see-all:hover { background:var(--fb-surface-container); }
 .fb-notification-body:focus-visible, .fb-notification-filters button:focus-visible, .fb-notification-see-all:focus-visible, .fb-notification-undo button:focus-visible { outline:2px solid var(--fb-focus); outline-offset:-2px; }
-.fb-popover.fb-notification-popover { display:flex; flex-direction:column; width:390px; overflow:hidden; }
+.fb-popover.fb-notification-popover { display:flex; flex-direction:column; width:390px; max-height:min(50dvh,440px); overflow:hidden; }
+/* The cap is viewport-relative (declared here, not the RAC maxHeight prop) so
+   it adapts to the viewport and never exceeds the previous 440px; the inner
+   .fb-notification-content scroller is unchanged. */
 /* RAC supplies the collision-adjusted max-height inline on the popover. */
 .fb-notification-dialog { display:flex; flex-direction:column; min-height:0; max-height:inherit; outline:none; }
 .fb-notification-dialog:focus-visible { outline:2px solid var(--fb-focus); outline-offset:-2px; }

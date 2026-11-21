@@ -28,7 +28,7 @@
    there is the icon column, not a surface a menu should imitate. */
 .fb-account-menu {
   display: flex; flex-direction: column;
-  width: var(--fb-rail-w, 192px); max-width: calc(100vw - 24px);
+  width: var(--fb-rail-w, 192px); max-width: min(calc(100vw - 24px), 280px);
   /* Owner ruling 2026-11-20: no excess height. 30rem holds the seven rows at
      normal text; a longer sub-panel scrolls this card's dialog, never shrinks
      a row. */
@@ -37,6 +37,11 @@
   padding: 8px; border-radius: 18px; background: var(--fb-surface);
   border: 1px solid var(--fb-outline-variant); box-shadow: var(--shadow-md);
 }
+
+/* The desktop rail is resizable up to 360px and the menu follows it, so
+   without this cap the menu can grow well wider than its content needs.
+   280px keeps it compact on desktop, wraps labels instead of clipping, and
+   still fits a 320px viewport (the viewport-relative term is tighter there). */
 .fb-account-menu:has(.fb-account-panel) {
   width: max(var(--fb-rail-w, 192px), min(320px, calc(100vw - 24px)));
 }

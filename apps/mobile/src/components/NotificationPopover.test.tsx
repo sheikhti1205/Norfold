@@ -47,8 +47,13 @@ afterEach(cleanup);
 
 describe("notification quick inbox sizing", () => {
   it("caps the popover at a preview height, not most of the window", () => {
-    expect(source).toMatch(/maxHeight=\{440\}/);
+    // The cap moved from the RAC maxHeight prop (a fixed px value) to a
+    // viewport-relative CSS max-height, so it adapts to the viewport and never
+    // exceeds the previous 440px. jsdom doesn't lay out, so assert the cap in
+    // source/CSS rather than a rendered scroll.
+    expect(source).not.toMatch(/maxHeight=\{440\}/);
     expect(source).not.toMatch(/maxHeight=\{680\}/);
+    expect(css).toMatch(/\.fb-popover\.fb-notification-popover\s*\{[^}]*max-height\s*:\s*min\(50dvh,\s*440px\)/);
   });
 
   it("keeps the preview scroller and fixed footer without widening the panel", () => {

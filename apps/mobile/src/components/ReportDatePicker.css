@@ -6,3 +6,15 @@
 @media (max-width: 359px) {
   .fb-date-actions button { padding-inline: 12px; }
 }
+
+/* Pin the Today / Cancel / Confirm row to the bottom of the sheet so the
+   actions stay reachable while the calendar body scrolls (and stay clear of
+   the keyboard edge). The row lives inside BottomSheet's single scrolling
+   content area, so without this it scrolls away with the calendar. 44px
+   targets and confirm/cancel semantics are unchanged; only placement is. */
+.fb-date-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--fb-surface);
+}

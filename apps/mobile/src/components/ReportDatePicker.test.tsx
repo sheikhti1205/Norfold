@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import type { FormEvent } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -1054,5 +1055,33 @@ describe("ReportDatePicker", () => {
     // With no panel left, the next Escape closes the sheet as before.
     fireEvent.keyDown(toggle, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("keeps the action row present in the surface while the calendar body scrolls", async () => {
+    render(<ReportDatePicker value="2026-09-26" onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: /date of event/i }));
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+
+    const dialog = screen.getByRole("dialog");
+    // jsdom does not lay out or scroll, so this is a structural presence
+    // assertion: the action row is rendered inside the dialog surface and is
+    // not removed or portaled away as the calendar body moves. The row is
+    // pinned to the bottom of the scrolling sheet by position: sticky; bottom:
+    // 0 in ReportDatePicker.css, so it stays reachable while the body scrolls
+    // (rendered verification deferred to the deployed build at phone widths
+    // and 100%/200% text).
+    expect(dialog.querySelector(".fb-date-actions")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^today$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^cancel$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^confirm$/i })).toBeTruthy();
+  });
+
+  it("pins the action row to the bottom of the scrolling sheet in source", () => {
+    // The mechanism that keeps the actions reachable while the body scrolls is
+    // pinned in CSS rather than relying on a rendered scroll (jsdom cannot
+    // scroll).
+    const css = readFileSync("src/components/ReportDatePicker.css", "utf8");
+    expect(css).toMatch(/\.fb-date-actions\s*\{[^}]*position\s*:\s*sticky/);
+    expect(css).toMatch(/\.fb-date-actions\s*\{[^}]*bottom\s*:\s*0/);
   });
 });

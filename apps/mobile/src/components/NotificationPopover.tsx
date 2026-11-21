@@ -70,12 +70,14 @@ export function NotificationPopover({ trigger }: { trigger: ReactNode }) {
     return () => document.removeEventListener("keydown", keepDisclosureInOrder);
   }, [open, reportId]);
 
-  // 440px is the whole panel: ~94px header and filters, a 44px "See all"
-  // footer, and ~300px of scrolling activity (3-4 rows). The quick inbox is a
-  // preview, not a second route, so it must not claim the window.
+  // The panel cap is viewport-relative (max-height: min(50dvh, 440px) in
+  // Notifications.css) so it adapts to the viewport and never exceeds the
+  // previous 440px. It is a preview, not a second route, so it must not claim
+  // the window; ~3-4 rows show and the rest scrolls in the existing
+  // .fb-notification-content scroller.
   return <><DialogTrigger isOpen={open} onOpenChange={changeOpen}>
     <Button ref={triggerRef} aria-label="Notifications" className="fb-icon-control relative" {...hoverLabel("Notifications")}>{trigger}</Button>
-    <LayeredPopover isNonModal placement="bottom end" offset={6} maxHeight={440} className="fb-notification-popover">
+    <LayeredPopover isNonModal placement="bottom end" offset={6} className="fb-notification-popover">
       <section ref={panelRef} role="dialog" aria-label="Notifications" className="fb-notification-dialog">
         <Notifications preview onNavigate={() => changeOpen(false)} onReport={setReportId} />
       </section>
