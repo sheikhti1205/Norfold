@@ -177,13 +177,11 @@ describe("SearchScreen URL filters", () => {
       });
       renderSearch("/search?q=photo");
       expect(await screen.findByText("Photo result")).toBeTruthy();
-      // Exactly one shared preview wrapper, and the canonical feed media is
-      // still the report's own tap target inside it.
+      // Exactly one shared preview wrapper around the result link.
       const triggers = document.querySelectorAll(".fb-report-preview-trigger");
       expect(triggers).toHaveLength(1);
-      expect(triggers[0]?.querySelector("[data-testid='masonry-media']")).toBeTruthy();
-      // The card itself still renders beside its wrapped media.
-      expect(triggers[0]?.parentElement?.textContent).toContain("Photo result");
+      expect(triggers[0]?.querySelector("[data-testid='search-result-thumb']")).toBeTruthy();
+      expect(triggers[0]?.querySelector("a")?.textContent).toContain("Photo result");
     } finally {
       window.matchMedia = original;
     }
@@ -257,7 +255,7 @@ describe("SearchScreen URL filters", () => {
     expect(await screen.findByRole("button", { name: /From date\. Oct 1, 2026/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /To date\. Oct 21, 2026/ })).toBeTruthy();
     const dialog = screen.getByRole("dialog");
-    fireEvent.click(Array.from(dialog.querySelectorAll("button")).find(button => button.textContent === "Clear all filters")!);
+    fireEvent.click(Array.from(dialog.querySelectorAll("button")).find(button => button.textContent === "Clear filters")!);
     await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/search?q=wallet"));
     expect(screen.getByRole("button", { name: /From date\. Any date/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /To date\. Any date/ })).toBeTruthy();
@@ -386,6 +384,29 @@ describe("SearchScreen URL filters", () => {
         </MemoryRouter>,
       );
     }
+
+    it("keeps ambiguous words in the literal query when extraction returns nothing", async () => {
+      renderWithNl(async () => ({}));
+      fireEvent.change(screen.getByLabelText("Search posts"), { target: { value: "open book found today" } });
+      await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledWith(
+        expect.objectContaining({ q: "open book found today", type: "", status: undefined }),
+        undefined,
+      ));
+      expect(screen.queryByText("Type: Found")).toBeNull();
+      expect(screen.queryByText("Status: Open")).toBeNull();
+    });
+
+    it("does not restore filters when a pending extraction finishes after Clear", async () => {
+      let answer!: (value: Record<string, string>) => void;
+      const extract = vi.fn(() => new Promise<Record<string, string>>(resolve => { answer = resolve; }));
+      renderWithNl(extract, "/search?type=FOUND");
+      fireEvent.change(screen.getByLabelText("Search posts"), { target: { value: "wallet" } });
+      await waitFor(() => expect(extract).toHaveBeenCalledWith("wallet"));
+      fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+      answer({ category: "Electronics" });
+      await waitFor(() => expect(screen.queryByText("Type: Found")).toBeNull());
+      expect(screen.queryByText("Category: Electronics")).toBeNull();
+    });
 
     it("applies an extracted patch to the ordinary filters without a button", async () => {
       const seen: string[] = [];

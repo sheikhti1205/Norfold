@@ -1,28 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Search } from "lucide-react";
+import { ImageOff, Search } from "lucide-react";
 import { useSearchParams } from "react-router";
 import { useAuth } from "../auth";
-import type { PostType } from "@norfold/shared";
+import type { PostItem, PostType } from "@norfold/shared";
 import { AppBar } from "../components/AppBar";
 import { SearchField } from "../components/SearchField";
 import { EmptyState } from "../components/PostCard";
-import { PostList } from "../components/PostList";
-import { ReportPhotoPreviewScope } from "../components/ReportPhotoPreview";
-import {
-  MASONRY_CANVAS_CLASS,
-  READABLE_COLUMN_CLASS,
-  feedDensity,
-  masonryColumns,
-  resolveFeedLayout,
-  useContentWidth,
-  useViewportWidth,
-} from "../components/responsive";
-import { useFeedLayoutPreference } from "../services/feedLayoutPreference";
+import { PostLink } from "../components/PostNavigation";
+import { ReportPhotoPreview } from "../components/ReportPhotoPreview";
 import { NewPostsPill } from "../components/NewPostsPill";
 import { PeopleSearch } from "../components/PeopleSearch";
+import { statusLabel } from "../components/Segmented";
 import { useFeed } from "../hooks/useFeed";
 import { useUrlParam } from "../hooks/useUrlParam";
 import { useTabTap } from "../components/TabTap";
+import { useMediaUrl } from "../services/media/privateMedia";
+import { timeAgo } from "../utils/dates";
 import { AdvancedSearchFilters, useAdvancedSearchFilters } from "./AdvancedSearchFilters";
 import { SearchNearbyControls, useSearchNearby } from "./SearchNearby";
 import "./SearchScreen.css";
@@ -107,7 +100,7 @@ function ReportSearch(props: SearchScreenProps) {
   // links restore the exact search the reader was looking at.
   const [typeParam, setTypeParam] = useUrlParam("type");
   const type: TypeFilter = typeParam === "LOST" || typeParam === "FOUND" ? typeParam : "ALL";
-  const setType = (next: TypeFilter) => setTypeParam(next === "ALL" ? "" : next);
+  const setType = useCallback((next: TypeFilter) => setTypeParam(next === "ALL" ? "" : next), [setTypeParam]);
   const advanced = useAdvancedSearchFilters();
   const nearby = useSearchNearby();
   const [qParam, setQParam] = useUrlParam("q");
@@ -139,12 +132,13 @@ function ReportSearch(props: SearchScreenProps) {
   const [, setSearchParams] = useSearchParams();
   const [clearingFilters, setClearingFilters] = useState(false);
   function clearSearchFilters() {
+    nlRequest.current += 1;
     advanced.clearAll();
     setDateFromParam("");
     setDateToParam("");
     setPlaceParam("");
     nearby.clear();
-    // The TYPE is a chip in the same row as "Clear all filters", so clearing
+    // The TYPE is a chip in the same row as "Clear filters", so clearing
     // every filter clears it too. A control that sits next to a filter it
     // does not clear is a lie about what it does.
     setType("ALL");
@@ -161,12 +155,19 @@ function ReportSearch(props: SearchScreenProps) {
       return next;
     }, { replace: true });
   }, [clearingFilters, setSearchParams]);
-  // Smart filters are automatic. Extraction reads the SAME words the reader
-  // typed in the one search field, runs once per settled phrase, and writes
-  // confident values into the ordinary editable filters. The reader's own
-  // choices always win; the field's words are never rewritten under them.
+  // The extractor reads the settled phrase without altering the literal query.
   const ordinaryQueryRef = useRef(query);
   ordinaryQueryRef.current = query;
+  const liveFilters = {
+    type,
+    place,
+    category: advanced.category,
+    status: advanced.status,
+    dateFrom,
+    dateTo,
+  };
+  const liveFiltersRef = useRef(liveFilters);
+  liveFiltersRef.current = liveFilters;
   const filterContext = JSON.stringify([type, place, advanced.category, advanced.status, advanced.sort, dateFrom, dateTo, nearby.feedFilters]);
   const filterContextRef = useRef(filterContext);
   filterContextRef.current = filterContext;
@@ -177,33 +178,37 @@ function ReportSearch(props: SearchScreenProps) {
   async function applyExtractedFilters(text: string) {
     if (nlExtract === undefined || text === "") return;
     const request = ++nlRequest.current;
-    const filtersAtRequest = filterContextRef.current;
+    // The reader's filters at the moment the question was asked. An answer
+    // only writes a field that was empty then and is still empty now, so a
+    // choice made while it was in flight is never overwritten.
+    const atRequest = { ...liveFiltersRef.current };
+    const contextAtRequest = filterContextRef.current;
     // Alive means: this answer still belongs to the words in the field. A
     // newer phrase, a changed field or an unmount drops the answer.
     const alive = () => request === nlRequest.current && ordinaryQueryRef.current.trim() === text;
     try {
       const outcome = asNlExtractOutcome(await nlExtract(text));
-      if (!alive() || outcome.kind === "failed") return;
+      if (!alive() || filterContextRef.current !== contextAtRequest || outcome.kind === "failed") return;
       const patch = outcome.patch;
-      // A filter the reader changed while the answer was coming is their
-      // answer: extracted filters are not applied over it.
-      if (filterContextRef.current !== filtersAtRequest) return;
-      // THE READER'S OWN CHOICE WINS, and a filter already in force is left
-      // alone. Automatic extraction is silent: the chips are the receipt.
-      if (patch.postType !== undefined && type === "ALL") setType(patch.postType);
+      const current = liveFiltersRef.current;
+      if (patch.postType !== undefined &&
+        atRequest.type === "ALL" && current.type === "ALL") setType(patch.postType);
       if (patch.place !== undefined) {
         const extractedPlace = cleanPlace(patch.place);
-        if (extractedPlace !== "" && place === "") setPlaceParam(extractedPlace);
+        if (extractedPlace !== "" && atRequest.place === "" && current.place === "") setPlaceParam(extractedPlace);
       }
-      if (patch.category !== undefined && advanced.category === "") advanced.setCategory(patch.category);
-      if (patch.status !== undefined && advanced.status === "") advanced.setStatus(patch.status);
+      if (patch.category !== undefined && atRequest.category === "" && current.category === "") advanced.setCategory(patch.category);
+      if (patch.status !== undefined &&
+        atRequest.status === "" && current.status === "") advanced.setStatus(patch.status);
       // A date that is not a real day, or a reversed range, is not a filter.
       const fromReal = patch.dateFrom === undefined || validDay(patch.dateFrom);
       const toReal = patch.dateTo === undefined || validDay(patch.dateTo);
       const reversed =
         patch.dateFrom !== undefined && patch.dateTo !== undefined &&
         fromReal && toReal && patch.dateFrom > patch.dateTo;
-      if (fromReal && toReal && !reversed && dateFrom === "" && dateTo === "") {
+      if (fromReal && toReal && !reversed &&
+        atRequest.dateFrom === "" && atRequest.dateTo === "" &&
+        current.dateFrom === "" && current.dateTo === "") {
         if (patch.dateFrom !== undefined) setDateFromParam(patch.dateFrom);
         if (patch.dateTo !== undefined) setDateToParam(patch.dateTo);
       }
@@ -213,15 +218,7 @@ function ReportSearch(props: SearchScreenProps) {
   }
   const searchInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Search results are reports; they use the same feed presentation the reader
-  // already chose on Home instead of a search-only card variant. The measured
-  // canvas width drives the masonry column count, exactly as Home does it.
-  const { layout: feedLayout } = useFeedLayoutPreference();
-  const viewportWidth = useViewportWidth();
-  const resolvedLayout = resolveFeedLayout(feedLayout, viewportWidth);
-  const resultsCanvasRef = useRef<HTMLDivElement>(null);
-  const resultsWidth = useContentWidth(resultsCanvasRef, viewportWidth);
-  const resultsCanvasClass = resolvedLayout === "masonry" ? MASONRY_CANVAS_CLASS : READABLE_COLUMN_CLASS;
+  const moreSentinelRef = useRef<HTMLDivElement>(null);
 
   // Debounce search input ~400ms — do not network-fetch every keystroke.
   useEffect(() => {
@@ -229,9 +226,7 @@ function ReportSearch(props: SearchScreenProps) {
     return () => clearTimeout(t);
   }, [query]);
 
-  // Smart filters run on their own once a phrase settles: one extraction per
-  // phrase, and a newer phrase supersedes an answer still in flight. Nothing
-  // is announced; the applied-filter chips are the receipt.
+  // One extraction per settled phrase, with editable filters as the receipt.
   useEffect(() => {
     // An emptied field forgets the phrase: typing it again is a new search.
     if (appliedQuery === "") {
@@ -245,7 +240,8 @@ function ReportSearch(props: SearchScreenProps) {
     // it on every filter change would fight the reader's own choices.
   }, [appliedQuery]);
 
-  // Publish the applied query to the URL once it settles.
+  // Publish the typed phrase to the URL once it settles. It stays the phrase
+  // the reader typed, so reopening the link re-derives the same filters.
   useEffect(() => {
     setQParam(appliedQuery);
   }, [appliedQuery, setQParam]);
@@ -274,6 +270,22 @@ function ReportSearch(props: SearchScreenProps) {
     lastOperation.current = "more";
     return loadMore();
   }, [loadMore]);
+
+  // The list watches for its own end. The sentinel leaves with the list, so a
+  // state change (empty, error) can never keep paginating a hidden surface.
+  useEffect(() => {
+    const el = moreSentinelRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver((entries) => {
+      // Do not auto-paginate while an append error is showing: the user must
+      // press Retry, otherwise the visible button races a background retry.
+      if (entries[0]?.isIntersecting && hasMore && !loadingMore && !error) {
+        void loadMoreReports();
+      }
+    }, { rootMargin: "240px" });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore, error, loadMoreReports, items, place]);
 
   // The place scope is applied ON THE DEVICE: the feed RPC matches the
   // title and the description and has no place filter, so the loaded
@@ -332,7 +344,11 @@ function ReportSearch(props: SearchScreenProps) {
         utilities={false}
       />
 
-      <div className="fb-search-canvas flex flex-col gap-2 px-3 pb-2 pt-2" data-testid="search-toolbar">
+      {/* One inset for the whole route: the bar's own 12px, the search field
+          and every result row share the SAME left edge, so the header title,
+          the pill's border and the row's photo start on one line at every
+          width. Nothing is centred in a canvas. */}
+      <div className="fb-search-canvas flex flex-col gap-2 pb-2 pt-2" data-testid="search-toolbar">
         {/* One search field for this screen. Everything that narrows the feed
             except the words lives behind the filter trigger, including the
             LOST/FOUND type (owner order 2026-11-14). Smart filters run
@@ -358,7 +374,7 @@ function ReportSearch(props: SearchScreenProps) {
           way to tell an empty search from a broken one. The floor holds the
           list at a usable height, and the column gives up the difference. */}
       <div ref={scrollRef} data-testid="search-results-scroller" className="min-h-[4rem] flex-1 overflow-y-auto">
-        <div ref={resultsCanvasRef} className={resultsCanvasClass}>
+        <div className="fb-search-canvas fb-search-results">
         <NewPostsPill count={0} hasUpdates={updatesAvailable} onTap={() => { void refreshReports(); scrollRef.current?.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" }); }} />
         {feedEmpty || placeEmpty ? (
           <EmptyState
@@ -386,26 +402,92 @@ function ReportSearch(props: SearchScreenProps) {
                   : undefined
             }
           />
+        ) : loading && visibleItems.length === 0 ? (
+          <SearchResultSkeleton />
+        ) : error && visibleItems.length === 0 ? (
+          <EmptyState
+            compact
+            icon={<Search size={16} aria-hidden />}
+            title="Could not load"
+            subtitle={error}
+            action={{ label: "Try again", onPress: () => void refreshReports() }}
+          />
         ) : (
-          <ReportPhotoPreviewScope enabled>
-            <PostList
-              items={visibleItems}
-              loading={loading}
-              loadingMore={loadingMore}
-              error={error}
-              failedOperation={failedOperation}
-              hasMore={hasMore}
-              onLoadMore={loadMoreReports}
-              onRetry={refreshReports}
-              density={feedDensity(resolvedLayout)}
-              masonryColumns={masonryColumns(resultsWidth)}
-              emptyTitle="No matches"
-              emptySubtitle="Try different filters or a broader search."
-            />
-          </ReportPhotoPreviewScope>
+          <>
+            {error && (
+              <div className="fb-search-result-banner" role="alert">
+                <span>{error}</span>
+                <button
+                  type="button"
+                  onClick={() => void (failedOperation === "loadMore" ? loadMoreReports() : refreshReports())}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+            <ul className="fb-search-result-list" aria-label="Search results">
+              {visibleItems.map(item => <li key={item.id}><SearchResultRow post={item} /></li>)}
+            </ul>
+            <div ref={moreSentinelRef} aria-hidden />
+            {loadingMore && <p className="fb-search-result-note" role="status">Loading more…</p>}
+            {hasMore && !loadingMore && !error && <button type="button" className="fb-surface-button" onClick={() => void loadMoreReports()}>Show more reports</button>}
+            {!hasMore && visibleItems.length > 0 && <p className="fb-search-result-note">You are all caught up.</p>}
+          </>
         )}
         </div>
       </div>
     </div>
   );
+}
+
+/**
+ * One result. The report's own photo is a small squircle beside the title (the
+ * same shape language as an avatar), so the row reads from one left edge with
+ * the search field instead of starting inside a centred card. The one shared
+ * `ReportPhotoPreview` hover card stays anchored to this row.
+ */
+function SearchResultRow({ post }: { post: PostItem }) {
+  return <ReportPhotoPreview post={post}>
+    <PostLink to={`/posts/${post.id}`} className="fb-search-result-row" data-testid="search-result-row">
+      <SearchResultThumb post={post} />
+      <span className="fb-search-result-copy">
+        <span className="fb-search-result-title">{post.title}</span>
+        <span className="fb-search-result-meta">
+          {post.type === "LOST" ? "Lost" : "Found"} · {statusLabel(post.status)} ·{" "}
+          <time dateTime={post.createdAt} title={new Date(post.createdAt).toLocaleString()}>{timeAgo(post.createdAt)}</time>
+        </span>
+      </span>
+    </PostLink>
+  </ReportPhotoPreview>;
+}
+
+/**
+ * The row's photo, resolved through the same private-media path as every other
+ * report image. The box keeps its geometry while a key is being signed, when
+ * a report has no photo, and after a failed load, so the row never shifts.
+ */
+function SearchResultThumb({ post }: { post: PostItem }) {
+  const image = post.attachments.find(item => item.mimeType.startsWith("image/"));
+  const src = useMediaUrl(image?.fileUrl);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const failed = image !== undefined && failedUrl === image.fileUrl;
+  const state = !image ? "none" : failed ? "failed" : src ? "ready" : "loading";
+  return <span className="fb-search-result-thumb fb-avatar-squircle" data-testid="search-result-thumb" data-state={state} aria-hidden="true">
+    {image && src && !failed
+      ? <img src={src} alt="" width={36} height={36} loading="lazy" onError={() => setFailedUrl(image.fileUrl)} />
+      : !image || failed ? <ImageOff size={16} aria-hidden="true" /> : null}
+  </span>;
+}
+
+/** Three rows of the shape the results are about to take: no layout jump. */
+function SearchResultSkeleton() {
+  return <div className="fb-search-result-skeleton" role="status" aria-label="Loading posts">
+    {[0, 1, 2].map(index => <div key={index} className="fb-search-result-skeleton-row" aria-hidden="true">
+      <span className="fb-search-result-skeleton-thumb" />
+      <span className="fb-search-result-skeleton-copy">
+        <span className="fb-search-result-skeleton-line is-title" />
+        <span className="fb-search-result-skeleton-line is-meta" />
+      </span>
+    </div>)}
+  </div>;
 }

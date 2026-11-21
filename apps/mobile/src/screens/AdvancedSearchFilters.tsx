@@ -274,10 +274,11 @@ export function AdvancedSearchFilters({
     <SelectField label="Sort" value={sort} onChange={value => setSort(value as "newest" | "oldest")} options={[
       { value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" },
     ]} />
-    {activeCount > 0 && <button type="button" onClick={clearAll} className="fb-surface-button">Clear all filters</button>}
+    {sheetOpen && <button type="button" onClick={clearAll} disabled={activeCount === 0}
+      className="fb-surface-button fb-search-filter-clear">Clear filters</button>}
   </div>;
   const done = <Button className="fb-surface-button" onPress={() => setSheetOpen(false)}>Done</Button>;
-  const task = <AdaptiveTaskSurface open={sheetOpen} onClose={() => setSheetOpen(false)} title="Filters" description={description} footer={done}>{fields}</AdaptiveTaskSurface>;
+  const task = <AdaptiveTaskSurface open={sheetOpen} onClose={() => setSheetOpen(false)} title="Filters" description={description} footer={done} bodyClassName="fb-search-filter-body">{fields}</AdaptiveTaskSurface>;
 
   return (
     <>
@@ -300,13 +301,8 @@ export function AdvancedSearchFilters({
               </Dialog>
             </LayeredPopover> : task}
           </DialogTrigger>
-          {/* Owner direction 2026-11-13: the way to clear every filter is a real
-              button beside Filters, not a second underlined text link in the
-              chip row. The panel keeps its own Clear all as well. */}
-          {activeCount > 0 && <button type="button" onClick={clearAll} aria-label="Clear all filters"
-            className="fb-surface-button fb-search-filter-clear">
-            {compactTrigger ? "Clear" : "Clear all filters"}
-          </button>}
+          {!sheetOpen && <button type="button" onClick={clearAll} disabled={activeCount === 0}
+            className="fb-surface-button fb-search-filter-clear">Clear filters</button>}
         </div>
       )}
       {!hideSheet && hideTrigger && task}

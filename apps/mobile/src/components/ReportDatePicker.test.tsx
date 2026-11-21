@@ -73,6 +73,8 @@ describe("ReportDatePicker", () => {
     await waitFor(() => {
       expect(screen.getByRole("dialog", { name: /when was it lost\?/i })).toBeTruthy();
     });
+    expect(screen.getByTestId("bottom-sheet").className).toContain("w-[calc(100%-32px)]");
+    expect(screen.queryByTestId("bottom-sheet-handle")).toBeNull();
   });
 
   it("sheet title reflects expected event type", async () => {
@@ -950,6 +952,20 @@ describe("ReportDatePicker", () => {
     fireEvent.click(within(panel).getByRole("button", { name: monthButtonName(3, 2025) }));
 
     await waitFor(() => expect(screen.getByRole("heading", { name: /March 2025/i })).toBeTruthy());
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("chooses a year from the grid before choosing a month without committing", async () => {
+    await openSheet("2026-09-26");
+    fireEvent.click(monthYearToggle());
+    const panel = screen.getByTestId("calendar-jump-panel");
+    fireEvent.click(within(panel).getByRole("button", { name: "Choose year, 2026" }));
+    const years = within(panel).getByRole("group", { name: "Choose year" });
+    expect(document.activeElement).toBe(within(years).getByRole("button", { name: "2026" }));
+    fireEvent.click(within(years).getByRole("button", { name: "2024" }));
+    expect(document.activeElement).toBe(within(panel).getByRole("button", { name: "Choose year, 2024" }));
+    fireEvent.click(within(panel).getByRole("button", { name: monthButtonName(3, 2024) }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: /March 2024/i })).toBeTruthy());
     expect(onChange).not.toHaveBeenCalled();
   });
 

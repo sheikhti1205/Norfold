@@ -115,7 +115,7 @@ describe("adaptive report filters", () => {
     const dialog = await openFilters();
     fireEvent.click(within(dialog).getByRole("button", { name: "Use my location once" }));
     await waitFor(() => expect(io.feed.mock.calls.at(-1)?.[0].nearLat).toBe(23.781));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Clear all filters" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Clear filters" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
     await waitFor(() => expect(screen.getByTestId("route").textContent).toBe("/search?q=wallet&people=reader"));
     expect(io.feed.mock.calls.at(-1)?.[0].nearLat).toBeUndefined();
