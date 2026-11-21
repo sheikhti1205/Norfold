@@ -29,11 +29,12 @@
 .fb-account-menu {
   display: flex; flex-direction: column;
   width: var(--fb-rail-w, 192px); max-width: min(calc(100vw - 24px), 280px);
-  /* Owner ruling 2026-11-20: no excess height. 30rem holds the seven rows at
-     normal text; a longer sub-panel scrolls this card's dialog, never shrinks
-     a row. */
-  max-height: min(30rem, calc(100vh - 1.5rem));
-  max-height: min(30rem, calc(100dvh - 1.5rem), var(--available-height, 100dvh));
+  /* Owner ruling 2026-11-20: no excess height. The height cap now lives in the
+     component as the computed layered-popover maxHeight (half the live viewport,
+     never above the 30rem ceiling) and rides the prop React Aria applies as the
+     inline max-height; a stylesheet max-height can no longer hold. 30rem holds
+     the seven rows at normal text; a longer sub-panel scrolls this card's
+     dialog, never shrinks a row. */
   padding: 8px; border-radius: 18px; background: var(--fb-surface);
   border: 1px solid var(--fb-outline-variant); box-shadow: var(--shadow-md);
 }

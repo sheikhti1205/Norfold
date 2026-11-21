@@ -27,7 +27,8 @@ vi.mock("../screens/Notifications", async () => {
   return { Notifications: StubInbox };
 });
 
-import { NotificationPopover, notificationPopoverMaxHeight } from "./NotificationPopover";
+import { NotificationPopover } from "./NotificationPopover";
+import { layeredPopoverMaxHeight } from "./popoverViewportCap";
 
 /**
  * Quick-inbox cap, source contract.
@@ -55,15 +56,15 @@ describe("notification quick inbox sizing", () => {
     expect(source).not.toMatch(/maxHeight=\{440\}/);
     expect(source).not.toMatch(/maxHeight=\{680\}/);
     expect(source).toMatch(/maxHeight=\{popoverMaxHeight\}/);
-    expect(source).toMatch(/Math\.min\(NOTIFICATION_POPOVER_MAX_HEIGHT_PX,\s*Math\.round\(viewportHeightPx \/ 2\)\)/);
+    expect(source).toMatch(/layeredPopoverMaxHeight\(viewportHeight, NOTIFICATION_POPOVER_MAX_HEIGHT_PX\)/);
   });
 
   it("computes the cap as half the live viewport, never above 440px", () => {
     // 900px viewport -> min(440, 450) = 440; 390px -> min(440, 195) = 195; never
     // above half the viewport, never above the previous 440px ceiling.
-    expect(notificationPopoverMaxHeight(900)).toBe(440);
-    expect(notificationPopoverMaxHeight(390)).toBe(195);
-    expect(notificationPopoverMaxHeight(800)).toBe(400);
+    expect(layeredPopoverMaxHeight(900, 440)).toBe(440);
+    expect(layeredPopoverMaxHeight(390, 440)).toBe(195);
+    expect(layeredPopoverMaxHeight(800, 440)).toBe(400);
   });
 
   it("keeps the preview scroller and fixed footer without widening the panel", () => {
