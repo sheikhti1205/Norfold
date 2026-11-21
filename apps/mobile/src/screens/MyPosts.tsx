@@ -25,6 +25,7 @@ import { ConfirmDialog } from "../components/AdaptiveTaskSurface";
 import { useViewportWidth } from "../components/responsive";
 import { Search } from "lucide-react";
 import { SearchField } from "../components/SearchField";
+import { AdvancedSearchFilters, FiltersIconButton, getActiveFilterCount, useAdvancedSearchFilters } from "./AdvancedSearchFilters";
 
 const MY_CACHE_BASE = "my:reports";
 
@@ -40,18 +41,6 @@ export const DELETE_UNDO_WINDOW_MS = 5000;
 
 /** The status change is optimistic; this is how long its Undo stays offered. */
 export const STATUS_UNDO_WINDOW_MS = 5000;
-
-/** UXN-4 owner-status quick filters. ALL clears the status restriction;
- *  every option keeps the userId feed restriction. */
-export type OwnerStatusFilter = "ALL" | PostStatus;
-
-const OWNER_STATUS_OPTIONS: { value: OwnerStatusFilter; label: string }[] = [
-  { value: "ALL", label: "All" },
-  { value: "OPEN", label: "Open" },
-  { value: "MATCHED", label: "Matched" },
-  { value: "RECOVERED", label: "Recovered" },
-  { value: "CLOSED", label: "Closed" },
-];
 
 /** A delete that is waiting for the undo window (or already on its way). */
 interface PendingDelete {
@@ -91,8 +80,8 @@ export function MyPosts() {
   const searchTrigger = useRef<HTMLButtonElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [ownerStatus, setOwnerStatus] = useState<OwnerStatusFilter>("ALL");
-  const filterRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const advanced = useAdvancedSearchFilters();
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   // The pending delete, readable from the unmount cleanup without making
   // that cleanup depend on the state.
@@ -123,20 +112,17 @@ export function MyPosts() {
 
   // The feed filter carries userId, so the resolved cache key is already
   // user-scoped: `my:reports:<filterKey>`. Passing the base (not a
-  // pre-scoped key) keeps it identical to the hook's own key.
+  // pre-scoped key) keeps it identical to the hook's own key. The page is
+  // "mine" by that restriction; the shared search filters narrow it further.
   const { items, total, loading, refreshing, loadingMore, error, failedOperation, updatesAvailable, hasMore, refresh, loadMore, removeItem, patchItem } = useFeed(
-    { userId: user?.id, status: ownerStatus === "ALL" ? "" : ownerStatus },
+    { userId: user?.id, category: advanced.category, status: advanced.status, sort: advanced.sort },
     { cacheKey: MY_CACHE_BASE, scrollRef },
   );
-  // Status writes read the live restriction without making the callbacks
-  // depend on a value that changes on every filter press.
-  const ownerStatusRef = useRef(ownerStatus);
-  useEffect(() => { ownerStatusRef.current = ownerStatus; }, [ownerStatus]);
   const searchTerm = searchQuery.trim().toLocaleLowerCase();
   const visibleItems = searchTerm
-    ? items.filter((item) => [item.title, item.description, item.category, item.locationLabel]
+    ? items.filter((item) => (!advanced.status || item.status === advanced.status) && [item.title, item.description, item.category, item.locationLabel]
       .some((value) => value?.toLocaleLowerCase().includes(searchTerm)))
-    : items;
+    : items.filter((item) => !advanced.status || item.status === advanced.status);
 
   function closeSearch() {
     setSearchOpen(false);
@@ -361,12 +347,11 @@ export function MyPosts() {
           const updated = await write;
           // This write is now server-confirmed even if a newer one follows.
           confirmedStatus.current.set(post.id, updated.status);
-          // In All, patch in place. In a status-only list, a row that no
-          // longer belongs must leave with its count; do not refetch/reorder.
+          // The row is patched where it sits; the list is not refetched or
+          // reordered for a status the reader just set.
           invalidateFeedCaches();
           if (!latest()) return;
-          if (ownerStatusRef.current !== "ALL" && ownerStatusRef.current !== updated.status) removeItem(post.id);
-          else patchItem(post.id, { status: updated.status });
+          patchItem(post.id, { status: updated.status });
           setActionError(null);
           announce(`Status updated to ${ownerStatusLabel(updated.status, post.type)}.`);
         } catch (err) {
@@ -386,7 +371,7 @@ export function MyPosts() {
         }
       })();
     },
-    [armStatusUndo, beginStatusWrite, clearStatusUndo, endStatusWrite, patchItem, removeItem],
+    [armStatusUndo, beginStatusWrite, clearStatusUndo, endStatusWrite, patchItem],
   );
 
   const changeStatus = useCallback(
@@ -455,15 +440,7 @@ export function MyPosts() {
         confirmedStatus.current.set(postId, updated.status);
         invalidateFeedCaches();
         if (!latest()) return;
-        if (ownerStatusRef.current !== "ALL" && ownerStatusRef.current !== updated.status) {
-          removeItem(postId);
-          void refresh();
-        } else {
-          patchItem(postId, { status: updated.status });
-          // A status-only list may have removed the row on the original
-          // success; a refetch is the only way to put it back.
-          if (ownerStatusRef.current !== "ALL") void refresh();
-        }
+        patchItem(postId, { status: updated.status });
         setNotice(`Status restored to ${ownerStatusLabel(updated.status, type)}.`);
         announce(`Status restored to ${ownerStatusLabel(updated.status, type)}.`);
       } catch (err) {
@@ -475,7 +452,6 @@ export function MyPosts() {
         // flight; roll back to that server-confirmed status, not the value
         // captured when Undo was tapped.
         patchItem(postId, { status: confirmedStatus.current.get(postId) ?? confirmed });
-        if (ownerStatusRef.current !== "ALL") void refresh();
         const message = friendlyError(err).message;
         setActionError(message);
         announce(message);
@@ -483,7 +459,7 @@ export function MyPosts() {
         endStatusWrite(postId);
       }
     })();
-  }, [beginStatusWrite, clearStatusUndo, endStatusWrite, patchItem, refresh, removeItem]);
+  }, [beginStatusWrite, clearStatusUndo, endStatusWrite, patchItem]);
 
   const shareOne = useCallback((post: PostItem) => {
     void (async () => {
@@ -526,18 +502,16 @@ export function MyPosts() {
 
   const onRecovered = useCallback(
     (_returnId: string, post: PostItem) => {
-      // In All (or the Recovered filter) patch in place; a status-only list
-      // that no longer matches loses the row with its count. The sheet already
-      // invalidated the feed caches for the confirmed write, including a
-      // success that completed after this dialog was dismissed.
-      if (ownerStatusRef.current !== "ALL" && ownerStatusRef.current !== "RECOVERED") removeItem(post.id);
-      else patchItem(post.id, { status: "RECOVERED" });
+      // The row is patched where it sits. The sheet already invalidated the
+      // feed caches for the confirmed write, including a success that
+      // completed after this dialog was dismissed.
+      patchItem(post.id, { status: "RECOVERED" });
       clearStatusUndo();
       setManualCopyUrl(null);
       setActionError(null);
       setNotice("Report marked recovered.");
     },
-    [clearStatusUndo, patchItem, removeItem],
+    [clearStatusUndo, patchItem],
   );
 
   // Recovery is a relationship, not a status write: the owner names the helper
@@ -590,7 +564,7 @@ export function MyPosts() {
           onChange={setSearchQuery}
           ariaLabel="Search your reports"
           placeholder="Search your reports"
-          leading={<></>}
+          leading={<FiltersIconButton activeCount={getActiveFilterCount(advanced)} open={filtersOpen} onClick={() => setFiltersOpen(true)} />}
           onClear={() => setSearchQuery("")}
           inputProps={{
             autoFocus: true,
@@ -605,6 +579,7 @@ export function MyPosts() {
             },
           }}
         /> : undefined} />
+      <AdvancedSearchFilters filters={advanced} open={filtersOpen} onOpenChange={setFiltersOpen} hideTrigger />
 
       {actionError && (
         <p role="alert" className="mx-4 lg:mx-8 rounded-m3-sm border border-error px-3 py-2 text-sm text-error">
@@ -648,47 +623,6 @@ export function MyPosts() {
         </div>
       )}
 
-      <div className="fb-scroll-fade mx-4 lg:mx-8">
-        <div
-          role="radiogroup"
-          aria-label="Filter by status"
-          className="fb-scroll-row flex gap-2"
-          onKeyDown={(event) => {
-            const index = filterRefs.current.findIndex((button) => button === document.activeElement);
-            if (index < 0) return;
-            const next = event.key === "Home" ? 0 : event.key === "End" ? OWNER_STATUS_OPTIONS.length - 1
-              : event.key === "ArrowRight" || event.key === "ArrowDown" ? (index + 1) % OWNER_STATUS_OPTIONS.length
-                : event.key === "ArrowLeft" || event.key === "ArrowUp" ? (index + OWNER_STATUS_OPTIONS.length - 1) % OWNER_STATUS_OPTIONS.length : null;
-            if (next == null) return;
-            event.preventDefault();
-            filterRefs.current[next]?.focus();
-            setOwnerStatus(OWNER_STATUS_OPTIONS[next]!.value);
-          }}
-        >
-          {OWNER_STATUS_OPTIONS.map((o, index) => {
-            const selected = o.value === ownerStatus;
-            return (
-              <button
-                key={o.value}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                tabIndex={selected ? 0 : -1}
-                ref={(element) => { filterRefs.current[index] = element; }}
-                onClick={() => setOwnerStatus(o.value)}
-                className={`min-h-[44px] shrink-0 rounded-full border px-4 text-sm font-medium transition-colors ${
-                  selected
-                    ? "border-transparent bg-primary-container text-on-primary-container"
-                    : "border-outline-variant bg-surface text-on-surface-variant hover:bg-surface-container"
-                }`}
-              >
-                {o.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       <OwnerReportActionsProvider value={actions}>
         <PullToRefresh ref={scrollRef} onRefresh={refresh} disabled={loading || refreshing} className="flex-1">
           <NewPostsPill count={0} hasUpdates={updatesAvailable} onTap={() => { void refresh(); scrollRef.current?.scrollToTop(); }} />
@@ -702,10 +636,10 @@ export function MyPosts() {
             hasMore={hasMore}
             onLoadMore={loadMore}
             onRetry={refresh}
-            emptyTitle={searchTerm ? "No matching loaded reports" : ownerStatus === "ALL" ? "You have no reports yet" : "No reports with this status"}
+            emptyTitle={searchTerm ? "No matching loaded reports" : "You have no reports yet"}
             emptySubtitle={searchTerm
               ? (hasMore ? "Load more reports to continue searching." : "Try another search.")
-              : ownerStatus === "ALL" ? "Tap Report to post a lost or found item." : "Try another status or clear the filter."}
+              : "Tap Report to post a lost or found item."}
             density="owner-feed"
             masonryColumns={ownerColumns}
           />
@@ -714,13 +648,6 @@ export function MyPosts() {
               <button type="button" className="min-h-[44px] px-3 text-sm font-semibold underline"
                 disabled={loadingMore} onClick={() => void loadMore()}>
                 {loadingMore ? "Loading more reports" : "Load more reports"}
-              </button>
-            </div>
-          )}
-          {!searchTerm && ownerStatus !== "ALL" && items.length === 0 && !loading && !error && (
-            <div className="flex justify-center">
-              <button type="button" onClick={() => setOwnerStatus("ALL")} className="min-h-[44px] px-4 text-sm font-medium underline">
-                Clear filter
               </button>
             </div>
           )}
