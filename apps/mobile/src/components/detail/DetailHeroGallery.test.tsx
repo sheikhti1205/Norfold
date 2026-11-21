@@ -39,7 +39,7 @@ describe("DetailHeroGallery continuous paging", () => {
   it("keeps the 16:10 cover frame with rounded corners", () => {
     render(<DetailHeroGallery postId="p1" title="Lost camera" images={IMAGES} />);
     const frame = track().parentElement!;
-    expect(frame.className).toContain("rounded-[18px]");
+    expect(frame.className).toContain("fb-media-shape");
     expect(frame.style.aspectRatio.replace(/\s/g, "")).toBe("16/10");
     expect(screen.getByRole("img", { name: /photo 1 of 3/i }).className).toContain("object-cover");
   });

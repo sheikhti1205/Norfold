@@ -28,7 +28,7 @@ function FeedImage({ url, alt, variant, postId, enableSharedMedia = false }: {
   const src = useMediaUrl(url);
   const sharedId = enableSharedMedia ? sharedMediaLayoutId(postId) : undefined;
   const transition = { duration: motionDurations.fast, ease: motionEasings.inOut };
-  return <motion.span className={variant === "thumb" ? "fb-thumb" : "fb-img-frame"}
+  return <motion.span className={variant === "thumb" ? "fb-thumb fb-media-shape" : "fb-img-frame fb-media-shape"}
     data-state={state} data-testid="post-image-state" {...(sharedId ? {
       layoutId: sharedId, "data-shared-media": sharedId, transition: sharedElementTransition,
     } : {})}>
@@ -67,7 +67,7 @@ function MasonryPreview({ post, onOpenReport, enableSharedMedia }: {
   const sharedId = enableSharedMedia ? sharedMediaLayoutId(post.id) : undefined;
   return <button type="button" data-testid="masonry-media"
     aria-label={metrics.imageCount > 1 ? `Photo 1 of ${metrics.imageCount} for ${post.title}` : `Photo for ${post.title}`}
-    onClick={onOpenReport} className="fb-post-photo fb-masonry-media relative block w-full overflow-hidden"
+    onClick={onOpenReport} className="fb-post-photo fb-masonry-media fb-media-shape relative block w-full overflow-hidden"
     style={{ aspectRatio: `${naturalRatio ?? metrics.mediaRatio}` }}>
     {!failed && <motion.img src={src} alt="" loading="lazy" className="h-full w-full object-cover"
       {...(sharedId ? { layoutId: sharedId, "data-shared-media": sharedId, transition: sharedElementTransition } : {})}

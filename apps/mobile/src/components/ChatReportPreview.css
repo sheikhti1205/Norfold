@@ -32,7 +32,6 @@
   width: 76px;
   height: 76px;
   object-fit: cover;
-  border-radius: .5rem;
 }
 /* The copy column wraps under the picture only when the text scale leaves it
    less than 9rem of room (the rem basis grows with the reader's text size), so

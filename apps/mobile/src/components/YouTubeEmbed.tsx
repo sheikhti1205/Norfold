@@ -288,7 +288,7 @@ export function YouTubeEmbed({ url, compact = false }: { url: string; compact?: 
   if (compact) {
     return (
       <div className="fb-yt-preview">
-        <div className="fb-yt-media">
+        <div className="fb-yt-media fb-media-shape">
           <AnimatePresence initial={false}>
             {player}
             {!playing && (

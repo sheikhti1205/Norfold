@@ -1,4 +1,8 @@
 @import "tailwindcss";
+/* The one media-photo shape. Unlayered, so it out-ranks `rounded-*`
+ * utilities; imported here because every feed, report and chat surface uses
+ * it and it must paint before the first photo does. */
+@import "./components/mediaShape.css";
 
 /* Soft Utility semantic tokens (Tailwind v4). Accent is never a status color. */
 @theme inline {
@@ -393,7 +397,6 @@ html.fb-reduce-motion .fb-morph-bar {
   width: 100%;
   aspect-ratio: 16 / 10;
   overflow: hidden;
-  border-radius: 8px;
   border: 1px solid var(--fb-outline-variant);
   background: var(--fb-surface-container);
 }
@@ -431,7 +434,7 @@ html.fb-reduce-motion .fb-morph-bar {
   color: var(--fb-on-surface-variant);
   background: var(--fb-surface-container-low);
   border: 1px dashed var(--fb-outline);
-  border-radius: 8px;
+  border-radius: inherit;
 }
 
 /* Compact 64px thumbnail used by Variant B rows (fixed box, no shift). */
@@ -441,7 +444,6 @@ html.fb-reduce-motion .fb-morph-bar {
   height: 64px;
   flex: none;
   overflow: hidden;
-  border-radius: 8px;
   border: 1px solid var(--fb-outline-variant);
   background: var(--fb-surface-container);
 }
@@ -558,7 +560,6 @@ html.fb-reduce-motion .fb-morph-bar {
   width: 100%;
   aspect-ratio: 4 / 5;
   overflow: hidden;
-  border-radius: 12px;
   border: 1px solid var(--fb-outline-variant);
   background: var(--fb-surface-container);
 }
@@ -724,9 +725,6 @@ html.fb-reduce-motion .fb-morph-bar {
   display: block;
   width: 100%;
 }
-.fb-home-media-viewport {
-  border-radius: var(--radius-m3-md, 12px);
-}
 
 /* UXN-4 My Reports owner card (`owner-feed`): compact image-left layout
  * aligned with the home feed. Loaded photos are edge-to-edge cover crops
@@ -826,15 +824,14 @@ html.fb-reduce-motion .fb-morph-bar {
 
 /* CF-010 (packet `09` §6–§8) true ratio masonry: the photo keeps its natural
  * shape (the shape itself is inline, computed from the stored dimensions), so
- * these rules only give the frame its radius, reserve a surface behind the
- * decode, and set the text block that sits under it. No equalising, no forced
- * square, no crop-all: card heights are meant to differ. New `fb-masonry-*`
- * classes only — every existing rule above is untouched. */
+ * these rules reserve a surface behind the decode and set the text block that
+ * sits under it; the shared media shape owns the corner. No equalising, no
+ * forced square, no crop-all: card heights are meant to differ. New
+ * `fb-masonry-*` classes only — every existing rule above is untouched. */
 .fb-masonry-media {
   display: block;
   width: 100%;
   overflow: hidden;
-  border-radius: var(--radius-m3-md, 12px);
   background: var(--fb-surface-container);
 }
 /* `+N` on a multi-photo report: the count only, never a second photo wall. */
@@ -843,7 +840,6 @@ html.fb-reduce-motion .fb-morph-bar {
   right: 0.5rem;
   bottom: 0.5rem;
   padding: 0.0625rem 0.4375rem;
-  border-radius: 999px;
   background: rgba(0, 0, 0, 0.55);
   color: var(--fb-on-media);
   font-size: 0.6875rem;

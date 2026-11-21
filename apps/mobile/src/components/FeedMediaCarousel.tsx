@@ -54,7 +54,7 @@ export function FeedMediaCarousel({ images, sharedMediaId, onOpenReport }: FeedM
   return (
     <div
       data-testid="feed-media-viewport"
-      className="fb-home-media-viewport relative w-full overflow-hidden"
+      className="fb-home-media-viewport fb-media-shape relative w-full overflow-hidden"
       style={{ aspectRatio: "4 / 3" }}
     >
       <div
@@ -156,7 +156,7 @@ function CarouselImage({ image, sharedId }: { image: FeedCarouselImage; sharedId
   if (state === "failed") {
     return (
       <motion.span
-        className="fb-feed-img"
+        className="fb-feed-img fb-media-shape"
         data-state="failed"
         data-testid="post-image-state"
         style={frameStyle}
@@ -179,7 +179,7 @@ function CarouselImage({ image, sharedId }: { image: FeedCarouselImage; sharedId
   }
   return (
     <motion.span
-      className="fb-feed-img"
+      className="fb-feed-img fb-media-shape"
       data-state={state}
       data-testid="post-image-state"
       style={frameStyle}
