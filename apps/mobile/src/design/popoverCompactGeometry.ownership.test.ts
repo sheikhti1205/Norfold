@@ -59,8 +59,18 @@ describe("account menu ceiling", () => {
   it("keeps the rail width and the phone width", () => {
     const menu = bodies(accountCss, ".fb-account-menu");
     expect(menu).toContain("width: var(--fb-rail-w, 192px);");
-    expect(menu).toContain("max-width: calc(100vw - 24px);");
+    expect(menu).toContain("max-width: min(calc(100vw - 24px), 280px);");
     expect(menu).toContain("width: 320px;");
+  });
+
+  it("keeps the menu compact on desktop and wraps labels instead of clipping", () => {
+    const menu = bodies(accountCss, ".fb-account-menu");
+    // The resizable desktop rail (up to 360px) no longer lets the menu grow
+    // past a modest cap; the viewport term keeps it inside a 320px viewport.
+    expect(menu).toMatch(/max-width:\s*min\(calc\(100vw - 24px\),\s*280px\);/);
+    const labels = bodies(accountCss, ".fb-account-row-label");
+    expect(labels).toContain("white-space: normal;");
+    expect(labels).toContain("overflow-wrap: anywhere;");
   });
 });
 
