@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { motion, type PanInfo } from "framer-motion";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { Archive, ArrowLeft, BellOff, ChevronDown, ChevronUp, Film, Flag, ImageOff, Images, Info, ListFilter, LogOut, MapPin, Maximize2, PanelLeftClose, PanelLeftOpen, Pin, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound, X } from "lucide-react";
+import { Archive, ArrowLeft, BellOff, ChevronDown, ChevronUp, Film, Flag, ImageOff, Images, ListFilter, LogOut, MapPin, Maximize2, PanelLeftClose, PanelLeftOpen, Pin, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound, X } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import type { PostItem } from "@norfold/shared";
 import { copyStaticLocation, isUuid } from "../services/messaging/validation";
@@ -2582,41 +2582,6 @@ export function ThreadSession({
       onChanged={() => { void refreshMessaging(accountId).catch(() => undefined); }} /></div>}
     {row && <button type="button" className="fb-chat-info-row" onClick={() => { setSheet(null); setReportTarget("account"); }}><Flag size={20} aria-hidden="true" /><span>Report account</span></button>}
   </div>;
-
-  /** Compact conversation-options popover for the dock surface. Kept small and
-      anchored close to the trigger; rows are the 44px house minimum. */
-  const dockOptionsItems: MenuAction[] = [
-    {
-      id: "mute",
-      label: presentationView?.ownMuted ? "Unmute notifications" : "Mute notifications",
-      disabled: busy || chat.status !== "ready" || typeof current?.ownMuted !== "boolean",
-      onAction: () => { void setMuted(!presentationView?.ownMuted); },
-    },
-    {
-      id: "archive",
-      label: presentationView?.ownHidden ? "Move to inbox" : presentationView?.mode === "CONNECTED" ? "Archive" : "Hide request",
-      disabled: busy || !current,
-      onAction: () => { if (!current) return; void relationship(current.ownHidden ? "unhide" : "hide"); },
-    },
-    {
-      id: "remove",
-      label: "Remove friend",
-      disabled: busy || !current || presentationView?.mode !== "CONNECTED",
-      onAction: () => { if (current?.mode === "CONNECTED") setSheet("end"); },
-    },
-    {
-      id: "clear",
-      label: "Clear chat for me",
-      disabled: busy || !current || highest === 0 || outbox.length > 0,
-      onAction: () => setSheet("clear"),
-    },
-    {
-      id: "report",
-      label: "Report account",
-      onAction: () => { setSheet(null); setReportTarget("account"); },
-    },
-  ];
-
   return <ChatDetailsLayout details={conversationInfo} onCompactOpen={() => setSheet("actions")}
     identity={<><UserAvatar username={name || person?.username} avatarUrl={person?.avatarUrl} size={72} shape="squircle" />
       <strong dir="auto">{name || "Conversation"}</strong><span className="fb-chat-secondary">{!presentationView ? "Saved chat" : presentationView.mode === "CONNECTED" ? "Friends" : "Message request"}</span></>}>
@@ -2628,13 +2593,7 @@ export function ThreadSession({
       <ChatIdentity peerId={row?.peerId} name={name} username={person?.username} avatarUrl={person?.avatarUrl} muted={presentationView?.ownMuted === true}
         conversationId={conversationId} variant={surface === "dock" ? "dock" : undefined}
         status={!presentationView ? "Saved chat" : presentationView.mode === "CONNECTED" ? "Friends" : "Message request"} />
-      {dock ? (
-        <ActionMenu label="Conversation options"
-          icon={<Info size={21} aria-hidden="true" />}
-          placement="bottom end">
-          {dockOptionsItems}
-        </ActionMenu>
-      ) : detailsToggle}
+      {detailsToggle}
       {/* The dock reuses the canonical header and adds window controls; it never
           renders the back link, because that would navigate the page beneath. */}
       {dock && <>
