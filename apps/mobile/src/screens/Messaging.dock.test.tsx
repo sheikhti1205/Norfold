@@ -523,8 +523,8 @@ it("labels from the accepted presentation and never revives a cleared relationsh
   expect(screen.getAllByText("Friends").length).toBeGreaterThan(0);
   // The label may come from the accepted display set, but no action is derived
   // from it: the mute switch renders and stays disabled without live authority.
-  fireEvent.click(screen.getByRole("button", { name: "Conversation options" }));
   const trigger = screen.getByRole("button", { name: "Conversation options" });
+  fireEvent.click(trigger);
   const info = await screen.findByRole("dialog", { name: "Conversation info" });
   const popover = info.closest(".fb-chat-info-popover");
   expect(popover).toBeInstanceOf(HTMLElement);

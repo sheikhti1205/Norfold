@@ -2634,7 +2634,7 @@ export function ThreadSession({
               sheet: same conversation-info content, same roles and order,
               closed by Escape or an outside press with focus back on the
               trigger, all owned by React Aria. */}
-          <LayeredPopover placement="bottom end" offset={4} maxHeight={infoMaxHeight} className="fb-chat-info-popover">
+          <LayeredPopover isNonModal placement="bottom end" offset={4} maxHeight={infoMaxHeight} className="fb-chat-info-popover">
             <Dialog aria-label="Conversation info" className="fb-chat-info-dialog">
               <div className="fb-chat-info-scroll">{conversationInfo}</div>
             </Dialog>
