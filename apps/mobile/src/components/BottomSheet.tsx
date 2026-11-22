@@ -197,9 +197,9 @@ function BottomSheetDialog({
         animate={floating ? { opacity: 1 } : { y: 0 }}
         exit={floating ? { opacity: 0 } : { y: "100%" }}
         transition={sheetTransition}
-        style={{ maxHeight: floating ? "calc(100dvh - 32px)" : MAX_HEIGHT[height], boxShadow: "var(--shadow-md)" }}
+        style={{ maxHeight: floating ? "100dvh" : MAX_HEIGHT[height], boxShadow: "var(--shadow-md)" }}
         className={floating
-          ? "absolute inset-0 m-auto flex h-fit w-[calc(100%-32px)] max-w-md flex-col rounded-m3-xl bg-surface text-on-surface"
+          ? "absolute inset-0 m-auto flex h-fit max-h-full w-[calc(100%-32px)] max-w-md flex-col rounded-m3-xl bg-surface text-on-surface"
           : "absolute inset-x-0 bottom-0 mx-auto flex w-full max-w-md flex-col rounded-t-m3-xl bg-surface pb-[env(safe-area-inset-bottom)] text-on-surface"}
       >
         {!floating && <div
@@ -246,7 +246,7 @@ function BottomSheetDialog({
           data-testid="bottom-sheet-content"
           onFocus={handleContentFocus}
           style={{ overflowY: contentScrollable ? "auto" : "hidden" }}
-          className="min-h-0 flex-1 px-4 pb-4"
+          className="min-h-0 flex-[1_1_auto] px-4 pb-4"
         >
           {description && contentScrollable ? (
             <p

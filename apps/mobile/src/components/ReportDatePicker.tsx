@@ -596,7 +596,7 @@ export function ReportDatePicker({
                     isDisabled: boolean;
                   }) =>
                     [
-                      "relative flex items-center justify-center h-10 w-full rounded-full transition-colors",
+                      "relative flex items-center justify-center h-11 w-full rounded-full transition-colors",
                       isOutsideVisibleRange && "text-on-surface-variant/30",
                       isUnavailable && "text-on-surface-variant/30 line-through",
                       isDisabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
