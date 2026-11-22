@@ -1,7 +1,8 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { motion, type PanInfo } from "framer-motion";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { Archive, ArrowLeft, BellOff, ChevronDown, ChevronUp, Film, Flag, ImageOff, Images, ListFilter, LogOut, MapPin, Maximize2, PanelLeftClose, PanelLeftOpen, Pin, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound, X } from "lucide-react";
+import { Archive, ArrowLeft, BellOff, ChevronDown, ChevronUp, Film, Flag, ImageOff, Images, Info, ListFilter, LogOut, MapPin, Maximize2, PanelLeftClose, PanelLeftOpen, Pin, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound, X } from "lucide-react";
+import { Dialog, DialogTrigger } from "react-aria-components";
 import { Capacitor } from "@capacitor/core";
 import type { PostItem } from "@norfold/shared";
 import { copyStaticLocation, isUuid } from "../services/messaging/validation";
@@ -39,6 +40,8 @@ import { LongPressArea } from "../components/LongPressArea";
 import { AppBar } from "../components/AppBar";
 import { TopUtilities } from "../components/TopUtilities";
 import { MEDIUM_MAX_PX, useContentWidth, useRootFontPx, useViewportWidth } from "../components/responsive";
+import { LayeredPopover } from "../components/overlayFoundation";
+import { layeredPopoverMaxHeight } from "../components/popoverViewportCap";
 import { PeopleSearch } from "../components/PeopleSearch";
 import { PeerChatComposer } from "../components/PeerChatComposer";
 import { CameraCapture } from "../components/CameraCapture";
@@ -862,6 +865,12 @@ export function MessagingThread() {
 /** `route` is the full chat screen; `dock` is the compact floating window. */
 export type ThreadSurface = "route" | "dock";
 
+/** Compact ceiling for the dock's conversation-info popover: 24rem / 384px at
+   the default root, never half the window. React Aria writes this value inline
+   on the open overlay from the layered-popover maxHeight prop; a stylesheet
+   max-height cannot outrank it, so the cap rides this prop. */
+const INFO_POPOVER_MAX_HEIGHT_PX = 384;
+
 export function ThreadSession({
   accountId,
   conversationId,
@@ -906,6 +915,28 @@ export function ThreadSession({
   const wideApp = useContentWidth(pageRef, dock ? 0 : viewportWidth) >= MEDIUM_MAX_PX;
   const chat = useMessaging();
   const { hoverLabel } = useHoverLabel();
+  // The dock's conversation-info popover: anchored a few pixels from its own
+  // trigger instead of opening the modal sheet.
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState(() =>
+    typeof window === "undefined" ? 0 : Math.round(window.innerHeight),
+  );
+  const infoMaxHeight = layeredPopoverMaxHeight(viewportHeight, INFO_POPOVER_MAX_HEIGHT_PX);
+
+  // A hidden or minimized dock never leaves its portalled pop-up behind:
+  // the surface closes with the window and the draft stays where it was.
+  useEffect(() => {
+    if (active) return;
+    setInfoOpen(false);
+  }, [active]);
+
+  useEffect(() => {
+    const onResize = () => setViewportHeight(Math.round(window.innerHeight));
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   const [cached] = useState(() => getCachedMessagingThreadState(accountId, conversationId));
   const [renderedRevision, setRenderedRevision] = useState(-1);
   const [threadReadFailed, setThreadReadFailed] = useState(false);
@@ -1216,6 +1247,7 @@ export function ThreadSession({
   useEffect(() => {
     if (active) return;
     setSheet(null);
+    setInfoOpen(false);
     setViewer(null);
     setDraftViewer(null);
     setCameraOpen(false);
@@ -2593,7 +2625,23 @@ export function ThreadSession({
       <ChatIdentity peerId={row?.peerId} name={name} username={person?.username} avatarUrl={person?.avatarUrl} muted={presentationView?.ownMuted === true}
         conversationId={conversationId} variant={surface === "dock" ? "dock" : undefined}
         status={!presentationView ? "Saved chat" : presentationView.mode === "CONNECTED" ? "Friends" : "Message request"} />
-      {detailsToggle}
+      {dock && !wideApp ? (
+        <DialogTrigger isOpen={infoOpen} onOpenChange={setInfoOpen}>
+          <button type="button" aria-label="Conversation options" aria-haspopup="dialog"
+            aria-expanded={infoOpen} className="fb-chat-icon" {...hoverLabel("Conversation options")}>
+            <Info size={21} aria-hidden="true" />
+          </button>
+          {/* Anchored a few pixels from its own trigger instead of the modal
+              sheet: same conversation-info content, same roles and order,
+              closed by Escape or an outside press with focus back on the
+              trigger, all owned by React Aria. */}
+          <LayeredPopover placement="bottom end" offset={4} maxHeight={infoMaxHeight} className="fb-chat-info-popover">
+            <Dialog aria-label="Conversation info" className="fb-chat-info-dialog">
+              <div className="fb-chat-info-scroll">{conversationInfo}</div>
+            </Dialog>
+          </LayeredPopover>
+        </DialogTrigger>
+      ) : detailsToggle}
       {/* The dock reuses the canonical header and adds window controls; it never
           renders the back link, because that would navigate the page beneath. */}
       {dock && <>

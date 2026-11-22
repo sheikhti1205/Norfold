@@ -524,11 +524,19 @@ it("labels from the accepted presentation and never revives a cleared relationsh
   // The label may come from the accepted display set, but no action is derived
   // from it: the mute switch renders and stays disabled without live authority.
   fireEvent.click(screen.getByRole("button", { name: "Conversation options" }));
+  const trigger = screen.getByRole("button", { name: "Conversation options" });
   const info = await screen.findByRole("dialog", { name: "Conversation info" });
-  expect(info.closest(".fb-modal-panel")?.classList.contains("fb-compact-panel")).toBe(true);
+  const popover = info.closest(".fb-chat-info-popover");
+  expect(popover).toBeInstanceOf(HTMLElement);
+  expect(popover!.contains(info)).toBe(true);
+  expect(trigger.getAttribute("aria-expanded")).toBe("true");
   expect(within(info).getByRole("switch", { name: "Mute notifications" })).toHaveProperty("disabled", true);
-  fireEvent.click(within(info).getByRole("button", { name: "Close" }));
+  // React Aria's Dialog inside a Popover listens for Escape at document level,
+  // not at the trigger or document.body.
+  fireEvent.keyDown(document, { key: "Escape" });
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  await waitFor(() => expect(document.activeElement).toBe(trigger));
   expect(screen.getByRole("list", { name: "Messages" })).toBe(transcript);
 
   // An explicit null means no presentation fallback: the cached CONNECTED row
@@ -538,4 +546,26 @@ it("labels from the accepted presentation and never revives a cleared relationsh
   expect(screen.queryByText("Friends")).toBeNull();
   expect(screen.getAllByText("Saved chat").length).toBeGreaterThan(0);
   expect(screen.getByText("Hello from the dock")).toBeTruthy();
+});
+
+it("keeps every conversation action inside the dock info popover", async () => {
+  await openDock({ active: true });
+  fireEvent.click(screen.getByRole("button", { name: "Conversation options" }));
+  const info = await screen.findByRole("dialog", { name: "Conversation info" });
+  within(info).getByRole("button", { name: "Search chat" });
+  within(info).getByRole("button", { name: "Media" });
+  within(info).getByRole("switch", { name: "Mute notifications" });
+  within(info).getByRole("button", { name: "Clear chat for me" });
+  within(info).getByRole("button", { name: "Report account" });
+});
+
+it("caps the dock info popover height from the layered-popover prop", async () => {
+  await openDock({ active: true });
+  fireEvent.click(screen.getByRole("button", { name: "Conversation options" }));
+  const info = await screen.findByRole("dialog", { name: "Conversation info" });
+  const popover = info.closest(".fb-chat-info-popover");
+  expect(popover).toBeInstanceOf(HTMLElement);
+  // React Aria writes the capped max-height inline while the popover is open;
+  // a stylesheet rule cannot replace it.
+  expect((popover as HTMLElement).style.maxHeight).toBeTruthy();
 });

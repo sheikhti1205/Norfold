@@ -357,7 +357,7 @@
 .fb-chat-composer textarea { flex:1; min-width:0; min-height:44px; max-height:9rem; resize:vertical; border:1px solid var(--fb-control-outline); border-radius:1.25rem; padding:.6rem .9rem; background:var(--fb-surface-container); color:var(--fb-on-surface); font-size:1rem; }
 .fb-chat-error { font-size:.875rem; color:var(--fb-error); padding:.5rem 1rem; }
 .fb-chat-sheet { display:flex; flex-direction:column; gap:0; }
-.fb-chat-info-scroll { scrollbar-width:thin; scrollbar-color:var(--fb-outline) transparent; }
+.fb-chat-info-scroll { scrollbar-width:thin; scrollbar-color:var(--fb-outline) transparent; overflow-y:auto; overscroll-behavior:contain; }
 .fb-chat-review-copy { white-space:pre-wrap; overflow-wrap:anywhere; padding:.55rem .7rem; border-radius:.6rem; background:var(--fb-surface-container); }
 .fb-chat-sheet > :is(button,a) { text-align:start; min-height:44px; padding:.5rem .25rem; font-size:.875rem; }
 .fb-chat-info-row, .fb-chat-info-block { display:flex; align-items:center; gap:.75rem; width:100%; min-width:0; }
@@ -378,6 +378,21 @@
    wide details pane keeps the base density. */
 .fb-compact-panel .fb-chat-info-row, .fb-compact-panel .fb-chat-info-block { gap:.65rem; }
 .fb-compact-panel .fb-chat-info-divider { margin:.3rem 0; }
+/* Dock surface: the conversation-options control opens as a compact popover
+   pinned a few pixels from its own trigger instead of the modal sheet. The
+   width cap lives in the stylesheet; the height cap rides the layered-popover
+   maxHeight prop, because React Aria writes the open overlay's max-height
+   inline and a stylesheet rule cannot outrank it. The popover is never the
+   scrollport: .fb-chat-info-scroll inside the dialog owns overflow, rows stay
+   44px, and a short panel paints with no empty space below it. */
+.fb-chat-info-popover {
+  display: flex; flex-direction: column;
+  width: min(20rem, calc(100vw - 16px));
+  padding: 8px; border-radius: 16px;
+  background: var(--fb-surface); border: 1px solid var(--fb-outline-variant);
+  box-shadow: var(--shadow-md);
+}
+.fb-chat-info-dialog { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; outline: none; }
 @media (prefers-reduced-motion:no-preference) { .fb-chat-refreshing { animation:fb-chat-spin 1s linear infinite; } }
 @keyframes fb-chat-spin { to { transform:rotate(360deg); } }
 /* One compact preview scale for the whole conversation. Every value is a
