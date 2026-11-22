@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { motion, type PanInfo } from "framer-motion";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { Archive, ArrowLeft, BellOff, ChevronDown, ChevronUp, Film, Flag, ImageOff, Images, Info, ListFilter, LogOut, MapPin, Maximize2, PanelLeftClose, PanelLeftOpen, Pin, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound, X } from "lucide-react";
-import { Dialog, DialogTrigger } from "react-aria-components";
+import { Button, Dialog, DialogTrigger } from "react-aria-components";
 import { Capacitor } from "@capacitor/core";
 import type { PostItem } from "@norfold/shared";
 import { copyStaticLocation, isUuid } from "../services/messaging/validation";
@@ -2627,10 +2627,9 @@ export function ThreadSession({
         status={!presentationView ? "Saved chat" : presentationView.mode === "CONNECTED" ? "Friends" : "Message request"} />
       {dock && !wideApp ? (
         <DialogTrigger isOpen={infoOpen} onOpenChange={setInfoOpen}>
-          <button type="button" aria-label="Conversation options" aria-haspopup="dialog"
-            aria-expanded={infoOpen} className="fb-chat-icon" {...hoverLabel("Conversation options")}>
+          <Button aria-label="Conversation options" className="fb-chat-icon" {...hoverLabel("Conversation options")}>
             <Info size={21} aria-hidden="true" />
-          </button>
+          </Button>
           {/* Anchored a few pixels from its own trigger instead of the modal
               sheet: same conversation-info content, same roles and order,
               closed by Escape or an outside press with focus back on the
