@@ -524,6 +524,7 @@ it("labels from the accepted presentation and never revives a cleared relationsh
   // The label may come from the accepted display set, but no action is derived
   // from it: the mute switch renders and stays disabled without live authority.
   const trigger = screen.getByRole("button", { name: "Conversation options" });
+  trigger.focus();
   fireEvent.click(trigger);
   const info = await screen.findByRole("dialog", { name: "Conversation info" });
   const popover = info.closest(".fb-chat-info-popover");
