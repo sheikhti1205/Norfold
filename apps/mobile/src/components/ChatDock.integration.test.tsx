@@ -154,7 +154,10 @@ describe("ChatDock with the real ThreadSession", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
     await waitFor(() => expect(screen.queryByRole("complementary", { name: "Chat" })).toBeNull());
-    expect(screen.getByRole("button", { name: "Open chat with Alice" })).toBe(launcher);
+    // Closing through the dock dismisses the conversation, so the launcher drops
+    // the unread avatar and falls back to its neutral label. The identity check
+    // is the guarantee: the same DOM node survived, so focus can return to it.
+    expect(screen.getByRole("button", { name: "Open messages" })).toBe(launcher);
     await waitFor(() => expect(document.activeElement).toBe(launcher));
     expect(screen.getByTestId("path").textContent).toBe("/search");
   });

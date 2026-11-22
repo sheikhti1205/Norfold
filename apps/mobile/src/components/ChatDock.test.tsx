@@ -457,7 +457,9 @@ describe("ChatDock panel", () => {
   it("returns focus to the launcher on close", () => {
     openUnread();
     fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
-    const launcher = screen.getByRole("button", { name: "Open chat with Alice" });
+    // Closing through the dock dismisses the conversation, so the launcher drops
+    // the unread avatar and falls back to its neutral label.
+    const launcher = screen.getByRole("button", { name: "Open messages" });
     expect(panel()).toBeNull();
     expect(document.activeElement).toBe(launcher);
   });
