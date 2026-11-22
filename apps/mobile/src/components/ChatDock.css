@@ -1,13 +1,13 @@
 /* The chat windows and their minimized rail.
    Every dock-specific geometry rule lives here, scoped to `.fb-chat-dock`,
-   `.fb-chat-dock-rail` or `.fb-chat-launcher`. The canonical styles keep the
+   `.fb-chat-dock-rail` or `.fb-chat-dock-utility-row`. The canonical styles keep the
    transcript, the composer and the conversation header; nothing here declares
    a second one. */
 
-.fb-chat-launcher,
+.fb-chat-dock-utility-row,
 .fb-chat-dock,
 .fb-chat-dock-rail {
-  /* One inset for the launcher, the window row and the rail. The shell
+  /* One inset for the utility row, the window row and the rail. The shell
      publishes `--fb-chat-dock-bottom` on `.fb-app-viewport`; the data-nav
      fallback repeats the shell's own two values so a harness outside the shell
      still clears the navigation instead of guessing. Safe-area reads mirror
@@ -20,7 +20,7 @@
   --fb-dock-composer: var(--fb-composer-clearance, 0px);
   z-index: 62;
 }
-.fb-chat-launcher[data-nav="visible"],
+.fb-chat-dock-utility-row[data-nav="visible"],
 .fb-chat-dock[data-nav="visible"],
 .fb-chat-dock-rail[data-nav="visible"] {
   --fb-dock-bottom: var(--fb-chat-dock-bottom, calc(66px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 8px));
@@ -29,60 +29,47 @@
 /* The `hidden` attribute is the only hiding mechanism: a mounted thread must
    keep its draft, staged media and recorder, and `display` from these rules
    would otherwise beat the user-agent `[hidden]` style. */
-.fb-chat-launcher[hidden],
+.fb-chat-dock-rail-launcher[hidden],
 .fb-chat-dock[hidden],
 .fb-chat-dock-window[hidden] { display: none !important; }
 
-/* ---------------------------------------------------------------- launcher */
+/* ---------------------------------------------------------------- rail launcher */
 
-.fb-chat-launcher {
-  position: fixed;
-  inset-inline-end: max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
-  inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer));
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  /* Three fixed circular controls (44 + 44 + 52 + gaps) stay one row and
-     clear both edges even at 320px; the bound only guards the cluster. */
-  max-width: calc(100vw - 24px);
-}
-
-.fb-chat-launcher-button {
+.fb-chat-dock-rail-launcher {
   position: relative;
   display: grid;
+  flex: none;
   place-items: center;
-  width: 52px;
-  height: 52px;
+  width: 48px;
+  height: 48px;
   padding: 0;
   border: 1px solid var(--fb-outline-variant);
   border-radius: 999px;
   background: var(--fb-surface-container-high);
-  color: var(--fb-on-surface);
   box-shadow: var(--shadow-md);
   cursor: pointer;
 }
-.fb-chat-launcher-button:hover { background: var(--fb-surface-container); }
+.fb-chat-dock-rail-launcher:hover { background: var(--fb-surface-container); }
 
-.fb-chat-launcher-badge {
-  position: absolute;
-  inset-block-start: -3px;
-  inset-inline-end: -3px;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: var(--fb-primary);
-  color: var(--fb-on-primary);
-  box-shadow: 0 0 0 2px var(--fb-surface);
-  font-size: .6875rem;
-  font-weight: 700;
-  line-height: 20px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
+.fb-chat-dock-rail-launcher .fb-chat-dock-rail-badge {
+  inset-block-start: -2px;
+  inset-inline-end: -2px;
 }
 
-.fb-chat-launcher-action {
+/* Utility row beneath the stack: close-all menu and the new-message pencil. */
+.fb-chat-dock-utility-row {
+  position: fixed;
+  inset-inline-end: max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
+  inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.fb-chat-dock-utility-pencil,
+.fb-chat-dock-utility-close {
+  position: relative;
   display: grid;
   flex: none;
   place-items: center;
@@ -96,20 +83,35 @@
   box-shadow: var(--shadow-sm);
   cursor: pointer;
 }
-.fb-chat-launcher-action:hover {
-  background: var(--fb-surface-container-high);
-  color: var(--fb-on-surface);
-}
+.fb-chat-dock-utility-pencil:hover,
+.fb-chat-dock-utility-close:hover { background: var(--fb-surface-container-high); color: var(--fb-on-surface); }
 
-.fb-chat-launcher button:focus-visible {
+.fb-chat-dock-utility-close svg { flex: none; }
+
+.fb-chat-dock-utility-pencil:focus-visible,
+.fb-chat-dock-utility-close:focus-visible {
   outline: 2px solid var(--fb-focus);
   outline-offset: 2px;
 }
+.fb-chat-dock-utility-badge {
+  position: absolute;
+  inset-block-start: -2px;
+  inset-inline-end: -2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--fb-primary);
+  color: var(--fb-on-primary);
+  box-shadow: 0 0 0 2px var(--fb-surface);
+  font-size: .625rem;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
 
 /* -------------------------------------------------------------- window row */
-
-/* The host anchors every window in one bottom-right row. A window's own card
-   carries the surface, border and shadow; the host is only the anchor. */
 .fb-chat-dock {
   position: fixed;
   inset-inline-end: max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
@@ -209,9 +211,9 @@
 .fb-chat-dock-rail {
   position: fixed;
   inset-inline-end: max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
-  /* One 52px launcher and its 8px gap sit below the rail, plus whatever the
-     launcher had to lift for a page composer. */
-  inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer) + 60px);
+  /* The utility row (two 44px controls plus an 8px gap) sits below the rail,
+     plus whatever the dock had to lift for a page composer. */
+  inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer) + 96px);
   display: flex;
   flex-direction: column;
   align-items: center;

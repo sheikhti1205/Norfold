@@ -50,6 +50,74 @@ function serverCurrent() {
   return null;
 }
 
+/**
+ * Sticky dismissal: conversations closed through the dock are remembered per
+ * account and must not reappear as rail heads on reload or on new messages.
+ * Interaction (opening from the picker, chat list or a notification) clears
+ * the flag. Persisted in localStorage under `fb-chat-dock-dismissed:<accountId>`,
+ * capped at 100 entries so the store cannot grow without bound.
+ */
+const dismissedKey = (accountId: string): string => `fb-chat-dock-dismissed:${accountId}`;
+const DISMISSED_CAP = 100;
+
+function loadDismissed(accountId: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(dismissedKey(accountId));
+    if (!raw) return new Set<string>();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set<string>();
+    return new Set<string>(parsed.slice(-DISMISSED_CAP));
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function saveDismissed(accountId: string, dismissed: Set<string>): void {
+  try {
+    const capped = [...dismissed].slice(-DISMISSED_CAP);
+    localStorage.setItem(dismissedKey(accountId), JSON.stringify(capped));
+  } catch {
+    // localStorage unavailable or quota-exceeded: dismissal is volatile.
+  }
+}
+
+/** Dismissed conversations, keyed by account, loaded lazily from localStorage. */
+const dismissedByAccount = new Map<string, Set<string>>();
+
+function getDismissed(accountId: string): Set<string> {
+  let set = dismissedByAccount.get(accountId);
+  if (!set) {
+    set = loadDismissed(accountId);
+    dismissedByAccount.set(accountId, set);
+  }
+  return set;
+}
+
+/** Remember a conversation as dismissed so it never comes back as a head. */
+export function dismissChatDockEntry(accountId: string, conversationId: string | null): void {
+  if (!accountId || !conversationId) return;
+  const set = getDismissed(accountId);
+  if (set.has(conversationId)) return;
+  set.add(conversationId);
+  saveDismissed(accountId, set);
+}
+
+/** Clear the dismissed flag: interaction re-enables the conversation. */
+export function clearChatDockDismissed(accountId: string, conversationId: string | null): void {
+  if (!accountId || !conversationId) return;
+  const set = dismissedByAccount.get(accountId);
+  if (!set) return;
+  if (!set.has(conversationId)) return;
+  set.delete(conversationId);
+  saveDismissed(accountId, set);
+}
+
+/** Check whether a conversation is dismissed from the dock. */
+export function isChatDockDismissed(accountId: string, conversationId: string): boolean {
+  if (!accountId) return false;
+  return getDismissed(accountId).has(conversationId);
+}
+
 function triggerKey(accountId: string, conversationId: string | null): string {
   return `${accountId}:${conversationId ?? ""}`;
 }
@@ -136,6 +204,8 @@ export function openChatDock(
   }
   state = { accountId, seq, entries: applyLimit(entries, seq, limit) };
   rememberTrigger(accountId, conversationId, trigger);
+  // Opening a conversation clears its dismissed flag: interaction re-enables it.
+  if (conversationId !== null) clearChatDockDismissed(accountId, conversationId);
   emit();
 }
 
@@ -158,6 +228,8 @@ export function openConversation(
   ));
   if (!existing) entries.push({ conversationId, phase: "open", seq });
   state = { accountId, seq, entries: applyLimit(entries, seq, limit) };
+  // Opening a conversation clears its dismissed flag: interaction re-enables it.
+  clearChatDockDismissed(accountId, conversationId);
   emit();
 }
 
@@ -177,6 +249,8 @@ export function restoreChatDock(
   limit = Number.POSITIVE_INFINITY,
 ): void {
   focusEntry(accountId, conversationId, limit);
+  // Restoring from the rail clears the dismissed flag: interaction re-enables it.
+  if (conversationId !== null) clearChatDockDismissed(accountId, conversationId);
 }
 
 /** Collapse a thread into a rail head. The picker is never minimizable. */
@@ -195,7 +269,7 @@ export function minimizeChatDock(accountId: string, conversationId: string | nul
 }
 
 /** Close one window and put the reader back on the control that opened it. */
-export function closeChatDockEntry(accountId: string, conversationId: string | null): void {
+export function closeChatDockEntry(accountId: string, conversationId: string | null, dismiss = true): void {
   if (!state || state.accountId !== accountId) return;
   const entry = state.entries.find((candidate) => candidate.conversationId === conversationId);
   if (!entry) return;
@@ -205,6 +279,9 @@ export function closeChatDockEntry(accountId: string, conversationId: string | n
   const entries = state.entries.filter((candidate) => candidate !== entry);
   state = entries.length === 0 ? null : { accountId, seq: state.seq + 1, entries };
   emit();
+  // Closing through the dock remembers the conversation as dismissed. Expanding
+  // into the full page is interaction, not closure, so callers pass false.
+  if (dismiss && conversationId !== null) dismissChatDockEntry(accountId, conversationId);
   // `isConnected` covers a trigger whose route unmounted while a window was up.
   if (target?.isConnected) target.focus({ preventScroll: true });
 }
@@ -214,7 +291,10 @@ export function closeChatDock(accountId: string): void {
   if (!state || state.accountId !== accountId || state.entries.length === 0) return;
   const latest = [...state.entries].sort((a, b) => b.seq - a.seq)[0];
   const target = latest ? triggers.get(triggerKey(accountId, latest.conversationId)) ?? null : null;
-  for (const entry of state.entries) triggers.delete(triggerKey(accountId, entry.conversationId));
+  for (const entry of state.entries) {
+    triggers.delete(triggerKey(accountId, entry.conversationId));
+    if (entry.conversationId !== null) dismissChatDockEntry(accountId, entry.conversationId);
+  }
   state = null;
   emit();
   if (target?.isConnected) target.focus({ preventScroll: true });
@@ -222,10 +302,29 @@ export function closeChatDock(accountId: string): void {
 
 /** Test isolation and account change: no state may outlive its viewer. */
 export function resetChatDock(): void {
-  if (state === null && triggers.size === 0) return;
   state = null;
   triggers.clear();
+  dismissedByAccount.clear();
   emit();
+}
+
+/** Test isolation only: clear every persisted sticky-dismissal key and the
+ * in-memory cache. Never called from production — `resetChatDock` deliberately
+ * leaves localStorage intact so account switching reloads dismissals lazily. */
+export function resetChatDockDismissedForTests(): void {
+  try {
+    const prefix = `fb-chat-dock-dismissed:`;
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key && key.startsWith(prefix)) {
+        localStorage.removeItem(key);
+        index -= 1;
+      }
+    }
+  } catch {
+    // localStorage unavailable: nothing to clear.
+  }
+  dismissedByAccount.clear();
 }
 
 /** This viewer's windows, or `null` for another account and while signed out. */

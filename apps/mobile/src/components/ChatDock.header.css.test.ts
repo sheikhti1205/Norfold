@@ -200,7 +200,7 @@ describe("ChatDock header, narrow two-row contract", () => {
     // window. None narrows a control.
     const hidingSelectors = dockRules.filter(rule => hiding.test(rule.body)).flatMap(rule => rule.selectors);
     expect(hidingSelectors).toEqual(expect.arrayContaining([
-      ".fb-chat-launcher[hidden]",
+      ".fb-chat-dock-rail-launcher[hidden]",
       ".fb-chat-dock[hidden]",
       ".fb-chat-dock-window[hidden]",
     ]));

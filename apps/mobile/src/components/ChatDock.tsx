@@ -12,10 +12,11 @@ import { searchPeople } from "../services/people";
 import { messagePreview } from "../utils/messagePreview";
 import { useSafetyLifetime } from "../utils/useSafetyLifetime";
 import {
-  closeChatDockEntry, focusChatDock, minimizeChatDock,
+  closeChatDockEntry, closeChatDock, focusChatDock, minimizeChatDock,
   openChatDock, openConversation, resetChatDock, restoreChatDock, useChatDock,
-  type ChatDockEntry,
+  isChatDockDismissed, type ChatDockEntry,
 } from "./chatDock";
+import { ActionMenu, type MenuAction } from "./ActionMenu";
 import { useHoverLabel } from "./HoverLabel";
 import { UserAvatar } from "./UserAvatar";
 import "./ChatDock.css";
@@ -126,7 +127,11 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
 
   const entries = dock?.entries ?? NO_ENTRIES;
   const openEntries = entries.filter((entry) => entry.phase === "open");
-  const minimized = entries.filter((entry) => entry.phase === "minimized");
+  // Dismissed conversations never reappear as heads. They stay out of the
+  // rail order entirely so the batch math never counts them.
+  const minimized = entries.filter((entry) => entry.phase === "minimized"
+    && entry.conversationId !== null
+    && !isChatDockDismissed(accountId, entry.conversationId));
   const panelMounted = entries.length > 0;
   const visible = !CHAT_SURFACE.test(pathname) && !hostOccluded;
   const focusedSeq = openEntries.reduce((max, entry) => Math.max(max, entry.seq), -1);
@@ -142,18 +147,18 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
 
   const windowNodes = useRef(new Map<string, HTMLDivElement>());
   const previousViewer = useRef<string | null>(null);
-  // Session-local only, keyed by account + conversation + message, so a
-  // dismissal never leaks across viewers and a newer message announces again.
-  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set<string>());
-  const [railOffset, setRailOffset] = useState(0);
+  // The anchor id of the first visible head: `null` means the newest batch.
+  // An anchor id survives a new head appearing at the newest end, so the
+  // reader's visible batch never slides. Repaired only when the anchor
+  // conversation closes or is dismissed.
+  const [railAnchor, setRailAnchor] = useState<string | null>(null);
   const [focusAfterRestore, setFocusAfterRestore] = useState<string | null>(null);
-
   // A page composer pinned at the foot — the report page's comment bar — would
   // otherwise sit underneath the launcher, and a tap on its Send button would
   // land on the launcher instead. Its height is measured, never assumed: the
   // lift is published on the dock's own surfaces so the launcher, the rail and
   // an open window keep one bottom anchor and move together.
-  const launcherNode = useRef<HTMLDivElement | null>(null);
+  const launcherNode = useRef<HTMLButtonElement | null>(null);
   const clearanceRef = useRef(0);
   const [composerClearance, setComposerClearance] = useState(0);
 
@@ -179,15 +184,13 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
       && !view?.ownMuted;
   };
   const unreadRow = rows.find((conversation) => unreadEligible(conversation)
-    && !dismissed.has(`${accountId}:${conversation.conversationId}:${conversation.lastMessage?.id ?? ""}`));
-  // The exact key the dismiss control writes, so the button and the predicate
-  // cannot drift apart.
-  const unreadKey = unreadRow
-    ? `${accountId}:${unreadRow.conversationId}:${unreadRow.lastMessage?.id ?? ""}`
-    : "";
-  // The new-message action survives a dismissal: unread activity exists even
-  // when every candidate has been dismissed from the shortcut.
-  const hasUnread = rows.some(unreadEligible);
+    && !isChatDockDismissed(accountId, conversation.conversationId));
+  // A dismissed conversation still counts for the pencil badge: that person did
+  // message. Count distinct conversations with unread messages, capped at 99+.
+  const unreadPeopleCount = rows.filter(unreadEligible).length;
+  const unreadBadge = unreadPeopleCount > 0
+    ? (unreadPeopleCount > 99 ? "99+" : String(unreadPeopleCount))
+    : null;
   // Recent is ordinary eligible chats, not unread-only ones. Only the privacy
   // exclusions apply; the unread and last-author predicates stay on the launcher.
   const recent: DockConversation[] = rows.filter((conversation) => {
@@ -208,20 +211,28 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
   ]);
 
   // Oldest first, so the newest minimized head renders at the bottom of the
-  // column, nearest the launcher. `railOffset` counts the hidden newer heads
-  // the reader has paged away from; the visible slice is the batch immediately
-  // above that gap, and never outlives a shorter rail.
+  // column, nearest the launcher.
   const railOrder = [...minimized].sort((a, b) => a.seq - b.seq);
   const batch = Math.max(1, Math.min(railBatch(viewport.height), railOrder.length));
-  const maxFromNewest = Math.max(0, railOrder.length - batch);
-  const fromNewest = Math.min(railOffset, maxFromNewest);
-  const start = railOrder.length - batch - fromNewest;
+
+  // Anchor-id batch position stability (Section B): `railAnchor` names the
+  // first visible head; `null` means the newest batch. A head appearing at the
+  // newest end leaves the anchor's index unchanged, so `start` never slides.
+  // No render-phase state updates or ref mutations.
+  const anchorIndex = railAnchor ? railOrder.findIndex((entry) => entry.conversationId === railAnchor) : -1;
+  const start = Math.max(0, anchorIndex >= 0 ? Math.min(anchorIndex, railOrder.length - batch) : railOrder.length - batch);
   const heads = railOrder.slice(start, start + batch);
   const above = start;
   const below = Math.max(0, railOrder.length - start - batch);
+
+  // Repair when the anchor conversation closes or is dismissed: fall back to
+  // the nearest surviving head, or the newest batch if none survives there.
   useEffect(() => {
-    if (railOffset > maxFromNewest) setRailOffset(maxFromNewest);
-  }, [railOffset, maxFromNewest]);
+    if (railAnchor === null) return;
+    if (anchorIndex >= 0) return;
+    const fallback = railOrder.at(Math.min(start, railOrder.length - 1));
+    setRailAnchor(fallback ? fallback.conversationId : null);
+  }, [railAnchor, railOrder, start]);
 
   // Restoring asks to type again: the field is the honest destination, after
   // the window is visible rather than while it is still `hidden`.
@@ -334,12 +345,20 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
   const closeEntry = useCallback((conversationId: string | null) => {
     if (accountId) closeChatDockEntry(accountId, conversationId);
   }, [accountId]);
+  /** Close every expanded window, leaving rail heads in place. */
+  const closeFloatingWindows = useCallback(() => {
+    if (!accountId) return;
+    for (const entry of openEntries) {
+      if (entry.conversationId !== null) closeChatDockEntry(accountId, entry.conversationId);
+    }
+  }, [accountId, openEntries]);
   const focusEntry = useCallback((conversationId: string | null) => {
     if (accountId) focusChatDock(accountId, conversationId);
   }, [accountId]);
   const expandEntry = useCallback((conversationId: string) => {
     if (!accountId) return;
-    closeChatDockEntry(accountId, conversationId);
+    // Expanding is interaction, not closure: it must not write a dismissal.
+    closeChatDockEntry(accountId, conversationId, false);
     // A push, not a replace: Back returns the reader to the page the dock was
     // floating over, with this window already closed.
     void navigate(`/chats/${encodeURIComponent(conversationId)}`);
@@ -373,78 +392,21 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
 
   return (
     <>
-      {/* The launcher stays mounted for the whole dock lifetime so the store's
-          remembered trigger is still connected when a window closes. A phone
-          hides it behind an open window; desktop keeps it at the foot as the
-          way to start another conversation. When hidden it leaves the page,
-          the accessibility tree and the tab order exactly as an unmounted
-          control would. One compact cluster carries all three actions: dismiss
-          this shortcut, open the new-message picker, and open the unread peer's
-          conversation. The dismiss control is keyed to the message, so it
-          removes only this notice; the pencil and the avatar never depend on
-          it. */}
-      <div className="fb-chat-launcher" ref={launcherNode}
-        data-nav={bottomNavVisible ? "visible" : "hidden"}
-        style={composerStyle}
-        hidden={!launcherVisible}>
-        {unreadRow && (
-          <button type="button" className="fb-chat-launcher-action"
-            aria-label="Dismiss unread shortcut"
-            onClick={() => {
-              if (!unreadKey) return;
-              setDismissed((previous) => {
-                if (previous.has(unreadKey)) return previous;
-                const next = new Set(previous);
-                next.add(unreadKey);
-                return next;
-              });
-            }}>
-            <X size={16} aria-hidden="true" />
-          </button>
-        )}
-        {hasUnread && (
-          <button type="button" className="fb-chat-launcher-action"
-            aria-label="New message"
-            onClick={(event) => {
-              if (!accountId) return;
-              openChatDock(accountId, event.currentTarget, null, capacity);
-            }}>
-            <Pencil size={19} aria-hidden="true" />
-          </button>
-        )}
-        {unreadRow ? (
-          <button type="button" className="fb-chat-launcher-button"
-            aria-label={`Open chat with ${unreadName}`}
-            aria-describedby="fb-chat-launcher-unread"
-            onClick={(event) => {
-              if (!accountId) return;
-              openChatDock(accountId, event.currentTarget, unreadRow.conversationId, capacity);
-            }}>
-            <UserAvatar username={unreadName} avatarUrl={identities.get(unreadRow.peerId)?.avatarUrl} size={46} shape="circle" />
-            <span className="fb-chat-launcher-badge" aria-hidden="true">
-              {unreadCount > 99 ? "99+" : unreadCount}
-            </span>
-          </button>
-        ) : hasUnread ? null : (
-          <button type="button" className="fb-chat-launcher-button"
-            aria-label="Open messages"
-            onClick={(event) => {
-              if (!accountId) return;
-              openChatDock(accountId, event.currentTarget, null, capacity);
-            }}>
-            <MessageSquareText size={22} aria-hidden="true" />
-          </button>
-        )}
-        {unreadRow && <span id="fb-chat-launcher-unread" className="sr-only">{`${unreadCount} unread`}</span>}
-      </div>
-      {railVisible && (
+      {/* One vertical rail column: minimized heads, then the launcher bubble at
+          the bottom-most position. Heads and the launcher share one vertical
+          axis; the `+N` chips batch only the heads, never the launcher. */}
+      {(railVisible || launcherVisible) && (
         <div className="fb-chat-dock-rail" data-nav={bottomNavVisible ? "visible" : "hidden"}
           style={composerStyle}
           role="group" aria-label="Minimized chats">
           {above > 0 && (
             <button type="button" className="fb-chat-dock-rail-more"
               aria-label={`Show ${above} older minimized ${above === 1 ? "chat" : "chats"}`}
-              onClick={() => setRailOffset(Math.min(maxFromNewest, fromNewest + batch))}>
+              onClick={() => {
+                const nextStart = Math.max(0, start - batch);
+                setRailAnchor(nextStart === railOrder.length - batch
+                  ? null : railOrder[nextStart]?.conversationId ?? null);
+              }}>
               {`+${above}`}
             </button>
           )}
@@ -474,10 +436,65 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
           {below > 0 && (
             <button type="button" className="fb-chat-dock-rail-more"
               aria-label={`Show ${below} newer minimized ${below === 1 ? "chat" : "chats"}`}
-              onClick={() => setRailOffset(Math.max(0, fromNewest - batch))}>
+              onClick={() => {
+                const nextStart = Math.min(start + batch, railOrder.length - batch);
+                setRailAnchor(nextStart === railOrder.length - batch
+                  ? null : railOrder[nextStart]?.conversationId ?? null);
+              }}>
               {`+${below}`}
             </button>
           )}
+          {/* Launcher bubble: the unread peer's avatar, or the messages icon. */}
+          {launcherVisible && (
+            <button ref={launcherNode} type="button" className="fb-chat-dock-rail-launcher"
+              aria-label={unreadRow ? `Open chat with ${unreadName}` : "Open messages"}
+              aria-describedby={unreadRow ? "fb-chat-rail-unread" : undefined}
+              onClick={(event) => {
+                if (!accountId) return;
+                openChatDock(accountId, event.currentTarget, unreadRow?.conversationId ?? null, capacity);
+              }}>
+              {unreadRow ? (
+                <>
+                  <UserAvatar username={unreadName} avatarUrl={identities.get(unreadRow.peerId)?.avatarUrl} size={44} shape="circle" />
+                  <span className="fb-chat-dock-rail-badge" aria-hidden="true">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                </>
+              ) : (
+                <MessageSquareText size={22} aria-hidden="true" />
+              )}
+            </button>
+          )}
+          {unreadRow && <span id="fb-chat-rail-unread" className="sr-only">{`${unreadCount} unread`}</span>}
+        </div>
+      )}
+      {/* Utility row beneath the stack: close-all menu and the new-message pencil. */}
+      {launcherVisible && (
+        <div className="fb-chat-dock-utility-row" data-nav={bottomNavVisible ? "visible" : "hidden"}
+          style={composerStyle}>
+          <ActionMenu label="Close chats"
+            icon={<X size={20} aria-hidden="true" />}
+            triggerClassName="fb-chat-dock-utility-close"
+            disabled={entries.length === 0}
+            placement="bottom end">
+            {[
+              { id: "close-all", label: "Close all chats" as const,
+                onAction: () => { closeChatDock(accountId); } } as MenuAction,
+              { id: "close-floating", label: "Close floating windows" as const,
+                onAction: closeFloatingWindows } as MenuAction,
+            ]}
+          </ActionMenu>
+          <button type="button" className="fb-chat-dock-utility-pencil"
+            aria-label={unreadBadge ? `${unreadBadge} unread conversations, new message` : "New message"}
+            onClick={(event) => {
+              if (!accountId) return;
+              openChatDock(accountId, event.currentTarget, null, capacity);
+            }}>
+            <Pencil size={19} aria-hidden="true" />
+            {unreadBadge && (
+              <span className="fb-chat-dock-utility-badge" aria-hidden="true">{unreadBadge}</span>
+            )}
+          </button>
         </div>
       )}
       {panelMounted && dock && (

@@ -9,8 +9,8 @@ import { chatFileBody, type ChatFileMeta } from "../services/messaging/files";
 import { ChatDock } from "./ChatDock";
 import {
   closeChatDock, closeChatDockEntry, focusChatDock, minimizeChatDock,
-  openChatDock, openConversation, resetChatDock, restoreChatDock,
-  useChatDock, type ChatDockEntry,
+  openChatDock, openConversation, resetChatDock, resetChatDockDismissedForTests,
+  restoreChatDock, useChatDock, type ChatDockEntry,
 } from "./chatDock";
 
 /**
@@ -203,6 +203,7 @@ function openUnread() {
 
 beforeEach(() => {
   resetChatDock();
+  resetChatDockDismissedForTests();
   viewport(1024, 768);
   auth.user = { id: "me" };
   auth.booting = false;
@@ -306,40 +307,77 @@ describe("ChatDock launcher", () => {
     }
   });
 
-  it("dismisses this shortcut only, keeps new-message access and honours a newer message", () => {
+  it("renders the launcher bubble inside the rail column, with the utility row holding only the two controls", () => {
     named("p1", "Alice");
     chat.conversations = [summary("c1", "p1", { unread: 2, author: "p1", messageId: "m1" })];
-    const view = mount("/");
-    expect(screen.getByRole("button", { name: "New message" })).toBeTruthy();
+    mount("/");
+    // The launcher bubble is inside the rail column, after any heads.
+    expect(screen.getByRole("button", { name: "Open chat with Alice" })).toBeTruthy();
+    // The utility row holds exactly the close-all menu and the pencil.
+    expect(screen.getByRole("button", { name: "Close chats" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /unread conversations, new message|New message/ })).toBeTruthy();
+    // The utility row is not the launcher: it is a separate element below the stack.
+    const utilityRow = document.querySelector(".fb-chat-dock-utility-row");
+    expect(utilityRow).toBeTruthy();
+    expect(utilityRow?.querySelector(".fb-chat-dock-rail-launcher")).toBeNull();
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss unread shortcut" }));
+  it("dismisses a conversation through the close-all menu and keeps it gone on remount", () => {
+    named("p1", "Alice");
+    chat.conversations = [summary("c1", "p1", { unread: 2, author: "p1", messageId: "m1" })];
+    mount("/");
+    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+    expect(dockWindow("c1")).toBeTruthy();
+
+    // Close all chats through the store action: the ActionMenu popover is a
+    // react-aria component, not jsdom-friendly, so the store is exercised directly.
+    act(() => closeChatDock("me"));
+    expect(dockWindow("c1")).toBeNull();
+    expect(panel()).toBeNull();
+    // The dismissal is persisted to localStorage under the account key.
+    expect(localStorage.getItem("fb-chat-dock-dismissed:me")).toContain("c1");
+
+    // Genuine remount: unmount and remount, forcing the dismissed set to be
+    // re-read from storage through loadDismissed.
+    cleanup();
+    const remounted = mount("/");
     expect(screen.queryByRole("button", { name: "Open chat with Alice" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Dismiss unread shortcut" })).toBeNull();
-    // New-message access does not depend on the dismissed shortcut.
-    expect(screen.getByRole("button", { name: "New message" })).toBeTruthy();
-    // The pending unread is untouched: no send, request, refresh or navigation.
-    expect(runtime.request).not.toHaveBeenCalled();
-    expect(runtime.refresh).not.toHaveBeenCalled();
-    expect(screen.queryByLabelText(/^Conversation /)).toBeNull();
-    expect(screen.getByTestId("path").textContent).toBe("/");
+    expect(screen.queryByRole("button", { name: /Restore chat with Alice/ })).toBeNull();
 
-    // Still the same message: the shortcut stays dismissed.
-    view.rerender(tree());
-    expect(screen.queryByRole("button", { name: "Open chat with Alice" })).toBeNull();
+    // Interaction re-enables it: opening from the picker clears the dismissed flag.
+    act(() => openChatDock("me", null, "c1", 2));
+    expect(dockWindow("c1")?.dataset.phase).toBe("open");
+    // After clearing, minimising again should show it as a head.
+    act(() => minimizeChatDock("me", "c1"));
+    expect(screen.getByRole("button", { name: /Restore chat with Alice/ })).toBeTruthy();
+    remounted.unmount();
+  });
 
-    // The key is account-fenced: the same ids under another viewer reappear.
-    auth.user = { id: "other" };
-    chat.accountId = "other";
-    view.rerender(tree());
-    expect(screen.getByRole("button", { name: /^Open chat with/ })).toBeTruthy();
+  it("the pencil badge counts distinct unread people, capped at 99+, and draws nothing at zero", () => {
+    // Zero unread: no badge element at all.
+    mount("/");
+    expect(document.querySelector(".fb-chat-dock-utility-badge")).toBeNull();
+    cleanup();
 
-    // Back on the first account, a newer message is a fresh key and returns.
-    auth.user = { id: "me" };
-    chat.accountId = "me";
-    chat.conversations = [summary("c1", "p1", { unread: 2, author: "p1", messageId: "m2" })];
-    view.rerender(tree());
-    expect(screen.getByRole("button", { name: /^Open chat with/ })).toBeTruthy();
-    expect(screen.getByText("2 unread")).toBeTruthy();
+    // Two distinct unread conversations: badge shows "2".
+    named("p1", "Alice");
+    named("p2", "Bob");
+    chat.conversations = [
+      summary("c1", "p1", { unread: 2, author: "p1" }),
+      summary("c2", "p2", { unread: 5, author: "p2" }),
+    ];
+    mount("/");
+    expect(screen.getByRole("button", { name: "2 unread conversations, new message" })).toBeTruthy();
+    expect(document.querySelector(".fb-chat-dock-utility-badge")?.textContent).toBe("2");
+    cleanup();
+
+    // 100 distinct unread conversations: "99+".
+    chat.conversations = Array.from({ length: 100 }, (_, i) =>
+      summary(`c${i}`, `p${i}`, { unread: 1, author: `p${i}` }),
+    );
+    mount("/");
+    expect(screen.getByRole("button", { name: "99+ unread conversations, new message" })).toBeTruthy();
+    expect(document.querySelector(".fb-chat-dock-utility-badge")?.textContent).toBe("99+");
   });
 
   it("never paints the previous account's label after a viewer switch", () => {
@@ -566,6 +604,89 @@ describe("ChatDock windows", () => {
 
     act(() => minimizeChatDock("me", "c2"));
     expect(rail()).toBeTruthy();
+  });
+
+  it("keeps the visible batch identical when a newer head appears while paged older (batch stability)", () => {
+    viewport(1024, 768); // batch = 5
+    mount("/");
+    act(() => {
+      for (let index = 1; index <= 8; index += 1) openChatDock("me", null, `c${index}`, 8);
+    });
+    act(() => {
+      for (let index = 1; index <= 8; index += 1) minimizeChatDock("me", `c${index}`);
+    });
+
+    // Newest nearest the launcher: c4..c8 visible, c1..c3 hidden above.
+    expect(railEntries()).toEqual(["c4", "c5", "c6", "c7", "c8"]);
+    expect(screen.getByRole("button", { name: "Show 3 older minimized chats" })).toBeTruthy();
+
+    // Page to the older batch.
+    fireEvent.click(screen.getByRole("button", { name: "Show 3 older minimized chats" }));
+    expect(railEntries()).toEqual(["c1", "c2", "c3", "c4", "c5"]);
+    expect(screen.getByRole("button", { name: "Show 3 newer minimized chats" })).toBeTruthy();
+
+    // A newly minimized chat joins the newest end; the visible batch must not slide.
+    act(() => openChatDock("me", null, "c9", 8));
+    act(() => minimizeChatDock("me", "c9"));
+    expect(railEntries()).toEqual(["c1", "c2", "c3", "c4", "c5"]);
+    // Only the hidden-count chips changed: c6..c9 are now below.
+    expect(screen.getByRole("button", { name: "Show 4 newer minimized chats" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /older minimized/ })).toBeNull();
+
+    // Paging back to the newest batch shows the new head.
+    fireEvent.click(screen.getByRole("button", { name: "Show 4 newer minimized chats" }));
+    expect(railEntries()).toEqual(["c5", "c6", "c7", "c8", "c9"]);
+  });
+
+  it("keeps the visible batch identical on the newest batch when a new head appears", () => {
+    viewport(1024, 768); // batch = 5
+    mount("/");
+    act(() => {
+      for (let index = 1; index <= 5; index += 1) openChatDock("me", null, `c${index}`, 5);
+    });
+    act(() => {
+      for (let index = 1; index <= 5; index += 1) minimizeChatDock("me", `c${index}`);
+    });
+
+    // Sitting on the newest batch: c1..c5 visible.
+    expect(railEntries()).toEqual(["c1", "c2", "c3", "c4", "c5"]);
+
+    // A new head appears at the newest end and is visible.
+    act(() => openChatDock("me", null, "c6", 5));
+    act(() => minimizeChatDock("me", "c6"));
+    expect(railEntries()).toEqual(["c2", "c3", "c4", "c5", "c6"]);
+  });
+
+  it("Close floating windows closes open windows and leaves heads", () => {
+    named("p1", "Alice");
+    named("p2", "Bob");
+    chat.conversations = [summary("c1", "p1", { unread: 1, author: "p1" }), summary("c2", "p2")];
+    mount("/");
+    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+    act(() => openChatDock("me", null, "c2", 2));
+    expect(dockWindow("c1")?.dataset.phase).toBe("minimized");
+    expect(dockWindow("c2")?.dataset.phase).toBe("open");
+
+    // Close floating windows: close every open entry, leaving heads in place.
+    act(() => closeChatDockEntry("me", "c2"));
+    expect(dockWindow("c2")).toBeNull();
+    expect(screen.getByRole("button", { name: /Restore chat with Alice/ })).toBeTruthy();
+  });
+
+  it("Close all chats leaves no heads and no windows", () => {
+    named("p1", "Alice");
+    named("p2", "Bob");
+    chat.conversations = [summary("c1", "p1", { unread: 1, author: "p1" }), summary("c2", "p2")];
+    mount("/");
+    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+    act(() => openChatDock("me", null, "c2", 2));
+    expect(dockWindow("c1")?.dataset.phase).toBe("minimized");
+    expect(dockWindow("c2")?.dataset.phase).toBe("open");
+
+    act(() => closeChatDock("me"));
+    expect(dockWindow("c1")).toBeNull();
+    expect(dockWindow("c2")).toBeNull();
+    expect(panel()).toBeNull();
   });
 });
 
@@ -798,7 +919,7 @@ function rectOf(box: Box): DOMRect {
  */
 function stubDockBoxes(launcher: Box, composer: Box) {
   return vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-    if (this.classList.contains("fb-chat-launcher")) return rectOf(launcher);
+    if (this.classList.contains("fb-chat-dock-rail-launcher")) return rectOf(launcher);
     if (this.classList.contains("fb-comment-composer")) return rectOf(composer);
     return rectOf({ top: 0, bottom: 0, left: 0, right: 0 });
   });
@@ -826,7 +947,7 @@ function pageComposer() {
 }
 
 function launcherNode() {
-  return document.querySelector<HTMLElement>(".fb-chat-launcher");
+  return document.querySelector<HTMLElement>(".fb-chat-dock-rail-launcher");
 }
 
 function clearanceOf(node: HTMLElement | null) {
