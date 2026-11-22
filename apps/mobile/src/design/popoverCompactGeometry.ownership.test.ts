@@ -1,12 +1,15 @@
 // @vitest-environment node
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { layeredPopoverMaxHeight } from "../components/popoverViewportCap";
 
 /**
  * Owner ruling 2026-11-20: no pop-up may take unnecessary width, excess height
  * or oversized content just to fill the screen. Three small panels each kept a
  * near-window ceiling that their content never needed: the seven-row account
- * menu (44rem = 704px in an 800-900px window), the category picker (70vh for a
+ * menu (30rem ceiling, held by the layered popover `maxHeight` prop — React
+ * Aria writes the overlay's max-height inline and a stylesheet max-height
+ * cannot win, so the CSS file holds none), the category picker (70vh for a
  * 48px trigger) and the search filters (680px tall, 380px wide).
  *
  * These assertions pin the compact ceilings and the owner of each scrollport.
@@ -17,6 +20,7 @@ import { describe, expect, it } from "vitest";
 type CssRule = { selectors: string[]; body: string };
 
 const accountCss = readFileSync(new URL("../components/AccountMenu.css", import.meta.url), "utf8");
+const accountSource = readFileSync(new URL("../components/AccountMenu.tsx", import.meta.url), "utf8");
 const categoryCss = readFileSync(new URL("../components/CategoryField.css", import.meta.url), "utf8");
 const categorySource = readFileSync(new URL("../components/CategoryField.tsx", import.meta.url), "utf8");
 const searchCss = readFileSync(new URL("../screens/SearchScreen.css", import.meta.url), "utf8");
@@ -42,10 +46,19 @@ function bodies(css: string, selector: string) {
 
 describe("account menu ceiling", () => {
   it("caps the menu at 30rem instead of most of an 800px window", () => {
-    const menu = bodies(accountCss, ".fb-account-menu");
+    // React Aria writes the open overlay's max-height inline and that inline
+    // value outranks any stylesheet max-height, so the CSS file holds none.
     expect(accountCss).not.toContain("44rem");
-    expect(menu).toMatch(/max-height:\s*min\(30rem,\s*calc\(100vh - 1\.5rem\)\)/);
-    expect(menu).toMatch(/max-height:\s*min\(30rem,\s*calc\(100dvh - 1\.5rem\),\s*var\(--available-height, 100dvh\)\)/);
+    expect(bodies(accountCss, ".fb-account-menu")).not.toMatch(/max-height:/);
+    // The cap now lives in AccountMenu.tsx: the 480px constant feeds the
+    // layeredPopoverMaxHeight helper and its result rides the popover prop.
+    expect(accountSource).toContain("ACCOUNT_MENU_MAX_HEIGHT_PX = 480");
+    expect(accountSource).toContain("maxHeight={accountMenuMaxHeight}");
+    expect(accountSource).toMatch(/<LayeredPopover[^>]*maxHeight=\{accountMenuMaxHeight\}/);
+    expect(layeredPopoverMaxHeight(800, 480)).toBe(400);
+    expect(layeredPopoverMaxHeight(1440, 480)).toBe(480);
+    expect(layeredPopoverMaxHeight(900, 480)).toBe(450);
+    expect(layeredPopoverMaxHeight(320, 480)).toBe(160);
   });
 
   it("scrolls the menu dialog and never compresses a row", () => {
