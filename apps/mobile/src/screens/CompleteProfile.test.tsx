@@ -314,6 +314,22 @@ describe("buildUsernameSuggestion (W0.6 local stopgap)", () => {
     expect(buildUsernameSuggestion(null, "New.User+tag@example.com")).toBe("new_user_tag");
   });
 
+  it("suggests the Norfold-neutral fallback, never the legacy brand name", () => {
+    // The final-resort literal is "norfold_user"; observable suggestions stay
+    // submittable and off the legacy brand through every input that reaches
+    // the fallback paths.
+    expect(buildUsernameSuggestion("***", "c@example.com")).toBe("user");
+    expect(buildUsernameSuggestion(null, "d@example.com")).toBe("d_user");
+    for (const value of [
+      buildUsernameSuggestion("A", "b@example.com"),
+      buildUsernameSuggestion("***", "c@example.com"),
+      buildUsernameSuggestion(null, "d@example.com"),
+    ]) {
+      expect(value).not.toBe("findback_user");
+      expect(value).toMatch(/^[A-Za-z0-9_]{3,20}$/);
+    }
+  });
+
   it("always yields a submittable shape", () => {
     for (const value of [
       buildUsernameSuggestion("A", "b@example.com"),

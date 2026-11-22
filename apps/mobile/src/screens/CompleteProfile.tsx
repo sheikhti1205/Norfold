@@ -78,7 +78,7 @@ export function buildUsernameSuggestion(name: string | null, email: string): str
   if (!/^[a-z0-9_]{3,20}$/.test(cleaned)) {
     cleaned = `${cleaned}_user`.replace(/_+/g, "_").replace(/^_+|_+$/g, "").slice(0, 20);
   }
-  if (!/^[a-z0-9_]{3,20}$/.test(cleaned)) cleaned = "findback_user".slice(0, 20);
+  if (!/^[a-z0-9_]{3,20}$/.test(cleaned)) cleaned = "norfold_user".slice(0, 20);
   return cleaned;
 }
 

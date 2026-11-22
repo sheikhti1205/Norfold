@@ -96,7 +96,7 @@ export function suggestUsername(name: string | null, email: string): string {
     const candidate = normalizeCandidate(raw);
     if (USERNAME_PATTERN.test(candidate)) return candidate;
   }
-  return "findback_user";
+  return "norfold_user";
 }
 
 function sanitizeAvatarUrl(value: unknown): string | null {
