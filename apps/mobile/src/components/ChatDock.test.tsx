@@ -259,8 +259,9 @@ describe("ChatDock launcher", () => {
       summary("c1", "p1", { unread: 2, author: "p1" })];
     mount("/");
     expect(screen.getByText("2 unread")).toBeTruthy();
-    // Both actions sit on the one launcher: the avatar and the pencil.
-    expect(screen.getByRole("button", { name: "New message" })).toBeTruthy();
+    // Both actions sit on the one launcher: the avatar and the pencil. The
+    // pencil carries the distinct-unread badge in its label.
+    expect(screen.getByRole("button", { name: "1 unread conversations, new message" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
     expect(screen.getAllByLabelText(/^Conversation /)).toHaveLength(1);
     expect(thread.props).toMatchObject({ accountId: "me", conversationId: "c1", surface: "dock", active: true });
@@ -270,7 +271,7 @@ describe("ChatDock launcher", () => {
     named("p1", "Alice");
     chat.conversations = [summary("c1", "p1", { unread: 2, author: "p1", messageId: "m1" })];
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "New message" }));
+    fireEvent.click(screen.getByRole("button", { name: "1 unread conversations, new message" }));
 
     // The picker is the compose surface: no thread, no request, no send.
     expect(screen.getByRole("heading", { name: "New message" })).toBeTruthy();
@@ -427,7 +428,8 @@ describe("ChatDock panel", () => {
     expect(dockWindow("c1")?.dataset.phase).toBe("open");
     expect(dockWindow("c1")?.hidden).toBe(false);
     expect(thread.byId.c1?.active).toBe(true);
-    expect(rail()).toBeNull();
+    // The rail still renders (it holds the launcher) but carries no heads.
+    expect(railHeads()).toHaveLength(0);
     expect(screen.getByLabelText("Message draft c1")).toBe(draft);
     expect((draft as HTMLInputElement).value).toBe("half a thought");
   });
@@ -488,8 +490,8 @@ describe("ChatDock windows", () => {
 
     // The desktop launcher stays at the foot while a window is open, so the
     // second conversation opens from the picker beside the first.
-    expect(screen.getByRole("button", { name: "New message" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "New message" }));
+    expect(screen.getByRole("button", { name: "1 unread conversations, new message" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "1 unread conversations, new message" }));
     fireEvent.click(screen.getByRole("button", { name: "Open conversation with Bob" }));
     expect(dockWindow("picker")).toBeNull();
     expect(dockWindows()).toHaveLength(2);
@@ -512,7 +514,7 @@ describe("ChatDock windows", () => {
 
     // The launcher stays at the foot while a head exists, so a second chat
     // can be chosen from the picker.
-    fireEvent.click(screen.getByRole("button", { name: "New message" }));
+    fireEvent.click(screen.getByRole("button", { name: "1 unread conversations, new message" }));
     fireEvent.click(screen.getByRole("button", { name: "Open conversation with Bob" }));
     expect(dockWindow("picker")).toBeNull();
     expect(dockWindow("c1")?.dataset.phase).toBe("minimized");
@@ -585,11 +587,13 @@ describe("ChatDock windows", () => {
   it("never puts the new-message chooser on the rail", () => {
     mount("/");
     fireEvent.click(screen.getByRole("button", { name: "Open messages" }));
-    expect(rail()).toBeNull();
+    // The rail renders (it holds the launcher) but the new-message chooser is
+    // never a rail head.
+    expect(railHeads()).toHaveLength(0);
     expect(dockWindow("picker")?.dataset.view).toBe("picker");
 
     act(() => minimizeChatDock("me", null));
-    expect(rail()).toBeNull();
+    expect(railHeads()).toHaveLength(0);
     expect(dockWindow("picker")?.hidden).toBe(false);
   });
 
@@ -663,7 +667,9 @@ describe("ChatDock windows", () => {
     chat.conversations = [summary("c1", "p1", { unread: 1, author: "p1" }), summary("c2", "p2")];
     mount("/");
     fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
-    act(() => openChatDock("me", null, "c2", 2));
+    // Limit 1 forces c1 (the only other open window) to fold to a rail head,
+    // leaving c2 as the open floating window.
+    act(() => openChatDock("me", null, "c2", 1));
     expect(dockWindow("c1")?.dataset.phase).toBe("minimized");
     expect(dockWindow("c2")?.dataset.phase).toBe("open");
 
@@ -679,7 +685,8 @@ describe("ChatDock windows", () => {
     chat.conversations = [summary("c1", "p1", { unread: 1, author: "p1" }), summary("c2", "p2")];
     mount("/");
     fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
-    act(() => openChatDock("me", null, "c2", 2));
+    // Limit 1 folds c1 to a rail head so c2 becomes the open floating window.
+    act(() => openChatDock("me", null, "c2", 1));
     expect(dockWindow("c1")?.dataset.phase).toBe("minimized");
     expect(dockWindow("c2")?.dataset.phase).toBe("open");
 
@@ -950,6 +957,10 @@ function launcherNode() {
   return document.querySelector<HTMLElement>(".fb-chat-dock-rail-launcher");
 }
 
+function railNode() {
+  return document.querySelector<HTMLElement>(".fb-chat-dock-rail");
+}
+
 function clearanceOf(node: HTMLElement | null) {
   return node?.style.getPropertyValue("--fb-composer-clearance") ?? "";
 }
@@ -977,8 +988,10 @@ describe("ChatDock page composer clearance", () => {
         { top: item.composer, bottom: item.height, left: 0, right: item.width },
       );
       mount("/");
-      // The composer's top edge plus the dock's own 8px gap.
-      expect(clearanceOf(launcherNode())).toBe(`${item.lift}px`);
+      // The composer's top edge plus the dock's own 8px gap. The lift is
+      // published on the rail (the single owner of --fb-composer-clearance),
+      // not on the launcher button's own inline style.
+      expect(clearanceOf(railNode())).toBe(`${item.lift}px`);
       expect(item.launcher - item.lift - 52, `${item.width}px wide`).toBeGreaterThan(0);
       cleanup();
       vi.restoreAllMocks();
@@ -1007,7 +1020,7 @@ describe("ChatDock page composer clearance", () => {
     const box: Box = { top: 780, bottom: 844, left: 0, right: 390 };
     stubDockBoxes(launcher, box);
     mount("/");
-    expect(clearanceOf(launcherNode())).toBe("60px");
+    expect(clearanceOf(railNode())).toBe("60px");
 
     const observer = FakeResizeObserver.instances.at(-1);
     expect(observer?.targets.has(composer)).toBe(true);
@@ -1017,14 +1030,14 @@ describe("ChatDock page composer clearance", () => {
     launcher.top = 720;
     launcher.bottom = 772;
     act(() => observer?.callback());
-    expect(clearanceOf(launcherNode())).toBe("140px");
+    expect(clearanceOf(railNode())).toBe("140px");
 
     // The measured box carries that lift, so it is taken back out: a second
     // observation of the same boxes keeps the same clearance.
     launcher.top = 640;
     launcher.bottom = 692;
     act(() => observer?.callback());
-    expect(clearanceOf(launcherNode())).toBe("140px");
+    expect(clearanceOf(railNode())).toBe("140px");
   });
 
   it("never counts the dock's own composer as the page composer", () => {
@@ -1044,7 +1057,7 @@ describe("ChatDock page composer clearance", () => {
     const observer = FakeResizeObserver.instances.at(-1);
     act(() => observer?.callback());
     expect(observer?.targets.has(dockComposer)).toBe(false);
-    expect(clearanceOf(launcherNode())).toBe("");
+    expect(clearanceOf(railNode())).toBe("");
   });
 
   it("drops the lift on a phone while a window is open, as the launcher hides", () => {
@@ -1055,12 +1068,12 @@ describe("ChatDock page composer clearance", () => {
       { top: 780, bottom: 844, left: 0, right: 390 },
     );
     mount("/");
-    expect(clearanceOf(launcherNode())).toBe("60px");
+    expect(clearanceOf(railNode())).toBe("60px");
 
     act(() => openChatDock("me", null, "c1", 1));
-    const launcher = launcherNode();
-    expect(launcher?.hidden).toBe(true);
-    expect(clearanceOf(launcher)).toBe("");
+    // On a phone with a window open the launcher is unmounted (not hidden), so
+    // it reads as null and no clearance surface remains.
+    expect(launcherNode()).toBeNull();
     expect(rail()).toBeNull();
     expect(panel()?.getAttribute("data-launcher")).toBeNull();
   });

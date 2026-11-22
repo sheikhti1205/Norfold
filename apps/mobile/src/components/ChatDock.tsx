@@ -394,22 +394,31 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
     <>
       {/* One vertical rail column: minimized heads, then the launcher bubble at
           the bottom-most position. Heads and the launcher share one vertical
-          axis; the `+N` chips batch only the heads, never the launcher. */}
+          axis; the `+N` chips batch only the heads, never the launcher. The
+          chip slots and the heads region always render (even when empty) so the
+          launcher is always the last child of this column whenever the dock
+          shows it, and never remounts while visible. The store's remembered
+          trigger therefore stays attached and `target.focus()` on close keeps
+          working. An empty slot is kept out of the flex layout so it adds no
+          gap, but it still occupies a stable React child index. */}
       {(railVisible || launcherVisible) && (
         <div className="fb-chat-dock-rail" data-nav={bottomNavVisible ? "visible" : "hidden"}
           style={composerStyle}
           role="group" aria-label="Minimized chats">
-          {above > 0 && (
-            <button type="button" className="fb-chat-dock-rail-more"
-              aria-label={`Show ${above} older minimized ${above === 1 ? "chat" : "chats"}`}
-              onClick={() => {
-                const nextStart = Math.max(0, start - batch);
-                setRailAnchor(nextStart === railOrder.length - batch
-                  ? null : railOrder[nextStart]?.conversationId ?? null);
-              }}>
-              {`+${above}`}
-            </button>
-          )}
+          {/* Above chip slot — always present so the launcher's index cannot shift. */}
+          <div style={{ display: above > 0 ? undefined : "none" }}>
+            {above > 0 && (
+              <button type="button" className="fb-chat-dock-rail-more"
+                aria-label={`Show ${above} older minimized ${above === 1 ? "chat" : "chats"}`}
+                onClick={() => {
+                  const nextStart = Math.max(0, start - batch);
+                  setRailAnchor(nextStart === railOrder.length - batch
+                    ? null : railOrder[nextStart]?.conversationId ?? null);
+                }}>
+                {`+${above}`}
+              </button>
+            )}
+          </div>
           <div className="fb-chat-dock-rail-heads">
             {heads.map((entry) => {
               const conversationId = entry.conversationId as string;
@@ -433,18 +442,22 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
               );
             })}
           </div>
-          {below > 0 && (
-            <button type="button" className="fb-chat-dock-rail-more"
-              aria-label={`Show ${below} newer minimized ${below === 1 ? "chat" : "chats"}`}
-              onClick={() => {
-                const nextStart = Math.min(start + batch, railOrder.length - batch);
-                setRailAnchor(nextStart === railOrder.length - batch
-                  ? null : railOrder[nextStart]?.conversationId ?? null);
-              }}>
-              {`+${below}`}
-            </button>
-          )}
-          {/* Launcher bubble: the unread peer's avatar, or the messages icon. */}
+          {/* Below chip slot — always present so the launcher's index cannot shift. */}
+          <div style={{ display: below > 0 ? undefined : "none" }}>
+            {below > 0 && (
+              <button type="button" className="fb-chat-dock-rail-more"
+                aria-label={`Show ${below} newer minimized ${below === 1 ? "chat" : "chats"}`}
+                onClick={() => {
+                  const nextStart = Math.min(start + batch, railOrder.length - batch);
+                  setRailAnchor(nextStart === railOrder.length - batch
+                    ? null : railOrder[nextStart]?.conversationId ?? null);
+                }}>
+                {`+${below}`}
+              </button>
+            )}
+          </div>
+          {/* Launcher bubble: last child, unconditionally rendered whenever the dock
+              shows the launcher. Its position in the column is stable. */}
           {launcherVisible && (
             <button ref={launcherNode} type="button" className="fb-chat-dock-rail-launcher"
               aria-label={unreadRow ? `Open chat with ${unreadName}` : "Open messages"}
