@@ -476,14 +476,13 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
             icon={<X size={20} aria-hidden="true" />}
             triggerClassName="fb-chat-dock-utility-close"
             disabled={entries.length === 0}
-            placement="bottom end">
-            {[
+            placement="bottom end"
+            items={[
               { id: "close-all", label: "Close all chats" as const,
                 onAction: () => { closeChatDock(accountId); } } as MenuAction,
               { id: "close-floating", label: "Close floating windows" as const,
                 onAction: closeFloatingWindows } as MenuAction,
-            ]}
-          </ActionMenu>
+            ]} />
           <button type="button" className="fb-chat-dock-utility-pencil"
             aria-label={unreadBadge ? `${unreadBadge} unread conversations, new message` : "New message"}
             onClick={(event) => {
