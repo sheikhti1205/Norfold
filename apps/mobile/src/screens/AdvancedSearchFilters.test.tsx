@@ -428,3 +428,53 @@ describe("AdvancedSearchFilters optional type and place (Search only)", () => {
     expect(screen.queryByText(/^Type:/)).toBeNull();
   });
 });
+
+describe("AdvancedSearchFilters trigger-row Clear filters button (Search)", () => {
+  function ClearFiltersHarness() {
+    const filters = useAdvancedSearchFilters();
+    return <AdvancedSearchFilters filters={filters} />;
+  }
+
+  /** The hideTrigger shape is My Posts'; the hook call must live in a
+      component render, never in the test body. */
+  function HideTriggerHarness() {
+    const filters = useAdvancedSearchFilters();
+    return <AdvancedSearchFilters filters={filters} hideTrigger />;
+  }
+
+  it("exposes a disabled Clear filters button when no filter is active", () => {
+    render(
+      <MemoryRouter initialEntries={["/search"]}>
+        <ClearFiltersHarness />
+      </MemoryRouter>,
+    );
+    const button = screen.getByRole("button", { name: "Clear filters" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+
+  it("enables Clear filters when a filter is active and clearing it clears every filter", async () => {
+    render(
+      <MemoryRouter initialEntries={["/search?category=Electronics&status=OPEN&sort=oldest"]}>
+        <ClearFiltersHarness />
+      </MemoryRouter>,
+    );
+    const button = screen.getByRole("button", { name: "Clear filters" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+    // The Filters trigger's active count drops back to zero.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Filters" })).toBeTruthy());
+    // Every active filter is cleared: the chips leave the screen.
+    await waitFor(() => expect(screen.queryByText(/^Category:/)).toBeNull());
+    expect(screen.queryByText(/^Status:/)).toBeNull();
+    expect(screen.queryByText(/^Sort:/)).toBeNull();
+  });
+
+  it("keeps My Reports' hideTrigger without a stray trigger row", () => {
+    render(
+      <MemoryRouter initialEntries={["/search"]}>
+        <HideTriggerHarness />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
+  });
+});

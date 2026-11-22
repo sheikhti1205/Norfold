@@ -301,8 +301,11 @@ export function AdvancedSearchFilters({
               </Dialog>
             </LayeredPopover> : task}
           </DialogTrigger>
-          {!sheetOpen && <button type="button" onClick={clearAll} disabled={activeCount === 0}
-            className="fb-surface-button fb-search-filter-clear">Clear filters</button>}
+          {/* A real Clear-filters control beside the Filters button, not an
+              underlined link at the end of the row. Always offered; disabled
+              only while no filter is active, matching GlobalSearchOverlay. */}
+          <button type="button" onClick={clearAll} disabled={activeCount === 0}
+            className="fb-surface-button fb-search-filter-clear">Clear filters</button>
         </div>
       )}
       {!hideSheet && hideTrigger && task}
