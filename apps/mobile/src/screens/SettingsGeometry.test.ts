@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
  */
 const screenCss = readFileSync(new URL("./Settings.css", import.meta.url), "utf8");
 const primitiveCss = readFileSync(new URL("../components/settings/settings.css", import.meta.url), "utf8");
+const profileCss = readFileSync(new URL("./Profile.css", import.meta.url), "utf8");
 const splitCss = readFileSync(new URL("../components/adaptiveFoundation.css", import.meta.url), "utf8");
 
 describe("Settings row geometry", () => {
@@ -37,6 +38,21 @@ describe("Settings row geometry", () => {
       .join("\n");
     expect(rowRules).not.toMatch(/overflow\s*:\s*hidden/);
     expect(screenCss).not.toMatch(/\.fb-settings-root \.fb-settings-row[^{]*\{[^}]*overflow\s*:\s*hidden/);
+  });
+
+  it("keeps every leading settings icon on one 28px gutter", () => {
+    // The shared row primitive and the root row grid both resolve the leading
+    // icon to the same 28px box, so the svg inside (20px) keeps one 4px inset
+    // regardless of which row primitive or subpane renders it.
+    expect(primitiveCss).toMatch(/\.fb-setting-icon \{[^}]*width: 28px/);
+    expect(screenCss).toMatch(/\.fb-settings-root \.fb-settings-row \{[^}]*grid-template-columns:28px minmax\(0,1fr\) auto/);
+    expect(screenCss).toMatch(/\.fb-settings-root \.fb-setting-icon \{[^}]*width: 28px/);
+  });
+
+  it("keeps profile provider marks on the same svg inset as standard icons", () => {
+    // Provider marks are 16px, so their box shrinks to 24px and keeps the same
+    // 4px svg inset as a 20px glyph in a 28px box.
+    expect(profileCss).toMatch(/\.fb-profile \.fb-setting-icon \{[^}]*width: 24px/);
   });
 
   it("lets a split fall back to one pane when the detail side would be unusable", () => {

@@ -26,7 +26,10 @@
   margin: auto;
   height: fit-content;
   width: min(640px, calc(100% - 48px));
-  max-height: calc(100% - 48px);
+  /* A comfortable share of the viewport, not the whole screen: the overlay
+     must never read as a near-full-screen sheet on a tall window. The body
+     below owns the scroll once this cap is reached. */
+  max-height: min(60vh, calc(100dvh - 48px));
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -188,7 +191,9 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  flex: 0 1 auto;
+  /* The filter bar keeps its height; the results card below is the scroll
+     owner when the overlay hits its viewport cap. */
+  flex: 0 0 auto;
   min-height: 0;
 }
 .fb-search-pills {

@@ -600,7 +600,10 @@ function SearchSurface() {
       aria-label={searchLabel}
       style={phoneTop === null ? undefined : {
         top: phoneTop,
-        maxHeight: `calc(100dvh - ${phoneTop}px - 12px)`,
+        /* The phone keeps the app-bar offset and safe-area math, but the cap is
+           still the smaller of the comfortable viewport share and the space left
+           below the bar, so a tall phone window cannot become a full-screen sheet. */
+        maxHeight: `min(60vh, calc(100dvh - ${phoneTop}px - 12px))`,
       }}
       initial={{ opacity: 0, scale: 0.985 }}
       animate={{ opacity: 1, scale: 1 }}
