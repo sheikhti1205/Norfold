@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useRef } from "react";
 import { HoverLabelProvider, HOVER_LABEL_MS, useHoverLabel } from "./HoverLabel";
 
-function Probe({ label = "Save", placement }: { label?: string; placement?: "top" | "right" }) {
+function Probe({ label = "Save", placement }: { label?: string; placement?: "top" | "right" | "left" }) {
   const { hoverLabel } = useHoverLabel();
   return <button type="button" aria-label={label} {...hoverLabel(label, placement)}>{label}</button>;
 }
@@ -110,11 +111,46 @@ describe("shared hover label", () => {
 
   it("records the requested edge for positioning", () => {
     vi.useFakeTimers();
-    render(<HoverLabelProvider><Probe placement="right" /></HoverLabelProvider>);
+    render(<HoverLabelProvider><Probe placement="left" /></HoverLabelProvider>);
     const button = screen.getByRole("button", { name: "Save" });
     fireEvent.pointerEnter(button, { pointerType: "mouse" });
     act(() => { vi.advanceTimersByTime(HOVER_LABEL_MS); });
-    expect(pill()?.getAttribute("data-placement")).toBe("right");
+    expect(pill()?.getAttribute("data-placement")).toBe("left");
+  });
+
+  it("names a row's actions from the row so the pill never covers a neighbour", () => {
+    const original = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("fb-hover-label")) return rect(0, 0, 80, 36);
+      if (this.classList.contains("fb-row")) return rect(1200, 600, 122, 44);
+      return rect(1311, 606, 34, 34);
+    });
+    function Row() {
+      const { hoverLabel } = useHoverLabel();
+      const row = useRef<HTMLDivElement>(null);
+      return (
+        <div className="fb-row" ref={row}>
+          <button type="button" aria-label="Compose" {...hoverLabel("Compose", "left", () => row.current)}>
+            compose
+          </button>
+        </div>
+      );
+    }
+    try {
+      vi.useFakeTimers();
+      render(<HoverLabelProvider><Row /></HoverLabelProvider>);
+      fireEvent.pointerEnter(screen.getByRole("button", { name: "Compose" }), { pointerType: "mouse" });
+      act(() => { vi.advanceTimersByTime(HOVER_LABEL_MS); });
+      const element = pill()!;
+      // Anchored to the 122px row, not the 34px button: 1200 - 10 - 80 leaves
+      // the pill ending 10px before the row, so the neighbouring actions stay
+      // visible while one of them is being named.
+      expect(element.style.left).toBe("1110px");
+      expect(element.getAttribute("data-placement")).toBe("left");
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: original });
+    }
   });
 
   it("drops below a control that has no room above it", () => {

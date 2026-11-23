@@ -504,7 +504,7 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
               <div ref={stripNode} className="fb-chat-dock-rail-strip">
                 <button type="button" className="fb-chat-dock-rail-action"
                   aria-label="Compose"
-                  {...hoverLabel("Compose", "right")}
+                  {...hoverLabel("Compose", "left", () => stripNode.current)}
                   onClick={(event) => {
                     if (!accountId) return;
                     // The picker is its own dock entry: pressing Compose while it is
@@ -522,14 +522,14 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
                   <>
                     <span className="fb-chat-dock-rail-divider" aria-hidden="true" />
                     <button type="button" className="fb-chat-dock-rail-action" aria-label="Minimize"
-                      {...hoverLabel("Minimize", "right")}
+                      {...hoverLabel("Minimize", "left", () => stripNode.current)}
                       onClick={(event) => tuckRail(event.detail === 0)}>
                       <Minus size={16} aria-hidden="true" />
                     </button>
                     <span className="fb-chat-dock-rail-divider" aria-hidden="true" />
                     <button type="button" className="fb-chat-dock-rail-action fb-chat-dock-rail-danger"
                       aria-label="Close"
-                      {...hoverLabel("Close", "right")}
+                      {...hoverLabel("Close", "left", () => stripNode.current)}
                       onClick={() => {
                         if (accountId) closeChatDockSurface(accountId);
                       }}>
@@ -542,7 +542,7 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
           ) : (
             <button ref={anchorNode} type="button" className="fb-chat-dock-rail-anchor"
               aria-label={unreadPeopleCount > 0 ? `Open chats, ${unreadPeopleCount} waiting` : "Open chats"}
-              {...hoverLabel("Open chats", "right")}
+              {...hoverLabel("Open chats", "left")}
               onClick={(event) => {
                 if (!accountId) return;
                 untuckChatDock(accountId);

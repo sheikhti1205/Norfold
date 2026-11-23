@@ -42,7 +42,7 @@ export const HOVER_LABEL_MS = 180;
  */
 const HOVER_LABEL_REENTER_MS = 400;
 
-export type HoverLabelPlacement = "top" | "right";
+export type HoverLabelPlacement = "top" | "right" | "left";
 
 interface ActiveLabel {
   label: string;
@@ -246,10 +246,15 @@ export function HoverLabelProvider({ children }: { children: ReactNode }) {
     let left: number;
     let top: number;
     let transform: string;
-    if (placement === "right") {
+    if (placement === "right" || placement === "left") {
       transform = "translateY(-50%)";
-      left = rect.right + gap;
+      left = placement === "right" ? rect.right + gap : rect.left - gap - box.width;
+      // Flip to the other side only when the requested edge has no room. A
+      // "left" label is the one a rail asks for: it must never cover the
+      // neighbours that share the row, so the pad check is the only reason to
+      // move it back over them.
       if (left + box.width > window.innerWidth - pad) left = rect.left - gap - box.width;
+      else if (left < pad) left = rect.right + gap;
       left = Math.min(Math.max(left, pad), Math.max(pad, window.innerWidth - pad - box.width));
       top = Math.min(
         Math.max(rect.top + rect.height / 2, pad + box.height / 2),
@@ -304,11 +309,16 @@ export interface HoverLabelHandlers {
  * Spread the returned handlers onto an icon-only control. Without a provider
  * (a fixture or a test that mounts a control alone) this is a no-op rather
  * than a crash, so the control keeps working.
+ *
+ * `anchor` is for controls that share one row: the name of a capsule action
+ * belongs to the capsule, not to the 34px button, so a pill anchored to the
+ * button would cover its neighbours. Resolved at pointer time, because a ref
+ * is still empty in the render that mounts it.
  */
 export function useHoverLabel() {
   const api = useContext(HoverLabelContext);
   const hoverLabel = useCallback(
-    (label: string, placement: HoverLabelPlacement = "top"): HoverLabelHandlers => {
+    (label: string, placement: HoverLabelPlacement = "top", anchor?: () => HTMLElement | null): HoverLabelHandlers => {
       if (!api) return {};
       return {
         onPointerEnter: (event: ReactPointerEvent<HTMLElement>) => {
@@ -328,7 +338,7 @@ export function useHoverLabel() {
             api.dismiss();
             return;
           }
-          api.show(event.currentTarget, label, placement);
+          api.show(anchor?.() ?? event.currentTarget, label, placement);
         },
         onPointerLeave: () => api.hide(),
         onPointerDown: () => api.hide(),
