@@ -1462,7 +1462,17 @@ describe("chatDock store", () => {
     return render(<><StoreProbe viewer="a" /><StoreProbe viewer="b" /><StoreProbe viewer={null} /></>);
   }
 
-  it("is account-fenced and memory only", () => {
+  /** The facts the entry list does not carry: the folded flag, the rank, the visit. */
+  function RailProbe() {
+    const state = useChatDock("a");
+    return <output data-testid="rail">
+      {state === null
+        ? "null"
+        : `${state.tucked ? "tucked" : "open"}|${state.seq}|${state.closed ? "closed" : "live"}`}
+    </output>;
+  }
+
+  it("is account-fenced and starts at the resting circle", () => {
     mountStore();
     // A signed-in viewer with no dock yet gets one stable empty snapshot, so
     // the Compose affordance exists before the first mutation. Signed out is
@@ -1603,6 +1613,79 @@ describe("chatDock store", () => {
     for (const read of reads) expect(read).toBe(reads[0]);
     // Signed out is still nothing at all.
     expect(screen.getByTestId("state-signed-out").textContent).toBe("null|f:-");
+  });
+
+  it("stores the account's windows and focus order, and never the picker", () => {
+    mountStore();
+    act(() => openChatDock("a", null, "c1", 3));
+    act(() => openChatDock("a", null, "c2", 3));
+    act(() => minimizeChatDock("a", "c1"));
+    act(() => openChatDock("a", null, null, 3));
+
+    // Every mutation rewrites the record, and the picker — which is not a
+    // conversation — has no place in it.
+    expect(JSON.parse(sessionStorage.getItem("fb-chat-dock-entries:a") ?? "null")).toEqual({
+      seq: 3,
+      tucked: false,
+      entries: [
+        { conversationId: "c1", phase: "minimized", seq: 1 },
+        { conversationId: "c2", phase: "open", seq: 2 },
+      ],
+    });
+    const raw = sessionStorage.getItem("fb-chat-dock-entries:a") ?? "";
+    expect(raw).not.toContain("null");
+    expect(raw).not.toContain("closed");
+  });
+
+  it("removes the stored rail when the dock empties or the reader closes it", () => {
+    mountStore();
+    act(() => openChatDock("a", null, "c1", 3));
+    expect(sessionStorage.getItem("fb-chat-dock-entries:a")).toBeTruthy();
+    act(() => closeChatDockEntry("a", "c1"));
+    expect(sessionStorage.getItem("fb-chat-dock-entries:a")).toBeNull();
+
+    act(() => openChatDock("a", null, "c1", 3));
+    act(() => closeChatDock("a"));
+    expect(sessionStorage.getItem("fb-chat-dock-entries:a")).toBeNull();
+
+    // Close ends the visit without keeping it dismissed: there is nothing to
+    // restore, so a reload paints the resting circle.
+    act(() => openChatDock("a", null, "c1", 3));
+    act(() => closeChatDockSurface("a"));
+    expect(sessionStorage.getItem("fb-chat-dock-entries:a")).toBeNull();
+  });
+
+  it("restores a stored rail for the same account and drops what cannot be restored", () => {
+    sessionStorage.setItem("fb-chat-dock-entries:a", JSON.stringify({
+      seq: 1,
+      tucked: false,
+      entries: [
+        { conversationId: "c1", phase: "open", seq: 4 },
+        { conversationId: "c1", phase: "minimized", seq: 1 },
+        { conversationId: "", phase: "open", seq: 9 },
+        { conversationId: "c2", phase: "expanded", seq: 9 },
+        { conversationId: "c3", phase: "minimized", seq: 2 },
+        "junk",
+        null,
+      ],
+    }));
+    render(<><StoreProbe viewer="a" /><StoreProbe viewer="b" /><RailProbe /></>);
+    // The duplicate, the empty id and the unknown phase never reach the rail;
+    // the rank is clamped to the highest restored entry.
+    expect(screen.getByTestId("state-a").textContent).toBe("c1:open,c3:minimized|f:c1");
+    expect(screen.getByTestId("state-b").textContent).toBe("null|f:-");
+    expect(screen.getByTestId("rail").textContent).toBe("open|4|live");
+
+    // The restored state is the one a mutation acts on, and it is rewritten.
+    act(() => minimizeChatDock("a", "c1"));
+    expect(JSON.parse(sessionStorage.getItem("fb-chat-dock-entries:a") ?? "null")).toEqual({
+      seq: 4,
+      tucked: false,
+      entries: [
+        { conversationId: "c1", phase: "minimized", seq: 4 },
+        { conversationId: "c3", phase: "minimized", seq: 2 },
+      ],
+    });
   });
 });
 
