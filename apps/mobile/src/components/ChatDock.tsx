@@ -510,7 +510,7 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
                 icon={<X size={20} aria-hidden="true" />}
                 triggerClassName="fb-chat-dock-utility-close"
                 disabled={entries.length === 0}
-                placement="top end"
+                placement="bottom end"
                 items={[
                   { id: "close-all", label: "Close all chats" as const,
                     onAction: () => { closeChatDock(accountId); } } as MenuAction,
