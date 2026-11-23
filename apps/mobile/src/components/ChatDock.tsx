@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type { SearchedProfile } from "@norfold/shared";
-import { MessageSquareText, Pencil, Search, X } from "lucide-react";
+import { MessageSquareText, Minus, Pencil, Search, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../auth";
 import { ThreadSession } from "../screens/Messaging";
@@ -12,11 +12,10 @@ import { searchPeople } from "../services/people";
 import { messagePreview } from "../utils/messagePreview";
 import { useSafetyLifetime } from "../utils/useSafetyLifetime";
 import {
-  closeChatDockEntry, closeChatDock, focusChatDock, minimizeChatDock,
-  openChatDock, openConversation, resetChatDock, restoreChatDock, useChatDock,
-  isChatDockDismissed, type ChatDockEntry,
+  closeChatDockEntry, closeChatDockSurface, focusChatDock, minimizeChatDock,
+  openChatDock, openConversation, resetChatDock, restoreChatDock, tuckChatDock,
+  untuckChatDock, useChatDock, isChatDockDismissed, type ChatDockEntry,
 } from "./chatDock";
-import { ActionMenu, type MenuAction } from "./ActionMenu";
 import { useHoverLabel } from "./HoverLabel";
 import { UserAvatar } from "./UserAvatar";
 import "./ChatDock.css";
@@ -42,14 +41,13 @@ const DESKTOP_MIN_WIDTH = 768;
 const WINDOW_WIDTH = 384;
 const WINDOW_GAP = 12;
 const DESKTOP_MAX_WINDOWS = 3;
-/** Rail head geometry; the batch math and the CSS rule share these numbers. */
-const RAIL_HEAD_SIZE = 48;
-const RAIL_CHIP_SIZE = 44;
-const RAIL_GAP = 8;
-/** The band's own inset from the screen edge, mirrored in `ChatDock.css`. */
-const RAIL_EDGE_INSET = 12;
+/**
+ * Heads in the rail before it pages. The rail is a column, so the fit is a
+ * height question the drawing already answered: five 48px heads, the two +N
+ * counters and the capsule. Independent of viewport width.
+ */
 const RAIL_MAX_HEADS = 5;
-/** Air kept between the launcher and a page composer pinned at the foot. */
+/** Air kept between the rail and a page composer pinned at the foot. */
 const COMPOSER_CLEARANCE_GAP = 8;
 const NO_ENTRIES: readonly ChatDockEntry[] = [];
 
@@ -57,24 +55,6 @@ const NO_ENTRIES: readonly ChatDockEntry[] = [];
 function openWindowLimit(width: number): number {
   if (width < DESKTOP_MIN_WIDTH) return 1;
   return Math.min(DESKTOP_MAX_WINDOWS, Math.max(1, Math.floor((width - 24) / (WINDOW_WIDTH + WINDOW_GAP))));
-}
-
-/**
- * Heads per rail batch. The band is horizontal, so the fit is a width question:
- * from the screen's right edge inward it reserves the edge inset, the
- * close/pencil column, the launcher, both page chips and the gaps between them,
- * then fits as many 48px heads as the remainder holds. The worst case is both
- * chips visible; at the narrowest desktop width five heads still fit. Never
- * fewer than one head, never more than five.
- */
-function railBatch(width: number): number {
-  const fixed = RAIL_EDGE_INSET * 2
-    + RAIL_CHIP_SIZE /* close/pencil column */
-    + RAIL_HEAD_SIZE /* launcher */
-    + RAIL_CHIP_SIZE * 2 /* both page chips */
-    + RAIL_GAP * 4; /* chip↔heads, heads↔chip, chip↔launcher, launcher↔column */
-  const fit = Math.floor((width - fixed + RAIL_GAP) / (RAIL_HEAD_SIZE + RAIL_GAP));
-  return Math.max(1, Math.min(RAIL_MAX_HEADS, fit));
 }
 
 function useViewportSize() {
@@ -145,15 +125,15 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
   const panelMounted = entries.length > 0;
   const visible = !CHAT_SURFACE.test(pathname) && !hostOccluded;
   const focusedSeq = openEntries.reduce((max, entry) => Math.max(max, entry.seq), -1);
-  // The rail is a pointer surface; while a window is open on a phone there is
-  // no room beside it, so the rail waits until the reader minimizes.
-  const railVisible = visible && minimized.length > 0 && (!phone || openEntries.length === 0);
-  // Desktop keeps the compose control at the foot while windows are open: that
-  // is the only surface that can open a second conversation, and the row above
-  // it already reserves the 60px. A phone still gives the one window the whole
-  // screen and brings the launcher back as soon as nothing is open.
-  const launcherVisible = visible && (!phone || openEntries.length === 0)
-    && (minimized.length > 0 || !panelMounted || !phone);
+  // Three states and nothing else: `closed` paints no dock at all, `tucked`
+  // paints the 48px circle, anything else paints the rail. A tuck alone never
+  // hides the rail when it holds nothing: an empty dock is a Compose
+  // affordance, never a dead circle. The store guarantees a state for a
+  // signed-in viewer; the optional reads only keep the signed-out render (which
+  // returns null below) type-safe.
+  const dockClosed = dock?.closed === true;
+  const expanded = !dockClosed && (!(dock?.tucked === true) || entries.length === 0);
+  const railPainted = visible && !dockClosed;
 
   const windowNodes = useRef(new Map<string, HTMLDivElement>());
   const previousViewer = useRef<string | null>(null);
@@ -163,12 +143,18 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
   // conversation closes or is dismissed.
   const [railAnchor, setRailAnchor] = useState<string | null>(null);
   const [focusAfterRestore, setFocusAfterRestore] = useState<string | null>(null);
+  // The rail unmounts one of its two halves whenever it opens or tucks, so a
+  // keyboard activation that removes the pressed control moves focus to the
+  // other half instead of dropping it on the document.
+  const [pendingFocus, setPendingFocus] = useState<"strip" | "anchor" | null>(null);
   // A page composer pinned at the foot — the report page's comment bar — would
-  // otherwise sit underneath the launcher, and a tap on its Send button would
-  // land on the launcher instead. Its height is measured, never assumed: the
-  // lift is published on the dock's own surfaces so the launcher, the rail and
-  // an open window keep one bottom anchor and move together.
-  const launcherNode = useRef<HTMLButtonElement | null>(null);
+  // otherwise sit underneath the rail, and a tap on its Send button would
+  // land on the rail instead. Its height is measured, never assumed: the lift
+  // is published on the dock's own surfaces so the rail and an open window
+  // keep one bottom anchor and move together.
+  const railNode = useRef<HTMLDivElement | null>(null);
+  const stripNode = useRef<HTMLDivElement | null>(null);
+  const anchorNode = useRef<HTMLButtonElement | null>(null);
   const clearanceRef = useRef(0);
   const [composerClearance, setComposerClearance] = useState(0);
 
@@ -193,22 +179,15 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
       && message.unsentAt === undefined && !view?.ownHidden && !view?.ownDeclined && !view?.ownBlocked
       && !view?.ownMuted;
   };
-  // A conversation that already has a dock entry — open or minimized — already
-  // represents itself in the column, so the launcher must not pick it again and
-  // paint the same person twice. Dismissed rows stay excluded. When no other
-  // eligible unread row remains, the launcher falls back to its neutral label.
-  const docked = new Set(entries.map((entry) => entry.conversationId).filter((id): id is string => id !== null));
-  const unreadRow = rows.find((conversation) => unreadEligible(conversation)
-    && !isChatDockDismissed(accountId, conversation.conversationId)
-    && !docked.has(conversation.conversationId));
-  // A dismissed conversation still counts for the pencil badge: that person did
-  // message. Count distinct conversations with unread messages, capped at 99+.
+  // Distinct people with unread messages, capped at 99+. The same aggregate is
+  // painted on the resting circle and on Compose: with the rail open a person
+  // who has no dock entry would otherwise have no cue at all.
   const unreadPeopleCount = rows.filter(unreadEligible).length;
   const unreadBadge = unreadPeopleCount > 0
     ? (unreadPeopleCount > 99 ? "99+" : String(unreadPeopleCount))
     : null;
   // Recent is ordinary eligible chats, not unread-only ones. Only the privacy
-  // exclusions apply; the unread and last-author predicates stay on the launcher.
+  // exclusions apply; the unread and last-author predicates stay on the badge.
   const recent: DockConversation[] = rows.filter((conversation) => {
     if (conversation.peerId === accountId) return false;
     const view = chat.currentProjections?.[conversation.conversationId] ?? conversation.cachedProjection;
@@ -221,15 +200,14 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
     return peerId ? [peerId] : [];
   });
   const identities = useDockIdentities(accountId, [
-    ...(unreadRow ? [unreadRow.peerId] : []),
     ...(pickerOpen ? recent.map((row) => row.peerId) : []),
     ...windowPeers,
   ]);
 
-  // Oldest first, so the newest minimized head renders at the right end of the
-  // row, nearest the launcher.
+  // Oldest first, so the newest minimized head renders at the bottom of the
+  // stack, nearest the actions capsule.
   const railOrder = [...minimized].sort((a, b) => a.seq - b.seq);
-  const batch = Math.max(1, Math.min(railBatch(viewport.width), railOrder.length));
+  const batch = Math.max(1, Math.min(RAIL_MAX_HEADS, railOrder.length));
 
   // Anchor-id batch position stability (Section B): `railAnchor` names the
   // first visible head; `null` means the newest batch. A head appearing at the
@@ -259,14 +237,48 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
     setFocusAfterRestore(null);
   }, [focusAfterRestore, entries]);
 
+  // A keyboard activation that unmounts its own control hands focus to the half
+  // of the rail that replaced it. Never traps: the rail is an ordinary group of
+  // buttons, and Tab leaves it as it leaves any other group.
+  useEffect(() => {
+    if (pendingFocus === null) return;
+    if (pendingFocus === "strip" && !expanded) return;
+    if (pendingFocus === "anchor" && expanded) return;
+    const target = pendingFocus === "strip"
+      ? stripNode.current?.querySelector<HTMLButtonElement>("button") ?? null
+      : anchorNode.current;
+    if (!target) return;
+    target.focus({ preventScroll: true });
+    setPendingFocus(null);
+  }, [expanded, pendingFocus]);
+
+  // Pressing the page folds the open window back to its bubble and leaves the
+  // rail open. The listener exists only while a thread is open, so the
+  // pointerdown that opened it (already dispatched) can never fold it. The dock
+  // and its own rail are not "the page", and a page composer is a text surface
+  // rather than a dismissal.
+  const focusedOpenId = openEntries.find((entry) => entry.seq === focusedSeq)?.conversationId ?? null;
+  useEffect(() => {
+    if (!visible || !expanded || focusedOpenId === null) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest(`#${DOCK_ID}`) || target.closest(".fb-chat-dock-rail")) return;
+      if (target.closest(".fb-comment-composer")) return;
+      minimizeChatDock(accountId, focusedOpenId);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [accountId, expanded, focusedOpenId, visible]);
+
   // Clearing a page composer is a geometry question, so it is measured. The
   // dock's own thread owns its composer (`#fb-chat-dock` is excluded below), so
-  // a window can never lift the launcher that opened it.
+  // a window can never lift the rail that opened it.
   useEffect(() => {
-    const launcher = launcherNode.current;
-    // A hidden launcher has no box to measure and nothing to clear; dropping
+    const rail = railNode.current;
+    // An unpainted rail has no box to measure and nothing to clear; dropping
     // the lift here is what keeps a covered page from staying shifted.
-    if (!launcher || !launcherVisible) {
+    if (!rail || !railPainted) {
       if (clearanceRef.current !== 0) {
         clearanceRef.current = 0;
         setComposerClearance(0);
@@ -299,7 +311,7 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
     const measure = () => {
       frame = 0;
       rescan();
-      const box = launcher.getBoundingClientRect();
+      const box = rail.getBoundingClientRect();
       if (box.width === 0 || box.height === 0) return;
       // The measured box already carries the lift from the previous pass; take
       // it back out so repeated measurements cannot compound into a climb.
@@ -308,7 +320,7 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
       let next = 0;
       for (const composer of pageComposers()) {
         const rect = composer.getBoundingClientRect();
-        // Only a composer in the launcher's own columns can be covered by it;
+        // Only a composer in the rail's own columns can be covered by it;
         // a narrow centred column on a wide canvas is already clear.
         if (rect.right <= box.left || rect.left >= box.right) continue;
         if (rect.bottom <= top || rect.top >= bottom) continue;
@@ -326,7 +338,7 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
     sizes = Observer ? new Observer(measure) : null;
     // A report's composer arrives with its data, long after this effect. Only a
     // record that adds or drops a composer may cost a scan: the app mutates a
-    // live transcript continuously and none of it can move the launcher.
+    // live transcript continuously and none of it can move the rail.
     const holdsComposer = (node: Node) => node.nodeType === 1
       && ((node as Element).matches(".fb-comment-composer")
         || (node as Element).querySelector(".fb-comment-composer") !== null);
@@ -348,7 +360,7 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
       window.removeEventListener("resize", schedule);
       window.removeEventListener("scroll", schedule, true);
     };
-  }, [launcherVisible, pathname]);
+  }, [railPainted, pathname]);
 
   const minimizeEntry = useCallback((conversationId: string) => {
     if (accountId) minimizeChatDock(accountId, conversationId);
@@ -361,13 +373,6 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
   const closeEntry = useCallback((conversationId: string | null) => {
     if (accountId) closeChatDockEntry(accountId, conversationId);
   }, [accountId]);
-  /** Close every expanded window, leaving rail heads in place. */
-  const closeFloatingWindows = useCallback(() => {
-    if (!accountId) return;
-    for (const entry of openEntries) {
-      if (entry.conversationId !== null) closeChatDockEntry(accountId, entry.conversationId);
-    }
-  }, [accountId, openEntries]);
   const focusEntry = useCallback((conversationId: string | null) => {
     if (accountId) focusChatDock(accountId, conversationId);
   }, [accountId]);
@@ -386,7 +391,7 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
 
   if (!user || booting || needsProfile) return null;
   // The dock is a wide-screen surface: below the desktop threshold it paints
-  // nothing at all — no rail, no launcher, no utility row, no floating window.
+  // nothing at all — no rail, no anchor, no capsule, no floating window.
   // A mounted thread stays alive in the store but is not rendered until the
   // viewport widens past the threshold again.
   if (phone) return null;
@@ -402,149 +407,159 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
   const isFocused = (entry: ChatDockEntry) => entry.phase === "open"
     && entry.seq === focusedSeq && visible;
 
-  const unreadName = unreadRow ? nameOf(unreadRow.peerId) || "Member" : "";
-  const unreadCount = unreadRow?.unreadCount ?? 0;
   // One measured lift, published on every fixed dock surface. Absent when no
-  // page composer reaches the launcher, so each inset keeps its own fallback.
-  const clearance = launcherVisible ? composerClearance : 0;
+  // page composer reaches the rail, so each inset keeps its own fallback.
+  const clearance = railPainted ? composerClearance : 0;
   const composerStyle = clearance > 0
     ? ({ "--fb-composer-clearance": `${clearance}px` } as CSSProperties)
     : undefined;
+  const stackIndex = (index: number) => ({ "--fb-dock-index": index } as CSSProperties);
+
+  /**
+   * Minimize is a parking space, not a dismissal: the store folds every open
+   * window into its bubble and drops a live picker, then the rail tucks into
+   * the circle. Nothing is discarded, so the circle restores the same stack.
+   */
+  const tuckRail = (keyboard: boolean) => {
+    if (!accountId) return;
+    // A picker is not a thread: tucking drops it, and a dock left holding
+    // nothing stays open as the Compose affordance, so there is no circle to
+    // hand focus to. The first action is where the pressed control used to be.
+    const holdsThreads = entries.some((entry) => entry.conversationId !== null);
+    tuckChatDock(accountId);
+    if (keyboard) setPendingFocus(holdsThreads ? "anchor" : "strip");
+  };
 
   return (
     <>
-      {/* One horizontal band at the bottom-right: the older `+N` chip, the
-          minimized heads oldest-to-newest, the newer `+N` chip, the launcher
-          bubble, then the close/pencil column at the row's right end nearest
-          the screen edge. The `+N` chips batch only the heads, never the
-          launcher. The chip slots and the heads region always render (even when
-          empty) so the launcher keeps a stable React child index and never
-          remounts while visible. The store's remembered trigger therefore stays
-          attached and `target.focus()` on close keeps working. An empty slot is
-          kept out of the flex layout so it adds no gap. */}
-      {(railVisible || launcherVisible) && (
-        <div className="fb-chat-dock-rail" data-nav={bottomNavVisible ? "visible" : "hidden"}
+      {/* One vertical rail at the bottom-right. At rest it is the 48px anchor
+          alone; open it is the stack of minimized people (older +N counter,
+          oldest-to-newest heads, newer +N counter) above the actions capsule in
+          the corner the anchor just left. `closed` paints nothing: it is
+          absence, not an empty rail. */}
+      {railPainted && (
+        <div ref={railNode} className="fb-chat-dock-rail" data-nav={bottomNavVisible ? "visible" : "hidden"}
           style={composerStyle}
           role="group" aria-label="Chat dock">
-          {/* Above chip slot — always present so the launcher's index cannot shift. */}
-          <div style={{ display: above > 0 ? undefined : "none" }}>
-            {above > 0 && (
-              <button type="button" className="fb-chat-dock-rail-more"
-                aria-label={`Show ${above} older minimized ${above === 1 ? "chat" : "chats"}`}
-                onClick={() => {
-                  const nextStart = Math.max(0, start - batch);
-                  setRailAnchor(nextStart === railOrder.length - batch
-                    ? null : railOrder[nextStart]?.conversationId ?? null);
-                }}>
-                {`+${above}`}
-              </button>
-            )}
-          </div>
-          <div className="fb-chat-dock-rail-heads"
-            style={{ display: heads.length > 0 ? undefined : "none" }}>
-            {heads.map((entry) => {
-              const conversationId = entry.conversationId as string;
-              const name = nameFor(conversationId);
-              const unread = rows.find((row) => row.conversationId === conversationId)?.unreadCount ?? 0;
-              const peerId = peerOf.get(conversationId);
-              return (
-                <button key={conversationId} type="button" className="fb-chat-dock-rail-head"
-                  data-entry={conversationId}
-                  aria-label={`Restore chat with ${name}`}
-                  onClick={() => restoreEntry(conversationId)}
-                  {...hoverLabel(name, "right")}>
-                  <UserAvatar username={name} avatarUrl={peerId ? identities.get(peerId)?.avatarUrl : null}
-                    size={44} shape="circle" />
-                  {unread > 0 && (
-                    <span className="fb-chat-dock-rail-badge" aria-hidden="true">
-                      {unread > 99 ? "99+" : unread}
-                    </span>
+          {expanded ? (
+            <>
+              {(above > 0 || heads.length > 0 || below > 0) && (
+                <div className="fb-chat-dock-rail-stack">
+                  {above > 0 && (
+                    <button type="button" className="fb-chat-dock-rail-more" style={stackIndex(0)}
+                      aria-label={`Show ${above} older minimized ${above === 1 ? "chat" : "chats"}`}
+                      onClick={() => {
+                        const nextStart = Math.max(0, start - batch);
+                        setRailAnchor(nextStart === railOrder.length - batch
+                          ? null : railOrder[nextStart]?.conversationId ?? null);
+                      }}>
+                      {`+${above}`}
+                    </button>
                   )}
+                  {heads.map((entry, index) => {
+                    const conversationId = entry.conversationId as string;
+                    const name = nameFor(conversationId);
+                    const unread = rows.find((row) => row.conversationId === conversationId)?.unreadCount ?? 0;
+                    const peerId = peerOf.get(conversationId);
+                    return (
+                      <button key={conversationId} type="button" className="fb-chat-dock-rail-head"
+                        data-entry={conversationId}
+                        style={stackIndex(index + (above > 0 ? 1 : 0))}
+                        aria-label={`Restore chat with ${name}`}
+                        onClick={() => restoreEntry(conversationId)}
+                        {...hoverLabel(name, "right")}>
+                        <UserAvatar username={name} avatarUrl={peerId ? identities.get(peerId)?.avatarUrl : null}
+                          size={44} shape="circle" />
+                        {unread > 0 && (
+                          <span className="fb-chat-dock-rail-badge" aria-hidden="true">
+                            {unread > 99 ? "99+" : unread}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                  {below > 0 && (
+                    <button type="button" className="fb-chat-dock-rail-more"
+                      style={stackIndex(heads.length + (above > 0 ? 1 : 0))}
+                      aria-label={`Show ${below} newer minimized ${below === 1 ? "chat" : "chats"}`}
+                      onClick={() => {
+                        const nextStart = Math.min(start + batch, railOrder.length - batch);
+                        setRailAnchor(nextStart === railOrder.length - batch
+                          ? null : railOrder[nextStart]?.conversationId ?? null);
+                      }}>
+                      {`+${below}`}
+                    </button>
+                  )}
+                </div>
+              )}
+              {/* The capsule is the notification action rail laid horizontal:
+                  Compose always, and Minimize/Close only when they would do
+                  something. Close is destructive and last. */}
+              <div ref={stripNode} className="fb-chat-dock-rail-strip">
+                <button type="button" className="fb-chat-dock-rail-action"
+                  aria-label={unreadPeopleCount > 0 ? `Compose, ${unreadPeopleCount} waiting` : "Compose"}
+                  onClick={(event) => {
+                    if (!accountId) return;
+                    // The picker is its own dock entry: pressing Compose while it is
+                    // open closes it instead of opening a second one. `pickerOpen` is
+                    // derived from the store, so there is no second source of truth.
+                    if (pickerOpen) {
+                      closeChatDockEntry(accountId, null);
+                    } else {
+                      openChatDock(accountId, event.currentTarget, null, capacity);
+                    }
+                  }}>
+                  <span className="fb-chat-dock-rail-glyph">
+                    <Pencil size={16} aria-hidden="true" />
+                    {unreadBadge && (
+                      <span className="fb-chat-dock-rail-badge" aria-hidden="true">{unreadBadge}</span>
+                    )}
+                  </span>
+                  <span className="fb-chat-dock-rail-name" aria-hidden="true">Compose</span>
                 </button>
-              );
-            })}
-          </div>
-          {/* Below chip slot — always present so the launcher's index cannot shift. */}
-          <div style={{ display: below > 0 ? undefined : "none" }}>
-            {below > 0 && (
-              <button type="button" className="fb-chat-dock-rail-more"
-                aria-label={`Show ${below} newer minimized ${below === 1 ? "chat" : "chats"}`}
-                onClick={() => {
-                  const nextStart = Math.min(start + batch, railOrder.length - batch);
-                  setRailAnchor(nextStart === railOrder.length - batch
-                    ? null : railOrder[nextStart]?.conversationId ?? null);
-                }}>
-                {`+${below}`}
-              </button>
-            )}
-          </div>
-          {/* Launcher bubble: the right-most bubble, immediately left of the
-              close/pencil column and never part of a batch. */}
-          {launcherVisible && (
-            <button ref={launcherNode} type="button" className="fb-chat-dock-rail-launcher"
-              aria-label={unreadRow ? `Open chat with ${unreadName}` : "Open messages"}
-              aria-describedby={unreadRow ? "fb-chat-rail-unread" : undefined}
+                {entries.length > 0 && (
+                  <>
+                    <span className="fb-chat-dock-rail-divider" aria-hidden="true" />
+                    <button type="button" className="fb-chat-dock-rail-action" aria-label="Minimize"
+                      onClick={(event) => tuckRail(event.detail === 0)}>
+                      <Minus size={16} aria-hidden="true" />
+                      <span className="fb-chat-dock-rail-name" aria-hidden="true">Minimize</span>
+                    </button>
+                    <span className="fb-chat-dock-rail-divider" aria-hidden="true" />
+                    <button type="button" className="fb-chat-dock-rail-action fb-chat-dock-rail-danger"
+                      aria-label="Close"
+                      onClick={() => {
+                        if (accountId) closeChatDockSurface(accountId);
+                      }}>
+                      <X size={16} aria-hidden="true" />
+                      <span className="fb-chat-dock-rail-name" aria-hidden="true">Close</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </>
+          ) : (
+            <button ref={anchorNode} type="button" className="fb-chat-dock-rail-anchor"
+              aria-label={unreadPeopleCount > 0 ? `Open chats, ${unreadPeopleCount} waiting` : "Open chats"}
               onClick={(event) => {
                 if (!accountId) return;
-                openChatDock(accountId, event.currentTarget, unreadRow?.conversationId ?? null, capacity);
+                untuckChatDock(accountId);
+                if (event.detail === 0) setPendingFocus("strip");
               }}>
-              {unreadRow ? (
-                <>
-                  <UserAvatar username={unreadName} avatarUrl={identities.get(unreadRow.peerId)?.avatarUrl} size={44} shape="circle" />
-                  <span className="fb-chat-dock-rail-badge" aria-hidden="true">
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </span>
-                </>
-              ) : (
-                <MessageSquareText size={22} aria-hidden="true" />
+              <MessageSquareText size={22} aria-hidden="true" />
+              {unreadBadge && (
+                <span className="fb-chat-dock-rail-badge" aria-hidden="true">{unreadBadge}</span>
               )}
+              <span className="fb-chat-dock-rail-name" aria-hidden="true">Open chats</span>
             </button>
           )}
-          {/* Close/pencil column at the band's right end, nearest the screen
-              edge: × above the pencil, both 44px, bottom-aligned with the
-              bubbles. */}
-          {launcherVisible && (
-            <div className="fb-chat-dock-utility-row" data-nav={bottomNavVisible ? "visible" : "hidden"}
-              style={composerStyle}>
-              <ActionMenu label="Close chats"
-                icon={<X size={20} aria-hidden="true" />}
-                triggerClassName="fb-chat-dock-utility-close"
-                disabled={entries.length === 0}
-                placement="bottom end"
-                items={[
-                  { id: "close-all", label: "Close all chats" as const,
-                    onAction: () => { closeChatDock(accountId); } } as MenuAction,
-                  { id: "close-floating", label: "Close floating windows" as const,
-                    onAction: closeFloatingWindows } as MenuAction,
-                ]} />
-              <button type="button" className="fb-chat-dock-utility-pencil"
-                aria-label={unreadBadge ? `${unreadBadge} unread conversations, new message` : "New message"}
-                onClick={(event) => {
-                  if (!accountId) return;
-                  // The picker is its own dock entry: pressing the pencil while it is
-                  // open closes it instead of opening a second one. `pickerOpen` is
-                  // derived from the store, so there is no second source of truth.
-                  if (pickerOpen) {
-                    closeChatDockEntry(accountId, null);
-                  } else {
-                    openChatDock(accountId, event.currentTarget, null, capacity);
-                  }
-                }}>
-                <Pencil size={19} aria-hidden="true" />
-                {unreadBadge && (
-                  <span className="fb-chat-dock-utility-badge" aria-hidden="true">{unreadBadge}</span>
-                )}
-              </button>
-            </div>
-          )}
-          {unreadRow && <span id="fb-chat-rail-unread" className="sr-only">{`${unreadCount} unread`}</span>}
         </div>
       )}
-      {panelMounted && dock && (
+      {panelMounted && dock && !dockClosed && (
         <div id={DOCK_ID} className="fb-chat-dock fb-chat-dock-stack"
           data-nav={bottomNavVisible ? "visible" : "hidden"}
           style={composerStyle}
-          hidden={!visible}
+          hidden={!visible || !expanded}
           role="complementary" aria-label="Chat">
           {entries.map((entry) => {
             const conversationId = entry.conversationId;
@@ -552,7 +567,7 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
               return (
                 <div key="picker" className="fb-chat-dock-window"
                   data-entry="picker" data-phase="open" data-view="picker"
-                  hidden={!visible}
+                  hidden={!visible || !expanded}
                   onPointerDownCapture={() => focusEntry(null)}>
                   <ChatDockPicker accountId={accountId} active={isFocused(entry)}
                     recent={recent} identities={identities} onSelect={select} onClose={() => closeEntry(null)} />
@@ -566,7 +581,7 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
                   else windowNodes.current.delete(conversationId);
                 }}
                 data-entry={conversationId} data-phase={entry.phase} data-view="thread"
-                hidden={entry.phase === "minimized" || !visible}
+                hidden={entry.phase === "minimized" || !visible || !expanded}
                 onPointerDownCapture={() => focusEntry(conversationId)}>
                 <ThreadSession key={`${dock.accountId}:${conversationId}`} accountId={dock.accountId}
                   conversationId={conversationId} surface="dock"

@@ -118,6 +118,12 @@ function mount(path = "/search") {
   return render(<MemoryRouter initialEntries={[path]}><Probe /></MemoryRouter>);
 }
 
+/** The only way into a window: the capsule's Compose action, then Recent. */
+function openWithAlice() {
+  fireEvent.click(screen.getByRole("button", { name: /^Compose/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Open conversation with Alice/ }));
+}
+
 beforeEach(() => {
   localStorage.clear();
   resetChatDock();
@@ -133,7 +139,7 @@ afterEach(() => {
 describe("ChatDock with the real ThreadSession", () => {
   it("opens the canonical dock without navigating the page underneath", async () => {
     mount("/search");
-    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+    openWithAlice();
 
     const panel = await screen.findByRole("complementary", { name: "Chat" });
     expect(panel.querySelector('section.fb-chat-page[data-surface="dock"]')).toBeTruthy();
@@ -146,30 +152,28 @@ describe("ChatDock with the real ThreadSession", () => {
     expect(screen.getByTestId("path").textContent).toBe("/search");
   });
 
-  it("closes the real thread and returns focus to the launcher", async () => {
+  it("closes the real thread and leaves the Compose capsule in the corner", async () => {
     mount("/search");
-    const launcher = screen.getByRole("button", { name: "Open chat with Alice" });
-    fireEvent.click(launcher);
+    openWithAlice();
     await screen.findByRole("button", { name: "Close chat" });
 
     fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
     await waitFor(() => expect(screen.queryByRole("complementary", { name: "Chat" })).toBeNull());
-    // Closing through the dock dismisses the conversation, so the launcher drops
-    // the unread avatar and falls back to its neutral label. The identity check
-    // is the guarantee: the same DOM node survived, so focus can return to it.
-    expect(screen.getByRole("button", { name: "Open messages" })).toBe(launcher);
-    await waitFor(() => expect(document.activeElement).toBe(launcher));
+    // Closing through the window dismisses the conversation, so no bubble
+    // survives it; an empty dock is a Compose affordance, not a dead circle.
+    expect(screen.queryByRole("button", { name: /Restore chat/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Compose/ })).toBeTruthy();
     expect(screen.getByTestId("path").textContent).toBe("/search");
   });
 
   it("expands to the canonical route through the real adapter", async () => {
     mount("/search");
-    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+    openWithAlice();
     await screen.findByRole("button", { name: "Open full chat" });
 
     fireEvent.click(screen.getByRole("button", { name: "Open full chat" }));
     await waitFor(() => expect(screen.getByTestId("path").textContent).toBe("/chats/c1"));
     // The chat route owns the conversation; the floating shortcut stands down.
-    expect(screen.queryByRole("button", { name: "Open chat with Alice" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Compose" })).toBeNull();
   });
 });

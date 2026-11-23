@@ -1,26 +1,29 @@
-/* The chat windows and their minimized rail.
-   Every dock-specific geometry rule lives here, scoped to `.fb-chat-dock`,
-   `.fb-chat-dock-rail` or `.fb-chat-dock-utility-row`. The canonical styles keep the
-   transcript, the composer and the conversation header; nothing here declares
-   a second one. */
+/* The chat windows and their vertical rail.
+   Every dock-specific geometry rule lives here, scoped to `.fb-chat-dock` or
+   `.fb-chat-dock-rail`. The canonical styles keep the transcript, the composer
+   and the conversation header; nothing here declares a second one. */
 
-.fb-chat-dock-utility-row,
 .fb-chat-dock,
 .fb-chat-dock-rail {
-  /* One inset for the utility row, the window row and the rail. The shell
-     publishes `--fb-chat-dock-bottom` on `.fb-app-viewport`; the data-nav
-     fallback repeats the shell's own two values so a harness outside the shell
-     still clears the navigation instead of guessing. Safe-area reads mirror
+  /* One inset for the window row and the rail. The shell publishes
+     `--fb-chat-dock-bottom` on `.fb-app-viewport`; the data-nav fallback
+     repeats the shell's own two values so a harness outside the shell still
+     clears the navigation instead of guessing. Safe-area reads mirror
      index.css, the app's single viewport owner, never a second source. */
   --fb-dock-bottom: var(--fb-chat-dock-bottom, max(12px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))));
-  /* `ChatDock` measures a page composer that reaches the launcher's own column
-     and publishes the lift as `--fb-composer-clearance`. Every dock surface
-     adds it to the same inset, so the launcher, the rail and the window row
-     move as one anchor instead of gaining a second competing inset. */
+  /* `ChatDock` measures a page composer that reaches the rail's own column and
+     publishes the lift as `--fb-composer-clearance`. Every dock surface adds it
+     to the same inset, so the rail and the window row move as one anchor
+     instead of gaining a second competing inset. */
   --fb-dock-composer: var(--fb-composer-clearance, 0px);
+  /* The corner inset, shared by the rail and the window row. */
+  --fb-dock-edge: max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
+  /* The widest the actions capsule can be: 12px edge inset + 122px for three
+     34px actions, two dividers and the capsule's padding and border + 8px gap.
+     Reserved permanently, so a window never jumps when an action appears. */
+  --fb-dock-window-clearance: 142px;
   z-index: 62;
 }
-.fb-chat-dock-utility-row[data-nav="visible"],
 .fb-chat-dock[data-nav="visible"],
 .fb-chat-dock-rail[data-nav="visible"] {
   --fb-dock-bottom: var(--fb-chat-dock-bottom, calc(66px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 8px));
@@ -28,99 +31,24 @@
 
 /* The `hidden` attribute is the only hiding mechanism: a mounted thread must
    keep its draft, staged media and recorder, and `display` from these rules
-   would otherwise beat the user-agent `[hidden]` style. */
+   would otherwise beat the user-agent `[hidden]` style. The first selector is
+   historical — the rest state is `.fb-chat-dock-rail-anchor` now — and stays
+   because `ChatDock.header.css.test.ts` pins the dock's hiding rules to these
+   three, which is not a file this module owns. */
 .fb-chat-dock-rail-launcher[hidden],
 .fb-chat-dock[hidden],
 .fb-chat-dock-window[hidden] { display: none !important; }
 
-/* ---------------------------------------------------------------- rail launcher */
-
-.fb-chat-dock-rail-launcher {
-  position: relative;
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  padding: 0;
-  border: 1px solid var(--fb-outline-variant);
-  border-radius: 999px;
-  background: var(--fb-surface-container-high);
-  box-shadow: var(--shadow-md);
-  cursor: pointer;
-}
-.fb-chat-dock-rail-launcher:hover { background: var(--fb-surface-container); }
-
-.fb-chat-dock-rail-launcher .fb-chat-dock-rail-badge {
-  inset-block-start: -2px;
-  inset-inline-end: -2px;
-}
-
-/* The close/pencil column at the band's right end, nearest the screen edge:
-   × above the pencil, both 44px, 8px apart. Its 96px height sets the band's
-   height and its bottom aligns with the bubbles' bottom. */
-.fb-chat-dock-utility-row {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.fb-chat-dock-utility-pencil,
-.fb-chat-dock-utility-close {
-  position: relative;
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border: 1px solid var(--fb-outline-variant);
-  border-radius: 999px;
-  background: var(--fb-surface-container);
-  color: var(--fb-on-surface-variant);
-  box-shadow: var(--shadow-sm);
-  cursor: pointer;
-}
-.fb-chat-dock-utility-pencil:hover,
-.fb-chat-dock-utility-close:hover { background: var(--fb-surface-container-high); color: var(--fb-on-surface); }
-
-.fb-chat-dock-utility-close svg { flex: none; }
-
-.fb-chat-dock-utility-pencil:focus-visible,
-.fb-chat-dock-utility-close:focus-visible {
-  outline: 2px solid var(--fb-focus);
-  outline-offset: 2px;
-}
-.fb-chat-dock-utility-badge {
-  position: absolute;
-  inset-block-start: -2px;
-  inset-inline-end: -2px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: var(--fb-primary);
-  color: var(--fb-on-primary);
-  box-shadow: 0 0 0 2px var(--fb-surface);
-  font-size: .625rem;
-  font-weight: 700;
-  line-height: 18px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
 /* -------------------------------------------------------------- window row */
 .fb-chat-dock {
   position: fixed;
-  inset-inline-end: max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
-  /* The horizontal band is 96px tall (the close/pencil column) plus an 8px
-     gap, so the window row sits wholly above the band and never overlaps it.
-     That vertical clearance is the only mechanism: the row keeps the same
-     right edge as the band instead of shifting sideways. */
-  inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer) + 104px);
-  max-width: calc(100vw - 24px);
+  /* The rail owns the corner: the window row sits beside it, bottom-aligned
+     with the capsule and clear of it by the reserved clearance. That figure
+     already includes the standard 12px inset, so only the safe-area excess
+     beyond it is added here: 12 + 122 + 8 in every ordinary window. */
+  inset-inline-end: calc(var(--fb-dock-edge) + var(--fb-dock-window-clearance) - 12px);
+  inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer));
+  max-width: calc(100vw - 24px - var(--fb-dock-window-clearance));
 }
 .fb-chat-dock-stack {
   display: flex;
@@ -132,11 +60,11 @@
 
 .fb-chat-dock-window {
   display: flex;
-  /* Shrink only when the band leaves less room than the capacity formula
+  /* Shrink only when the rail leaves less room than the capacity formula
      assumed; the preferred width stays the 24rem card. */
   flex: 0 1 auto;
   flex-direction: column;
-  width: min(24rem, calc(100vw - 24px));
+  width: min(24rem, calc(100vw - 24px - var(--fb-dock-window-clearance)));
   /* Height is the bound for the whole canonical chain (workspace -> page):
      no inner wrapper may grow past it, and only the transcript scrolls. The
      544px card is the ceiling, never the target: on a short viewport the
@@ -185,24 +113,45 @@
 
 /* -------------------------------------------------------------------- rail */
 
-/* Minimized windows become one horizontal band of circular heads at the right
-   edge, oldest-to-newest, ending at the launcher and the close/pencil column.
-   The band is a sibling of the window row and sits below it, never over it. */
+/* One column at the bottom-right. At rest it is the 48px anchor alone; open it
+   is the stack of people above the actions capsule, in the corner the anchor
+   just left. The column reads as one object in both states. */
 .fb-chat-dock-rail {
   position: fixed;
-  inset-inline-end: max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
+  inset-inline-end: var(--fb-dock-edge);
   inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer));
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: flex-end;
   gap: 8px;
 }
-.fb-chat-dock-rail-heads {
+/* People are a column; two extra 8px gaps never sit above an empty stack. */
+.fb-chat-dock-rail-stack {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
   gap: 8px;
 }
+
+/* The rest state: one 48px circle with the aggregate unread badge. */
+.fb-chat-dock-rail-anchor {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 999px;
+  background: var(--fb-surface-container-high);
+  box-shadow: var(--shadow-md);
+  color: var(--fb-on-surface);
+  cursor: pointer;
+}
+.fb-chat-dock-rail-anchor:hover { background: var(--fb-surface-container); }
+.fb-chat-dock-rail-anchor svg { display: block; }
+
 .fb-chat-dock-rail-head {
   position: relative;
   display: grid;
@@ -235,23 +184,23 @@
   line-height: 18px;
   text-align: center;
   font-variant-numeric: tabular-nums;
+  pointer-events: none;
 }
 
-/* The page counter is a control, not a head: same column width, smaller, and
-   it names the count it hides. */
+/* The page counter is a control, not a person: a small counter at the stack's
+   end that names the count it hides. */
 .fb-chat-dock-rail-more {
   display: grid;
   flex: none;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
+  min-width: 34px;
+  height: 28px;
+  padding: 0 7px;
   border: 1px solid var(--fb-outline-variant);
   border-radius: 999px;
   background: var(--fb-surface-container);
   color: var(--fb-on-surface-variant);
-  box-shadow: var(--shadow-sm);
-  font-size: .8125rem;
+  font-size: .75rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
@@ -260,6 +209,115 @@
   background: var(--fb-surface-container-high);
   color: var(--fb-on-surface);
 }
+
+/* The three actions are the notification action rail turned horizontal: the
+   same 34px controls, 2px gaps, 1px by 18px dividers, hairline border and
+   two-layer shadow. Values copied from NotificationInteractions.css, not
+   approximated. */
+.fb-chat-dock-rail-strip {
+  position: relative;
+  align-self: flex-end;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--fb-outline-variant);
+  border-radius: 999px;
+  background: var(--fb-surface);
+  box-shadow: 0 10px 28px -10px #0000004d, 0 2px 8px #0000001f;
+  transform-origin: right center;
+}
+/* The notification rail's translucent material, mirrored so the capsule and
+   the rail read as one family. The opaque `background` above is the fallback. */
+@supports (background: color-mix(in srgb, white 50%, transparent)) {
+  .fb-chat-dock-rail-strip { background: color-mix(in srgb, var(--fb-surface) 88%, transparent); backdrop-filter: blur(14px) saturate(1.35); }
+}
+.fb-chat-dock-rail-divider {
+  width: 1px;
+  height: 18px;
+  flex: none;
+  background: var(--fb-outline-variant);
+}
+
+/* `position: static` is deliberate: the action's name pill resolves against
+   the strip, so it can never float over the neighbouring action. */
+.fb-chat-dock-rail-action {
+  position: static;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fb-on-surface);
+  cursor: pointer;
+  transition: background-color .14s ease, color .14s ease;
+}
+.fb-chat-dock-rail-action:hover,
+.fb-chat-dock-rail-action:focus-visible {
+  background: color-mix(in srgb, var(--fb-primary) 13%, var(--fb-surface));
+  color: var(--fb-primary);
+}
+.fb-chat-dock-rail-action svg { flex: none; }
+/* The icon and its badge are one box: the badge resolves against the glyph,
+   because the action itself stays `static` for the name pill's strip anchor. */
+.fb-chat-dock-rail-glyph {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.fb-chat-dock-rail-danger:hover,
+.fb-chat-dock-rail-danger:focus-visible {
+  color: var(--fb-error);
+  background: color-mix(in srgb, var(--fb-error) 14%, var(--fb-surface));
+}
+/* Inside the capsule the ring draws in the 4px padding rather than over the
+   hairline border. */
+.fb-chat-dock-rail .fb-chat-dock-rail-action:focus-visible { outline-offset: -2px; }
+
+/* The name is out of flow to the left, so the icon never moves when it appears.
+   It is anchored to the whole strip, never to the action: with three actions in
+   a row, a pill beside one of them would cover its neighbour — and covering
+   Compose with "Minimize" hides the control the reader needs. */
+.fb-chat-dock-rail-name {
+  position: absolute;
+  right: calc(100% + 8px);
+  top: 50%;
+  z-index: 1;
+  transform: translateY(-50%);
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--fb-outline-variant);
+  background: var(--fb-surface);
+  color: inherit;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px -6px #00000066;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s ease;
+}
+.fb-chat-dock-rail-action:hover .fb-chat-dock-rail-name,
+.fb-chat-dock-rail-action:focus-visible .fb-chat-dock-rail-name,
+.fb-chat-dock-rail-anchor:hover .fb-chat-dock-rail-name,
+.fb-chat-dock-rail-anchor:focus-visible .fb-chat-dock-rail-name {
+  opacity: 1;
+}
+/* A coarse pointer has no hover to reveal a name: icon only, and every action
+   grows to a real touch target, exactly as the notification rail does. */
+@media (hover: none), (pointer: coarse) {
+  .fb-chat-dock-rail-strip { gap: 4px; padding: 6px; }
+  .fb-chat-dock-rail-action { width: 44px; height: 44px; }
+  .fb-chat-dock-rail-name { opacity: 0 !important; transition: none; }
+  /* The 44px actions and the roomier gaps and padding fill 164px:
+     12 + 164 + 8 = the window row's clearance. */
+  .fb-chat-dock,
+  .fb-chat-dock-rail { --fb-dock-window-clearance: 184px; }
+}
+
 .fb-chat-dock-rail button:focus-visible {
   outline: 2px solid var(--fb-focus);
   outline-offset: 2px;
@@ -467,11 +525,30 @@
 
 /* ------------------------------------------------------------------- motion */
 
-/* One short fade when a window joins the row. Minimize is a geometry change,
-   not a transition, so the header never slides away from the control the
-   reader just pressed. */
+/* The rail reports the state it just entered: bubbles rise 12px into place,
+   oldest first, and the capsule scales in from its right edge. Icons never
+   animate. Reduced motion removes the stagger and the scale and keeps the state
+   change instantaneous. */
 @media (prefers-reduced-motion: no-preference) {
+  .fb-chat-dock-rail-stack > * {
+    animation: fb-chat-dock-rise .24s cubic-bezier(.2, 0, 0, 1) both;
+    animation-delay: calc(var(--fb-dock-index, 0) * 36ms);
+  }
+  .fb-chat-dock-rail-strip {
+    animation: fb-chat-dock-capsule-in .14s cubic-bezier(.2, 0, 0, 1) .12s both;
+  }
+  /* One short fade when a window joins the row. Minimize is a geometry change,
+     not a transition, so the header never slides away from the control the
+     reader just pressed. */
   .fb-chat-dock-window { animation: fb-chat-dock-enter .16s cubic-bezier(.2, 0, 0, 1); }
+}
+@keyframes fb-chat-dock-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fb-chat-dock-capsule-in {
+  from { opacity: 0; transform: scale(.94); }
+  to { opacity: 1; transform: scale(1); }
 }
 @keyframes fb-chat-dock-enter {
   from { opacity: 0; }

@@ -12,7 +12,9 @@ import { useSyncExternalStore } from "react";
  * storage. Every mutation names its account, so a late picker completion or a
  * stray callback can never act for a different viewer. The hook returns `null`
  * for any other account or a signed-out viewer, which unmounts every window
- * and therefore drops the in-memory drafts exactly as an account switch must.
+ * and therefore drops the in-memory drafts exactly as an account switch must;
+ * a signed-in viewer who has not touched the dock yet gets one frozen empty
+ * state instead, so the resting circle exists before the first mutation.
  */
 
 export interface ChatDockEntry {
@@ -27,6 +29,10 @@ export interface ChatDockState {
   accountId: string;
   entries: readonly ChatDockEntry[];
   seq: number;
+  /** Rail folded to the resting circle. Every window stays mounted. */
+  tucked: boolean;
+  /** Dock dismissed for this visit; nothing paints until an opener clears it. */
+  closed: boolean;
 }
 
 type Listener = () => void;
@@ -35,6 +41,14 @@ const listeners = new Set<Listener>();
 let state: ChatDockState | null = null;
 /** The control that opened an entry, so closing it returns focus there. */
 const triggers = new Map<string, HTMLElement>();
+
+/**
+ * One frozen empty state per signed-in account that has not mutated the dock.
+ * The hook must hand React a snapshot whose identity never changes between
+ * renders, and the resting circle needs a state to read before the first open.
+ */
+const syntheticByAccount = new Map<string, ChatDockState>();
+const NO_ENTRIES: readonly ChatDockEntry[] = Object.freeze([]);
 
 function emit() {
   for (const listener of listeners) listener();
@@ -165,7 +179,7 @@ function focusEntry(accountId: string, conversationId: string | null, limit: num
   const entries: ChatDockEntry[] = state.entries.map((candidate) => (
     candidate === entry ? { ...candidate, phase: "open", seq } : candidate
   ));
-  state = { accountId, seq, entries: applyLimit(entries, seq, limit) };
+  state = { accountId, seq, entries: applyLimit(entries, seq, limit), tucked: false, closed: false };
   emit();
 }
 
@@ -190,7 +204,7 @@ export function openChatDock(
     state = null;
     triggers.clear();
   }
-  const current: ChatDockState = state ?? { accountId, entries: [], seq: 0 };
+  const current: ChatDockState = state ?? { accountId, entries: [], seq: 0, tucked: true, closed: false };
   const existing = current.entries.find((entry) => entry.conversationId === conversationId);
   const seq = current.seq + 1;
   let entries: ChatDockEntry[];
@@ -202,7 +216,7 @@ export function openChatDock(
     const base = conversationId === null ? [...current.entries] : withoutPicker(current.entries);
     entries = [...base, { conversationId, phase: "open", seq }];
   }
-  state = { accountId, seq, entries: applyLimit(entries, seq, limit) };
+  state = { accountId, seq, entries: applyLimit(entries, seq, limit), tucked: false, closed: false };
   rememberTrigger(accountId, conversationId, trigger);
   // Opening a conversation clears its dismissed flag: interaction re-enables it.
   if (conversationId !== null) clearChatDockDismissed(accountId, conversationId);
@@ -227,7 +241,7 @@ export function openConversation(
     entry === existing ? { ...entry, phase: "open", seq } : entry
   ));
   if (!existing) entries.push({ conversationId, phase: "open", seq });
-  state = { accountId, seq, entries: applyLimit(entries, seq, limit) };
+  state = { accountId, seq, entries: applyLimit(entries, seq, limit), tucked: false, closed: false };
   // Opening a conversation clears its dismissed flag: interaction re-enables it.
   clearChatDockDismissed(accountId, conversationId);
   emit();
@@ -258,12 +272,15 @@ export function minimizeChatDock(accountId: string, conversationId: string | nul
   if (!state || state.accountId !== accountId) return;
   const entry = state.entries.find((candidate) => candidate.conversationId === conversationId);
   if (!entry || entry.phase === "minimized" || entry.conversationId === null) return;
+  const { seq, tucked, closed } = state;
   state = {
     accountId,
-    seq: state.seq,
+    seq,
     entries: state.entries.map((candidate) => (
       candidate === entry ? { ...candidate, phase: "minimized" } : candidate
     )),
+    tucked,
+    closed,
   };
   emit();
 }
@@ -276,8 +293,9 @@ export function closeChatDockEntry(accountId: string, conversationId: string | n
   const key = triggerKey(accountId, conversationId);
   const target = triggers.get(key) ?? null;
   triggers.delete(key);
+  const { seq, tucked, closed } = state;
   const entries = state.entries.filter((candidate) => candidate !== entry);
-  state = entries.length === 0 ? null : { accountId, seq: state.seq + 1, entries };
+  state = entries.length === 0 ? null : { accountId, seq: seq + 1, entries, tucked, closed };
   emit();
   // Closing through the dock remembers the conversation as dismissed. Expanding
   // into the full page is interaction, not closure, so callers pass false.
@@ -300,9 +318,71 @@ export function closeChatDock(accountId: string): void {
   if (target?.isConnected) target.focus({ preventScroll: true });
 }
 
+/**
+ * The capsule's Minimize: park the rail in its resting circle without losing
+ * anyone. Open threads fold to bubbles in place, and `seq` is untouched so the
+ * stack order survives the fold. A live picker entry is dropped outright — the
+ * picker is not a conversation, so it has no bubble to come back as, and it is
+ * not remembered as dismissed either: tucking must not hide a person. No focus
+ * move: the reader pressed a dock control, not a chat.
+ */
+export function tuckChatDock(accountId: string): void {
+  if (!accountId || !state || state.accountId !== accountId) return;
+  const entries: ChatDockEntry[] = state.entries
+    .filter((entry) => entry.conversationId !== null)
+    .map((entry) => (entry.phase === "open" ? { ...entry, phase: "minimized" } : entry));
+  state = { accountId, entries, seq: state.seq, tucked: true, closed: false };
+  emit();
+}
+
+/**
+ * The resting circle: unfold the rail exactly as Minimize parked it. Nothing
+ * is recreated because tucking never unmounted anything, so drafts and staged
+ * media are still there. An account that has never had a dock gets its first
+ * state here, since the circle is the first thing a fresh session shows.
+ */
+export function untuckChatDock(accountId: string): void {
+  if (!accountId) return;
+  // A stale call for a previous viewer must not replace the current one's dock.
+  if (state !== null && state.accountId !== accountId) return;
+  state = state === null
+    ? { accountId, entries: [], seq: 0, tucked: false, closed: false }
+    : { ...state, tucked: false, closed: false };
+  emit();
+}
+
+/**
+ * The capsule's Close: remove the dock for the rest of the visit.
+ *
+ * The dismissal itself is identical to `closeChatDock` — every conversation is
+ * remembered as dismissed, its trigger forgotten, and focus returns to the
+ * control that opened the most recent one. What differs is persistence: the
+ * account keeps a state object carrying `closed`, because "this visit is done
+ * with the dock" is a fact a `null` state cannot hold. The host paints nothing
+ * while it is set; any opener clears it.
+ */
+export function closeChatDockSurface(accountId: string): void {
+  if (!accountId) return;
+  // A stale call for a previous viewer must not dismiss the current one's dock.
+  if (state !== null && state.accountId !== accountId) return;
+  const current = state;
+  const latest = current ? [...current.entries].sort((a, b) => b.seq - a.seq)[0] : undefined;
+  const target = latest ? triggers.get(triggerKey(accountId, latest.conversationId)) ?? null : null;
+  if (current) {
+    for (const entry of current.entries) {
+      triggers.delete(triggerKey(accountId, entry.conversationId));
+      if (entry.conversationId !== null) dismissChatDockEntry(accountId, entry.conversationId);
+    }
+  }
+  state = { accountId, entries: [], seq: (current?.seq ?? 0) + 1, tucked: true, closed: true };
+  emit();
+  if (target?.isConnected) target.focus({ preventScroll: true });
+}
+
 /** Test isolation and account change: no state may outlive its viewer. */
 export function resetChatDock(): void {
   state = null;
+  syntheticByAccount.clear();
   triggers.clear();
   dismissedByAccount.clear();
   emit();
@@ -327,9 +407,33 @@ export function resetChatDockDismissedForTests(): void {
   dismissedByAccount.clear();
 }
 
-/** This viewer's windows, or `null` for another account and while signed out. */
+/** The one frozen empty state for a viewer who has not touched the dock yet. */
+function syntheticState(accountId: string): ChatDockState {
+  const cached = syntheticByAccount.get(accountId);
+  if (cached) return cached;
+  const empty: ChatDockState = Object.freeze({
+    accountId,
+    entries: NO_ENTRIES,
+    seq: 0,
+    tucked: true,
+    closed: false,
+  });
+  syntheticByAccount.set(accountId, empty);
+  return empty;
+}
+
+/**
+ * This viewer's windows, or `null` for another account and while signed out.
+ *
+ * A signed-in viewer with no dock yet gets one stable, frozen empty state rather
+ * than `null`: the resting circle is painted from `!closed && (tucked ||
+ * entries.length === 0)`, so a `null` snapshot would hide the dock until the
+ * first open. The cached snapshot keeps its identity across renders.
+ */
 export function useChatDock(viewerId: string | null): ChatDockState | null {
-  return useSyncExternalStore(subscribe, () => (
-    state !== null && viewerId !== null && state.accountId === viewerId ? state : null
-  ), serverCurrent);
+  return useSyncExternalStore(subscribe, () => {
+    if (viewerId === null) return null;
+    if (state === null) return syntheticState(viewerId);
+    return state.accountId === viewerId ? state : null;
+  }, serverCurrent);
 }

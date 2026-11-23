@@ -8,8 +8,8 @@ import type { SearchedProfile } from "@norfold/shared";
 import { chatFileBody, type ChatFileMeta } from "../services/messaging/files";
 import { ChatDock } from "./ChatDock";
 import {
-  closeChatDock, closeChatDockEntry, focusChatDock, minimizeChatDock,
-  openChatDock, openConversation, resetChatDock, resetChatDockDismissedForTests,
+  closeChatDock, closeChatDockEntry, closeChatDockSurface, focusChatDock, isChatDockDismissed,
+  minimizeChatDock, openChatDock, openConversation, resetChatDock, resetChatDockDismissedForTests,
   restoreChatDock, useChatDock, type ChatDockEntry,
 } from "./chatDock";
 
@@ -188,6 +188,37 @@ function railEntries() {
   return railHeads().map((head) => head.dataset.entry);
 }
 
+/** The actions capsule; every rail test asserts it exists before using it. */
+function strip() {
+  return document.querySelector<HTMLElement>(".fb-chat-dock-rail-strip");
+}
+
+/** The resting circle; absent while the rail is open. */
+function anchor() {
+  return document.querySelector<HTMLElement>(".fb-chat-dock-rail-anchor");
+}
+
+function badge() {
+  return document.querySelector<HTMLElement>(".fb-chat-dock-rail-badge");
+}
+
+/** Compose is the open rail's first action and the only way into the picker.
+ *  Its name appends the unread count when there is one, so the prefix matches. */
+function compose() {
+  fireEvent.click(screen.getByRole("button", { name: /^Compose/ }));
+}
+
+/** Pick a person out of the picker's Recent list. */
+function selectRecent(label: string) {
+  fireEvent.click(screen.getByRole("button", { name: new RegExp(`^Open conversation with ${label}`) }));
+}
+
+/** Compose, then open one existing conversation: the ordinary path to a window. */
+function dockChat(label: string) {
+  compose();
+  selectRecent(label);
+}
+
 /** True when `a` precedes `b` in document order. */
 function precedes(a: Node, b: Node) {
   return Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -202,7 +233,7 @@ function openUnread() {
   named("p1", "Alice");
   chat.conversations = [summary("c1", "p1", { unread: 2, author: "p1" })];
   const view = mount("/");
-  fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+  dockChat("Alice");
   return view;
 }
 
@@ -234,49 +265,55 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ChatDock route eligibility", () => {
-  it("keeps the launcher off every chat surface", () => {
+  it("keeps the dock off every chat surface", () => {
     for (const path of ["/chats", "/chats/a", "/connections", "/connections/a"]) {
       mount(path);
-      expect(screen.queryByRole("button", { name: "Open messages" })).toBeNull();
+      expect(rail()).toBeNull();
+      expect(anchor()).toBeNull();
+      expect(screen.queryByRole("button", { name: "Compose" })).toBeNull();
       cleanup();
     }
   });
 
-  it("offers the launcher on ordinary pages", () => {
+  it("offers the dock on ordinary pages", () => {
     for (const path of ["/", "/search", "/my/1/edit"]) {
       mount(path);
-      expect(screen.getByRole("button", { name: "Open messages" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Compose" })).toBeTruthy();
       cleanup();
     }
   });
 
-  it("hides the shortcut while the shell reports an occluding surface", () => {
+  it("hides the dock while the shell reports an occluding surface", () => {
     host.occluded = true;
     mount("/");
-    expect(screen.queryByRole("button", { name: "Open messages" })).toBeNull();
+    expect(rail()).toBeNull();
+    expect(screen.queryByRole("button", { name: "Compose" })).toBeNull();
   });
 });
 
-describe("ChatDock launcher", () => {
-  it("opens the newest unread conversation from the avatar beside the new-message action", () => {
+describe("ChatDock rail", () => {
+  it("opens a conversation from Compose without reading, sending or navigating", () => {
     named("p1", "Alice");
     chat.conversations = [summary("c0", "p0", { unread: 0, author: "p0" }),
       summary("c1", "p1", { unread: 2, author: "p1" })];
     mount("/");
-    expect(screen.getByText("2 unread")).toBeTruthy();
-    // Both actions sit on the one launcher: the avatar and the pencil. The
-    // pencil carries the distinct-unread badge in its label.
-    expect(screen.getByRole("button", { name: "1 unread conversations, new message" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+    // The aggregate is the only unread cue on an empty dock, and it lives on
+    // Compose until there is a circle to carry it.
+    expect(badge()?.textContent).toBe("1");
+    compose();
+    expect(screen.getByRole("heading", { name: "New message" })).toBeTruthy();
+    selectRecent("Alice");
     expect(screen.getAllByLabelText(/^Conversation /)).toHaveLength(1);
     expect(thread.props).toMatchObject({ accountId: "me", conversationId: "c1", surface: "dock", active: true });
+    expect(runtime.request).not.toHaveBeenCalled();
+    expect(screen.getByTestId("path").textContent).toBe("/");
   });
 
-  it("opens the new-message picker from the launcher without touching the unread", () => {
+  it("opens the new-message picker from Compose without touching the unread", () => {
     named("p1", "Alice");
     chat.conversations = [summary("c1", "p1", { unread: 2, author: "p1", messageId: "m1" })];
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "1 unread conversations, new message" }));
+    compose();
 
     // The picker is the compose surface: no thread, no request, no send.
     expect(screen.getByRole("heading", { name: "New message" })).toBeTruthy();
@@ -285,11 +322,12 @@ describe("ChatDock launcher", () => {
     expect(runtime.request).not.toHaveBeenCalled();
     expect(screen.getByTestId("path").textContent).toBe("/");
 
-    // Closing it restores the unread avatar exactly as it was: opening a new
-    // message never reads, sends or dismisses the existing unread row.
+    // Closing it restores the badge exactly as it was: opening a new message
+    // never reads, sends or dismisses the existing unread row.
     fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
-    expect(screen.getByRole("button", { name: "Open chat with Alice" })).toBeTruthy();
-    expect(screen.getByText("2 unread")).toBeTruthy();
+    expect(panel()).toBeNull();
+    expect(badge()?.textContent).toBe("1");
+    expect(screen.getByRole("button", { name: /^Compose/ })).toBeTruthy();
   });
 
   it("ignores an own last message, an unsent one and privacy-muted rows", () => {
@@ -307,63 +345,174 @@ describe("ChatDock launcher", () => {
       chat.conversations = item.rows;
       chat.currentProjections = item.views ?? null;
       mount("/");
-      expect(screen.queryByRole("button", { name: "Open chat with Alice" })).toBeNull();
-      expect(screen.getByRole("button", { name: "Open messages" })).toBeTruthy();
+      expect(badge()).toBeNull();
+      expect(screen.getByRole("button", { name: "Compose" })).toBeTruthy();
       cleanup();
     }
   });
 
-  it("renders the launcher bubble and the close/pencil column inside the one band", () => {
-    named("p1", "Alice");
-    chat.conversations = [summary("c1", "p1", { unread: 2, author: "p1", messageId: "m1" })];
+  it("keeps every action in one capsule inside the rail, in order", () => {
     mount("/");
-    // The launcher bubble is inside the band, after any heads.
-    expect(screen.getByRole("button", { name: "Open chat with Alice" })).toBeTruthy();
-    // The column holds exactly the close-all menu and the pencil.
-    expect(screen.getByRole("button", { name: "Close chats" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /unread conversations, new message|New message/ })).toBeTruthy();
-    // Both the launcher and the column live in the band; the column is not the launcher.
-    const utilityRow = document.querySelector(".fb-chat-dock-utility-row");
-    expect(utilityRow).toBeTruthy();
-    expect(rail()?.contains(utilityRow)).toBe(true);
-    expect(utilityRow?.querySelector(".fb-chat-dock-rail-launcher")).toBeNull();
+    compose();
+    const capsule = strip() as HTMLElement;
+    expect(capsule).toBeTruthy();
+    expect(rail()?.contains(capsule)).toBe(true);
+    // Compose, Minimize, Close — destructive last, and no second circle.
+    expect(within(capsule).getAllByRole("button").map((node) => node.getAttribute("aria-label")))
+      .toEqual(["Compose", "Minimize", "Close"]);
+    expect(capsule.querySelector(".fb-chat-dock-rail-anchor")).toBeNull();
+    expect(document.querySelector(".fb-chat-dock-utility-row")).toBeNull();
+    expect(document.querySelector(".fb-chat-dock-rail-launcher")).toBeNull();
   });
 
-  it("dismisses a conversation through the close-all menu and keeps it gone on remount", () => {
-    named("p1", "Alice");
-    chat.conversations = [summary("c1", "p1", { unread: 2, author: "p1", messageId: "m1" })];
+  it("offers Compose alone when nothing is docked", () => {
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
-    expect(dockWindow("c1")).toBeTruthy();
+    const capsule = strip() as HTMLElement;
+    expect(within(capsule).getAllByRole("button")).toHaveLength(1);
+    expect(within(capsule).getByRole("button", { name: "Compose" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Minimize" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+    // An empty dock is a Compose affordance, never a dead circle.
+    expect(anchor()).toBeNull();
+  });
 
-    // Close all chats through the store action: the ActionMenu popover is a
-    // react-aria component, not jsdom-friendly, so the store is exercised directly.
-    act(() => closeChatDock("me"));
-    expect(dockWindow("c1")).toBeNull();
-    expect(panel()).toBeNull();
-    // The dismissal is persisted to localStorage under the account key.
-    expect(localStorage.getItem("fb-chat-dock-dismissed:me")).toContain("c1");
+  it("minimizes a window to a bubble and tucks the rail to the circle", () => {
+    openUnread();
+    const draft = screen.getByLabelText("Message draft c1");
+    fireEvent.change(draft, { target: { value: "half a thought" } });
+    fireEvent.click(screen.getByRole("button", { name: "Minimize" }));
 
-    // Genuine remount: unmount and remount, forcing the dismissed set to be
-    // re-read from storage through loadDismissed.
-    cleanup();
-    const remounted = mount("/");
-    expect(screen.queryByRole("button", { name: "Open chat with Alice" })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Restore chat with Alice/ })).toBeNull();
+    expect(dockWindow("c1")?.dataset.phase).toBe("minimized");
+    expect(dockWindow("c1")?.hidden).toBe(true);
+    expect(thread.byId.c1?.active).toBe(false);
+    expect(strip()).toBeNull();
+    const circle = anchor() as HTMLElement;
+    expect(circle).toBeTruthy();
+    expect(circle.getAttribute("aria-label")).toBe("Open chats, 1 waiting");
+    expect(circle.querySelector(".fb-chat-dock-rail-badge")?.textContent).toBe("1");
 
-    // Interaction re-enables it: opening from the picker clears the dismissed flag.
-    act(() => openChatDock("me", null, "c1", 2));
+    // Parking, not dismissal: the circle brings the same bubble back, with the
+    // draft untouched, because the thread was never unmounted.
+    fireEvent.click(circle);
+    expect(strip()).toBeTruthy();
+    expect(railEntries()).toEqual(["c1"]);
+    fireEvent.click(screen.getByRole("button", { name: "Restore chat with Alice" }));
     expect(dockWindow("c1")?.dataset.phase).toBe("open");
-    // After clearing, minimising again should show it as a head.
+    expect(dockWindow("c1")?.hidden).toBe(false);
+    expect(thread.byId.c1?.active).toBe(true);
+    expect((screen.getByLabelText("Message draft c1") as HTMLInputElement).value).toBe("half a thought");
+  });
+
+  it("closes the dock and its windows completely", () => {
+    openUnread();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(rail()).toBeNull();
+    expect(panel()).toBeNull();
+    expect(screen.queryByRole("button", { name: "Compose" })).toBeNull();
+    expect(screen.queryByLabelText("Conversation c1")).toBeNull();
+    // Close is a dismissal, not a parking space: Alice is remembered as
+    // dismissed, so she cannot come back on her own.
+    expect(isChatDockDismissed("me", "c1")).toBe(true);
+
+    // A closed dock stays closed for the rest of the visit, and the dismissed
+    // conversation stays gone through a genuine remount.
+    cleanup();
+    mount("/");
+    expect(screen.queryByRole("button", { name: "Compose" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Restore chat with/ })).toBeNull();
+
+    // Interaction re-enables her: opening a conversation clears the dismissal,
+    // and minimizing it puts her back on the rail with a readable name.
+    act(() => openChatDock("me", null, "c1", 2));
     act(() => minimizeChatDock("me", "c1"));
     expect(screen.getByRole("button", { name: /Restore chat with Alice/ })).toBeTruthy();
-    remounted.unmount();
+    act(() => resetChatDock());
+    expect(screen.getByRole("button", { name: /^Compose/ })).toBeTruthy();
   });
 
-  it("the pencil badge counts distinct unread people, capped at 99+, and draws nothing at zero", () => {
+  it("keeps the aggregate badge on whichever surface is showing", () => {
+    openUnread();
+    // Open: the badge rides Compose, because someone with unread messages and
+    // no dock entry would otherwise have no cue at all.
+    const capsule = strip() as HTMLElement;
+    expect(capsule.querySelector(".fb-chat-dock-rail-badge")?.textContent).toBe("1");
+    // The count is in the action's name as well, not only in a hidden badge.
+    expect(screen.getByRole("button", { name: "Compose, 1 waiting" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Minimize" }));
+    // Rest: it moves to the circle, which is the only thing on screen.
+    expect((anchor() as HTMLElement).querySelector(".fb-chat-dock-rail-badge")?.textContent).toBe("1");
+    expect(strip()).toBeNull();
+  });
+
+  it("folds an open window when the page is pressed and keeps the rail open", () => {
+    openUnread();
+    expect(dockWindow("c1")?.dataset.phase).toBe("open");
+
+    fireEvent.pointerDown(document.body);
+    // Folded, not dismissed, and the rail never leaves the corner.
+    expect(dockWindow("c1")?.dataset.phase).toBe("minimized");
+    expect(dockWindow("c1")?.hidden).toBe(true);
+    expect(strip()).toBeTruthy();
+    expect(railEntries()).toEqual(["c1"]);
+    expect(isChatDockDismissed("me", "c1")).toBe(false);
+
+    // The pointerdown that restores a bubble is inside the dock and never folds
+    // the window it is about to open.
+    const head = screen.getByRole("button", { name: "Restore chat with Alice" });
+    fireEvent.pointerDown(head);
+    fireEvent.click(head);
+    expect(dockWindow("c1")?.dataset.phase).toBe("open");
+    expect(dockWindow("c1")?.hidden).toBe(false);
+  });
+
+  it("moves focus with the rail when a keyboard user opens and tucks it", () => {
+    openUnread();
+    fireEvent.click(screen.getByRole("button", { name: "Minimize" }));
+    // The pressed control unmounted: focus lands on the circle that replaced it.
+    expect(anchor()).toBeTruthy();
+    expect(document.activeElement).toBe(anchor());
+
+    fireEvent.click(anchor() as HTMLElement);
+    const capsule = strip() as HTMLElement;
+    expect(capsule).toBeTruthy();
+    expect(document.activeElement).toBe(within(capsule).getByRole("button", { name: /^Compose/ }));
+  });
+
+  it("docks one person once and keeps counting her unread", () => {
+    named("p1", "Alice");
+    chat.conversations = [summary("c1", "p1", { unread: 2, author: "p1", messageId: "m1" })];
+    mount("/");
+    dockChat("Alice");
+    // An open window is not also painted as a bubble beside itself.
+    expect(railHeads()).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: /Restore chat with Alice/ })).toBeNull();
+    // The badge still counts her: she messaged, and the count is not a choice.
+    expect((strip() as HTMLElement).querySelector(".fb-chat-dock-rail-badge")?.textContent).toBe("1");
+  });
+
+  it("keeps every other conversation reachable from Compose while one is docked", () => {
+    named("p1", "Alice");
+    named("p2", "Bob");
+    chat.conversations = [
+      summary("c1", "p1", { unread: 2, author: "p1", messageId: "m1" }),
+      summary("c2", "p2", { unread: 1, author: "p2", messageId: "m2" }),
+    ];
+    mount("/");
+    dockChat("Alice");
+    expect(dockWindow("c1")?.dataset.phase).toBe("open");
+
+    compose();
+    expect(screen.getByRole("button", { name: /^Open conversation with Bob/ })).toBeTruthy();
+    selectRecent("Bob");
+    expect(dockWindow("picker")).toBeNull();
+    expect(dockWindow("c2")?.dataset.phase).toBe("open");
+    expect(conversation("c2").dataset.active).toBe("true");
+  });
+
+  it("counts distinct unread people, capped at 99+, and draws nothing at zero", () => {
     // Zero unread: no badge element at all.
     mount("/");
-    expect(document.querySelector(".fb-chat-dock-utility-badge")).toBeNull();
+    expect(badge()).toBeNull();
     cleanup();
 
     // Two distinct unread conversations: badge shows "2".
@@ -374,8 +523,7 @@ describe("ChatDock launcher", () => {
       summary("c2", "p2", { unread: 5, author: "p2" }),
     ];
     mount("/");
-    expect(screen.getByRole("button", { name: "2 unread conversations, new message" })).toBeTruthy();
-    expect(document.querySelector(".fb-chat-dock-utility-badge")?.textContent).toBe("2");
+    expect(badge()?.textContent).toBe("2");
     cleanup();
 
     // 100 distinct unread conversations: "99+".
@@ -383,15 +531,15 @@ describe("ChatDock launcher", () => {
       summary(`c${i}`, `p${i}`, { unread: 1, author: `p${i}` }),
     );
     mount("/");
-    expect(screen.getByRole("button", { name: "99+ unread conversations, new message" })).toBeTruthy();
-    expect(document.querySelector(".fb-chat-dock-utility-badge")?.textContent).toBe("99+");
+    expect(badge()?.textContent).toBe("99+");
   });
 
   it("never paints the previous account's label after a viewer switch", () => {
     named("p1", "Alice");
     chat.conversations = [summary("c1", "p1", { unread: 1, author: "p1", body: "Hi" })];
     const view = mount("/");
-    expect(screen.getByRole("button", { name: "Open chat with Alice" })).toBeTruthy();
+    compose();
+    expect(screen.getByRole("button", { name: /^Open conversation with Alice/ })).toBeTruthy();
 
     // The same peer id under a viewer with no cached label must not inherit the
     // previous account's identity for even one render.
@@ -401,64 +549,33 @@ describe("ChatDock launcher", () => {
     chat.conversations = [summary("c2", "p1", { unread: 1, author: "p1", body: "Hi" })];
     view.rerender(tree());
     expect(screen.queryByRole("button", { name: /Alice/ })).toBeNull();
-    expect(screen.getByRole("button", { name: "Open chat with Member" })).toBeTruthy();
-  });
 
-  it("does not name a conversation that already has an open window", () => {
-    named("p1", "Alice");
-    chat.conversations = [summary("c1", "p1", { unread: 2, author: "p1", messageId: "m1" })];
-    mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
-    // c1 is an open dock entry now: the launcher falls back to neutral instead
-    // of showing Alice a second time beside her own window.
-    expect(screen.queryByRole("button", { name: "Open chat with Alice" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Open messages" })).toBeTruthy();
-    // The pencil badge still counts her: she messaged. It is not the launcher's
-    // pick and does not change.
-    expect(screen.getByRole("button", { name: "1 unread conversations, new message" })).toBeTruthy();
-  });
-
-  it("advances the launcher to another unread conversation when the first is docked", () => {
-    named("p1", "Alice");
-    named("p2", "Bob");
-    chat.conversations = [
-      summary("c1", "p1", { unread: 2, author: "p1", messageId: "m1" }),
-      summary("c2", "p2", { unread: 1, author: "p2", messageId: "m2" }),
-    ];
-    mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
-    fireEvent.click(screen.getByRole("button", { name: "Collapse chat" }));
-    // Alice is a minimized head: the launcher advances to Bob.
-    expect(screen.queryByRole("button", { name: "Open chat with Alice" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Open chat with Bob" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Open chat with Bob" }));
-    expect(dockWindow("c2")?.dataset.phase).toBe("open");
-    expect(dockWindow("c1")?.dataset.phase).toBe("minimized");
-    expect(conversation("c2").dataset.active).toBe("true");
+    compose();
+    expect(screen.getByRole("button", { name: /^Open conversation with Member/ })).toBeTruthy();
   });
 });
 
-describe("ChatDock pencil toggle", () => {
+describe("ChatDock Compose toggle", () => {
   it("opens the picker on the first press and closes it on the second, never more than once", () => {
     mount("/");
     expect(dockWindow("picker")).toBeNull();
     expect(document.querySelectorAll(".fb-chat-dock-window[data-entry='picker']")).toHaveLength(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "New message" }));
+    compose();
     expect(screen.getByRole("heading", { name: "New message" })).toBeTruthy();
     expect(dockWindow("picker")?.dataset.view).toBe("picker");
     expect(dockWindow("picker")?.dataset.phase).toBe("open");
     expect(document.querySelectorAll(".fb-chat-dock-window[data-entry='picker']")).toHaveLength(1);
 
-    // A second press on the same pencil closes the picker instead of opening
+    // A second press on the same action closes the picker instead of opening
     // another one.
-    fireEvent.click(screen.getByRole("button", { name: "New message" }));
+    compose();
     expect(dockWindow("picker")).toBeNull();
     expect(document.querySelectorAll(".fb-chat-dock-window[data-entry='picker']")).toHaveLength(0);
-    expect(screen.getByRole("button", { name: "New message" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Compose" })).toBeTruthy();
 
     // It opens again, still exactly one entry.
-    fireEvent.click(screen.getByRole("button", { name: "New message" }));
+    compose();
     expect(dockWindow("picker")?.dataset.view).toBe("picker");
     expect(document.querySelectorAll(".fb-chat-dock-window[data-entry='picker']")).toHaveLength(1);
   });
@@ -483,7 +600,7 @@ describe("ChatDock panel", () => {
     expect(dockWindow("c1")?.dataset.phase).toBe("minimized");
     expect(dockWindow("c1")?.hidden).toBe(true);
     expect(thread.byId.c1?.active).toBe(false);
-    expect(railHeads()).toHaveLength(1);
+    expect(railEntries()).toEqual(["c1"]);
     expect(screen.getByRole("button", { name: "Restore chat with Alice" })).toBeTruthy();
     const kept = screen.getByLabelText("Message draft c1");
     expect(kept).toBe(draft);
@@ -493,7 +610,8 @@ describe("ChatDock panel", () => {
     expect(dockWindow("c1")?.dataset.phase).toBe("open");
     expect(dockWindow("c1")?.hidden).toBe(false);
     expect(thread.byId.c1?.active).toBe(true);
-    // The rail still renders (it holds the launcher) but carries no heads.
+    // The rail still renders (it holds the capsule) but carries no heads.
+    expect(strip()).toBeTruthy();
     expect(railHeads()).toHaveLength(0);
     expect(screen.getByLabelText("Message draft c1")).toBe(draft);
     expect((draft as HTMLInputElement).value).toBe("half a thought");
@@ -507,6 +625,7 @@ describe("ChatDock panel", () => {
     expect(dockWindow("c1")?.hidden).toBe(true);
     expect(thread.byId.c1?.active).toBe(false);
     expect(screen.getByLabelText("Message draft c1")).toBeTruthy();
+    expect(rail()).toBeNull();
   });
 
   it("stays mounted but inactive while the shell is occluded", () => {
@@ -517,16 +636,15 @@ describe("ChatDock panel", () => {
     expect(dockWindow("c1")?.hidden).toBe(true);
     expect(thread.byId.c1?.active).toBe(false);
     expect(screen.getByLabelText("Message draft c1")).toBeTruthy();
+    expect(rail()).toBeNull();
   });
 
-  it("returns focus to the launcher on close", () => {
+  it("leaves the Compose capsule when the thread closes itself", () => {
     openUnread();
-    fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
-    // Closing through the dock dismisses the conversation, so the launcher drops
-    // the unread avatar and falls back to its neutral label.
-    const launcher = screen.getByRole("button", { name: "Open messages" });
+    fireEvent.click(within(conversation("c1")).getByRole("button", { name: "Close chat" }));
     expect(panel()).toBeNull();
-    expect(document.activeElement).toBe(launcher);
+    expect(strip()).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Compose/ })).toBeTruthy();
   });
 
   it("expands to the canonical route without leaving a second transcript", () => {
@@ -534,7 +652,8 @@ describe("ChatDock panel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open full chat" }));
     expect(screen.getByTestId("path").textContent).toBe("/chats/c1");
     expect(screen.queryByLabelText("Conversation c1")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Open chat with Alice" })).toBeNull();
+    // The chat route owns the conversation; the dock stands down there.
+    expect(rail()).toBeNull();
   });
 
   it("drops every window and its account when the viewer changes", () => {
@@ -543,7 +662,7 @@ describe("ChatDock panel", () => {
     auth.user = { id: "other" };
     view.rerender(tree());
     expect(panel()).toBeNull();
-    expect(screen.getByRole("button", { name: "Open messages" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Compose" })).toBeTruthy();
   });
 });
 
@@ -553,13 +672,12 @@ describe("ChatDock windows", () => {
     named("p2", "Bob");
     chat.conversations = [summary("c1", "p1", { unread: 1, author: "p1" }), summary("c2", "p2")];
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+    dockChat("Alice");
 
-    // The desktop launcher stays at the foot while a window is open, so the
-    // second conversation opens from the picker beside the first.
-    expect(screen.getByRole("button", { name: "1 unread conversations, new message" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "1 unread conversations, new message" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open conversation with Bob" }));
+    // Compose stays in the capsule while a window is open: it is the only
+    // surface that can open a second conversation.
+    compose();
+    selectRecent("Bob");
     expect(dockWindow("picker")).toBeNull();
     expect(dockWindows()).toHaveLength(2);
     expect(conversation("c1").dataset.active).toBe("false");
@@ -576,13 +694,11 @@ describe("ChatDock windows", () => {
     named("p2", "Bob");
     chat.conversations = [summary("c1", "p1", { unread: 1, author: "p1" }), summary("c2", "p2")];
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+    dockChat("Alice");
     fireEvent.click(screen.getByRole("button", { name: "Collapse chat" }));
 
-    // The launcher stays at the foot while a head exists, so a second chat
-    // can be chosen from the picker.
-    fireEvent.click(screen.getByRole("button", { name: "1 unread conversations, new message" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open conversation with Bob" }));
+    compose();
+    selectRecent("Bob");
     expect(dockWindow("picker")).toBeNull();
     expect(dockWindow("c1")?.dataset.phase).toBe("minimized");
     expect(dockWindow("c2")?.dataset.phase).toBe("open");
@@ -599,7 +715,7 @@ describe("ChatDock windows", () => {
     named("p2", "Bob");
     chat.conversations = [summary("c1", "p1", { unread: 1, author: "p1" }), summary("c2", "p2")];
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+    dockChat("Alice");
     act(() => openChatDock("me", null, "c2", 2));
 
     fireEvent.click(within(conversation("c1")).getByRole("button", { name: "Close chat" }));
@@ -615,7 +731,7 @@ describe("ChatDock windows", () => {
     chat.conversations = [summary("c1", "p1", { unread: 1, author: "p1" }),
       summary("c2", "p2"), summary("c3", "p3")];
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+    dockChat("Alice");
     act(() => openChatDock("me", null, "c2", 2));
     act(() => openChatDock("me", null, "c3", 2));
 
@@ -626,7 +742,7 @@ describe("ChatDock windows", () => {
     expect(railHeads()).toHaveLength(1);
   });
 
-  it("pages the rail with a +N chip at both ends", () => {
+  it("pages the rail with a +N counter at both ends", () => {
     mount("/");
     act(() => {
       for (let index = 1; index <= 8; index += 1) openChatDock("me", null, `c${index}`, 8);
@@ -635,7 +751,7 @@ describe("ChatDock windows", () => {
       for (let index = 1; index <= 8; index += 1) minimizeChatDock("me", `c${index}`);
     });
 
-    // Newest nearest the launcher: c4..c8 with the older three hidden above.
+    // Newest nearest the capsule: c4..c8 with the older three hidden above.
     expect(railEntries()).toEqual(["c4", "c5", "c6", "c7", "c8"]);
     expect(screen.queryByRole("button", { name: /newer minimized/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Show 3 older minimized chats" })).toBeTruthy();
@@ -651,7 +767,7 @@ describe("ChatDock windows", () => {
     expect(screen.getByRole("button", { name: "Show 3 older minimized chats" })).toBeTruthy();
   });
 
-  it("lays the band out older chip, heads, newer chip, launcher, then the close/pencil column", () => {
+  it("stacks the counters and heads above one capsule in the corner", () => {
     viewport(1024, 768);
     mount("/");
     act(() => {
@@ -661,35 +777,34 @@ describe("ChatDock windows", () => {
       for (let index = 1; index <= 8; index += 1) minimizeChatDock("me", `c${index}`);
     });
 
-    const heads = document.querySelector<HTMLElement>(".fb-chat-dock-rail-heads");
-    const launcher = launcherNode();
-    const column = document.querySelector<HTMLElement>(".fb-chat-dock-utility-row");
-    const close = screen.getByRole("button", { name: "Close chats" });
-    const pencil = screen.getByRole("button", { name: "New message" });
+    const stack = document.querySelector<HTMLElement>(".fb-chat-dock-rail-stack");
+    const capsule = strip() as HTMLElement;
     const older = screen.getByRole("button", { name: "Show 3 older minimized chats" });
-    expect(heads && launcher && column).toBeTruthy();
-    if (!heads || !launcher || !column) return;
+    const heads = railHeads();
+    expect(stack).toBeTruthy();
+    expect(heads).toHaveLength(5);
+    expect(within(capsule).getAllByRole("button").map((node) => node.getAttribute("aria-label")))
+      .toEqual(["Compose", "Minimize", "Close"]);
 
-    // Newest batch: the older chip is the row's left end, then the heads, then
-    // the launcher, then the column nearest the screen edge.
-    expect(precedes(older, heads)).toBe(true);
-    expect(precedes(heads, launcher)).toBe(true);
-    expect(precedes(launcher, column)).toBe(true);
-    // × sits above the pencil in the column.
-    expect(precedes(close, pencil)).toBe(true);
+    // The older counter is the stack's top, then the heads, then the capsule.
+    // There is no second circle beside the capsule.
+    expect(precedes(older, heads[0] as Node)).toBe(true);
+    expect(precedes(heads[heads.length - 1] as Node, capsule)).toBe(true);
+    expect(anchor()).toBeNull();
 
-    // Paging to the older batch puts the newer chip between the last head and
-    // the launcher, never after the launcher.
+    // Paging to the older batch puts the newer counter below the last head and
+    // still above the capsule.
     fireEvent.click(older);
     const newer = screen.getByRole("button", { name: "Show 3 newer minimized chats" });
-    expect(precedes(heads, newer)).toBe(true);
-    expect(precedes(newer, launcher)).toBe(true);
+    const olderHeads = railHeads();
+    expect(precedes(olderHeads[olderHeads.length - 1] as Node, newer)).toBe(true);
+    expect(precedes(newer, capsule)).toBe(true);
   });
 
   it("never puts the new-message chooser on the rail", () => {
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open messages" }));
-    // The rail renders (it holds the launcher) but the new-message chooser is
+    compose();
+    // The rail renders (it holds the capsule) but the new-message chooser is
     // never a rail head.
     expect(railHeads()).toHaveLength(0);
     expect(dockWindow("picker")?.dataset.view).toBe("picker");
@@ -705,6 +820,7 @@ describe("ChatDock windows", () => {
     act(() => openChatDock("me", null, "c1", 1));
     act(() => openChatDock("me", null, "c2", 1));
     expect(rail()).toBeNull();
+    expect(anchor()).toBeNull();
     expect(panel()).toBeNull();
     expect(dockWindow("c1")).toBeNull();
     expect(dockWindow("c2")).toBeNull();
@@ -727,7 +843,7 @@ describe("ChatDock windows", () => {
       for (let index = 1; index <= 8; index += 1) minimizeChatDock("me", `c${index}`);
     });
 
-    // Newest nearest the launcher: c4..c8 visible, c1..c3 hidden above.
+    // Newest nearest the capsule: c4..c8 visible, c1..c3 hidden above.
     expect(railEntries()).toEqual(["c4", "c5", "c6", "c7", "c8"]);
     expect(screen.getByRole("button", { name: "Show 3 older minimized chats" })).toBeTruthy();
 
@@ -740,7 +856,7 @@ describe("ChatDock windows", () => {
     act(() => openChatDock("me", null, "c9", 8));
     act(() => minimizeChatDock("me", "c9"));
     expect(railEntries()).toEqual(["c1", "c2", "c3", "c4", "c5"]);
-    // Only the hidden-count chips changed: c6..c9 are now below.
+    // Only the hidden-count counters changed: c6..c9 are now below.
     expect(screen.getByRole("button", { name: "Show 4 newer minimized chats" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /older minimized/ })).toBeNull();
 
@@ -768,39 +884,39 @@ describe("ChatDock windows", () => {
     expect(railEntries()).toEqual(["c2", "c3", "c4", "c5", "c6"]);
   });
 
-  it("Close floating windows closes open windows and leaves heads", () => {
+  it("leaves the other docked chat alone when one window closes itself", () => {
     named("p1", "Alice");
     named("p2", "Bob");
     chat.conversations = [summary("c1", "p1", { unread: 1, author: "p1" }), summary("c2", "p2")];
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+    dockChat("Alice");
     // Limit 1 forces c1 (the only other open window) to fold to a rail head,
     // leaving c2 as the open floating window.
     act(() => openChatDock("me", null, "c2", 1));
     expect(dockWindow("c1")?.dataset.phase).toBe("minimized");
     expect(dockWindow("c2")?.dataset.phase).toBe("open");
 
-    // Close floating windows: close every open entry, leaving heads in place.
-    act(() => closeChatDockEntry("me", "c2"));
+    fireEvent.click(within(conversation("c2")).getByRole("button", { name: "Close chat" }));
     expect(dockWindow("c2")).toBeNull();
     expect(screen.getByRole("button", { name: /Restore chat with Alice/ })).toBeTruthy();
   });
 
-  it("Close all chats leaves no heads and no windows", () => {
+  it("Close removes every head and every window", () => {
     named("p1", "Alice");
     named("p2", "Bob");
     chat.conversations = [summary("c1", "p1", { unread: 1, author: "p1" }), summary("c2", "p2")];
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+    dockChat("Alice");
     // Limit 1 folds c1 to a rail head so c2 becomes the open floating window.
     act(() => openChatDock("me", null, "c2", 1));
     expect(dockWindow("c1")?.dataset.phase).toBe("minimized");
     expect(dockWindow("c2")?.dataset.phase).toBe("open");
 
-    act(() => closeChatDock("me"));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(dockWindow("c1")).toBeNull();
     expect(dockWindow("c2")).toBeNull();
     expect(panel()).toBeNull();
+    expect(rail()).toBeNull();
   });
 });
 
@@ -813,7 +929,7 @@ describe("ChatDock picker", () => {
       summary("c2", "p2", { unread: 0, author: "p2" }), summary("c3", "p3", { unread: 0, author: "p3" })];
     chat.currentProjections = { c2: { ownMuted: true }, c3: { ownHidden: true } };
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open messages" }));
+    compose();
     expect(screen.getByRole("heading", { name: "New message" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Open conversation with Alice" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Bob/ })).toBeNull();
@@ -824,7 +940,7 @@ describe("ChatDock picker", () => {
     named("p1", "Alice");
     chat.conversations = [summary("c1", "p1", { unread: 0, author: "p1", body: "Hello there" })];
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open messages" }));
+    compose();
     expect(screen.getByText("Hello there")).toBeTruthy();
   });
 
@@ -834,7 +950,7 @@ describe("ChatDock picker", () => {
       unread: 0, author: "p1", body: chatFileBody(meta, "Here is the report"),
     })];
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open messages" }));
+    compose();
     expect(screen.getByText("report.pdf")).toBeTruthy();
     expect(screen.queryByText(/norfold-file:/)).toBeNull();
     expect(screen.queryByText(/files\/u-1/)).toBeNull();
@@ -844,7 +960,7 @@ describe("ChatDock picker", () => {
     named("p1", "Alice");
     chat.conversations = [summary("c1", "p1", { unread: 0, author: "p1", body: "norfold-file:v2:AAAA" })];
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open messages" }));
+    compose();
     expect(screen.getByText("File")).toBeTruthy();
     expect(screen.queryByText(/norfold-file:/)).toBeNull();
   });
@@ -853,14 +969,14 @@ describe("ChatDock picker", () => {
     named("p1", "Alice");
     chat.conversations = [summary("c1", "p1", { unread: 0, author: "p1", body: "", type: "VOICE" })];
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open messages" }));
+    compose();
     expect(screen.getByText("Voice message")).toBeTruthy();
 
     cleanup();
     resetChatDock();
     chat.conversations = [summary("c1", "p1", { unread: 0, author: "p1", body: "https://media.klipy.com/a.gif" })];
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open messages" }));
+    compose();
     expect(screen.getByText("Sticker/GIF")).toBeTruthy();
 
     cleanup();
@@ -869,7 +985,7 @@ describe("ChatDock picker", () => {
       unread: 0, author: "p1", body: "https://media.klipy.com/a.gif#norfold-media=gif",
     })];
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open messages" }));
+    compose();
     expect(screen.getByText("GIF")).toBeTruthy();
   });
 
@@ -877,8 +993,8 @@ describe("ChatDock picker", () => {
     named("p1", "Alice");
     chat.conversations = [summary("c1", "p1", { unread: 0, author: "p1" })];
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open messages" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open conversation with Alice" }));
+    compose();
+    selectRecent("Alice");
     expect(runtime.request).not.toHaveBeenCalled();
     expect(screen.getByTestId("path").textContent).toBe("/");
     expect(screen.getByLabelText("Conversation c1")).toBeTruthy();
@@ -889,7 +1005,7 @@ describe("ChatDock picker", () => {
     people.results = [{ id: "p9", username: "sam", displayName: "Sam", avatarUrl: null }];
     runtime.request.mockResolvedValue("c-new");
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open messages" }));
+    compose();
     fireEvent.change(screen.getByLabelText("Search people"), { target: { value: "sam" } });
     fireEvent.click(await screen.findByRole("button", { name: "Message Sam" }));
     await waitFor(() => expect(screen.getByLabelText("Conversation c-new")).toBeTruthy());
@@ -902,7 +1018,7 @@ describe("ChatDock picker", () => {
     chat.status = "offline";
     people.results = [{ id: "p9", username: "sam", displayName: "Sam", avatarUrl: null }];
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open messages" }));
+    compose();
     fireEvent.change(screen.getByLabelText("Search people"), { target: { value: "sam" } });
     fireEvent.click(await screen.findByRole("button", { name: "Message Sam" }));
     expect(screen.getByText("You're offline. Check your connection, then tap again.")).toBeTruthy();
@@ -916,14 +1032,14 @@ describe("ChatDock picker", () => {
     runtime.request.mockImplementation(() => new Promise<string>((resolve) => { settle = resolve; }));
     people.results = [{ id: "p9", username: "sam", displayName: "Sam", avatarUrl: null }];
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open messages" }));
+    compose();
     fireEvent.change(screen.getByLabelText("Search people"), { target: { value: "sam" } });
     fireEvent.click(await screen.findByRole("button", { name: "Message Sam" }));
     fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
     expect(panel()).toBeNull();
     await act(async () => { settle?.("c-late"); await Promise.resolve(); });
     expect(screen.queryByLabelText("Conversation c-late")).toBeNull();
-    expect(screen.getByRole("button", { name: "Open messages" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Compose" })).toBeTruthy();
   });
 });
 
@@ -933,7 +1049,7 @@ const dockCss = readFileSync("src/components/ChatDock.css", "utf8");
 describe("ChatDock surface sizing", () => {
   it("marks the picker window as the picker until a conversation takes it over", () => {
     mount("/");
-    fireEvent.click(screen.getByRole("button", { name: "Open messages" }));
+    compose();
     expect(dockWindow("picker")?.dataset.view).toBe("picker");
     expect(dockWindow("picker")?.dataset.phase).toBe("open");
 
@@ -966,34 +1082,70 @@ describe("ChatDock surface sizing", () => {
     expect(hostRow).toContain("gap: 12px");
     expect(hostRow).toContain("align-items: flex-end");
 
-    // The rail is a horizontal band of circular heads with an 8px rhythm,
-    // bottom-aligned with the close/pencil column at its right end.
+    // The rail is one vertical column at the corner: an 8px rhythm and the same
+    // shared bottom inset the window row uses.
     const railRule = /(?:^|\})\s*\.fb-chat-dock-rail\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
-    expect(railRule).toContain("flex-direction: row");
+    expect(railRule).toContain("flex-direction: column");
     expect(railRule).toContain("align-items: flex-end");
     expect(railRule).toContain("gap: 8px");
     expect(railRule).toContain("inset-block-end");
+    const stack = /\.fb-chat-dock-rail-stack\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
+    expect(stack).toContain("flex-direction: column");
+    expect(stack).toContain("gap: 8px");
+
+    // The rest state is the shipped 48px circle.
+    const circle = /\.fb-chat-dock-rail-anchor\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
+    expect(circle).toContain("width: 48px");
+    expect(circle).toContain("height: 48px");
+    expect(circle).toContain("border-radius: 999px");
     const head = /\.fb-chat-dock-rail-head\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
     expect(head).toContain("width: 48px");
     expect(head).toContain("height: 48px");
     expect(head).toContain("border-radius: 999px");
-    const heads = /\.fb-chat-dock-rail-heads\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
-    expect(heads).toContain("flex-direction: row");
-    expect(heads).toContain("gap: 8px");
+    // The page counter is a small counter at the stack's end, not a head.
     const more = /\.fb-chat-dock-rail-more\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
-    expect(more).toContain("width: 44px");
-    expect(more).toContain("height: 44px");
+    expect(more).toContain("min-width: 34px");
+    expect(more).toContain("height: 28px");
 
-    // The close/pencil column is vertical, 44px per control, 8px apart, and
-    // flows inside the band instead of pinning itself to the viewport.
-    const column = /(?:^|\})\s*\.fb-chat-dock-utility-row\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
-    expect(column).toContain("flex-direction: column");
-    expect(column).toContain("gap: 8px");
-    expect(column).not.toContain("position: fixed");
+    // The capsule copies the notification rail: 34px actions, 2px gaps, 4px
+    // padding, hairline border, the same two-layer shadow.
+    const capsule = /\.fb-chat-dock-rail-strip\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
+    expect(capsule).toContain("gap: 2px");
+    expect(capsule).toContain("padding: 4px");
+    expect(capsule).toContain("border-radius: 999px");
+    expect(capsule).toContain("box-shadow: 0 10px 28px -10px #0000004d, 0 2px 8px #0000001f");
+    expect(capsule).toContain("transform-origin: right center");
+    const action = /\.fb-chat-dock-rail-action\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
+    expect(action).toContain("width: 34px");
+    expect(action).toContain("height: 34px");
+    // The name pill resolves against the strip, never the action.
+    expect(action).toContain("position: static");
+    const name = /\.fb-chat-dock-rail-name\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
+    expect(name).toContain("right: calc(100% + 8px)");
+    expect(name).toContain("opacity: 0");
 
-    // The window row clears the 96px band plus an 8px gap.
+    // The badge resolves against the glyph box, never the strip: the action
+    // stays static so the name pill keeps the strip as its containing block.
+    const glyph = /\.fb-chat-dock-rail-glyph\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
+    expect(glyph).toContain("position: relative");
+    expect(glyph).toContain("display: grid");
+    expect(glyph).toContain("place-items: center");
+
+    // A coarse pointer widens the capsule to three 44px actions, so the window
+    // row reserves the wider clearance on the same two elements.
+    const coarseAt = clean.indexOf("@media (hover: none), (pointer: coarse)");
+    expect(coarseAt).toBeGreaterThan(-1);
+    const coarse = clean.slice(coarseAt, clean.indexOf("\n}", coarseAt));
+    expect(coarse).toContain("--fb-dock-window-clearance: 184px");
+
+    // The window row sits beside the rail and reserves the widest capsule.
     const panelRule = /(?:^|\})\s*\.fb-chat-dock\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
-    expect(panelRule).toContain("inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer) + 104px)");
+    expect(panelRule).toContain("inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer))");
+    // The clearance already counts the standard 12px inset, so the row adds
+    // only the safe-area excess: 12 + 122 + 8 in an ordinary window.
+    expect(panelRule).toContain("inset-inline-end: calc(var(--fb-dock-edge) + var(--fb-dock-window-clearance) - 12px)");
+    expect(clean).toContain("--fb-dock-window-clearance: 142px");
+    expect(clean).toContain("--fb-dock-edge: max(12px");
 
     // Only the picker body scrolls; the picker itself never clips a menu.
     const body = /\.fb-chat-dock-body\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
@@ -1040,13 +1192,13 @@ function rectOf(box: Box): DOMRect {
 
 /**
  * jsdom has no layout, so the two boxes the clearance reads are supplied here.
- * The launcher's box is the one the declarations produce: a test that moves it
+ * The rail's box is the one the declarations produce: a test that moves it
  * after a lift models the real element, and that is what proves a repeated
  * measurement cannot compound into a climb.
  */
-function stubDockBoxes(launcher: Box, composer: Box) {
+function stubDockBoxes(railBox: Box, composer: Box) {
   return vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-    if (this.classList.contains("fb-chat-dock-rail-launcher")) return rectOf(launcher);
+    if (this.classList.contains("fb-chat-dock-rail")) return rectOf(railBox);
     if (this.classList.contains("fb-comment-composer")) return rectOf(composer);
     return rectOf({ top: 0, bottom: 0, left: 0, right: 0 });
   });
@@ -1071,10 +1223,6 @@ function pageComposer() {
   composer.className = "fb-comment-composer";
   document.body.appendChild(composer);
   return composer;
-}
-
-function launcherNode() {
-  return document.querySelector<HTMLElement>(".fb-chat-dock-rail-launcher");
 }
 
 function railNode() {
@@ -1102,12 +1250,12 @@ describe("ChatDock page composer clearance", () => {
       );
       mount("/");
       // Below the desktop threshold nothing of the dock renders: no rail, no
-      // launcher, no panel and no utility row — so there is no lift surface at
-      // all, nothing to clear and nothing to compound.
-      expect(document.querySelector<HTMLElement>(".fb-chat-dock-rail-launcher")).toBeNull();
+      // anchor, no capsule and no panel — so there is no lift surface at all,
+      // nothing to clear and nothing to compound.
       expect(rail()).toBeNull();
+      expect(anchor()).toBeNull();
+      expect(strip()).toBeNull();
       expect(panel()).toBeNull();
-      expect(document.querySelector(".fb-chat-dock-utility-row")).toBeNull();
       expect(clearanceOf(railNode())).toBe("");
       cleanup();
       vi.restoreAllMocks();
@@ -1115,16 +1263,16 @@ describe("ChatDock page composer clearance", () => {
     }
   });
 
-  it("leaves the launcher alone when the composer is outside its column", () => {
+  it("leaves the rail alone when the composer is outside its column", () => {
     viewport(1024, 768);
     pageComposer();
-    // A centred 44rem readable column: the launcher is not over it.
+    // A centred 44rem readable column: the rail is not over it.
     stubDockBoxes(
       { top: 704, bottom: 756, left: 960, right: 1012 },
       { top: 690, bottom: 768, left: 160, right: 864 },
     );
     mount("/");
-    expect(clearanceOf(launcherNode())).toBe("");
+    expect(clearanceOf(railNode())).toBe("");
   });
 
   it("observes the composer and turns a taller box into a taller lift, once", () => {
@@ -1132,9 +1280,9 @@ describe("ChatDock page composer clearance", () => {
     vi.stubGlobal("ResizeObserver", FakeResizeObserver);
     FakeResizeObserver.instances = [];
     const composer = pageComposer();
-    const launcher: Box = { top: 780, bottom: 832, left: 960, right: 1012 };
+    const railBox: Box = { top: 780, bottom: 832, left: 960, right: 1012 };
     const box: Box = { top: 780, bottom: 844, left: 0, right: 1024 };
-    stubDockBoxes(launcher, box);
+    stubDockBoxes(railBox, box);
     mount("/");
     act(() => openChatDock("me", null, "c1", 2));
     act(() => minimizeChatDock("me", "c1"));
@@ -1143,17 +1291,17 @@ describe("ChatDock page composer clearance", () => {
     const observer = FakeResizeObserver.instances.at(-1);
     expect(observer?.targets.has(composer)).toBe(true);
 
-    // The composer grew and the launcher sits where the first lift put it.
+    // The composer grew and the rail sits where the first lift put it.
     box.top = 700;
-    launcher.top = 720;
-    launcher.bottom = 772;
+    railBox.top = 720;
+    railBox.bottom = 772;
     act(() => observer?.callback());
     expect(clearanceOf(railNode())).toBe("140px");
 
     // The measured box carries that lift, so it is taken back out: a second
     // observation of the same boxes keeps the same clearance.
-    launcher.top = 640;
-    launcher.bottom = 692;
+    railBox.top = 640;
+    railBox.bottom = 692;
     act(() => observer?.callback());
     expect(clearanceOf(railNode())).toBe("140px");
   });
@@ -1162,7 +1310,7 @@ describe("ChatDock page composer clearance", () => {
     viewport(1024, 768);
     vi.stubGlobal("ResizeObserver", FakeResizeObserver);
     FakeResizeObserver.instances = [];
-    // This box would shift the launcher 74px if it were counted.
+    // This box would shift the rail 74px if it were counted.
     stubDockBoxes(
       { top: 704, bottom: 756, left: 960, right: 1012 },
       { top: 690, bottom: 768, left: 900, right: 1024 },
@@ -1188,11 +1336,11 @@ describe("ChatDock page composer clearance", () => {
     mount("/");
     act(() => openChatDock("me", null, "c1", 1));
     // A mounted thread stays alive in the store but is not painted on a phone:
-    // no rail, no launcher, no panel and no utility row, so no lift surface.
+    // no rail, no anchor, no capsule and no panel, so no lift surface.
     expect(rail()).toBeNull();
-    expect(launcherNode()).toBeNull();
+    expect(anchor()).toBeNull();
+    expect(strip()).toBeNull();
     expect(panel()).toBeNull();
-    expect(document.querySelector(".fb-chat-dock-utility-row")).toBeNull();
     expect(clearanceOf(railNode())).toBe("");
   });
 });
@@ -1205,10 +1353,11 @@ describe("chatDock store", () => {
       .reduce<ChatDockEntry | null>((best, entry) => (
         best === null || entry.seq > best.seq ? entry : best
       ), null) ?? null;
+    const list = state
+      ? state.entries.map((entry) => `${entry.conversationId ?? "-"}:${entry.phase}`).join(",") || "empty"
+      : "null";
     return <output data-testid={`state-${viewer ?? "signed-out"}`}>
-      {state
-        ? `${state.accountId}|${state.entries.map((entry) => `${entry.conversationId ?? "-"}:${entry.phase}`).join(",")}|f:${focused?.conversationId ?? "-"}`
-        : "null"}
+      {`${list}|f:${focused?.conversationId ?? "-"}`}
     </output>;
   }
 
@@ -1218,49 +1367,58 @@ describe("chatDock store", () => {
 
   it("is account-fenced and memory only", () => {
     mountStore();
+    // A signed-in viewer with no dock yet gets one stable empty snapshot, so
+    // the Compose affordance exists before the first mutation. Signed out is
+    // still nothing at all.
+    expect(screen.getByTestId("state-a").textContent).toBe("empty|f:-");
+    expect(screen.getByTestId("state-b").textContent).toBe("empty|f:-");
+    expect(screen.getByTestId("state-signed-out").textContent).toBe("null|f:-");
+
     act(() => openChatDock("a", null, null));
-    expect(screen.getByTestId("state-a").textContent).toBe("a|-:open|f:-");
-    expect(screen.getByTestId("state-b").textContent).toBe("null");
-    expect(screen.getByTestId("state-signed-out").textContent).toBe("null");
+    expect(screen.getByTestId("state-a").textContent).toBe("-:open|f:-");
+    // Another viewer never sees a's entries, and no empty stand-in is invented
+    // for an account this dock does not belong to.
+    expect(screen.getByTestId("state-b").textContent).toBe("null|f:-");
+    expect(screen.getByTestId("state-signed-out").textContent).toBe("null|f:-");
   });
 
   it("appends window entries, focuses an existing one and never duplicates", () => {
     mountStore();
     act(() => openChatDock("a", null, "c1"));
     act(() => openChatDock("a", null, "c2"));
-    expect(screen.getByTestId("state-a").textContent).toBe("a|c1:open,c2:open|f:c2");
+    expect(screen.getByTestId("state-a").textContent).toBe("c1:open,c2:open|f:c2");
     act(() => openChatDock("a", null, "c1"));
-    expect(screen.getByTestId("state-a").textContent).toBe("a|c1:open,c2:open|f:c1");
+    expect(screen.getByTestId("state-a").textContent).toBe("c1:open,c2:open|f:c1");
     act(() => focusChatDock("a", "c2"));
-    expect(screen.getByTestId("state-a").textContent).toBe("a|c1:open,c2:open|f:c2");
+    expect(screen.getByTestId("state-a").textContent).toBe("c1:open,c2:open|f:c2");
   });
 
   it("minimizes, restores and closes a single window", () => {
     mountStore();
     act(() => openChatDock("a", null, "c1"));
     act(() => minimizeChatDock("a", "c1"));
-    expect(screen.getByTestId("state-a").textContent).toBe("a|c1:minimized|f:-");
+    expect(screen.getByTestId("state-a").textContent).toBe("c1:minimized|f:-");
     act(() => restoreChatDock("a", "c1"));
-    expect(screen.getByTestId("state-a").textContent).toBe("a|c1:open|f:c1");
+    expect(screen.getByTestId("state-a").textContent).toBe("c1:open|f:c1");
     act(() => minimizeChatDock("a", "c1"));
     act(() => closeChatDockEntry("a", "c1"));
-    expect(screen.getByTestId("state-a").textContent).toBe("null");
+    expect(screen.getByTestId("state-a").textContent).toBe("empty|f:-");
   });
 
   it("keeps the picker out of minimize and swaps it for the chosen conversation", () => {
     mountStore();
     act(() => openChatDock("a", null, null));
     act(() => minimizeChatDock("a", null));
-    expect(screen.getByTestId("state-a").textContent).toBe("a|-:open|f:-");
+    expect(screen.getByTestId("state-a").textContent).toBe("-:open|f:-");
     act(() => openConversation("a", "c1"));
-    expect(screen.getByTestId("state-a").textContent).toBe("a|c1:open|f:c1");
+    expect(screen.getByTestId("state-a").textContent).toBe("c1:open|f:c1");
   });
 
   it("enforces the host limit by minimizing the least recently focused other window", () => {
     mountStore();
     act(() => openChatDock("a", null, "c1", 1));
     act(() => openChatDock("a", null, "c2", 1));
-    expect(screen.getByTestId("state-a").textContent).toBe("a|c1:minimized,c2:open|f:c2");
+    expect(screen.getByTestId("state-a").textContent).toBe("c1:minimized,c2:open|f:c2");
   });
 
   it("refuses cross-account mutation and clears on close and reset", () => {
@@ -1269,11 +1427,54 @@ describe("chatDock store", () => {
     act(() => minimizeChatDock("b", "c1"));
     act(() => closeChatDockEntry("b", "c1"));
     act(() => openConversation("b", "c2"));
-    expect(screen.getByTestId("state-a").textContent).toBe("a|c1:open|f:c1");
+    expect(screen.getByTestId("state-a").textContent).toBe("c1:open|f:c1");
     act(() => closeChatDock("a"));
-    expect(screen.getByTestId("state-a").textContent).toBe("null");
+    expect(screen.getByTestId("state-a").textContent).toBe("empty|f:-");
     act(() => openChatDock("a", null, "c3"));
     act(() => resetChatDock());
-    expect(screen.getByTestId("state-a").textContent).toBe("null");
+    expect(screen.getByTestId("state-a").textContent).toBe("empty|f:-");
+  });
+
+  it("remembers a closed surface as a state, while closeChatDock clears the store", () => {
+    function ClosedProbe() {
+      const state = useChatDock("a");
+      return <output data-testid="closed">
+        {state === null ? "null" : `${state.closed ? "closed" : "open"}|${state.entries.length}`}
+      </output>;
+    }
+    render(<ClosedProbe />);
+    act(() => openChatDock("a", null, "c1"));
+    act(() => closeChatDockSurface("a"));
+    // The visit's dismissal is a fact a null state cannot hold: no window
+    // survives, and nothing paints until an opener clears it.
+    expect(screen.getByTestId("closed").textContent).toBe("closed|0");
+
+    // Any opener clears the dismissal and the state stays this account's.
+    act(() => openChatDock("a", null, "c2"));
+    expect(screen.getByTestId("closed").textContent).toBe("open|1");
+
+    // The plain close still drops the state itself: with nothing left, another
+    // account's dock owns the store and viewer a is fenced back to null.
+    act(() => closeChatDock("a"));
+    act(() => openChatDock("b", null, "c9"));
+    expect(screen.getByTestId("closed").textContent).toBe("null");
+  });
+
+  it("keeps one snapshot identity across renders and stays null when signed out", () => {
+    const reads: Array<ReturnType<typeof useChatDock>> = [];
+    function IdentityProbe() {
+      const state = useChatDock("a");
+      reads.push(state);
+      return <output data-testid="identity">{state === null ? "null" : "state"}</output>;
+    }
+    const view = render(<><IdentityProbe /><StoreProbe viewer={null} /></>);
+    view.rerender(<><IdentityProbe /><StoreProbe viewer={null} /></>);
+    // A fresh object on every read would make useSyncExternalStore render
+    // forever, so the frozen empty snapshot keeps its identity.
+    expect(reads.length).toBeGreaterThan(1);
+    expect(reads[0]).not.toBeNull();
+    for (const read of reads) expect(read).toBe(reads[0]);
+    // Signed out is still nothing at all.
+    expect(screen.getByTestId("state-signed-out").textContent).toBe("null|f:-");
   });
 });
