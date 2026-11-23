@@ -63,7 +63,7 @@ vi.mock("../screens/Messaging", () => ({
         data-surface={props.surface} data-active={String(props.active)}>
         <header className="fb-chat-header">
           <h1>Thread {props.conversationId}</h1>
-          <button type="button" aria-label="Collapse chat"
+          <button type="button" aria-label={props.active ? "Collapse chat" : "Expand chat"}
             onClick={props.onToggleCompact}>collapse</button>
           <button type="button" aria-label="Open full chat" onClick={props.onExpand}>open</button>
           <button type="button" aria-label="Close chat" onClick={props.onClose}>close</button>
@@ -754,6 +754,25 @@ describe("ChatDock windows", () => {
 
     // Pressing inside a window takes focus, and only one window owns the lease.
     fireEvent.pointerDown(conversation("c1"));
+    expect(conversation("c1").dataset.active).toBe("true");
+    expect(conversation("c2").dataset.active).toBe("false");
+  });
+
+  it("names the header toggle for what it does on an unfocused window", () => {
+    named("p1", "Alice");
+    named("p2", "Bob");
+    chat.conversations = [summary("c1", "p1", { unread: 1, author: "p1" }), summary("c2", "p2")];
+    mount("/");
+    dockChat("Alice");
+    act(() => openChatDock("me", null, "c2", 2));
+
+    // Only the window holding the lease offers Collapse. The other is open but
+    // unfocused, so its control says what pressing it does.
+    expect(conversation("c2").dataset.active).toBe("true");
+    fireEvent.click(within(conversation("c1")).getByRole("button", { name: "Expand chat" }));
+
+    expect(dockWindow("c1")?.dataset.phase).toBe("open");
+    expect(dockWindow("c1")?.hidden).toBe(false);
     expect(conversation("c1").dataset.active).toBe("true");
     expect(conversation("c2").dataset.active).toBe("false");
   });

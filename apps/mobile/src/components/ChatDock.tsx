@@ -587,7 +587,13 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
                 <ThreadSession key={`${dock.accountId}:${conversationId}`} accountId={dock.accountId}
                   conversationId={conversationId} surface="dock"
                   active={isFocused(entry)}
-                  onToggleCompact={() => minimizeEntry(conversationId)}
+                  onToggleCompact={() => {
+                    // The header names this control from `active`, so an open
+                    // but unfocused window offers "Expand chat": the press has
+                    // to bring that window forward, not collapse it.
+                    if (isFocused(entry)) minimizeEntry(conversationId);
+                    else restoreEntry(conversationId);
+                  }}
                   onClose={() => closeEntry(conversationId)}
                   onExpand={() => expandEntry(conversationId)} />
               </div>
