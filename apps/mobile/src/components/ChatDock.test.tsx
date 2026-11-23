@@ -1163,11 +1163,12 @@ describe("ChatDock surface sizing", () => {
     // The viewport bound and the shared width are the ones the window already had.
     expect(picker).toContain("var(--fb-dock-bottom)");
 
-    // A thread window keeps the fixed 544px card beside its neighbours, and the
-    // narrower 320px side-panel width the owner asked for.
+    // A transcript window keeps its 24rem card beside its neighbours; the
+    // picker is the thinner 20rem chooser the owner asked for.
     const windowRule = /(?:^|\})\s*\.fb-chat-dock-window\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
     expect(windowRule).toContain("height: min(34rem");
-    expect(windowRule).toContain("width: min(20rem");
+    expect(windowRule).toContain("width: min(24rem");
+    expect(picker).toContain("width: min(20rem");
 
     // The host is a bottom-right row, not a panel.
     const hostRow = /\.fb-chat-dock-stack\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
@@ -1211,11 +1212,10 @@ describe("ChatDock surface sizing", () => {
     const action = /\.fb-chat-dock-rail-action\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
     expect(action).toContain("width: 34px");
     expect(action).toContain("height: 34px");
-    // The name pill resolves against the strip, never the action.
-    expect(action).toContain("position: static");
-    const name = /\.fb-chat-dock-rail-name\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
-    expect(name).toContain("right: calc(100% + 8px)");
-    expect(name).toContain("opacity: 0");
+    // One tooltip system for the whole rail: the capsule's names come from the
+    // shared HoverLabel, exactly as the bubbles' do, so there is no bespoke
+    // name pill rule to drift out of step with it.
+    expect(clean).not.toContain(".fb-chat-dock-rail-name");
 
     // A coarse pointer widens the capsule to three 44px actions, so the window
     // row reserves the wider clearance on the same two elements.

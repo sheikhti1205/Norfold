@@ -37,8 +37,8 @@ const CHAT_SURFACE = /^\/(?:chats|connections)(?:\/|$)/;
 const DOCK_ID = "fb-chat-dock";
 const SEARCH_DEBOUNCE_MS = 250;
 const DESKTOP_MIN_WIDTH = 768;
-/** 20rem at the 16px design root; the row's gap is added separately. */
-const WINDOW_WIDTH = 320;
+/** 24rem at the 16px design root; the row's gap is added separately. */
+const WINDOW_WIDTH = 384;
 const WINDOW_GAP = 12;
 const DESKTOP_MAX_WINDOWS = 3;
 /**
@@ -504,6 +504,7 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
               <div ref={stripNode} className="fb-chat-dock-rail-strip">
                 <button type="button" className="fb-chat-dock-rail-action"
                   aria-label="Compose"
+                  {...hoverLabel("Compose", "right")}
                   onClick={(event) => {
                     if (!accountId) return;
                     // The picker is its own dock entry: pressing Compose while it is
@@ -516,24 +517,23 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
                     }
                   }}>
                   <Pencil size={16} aria-hidden="true" />
-                  <span className="fb-chat-dock-rail-name" aria-hidden="true">Compose</span>
                 </button>
                 {entries.length > 0 && (
                   <>
                     <span className="fb-chat-dock-rail-divider" aria-hidden="true" />
                     <button type="button" className="fb-chat-dock-rail-action" aria-label="Minimize"
+                      {...hoverLabel("Minimize", "right")}
                       onClick={(event) => tuckRail(event.detail === 0)}>
                       <Minus size={16} aria-hidden="true" />
-                      <span className="fb-chat-dock-rail-name" aria-hidden="true">Minimize</span>
                     </button>
                     <span className="fb-chat-dock-rail-divider" aria-hidden="true" />
                     <button type="button" className="fb-chat-dock-rail-action fb-chat-dock-rail-danger"
                       aria-label="Close"
+                      {...hoverLabel("Close", "right")}
                       onClick={() => {
                         if (accountId) closeChatDockSurface(accountId);
                       }}>
                       <X size={16} aria-hidden="true" />
-                      <span className="fb-chat-dock-rail-name" aria-hidden="true">Close</span>
                     </button>
                   </>
                 )}
@@ -542,6 +542,7 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
           ) : (
             <button ref={anchorNode} type="button" className="fb-chat-dock-rail-anchor"
               aria-label={unreadPeopleCount > 0 ? `Open chats, ${unreadPeopleCount} waiting` : "Open chats"}
+              {...hoverLabel("Open chats", "right")}
               onClick={(event) => {
                 if (!accountId) return;
                 untuckChatDock(accountId);
@@ -551,7 +552,6 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
               {unreadBadge && (
                 <span className="fb-chat-dock-rail-badge" aria-hidden="true">{unreadBadge}</span>
               )}
-              <span className="fb-chat-dock-rail-name" aria-hidden="true">Open chats</span>
             </button>
           )}
         </div>

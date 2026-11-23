@@ -61,12 +61,13 @@
 .fb-chat-dock-window {
   display: flex;
   /* Shrink only when the rail leaves less room than the capacity formula
-     assumed; the preferred width stays the 20rem card. A floating popup is a
-     side panel, not a page: 320px keeps the transcript readable and the row of
-     windows compact. */
+     assumed; the preferred width stays the 24rem card, because a 320px panel
+     leaves the peer's name about 90px beside four 44px header controls and it
+     truncates to "Arif…". A floating popup is a side panel, not a page: 384px
+     keeps the transcript readable and the row of windows compact. */
   flex: 0 1 auto;
   flex-direction: column;
-  width: min(20rem, calc(100vw - 24px - var(--fb-dock-window-clearance)));
+  width: min(24rem, calc(100vw - 24px - var(--fb-dock-window-clearance)));
   /* Height is the bound for the whole canonical chain (workspace -> page):
      no inner wrapper may grow past it, and only the transcript scrolls. The
      544px card is the ceiling, never the target: on a short viewport the
@@ -90,6 +91,10 @@
    inside the 23rem/28rem bounds; the rest scrolls inside `.fb-chat-dock-body`.
    28rem caps header + 44px search + the Recent label + five 52px rows. */
 .fb-chat-dock-window[data-view="picker"] {
+  /* The owner asked for a thinner chooser (2026-11-23): the picker is a list of
+     names and one-line previews, so it keeps the 20rem width while a transcript
+     window takes 24rem. */
+  width: min(20rem, calc(100vw - 24px - var(--fb-dock-window-clearance)));
   height: clamp(23rem, 52vh, 28rem);
   height: clamp(23rem, 52dvh, 28rem);
   max-height: min(28rem, calc(100vh - 2 * var(--fb-dock-bottom) - 6rem), calc(100vh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
@@ -260,10 +265,7 @@
   background: var(--fb-outline-variant);
 }
 
-/* `position: static` is deliberate: the action's name pill resolves against
-   the strip, so it can never float over the neighbouring action. */
 .fb-chat-dock-rail-action {
-  position: static;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -293,39 +295,11 @@
    hairline border. */
 .fb-chat-dock-rail .fb-chat-dock-rail-action:focus-visible { outline-offset: -2px; }
 
-/* The name is out of flow to the left, so the icon never moves when it appears.
-   It is anchored to the whole strip, never to the action: with three actions in
-   a row, a pill beside one of them would cover its neighbour — and covering
-   Compose with "Minimize" hides the control the reader needs. */
-.fb-chat-dock-rail-name {
-  position: absolute;
-  right: calc(100% + 8px);
-  top: 50%;
-  z-index: 1;
-  transform: translateY(-50%);
-  padding: 5px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--fb-outline-variant);
-  background: var(--fb-surface);
-  color: inherit;
-  white-space: nowrap;
-  box-shadow: 0 4px 14px -6px #00000066;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity .12s ease;
-}
-.fb-chat-dock-rail-action:hover .fb-chat-dock-rail-name,
-.fb-chat-dock-rail-action:focus-visible .fb-chat-dock-rail-name,
-.fb-chat-dock-rail-anchor:hover .fb-chat-dock-rail-name,
-.fb-chat-dock-rail-anchor:focus-visible .fb-chat-dock-rail-name {
-  opacity: 1;
-}
 /* A coarse pointer has no hover to reveal a name: icon only, and every action
    grows to a real touch target, exactly as the notification rail does. */
 @media (hover: none), (pointer: coarse) {
   .fb-chat-dock-rail-strip { gap: 4px; padding: 6px; }
   .fb-chat-dock-rail-action { width: 44px; height: 44px; }
-  .fb-chat-dock-rail-name { opacity: 0 !important; transition: none; }
   /* The 44px actions and the roomier gaps and padding fill 164px:
      12 + 164 + 8 = the window row's clearance. */
   .fb-chat-dock,
