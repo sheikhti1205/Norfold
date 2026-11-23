@@ -103,6 +103,10 @@ const a = spawn(psql, ["-X", "-q", "-tA", "-v", "ON_ERROR_STOP=1", "-f", "-"], {
   env: env({ PGAPPNAME: "findback-lock-a" }),
   stdio: ["pipe", "pipe", "pipe"],
 });
+// Created at spawn time so close cannot fire before a listener exists.
+// `close` (not `exit`) ends only after stdio flushes, so aOut/aErr are whole
+// before the failure message reads them. A signal-killed child reports 1.
+const aExit = new Promise((resolve) => a.once("close", (code, signal) => resolve(code ?? (signal ? 1 : 0))));
 let aOut = "", aErr = "";
 a.stdout.on("data", (chunk) => { aOut += chunk; });
 a.stderr.on("data", (chunk) => { aErr += chunk; });
@@ -133,6 +137,9 @@ const b = spawn(psql, ["-X", "-q", "-tA", "-v", "ON_ERROR_STOP=1", "-f", "-"], {
   env: env({ PGAPPNAME: "findback-lock-b" }),
   stdio: ["pipe", "pipe", "pipe"],
 });
+// Captured before B can finish; `once` avoids a double resolve. `close` waits
+// for stdio to end, so B's refusal text is whole when the assertions read it.
+const bExit = new Promise((resolve) => b.once("close", (code, signal) => resolve(code ?? (signal ? 1 : 0))));
 let bOut = "", bErr = "";
 b.stdout.on("data", (chunk) => { bOut += chunk; });
 b.stderr.on("data", (chunk) => { bErr += chunk; });
@@ -161,9 +168,9 @@ select count(*) from pg_stat_activity
   await new Promise((resolve) => setTimeout(resolve, 50));
 }
 
-const aCode = await new Promise((resolve) => a.on("exit", resolve));
+const aCode = await aExit;
 if (aCode !== 0) throw new Error(`session A failed (exit ${aCode})\n${aErr}\n${aOut}`);
-const bCode = await new Promise((resolve) => b.on("exit", resolve));
+const bCode = await bExit;
 const bResult = { status: bCode, stdout: bOut, stderr: bErr, error: null };
 
 // --- assert --------------------------------------------------------------
