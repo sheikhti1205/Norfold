@@ -985,7 +985,11 @@ describe("ChatDock windows", () => {
     expect(dockWindow("c1")).toBeNull();
     expect(dockWindow("c2")).toBeNull();
     expect(panel()).toBeNull();
-    expect(rail()).toBeNull();
+    // Close ends the windows and their heads, not the way in: the resting
+    // circle stays in the corner.
+    expect(railHeads()).toHaveLength(0);
+    expect(strip()).toBeNull();
+    expect(screen.getByRole("button", { name: /^Open chats/ })).toBeTruthy();
   });
 });
 
