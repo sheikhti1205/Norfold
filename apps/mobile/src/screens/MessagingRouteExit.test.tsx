@@ -11,6 +11,7 @@ import { resetBackInterceptors } from "../components/backNavigation";
 import { resetModalLayers } from "../hooks/modalLayers";
 import { LiveRegion } from "../components/LiveRegion";
 import { InlineRailProvider } from "../components/navLayout";
+import { readConversationDraft } from "../services/conversationDrafts";
 import type { MessagingThreadSync } from "../services/messaging/runtime";
 
 const native = vi.hoisted(() => ({ back: null as null | (() => void) }));
@@ -275,25 +276,17 @@ it("rests at the chat list, where Escape is a no-op", async () => {
   expect(path()).toBe("/chats");
 });
 
-it("asks before dropping an unsent draft and keeps it when the reader stays", async () => {
+it("leaves with an unsent draft on Escape, keeping the text for the next visit", async () => {
   await openThread();
   const field = screen.getByRole("textbox", { name: "Message" });
   fireEvent.change(field, { target: { value: "Unsent words" } });
 
   fireEvent.keyDown(field, { key: "Escape" });
-  const dialog = await leaveDialog();
-  expect(dialog.textContent).toMatch(/unsent message/i);
-  expect(path()).toBe("/chats/chat");
-
-  fireEvent.click(within(dialog).getByRole("button", { name: "Stay" }));
-  await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-  expect(path()).toBe("/chats/chat");
-  expect(field).toHaveProperty("value", "Unsent words");
-
-  // A second gesture asks again; only the explicit choice leaves.
-  fireEvent.keyDown(field, { key: "Escape" });
-  fireEvent.click(within(await leaveDialog()).getByRole("button", { name: "Leave chat" }));
   await waitFor(() => expect(path()).toBe("/chats"));
+  // Text is kept in the session draft store, so leaving asks nothing and
+  // discards nothing: one press leaves and the words are still there.
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+  expect(readConversationDraft("account", "chat")).toBe("Unsent words");
   // Leaving only navigates: nothing is sent, cleared or changed.
   for (const call of [m.text, m.send, m.voice, m.location, m.remove, m.clear,
     m.relationship, m.refresh]) expect(call).not.toHaveBeenCalled();
@@ -397,7 +390,7 @@ it("sends a live recording that was never paused, once, with its real duration",
   expect(m.voice).toHaveBeenCalledTimes(1);
 });
 
-it("asks about the draft alone once the voice send is already in flight", async () => {
+it("leaves at once once the voice send is in flight, keeping the draft", async () => {
   const capture = stubVoiceCapture();
   await openThread();
   fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Unsent words" } });
@@ -405,28 +398,19 @@ it("asks about the draft alone once the voice send is already in flight", async 
   await screen.findByRole("button", { name: "Pause recording" });
   capture.advance(1_500);
   // The service holds the note: it is in the durable outbox now, so no leave can
-  // discard or cancel it, and the question must not say otherwise.
+  // discard or cancel it. The typed text is kept in the session draft store, so
+  // nothing at all is at risk and the leave asks nothing.
   m.voice.mockReturnValue(new Promise(() => undefined));
   fireEvent.click(screen.getByRole("button", { name: "Send voice message" }));
   await waitFor(() => expect(m.voice).toHaveBeenCalledTimes(1));
   await screen.findByRole("button", { name: "Sending voice message" });
 
   fireEvent.keyDown(document.body, { key: "Escape" });
-  const dialog = await leaveDialog();
-  expect(dialog.textContent).toMatch(/unsent message/i);
-  expect(dialog.textContent).not.toMatch(/recording/i);
-  expect(dialog.textContent).not.toMatch(/cancel/i);
-  expect(path()).toBe("/chats/chat");
-
-  fireEvent.click(within(dialog).getByRole("button", { name: "Stay" }));
-  await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-  // Nothing was cancelled or sent twice, and the draft still guards the leave.
-  expect(m.voice).toHaveBeenCalledTimes(1);
-  fireEvent.keyDown(document.body, { key: "Escape" });
-  const again = await leaveDialog();
-  expect(again.textContent).toMatch(/unsent message/i);
-  fireEvent.click(within(again).getByRole("button", { name: "Leave chat" }));
   await waitFor(() => expect(path()).toBe("/chats"));
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+  // Nothing was cancelled or sent twice, and the text waited for the next visit.
+  expect(m.voice).toHaveBeenCalledTimes(1);
+  expect(readConversationDraft("account", "chat")).toBe("Unsent words");
 });
 
 it("keeps a finalizing note as this screen's own until admission, and never sends after an explicit discard", async () => {
@@ -509,9 +493,17 @@ it("leaves a higher-priority layer in charge of Escape even when focus is outsid
 });
 
 it("ignores composing, repeated and modified Escape, then asks on a plain press", async () => {
+  m.prepare.mockResolvedValue({ bytes: new Uint8Array([1]).buffer, sha256: "a".repeat(64),
+    mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
   await openThread();
   const field = screen.getByRole("textbox", { name: "Message" });
   fireEvent.change(field, { target: { value: "Unsent words" } });
+  // Real work a leave would discard, so a press that is wrongly honoured has
+  // something to raise the question about.
+  fireEvent.change(screen.getByLabelText("Photo file input"), {
+    target: { files: [new File(["x"], "p.jpg", { type: "image/jpeg" })] },
+  });
+  await screen.findByText("1 photo ready. Tap one to review.");
 
   fireEvent.keyDown(field, { key: "Escape", isComposing: true });
   fireEvent.keyDown(field, { key: "Escape", repeat: true });
@@ -524,7 +516,10 @@ it("ignores composing, repeated and modified Escape, then asks on a plain press"
   expect(field).toHaveProperty("value", "Unsent words");
 
   fireEvent.keyDown(field, { key: "Escape" });
-  fireEvent.click(within(await leaveDialog()).getByRole("button", { name: "Leave chat" }));
+  const dialog = await leaveDialog();
+  expect(dialog.textContent).toMatch(/unsent photos/i);
+  expect(dialog.textContent).not.toMatch(/message/i);
+  fireEvent.click(within(dialog).getByRole("button", { name: "Leave chat" }));
   await waitFor(() => expect(path()).toBe("/chats"));
   expect(m.text).not.toHaveBeenCalled();
   expect(m.voice).not.toHaveBeenCalled();
@@ -535,18 +530,29 @@ it("ignores composing, repeated and modified Escape, then asks on a plain press"
   expect(m.refresh).not.toHaveBeenCalled();
 });
 
-it("asks Android Back before leaving a dirty conversation, and keeps the draft when the reader stays", async () => {
+it("asks Android Back before leaving work a leave would discard, and keeps it when the reader stays", async () => {
+  m.prepare.mockResolvedValue({ bytes: new Uint8Array([1]).buffer, sha256: "a".repeat(64),
+    mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
   await openThread();
   const field = screen.getByRole("textbox", { name: "Message" });
   fireEvent.change(field, { target: { value: "Unsent words" } });
+  fireEvent.change(screen.getByLabelText("Photo file input"), {
+    target: { files: [new File(["x"], "p.jpg", { type: "image/jpeg" })] },
+  });
+  await screen.findByText("1 photo ready. Tap one to review.");
 
   pressBack();
   const dialog = await leaveDialog();
+  // The question names only what leaving discards: the staged photo, never the
+  // text that the session draft store keeps.
+  expect(dialog.textContent).toMatch(/unsent photos/i);
+  expect(dialog.textContent).not.toMatch(/message/i);
   expect(path()).toBe("/chats/chat");
 
   fireEvent.click(within(dialog).getByRole("button", { name: "Stay" }));
   await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
   expect(path()).toBe("/chats/chat");
+  expect(screen.getByText("1 photo ready. Tap one to review.")).toBeTruthy();
   expect(field).toHaveProperty("value", "Unsent words");
 
   pressBack();

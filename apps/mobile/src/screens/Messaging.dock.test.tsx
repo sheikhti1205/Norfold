@@ -283,7 +283,7 @@ it("closes and expands only through the canonical guard, never by navigating", a
   expect(location()).toBe("/posts/1");
 });
 
-it("asks before opening the full chat with unsent work, then expands without closing", async () => {
+it("opens the full chat with a text draft and keeps the text, without asking", async () => {
   const onClose = vi.fn();
   const onExpand = vi.fn();
   await openDock({ onClose, onExpand });
@@ -291,28 +291,26 @@ it("asks before opening the full chat with unsent work, then expands without clo
   fireEvent.change(field, { target: { value: "Unsent expand" } });
 
   fireEvent.click(screen.getByRole("button", { name: "Open full chat" }));
-  const dialog = await leaveDialog();
-  expect(onExpand).not.toHaveBeenCalled();
+  await waitFor(() => expect(onExpand).toHaveBeenCalledTimes(1));
   expect(onClose).not.toHaveBeenCalled();
-  expect(location()).toBe("/posts/1");
-
-  fireEvent.click(within(dialog).getByRole("button", { name: "Stay" }));
-  await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-  expect(onExpand).not.toHaveBeenCalled();
-  expect(onClose).not.toHaveBeenCalled();
-  // Staying keeps the same window and the exact draft: the guard is a question,
-  // not a navigation or a remount of the work it is protecting.
+  // The text is kept by the session draft store, so there is no loss to confirm.
+  expect(screen.queryByRole("alertdialog")).toBeNull();
   expect(screen.getByRole("textbox", { name: "Message" })).toBe(field);
   expect(field).toHaveProperty("value", "Unsent expand");
   expect(location()).toBe("/posts/1");
+});
 
-  fireEvent.click(screen.getByRole("button", { name: "Open full chat" }));
-  fireEvent.click(within(await leaveDialog()).getByRole("button", { name: "Leave chat" }));
-  await waitFor(() => expect(onExpand).toHaveBeenCalledTimes(1));
-  expect(onClose).not.toHaveBeenCalled();
-  // The adapter converts the consent into the host's callback; the page beneath
-  // is never navigated, which is why location must not move here either.
-  expect(location()).toBe("/posts/1");
+it("closes a text draft from the window's own Close without asking", async () => {
+  const onClose = vi.fn();
+  await openDock({ onClose });
+  const field = screen.getByRole("textbox", { name: "Message" });
+  fireEvent.change(field, { target: { value: "Close keeps this" } });
+
+  fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
+  expect(onClose).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+  expect(screen.getByRole("textbox", { name: "Message" })).toBe(field);
+  expect(field).toHaveProperty("value", "Close keeps this");
 });
 
 it("ignores an ambient report query instead of adopting it for the first send", async () => {
@@ -351,25 +349,42 @@ it("closes a clean window on Escape without navigating the page underneath", asy
   expect(location()).toBe("/posts/1");
 });
 
-it("asks before dropping an unsent draft, and closes only on the explicit choice", async () => {
+it("closes a text draft on Escape without asking, and the text survives the close", async () => {
   const onClose = vi.fn();
   await openDock({ onClose });
   const field = screen.getByRole("textbox", { name: "Message" });
   fireEvent.change(field, { target: { value: "Unsent words" } });
 
   fireEvent.keyDown(document.body, { key: "Escape" });
+  await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  // The text is kept by the session draft store: nothing is discarded, so there
+  // is nothing to ask about and the close proceeds on one press.
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+  expect(screen.getByRole("textbox", { name: "Message" })).toBe(field);
+  expect(field).toHaveProperty("value", "Unsent words");
+  expect(location()).toBe("/posts/1");
+});
+
+it("still asks before dropping staged photos, and Stay keeps the window", async () => {
+  const onClose = vi.fn();
+  m.prepare.mockResolvedValue({ bytes: new Uint8Array([1]).buffer, sha256: "a".repeat(64),
+    mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
+  await openDock({ onClose });
+  fireEvent.change(screen.getByLabelText("Photo file input"), {
+    target: { files: [new File(["x"], "p.jpg", { type: "image/jpeg" })] },
+  });
+  await screen.findByText("1 photo ready. Tap one to review.");
+
+  fireEvent.keyDown(document.body, { key: "Escape" });
   const dialog = await leaveDialog();
+  expect(dialog.textContent).toMatch(/unsent photos/i);
   expect(onClose).not.toHaveBeenCalled();
   expect(location()).toBe("/posts/1");
 
   fireEvent.click(within(dialog).getByRole("button", { name: "Stay" }));
   await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
   expect(onClose).not.toHaveBeenCalled();
-  expect(field).toHaveProperty("value", "Unsent words");
-
-  fireEvent.keyDown(document.body, { key: "Escape" });
-  fireEvent.click(within(await leaveDialog()).getByRole("button", { name: "Leave chat" }));
-  await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  expect(screen.getByText("1 photo ready. Tap one to review.")).toBeTruthy();
   expect(location()).toBe("/posts/1");
 });
 
@@ -381,17 +396,18 @@ it("closes on Android Back and never falls through to the page history", async (
   expect(location()).toBe("/posts/1");
 });
 
-it("still asks Android Back about unsent work before closing", async () => {
+it("closes a text draft on Android Back without asking, and keeps the text", async () => {
   const onClose = vi.fn();
   await openDock({ onClose });
-  fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Keep me" } });
+  const field = screen.getByRole("textbox", { name: "Message" });
+  fireEvent.change(field, { target: { value: "Keep me" } });
 
   pressBack();
-  const dialog = await leaveDialog();
-  expect(onClose).not.toHaveBeenCalled();
-  expect(location()).toBe("/posts/1");
-  fireEvent.click(within(dialog).getByRole("button", { name: "Leave chat" }));
   await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+  expect(screen.getByRole("textbox", { name: "Message" })).toBe(field);
+  expect(field).toHaveProperty("value", "Keep me");
+  expect(location()).toBe("/posts/1");
 });
 
 it("holds no lease while inactive and releases it when the window hides", async () => {
@@ -457,15 +473,22 @@ it("closes a message menu portalled above a page it no longer floats over", asyn
   await waitFor(() => expect(screen.queryByRole("menu", { name: "Message actions" })).toBeNull());
 });
 
-it("mirrors unsent work to the host without moving the work itself", async () => {
+it("mirrors only work a leave would discard to the host", async () => {
   const onUnsentWorkChange = vi.fn();
+  m.prepare.mockResolvedValue({ bytes: new Uint8Array([1]).buffer, sha256: "a".repeat(64),
+    mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
   const view = await openDock({ onUnsentWorkChange });
   await waitFor(() => expect(onUnsentWorkChange).toHaveBeenLastCalledWith(false));
   const field = screen.getByRole("textbox", { name: "Message" });
+  // Typed text survives the close in the session draft store, so it is not work
+  // a leave would discard and the host must not be told otherwise.
   fireEvent.change(field, { target: { value: "Some work" } });
+  expect(onUnsentWorkChange).toHaveBeenLastCalledWith(false);
+
+  fireEvent.change(screen.getByLabelText("Photo file input"), {
+    target: { files: [new File(["x"], "p.jpg", { type: "image/jpeg" })] },
+  });
   await waitFor(() => expect(onUnsentWorkChange).toHaveBeenLastCalledWith(true));
-  fireEvent.change(field, { target: { value: "" } });
-  await waitFor(() => expect(onUnsentWorkChange).toHaveBeenLastCalledWith(false));
   view.rerender(dockApp({ onUnsentWorkChange }));
   expect(screen.getByRole("textbox", { name: "Message" })).toBeTruthy();
 });

@@ -6,6 +6,7 @@ import { Button, Dialog, DialogTrigger } from "react-aria-components";
 import { Capacitor } from "@capacitor/core";
 import type { PostItem } from "@norfold/shared";
 import { copyStaticLocation, isUuid } from "../services/messaging/validation";
+import { clearConversationDraft, readConversationDraft, writeConversationDraft } from "../services/conversationDrafts";
 import { subscribeSafetyChanged } from "../services/safetySignals";
 import { onRealtime } from "../services/realtime";
 import { useAuth } from "../auth";
@@ -984,8 +985,19 @@ export function ThreadSession({
   const [outbox, setOutbox] = useState<OutboxEntry[]>(cached?.outbox ?? []);
   const [media, setMedia] = useState<MediaAttachment[]>(cached?.media ?? []);
   const [loaded, setLoaded] = useState(!!cached);
-  const [draft, setDraft] = useState("");
+  // Composer text lives outside this component, so closing the window (which
+  // unmounts the session) or leaving the route does not throw away what the
+  // reader typed. Only a durable send clears it below; unmount, minimize, close,
+  // a conversation switch and a failed send all leave it untouched.
+  const [draft, setDraft] = useState(() => readConversationDraft(accountId, conversationId));
   const draftRevision = useRef(0);
+  // One composer clear: the revision fence, the field and the stored draft move
+  // together, so a remount never shows words the field already dropped.
+  const clearDraft = () => {
+    draftRevision.current++;
+    setDraft("");
+    clearConversationDraft(accountId, conversationId);
+  };
   const textAttempts = useRef(new Map<number, string>());
   const textInFlight = useRef(new Set<number>());
   // One synchronous admission owner for this composer. React state is too late
@@ -1091,10 +1103,12 @@ export function ThreadSession({
   const voiceSendDiscarded = useRef(false);
   const voiceSupported = voiceRecordingSupported();
   const voiceAllowed = photoAllowed && voiceSupported;
-  // A leave gesture never drops work the reader has not sent. Text, staged
-  // photos and a recording that has not reached the service ask for an explicit
-  // choice; a clean conversation still leaves at once. Escape and Android Back
-  // share this one path, and a layer that is already open keeps its own press.
+  // A leave gesture never drops work the reader has not sent. Typed text is not
+  // that work any more: it lives in the session draft store and comes back on
+  // the next mount (see `conversationDrafts`), so only staged photos and a
+  // recording that has not reached the service ask for an explicit choice. A
+  // clean conversation still leaves at once. Escape and Android Back share this
+  // one path, and a layer that is already open keeps its own press.
   const [confirmLeave, setConfirmLeave] = useState(false);
   // What the leave question is guarding: the route screen navigates, the dock
   // closes, or the dock opens the full route. One dialog, one canonical guard.
@@ -1103,10 +1117,11 @@ export function ThreadSession({
     || voiceStatus === "pausing" || voiceStatus === "review";
   // Past admission the note is in the outbox, so leaving does not recall it and
   // "will be discarded" would be a false promise. Preparation is still work
-  // this screen can lose, and a text draft or staged photos keep their warning
-  // either way.
+  // this screen can lose. Typed text is kept in the session draft store, so the
+  // question never names it: only the staged attachments and the active note
+  // below die with the window.
   const voiceAtRisk = voiceActive && voiceSendPhase !== "sending";
-  const hasUnsentWork = draft.trim() !== "" || photos.length > 0 || voiceAtRisk;
+  const hasUnsentWork = photos.length > 0 || voiceAtRisk;
   const stagedVideos = photos.some((item) => item.kind === "video");
   const stagedAttachments = stagedVideos || photos.some((item) => item.kind === "animation");
   // Only a prepared still or animation has a frame to review; a video has no
@@ -1114,7 +1129,6 @@ export function ThreadSession({
   // actually exist instead of inventing one.
   const reviewablePhotos = photos.filter((item) => !!item.url && (!!item.prepared || !!item.file));
   const unsentParts = [
-    draft.trim() !== "" ? "message" : null,
     photos.length > 0 ? (stagedAttachments ? "attachments" : "photos") : null,
     voiceAtRisk ? "recording" : null,
   ].filter((part): part is string => part !== null);
@@ -2168,7 +2182,7 @@ export function ThreadSession({
           if (!stillOwner()) return;
           // Only clear what this draft owned: typing that arrived while it was
           // in flight is newer intent and must survive.
-          if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+          if (draftRevision.current === sendingRevision) clearDraft();
           if (submittedReport) clearReportContext(submittedReport);
           setReplyTo(previous => previous?.id === replyTargetId ? null : previous);
           // The message is durable and its draft is settled: the next deliberate
@@ -2180,7 +2194,7 @@ export function ThreadSession({
           transcript.followLatest();
           // Also settle here when the caller returned without an admission
           // callback: the resolved result still proves the row committed.
-          if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+          if (draftRevision.current === sendingRevision) clearDraft();
           if (submittedReport) clearReportContext(submittedReport);
           setReplyTo(previous => previous?.id === replyTargetId ? null : previous);
           setAdmissionFailed(false);
@@ -2254,7 +2268,7 @@ export function ThreadSession({
             transcript.followLatest();
             // A split link leaves after the batch; only then does the draft clear.
             if (!splitPreviewLink && sentCaption === body && draftRevision.current === sendingRevision) {
-              draftRevision.current++; setDraft("");
+              clearDraft();
             }
             setReplyTo(null);
           }
@@ -2280,12 +2294,12 @@ export function ThreadSession({
               // Clear on the durable boundary, but keep the latch: the next send
               // may begin only once this split admission has fully settled.
               if (!stillOwner()) return;
-              if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+              if (draftRevision.current === sendingRevision) clearDraft();
             }, linkCreatedAt);
             textAttempts.current.delete(linkRevision);
             if (stillOwner()) {
               transcript.followLatest();
-              if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+              if (draftRevision.current === sendingRevision) clearDraft();
               setAdmissionFailed(false);
             }
           } catch {
@@ -2307,10 +2321,13 @@ export function ThreadSession({
             : "Those photos could not all be saved. The unsent ones are still here.");
         }
         else {
-          // The optimistic bubble IS the draft now: it stays in the transcript
-          // marked "Not sent" with Retry, so the field must not also hold a
-          // second copy of the same words. Typing that arrived while the send
-          // was in flight (a newer revision) is untouched.
+          // The optimistic bubble IS the draft while this window stays open: it
+          // stays in the transcript marked "Not sent" with Retry, so the field
+          // must not also hold a second copy of the same words. The stored draft
+          // is deliberately NOT cleared: a rejected admission may have persisted
+          // nothing, and the local echo dies with this window, so the store is
+          // the only place those words survive. Typing that arrived while the
+          // send was in flight (a newer revision) is untouched.
           if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
           setError("Your message was not sent. Tap Retry on it.");
         }
@@ -2421,12 +2438,12 @@ export function ThreadSession({
               // Clear on the durable boundary; the latch stays held until the
               // split admission settles, so files and text cannot interleave.
               if (!alive.current) return;
-              if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+              if (draftRevision.current === sendingRevision) clearDraft();
             }, linkCreatedAt);
             textAttempts.current.delete(linkRevision);
             if (alive.current) {
               transcript.followLatest();
-              if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+              if (draftRevision.current === sendingRevision) clearDraft();
               setAdmissionFailed(false);
             }
           } catch {
@@ -2436,7 +2453,7 @@ export function ThreadSession({
           }
         } else {
           transcript.followLatest();
-          if (draftRevision.current === sendingRevision) { draftRevision.current++; setDraft(""); }
+          if (draftRevision.current === sendingRevision) clearDraft();
           setAdmissionFailed(false);
         }
         setReplyTo(previous => previous?.id === replyTargetId ? null : previous);
@@ -2891,7 +2908,7 @@ export function ThreadSession({
                   const revision = [...textAttempts.current].find(([, id]) => id === message.id)?.[0];
                   if (revision !== undefined) {
                     textAttempts.current.delete(revision);
-                    if (draftRevision.current === revision) { draftRevision.current++; setDraft(""); }
+                    if (draftRevision.current === revision) clearDraft();
                   }
                   if (message.contextReportId) clearReportContext(message.contextReportId);
                   setReplyTo(previous => previous?.id === message.replyToId ? null : previous);
@@ -3017,7 +3034,7 @@ export function ThreadSession({
             if (files.length > 0 && Capacitor.getPlatform() !== "android") void stageLocalFiles(files);
           }} />
         </>}
-      <PeerChatComposer value={draft} onChange={value => { draftRevision.current++; setDraft(value); }} onSend={() => void send()} inputRef={composer}
+      <PeerChatComposer value={draft} onChange={value => { draftRevision.current++; setDraft(value); writeConversationDraft(accountId, conversationId, value); }} onSend={() => void send()} inputRef={composer}
         busy={false} locked={!runtimeOpen || requestAccepting || photoSending || voiceSending} attachmentsLocked={photoSending || admissionFailed}
         canSend={runtimeOpen && !requestAccepting && (photos.length > 0 ? photoAllowed && photos.every(item => !!item.prepared || !!item.file) : !!draft.trim())}
         photoAllowed={view?.mode === "CONNECTED"}

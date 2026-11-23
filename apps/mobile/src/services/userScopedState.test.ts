@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { saveDraft, loadDraft, type ReportDraft } from "./reportDraft";
 import { stashPhotoFile, getStashedPhoto } from "./photoStore";
 import { saveFeedCache, loadFeedCache } from "../hooks/feedCache";
+import { readConversationDraft, writeConversationDraft } from "./conversationDrafts";
 import { clearUserScopedLocalState } from "./userScopedState";
 
 const draft: ReportDraft = {
@@ -16,7 +17,7 @@ const draft: ReportDraft = {
 };
 
 describe("clearUserScopedLocalState", () => {
-  it("drops the report draft, stashed photos, and feed caches together", () => {
+  it("drops the report draft, chat drafts, stashed photos, and feed caches together", () => {
     saveDraft({ ...draft, photoId: "photo-1" });
     const id = stashPhotoFile(new File(["x"], "x.jpg", { type: "image/jpeg" }));
     saveDraft({ ...draft, photoId: id });
@@ -26,11 +27,13 @@ describe("clearUserScopedLocalState", () => {
       cursor: null,
       scrollTop: 0,
     });
+    writeConversationDraft("account", "chat", "Unsent words");
 
     clearUserScopedLocalState();
 
     expect(loadDraft()).toBeNull();
     expect(getStashedPhoto(id)).toBeNull();
     expect(loadFeedCache("k")).toBeNull();
+    expect(readConversationDraft("account", "chat")).toBe("");
   });
 });
