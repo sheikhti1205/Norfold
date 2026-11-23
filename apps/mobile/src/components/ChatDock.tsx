@@ -37,10 +37,18 @@ const CHAT_SURFACE = /^\/(?:chats|connections)(?:\/|$)/;
 const DOCK_ID = "fb-chat-dock";
 const SEARCH_DEBOUNCE_MS = 250;
 const DESKTOP_MIN_WIDTH = 768;
-/** 24rem at the 16px design root, plus the row's gap. */
-const WINDOW_WIDTH = 384;
+/** 20rem at the 16px design root; the row's gap is added separately. */
+const WINDOW_WIDTH = 320;
 const WINDOW_GAP = 12;
 const DESKTOP_MAX_WINDOWS = 3;
+/**
+ * Width the rail reserves in the corner: the wide capsule (a 12px edge inset, a
+ * 122px capsule of three 34px actions and an 8px gap) grows to 184px on a
+ * coarse pointer, where the actions are 44px. The larger figure is the one the
+ * capacity formula reserves, so it never promises a row the CSS has to shrink
+ * below the width the header was laid out for.
+ */
+const RAIL_RESERVE = 184;
 /**
  * Heads in the rail before it pages. The rail is a column, so the fit is a
  * height question the drawing already answered: five 48px heads, the two +N
@@ -54,7 +62,7 @@ const NO_ENTRIES: readonly ChatDockEntry[] = [];
 /** Desktop windows side by side, capped at three; a phone shows one at a time. */
 function openWindowLimit(width: number): number {
   if (width < DESKTOP_MIN_WIDTH) return 1;
-  return Math.min(DESKTOP_MAX_WINDOWS, Math.max(1, Math.floor((width - 24) / (WINDOW_WIDTH + WINDOW_GAP))));
+  return Math.min(DESKTOP_MAX_WINDOWS, Math.max(1, Math.floor((width - RAIL_RESERVE) / (WINDOW_WIDTH + WINDOW_GAP))));
 }
 
 function useViewportSize() {
@@ -125,15 +133,14 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
   const panelMounted = entries.length > 0;
   const visible = !CHAT_SURFACE.test(pathname) && !hostOccluded;
   const focusedSeq = openEntries.reduce((max, entry) => Math.max(max, entry.seq), -1);
-  // Three states and nothing else: `closed` paints no dock at all, `tucked`
-  // paints the 48px circle, anything else paints the rail. A tuck alone never
-  // hides the rail when it holds nothing: an empty dock is a Compose
-  // affordance, never a dead circle. The store guarantees a state for a
-  // signed-in viewer; the optional reads only keep the signed-out render (which
-  // returns null below) type-safe.
+  // Three states and nothing else: `closed` and `tucked` both paint the 48px
+  // circle, anything else paints the rail. An empty dock rests at the circle
+  // too — the circle is the way in, and Compose is the pen inside it. The store
+  // guarantees a state for a signed-in viewer; the optional reads only keep the
+  // signed-out render (which returns null below) type-safe.
   const dockClosed = dock?.closed === true;
-  const expanded = !dockClosed && (!(dock?.tucked === true) || entries.length === 0);
-  const railPainted = visible && !dockClosed;
+  const expanded = !dockClosed && dock?.tucked === false;
+  const railPainted = visible;
 
   const windowNodes = useRef(new Map<string, HTMLDivElement>());
   const previousViewer = useRef<string | null>(null);
@@ -179,9 +186,9 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
       && message.unsentAt === undefined && !view?.ownHidden && !view?.ownDeclined && !view?.ownBlocked
       && !view?.ownMuted;
   };
-  // Distinct people with unread messages, capped at 99+. The same aggregate is
-  // painted on the resting circle and on Compose: with the rail open a person
-  // who has no dock entry would otherwise have no cue at all.
+  // Distinct people with unread messages, capped at 99+. The aggregate lives on
+  // the resting circle; while the rail is open the per-bubble badges carry the
+  // counts, so a number never replaces a control's glyph.
   const unreadPeopleCount = rows.filter(unreadEligible).length;
   const unreadBadge = unreadPeopleCount > 0
     ? (unreadPeopleCount > 99 ? "99+" : String(unreadPeopleCount))
@@ -417,26 +424,25 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
 
   /**
    * Minimize is a parking space, not a dismissal: the store folds every open
-   * window into its bubble and drops a live picker, then the rail tucks into
+   * window into its bubble and drops a live picker, then tucks the rail into
    * the circle. Nothing is discarded, so the circle restores the same stack.
    */
   const tuckRail = (keyboard: boolean) => {
     if (!accountId) return;
-    // A picker is not a thread: tucking drops it, and a dock left holding
-    // nothing stays open as the Compose affordance, so there is no circle to
-    // hand focus to. The first action is where the pressed control used to be.
-    const holdsThreads = entries.some((entry) => entry.conversationId !== null);
+    // Tucking always paints the circle, empty dock or not, so a keyboard
+    // activation hands focus to the control that replaces the capsule.
     tuckChatDock(accountId);
-    if (keyboard) setPendingFocus(holdsThreads ? "anchor" : "strip");
+    if (keyboard) setPendingFocus("anchor");
   };
 
   return (
     <>
-      {/* One vertical rail at the bottom-right. At rest it is the 48px anchor
-          alone; open it is the stack of minimized people (older +N counter,
-          oldest-to-newest heads, newer +N counter) above the actions capsule in
-          the corner the anchor just left. `closed` paints nothing: it is
-          absence, not an empty rail. */}
+      {/* One vertical rail at the bottom-right. At rest — tucked or closed — it
+          is the 48px anchor alone; open it is the stack of minimized people
+          (older +N counter, oldest-to-newest heads, newer +N counter) above the
+          actions capsule in the corner the anchor just left. Close ends the
+          windows and returns here: the corner never goes empty, and Compose is
+          the pen inside it. */}
       {railPainted && (
         <div ref={railNode} className="fb-chat-dock-rail" data-nav={bottomNavVisible ? "visible" : "hidden"}
           style={composerStyle}
@@ -497,7 +503,7 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
                   something. Close is destructive and last. */}
               <div ref={stripNode} className="fb-chat-dock-rail-strip">
                 <button type="button" className="fb-chat-dock-rail-action"
-                  aria-label={unreadPeopleCount > 0 ? `Compose, ${unreadPeopleCount} waiting` : "Compose"}
+                  aria-label="Compose"
                   onClick={(event) => {
                     if (!accountId) return;
                     // The picker is its own dock entry: pressing Compose while it is
@@ -509,12 +515,7 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
                       openChatDock(accountId, event.currentTarget, null, capacity);
                     }
                   }}>
-                  <span className="fb-chat-dock-rail-glyph">
-                    <Pencil size={16} aria-hidden="true" />
-                    {unreadBadge && (
-                      <span className="fb-chat-dock-rail-badge" aria-hidden="true">{unreadBadge}</span>
-                    )}
-                  </span>
+                  <Pencil size={16} aria-hidden="true" />
                   <span className="fb-chat-dock-rail-name" aria-hidden="true">Compose</span>
                 </button>
                 {entries.length > 0 && (

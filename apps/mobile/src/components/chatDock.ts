@@ -119,8 +119,10 @@ export function dismissChatDockEntry(accountId: string, conversationId: string |
 /** Clear the dismissed flag: interaction re-enables the conversation. */
 export function clearChatDockDismissed(accountId: string, conversationId: string | null): void {
   if (!accountId || !conversationId) return;
-  const set = dismissedByAccount.get(accountId);
-  if (!set) return;
+  // `getDismissed`, never the raw map: on a fresh page the cache is still empty
+  // while localStorage carries last visit's dismissals, and a bare `get` would
+  // return early and leave this conversation hidden from the rail for good.
+  const set = getDismissed(accountId);
   if (!set.has(conversationId)) return;
   set.delete(conversationId);
   saveDismissed(accountId, set);
@@ -219,6 +221,8 @@ export function openChatDock(
   state = { accountId, seq, entries: applyLimit(entries, seq, limit), tucked: false, closed: false };
   rememberTrigger(accountId, conversationId, trigger);
   // Opening a conversation clears its dismissed flag: interaction re-enables it.
+  // Cleared before the emit so the render that paints this window already knows
+  // it is not dismissed.
   if (conversationId !== null) clearChatDockDismissed(accountId, conversationId);
   emit();
 }
@@ -262,9 +266,10 @@ export function restoreChatDock(
   conversationId: string | null,
   limit = Number.POSITIVE_INFINITY,
 ): void {
-  focusEntry(accountId, conversationId, limit);
   // Restoring from the rail clears the dismissed flag: interaction re-enables it.
+  // Cleared first, so the render that focuses the window cannot filter it out.
   if (conversationId !== null) clearChatDockDismissed(accountId, conversationId);
+  focusEntry(accountId, conversationId, limit);
 }
 
 /** Collapse a thread into a rail head. The picker is never minimizable. */
@@ -352,14 +357,15 @@ export function untuckChatDock(accountId: string): void {
 }
 
 /**
- * The capsule's Close: remove the dock for the rest of the visit.
+ * The capsule's Close: end the dock for this visit without stranding the
+ * reader.
  *
- * The dismissal itself is identical to `closeChatDock` — every conversation is
- * remembered as dismissed, its trigger forgotten, and focus returns to the
- * control that opened the most recent one. What differs is persistence: the
- * account keeps a state object carrying `closed`, because "this visit is done
- * with the dock" is a fact a `null` state cannot hold. The host paints nothing
- * while it is set; any opener clears it.
+ * Every conversation is closed and remembered as dismissed, its trigger
+ * forgotten, and focus returns to the control that opened the most recent one.
+ * What survives is the rail's resting circle: `closed` keeps the windows ended
+ * (no bubble, no window) while the circle still shows the count and opens the
+ * dock again. That is the owner's rule — the corner never goes empty, and the
+ * pen never disappears.
  */
 export function closeChatDockSurface(accountId: string): void {
   if (!accountId) return;
@@ -426,9 +432,11 @@ function syntheticState(accountId: string): ChatDockState {
  * This viewer's windows, or `null` for another account and while signed out.
  *
  * A signed-in viewer with no dock yet gets one stable, frozen empty state rather
- * than `null`: the resting circle is painted from `!closed && (tucked ||
- * entries.length === 0)`, so a `null` snapshot would hide the dock until the
- * first open. The cached snapshot keeps its identity across renders.
+ * than `null`: the resting circle is painted whenever the rail is not expanded,
+ * which includes a closed or tucked dock with nothing in it, so a `null`
+ * snapshot would leave the rail with no state to read before the first open and
+ * the circle could not appear. The cached snapshot keeps its identity across
+ * renders.
  */
 export function useChatDock(viewerId: string | null): ChatDockState | null {
   return useSyncExternalStore(subscribe, () => {

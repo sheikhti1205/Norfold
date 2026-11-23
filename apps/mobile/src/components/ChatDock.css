@@ -61,10 +61,12 @@
 .fb-chat-dock-window {
   display: flex;
   /* Shrink only when the rail leaves less room than the capacity formula
-     assumed; the preferred width stays the 24rem card. */
+     assumed; the preferred width stays the 20rem card. A floating popup is a
+     side panel, not a page: 320px keeps the transcript readable and the row of
+     windows compact. */
   flex: 0 1 auto;
   flex-direction: column;
-  width: min(24rem, calc(100vw - 24px - var(--fb-dock-window-clearance)));
+  width: min(20rem, calc(100vw - 24px - var(--fb-dock-window-clearance)));
   /* Height is the bound for the whole canonical chain (workspace -> page):
      no inner wrapper may grow past it, and only the transcript scrolls. The
      544px card is the ceiling, never the target: on a short viewport the
@@ -118,6 +120,10 @@
    just left. The column reads as one object in both states. */
 .fb-chat-dock-rail {
   position: fixed;
+  /* Above the window row: a name pill reaches left into the window's column, and
+     at equal z-index the window would paint over the label for the control the
+     reader is pressing. */
+  z-index: 63;
   inset-inline-end: var(--fb-dock-edge);
   inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer));
   display: flex;
@@ -148,8 +154,21 @@
   box-shadow: var(--shadow-md);
   color: var(--fb-on-surface);
   cursor: pointer;
+  transition: background-color .14s ease;
 }
-.fb-chat-dock-rail-anchor:hover { background: var(--fb-surface-container); }
+/* Hover is a tint, never a step down a surface role: `--fb-surface-container`
+   is darker than `-high` in the dark themes, so the old rule made the circle
+   recede into the page instead of lifting. The primary tint reads the same in
+   every theme, and an inset ring makes it visible on a head whose 44px avatar
+   covers all but the outer 2px of the 48px circle. The ring is `outline`, not
+   a second shadow: true-black sets `--shadow-md: none`, and `none` cannot be
+   combined with another shadow in one list. */
+.fb-chat-dock-rail-anchor:hover,
+.fb-chat-dock-rail-head:hover {
+  background: color-mix(in srgb, var(--fb-primary) 15%, var(--fb-surface-container-high));
+  outline: 2px solid color-mix(in srgb, var(--fb-primary) 50%, transparent);
+  outline-offset: -2px;
+}
 .fb-chat-dock-rail-anchor svg { display: block; }
 
 .fb-chat-dock-rail-head {
@@ -165,8 +184,8 @@
   background: var(--fb-surface-container-high);
   box-shadow: var(--shadow-md);
   cursor: pointer;
+  transition: background-color .14s ease;
 }
-.fb-chat-dock-rail-head:hover { background: var(--fb-surface-container); }
 
 .fb-chat-dock-rail-badge {
   position: absolute;
@@ -204,10 +223,12 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
+  transition: background-color .14s ease, color .14s ease, border-color .14s ease;
 }
 .fb-chat-dock-rail-more:hover {
-  background: var(--fb-surface-container-high);
+  background: color-mix(in srgb, var(--fb-primary) 15%, var(--fb-surface-container));
   color: var(--fb-on-surface);
+  border-color: color-mix(in srgb, var(--fb-primary) 45%, var(--fb-outline-variant));
 }
 
 /* The three actions are the notification action rail turned horizontal: the
@@ -263,13 +284,6 @@
   color: var(--fb-primary);
 }
 .fb-chat-dock-rail-action svg { flex: none; }
-/* The icon and its badge are one box: the badge resolves against the glyph,
-   because the action itself stays `static` for the name pill's strip anchor. */
-.fb-chat-dock-rail-glyph {
-  position: relative;
-  display: grid;
-  place-items: center;
-}
 .fb-chat-dock-rail-danger:hover,
 .fb-chat-dock-rail-danger:focus-visible {
   color: var(--fb-error);

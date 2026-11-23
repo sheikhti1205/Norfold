@@ -202,9 +202,11 @@ function badge() {
   return document.querySelector<HTMLElement>(".fb-chat-dock-rail-badge");
 }
 
-/** Compose is the open rail's first action and the only way into the picker.
- *  Its name appends the unread count when there is one, so the prefix matches. */
+/** Compose is the open rail's only way into the picker. From rest the circle
+ *  opens the rail first; with the rail already open it is one press. */
 function compose() {
+  const circle = anchor();
+  if (circle) fireEvent.click(circle);
   fireEvent.click(screen.getByRole("button", { name: /^Compose/ }));
 }
 
@@ -278,7 +280,7 @@ describe("ChatDock route eligibility", () => {
   it("offers the dock on ordinary pages", () => {
     for (const path of ["/", "/search", "/my/1/edit"]) {
       mount(path);
-      expect(screen.getByRole("button", { name: "Compose" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Open chats" })).toBeTruthy();
       cleanup();
     }
   });
@@ -297,9 +299,9 @@ describe("ChatDock rail", () => {
     chat.conversations = [summary("c0", "p0", { unread: 0, author: "p0" }),
       summary("c1", "p1", { unread: 2, author: "p1" })];
     mount("/");
-    // The aggregate is the only unread cue on an empty dock, and it lives on
-    // Compose until there is a circle to carry it.
-    expect(badge()?.textContent).toBe("1");
+    // The aggregate is the only unread cue on an empty dock, and it rides the
+    // resting circle.
+    expect(anchor()?.querySelector(".fb-chat-dock-rail-badge")?.textContent).toBe("1");
     compose();
     expect(screen.getByRole("heading", { name: "New message" })).toBeTruthy();
     selectRecent("Alice");
@@ -327,7 +329,7 @@ describe("ChatDock rail", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
     expect(panel()).toBeNull();
     expect(badge()?.textContent).toBe("1");
-    expect(screen.getByRole("button", { name: /^Compose/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open chats, 1 waiting" })).toBeTruthy();
   });
 
   it("ignores an own last message, an unsent one and privacy-muted rows", () => {
@@ -346,14 +348,14 @@ describe("ChatDock rail", () => {
       chat.currentProjections = item.views ?? null;
       mount("/");
       expect(badge()).toBeNull();
-      expect(screen.getByRole("button", { name: "Compose" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Open chats" })).toBeTruthy();
       cleanup();
     }
   });
 
   it("keeps every action in one capsule inside the rail, in order", () => {
     mount("/");
-    compose();
+    act(() => openChatDock("me", null, "c1", 2));
     const capsule = strip() as HTMLElement;
     expect(capsule).toBeTruthy();
     expect(rail()?.contains(capsule)).toBe(true);
@@ -365,15 +367,39 @@ describe("ChatDock rail", () => {
     expect(document.querySelector(".fb-chat-dock-rail-launcher")).toBeNull();
   });
 
-  it("offers Compose alone when nothing is docked", () => {
+  it("rests at the circle, then offers Compose alone when it is pressed", () => {
     mount("/");
+    // Rest is the 48px circle in every case, even with nothing docked.
+    const circle = anchor() as HTMLElement;
+    expect(circle).toBeTruthy();
+    expect(circle.getAttribute("aria-label")).toBe("Open chats");
+    expect(strip()).toBeNull();
+
+    fireEvent.click(circle);
     const capsule = strip() as HTMLElement;
-    expect(within(capsule).getAllByRole("button")).toHaveLength(1);
+    expect(capsule).toBeTruthy();
+    expect(anchor()).toBeNull();
+    // Nothing to minimize or close, so Compose is the only action.
+    expect(within(capsule).getAllByRole("button").map((node) => node.getAttribute("aria-label")))
+      .toEqual(["Compose"]);
     expect(within(capsule).getByRole("button", { name: "Compose" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Minimize" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
-    // An empty dock is a Compose affordance, never a dead circle.
-    expect(anchor()).toBeNull();
+  });
+
+  it("keeps the count on the circle and never turns the pen into a number", () => {
+    chat.conversations = [summary("c1", "p1", { unread: 1, author: "p1" })];
+    mount("/");
+    const circle = anchor() as HTMLElement;
+    expect(circle.getAttribute("aria-label")).toBe("Open chats, 1 waiting");
+    expect(circle.querySelector(".fb-chat-dock-rail-badge")?.textContent).toBe("1");
+    expect(document.querySelectorAll(".fb-chat-dock-rail-badge")).toHaveLength(1);
+
+    fireEvent.click(circle);
+    const capsule = strip() as HTMLElement;
+    expect(within(capsule).getByRole("button", { name: "Compose" })).toBeTruthy();
+    expect(capsule.querySelector(".fb-chat-dock-rail-badge")).toBeNull();
+    expect(document.querySelectorAll(".fb-chat-dock-rail-badge")).toHaveLength(0);
   });
 
   it("minimizes a window to a bubble and tucks the rail to the circle", () => {
@@ -403,23 +429,30 @@ describe("ChatDock rail", () => {
     expect((screen.getByLabelText("Message draft c1") as HTMLInputElement).value).toBe("half a thought");
   });
 
-  it("closes the dock and its windows completely", () => {
+  it("ends every window on Close and leaves the resting circle in the corner", () => {
     openUnread();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
-    expect(rail()).toBeNull();
+    // Close ends the rail and every window, but the corner never goes empty:
+    // the circle with its count is the way back in.
+    expect(rail()).toBeTruthy();
     expect(panel()).toBeNull();
-    expect(screen.queryByRole("button", { name: "Compose" })).toBeNull();
+    expect(strip()).toBeNull();
+    expect(screen.getByRole("button", { name: /^Open chats/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Compose/ })).toBeNull();
     expect(screen.queryByLabelText("Conversation c1")).toBeNull();
     // Close is a dismissal, not a parking space: Alice is remembered as
     // dismissed, so she cannot come back on her own.
     expect(isChatDockDismissed("me", "c1")).toBe(true);
 
-    // A closed dock stays closed for the rest of the visit, and the dismissed
-    // conversation stays gone through a genuine remount.
+    // The dismissal survives a genuine remount, and the circle is still there.
     cleanup();
     mount("/");
-    expect(screen.queryByRole("button", { name: "Compose" })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Open chats/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Restore chat with/ })).toBeNull();
+
+    // The circle re-opens the rail, and Compose is a pen — never a number.
+    fireEvent.click(screen.getByRole("button", { name: /^Open chats/ }));
+    expect(screen.getByRole("button", { name: /^Compose/ })).toBeTruthy();
 
     // Interaction re-enables her: opening a conversation clears the dismissal,
     // and minimizing it puts her back on the rail with a readable name.
@@ -427,21 +460,53 @@ describe("ChatDock rail", () => {
     act(() => minimizeChatDock("me", "c1"));
     expect(screen.getByRole("button", { name: /Restore chat with Alice/ })).toBeTruthy();
     act(() => resetChatDock());
-    expect(screen.getByRole("button", { name: /^Compose/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open chats, 1 waiting" })).toBeTruthy();
   });
 
-  it("keeps the aggregate badge on whichever surface is showing", () => {
+  it("clears a dismissal persisted by an earlier visit before the rail reads it", () => {
+    named("p1", "Alice");
+    chat.conversations = [summary("c1", "p1", { unread: 2, author: "p1" })];
+    // A fresh page: no render has read the dismissal set yet, so the cache is
+    // empty while localStorage still carries last visit's dismissal.
+    resetChatDock();
+    resetChatDockDismissedForTests();
+    localStorage.setItem("fb-chat-dock-dismissed:me", JSON.stringify(["c1"]));
+    mount("/");
+    // Opening is interaction and must clear the stored flag even though nothing
+    // has loaded the dismissal cache on this page yet. Before the fix the clear
+    // was a no-op, and the first Minimize of that chat hid it for good.
+    act(() => openChatDock("me", null, "c1", 2));
+    act(() => minimizeChatDock("me", "c1"));
+    expect(screen.getByRole("button", { name: /Restore chat with Alice/ })).toBeTruthy();
+    expect(isChatDockDismissed("me", "c1")).toBe(false);
+  });
+
+  it("keeps the aggregate on the resting circle and never on Compose", () => {
     openUnread();
-    // Open: the badge rides Compose, because someone with unread messages and
-    // no dock entry would otherwise have no cue at all.
-    const capsule = strip() as HTMLElement;
-    expect(capsule.querySelector(".fb-chat-dock-rail-badge")?.textContent).toBe("1");
-    // The count is in the action's name as well, not only in a hidden badge.
-    expect(screen.getByRole("button", { name: "Compose, 1 waiting" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Minimize" }));
-    // Rest: it moves to the circle, which is the only thing on screen.
-    expect((anchor() as HTMLElement).querySelector(".fb-chat-dock-rail-badge")?.textContent).toBe("1");
+
+    // Tucked: one badge, on the circle, and no capsule.
+    const circle = anchor() as HTMLElement;
+    expect(circle.querySelector(".fb-chat-dock-rail-badge")?.textContent).toBe("1");
+    expect(document.querySelectorAll(".fb-chat-dock-rail-badge")).toHaveLength(1);
     expect(strip()).toBeNull();
+
+    // Open with a docked bubble: the bubble carries its own count, so the
+    // capsule draws no aggregate of its own and Compose stays a pen.
+    fireEvent.click(circle);
+    const capsule = strip() as HTMLElement;
+    expect(capsule.querySelector(".fb-chat-dock-rail-badge")).toBeNull();
+    expect(within(capsule).getByRole("button", { name: "Compose" })).toBeTruthy();
+    expect((railHeads()[0] as HTMLElement).querySelector(".fb-chat-dock-rail-badge")?.textContent).toBe("2");
+    expect(document.querySelectorAll(".fb-chat-dock-rail-badge")).toHaveLength(1);
+
+    // Emptied: the same aggregate returns to the circle, still the only badge.
+    act(() => closeChatDockEntry("me", "c1"));
+    const emptied = anchor() as HTMLElement;
+    expect(emptied).toBeTruthy();
+    expect(strip()).toBeNull();
+    expect(emptied.querySelector(".fb-chat-dock-rail-badge")?.textContent).toBe("1");
+    expect(document.querySelectorAll(".fb-chat-dock-rail-badge")).toHaveLength(1);
   });
 
   it("folds an open window when the page is pressed and keeps the rail open", () => {
@@ -487,7 +552,8 @@ describe("ChatDock rail", () => {
     expect(railHeads()).toHaveLength(0);
     expect(screen.queryByRole("button", { name: /Restore chat with Alice/ })).toBeNull();
     // The badge still counts her: she messaged, and the count is not a choice.
-    expect((strip() as HTMLElement).querySelector(".fb-chat-dock-rail-badge")?.textContent).toBe("1");
+    fireEvent.click(screen.getByRole("button", { name: "Minimize" }));
+    expect((anchor() as HTMLElement).querySelector(".fb-chat-dock-rail-badge")?.textContent).toBe("1");
   });
 
   it("keeps every other conversation reachable from Compose while one is docked", () => {
@@ -572,7 +638,8 @@ describe("ChatDock Compose toggle", () => {
     compose();
     expect(dockWindow("picker")).toBeNull();
     expect(document.querySelectorAll(".fb-chat-dock-window[data-entry='picker']")).toHaveLength(0);
-    expect(screen.getByRole("button", { name: "Compose" })).toBeTruthy();
+    // The emptied dock falls back to the circle that carries the count.
+    expect(screen.getByRole("button", { name: /^Open chats/ })).toBeTruthy();
 
     // It opens again, still exactly one entry.
     compose();
@@ -639,12 +706,14 @@ describe("ChatDock panel", () => {
     expect(rail()).toBeNull();
   });
 
-  it("leaves the Compose capsule when the thread closes itself", () => {
+  it("returns to the circle when the thread closes itself", () => {
     openUnread();
     fireEvent.click(within(conversation("c1")).getByRole("button", { name: "Close chat" }));
     expect(panel()).toBeNull();
-    expect(strip()).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^Compose/ })).toBeTruthy();
+    // The last thread's close leaves nothing docked, and the corner falls back
+    // to the circle that carries the count.
+    expect(strip()).toBeNull();
+    expect(screen.getByRole("button", { name: "Open chats, 1 waiting" })).toBeTruthy();
   });
 
   it("expands to the canonical route without leaving a second transcript", () => {
@@ -662,7 +731,7 @@ describe("ChatDock panel", () => {
     auth.user = { id: "other" };
     view.rerender(tree());
     expect(panel()).toBeNull();
-    expect(screen.getByRole("button", { name: "Compose" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open chats" })).toBeTruthy();
   });
 });
 
@@ -1039,7 +1108,7 @@ describe("ChatDock picker", () => {
     expect(panel()).toBeNull();
     await act(async () => { settle?.("c-late"); await Promise.resolve(); });
     expect(screen.queryByLabelText("Conversation c-late")).toBeNull();
-    expect(screen.getByRole("button", { name: "Compose" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Open chats/ })).toBeTruthy();
   });
 });
 
@@ -1071,10 +1140,11 @@ describe("ChatDock surface sizing", () => {
     // The viewport bound and the shared width are the ones the window already had.
     expect(picker).toContain("var(--fb-dock-bottom)");
 
-    // A thread window keeps the fixed 544px card beside its neighbours.
+    // A thread window keeps the fixed 544px card beside its neighbours, and the
+    // narrower 320px side-panel width the owner asked for.
     const windowRule = /(?:^|\})\s*\.fb-chat-dock-window\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
     expect(windowRule).toContain("height: min(34rem");
-    expect(windowRule).toContain("width: min(24rem");
+    expect(windowRule).toContain("width: min(20rem");
 
     // The host is a bottom-right row, not a panel.
     const hostRow = /\.fb-chat-dock-stack\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
@@ -1124,13 +1194,6 @@ describe("ChatDock surface sizing", () => {
     expect(name).toContain("right: calc(100% + 8px)");
     expect(name).toContain("opacity: 0");
 
-    // The badge resolves against the glyph box, never the strip: the action
-    // stays static so the name pill keeps the strip as its containing block.
-    const glyph = /\.fb-chat-dock-rail-glyph\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
-    expect(glyph).toContain("position: relative");
-    expect(glyph).toContain("display: grid");
-    expect(glyph).toContain("place-items: center");
-
     // A coarse pointer widens the capsule to three 44px actions, so the window
     // row reserves the wider clearance on the same two elements.
     const coarseAt = clean.indexOf("@media (hover: none), (pointer: coarse)");
@@ -1150,6 +1213,17 @@ describe("ChatDock surface sizing", () => {
     // Only the picker body scrolls; the picker itself never clips a menu.
     const body = /\.fb-chat-dock-body\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
     expect(body).toContain("overflow-y: auto");
+  });
+
+  it("paints the badge inside the circle's own rim, clear of the 22px glyph", () => {
+    const clean = dockCss.replace(/\/\*[\s\S]*?\*\//g, " ");
+    // The only badge in the rail lives on the resting circle. -2px keeps it on
+    // the rim; the 22px glyph is centred, so an 18px badge never covers it.
+    const base = /\.fb-chat-dock-rail-badge\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
+    expect(base).toContain("inset-block-start: -2px");
+    expect(base).toContain("inset-inline-end: -2px");
+    // No capsule-corner variant exists: a number never replaces the pen.
+    expect(clean).not.toContain(".fb-chat-dock-rail-badge-corner");
   });
 
   it("caps the window and the chooser at a compact share of a short viewport", () => {

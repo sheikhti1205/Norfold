@@ -118,8 +118,10 @@ function mount(path = "/search") {
   return render(<MemoryRouter initialEntries={[path]}><Probe /></MemoryRouter>);
 }
 
-/** The only way into a window: the capsule's Compose action, then Recent. */
+/** The only way into a window: the circle, then Compose, then Recent. */
 function openWithAlice() {
+  const circle = screen.queryByRole("button", { name: /^Open chats/ });
+  if (circle) fireEvent.click(circle);
   fireEvent.click(screen.getByRole("button", { name: /^Compose/ }));
   fireEvent.click(screen.getByRole("button", { name: /^Open conversation with Alice/ }));
 }
@@ -152,7 +154,7 @@ describe("ChatDock with the real ThreadSession", () => {
     expect(screen.getByTestId("path").textContent).toBe("/search");
   });
 
-  it("closes the real thread and leaves the Compose capsule in the corner", async () => {
+  it("closes the real thread and returns the rail to its resting circle", async () => {
     mount("/search");
     openWithAlice();
     await screen.findByRole("button", { name: "Close chat" });
@@ -160,9 +162,10 @@ describe("ChatDock with the real ThreadSession", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
     await waitFor(() => expect(screen.queryByRole("complementary", { name: "Chat" })).toBeNull());
     // Closing through the window dismisses the conversation, so no bubble
-    // survives it; an empty dock is a Compose affordance, not a dead circle.
+    // survives it, and the rail falls back to the circle that carries the count.
     expect(screen.queryByRole("button", { name: /Restore chat/ })).toBeNull();
-    expect(screen.getByRole("button", { name: /^Compose/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Open chats/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Compose/ })).toBeNull();
     expect(screen.getByTestId("path").textContent).toBe("/search");
   });
 
@@ -173,7 +176,8 @@ describe("ChatDock with the real ThreadSession", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open full chat" }));
     await waitFor(() => expect(screen.getByTestId("path").textContent).toBe("/chats/c1"));
-    // The chat route owns the conversation; the floating shortcut stands down.
-    expect(screen.queryByRole("button", { name: "Compose" })).toBeNull();
+    // The chat route owns the conversation; the whole floating rail stands down.
+    expect(screen.queryByRole("button", { name: /^Compose/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Open chats/ })).toBeNull();
   });
 });
