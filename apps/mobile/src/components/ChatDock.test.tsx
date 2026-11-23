@@ -188,6 +188,11 @@ function railEntries() {
   return railHeads().map((head) => head.dataset.entry);
 }
 
+/** True when `a` precedes `b` in document order. */
+function precedes(a: Node, b: Node) {
+  return Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
 function viewport(width: number, height: number) {
   Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
   Object.defineProperty(window, "innerHeight", { configurable: true, value: height });
@@ -308,18 +313,19 @@ describe("ChatDock launcher", () => {
     }
   });
 
-  it("renders the launcher bubble inside the rail column, with the utility row holding only the two controls", () => {
+  it("renders the launcher bubble and the close/pencil column inside the one band", () => {
     named("p1", "Alice");
     chat.conversations = [summary("c1", "p1", { unread: 2, author: "p1", messageId: "m1" })];
     mount("/");
-    // The launcher bubble is inside the rail column, after any heads.
+    // The launcher bubble is inside the band, after any heads.
     expect(screen.getByRole("button", { name: "Open chat with Alice" })).toBeTruthy();
-    // The utility row holds exactly the close-all menu and the pencil.
+    // The column holds exactly the close-all menu and the pencil.
     expect(screen.getByRole("button", { name: "Close chats" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /unread conversations, new message|New message/ })).toBeTruthy();
-    // The utility row is not the launcher: it is a separate element below the stack.
+    // Both the launcher and the column live in the band; the column is not the launcher.
     const utilityRow = document.querySelector(".fb-chat-dock-utility-row");
     expect(utilityRow).toBeTruthy();
+    expect(rail()?.contains(utilityRow)).toBe(true);
     expect(utilityRow?.querySelector(".fb-chat-dock-rail-launcher")).toBeNull();
   });
 
@@ -396,6 +402,65 @@ describe("ChatDock launcher", () => {
     view.rerender(tree());
     expect(screen.queryByRole("button", { name: /Alice/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Open chat with Member" })).toBeTruthy();
+  });
+
+  it("does not name a conversation that already has an open window", () => {
+    named("p1", "Alice");
+    chat.conversations = [summary("c1", "p1", { unread: 2, author: "p1", messageId: "m1" })];
+    mount("/");
+    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+    // c1 is an open dock entry now: the launcher falls back to neutral instead
+    // of showing Alice a second time beside her own window.
+    expect(screen.queryByRole("button", { name: "Open chat with Alice" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Open messages" })).toBeTruthy();
+    // The pencil badge still counts her: she messaged. It is not the launcher's
+    // pick and does not change.
+    expect(screen.getByRole("button", { name: "1 unread conversations, new message" })).toBeTruthy();
+  });
+
+  it("advances the launcher to another unread conversation when the first is docked", () => {
+    named("p1", "Alice");
+    named("p2", "Bob");
+    chat.conversations = [
+      summary("c1", "p1", { unread: 2, author: "p1", messageId: "m1" }),
+      summary("c2", "p2", { unread: 1, author: "p2", messageId: "m2" }),
+    ];
+    mount("/");
+    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse chat" }));
+    // Alice is a minimized head: the launcher advances to Bob.
+    expect(screen.queryByRole("button", { name: "Open chat with Alice" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Open chat with Bob" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open chat with Bob" }));
+    expect(dockWindow("c2")?.dataset.phase).toBe("open");
+    expect(dockWindow("c1")?.dataset.phase).toBe("minimized");
+    expect(conversation("c2").dataset.active).toBe("true");
+  });
+});
+
+describe("ChatDock pencil toggle", () => {
+  it("opens the picker on the first press and closes it on the second, never more than once", () => {
+    mount("/");
+    expect(dockWindow("picker")).toBeNull();
+    expect(document.querySelectorAll(".fb-chat-dock-window[data-entry='picker']")).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "New message" }));
+    expect(screen.getByRole("heading", { name: "New message" })).toBeTruthy();
+    expect(dockWindow("picker")?.dataset.view).toBe("picker");
+    expect(dockWindow("picker")?.dataset.phase).toBe("open");
+    expect(document.querySelectorAll(".fb-chat-dock-window[data-entry='picker']")).toHaveLength(1);
+
+    // A second press on the same pencil closes the picker instead of opening
+    // another one.
+    fireEvent.click(screen.getByRole("button", { name: "New message" }));
+    expect(dockWindow("picker")).toBeNull();
+    expect(document.querySelectorAll(".fb-chat-dock-window[data-entry='picker']")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "New message" })).toBeTruthy();
+
+    // It opens again, still exactly one entry.
+    fireEvent.click(screen.getByRole("button", { name: "New message" }));
+    expect(dockWindow("picker")?.dataset.view).toBe("picker");
+    expect(document.querySelectorAll(".fb-chat-dock-window[data-entry='picker']")).toHaveLength(1);
   });
 });
 
@@ -586,6 +651,41 @@ describe("ChatDock windows", () => {
     expect(screen.getByRole("button", { name: "Show 3 older minimized chats" })).toBeTruthy();
   });
 
+  it("lays the band out older chip, heads, newer chip, launcher, then the close/pencil column", () => {
+    viewport(1024, 768);
+    mount("/");
+    act(() => {
+      for (let index = 1; index <= 8; index += 1) openChatDock("me", null, `c${index}`, 8);
+    });
+    act(() => {
+      for (let index = 1; index <= 8; index += 1) minimizeChatDock("me", `c${index}`);
+    });
+
+    const heads = document.querySelector<HTMLElement>(".fb-chat-dock-rail-heads");
+    const launcher = launcherNode();
+    const column = document.querySelector<HTMLElement>(".fb-chat-dock-utility-row");
+    const close = screen.getByRole("button", { name: "Close chats" });
+    const pencil = screen.getByRole("button", { name: "New message" });
+    const older = screen.getByRole("button", { name: "Show 3 older minimized chats" });
+    expect(heads && launcher && column).toBeTruthy();
+    if (!heads || !launcher || !column) return;
+
+    // Newest batch: the older chip is the row's left end, then the heads, then
+    // the launcher, then the column nearest the screen edge.
+    expect(precedes(older, heads)).toBe(true);
+    expect(precedes(heads, launcher)).toBe(true);
+    expect(precedes(launcher, column)).toBe(true);
+    // × sits above the pencil in the column.
+    expect(precedes(close, pencil)).toBe(true);
+
+    // Paging to the older batch puts the newer chip between the last head and
+    // the launcher, never after the launcher.
+    fireEvent.click(older);
+    const newer = screen.getByRole("button", { name: "Show 3 newer minimized chats" });
+    expect(precedes(heads, newer)).toBe(true);
+    expect(precedes(newer, launcher)).toBe(true);
+  });
+
   it("never puts the new-message chooser on the rail", () => {
     mount("/");
     fireEvent.click(screen.getByRole("button", { name: "Open messages" }));
@@ -599,16 +699,21 @@ describe("ChatDock windows", () => {
     expect(dockWindow("picker")?.hidden).toBe(false);
   });
 
-  it("hides the rail on a phone while a window is open", () => {
+  it("paints nothing on a phone, open windows or not", () => {
     viewport(375, 700);
     mount("/");
     act(() => openChatDock("me", null, "c1", 1));
     act(() => openChatDock("me", null, "c2", 1));
+    expect(rail()).toBeNull();
+    expect(panel()).toBeNull();
+    expect(dockWindow("c1")).toBeNull();
+    expect(dockWindow("c2")).toBeNull();
+
+    viewport(1024, 768);
+    act(() => { fireEvent.resize(window); });
+    // Back on the desktop the same mounts paint again, untouched.
     expect(dockWindow("c1")?.dataset.phase).toBe("minimized");
     expect(dockWindow("c2")?.dataset.phase).toBe("open");
-    expect(rail()).toBeNull();
-
-    act(() => minimizeChatDock("me", "c2"));
     expect(rail()).toBeTruthy();
   });
 
@@ -861,9 +966,11 @@ describe("ChatDock surface sizing", () => {
     expect(hostRow).toContain("gap: 12px");
     expect(hostRow).toContain("align-items: flex-end");
 
-    // The rail is a 48px column of circular heads with an 8px rhythm.
+    // The rail is a horizontal band of circular heads with an 8px rhythm,
+    // bottom-aligned with the close/pencil column at its right end.
     const railRule = /(?:^|\})\s*\.fb-chat-dock-rail\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
-    expect(railRule).toContain("flex-direction: column");
+    expect(railRule).toContain("flex-direction: row");
+    expect(railRule).toContain("align-items: flex-end");
     expect(railRule).toContain("gap: 8px");
     expect(railRule).toContain("inset-block-end");
     const head = /\.fb-chat-dock-rail-head\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
@@ -871,11 +978,22 @@ describe("ChatDock surface sizing", () => {
     expect(head).toContain("height: 48px");
     expect(head).toContain("border-radius: 999px");
     const heads = /\.fb-chat-dock-rail-heads\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
+    expect(heads).toContain("flex-direction: row");
     expect(heads).toContain("gap: 8px");
-    expect(heads).toContain("max-block-size: 50dvh");
     const more = /\.fb-chat-dock-rail-more\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
     expect(more).toContain("width: 44px");
     expect(more).toContain("height: 44px");
+
+    // The close/pencil column is vertical, 44px per control, 8px apart, and
+    // flows inside the band instead of pinning itself to the viewport.
+    const column = /(?:^|\})\s*\.fb-chat-dock-utility-row\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
+    expect(column).toContain("flex-direction: column");
+    expect(column).toContain("gap: 8px");
+    expect(column).not.toContain("position: fixed");
+
+    // The window row clears the 96px band plus an 8px gap.
+    const panelRule = /(?:^|\})\s*\.fb-chat-dock\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
+    expect(panelRule).toContain("inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer) + 104px)");
 
     // Only the picker body scrolls; the picker itself never clips a menu.
     const body = /\.fb-chat-dock-body\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
@@ -974,27 +1092,23 @@ describe("ChatDock page composer clearance", () => {
     document.querySelectorAll(".fb-comment-composer").forEach((node) => node.remove());
   });
 
-  it("lifts the launcher clear of a page composer at both phone widths", () => {
-    const cases = [
-      // The deployed measurement: 390x844, composer top 780, launcher bottom 832.
-      { width: 390, height: 844, composer: 780, launcher: 832, lift: 60 },
-      // 320 wide: the lift is the composer's own overlap, so the launcher stays
-      // inside the viewport instead of being pushed past the top edge.
-      { width: 320, height: 640, composer: 560, launcher: 628, lift: 76 },
-    ];
-    for (const item of cases) {
-      viewport(item.width, item.height);
+  it("paints no dock chrome at phone widths, so no composer-clearance surface exists", () => {
+    for (const width of [320, 390]) {
+      viewport(width, 844);
       pageComposer();
       stubDockBoxes(
-        { top: item.launcher - 52, bottom: item.launcher, left: item.width - 64, right: item.width - 12 },
-        { top: item.composer, bottom: item.height, left: 0, right: item.width },
+        { top: 780, bottom: 832, left: width - 64, right: width - 12 },
+        { top: 780, bottom: 844, left: 0, right: width },
       );
       mount("/");
-      // The composer's top edge plus the dock's own 8px gap. The lift is
-      // published on the rail (the single owner of --fb-composer-clearance),
-      // not on the launcher button's own inline style.
-      expect(clearanceOf(railNode())).toBe(`${item.lift}px`);
-      expect(item.launcher - item.lift - 52, `${item.width}px wide`).toBeGreaterThan(0);
+      // Below the desktop threshold nothing of the dock renders: no rail, no
+      // launcher, no panel and no utility row — so there is no lift surface at
+      // all, nothing to clear and nothing to compound.
+      expect(document.querySelector<HTMLElement>(".fb-chat-dock-rail-launcher")).toBeNull();
+      expect(rail()).toBeNull();
+      expect(panel()).toBeNull();
+      expect(document.querySelector(".fb-chat-dock-utility-row")).toBeNull();
+      expect(clearanceOf(railNode())).toBe("");
       cleanup();
       vi.restoreAllMocks();
       document.querySelectorAll(".fb-comment-composer").forEach((node) => node.remove());
@@ -1014,14 +1128,16 @@ describe("ChatDock page composer clearance", () => {
   });
 
   it("observes the composer and turns a taller box into a taller lift, once", () => {
-    viewport(390, 844);
+    viewport(1024, 768);
     vi.stubGlobal("ResizeObserver", FakeResizeObserver);
     FakeResizeObserver.instances = [];
     const composer = pageComposer();
-    const launcher: Box = { top: 780, bottom: 832, left: 326, right: 378 };
-    const box: Box = { top: 780, bottom: 844, left: 0, right: 390 };
+    const launcher: Box = { top: 780, bottom: 832, left: 960, right: 1012 };
+    const box: Box = { top: 780, bottom: 844, left: 0, right: 1024 };
     stubDockBoxes(launcher, box);
     mount("/");
+    act(() => openChatDock("me", null, "c1", 2));
+    act(() => minimizeChatDock("me", "c1"));
     expect(clearanceOf(railNode())).toBe("60px");
 
     const observer = FakeResizeObserver.instances.at(-1);
@@ -1062,7 +1178,7 @@ describe("ChatDock page composer clearance", () => {
     expect(clearanceOf(railNode())).toBe("");
   });
 
-  it("drops the lift on a phone while a window is open, as the launcher hides", () => {
+  it("paints nothing at phone widths even with a mounted thread", () => {
     viewport(390, 844);
     pageComposer();
     stubDockBoxes(
@@ -1070,14 +1186,14 @@ describe("ChatDock page composer clearance", () => {
       { top: 780, bottom: 844, left: 0, right: 390 },
     );
     mount("/");
-    expect(clearanceOf(railNode())).toBe("60px");
-
     act(() => openChatDock("me", null, "c1", 1));
-    // On a phone with a window open the launcher is unmounted (not hidden), so
-    // it reads as null and no clearance surface remains.
-    expect(launcherNode()).toBeNull();
+    // A mounted thread stays alive in the store but is not painted on a phone:
+    // no rail, no launcher, no panel and no utility row, so no lift surface.
     expect(rail()).toBeNull();
-    expect(panel()?.getAttribute("data-launcher")).toBeNull();
+    expect(launcherNode()).toBeNull();
+    expect(panel()).toBeNull();
+    expect(document.querySelector(".fb-chat-dock-utility-row")).toBeNull();
+    expect(clearanceOf(railNode())).toBe("");
   });
 });
 

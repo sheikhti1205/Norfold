@@ -56,12 +56,12 @@
   inset-inline-end: -2px;
 }
 
-/* Utility row beneath the stack: close-all menu and the new-message pencil. */
+/* The close/pencil column at the band's right end, nearest the screen edge:
+   × above the pencil, both 44px, 8px apart. Its 96px height sets the band's
+   height and its bottom aligns with the bubbles' bottom. */
 .fb-chat-dock-utility-row {
-  position: fixed;
-  inset-inline-end: max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
-  inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer));
   display: flex;
+  flex: none;
   flex-direction: column;
   align-items: center;
   gap: 8px;
@@ -115,7 +115,11 @@
 .fb-chat-dock {
   position: fixed;
   inset-inline-end: max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
-  inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer));
+  /* The horizontal band is 96px tall (the close/pencil column) plus an 8px
+     gap, so the window row sits wholly above the band and never overlaps it.
+     That vertical clearance is the only mechanism: the row keeps the same
+     right edge as the band instead of shifting sideways. */
+  inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer) + 104px);
   max-width: calc(100vw - 24px);
 }
 .fb-chat-dock-stack {
@@ -125,26 +129,11 @@
   justify-content: flex-end;
   gap: 12px;
 }
-/* The rail owns one 48px column plus its 12px edge gaps, so the window row
-   steps left instead of painting underneath the heads. */
-.fb-chat-dock[data-rail="true"] {
-  inset-inline-end: calc(max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px))) + 60px);
-}
-/* A visible compose launcher at the foot owns the bottom strip; the window row
-   and the rail move one control higher so neither paints over it, and both take
-   the same measured composer lift the launcher takes. */
-.fb-chat-dock[data-launcher="above"] {
-  inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer) + 60px);
-}
-.fb-chat-dock[data-launcher="above"] .fb-chat-dock-window {
-  height: min(34rem, 66vh, calc(100vh - 2 * var(--fb-dock-bottom) - var(--fb-dock-composer) - 60px - 6rem), calc(100vh - var(--fb-dock-bottom) - var(--fb-dock-composer) - 60px - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
-  height: min(34rem, 66dvh, calc(100dvh - 2 * var(--fb-dock-bottom) - var(--fb-dock-composer) - 60px - 6rem), calc(100dvh - var(--fb-dock-bottom) - var(--fb-dock-composer) - 60px - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
-}
 
 .fb-chat-dock-window {
   display: flex;
-  /* Shrink only when the rail column leaves less room than the capacity
-     formula assumed; the preferred width stays the 24rem card. */
+  /* Shrink only when the band leaves less room than the capacity formula
+     assumed; the preferred width stays the 24rem card. */
   flex: 0 1 auto;
   flex-direction: column;
   width: min(24rem, calc(100vw - 24px));
@@ -176,15 +165,6 @@
   max-height: min(28rem, calc(100vh - 2 * var(--fb-dock-bottom) - 6rem), calc(100vh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
   max-height: min(28rem, calc(100dvh - 2 * var(--fb-dock-bottom) - 6rem), calc(100dvh - var(--fb-dock-bottom) - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
 }
-/* The chooser takes the same lift when the launcher sits above it. It restates
-   the four-to-five-row frame because the lifted thread height above is a more
-   specific selector. */
-.fb-chat-dock[data-launcher="above"] .fb-chat-dock-window[data-view="picker"] {
-  height: clamp(23rem, 52vh, 28rem);
-  height: clamp(23rem, 52dvh, 28rem);
-  max-height: min(28rem, calc(100vh - 2 * var(--fb-dock-bottom) - var(--fb-dock-composer) - 60px - 6rem), calc(100vh - var(--fb-dock-bottom) - var(--fb-dock-composer) - 60px - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
-  max-height: min(28rem, calc(100dvh - 2 * var(--fb-dock-bottom) - var(--fb-dock-composer) - 60px - 6rem), calc(100dvh - var(--fb-dock-bottom) - var(--fb-dock-composer) - 60px - 12px - max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))));
-}
 
 /* The window is not a clipping box: the composer's expression panel resolves
    against the composer and may need to open above a short dock. The rounded
@@ -205,29 +185,23 @@
 
 /* -------------------------------------------------------------------- rail */
 
-/* Minimized windows become one vertical column of circular heads at the right
-   edge, above the compose launcher. The rail is a sibling of the window row,
-   never a replacement for it. */
+/* Minimized windows become one horizontal band of circular heads at the right
+   edge, oldest-to-newest, ending at the launcher and the close/pencil column.
+   The band is a sibling of the window row and sits below it, never over it. */
 .fb-chat-dock-rail {
   position: fixed;
   inset-inline-end: max(12px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
-  /* The utility row (two 44px controls plus an 8px gap) sits below the rail,
-     plus whatever the dock had to lift for a page composer. */
-  inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer) + 96px);
+  inset-block-end: calc(var(--fb-dock-bottom) + var(--fb-dock-composer));
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  flex-direction: row;
+  align-items: flex-end;
   gap: 8px;
 }
 .fb-chat-dock-rail-heads {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   gap: 8px;
-  /* Second guard, heads only: the batch math in ChatDock.tsx already fits the
-     heads and both page chips inside half the viewport. */
-  max-block-size: 50vh;
-  max-block-size: 50dvh;
 }
 .fb-chat-dock-rail-head {
   position: relative;

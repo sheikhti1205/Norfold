@@ -44,7 +44,10 @@ const WINDOW_GAP = 12;
 const DESKTOP_MAX_WINDOWS = 3;
 /** Rail head geometry; the batch math and the CSS rule share these numbers. */
 const RAIL_HEAD_SIZE = 48;
+const RAIL_CHIP_SIZE = 44;
 const RAIL_GAP = 8;
+/** The band's own inset from the screen edge, mirrored in `ChatDock.css`. */
+const RAIL_EDGE_INSET = 12;
 const RAIL_MAX_HEADS = 5;
 /** Air kept between the launcher and a page composer pinned at the foot. */
 const COMPOSER_CLEARANCE_GAP = 8;
@@ -57,13 +60,20 @@ function openWindowLimit(width: number): number {
 }
 
 /**
- * Heads per rail batch: the column, including the page chips at both ends, must
- * stay inside half the viewport height. Worst case is both chips visible, so
- * reserve 44 + 8 above the heads and 8 + 44 below before fitting them in.
+ * Heads per rail batch. The band is horizontal, so the fit is a width question:
+ * from the screen's right edge inward it reserves the edge inset, the
+ * close/pencil column, the launcher, both page chips and the gaps between them,
+ * then fits as many 48px heads as the remainder holds. The worst case is both
+ * chips visible; at the narrowest desktop width five heads still fit. Never
+ * fewer than one head, never more than five.
  */
-function railBatch(height: number): number {
-  const reserved = 2 * (44 + RAIL_GAP);
-  const fit = Math.floor((0.5 * height - reserved + RAIL_GAP) / (RAIL_HEAD_SIZE + RAIL_GAP));
+function railBatch(width: number): number {
+  const fixed = RAIL_EDGE_INSET * 2
+    + RAIL_CHIP_SIZE /* close/pencil column */
+    + RAIL_HEAD_SIZE /* launcher */
+    + RAIL_CHIP_SIZE * 2 /* both page chips */
+    + RAIL_GAP * 4; /* chip↔heads, heads↔chip, chip↔launcher, launcher↔column */
+  const fit = Math.floor((width - fixed + RAIL_GAP) / (RAIL_HEAD_SIZE + RAIL_GAP));
   return Math.max(1, Math.min(RAIL_MAX_HEADS, fit));
 }
 
@@ -183,8 +193,14 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
       && message.unsentAt === undefined && !view?.ownHidden && !view?.ownDeclined && !view?.ownBlocked
       && !view?.ownMuted;
   };
+  // A conversation that already has a dock entry — open or minimized — already
+  // represents itself in the column, so the launcher must not pick it again and
+  // paint the same person twice. Dismissed rows stay excluded. When no other
+  // eligible unread row remains, the launcher falls back to its neutral label.
+  const docked = new Set(entries.map((entry) => entry.conversationId).filter((id): id is string => id !== null));
   const unreadRow = rows.find((conversation) => unreadEligible(conversation)
-    && !isChatDockDismissed(accountId, conversation.conversationId));
+    && !isChatDockDismissed(accountId, conversation.conversationId)
+    && !docked.has(conversation.conversationId));
   // A dismissed conversation still counts for the pencil badge: that person did
   // message. Count distinct conversations with unread messages, capped at 99+.
   const unreadPeopleCount = rows.filter(unreadEligible).length;
@@ -210,10 +226,10 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
     ...windowPeers,
   ]);
 
-  // Oldest first, so the newest minimized head renders at the bottom of the
-  // column, nearest the launcher.
+  // Oldest first, so the newest minimized head renders at the right end of the
+  // row, nearest the launcher.
   const railOrder = [...minimized].sort((a, b) => a.seq - b.seq);
-  const batch = Math.max(1, Math.min(railBatch(viewport.height), railOrder.length));
+  const batch = Math.max(1, Math.min(railBatch(viewport.width), railOrder.length));
 
   // Anchor-id batch position stability (Section B): `railAnchor` names the
   // first visible head; `null` means the newest batch. A head appearing at the
@@ -369,6 +385,11 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
   }, [accountId, capacity]);
 
   if (!user || booting || needsProfile) return null;
+  // The dock is a wide-screen surface: below the desktop threshold it paints
+  // nothing at all — no rail, no launcher, no utility row, no floating window.
+  // A mounted thread stays alive in the store but is not rendered until the
+  // viewport widens past the threshold again.
+  if (phone) return null;
 
   const nameOf = (peerId: string) => {
     const person = identities.get(peerId);
@@ -392,19 +413,19 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
 
   return (
     <>
-      {/* One vertical rail column: minimized heads, then the launcher bubble at
-          the bottom-most position. Heads and the launcher share one vertical
-          axis; the `+N` chips batch only the heads, never the launcher. The
-          chip slots and the heads region always render (even when empty) so the
-          launcher is always the last child of this column whenever the dock
-          shows it, and never remounts while visible. The store's remembered
-          trigger therefore stays attached and `target.focus()` on close keeps
-          working. An empty slot is kept out of the flex layout so it adds no
-          gap, but it still occupies a stable React child index. */}
+      {/* One horizontal band at the bottom-right: the older `+N` chip, the
+          minimized heads oldest-to-newest, the newer `+N` chip, the launcher
+          bubble, then the close/pencil column at the row's right end nearest
+          the screen edge. The `+N` chips batch only the heads, never the
+          launcher. The chip slots and the heads region always render (even when
+          empty) so the launcher keeps a stable React child index and never
+          remounts while visible. The store's remembered trigger therefore stays
+          attached and `target.focus()` on close keeps working. An empty slot is
+          kept out of the flex layout so it adds no gap. */}
       {(railVisible || launcherVisible) && (
         <div className="fb-chat-dock-rail" data-nav={bottomNavVisible ? "visible" : "hidden"}
           style={composerStyle}
-          role="group" aria-label="Minimized chats">
+          role="group" aria-label="Chat dock">
           {/* Above chip slot — always present so the launcher's index cannot shift. */}
           <div style={{ display: above > 0 ? undefined : "none" }}>
             {above > 0 && (
@@ -419,7 +440,8 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
               </button>
             )}
           </div>
-          <div className="fb-chat-dock-rail-heads">
+          <div className="fb-chat-dock-rail-heads"
+            style={{ display: heads.length > 0 ? undefined : "none" }}>
             {heads.map((entry) => {
               const conversationId = entry.conversationId as string;
               const name = nameFor(conversationId);
@@ -456,8 +478,8 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
               </button>
             )}
           </div>
-          {/* Launcher bubble: last child, unconditionally rendered whenever the dock
-              shows the launcher. Its position in the column is stable. */}
+          {/* Launcher bubble: the right-most bubble, immediately left of the
+              close/pencil column and never part of a batch. */}
           {launcherVisible && (
             <button ref={launcherNode} type="button" className="fb-chat-dock-rail-launcher"
               aria-label={unreadRow ? `Open chat with ${unreadName}` : "Open messages"}
@@ -478,42 +500,49 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
               )}
             </button>
           )}
+          {/* Close/pencil column at the band's right end, nearest the screen
+              edge: × above the pencil, both 44px, bottom-aligned with the
+              bubbles. */}
+          {launcherVisible && (
+            <div className="fb-chat-dock-utility-row" data-nav={bottomNavVisible ? "visible" : "hidden"}
+              style={composerStyle}>
+              <ActionMenu label="Close chats"
+                icon={<X size={20} aria-hidden="true" />}
+                triggerClassName="fb-chat-dock-utility-close"
+                disabled={entries.length === 0}
+                placement="top end"
+                items={[
+                  { id: "close-all", label: "Close all chats" as const,
+                    onAction: () => { closeChatDock(accountId); } } as MenuAction,
+                  { id: "close-floating", label: "Close floating windows" as const,
+                    onAction: closeFloatingWindows } as MenuAction,
+                ]} />
+              <button type="button" className="fb-chat-dock-utility-pencil"
+                aria-label={unreadBadge ? `${unreadBadge} unread conversations, new message` : "New message"}
+                onClick={(event) => {
+                  if (!accountId) return;
+                  // The picker is its own dock entry: pressing the pencil while it is
+                  // open closes it instead of opening a second one. `pickerOpen` is
+                  // derived from the store, so there is no second source of truth.
+                  if (pickerOpen) {
+                    closeChatDockEntry(accountId, null);
+                  } else {
+                    openChatDock(accountId, event.currentTarget, null, capacity);
+                  }
+                }}>
+                <Pencil size={19} aria-hidden="true" />
+                {unreadBadge && (
+                  <span className="fb-chat-dock-utility-badge" aria-hidden="true">{unreadBadge}</span>
+                )}
+              </button>
+            </div>
+          )}
           {unreadRow && <span id="fb-chat-rail-unread" className="sr-only">{`${unreadCount} unread`}</span>}
-        </div>
-      )}
-      {/* Utility row beneath the stack: close-all menu and the new-message pencil. */}
-      {launcherVisible && (
-        <div className="fb-chat-dock-utility-row" data-nav={bottomNavVisible ? "visible" : "hidden"}
-          style={composerStyle}>
-          <ActionMenu label="Close chats"
-            icon={<X size={20} aria-hidden="true" />}
-            triggerClassName="fb-chat-dock-utility-close"
-            disabled={entries.length === 0}
-            placement="bottom end"
-            items={[
-              { id: "close-all", label: "Close all chats" as const,
-                onAction: () => { closeChatDock(accountId); } } as MenuAction,
-              { id: "close-floating", label: "Close floating windows" as const,
-                onAction: closeFloatingWindows } as MenuAction,
-            ]} />
-          <button type="button" className="fb-chat-dock-utility-pencil"
-            aria-label={unreadBadge ? `${unreadBadge} unread conversations, new message` : "New message"}
-            onClick={(event) => {
-              if (!accountId) return;
-              openChatDock(accountId, event.currentTarget, null, capacity);
-            }}>
-            <Pencil size={19} aria-hidden="true" />
-            {unreadBadge && (
-              <span className="fb-chat-dock-utility-badge" aria-hidden="true">{unreadBadge}</span>
-            )}
-          </button>
         </div>
       )}
       {panelMounted && dock && (
         <div id={DOCK_ID} className="fb-chat-dock fb-chat-dock-stack"
           data-nav={bottomNavVisible ? "visible" : "hidden"}
-          data-rail={railVisible ? "true" : undefined}
-          data-launcher={launcherVisible && panelMounted ? "above" : undefined}
           style={composerStyle}
           hidden={!visible}
           role="complementary" aria-label="Chat">
