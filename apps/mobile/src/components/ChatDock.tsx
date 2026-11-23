@@ -12,11 +12,12 @@ import { searchPeople } from "../services/people";
 import { messagePreview } from "../utils/messagePreview";
 import { useSafetyLifetime } from "../utils/useSafetyLifetime";
 import {
-  closeChatDockEntry, closeChatDockSurface, focusChatDock, minimizeChatDock,
+  clampChatDockCapacity, closeChatDockEntry, closeChatDockSurface, focusChatDock, minimizeChatDock,
   openChatDock, openConversation, resetChatDock, restoreChatDock, tuckChatDock,
   untuckChatDock, useChatDock, isChatDockDismissed, type ChatDockEntry,
 } from "./chatDock";
 import { useHoverLabel } from "./HoverLabel";
+import { useRootFontPx } from "./responsive";
 import { UserAvatar } from "./UserAvatar";
 import "./ChatDock.css";
 
@@ -37,8 +38,10 @@ const CHAT_SURFACE = /^\/(?:chats|connections)(?:\/|$)/;
 const DOCK_ID = "fb-chat-dock";
 const SEARCH_DEBOUNCE_MS = 250;
 const DESKTOP_MIN_WIDTH = 768;
+/** The window's CSS width in rem (`.fb-chat-dock-window`), and its 16px form. */
+const WINDOW_WIDTH_REM = 24;
 /** 24rem at the 16px design root; the row's gap is added separately. */
-const WINDOW_WIDTH = 384;
+const WINDOW_WIDTH = WINDOW_WIDTH_REM * 16;
 const WINDOW_GAP = 12;
 const DESKTOP_MAX_WINDOWS = 3;
 /**
@@ -59,10 +62,18 @@ const RAIL_MAX_HEADS = 5;
 const COMPOSER_CLEARANCE_GAP = 8;
 const NO_ENTRIES: readonly ChatDockEntry[] = [];
 
-/** Desktop windows side by side, capped at three; a phone shows one at a time. */
-function openWindowLimit(width: number): number {
+/**
+ * Desktop windows side by side, capped at three; a phone shows one at a time.
+ *
+ * `windowWidthPx` is the window's real pixel width. Its CSS width is 24rem, so
+ * capacity must follow the root font size, not a constant: at 200% text the
+ * nominal 384px window is 768px, and a fixed formula would promise a row the
+ * CSS then shrinks under the navigation rail. The rail reserves the same pixels
+ * at every scale, because its capsule is icon-sized.
+ */
+export function openWindowLimit(width: number, windowWidthPx: number = WINDOW_WIDTH): number {
   if (width < DESKTOP_MIN_WIDTH) return 1;
-  return Math.min(DESKTOP_MAX_WINDOWS, Math.max(1, Math.floor((width - RAIL_RESERVE) / (WINDOW_WIDTH + WINDOW_GAP))));
+  return Math.min(DESKTOP_MAX_WINDOWS, Math.max(1, Math.floor((width - RAIL_RESERVE) / (windowWidthPx + WINDOW_GAP))));
 }
 
 function useViewportSize() {
@@ -76,6 +87,19 @@ function useViewportSize() {
     return () => window.removeEventListener("resize", update);
   }, []);
   return size;
+}
+
+/**
+ * The window's real pixel width. Its CSS width is 24rem, so capacity must
+ * follow the root font size, not a constant: at 200% text the nominal 384px
+ * window is 768px. `useRootFontPx` watches `document.documentElement` for
+ * `style`/`class` mutations (Appearance applies a scale change live) and window
+ * resize, and React skips the render when the number is unchanged. An
+ * environment that cannot resolve a font size (jsdom returns an empty string)
+ * falls back to the 16px design root: 384px.
+ */
+function useWindowWidthPx(): number {
+  return Math.round(WINDOW_WIDTH_REM * useRootFontPx());
 }
 
 /** The fields the picker reads from a conversation summary. */
@@ -120,7 +144,8 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
   const navigate = useNavigate();
   const { hoverLabel } = useHoverLabel();
   const viewport = useViewportSize();
-  const capacity = openWindowLimit(viewport.width);
+  const windowWidthPx = useWindowWidthPx();
+  const capacity = openWindowLimit(viewport.width, windowWidthPx);
   const phone = viewport.width < DESKTOP_MIN_WIDTH;
 
   const entries = dock?.entries ?? NO_ENTRIES;
@@ -172,6 +197,17 @@ export function ChatDock({ hostOccluded, bottomNavVisible }: {
     if (previousViewer.current !== null && previousViewer.current !== viewer) resetChatDock();
     previousViewer.current = viewer;
   }, [user?.id]);
+
+  // Capacity follows the root font size, so a text-scale change while the dock
+  // is mounted can lower it under the number of open windows. Fold the surplus
+  // exactly as opening past capacity does — the focused window stays open and
+  // the least recently focused others become rail heads — instead of leaving a
+  // row the CSS would shrink under the rail. Only window phases move: this is
+  // an effect, never a close or a tuck, so the first paint is untouched.
+  useEffect(() => {
+    if (!accountId) return;
+    clampChatDockCapacity(accountId, capacity);
+  }, [accountId, capacity]);
 
   const rows: ConversationSummary[] = chat.accountId === accountId ? chat.conversations : [];
   const peerOf = new Map(rows.map((row) => [row.conversationId, row.peerId] as const));

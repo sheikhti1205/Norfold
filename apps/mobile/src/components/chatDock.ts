@@ -272,6 +272,36 @@ export function restoreChatDock(
   focusEntry(accountId, conversationId, limit);
 }
 
+/**
+ * Fold the surplus open windows after the host's capacity shrinks.
+ *
+ * The window's CSS width is 24rem, so its real pixel width grows with the
+ * reader's text scale: a scale change (or a narrower viewport) can lower the
+ * capacity while more windows are already open. This is the same rule as
+ * opening past capacity — the most recently focused window stays open and the
+ * least recently focused others become rail heads — but it runs when the limit
+ * itself moves. `applyLimit` only flips `phase`, so every window stays mounted
+ * (and keeps its draft); `tucked` and `closed` are untouched, and a row with
+ * nothing over the limit neither re-orders nor emits.
+ */
+export function clampChatDockCapacity(accountId: string, limit: number): void {
+  const current = state;
+  if (!current || current.accountId !== accountId) return;
+  if (!Number.isFinite(limit)) return;
+  const focusedSeq = current.entries.reduce(
+    (max, entry) => (entry.phase === "open" && entry.seq > max ? entry.seq : max),
+    -1,
+  );
+  const entries = applyLimit(current.entries, focusedSeq, limit);
+  // `applyLimit` always returns a fresh array: compare entries by identity so a
+  // capacity change with nothing over the limit is a true no-op.
+  const changed = entries.length !== current.entries.length
+    || entries.some((entry, index) => entry !== current.entries[index]);
+  if (!changed) return;
+  state = { ...current, entries };
+  emit();
+}
+
 /** Collapse a thread into a rail head. The picker is never minimizable. */
 export function minimizeChatDock(accountId: string, conversationId: string | null): void {
   if (!state || state.accountId !== accountId) return;

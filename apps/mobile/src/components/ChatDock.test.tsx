@@ -6,11 +6,11 @@ import { MemoryRouter, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SearchedProfile } from "@norfold/shared";
 import { chatFileBody, type ChatFileMeta } from "../services/messaging/files";
-import { ChatDock } from "./ChatDock";
+import { ChatDock, openWindowLimit } from "./ChatDock";
 import {
-  closeChatDock, closeChatDockEntry, closeChatDockSurface, focusChatDock, isChatDockDismissed,
-  minimizeChatDock, openChatDock, openConversation, resetChatDock, resetChatDockDismissedForTests,
-  restoreChatDock, useChatDock, type ChatDockEntry,
+  clampChatDockCapacity, closeChatDock, closeChatDockEntry, closeChatDockSurface, focusChatDock,
+  isChatDockDismissed, minimizeChatDock, openChatDock, openConversation, resetChatDock,
+  resetChatDockDismissedForTests, restoreChatDock, useChatDock, type ChatDockEntry,
 } from "./chatDock";
 
 /**
@@ -1518,6 +1518,36 @@ describe("chatDock store", () => {
     expect(screen.getByTestId("state-a").textContent).toBe("c1:minimized,c2:open|f:c2");
   });
 
+  it("folds the surplus open windows when the host capacity shrinks", () => {
+    mountStore();
+    act(() => openChatDock("a", null, "c1", 3));
+    act(() => openChatDock("a", null, "c2", 3));
+    act(() => openChatDock("a", null, "c3", 3));
+    expect(screen.getByTestId("state-a").textContent).toBe("c1:open,c2:open,c3:open|f:c3");
+    // The most recently focused window keeps its lease; the two older ones
+    // fold in place as rail heads and stay mounted for their drafts.
+    act(() => clampChatDockCapacity("a", 1));
+    expect(screen.getByTestId("state-a").textContent).toBe("c1:minimized,c2:minimized,c3:open|f:c3");
+  });
+
+  it("leaves a dock with room to spare untouched when capacity is clamped", () => {
+    mountStore();
+    act(() => openChatDock("a", null, "c1", 3));
+    act(() => openChatDock("a", null, "c2", 3));
+    expect(screen.getByTestId("state-a").textContent).toBe("c1:open,c2:open|f:c2");
+    act(() => clampChatDockCapacity("a", 3));
+    expect(screen.getByTestId("state-a").textContent).toBe("c1:open,c2:open|f:c2");
+  });
+
+  it("ignores a capacity clamp for another account or a non-finite limit", () => {
+    mountStore();
+    act(() => openChatDock("a", null, "c1", 2));
+    act(() => openChatDock("a", null, "c2", 2));
+    act(() => clampChatDockCapacity("b", 1));
+    act(() => clampChatDockCapacity("a", Number.POSITIVE_INFINITY));
+    expect(screen.getByTestId("state-a").textContent).toBe("c1:open,c2:open|f:c2");
+  });
+
   it("refuses cross-account mutation and clears on close and reset", () => {
     mountStore();
     act(() => openChatDock("a", null, "c1"));
@@ -1573,5 +1603,63 @@ describe("chatDock store", () => {
     for (const read of reads) expect(read).toBe(reads[0]);
     // Signed out is still nothing at all.
     expect(screen.getByTestId("state-signed-out").textContent).toBe("null|f:-");
+  });
+});
+
+describe("ChatDock window capacity", () => {
+  afterEach(() => document.documentElement.style.removeProperty("font-size"));
+
+  it("fits three 384px windows in a 1440px viewport", () => {
+    expect(openWindowLimit(1440)).toBe(3);
+    expect(openWindowLimit(1440, 384)).toBe(3);
+  });
+
+  it("fits one 768px window when the 24rem card doubles with the root font", () => {
+    expect(openWindowLimit(1440, 768)).toBe(1);
+  });
+
+  it("fits two 384px windows in a 1024px viewport", () => {
+    expect(openWindowLimit(1024, 384)).toBe(2);
+  });
+
+  it("never promises fewer than one window, however narrow the remainder", () => {
+    // The rail reserve can exceed the space left, and a phone shows one anyway.
+    expect(openWindowLimit(768, 768)).toBe(1);
+    expect(openWindowLimit(375, 384)).toBe(1);
+  });
+
+  it("keeps the 384px default when the caller passes no window width", () => {
+    expect(openWindowLimit(1440, 384)).toBe(openWindowLimit(1440));
+    expect(openWindowLimit(1024, 384)).toBe(openWindowLimit(1024));
+  });
+
+  it("folds the surplus into rail heads when the text scale lowers capacity", async () => {
+    viewport(1440, 727);
+    mount("/");
+    // The 16px root makes 24rem 384px, so a 1440px row keeps three windows.
+    act(() => {
+      for (const id of ["c1", "c2", "c3"]) openChatDock("me", null, id, 3);
+    });
+    expect(dockWindows()).toHaveLength(3);
+    expect(railHeads()).toHaveLength(0);
+
+    // 200% text makes each window 768px, so only one fits beside the rail.
+    document.documentElement.style.fontSize = "32px";
+    await waitFor(() => expect(railHeads()).toHaveLength(2));
+
+    // The most recently focused window stays open; the surplus became heads.
+    expect(dockWindow("c3")?.dataset.phase).toBe("open");
+    expect(dockWindow("c3")?.hidden).toBe(false);
+    expect(dockWindow("c1")?.dataset.phase).toBe("minimized");
+    expect(dockWindow("c2")?.dataset.phase).toBe("minimized");
+    expect(conversation("c3").dataset.active).toBe("true");
+    // Folded, never unmounted: every window is still in the tree, hidden.
+    expect(dockWindows()).toHaveLength(3);
+    expect(dockWindow("c1")?.hidden).toBe(true);
+    expect(dockWindow("c2")?.hidden).toBe(true);
+
+    // Restore the design root inside the act boundary so the observer's update
+    // belongs to this test, and the next one starts at 100%.
+    await act(async () => { document.documentElement.style.removeProperty("font-size"); });
   });
 });
