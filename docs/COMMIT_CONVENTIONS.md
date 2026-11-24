@@ -1,53 +1,74 @@
-# Norfold commit-message convention (prospective)
+# Commit messages
 
-Applies to **new commits only** — enforced by
-`scripts/check-commit-messages.mjs` over the PR/push commit range in CI and
-over the release range in `release.yml`. History is never retroactively
-failed: the checker only inspects the commits it is explicitly given.
+Norfold uses [Conventional Commits](https://www.conventionalcommits.org/) so
+that commit history can drive automatic semantic versioning. The convention
+applies to new commits; CI checks the commits in a pull request or push range.
 
-## Subject shape: `scope: outcome`
-
-- `scope` is lower-case (`[a-z0-9][a-z0-9-]*`). Canonical scopes include
-  `release`, `build`, `ai`, `android`, `fix`, `docs`, `test`, `refactor`.
-  Other lower-case scopes are accepted; upper-case scopes are rejected.
-- One space after the colon, then the outcome: what changed for the repo,
-  starting lower-case, no trailing period, max 72 characters total.
-- Good: `fix: reject placeholder Supabase key in release preflight`
-- Bad: `Fix: ...` (upper-case scope), `fix ...` (no colon), 90-char subjects.
-
-## Never in the subject
-
-- Test counts (`12 tests`, `5 cases`, ...). Counts rot; the body records gates.
-
-## Body records gates
-
-Every non-trivial commit body names the gates that were run or observed, e.g.
-`typecheck`, `lint`, `test`, `gate`, `verify`, `ci`, `e2e`, `qa`, `tsc`,
-`eslint`, `vitest`. One line is enough:
+## Subject
 
 ```
-fix: reject placeholder Supabase key in release preflight
-
-Gates: typecheck, lint, node --test scripts/check-release-config
+type(scope)!: description
 ```
 
-`docs`-scoped commits are exempt from the body-gate rule.
+- `type` is one of:
 
-## Graceful skips (always pass)
+  | Type       | Meaning                                              |
+  | ---------- | ---------------------------------------------------- |
+  | `feat`     | a user-visible feature                               |
+  | `fix`      | a user-visible bug fix                               |
+  | `perf`     | a performance improvement                            |
+  | `refactor` | a code change that is not a feature or bug fix       |
+  | `docs`     | documentation only                                   |
+  | `test`     | tests only                                           |
+  | `build`    | build system or dependencies                         |
+  | `ci`       | CI configuration and workflows                       |
+  | `chore`    | maintenance that does not change product behaviour   |
+  | `style`    | formatting or other no-op changes                    |
+  | `revert`   | reverts an earlier commit                            |
 
-- Merge commits (`Merge ...`), revert commits (`Revert ...`), and generated
-  dependency bumps (`Bump ...`, `chore(deps)...`) pass without further checks.
+- `(scope)` is optional and lower-case, for example `feat(chat):` or
+  `fix(api,client):`. Use a path-like segment such as `build(scripts/check):`
+  when it helps locate the change.
+- `!` marks a breaking change: `feat(api)!: replace the transport`.
+- `description` is required, contains at least one letter, and the subject line
+  is at most 72 characters.
+- The body is optional. Add one when the change needs context that the subject
+  cannot carry.
 
-## No exemptions
+## Breaking changes
 
-There is no exemption list. Merge, revert and generated dependency-bump commits
-are the only skips; every other commit in an inspected range must comply.
+A breaking change is declared either with `!` or with a footer:
 
-## Local usage
+```
+feat(api)!: replace the transport
+
+BREAKING CHANGE: the legacy transport is removed; use the relay client.
+```
+
+`BREAKING CHANGE:` and `BREAKING-CHANGE:` are equivalent. The footer must
+describe what breaks and what to use instead.
+
+## Verification
+
+Verification evidence belongs to CI, not to commit text. A commit with a
+subject and no body is valid; do not paste gate lists or test counts into the
+message.
+
+## Versioning
+
+Merge commits, git-generated `Revert "…"` commits, and release-automation
+commits are skipped. For the rest:
+
+- `feat` produces a minor release.
+- `fix` and `perf` produce a patch release.
+- A breaking change (on any type) produces a major release.
+- Every other type produces no release.
+
+## Checking locally
 
 ```sh
-node scripts/check-commit-messages.mjs --count 1            # just HEAD
+node scripts/check-commit-messages.mjs --count 1             # just HEAD
 node scripts/check-commit-messages.mjs --range origin/main...HEAD
-node scripts/check-commit-messages.mjs --rev v0.1.0-beta.1  # single commit/tag
+node scripts/check-commit-messages.mjs --rev v0.1.0-beta.1   # a single commit or tag
 git log --format='%H' -5 | node scripts/check-commit-messages.mjs --stdin
 ```

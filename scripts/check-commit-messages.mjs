@@ -2,41 +2,82 @@
 /**
  * Commit-message convention checker (see docs/COMMIT_CONVENTIONS.md).
  *
- * Prospective only: inspects ONLY the commits it is explicitly given
- * (--range/--rev/--count/--stdin) and never fails repository history.
- * Merge, revert, and generated dependency-bump commits are skipped by
- * `classifyCommit`. There are no exemptions: every non-skipped commit in an
- * inspected range must comply.
+ * Subjects follow Conventional Commits: `type(scope)!: description`. A body is
+ * optional; verification evidence lives in CI, not in commit text. Breaking
+ * changes are declared with `!` or a `BREAKING CHANGE:` / `BREAKING-CHANGE:`
+ * footer.
+ *
+ * Exit codes:
+ *   0  every checked message passes (including a range with no commits)
+ *   1  at least one real convention violation
+ *   3  the requested range could not be resolved
+ *
+ * Without `--strict-range`, an unresolvable range prints an explicit fallback
+ * line and checks the last commit anyway; it still exits 3 unless that commit
+ * itself violates the convention.
  *
  * Pure Node builtins. Test suite: scripts/check-commit-messages.test.mjs
  * Run: `node --test scripts/check-commit-messages.test.mjs` from repo root.
  */
 
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
-// Merge / revert / generated commits are exempt from every rule.
-const SKIP_SUBJECT_RE =
-  /^(Merge\b|Revert\b|[Bb]ump\b|chore\(deps\b|build\(deps\b|🤖)/;
+export const EXIT_OK = 0;
+export const EXIT_VIOLATION = 1;
+export const EXIT_UNRESOLVABLE = 3;
 
-// Never in the subject.
-const WAVE_RE = /\b(wave|phase|stage|step)\s*\d+/i;
-const WORKER_RE = /\b(opencode|sonnet|opus|haiku|gpt(?:-?\d)?|gemini|copilot|cursor|Muse|llm|agent)\b/i;
-const TEST_COUNT_RE = /\b\d+\s*(tests?|cases?|specs?|assertions?)\b/i;
-const WIP_RE = /^\s*wip\b/i;
+const TYPES = [
+  "feat",
+  "fix",
+  "perf",
+  "refactor",
+  "docs",
+  "test",
+  "build",
+  "ci",
+  "chore",
+  "style",
+  "revert",
+];
+const TYPE_HELP = TYPES.join(", ");
 
-// Subject shape: `scope: outcome`.
-const SUBJECT_RE = /^([a-z0-9][a-z0-9-]*): (\S.*)$/;
+const MAX_SUBJECT_LENGTH = 72;
+const SEP = "\x1f";
+const END = "\x1e";
+const FORMAT = `%H${SEP}%s${SEP}%b${END}`;
 
-// Body must name at least one gate (docs-scoped commits are exempt).
-const GATE_RE =
-  /\b(typecheck|lint|tests?|gate|verify|verified|verification|checks?|ci\b|e2e|qa|vitest|tsc|eslint|node --test)\b/i;
+// Merge, generated revert and release-automation commits are accepted without
+// further checks. A generated revert is machine-written, so contributors
+// cannot reshape its subject.
+const MERGE_SUBJECT_RE = /^Merge (?:pull request|branch|remote-tracking branch)\b/;
+const REVERT_SUBJECT_RE = /^Revert ".+"$/;
+const RELEASE_SUBJECT_RE = /^(?:chore\(release\): v\d+\.\d+\.\d+|Bump\b)/;
+
+// `type(scope)!: description`; the scope is a comma-separated list of
+// lower-case path-ish segments and may never contain whitespace.
+const SUBJECT_RE = /^([a-z]+)(?:\(([a-z0-9._/-]+(?:,[a-z0-9._/-]+)*)\))?(!)?: (.*)$/;
+const EMPTY_DESCRIPTION_RE = /^([a-z]+)(?:\([a-z0-9._/-]+(?:,[a-z0-9._/-]+)*\))?!?:$/;
+
+/** Thrown when the requested range or revision cannot be resolved. */
+export class RangeResolutionError extends Error {}
 
 /**
- * Classify a subject line. Returns "skip" for merge/revert/generated
- * commits, otherwise "normal".
+ * Classify a subject line. Returns "skip" for merge, generated revert and
+ * release-automation commits, otherwise "normal". The versioning classifier
+ * should treat every "skip" subject as impact "none".
  */
 export function classifyCommit(subject) {
-  return SKIP_SUBJECT_RE.test(subject.trim()) ? "skip" : "normal";
+  const text = subject.trim();
+  if (
+    MERGE_SUBJECT_RE.test(text) ||
+    REVERT_SUBJECT_RE.test(text) ||
+    RELEASE_SUBJECT_RE.test(text)
+  ) {
+    return "skip";
+  }
+  return "normal";
 }
 
 /**
@@ -44,117 +85,204 @@ export function classifyCommit(subject) {
  * Never throws on content; never prints key material (no secrets involved).
  */
 export function checkMessage(subject, body = "") {
-  const errors = [];
   const trimmed = subject.trim();
+  if (classifyCommit(trimmed) === "skip") return { ok: true, errors: [], skipped: true };
+  if (!trimmed) return { ok: false, errors: ["subject is empty"], skipped: false };
 
-  if (classifyCommit(trimmed) === "skip") return { ok: true, errors, skipped: true };
-  if (!trimmed) return { ok: false, errors: ["empty subject"], skipped: false };
+  const errors = [];
 
-  if (WIP_RE.test(trimmed)) errors.push("subject looks like WIP");
-  if (WAVE_RE.test(trimmed)) errors.push("subject must not contain wave/phase/stage labels");
-  if (WORKER_RE.test(trimmed)) errors.push("subject must not name workers/models/agents");
-  if (TEST_COUNT_RE.test(trimmed)) errors.push("subject must not contain test counts (record gates in the body)");
+  if (trimmed.length > MAX_SUBJECT_LENGTH) {
+    errors.push(`subject is ${trimmed.length} characters; the limit is ${MAX_SUBJECT_LENGTH}`);
+  }
 
-  const shape = SUBJECT_RE.exec(trimmed);
-  if (!shape) {
-    if (/^[A-Z]/.test(trimmed) && !trimmed.includes(":")) {
-      errors.push("subject must start with a lower-case `scope:` prefix");
-    } else {
-      errors.push("subject must match `scope: outcome` with a lower-case scope");
-    }
+  if (EMPTY_DESCRIPTION_RE.test(trimmed)) {
+    errors.push("description is empty");
   } else {
-    const outcome = shape[2];
-    if (/^[A-Z]/.test(outcome)) errors.push("outcome must start lower-case");
-    if (/\.$/.test(trimmed)) errors.push("subject must not end with a period");
-    if (trimmed.length > 72) errors.push(`subject exceeds 72 chars (${trimmed.length})`);
-    // Body-gate rule: docs-scoped commits are exempt.
-    if (shape[1] !== "docs" && !GATE_RE.test(body)) {
-      errors.push("body must record gates (e.g. `Gates: typecheck, lint, tests`)");
+    const shape = SUBJECT_RE.exec(trimmed);
+    if (!shape) {
+      errors.push('subject must be "type(scope)!: description" with a known type');
+    } else {
+      const [, type, , , description] = shape;
+      if (!TYPES.includes(type)) errors.push(`type "${type}" is not one of ${TYPE_HELP}`);
+      if (description.length === 0) {
+        errors.push("description is empty");
+      } else if (description.startsWith(" ")) {
+        errors.push("description must not start with a space");
+      } else if (!/\p{L}/u.test(description)) {
+        errors.push("description must contain at least one letter");
+      }
     }
   }
+
+  const footerError = breakingFooterError(body);
+  if (footerError) errors.push(footerError);
 
   return { ok: errors.length === 0, errors, skipped: false };
 }
 
-function loadCommits(args) {
-  const rangeIdx = args.indexOf("--range");
-  const revIdx = args.indexOf("--rev");
-  const countIdx = args.indexOf("--count");
-  const useStdin = args.includes("--stdin");
-  const SEP = "\x1f";
-  const END = "\x1e";
+function breakingFooterError(body) {
+  const lines = String(body).split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = /^BREAKING[ -]CHANGE:[ \t]*(.*)$/.exec(lines[index]);
+    if (!match) continue;
+    const inline = match[1].trim();
+    const following = (lines[index + 1] ?? "").trim();
+    if (!inline && !following) return "BREAKING CHANGE footer must describe the break";
+  }
+  return null;
+}
 
-  /** @returns {{ sha: string, subject: string, body: string }[]} */
-  const parse = (raw) =>
-    raw
-      .split(END)
-      .map((chunk) => chunk.replace(/^\n+/, ""))
-      .filter((chunk) => chunk.trim())
-      .map((chunk) => {
-        const [sha = "", subject = "", body = ""] = chunk.split(SEP);
-        return { sha: sha.trim(), subject: (subject ?? "").trim(), body: body ?? "" };
-      });
+/** Encode commits into the `git log --format` wire form (used by tests). */
+export function encodeLog(commits) {
+  return commits
+    .map(({ sha = "", subject = "", body = "" }) => `${sha}${SEP}${subject}${SEP}${body}${END}`)
+    .join("");
+}
+
+/** Decode `git log --format` output into { sha, subject, body } records. */
+export function parseLog(raw) {
+  return String(raw)
+    .split(END)
+    .map((chunk) => chunk.replace(/^\n+/, ""))
+    .filter((chunk) => chunk.trim())
+    .map((chunk) => {
+      const [sha = "", subject = "", body = ""] = chunk.split(SEP);
+      return { sha: sha.trim(), subject: subject.trim(), body };
+    });
+}
+
+function gitLog(git, args) {
+  try {
+    return git(args);
+  } catch (error) {
+    throw new RangeResolutionError(error?.message ?? String(error));
+  }
+}
+
+/**
+ * Load commits for the requested CLI selector. `git(args)` returns raw stdout
+ * and throws on failure; tests inject fixtures instead of spawning processes.
+ */
+export function loadCommits(argv, git) {
+  const rangeIdx = argv.indexOf("--range");
+  const revIdx = argv.indexOf("--rev");
+  const countIdx = argv.indexOf("--count");
+  const useStdin = argv.includes("--stdin");
 
   if (useStdin) {
-    return import("node:fs").then(({ readFileSync }) =>
-      parse(readFileSync(0, "utf8")).map((c, i) => ({
-        sha: c.sha || `stdin-${i}`,
-        subject: c.subject || c.sha,
-        body: c.body,
-      })),
-    );
+    return parseLog(readFileSync(0, "utf8")).map((commit, index) => ({
+      ...commit,
+      sha: commit.sha || `stdin-${index}`,
+      subject: commit.subject || commit.sha,
+    }));
   }
-  const format = `%H${SEP}%s${SEP}%b${END}`;
+
   if (rangeIdx !== -1) {
-    const range = args[rangeIdx + 1];
+    const range = argv[rangeIdx + 1];
     if (!range) throw new Error("check-commit-messages: --range requires a value");
-    return parse(execFileSync("git", ["log", `--format=${format}`, range], { encoding: "utf8" }));
+    return parseLog(gitLog(git, ["log", `--format=${FORMAT}`, range]));
   }
   if (revIdx !== -1) {
-    const rev = args[revIdx + 1];
+    const rev = argv[revIdx + 1];
     if (!rev) throw new Error("check-commit-messages: --rev requires a value");
-    return parse(execFileSync("git", ["log", "-1", `--format=${format}`, rev], { encoding: "utf8" }));
+    const commits = parseLog(gitLog(git, ["log", "-1", `--format=${FORMAT}`, rev]));
+    if (commits.length === 0) throw new RangeResolutionError(`revision ${rev} is unknown`);
+    return commits;
   }
   if (countIdx !== -1) {
-    const count = args[countIdx + 1];
+    const count = argv[countIdx + 1];
     if (!count) throw new Error("check-commit-messages: --count requires a value");
-    return parse(execFileSync("git", ["log", `-${count}`, `--format=${format}`], { encoding: "utf8" }));
+    const commits = parseLog(gitLog(git, ["log", `-${count}`, `--format=${FORMAT}`]));
+    if (commits.length === 0) throw new RangeResolutionError("history has no commits");
+    return commits;
   }
   throw new Error(
     "check-commit-messages: expected one of --range A...B, --rev X, --count N, --stdin",
   );
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+function shortSha(sha) {
+  return sha ? sha.slice(0, 7) : "(no sha)";
+}
+
+function checkCommits(commits, out, err) {
+  if (commits.length === 0) {
+    out("check-commit-messages: PASS (0 checked, 0 skipped, 0 total — no commits in range)");
+    return EXIT_OK;
+  }
+
+  let failed = 0;
+  let skipped = 0;
+
+  for (const { sha, subject, body } of commits) {
+    const result = checkMessage(subject, body);
+    if (result.skipped) {
+      skipped += 1;
+      out(`check-commit-messages: SKIP ${shortSha(sha)} ${subject}`);
+      continue;
+    }
+    if (result.ok) continue;
+    failed += 1;
+    err(`check-commit-messages: FAIL ${shortSha(sha)} ${subject}`);
+    for (const error of result.errors) err(`  - ${error}`);
+  }
+
+  const checked = commits.length - skipped;
+  const status = failed > 0 ? "FAIL" : "PASS";
+  const summary = `check-commit-messages: ${status} (${checked} checked, ${skipped} skipped, ${commits.length} total)`;
+  if (failed > 0) {
+    err(summary);
+    return EXIT_VIOLATION;
+  }
+  out(summary);
+  return EXIT_OK;
+}
+
+/**
+ * Run the checker without exiting the process. `io` defaults to the console;
+ * tests inject recorders. Returns the exit code.
+ */
+export function evaluate(argv, git, io = { out: console.log, err: console.error }) {
+  const { out, err } = io;
+  const strict = argv.includes("--strict-range");
+
+  let commits;
   try {
-    const argv = process.argv.slice(2);
-    const commits = await loadCommits(argv);
-    if (commits.length === 0) {
-      console.log("check-commit-messages: PASS (no commits in range — nothing to check)");
-      process.exit(0);
-    }
-    let failed = 0;
-    let skipped = 0;
-    for (const { sha, subject, body } of commits) {
-      const result = checkMessage(subject, body);
-      if (result.skipped) {
-        skipped += 1;
-        console.log(`check-commit-messages: SKIP ${sha} (${subject.slice(0, 60)})`);
-      } else if (!result.ok) {
-        failed += 1;
-        console.error(`check-commit-messages: FAIL ${sha} (${subject.slice(0, 80)})`);
-        for (const error of result.errors) console.error(`  - ${error}`);
-      }
-    }
-    if (failed > 0) {
-      console.error(`check-commit-messages: FAIL (${failed} failing, ${skipped} skipped, ${commits.length} total)`);
-      process.exit(1);
-    }
-    console.log(
-      `check-commit-messages: PASS (${commits.length - skipped} checked, ${skipped} skipped, ${commits.length} total)`,
-    );
+    commits = loadCommits(argv, git);
   } catch (error) {
-    console.error(error.message.startsWith("check-commit-messages:") ? error.message : `check-commit-messages: ${error.message}`);
-    process.exit(1);
+    if (!(error instanceof RangeResolutionError)) throw error;
+
+    if (strict) {
+      err(`check-commit-messages: range unresolvable (${error.message})`);
+      return EXIT_UNRESOLVABLE;
+    }
+
+    err("range unresolvable, falling back to the last commit only");
+    let fallback;
+    try {
+      fallback = loadCommits(["--count", "1"], git);
+    } catch (fallbackError) {
+      err(`check-commit-messages: range unresolvable (${fallbackError.message})`);
+      return EXIT_UNRESOLVABLE;
+    }
+
+    const result = checkCommits(fallback, out, err);
+    return result === EXIT_VIOLATION ? EXIT_VIOLATION : EXIT_UNRESOLVABLE;
+  }
+
+  return checkCommits(commits, out, err);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    const git = (args) => execFileSync("git", args, { encoding: "utf8" });
+    process.exit(evaluate(process.argv.slice(2), git));
+  } catch (error) {
+    console.error(
+      error.message.startsWith("check-commit-messages:")
+        ? error.message
+        : `check-commit-messages: ${error.message}`,
+    );
+    process.exit(EXIT_VIOLATION);
   }
 }
