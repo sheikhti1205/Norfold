@@ -34,11 +34,17 @@ const FN = "findback_update_post_client";
 const NEW_SIGNATURE =
   "text, text, text, text, text, text, double precision, double precision, text, text, text[]";
 // The SQL wraps the signature across lines, so the argument list is matched
-// with flexible whitespace instead of the literal one-line form.
+// with flexible whitespace instead of the literal one-line form. Each part is
+// escaped as a literal FIRST — `text[]` is square brackets, not an empty
+// character class, and `.` or `\` are not wildcards — then its internal
+// whitespace is made flexible. The order matters: escaping after the
+// substitution would escape the backslash it introduces.
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const signaturePattern = (signature) =>
   signature
     .split(",")
-    .map((part) => part.trim().replace(/[[\]]/g, "\\$&").replace(/\s+/g, "\\s+"))
+    .map((part) => escapeRegExp(part.trim()).replace(/\s+/g, "\\s+"))
     .join("\\s*,\\s*");
 
 describe("the update RPC keeps its contract and gains ONE explicit clear argument", () => {
@@ -327,6 +333,22 @@ describe("the migration touches nothing but that one function", () => {
     );
     assert.doesNotMatch(sql, /grant[^;]*\bto\s+anon\b/i);
     assert.doesNotMatch(sql, /grant[^;]*\bto\s+public\b/i);
+  });
+
+  it("matches a text[] argument literally, not as a character class", () => {
+    // Unescaped, `text[]` is an empty character class that matches nothing, so
+    // this pins the escape as well as the flexible-whitespace normalisation.
+    const paired = new RegExp(`\\(\\s*${signaturePattern("text[], text")}\\s*\\)`, "i");
+    assert.match("( text[] , text )", paired);
+    assert.doesNotMatch("( text, text )", paired);
+    // And the escaped pattern still matches the migration's real grant line.
+    assert.match(
+      sql,
+      new RegExp(
+        `grant\\s+execute\\s+on\\s+function\\s+public\\.${FN}\\(\\s*${signaturePattern(NEW_SIGNATURE)}\\s*\\)\\s+to\\s+authenticated`,
+        "i",
+      ),
+    );
   });
 
   it("states that it is forward-only, live-pending, and points at its verifier", () => {
