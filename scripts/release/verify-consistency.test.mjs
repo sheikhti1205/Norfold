@@ -36,25 +36,29 @@ const RELEASE_CODE = 101078;
 const SIGNER = "b".repeat(64);
 const OTHER_SIGNER = "c".repeat(64);
 const GIT_SHA = "c".repeat(40);
+const BUMP_SHA = "e".repeat(40);
 
 /**
- * The exact record release.yml writes at prepare time: `{ tag, version,
- * versionCode }`, with no commit SHA and no timestamp (nothing is published
- * yet, so a timestamp would be a lie and validateState rejects one).
+ * The record release.yml writes at prepare time: `{ tag, version, versionCode,
+ * commit }`, where `commit` is bump commit A. Publication is two commits — A
+ * bumps the versions, B writes this record — so A exists before the record is
+ * written. There is no timestamp: nothing is published yet.
  */
 function pendingRelease(overrides = {}) {
   return {
     tag: `v${RELEASE_VERSION}`,
     version: RELEASE_VERSION,
     versionCode: RELEASE_CODE,
+    commit: BUMP_SHA,
     ...overrides,
   };
 }
 
-function state({ version = STATE_VERSION, versionCode = STATE_CODE, pending = pendingRelease() } = {}) {
+function state({ version = STATE_VERSION, versionCode = STATE_CODE, signingChannel = "beta", pending = pendingRelease() } = {}) {
   return {
     schemaVersion: 1,
     channel: "beta",
+    signingChannel,
     version,
     versionCode,
     classificationBase: "a".repeat(40),
@@ -135,6 +139,7 @@ function catalogue({ release = {}, artifacts = null } = {}) {
 function writeTree({
   stateVersion = STATE_VERSION,
   stateCode = STATE_CODE,
+  signingChannel = "beta",
   pending = pendingRelease(),
   version = RELEASE_VERSION,
   rootVersion = version,
@@ -146,7 +151,9 @@ function writeTree({
 } = {}) {
   const root = mkdtempSync(join(tmpdir(), "norfold-consistency-"));
   const contents = {
-    "release/state.json": JSON.stringify(state({ version: stateVersion, versionCode: stateCode, pending })),
+    "release/state.json": JSON.stringify(
+      state({ version: stateVersion, versionCode: stateCode, signingChannel, pending }),
+    ),
     "package.json": JSON.stringify({
       name: "norfold",
       private: true,
@@ -316,6 +323,42 @@ test("two APKs with different signer fingerprints fail and name both", () => {
   assert.ok(identity.detail.includes(OTHER_SIGNER), "the armeabi signer must be named");
   assert.match(identity.detail, /arm64-v8a/);
   assert.match(identity.detail, /armeabi-v7a/);
+});
+
+test("a catalogue signingChannel that differs from the state fails naming the expected value", () => {
+  const root = releaseTree({ catalogueDoc: catalogue({ artifacts: [artifact({ signingChannel: "stable" })] }) });
+  const report = verifyWithCatalogue(root);
+
+  assert.equal(report.exitCode, 1);
+  const identity = check(report, "APK identity");
+  assert.equal(identity.status, "FAIL");
+  assert.match(
+    identity.detail,
+    /releases\[0\]\.artifacts\[0\]\.signingChannel "stable" is not "beta" \(release\/state\.json signingChannel\)/,
+  );
+});
+
+test("the expected signingChannel is read from release/state.json, not a constant", () => {
+  const root = releaseTree({
+    signingChannel: "beta.legacy",
+    catalogueDoc: catalogue({ artifacts: [artifact({ signingChannel: "beta.legacy" })] }),
+  });
+  const report = verifyWithCatalogue(root);
+
+  const identity = check(report, "APK identity");
+  assert.equal(identity.status, "PASS", identity.detail);
+  assert.match(identity.detail, /channel beta\.legacy/);
+});
+
+test("a state without signingChannel is an unparseable required input", () => {
+  const root = releaseTree({
+    files: { "release/state.json": JSON.stringify({ ...state(), signingChannel: undefined }) },
+  });
+  const report = verifyWithCatalogue(root);
+
+  assert.equal(report.exitCode, 2);
+  assert.deepEqual(report.checks, []);
+  assert.match(report.inputProblems.join("\n"), /release\/state\.json: signingChannel must be a non-empty string/);
 });
 
 test("a catalogue tag that is not v+versionName fails", () => {

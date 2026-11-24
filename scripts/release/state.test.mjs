@@ -32,17 +32,20 @@ const VALID_RELEASE = {
   publishedAt: "2026-11-08T17:18:01Z",
 };
 
-// A pending release records only what exists before the bump is committed.
+// A pending release is written after the bump commit exists, so it pins that
+// commit: the two-commit flow is bump A, then this record B carrying A.
 const VALID_PENDING = {
   tag: "v0.16.0",
   version: "0.16.0",
   versionCode: 101078,
+  commit: COMMIT,
 };
 
 function fixture(overrides = {}) {
   return {
     schemaVersion: 1,
     channel: "beta",
+    signingChannel: "beta",
     version: "0.16.0-beta.3",
     versionCode: 101077,
     classificationBase: COMMIT,
@@ -62,6 +65,14 @@ function tempRepo() {
 test("exports the schema constants", () => {
   assert.equal(SCHEMA_VERSION, 1);
   assert.equal(MAX_VERSION_CODE, 2_100_000_000);
+});
+
+test("signingChannel accepts only beta and explains the native policy migration", () => {
+  assert.doesNotThrow(() => validateState(fixture(), { repoDir: ".", commitExists }));
+  assert.throws(
+    () => validateState(fixture({ signingChannel: "stable" }), { repoDir: ".", commitExists }),
+    /signingChannel must be one of beta \(got "stable"\); promoting the installation channel requires a native policy migration first/,
+  );
 });
 
 test("round-trips byte-identically through write and load", () => {
@@ -105,7 +116,7 @@ test("lastRelease accepts a well-formed release object", () => {
   assert.doesNotThrow(() => validateState(state, { repoDir: ".", commitExists }));
 });
 
-test("pendingRelease round-trips byte-identically without commit or publishedAt", () => {
+test("pendingRelease round-trips byte-identically with its commit and no publishedAt", () => {
   const repoDir = tempRepo();
   try {
     const state = fixture({ pendingRelease: { ...VALID_PENDING } });
@@ -113,7 +124,7 @@ test("pendingRelease round-trips byte-identically without commit or publishedAt"
     const first = readFileSync(file);
     const text = first.toString("utf8");
     assert.match(text, /"pendingRelease": \{/);
-    assert.ok(!text.includes("\"commit\""), "a pending release carries no commit");
+    assert.ok(text.includes(`"commit": "${COMMIT}"`), "a pending release pins the bump commit");
     assert.ok(!text.includes("\"publishedAt\""), "a pending release carries no publishedAt");
     writeState(repoDir, loadState(repoDir, { commitExists }), { commitExists });
     assert.deepEqual(readFileSync(file), first);
@@ -122,18 +133,25 @@ test("pendingRelease round-trips byte-identically without commit or publishedAt"
   }
 });
 
-test("pendingRelease accepts commit null", () => {
-  assert.doesNotThrow(() =>
-    validateState(fixture({ pendingRelease: { ...VALID_PENDING, commit: null } }), { repoDir: ".", commitExists }),
+test("pendingRelease rejects commit null", () => {
+  assert.throws(
+    () => validateState(fixture({ pendingRelease: { ...VALID_PENDING, commit: null } }), { repoDir: ".", commitExists }),
+    /pendingRelease\.commit/,
+  );
+});
+
+test("pendingRelease rejects a missing commit", () => {
+  const withoutCommit = { ...VALID_PENDING };
+  delete withoutCommit.commit;
+  assert.throws(
+    () => validateState(fixture({ pendingRelease: withoutCommit }), { repoDir: ".", commitExists }),
+    /pendingRelease\.commit/,
   );
 });
 
 test("pendingRelease accepts a 40-character hex commit", () => {
   assert.doesNotThrow(() =>
-    validateState(
-      fixture({ pendingRelease: { ...VALID_PENDING, commit: RELEASE_COMMIT } }),
-      { repoDir: ".", commitExists },
-    ),
+    validateState(fixture({ pendingRelease: { ...VALID_PENDING } }), { repoDir: ".", commitExists }),
   );
 });
 
@@ -196,6 +214,7 @@ test("loadState fails closed when the file is not JSON", () => {
 const INVALID_STATES = [
   { name: "schemaVersion", state: fixture({ schemaVersion: 2 }), field: /schemaVersion/ },
   { name: "channel", state: fixture({ channel: "nightly" }), field: /channel/ },
+  { name: "signingChannel", state: fixture({ signingChannel: "stable" }), field: /signingChannel/ },
   { name: "version", state: fixture({ version: "0.16" }), field: /version/ },
   { name: "versionCode zero", state: fixture({ versionCode: 0 }), field: /versionCode/ },
   {
@@ -242,6 +261,11 @@ const INVALID_STATES = [
     field: /pendingRelease\.publishedAt/,
   },
   {
+    name: "pendingRelease.commit null",
+    state: fixture({ pendingRelease: { ...VALID_PENDING, commit: null } }),
+    field: /pendingRelease\.commit/,
+  },
+  {
     name: "pendingRelease.commit",
     state: fixture({ pendingRelease: { ...VALID_PENDING, commit: "abc" } }),
     field: /pendingRelease\.commit/,
@@ -270,10 +294,13 @@ test("an unknown classificationBase commit is rejected", () => {
   );
 });
 
-test("pendingRelease accepts null and a record with no commit", () => {
+test("pendingRelease accepts null and rejects a record with no commit", () => {
   assert.doesNotThrow(() => validateState(fixture({ pendingRelease: null }), { repoDir: ".", commitExists }));
-  assert.doesNotThrow(() =>
-    validateState(fixture({ pendingRelease: { ...VALID_PENDING } }), { repoDir: ".", commitExists }),
+  const withoutCommit = { ...VALID_PENDING };
+  delete withoutCommit.commit;
+  assert.throws(
+    () => validateState(fixture({ pendingRelease: withoutCommit }), { repoDir: ".", commitExists }),
+    /pendingRelease\.commit/,
   );
 });
 

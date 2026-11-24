@@ -31,8 +31,15 @@ export const STATE_FILE = "release/state.json";
 
 // `channel` is a release-workflow label only: it decides whether the GitHub
 // release is flagged as a prerelease and how the title is worded. It never
-// appears in, or changes, the version string.
+// appears in, or changes, the version string or any signing metadata.
 const CHANNELS = ["beta", "stable"];
+// `signingChannel` is the installation-compatibility label: it is written into
+// the update catalogue and asserted by verify-consistency.mjs. The native
+// update policy compares it with the installed build's label and rejects a
+// mismatched update, so changing this value strands every existing
+// installation. Promoting it requires a native policy migration first, which
+// is why only `beta` is accepted here.
+const SIGNING_CHANNELS = ["beta"];
 const COMMIT_RE = /^[0-9a-f]{40}$/i;
 const TAG_RE = /^v[0-9A-Za-z.+-]+$/;
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
@@ -92,21 +99,25 @@ function validateRelease(value, field) {
 /**
  * A release the workflow has decided to publish but has not published yet.
  *
- * It records only what is known when the state file is written:
- *   * `commit` is optional — the bump commit does not exist yet, so requiring
- *     it would force the writer to invent a placeholder that later reads as
- *     provenance;
- *   * `publishedAt` must be absent — nothing has been published, so a
- *     timestamp here would be a lie that later reads as fact.
+ * Publication is two commits, so every field here is known when this record is
+ * written:
+ *   * commit A is the version bump (`sync-version` output only), pushed first;
+ *   * commit B is this `pendingRelease` record, which carries A.
+ *
+ * Because A exists before B is written, `commit` is required: it pins the exact
+ * built tree, so recovery never substitutes whatever `main` happens to be and
+ * drift is impossible rather than merely unlikely.
+ *
+ * `publishedAt` must be absent — nothing has been published, so a timestamp
+ * here would be a lie that later reads as fact.
  */
 function validatePendingRelease(value, field) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     fail(field, "must be an object");
   }
   validateReleaseIdentity(value, field);
-  const { commit } = value;
-  if (commit !== undefined && commit !== null && (typeof commit !== "string" || !COMMIT_RE.test(commit))) {
-    fail(`${field}.commit`, `must be a 40-character hex commit SHA when set (got ${JSON.stringify(commit)})`);
+  if (typeof value.commit !== "string" || !COMMIT_RE.test(value.commit)) {
+    fail(`${field}.commit`, `must be a 40-character hex commit SHA (got ${JSON.stringify(value.commit)})`);
   }
   if (Object.prototype.hasOwnProperty.call(value, "publishedAt")) {
     fail(`${field}.publishedAt`, "must not be set: a pending release is not published yet");
@@ -132,6 +143,13 @@ export function validateState(state, { repoDir = process.cwd(), commitExists = d
   }
   if (!CHANNELS.includes(state.channel)) {
     fail("channel", `must be one of ${CHANNELS.join(", ")} (got ${JSON.stringify(state.channel)})`);
+  }
+  if (!SIGNING_CHANNELS.includes(state.signingChannel)) {
+    fail(
+      "signingChannel",
+      `must be one of ${SIGNING_CHANNELS.join(", ")} (got ${JSON.stringify(state.signingChannel)}); ` +
+        "promoting the installation channel requires a native policy migration first",
+    );
   }
   if (typeof state.version !== "string" || parseVersion(state.version) === null) {
     fail("version", `must be a SemVer version (got ${JSON.stringify(state.version)})`);

@@ -2,12 +2,16 @@
 /**
  * Derive the GitHub Release publish type from a SemVer release tag.
  *
- * Every prerelease tag (-beta.*, -rc.*, -alpha, ...) publishes as a GitHub
- * PRE-RELEASE so it is never Latest/production. Plain stable (e.g. v1.0.0) →
- * normal release + stable title. Build metadata (+...) never implies
- * prerelease.
+ * A pure tag/label helper with no publication authority: whether a release is
+ * published, and whether the GitHub release is flagged prerelease, comes from
+ * `release/state.json` `channel`. This script only labels a tag.
  *
- * Usage (consumed by the `publish` job in .github/workflows/release.yml):
+ * Every prerelease tag (-beta.*, -rc.*, -alpha, ...) maps to a GitHub
+ * PRE-RELEASE label so it is never Latest/production. Plain stable (e.g.
+ * v1.0.0) → normal release label + stable title. Build metadata (+...) never
+ * implies prerelease.
+ *
+ * Usage:
  *   node scripts/derive-publish-type.mjs --tag v0.2.0-beta.1 --field title
  *   --field is one of: prerelease (true|false), prerelease-flag
  *   (--prerelease or empty), title, notes, json.

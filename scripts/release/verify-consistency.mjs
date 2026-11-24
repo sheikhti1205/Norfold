@@ -44,8 +44,8 @@
  *                          1..2100000000; a pendingRelease carries exactly
  *                          `state.versionCode + 1`; every APK agrees with the
  *                          canonical code and version.
- *   4. APK identity        package id, signing channel and one signer across
- *                          every ABI.
+ *   4. APK identity        package id, the state's `signingChannel` and one
+ *                          signer across every ABI.
  *   5. catalogue agreement schemaVersion, per-release tag/version/versionCode
  *                          against the canonical pair, and per-artifact SDK
  *                          levels against apps/mobile/android/variables.gradle.
@@ -93,7 +93,6 @@ import { compare } from "./semver.mjs";
 import { MAX_VERSION_CODE } from "./state.mjs";
 
 export const PACKAGE_NAME = "com.findback.app";
-export const SIGNING_CHANNEL = "beta";
 export const CATALOGUE_SCHEMA_VERSION = 1;
 export const SENTRY_NAMESPACE = "findback-mobile";
 
@@ -193,6 +192,9 @@ function lockEntryVersion(lock, key, problems) {
  */
 function readStateRelease(stateDoc, problems) {
   const stateVersion = stateDoc === null ? null : requireString(stateDoc, "version", "release/state.json", problems);
+  const signingChannel = stateDoc === null
+    ? null
+    : requireString(stateDoc, "signingChannel", "release/state.json", problems);
   const stateVersionCode = stateDoc?.versionCode;
   const rawPending = stateDoc?.pendingRelease;
   const hasPending = rawPending !== null && rawPending !== undefined;
@@ -224,6 +226,7 @@ function readStateRelease(stateDoc, problems) {
   return {
     stateVersion,
     stateVersionCode,
+    signingChannel,
     hasPending,
     pending,
     pendingVersion,
@@ -389,12 +392,14 @@ export function verifyReleaseConsistency(options = {}) {
   const {
     stateVersion,
     stateVersionCode,
+    signingChannel,
     hasPending,
     pending,
     version: canonicalVersion,
     versionCode: canonicalVersionCode,
     codeSource,
   } = release;
+  const signingChannelSource = `${options.stateFile ?? DEFAULTS.state} signingChannel`;
 
   const checks = [];
   const addCheck = (status, name, detail) => {
@@ -530,8 +535,11 @@ export function verifyReleaseConsistency(options = {}) {
       if (row.packageName !== PACKAGE_NAME) {
         problems.push(`${row.abi}: packageName ${JSON.stringify(row.packageName)} is not ${PACKAGE_NAME}`);
       }
-      if (row.signingChannel !== undefined && row.signingChannel !== SIGNING_CHANNEL) {
-        problems.push(`${row.abi}: signingChannel ${JSON.stringify(row.signingChannel)} is not ${SIGNING_CHANNEL}`);
+      if (row.signingChannel !== undefined && row.signingChannel !== signingChannel) {
+        problems.push(
+          `${row.abi}: signingChannel ${JSON.stringify(row.signingChannel)} is not ` +
+            `${JSON.stringify(signingChannel)} (${signingChannelSource})`,
+        );
       }
       if (!signers.has(row.signerSha256)) signers.set(row.signerSha256, []);
       signers.get(row.signerSha256).push(row.abi);
@@ -551,10 +559,11 @@ export function verifyReleaseConsistency(options = {}) {
       const artifacts = Array.isArray(entry?.artifacts) ? entry.artifacts : [];
       if (artifacts.length > 0) channelDeclared = true;
       artifacts.forEach((artifact, artifactIndex) => {
-        if (artifact?.signingChannel !== SIGNING_CHANNEL) {
+        if (artifact?.signingChannel !== signingChannel) {
           problems.push(
             `catalogue releases[${releaseIndex}].artifacts[${artifactIndex}].signingChannel ` +
-              `${JSON.stringify(artifact?.signingChannel)} is not ${SIGNING_CHANNEL}`,
+              `${JSON.stringify(artifact?.signingChannel)} is not ${JSON.stringify(signingChannel)} ` +
+              `(${signingChannelSource})`,
           );
         }
       });
@@ -565,7 +574,7 @@ export function verifyReleaseConsistency(options = {}) {
       "APK identity",
       problems.length === 0
         ? `${facts.length} APK(s) ${PACKAGE_NAME}, signer ${signerSummary(signer)} across ${facts.length} ABI row(s)` +
-          (channelDeclared ? `, channel ${SIGNING_CHANNEL}` : ", signingChannel not declared by the supplied inputs")
+          (channelDeclared ? `, channel ${signingChannel}` : ", signingChannel not declared by the supplied inputs")
         : problems.join("; "),
     );
   }
