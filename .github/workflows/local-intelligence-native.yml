@@ -41,7 +41,9 @@ jobs:
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
       VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
     steps:
-      # Full history: versionCode derives from `git rev-list --count HEAD`.
+      # Full history for the build-context git SHA. versionCode is NOT derived
+      # from history: Gradle reads release/state.json (committed), so a shallow
+      # clone would still stamp the correct monotonic code.
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0

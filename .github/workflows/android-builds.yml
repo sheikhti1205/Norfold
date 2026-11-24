@@ -1,25 +1,28 @@
-# Signed Android publication after successful main CI. Release tags are exactly
-# v<app version>, never a rolling alias. Numbered tags and assets are immutable:
-# a changed source commit requires a new app version, not replacement binaries.
-# The public metadata bridge discovers numbered releases for in-app updates.
+# Candidate Android builds after successful main CI, plus manual dispatch.
+#
+# This workflow BUILDS signed candidate APKs and uploads them as Actions
+# artifacts. It NEVER creates a GitHub Release, uploads release metadata, edits
+# a release or pushes a tag: numbered releases are produced by release.yml from
+# a v<app version> tag. Keep this path build-only so the two workflows never
+# compete over the same release.
 #
 # One switch controls what this workflow does: repo variable
-# ANDROID_BUILD_MODE = none | build | publish (unset means publish).
-#   none    - no automatic builds
-#   build   - build on every successful main CI, upload a 7-day artifact, never
-#             create or touch a release
-#   publish - build only when this commit has something to publish, then publish
+# ANDROID_BUILD_MODE = none | build (unset means build).
+#   none  - no automatic builds
+#   build - build on every successful main CI, upload a 7-day artifact, never
+#           create or touch a release
+# The legacy value `publish` is still accepted but is treated as `build` with a
+# notice: it no longer publishes, because release.yml owns numbered releases.
 # A manual run may override the mode for that run alone.
 
 name: Android builds
 
 on:
-  # Manual testing only: signed Actions artifacts, never a Release/catalogue
-  # unless the run explicitly selects mode=publish.
+  # Manual candidate builds: signed Actions artifacts, never a Release.
   workflow_dispatch:
     inputs:
       mode:
-        description: "none, build (artifact only), publish, or auto (repo variable)"
+        description: "auto (repo variable), none, or build; publish is deprecated and builds an artifact"
         type: choice
         options: [auto, none, build, publish]
         default: auto
@@ -28,11 +31,12 @@ on:
     types: [completed]
     branches: [main]
 
+# Candidate builds only read the repository: no release or tag is created here.
 permissions:
-  contents: write
+  contents: read
 
-# One publisher at a time, never cancelled mid-upload: a half-replaced release
-# would leave a catalogue pointing at missing bytes.
+# One candidate build at a time, so a dispatched run and a CI follow-up do not
+# duplicate the 45-minute build for the same commit.
 concurrency:
   group: android-publish
   cancel-in-progress: false
@@ -54,11 +58,11 @@ env:
 
 jobs:
   guard:
-    # Numbered releases are immutable, so a commit whose version is already
-    # published has nothing to publish. Decide that cheaply here rather than
-    # starting a 45-minute build. The same job resolves the operator's mode, so
-    # a green workflow always states which lever produced the outcome.
-    name: Decide whether this commit needs a build or a release
+    # Releases live in release.yml, so this guard only resolves the operator's
+    # mode and refuses to build from a failed or foreign upstream run. It stays
+    # cheap so a 45-minute build never starts needlessly, and a green workflow
+    # always states which lever produced the outcome.
+    name: Decide whether this commit needs a candidate build
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
@@ -71,7 +75,6 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - id: check
         env:
-          GH_TOKEN: ${{ github.token }}
           INPUT_MODE: ${{ inputs.mode || 'auto' }}
           REPO_VARIABLE_MODE: ${{ vars.ANDROID_BUILD_MODE }}
           UPSTREAM_CONCLUSION: ${{ github.event.workflow_run.conclusion || 'success' }}
@@ -79,29 +82,17 @@ jobs:
           SAME_REPO: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.head_repository.full_name == github.repository }}
         run: |
           set -euo pipefail
-          SHA=$(git rev-parse HEAD)
-          VERSION=$(node -p "require('./apps/mobile/package.json').version")
-          TAG="v${VERSION}"
           if [ "$INPUT_MODE" != "auto" ]; then
             MODE="$INPUT_MODE"
           else
-            MODE="${REPO_VARIABLE_MODE:-publish}"
+            MODE="${REPO_VARIABLE_MODE:-build}"
           fi
-          TAG_SHA=""
-          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
-            TAG_SHA=$(git rev-parse "${TAG}^{commit}")
-          fi
-          RELEASE_SHA=""
-          if [ -z "$TAG_SHA" ]; then
-            RELEASE_SHA=$(gh release view "$TAG" --json targetCommitish --jq .targetCommitish 2>/dev/null || true)
-          fi
-          MODE="$MODE" HEAD_SHA="$SHA" TAG_SHA="$TAG_SHA" RELEASE_SHA="$RELEASE_SHA" \
-            node scripts/decide-android-build.mjs
+          MODE="$MODE" node scripts/decide-android-build.mjs
 
   apk:
     needs: guard
     if: needs.guard.outputs.decision != 'skip'
-    name: Signed APKs + catalogue
+    name: Signed candidate APKs
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -117,6 +108,32 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+
+      - name: Resolve canonical version code (release/state.json)
+        # versionCode is the monotonic release counter from release/state.json,
+        # never a commit count. resolve-release.mjs is the canonical resolver:
+        # exit 0 = a decision, 1 = blocking problems, 2 = cannot decide. A
+        # produced version_code is the next unreleased counter; when the resolver
+        # has no candidate change (nothing releasable, or this version is already
+        # tagged) it is empty, so the candidate builds at the monotonic floor,
+        # release/state.json's versionCode + 1 — exactly the value build.gradle
+        # uses when no override is set. The single value feeds both Gradle and
+        # the APK verifier below.
+        run: |
+          set -euo pipefail
+          status=0
+          node scripts/release/resolve-release.mjs --github-output "$RUNNER_TEMP/release.txt" || status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::error::resolve-release could not produce a decision (exit $status); see the reason printed above."
+            exit "$status"
+          fi
+          VERSION_CODE="$(grep -E '^version_code=' "$RUNNER_TEMP/release.txt" | tail -n1 | cut -d= -f2-)"
+          if [ -z "$VERSION_CODE" ]; then
+            VERSION_CODE="$(node -p "require('./release/state.json').versionCode + 1")"
+            echo "resolve-release reported no candidate version code (no releasable change, or already tagged); building the candidate at the monotonic floor ${VERSION_CODE}."
+          fi
+          echo "VERSION_CODE_OVERRIDE=${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "candidate versionCode: ${VERSION_CODE}"
 
       - name: Refuse to build without the server URL and publishable key
         # Hard rule: an APK that cannot reach the server is a build failure, not
@@ -145,27 +162,7 @@ jobs:
           echo "BUILD_SHA=$SHA" >> "$GITHUB_ENV"
           VERSION=$(node -p "require('./apps/mobile/package.json').version")
           node scripts/check-version-sync.mjs
-          TAG="v${VERSION}"
-          # Immutability only matters when this run will publish. A build-only
-          # run must be able to build a commit whose version is already released.
-          if [ "$DECISION" = publish ]; then
-          if gh release view "$TAG" --json isDraft,targetCommitish > "$RUNNER_TEMP/existing-release.json" 2>/dev/null; then
-            node -e 'const r=require(process.argv[1]); if(r.isDraft && r.targetCommitish!==process.env.BUILD_SHA) process.exit(1)' "$RUNNER_TEMP/existing-release.json" || {
-              echo '::error::A draft for this version belongs to another source commit.'; exit 1;
-            }
-          fi
-          if git rev-parse --verify -q "${TAG}^{commit}" >/dev/null; then
-            [ "$(git rev-parse "${TAG}^{commit}")" = "$SHA" ] || {
-              echo "::error::${TAG} already belongs to another commit. Advance the app version; numbered releases are immutable."
-              exit 1
-            }
-          fi
-          fi
-          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
           echo "VITE_SENTRY_RELEASE=findback-mobile@${VERSION}+${SHA:0:12}" >> "$GITHUB_ENV"
-        env:
-          GH_TOKEN: ${{ github.token }}
-          DECISION: ${{ needs.guard.outputs.decision }}
       - name: Fetch pinned USE asset
         run: node scripts/fetch-use-model.mjs
       - name: Build mobile web dist (Capacitor webDir)
@@ -199,6 +196,9 @@ jobs:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/findback-release.jks
       - name: Signed assembleRelease (per-ABI APKs)
+        # VERSION_CODE_OVERRIDE arrives via $GITHUB_ENV from the resolve step;
+        # build.gradle reads it from the environment (System.getenv), never a
+        # -P property, so no explicit pass is needed here.
         run: cd apps/mobile/android && ./gradlew --max-workers=2 :app:assembleRelease
         env:
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/findback-release.jks
@@ -210,17 +210,20 @@ jobs:
         run: rm -f "${{ runner.temp }}/findback-release.jks"
 
       - name: Verify EVERY APK variant (signature pin, identity, ABI, config)
+        # The expected versionCode is the same resolver-derived value passed to
+        # Gradle above; VERSION_CODE_OVERRIDE is in the environment from the
+        # resolve step. --expected-version-code wins over the env fallback.
         run: |
           export EXPECTED_VERSION_NAME="$(node -p "require('./apps/mobile/package.json').version")"
-          export EXPECTED_VERSION_CODE="$((100000 + $(git rev-list --count HEAD)))"
           bash scripts/verify-release-apks.sh \
             --apk-dir apps/mobile/android/app/build/outputs/apk/release \
+            --expected-version-code "$VERSION_CODE_OVERRIDE" \
             --facts-out "$RUNNER_TEMP/apk-facts.json"
         env:
           ANDROID_SIGNING_CERT_SHA256: ${{ secrets.ANDROID_SIGNING_CERT_SHA256 }}
           EXPECTED_APP_ID: com.findback.app
 
-      - name: Stage APKs under their published names
+      - name: Stage APKs under candidate filenames
         run: |
           set -euo pipefail
           SHA12="${BUILD_SHA:0:12}"
@@ -238,62 +241,6 @@ jobs:
             cp "$APK" "release-stage/Norfold-${SHA12}-${ABI}.apk"
           done
           ls -l release-stage/
-
-      - name: Write the update catalogue for exactly these bytes
-        if: needs.guard.outputs.decision == 'publish'
-        run: |
-          set -euo pipefail
-          VERSION="$(node -p "require('./apps/mobile/package.json').version")"
-          VCODE=$((100000 + $(git rev-list --count HEAD)))
-          PRIOR=()
-          PREVIOUS=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=20" --jq 'map(select(.draft == false and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$")) and any(.assets[]; .name == "catalogue.v1.json"))) | .[0].tag_name // empty')
-          if [ -n "$PREVIOUS" ]; then
-            gh release download "$PREVIOUS" --pattern catalogue.v1.json --output "$RUNNER_TEMP/prior-catalogue.json"
-            PRIOR=(--previous "$RUNNER_TEMP/prior-catalogue.json")
-          fi
-          node scripts/write-android-catalogue.mjs \
-            "${PRIOR[@]}" \
-            --facts "$RUNNER_TEMP/apk-facts.json" \
-            --apk-dir release-stage \
-            --repo "${GITHUB_REPOSITORY}" \
-            --tag "$RELEASE_TAG" \
-            --release-id "$RELEASE_TAG" \
-            --version-name "$VERSION" \
-            --version-code "$VCODE" \
-            --git-sha "${BUILD_SHA}" \
-            --published-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --summary "Signed Android build of Norfold ${VERSION}." \
-            --signing-channel beta \
-            --out release-stage/catalogue.v1.json
-          node -e 'const c=require("./release-stage/catalogue.v1.json"); console.log(`catalogue: ${c.releases[0].id} versionCode ${c.releases[0].versionCode} artifacts ${c.releases[0].artifacts.length}`)'
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Publish the numbered release
-        if: needs.guard.outputs.decision == 'publish'
-        # APKs first, catalogue last: a reader must never see a catalogue entry
-        # whose bytes are not uploaded yet. Never replace a numbered release.
-        run: |
-          set -euo pipefail
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            if [ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = false ]; then
-              echo "${RELEASE_TAG} is already published; preserving its immutable assets."
-              exit 0
-            fi
-          else
-            TYPE=()
-            case "$RELEASE_TAG" in *-*) TYPE=(--prerelease) ;; esac
-            gh release create "$RELEASE_TAG" --draft "${TYPE[@]}" --target "$BUILD_SHA" \
-              --title "Norfold $RELEASE_TAG" --notes "Signed Android build. Changes are included in the in-app update history."
-          fi
-          # Replacement is permitted only inside this unpublished draft, so a
-          # failed upload can resume. Published versioned bytes never change.
-          gh release upload "$RELEASE_TAG" release-stage/Norfold-*.apk --clobber
-          gh release upload "$RELEASE_TAG" release-stage/catalogue.v1.json --clobber
-          gh release edit "$RELEASE_TAG" --draft=false
-          gh release view "$RELEASE_TAG" --json assets --jq '.assets[] | "published \(.name) \(.size) bytes"'
-        env:
-          GH_TOKEN: ${{ github.token }}
 
       - name: Preserve the signed build as an artifact
         if: needs.guard.outputs.decision == 'build'

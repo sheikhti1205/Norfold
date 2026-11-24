@@ -41,16 +41,23 @@ jobs:
           python scripts/generate-brand-assets.py --check
           python scripts/brand-assets.test.py
       - name: Commit-message convention over new commits
-        # Prospective only: merge/revert/generated commits pass gracefully;
-        # an unresolvable range (e.g. all-zero `before` on branch creation)
-        # falls back to HEAD instead of failing the job.
+        # Prospective only: merge/revert/generated commits pass gracefully.
+        # The checker separates an unresolvable range (exit 3) from a real
+        # violation (exit 1); `--strict-range` makes that distinction explicit,
+        # so the single-commit fallback runs ONLY when the range cannot resolve
+        # and a genuine violation is never masked by a valid last commit.
         run: |
           if [[ -n "${{ github.base_ref }}" ]]; then
             git fetch origin "${{ github.base_ref }}" --depth=50 2>/dev/null || true
             node scripts/check-commit-messages.mjs --range "origin/${{ github.base_ref }}...HEAD"
           elif [[ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" && -n "${{ github.event.before }}" ]]; then
-            node scripts/check-commit-messages.mjs --range "${{ github.event.before }}...${{ github.sha }}" || \
+            status=0
+            node scripts/check-commit-messages.mjs --strict-range --range "${{ github.event.before }}...${{ github.sha }}" || status=$?
+            if [ "$status" -eq 3 ]; then
               node scripts/check-commit-messages.mjs --count 1
+            elif [ "$status" -ne 0 ]; then
+              exit "$status"
+            fi
           else
             node scripts/check-commit-messages.mjs --count 1
           fi
@@ -94,10 +101,13 @@ jobs:
       - name: Release-infra script tests (signing, ABI, manifest, publish type)
         # Gates the release-script regressions (fingerprint parse order, ABI
         # completeness, full-SHA provenance, SemVer publish type) so an
-        # unverified release path can never reach a tag. Also the commit-message
-        # checker (range checks). Local tools are covered by
-        # behavioral mobile tests plus the retained native/package gate below.
-        run: node --test scripts/verify-release-apks.test.mjs scripts/generate-release-manifest.test.mjs scripts/derive-publish-type.test.mjs scripts/check-commit-messages.test.mjs scripts/beta-claims.test.mjs scripts/audit-gate.test.mjs scripts/check-security-baseline.test.mjs scripts/check-map-provider.test.mjs scripts/check-map-config.test.mjs scripts/legacy-api-retirement.test.mjs scripts/ci-test-runtime.test.mjs scripts/public-screenshots.test.mjs scripts/decide-android-build.test.mjs scripts/android-chat-candidate.test.mjs supabase/tests/delete_account_bucket_coverage.test.mjs
+        # unverified release path can never reach a tag, plus the release
+        # pipeline suites (classification, next version, state, consistency,
+        # resolver and the catalogue handler) so a regression in release.yml's
+        # inputs fails CI. Also the commit-message checker (range checks). Local
+        # tools are covered by behavioral mobile tests plus the retained
+        # native/package gate below.
+        run: node --test scripts/verify-release-apks.test.mjs scripts/generate-release-manifest.test.mjs scripts/derive-publish-type.test.mjs scripts/check-commit-messages.test.mjs scripts/beta-claims.test.mjs scripts/audit-gate.test.mjs scripts/check-security-baseline.test.mjs scripts/check-map-provider.test.mjs scripts/check-map-config.test.mjs scripts/legacy-api-retirement.test.mjs scripts/ci-test-runtime.test.mjs scripts/public-screenshots.test.mjs scripts/decide-android-build.test.mjs scripts/android-chat-candidate.test.mjs scripts/release/semver.test.mjs scripts/release/state.test.mjs scripts/release/classify.test.mjs scripts/release/next-version.test.mjs scripts/release/resolve-release.test.mjs scripts/release/sync-version.test.mjs scripts/release/verify-consistency.test.mjs apps/share-preview/android-updates/index.test.cjs supabase/tests/delete_account_bucket_coverage.test.mjs
       - name: Sharing and server credential config tests
         run: node --test scripts/check-share-config.test.mjs scripts/share-preview.test.mjs scripts/link-preview.test.mjs scripts/link-preview-metadata.test.mjs scripts/prepare-share-preview.test.mjs scripts/check-mobile-build-config.test.mjs scripts/sync-fcm-secrets.test.mjs scripts/check-google-config.test.mjs scripts/check-signeddev-config.test.mjs scripts/check-web-association.test.mjs scripts/check-push-config.test.mjs scripts/deploy-required-edge-functions.test.mjs scripts/check-edge-parity.test.mjs scripts/check-sentry-release-parity.test.mjs scripts/check-edge-cors.test.mjs
       - name: Deployed identity and auth email template tests
@@ -280,8 +290,9 @@ jobs:
       # Public identifier; empty keeps Google sign-in fail-closed in the build.
       GOOGLE_WEB_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID }}
     steps:
-      # Full history: versionCode derives from `git rev-list --count HEAD`;
-      # a depth-1 checkout would silently yield count=1 (see build.gradle guard).
+      # Full history for the provenance steps; versionCode itself now resolves
+      # from release/state.json (build.gradle guard), never from a commit count,
+      # so no clone-depth arithmetic is involved.
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0

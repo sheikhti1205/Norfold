@@ -2,21 +2,20 @@
 /**
  * TDD tests for scripts/decide-android-build.mjs.
  *
- * The switch exists so one readable value controls Android work: nothing,
- * build-only, or build-and-publish. These tests pin the matrix, especially the
- * cases that must NOT publish.
+ * The switch exists so one readable value controls Android work: nothing, or
+ * build-and-upload-artifacts. Numbered releases are produced by release.yml, so
+ * no mode may decide to publish. These tests pin the matrix, especially that the
+ * legacy `publish` value never publishes.
  *
  * Run: `node --test scripts/decide-android-build.test.mjs`
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { MODES, DEFAULT_MODE, normalizeMode, decideAndroidBuild, formatDecision } from "./decide-android-build.mjs";
-
-const HEAD = "a".repeat(40);
-const OTHER = "b".repeat(40);
+import { MODES, DEFAULT_MODE, DEPRECATED_MODES, normalizeMode, decideAndroidBuild, formatDecision } from "./decide-android-build.mjs";
 
 describe("normalizeMode", () => {
-  it("accepts the three documented modes", () => {
+  it("accepts only the documented modes", () => {
+    assert.deepEqual(MODES, ["none", "build"]);
     for (const mode of MODES) assert.equal(normalizeMode(mode).mode, mode);
   });
 
@@ -25,9 +24,18 @@ describe("normalizeMode", () => {
   });
 
   it("treats empty and auto as the default", () => {
+    assert.equal(DEFAULT_MODE, "build");
     assert.equal(normalizeMode("").mode, DEFAULT_MODE);
     assert.equal(normalizeMode("auto").mode, DEFAULT_MODE);
     assert.equal(normalizeMode(undefined).mode, DEFAULT_MODE);
+  });
+
+  it("demotes the deprecated publish mode to build with a notice", () => {
+    assert.equal(DEPRECATED_MODES.publish, "build");
+    const result = normalizeMode("publish");
+    assert.equal(result.mode, "build");
+    assert.match(result.warning, /deprecated/);
+    assert.match(result.warning, /release\.yml/);
   });
 
   it("falls back with a warning instead of silently doing nothing", () => {
@@ -39,56 +47,39 @@ describe("normalizeMode", () => {
 
 describe("decideAndroidBuild: mode none", () => {
   it("skips a successful push", () => {
-    const result = decideAndroidBuild({ mode: "none", eventName: "workflow_run", headSha: HEAD });
+    const result = decideAndroidBuild({ mode: "none", eventName: "workflow_run" });
     assert.equal(result.decision, "skip");
     assert.match(result.reason, /mode is none/);
   });
 });
 
 describe("decideAndroidBuild: mode build", () => {
-  it("builds without publishing even when the version is already released", () => {
-    const result = decideAndroidBuild({
-      mode: "build", eventName: "workflow_run", headSha: HEAD, tagSha: HEAD,
-    });
+  it("builds without any release step", () => {
+    const result = decideAndroidBuild({ mode: "build", eventName: "workflow_run" });
     assert.equal(result.decision, "build");
+    assert.notEqual(result.decision, "publish");
   });
 
   it("builds on a dispatch", () => {
-    const result = decideAndroidBuild({ mode: "build", eventName: "workflow_dispatch", headSha: HEAD });
+    const result = decideAndroidBuild({ mode: "build", eventName: "workflow_dispatch" });
     assert.equal(result.decision, "build");
   });
 });
 
-describe("decideAndroidBuild: mode publish", () => {
-  it("publishes when the version has no tag yet", () => {
-    const result = decideAndroidBuild({ mode: "publish", headSha: HEAD, tagSha: null, releaseSha: null });
-    assert.equal(result.decision, "publish");
-  });
-
-  it("skips when this exact commit is already published", () => {
-    const result = decideAndroidBuild({ mode: "publish", headSha: HEAD, tagSha: HEAD });
-    assert.equal(result.decision, "skip");
-    assert.match(result.reason, /already published from this exact commit/);
-  });
-
-  it("skips when the version belongs to another commit", () => {
-    const result = decideAndroidBuild({ mode: "publish", headSha: HEAD, tagSha: OTHER });
-    assert.equal(result.decision, "skip");
-    assert.match(result.reason, /bump the app version/);
-  });
-
-  it("skips when an existing release targets another commit", () => {
-    const result = decideAndroidBuild({ mode: "publish", headSha: HEAD, tagSha: null, releaseSha: OTHER });
-    assert.equal(result.decision, "skip");
-    assert.match(result.reason, /bump the app version/);
+describe("decideAndroidBuild: deprecated publish mode", () => {
+  it("behaves exactly like build and never publishes", () => {
+    const result = decideAndroidBuild({ mode: "publish", eventName: "workflow_run" });
+    assert.equal(result.decision, "build");
+    assert.notEqual(result.decision, "publish");
+    assert.ok(result.warnings.some((warning) => /deprecated/.test(warning)));
   });
 });
 
 describe("decideAndroidBuild: upstream gates", () => {
   it("skips a failed upstream CI run in every mode", () => {
-    for (const mode of MODES) {
+    for (const mode of [...MODES, "publish"]) {
       const result = decideAndroidBuild({
-        mode, eventName: "workflow_run", workflowConclusion: "failure", headSha: HEAD,
+        mode, eventName: "workflow_run", workflowConclusion: "failure",
       });
       assert.equal(result.decision, "skip", mode);
     }
@@ -96,23 +87,23 @@ describe("decideAndroidBuild: upstream gates", () => {
 
   it("skips a non-push upstream event", () => {
     const result = decideAndroidBuild({
-      mode: "build", eventName: "workflow_run", workflowEvent: "pull_request", headSha: HEAD,
+      mode: "build", eventName: "workflow_run", workflowEvent: "pull_request",
     });
     assert.equal(result.decision, "skip");
   });
 
   it("skips a fork run", () => {
     const result = decideAndroidBuild({
-      mode: "publish", eventName: "workflow_run", sameRepo: false, headSha: HEAD,
+      mode: "build", eventName: "workflow_run", sameRepo: false,
     });
     assert.equal(result.decision, "skip");
   });
 
   it("does not apply upstream gates to a dispatch", () => {
     const result = decideAndroidBuild({
-      mode: "publish", eventName: "workflow_dispatch", workflowConclusion: "failure", headSha: HEAD,
+      mode: "build", eventName: "workflow_dispatch", workflowConclusion: "failure",
     });
-    assert.equal(result.decision, "publish");
+    assert.equal(result.decision, "build");
   });
 });
 

@@ -6,35 +6,54 @@
  *   none    - never build on a push; the workflow does nothing automatically
  *   build   - build on every successful main CI run, upload a 7-day artifact,
  *             never create or touch a release
- *   publish - build only when this commit has something to publish, then
- *             create/refresh the numbered release (immutable once published)
  *
- * Unset or unrecognised falls back to `publish`, which is the behaviour the
- * workflow had before this switch existed.
+ * Numbered releases are produced only by the tag-driven release.yml, so no mode
+ * here publishes. The legacy value `publish` is still accepted but is treated as
+ * `build` with a deprecation notice: it keeps the build operators already had and
+ * simply drops the release step.
+ *
+ * Unset or unrecognised falls back to `build`, the behaviour the former `publish`
+ * default has now that releases live in release.yml.
  *
  * A `workflow_dispatch` run may override the mode for that one run; `auto`
  * means "use the repo variable".
  *
- * Why a decide step at all: numbered releases are immutable, so a commit whose
- * version is already published has nothing to publish. Deciding that in a
- * 5-minute guard job avoids a 45-minute build that must then throw its work
- * away. Modes `build` and `none` exist so the guard is not the only lever.
+ * Why a decide step at all: an upstream CI run that failed, or was not a push to
+ * this repository, must never start a 45-minute build. The guard makes that
+ * cheap, and `none` lets an operator disable automatic builds without editing
+ * the workflow.
  *
  * Pure and injectable: importing this module runs nothing.
  */
 import { appendFileSync } from "node:fs";
 
-export const MODES = ["none", "build", "publish"];
-export const DEFAULT_MODE = "publish";
+export const MODES = ["none", "build"];
+export const DEFAULT_MODE = "build";
+
+/** Legacy values still accepted from the repo variable, and what they mean now. */
+export const DEPRECATED_MODES = { publish: "build" };
 
 /**
- * Normalise a mode string. Unknown or empty values fall back to `publish` and
- * say so, because silently doing nothing is the one outcome an operator cannot
- * see from a green workflow.
+ * Normalise a mode string.
+ *
+ * `none` and `build` pass through. The deprecated `publish` becomes `build`
+ * with a warning, because a numbered release is release.yml's job now. Empty,
+ * `auto` and unrecognised values fall back to the default; only an unrecognised
+ * value is worth a warning, because a deliberately absent value is not a typo.
  */
 export function normalizeMode(value, { fallback = DEFAULT_MODE } = {}) {
   const raw = String(value ?? "").trim().toLowerCase();
   if (!raw || raw === "auto") return { mode: fallback, warning: null };
+  if (Object.prototype.hasOwnProperty.call(DEPRECATED_MODES, raw)) {
+    const mode = DEPRECATED_MODES[raw];
+    return {
+      mode,
+      warning:
+        `build mode "${raw}" is deprecated and now behaves as "${mode}": numbered ` +
+        `releases are produced by release.yml, so change ANDROID_BUILD_MODE to ` +
+        `"${mode}" (or "none")`,
+    };
+  }
   if (MODES.includes(raw)) return { mode: raw, warning: null };
   return { mode: fallback, warning: `unknown build mode "${raw}"; using "${fallback}"` };
 }
@@ -43,16 +62,13 @@ export function normalizeMode(value, { fallback = DEFAULT_MODE } = {}) {
  * Decide what this run should do.
  *
  * Inputs:
- *   mode               none | build | publish
+ *   mode               none | build | publish (deprecated alias of build)
  *   eventName          workflow_run | workflow_dispatch | ...
  *   workflowConclusion upstream CI conclusion (workflow_run only)
  *   workflowEvent      upstream trigger, e.g. "push" (workflow_run only)
  *   sameRepo           upstream run is from this repository
- *   headSha            commit this run would build
- *   tagSha             commit the version tag points at, or null
- *   releaseSha         commit the existing release (if any) targets, or null
  *
- * Returns { decision: "skip" | "build" | "publish", reason }.
+ * Returns { decision: "skip" | "build", reason, warnings }.
  */
 export function decideAndroidBuild({
   mode = DEFAULT_MODE,
@@ -60,53 +76,28 @@ export function decideAndroidBuild({
   workflowConclusion = "success",
   workflowEvent = "push",
   sameRepo = true,
-  headSha = "",
-  tagSha = null,
-  releaseSha = null,
 } = {}) {
   const { mode: resolved, warning } = normalizeMode(mode);
-  const asWarning = warning ? [warning] : [];
+  const warnings = warning ? [warning] : [];
 
   // An upstream CI run that failed, or was not a push to this repository, is
   // never a build trigger regardless of mode.
   if (eventName === "workflow_run") {
     if (workflowConclusion !== "success") {
-      return { decision: "skip", reason: `upstream CI concluded ${workflowConclusion}`, warnings: asWarning };
+      return { decision: "skip", reason: `upstream CI concluded ${workflowConclusion}`, warnings };
     }
     if (workflowEvent !== "push") {
-      return { decision: "skip", reason: `upstream event was ${workflowEvent}, not push`, warnings: asWarning };
+      return { decision: "skip", reason: `upstream event was ${workflowEvent}, not push`, warnings };
     }
     if (!sameRepo) {
-      return { decision: "skip", reason: "upstream run is not from this repository", warnings: asWarning };
+      return { decision: "skip", reason: "upstream run is not from this repository", warnings };
     }
   }
 
   if (resolved === "none") {
-    return { decision: "skip", reason: "build mode is none", warnings: asWarning };
+    return { decision: "skip", reason: "build mode is none", warnings };
   }
-  if (resolved === "build") {
-    return { decision: "build", reason: "build mode is build; artifacts only, no release", warnings: asWarning };
-  }
-
-  // publish
-  if (tagSha && headSha && tagSha === headSha) {
-    return { decision: "skip", reason: "this version is already published from this exact commit", warnings: asWarning };
-  }
-  if (tagSha && tagSha !== headSha) {
-    return {
-      decision: "skip",
-      reason: `this version is already published from ${tagSha.slice(0, 12)}; bump the app version to publish ${headSha.slice(0, 12)}`,
-      warnings: asWarning,
-    };
-  }
-  if (releaseSha && headSha && releaseSha !== headSha) {
-    return {
-      decision: "skip",
-      reason: `the existing release targets ${releaseSha.slice(0, 12)}; bump the app version`,
-      warnings: asWarning,
-    };
-  }
-  return { decision: "publish", reason: "no release for this version yet", warnings: asWarning };
+  return { decision: "build", reason: "build mode; signed artifacts only, never a release", warnings };
 }
 
 /** Human-readable one-liner for the job log. */
@@ -122,9 +113,6 @@ function main() {
     workflowConclusion: env.UPSTREAM_CONCLUSION ?? "success",
     workflowEvent: env.UPSTREAM_EVENT ?? "push",
     sameRepo: (env.SAME_REPO ?? "true") === "true",
-    headSha: env.HEAD_SHA ?? "",
-    tagSha: env.TAG_SHA || null,
-    releaseSha: env.RELEASE_SHA || null,
   });
   for (const warning of result.warnings ?? []) console.log(`::warning::${warning}`);
   // The mode is echoed so a run log shows which lever produced this outcome.
