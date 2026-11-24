@@ -7,6 +7,10 @@
  * changes are declared with `!` or a `BREAKING CHANGE:` / `BREAKING-CHANGE:`
  * footer.
  *
+ * Conventional Commits does not define a closed type list: a type is any
+ * lowercase noun (`[a-z][a-z0-9-]*`). `feat` and `fix` are examples, not the
+ * whole vocabulary.
+ *
  * Exit codes:
  *   0  every checked message passes (including a range with no commits)
  *   1  at least one real convention violation
@@ -28,21 +32,6 @@ export const EXIT_OK = 0;
 export const EXIT_VIOLATION = 1;
 export const EXIT_UNRESOLVABLE = 3;
 
-const TYPES = [
-  "feat",
-  "fix",
-  "perf",
-  "refactor",
-  "docs",
-  "test",
-  "build",
-  "ci",
-  "chore",
-  "style",
-  "revert",
-];
-const TYPE_HELP = TYPES.join(", ");
-
 const MAX_SUBJECT_LENGTH = 72;
 const SEP = "\x1f";
 const END = "\x1e";
@@ -55,13 +44,38 @@ const MERGE_SUBJECT_RE = /^Merge (?:pull request|branch|remote-tracking branch)\
 const REVERT_SUBJECT_RE = /^Revert ".+"$/;
 const RELEASE_SUBJECT_RE = /^(?:chore\(release\): v\d+\.\d+\.\d+|Bump\b)/;
 
+// Conventional Commits defines no closed type list: a type is a lowercase
+// noun. Letters, digits and hyphens are allowed after the first letter.
+const TYPE_RE = /^[a-z][a-z0-9-]*$/;
+
 // `type(scope)!: description`; the scope is a comma-separated list of
 // lower-case path-ish segments and may never contain whitespace.
-const SUBJECT_RE = /^([a-z]+)(?:\(([a-z0-9._/-]+(?:,[a-z0-9._/-]+)*)\))?(!)?: (.*)$/;
-const EMPTY_DESCRIPTION_RE = /^([a-z]+)(?:\([a-z0-9._/-]+(?:,[a-z0-9._/-]+)*\))?!?:$/;
+const SUBJECT_RE = /^([a-z][a-z0-9-]*)(?:\(([a-z0-9._/-]+(?:,[a-z0-9._/-]+)*)\))?(!)?: (.*)$/;
+const EMPTY_DESCRIPTION_RE = /^([a-z][a-z0-9-]*)(?:\([a-z0-9._/-]+(?:,[a-z0-9._/-]+)*\))?!?:$/;
 
 /** Thrown when the requested range or revision cannot be resolved. */
 export class RangeResolutionError extends Error {}
+
+/** True when `type` satisfies the Conventional Commits type grammar. */
+export function isValidType(type) {
+  return typeof type === "string" && TYPE_RE.test(type);
+}
+
+/**
+ * Parse `type(scope)!: description`. Returns
+ * `{ type, scope, breaking, description }` with `scope` null when absent, or
+ * null when the subject does not match the grammar.
+ */
+export function parseSubject(subject) {
+  if (typeof subject !== "string") return null;
+  const text = subject.trim();
+  if (!text) return null;
+  const match = SUBJECT_RE.exec(text);
+  if (!match) return null;
+  const [, type, scope, bang, description] = match;
+  if (!isValidType(type)) return null;
+  return { type, scope: scope ?? null, breaking: Boolean(bang), description };
+}
 
 /**
  * Classify a subject line. Returns "skip" for merge, generated revert and
@@ -98,12 +112,11 @@ export function checkMessage(subject, body = "") {
   if (EMPTY_DESCRIPTION_RE.test(trimmed)) {
     errors.push("description is empty");
   } else {
-    const shape = SUBJECT_RE.exec(trimmed);
-    if (!shape) {
-      errors.push('subject must be "type(scope)!: description" with a known type');
+    const parsed = parseSubject(trimmed);
+    if (!parsed) {
+      errors.push('subject must be "type(scope)!: description" with a lowercase type');
     } else {
-      const [, type, , , description] = shape;
-      if (!TYPES.includes(type)) errors.push(`type "${type}" is not one of ${TYPE_HELP}`);
+      const { description } = parsed;
       if (description.length === 0) {
         errors.push("description is empty");
       } else if (description.startsWith(" ")) {

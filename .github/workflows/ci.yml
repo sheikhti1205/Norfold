@@ -61,6 +61,11 @@ jobs:
           else
             node scripts/check-commit-messages.mjs --count 1
           fi
+      - name: Set-up range for commit messages in the next release
+        run: |
+          base=$(node -p "require('./release/state.json').classificationBase || ''")
+          if [ -z "$base" ]; then echo "no classificationBase in release/state.json"; exit 1; fi
+          node scripts/check-commit-messages.mjs --range "${base}..HEAD"
 
   check:
     name: Lint, typecheck & test

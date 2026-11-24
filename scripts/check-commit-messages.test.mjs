@@ -16,9 +16,12 @@ import {
   classifyCommit,
   encodeLog,
   evaluate,
+  isValidType,
+  parseSubject,
 } from "./check-commit-messages.mjs";
 
-const TYPES = [
+// Examples only: Conventional Commits has no closed type list.
+const CONVENTIONAL_EXAMPLE_TYPES = [
   "feat",
   "fix",
   "perf",
@@ -30,6 +33,31 @@ const TYPES = [
   "chore",
   "style",
   "revert",
+];
+
+// Real subjects from the a1f5cc61..HEAD release range. A fixed type list
+// rejects almost all of them, so the release gate would never start.
+const HISTORICAL_SUBJECTS = [
+  "dock: one vertical rail, rest / open / closed",
+  "share-preview: add authenticated link metadata endpoint",
+  "release-config: match the packaged Google client id by shape",
+  "messaging: parse copied hosts instead of matching substrings",
+  "supabase: escape the signature before building its pattern",
+  "media: route previews through one scheme allowlist",
+  "settings: pin the icon gutter and cap the shell search overlay",
+  "notifications: declare the dialog popup and cap it for real",
+  "myreports: keep the header count equal to the filtered list",
+  "feed: focus the comment field from the Comments action",
+  "editor: keep the expanded writing column readable",
+  "dialogs: cap height, narrow the report form, use in-app confirms",
+  "popovers: cap the account, category and filter menus",
+  "android: export chat files through the native bridge",
+  "chat: honour the initiating link-preview abort",
+  "tests: pin the account menu cap where it actually binds",
+  "ui: give layered popovers one real viewport cap",
+  "search: offer Clear filters beside Filters instead of in the sheet",
+  "fix(lint): declare console and drop a dead binding",
+  "chore(release): adopt Conventional Commits for version impact",
 ];
 
 function recorder() {
@@ -75,7 +103,7 @@ describe("classifyCommit", () => {
 
 describe("checkMessage subject form", () => {
   it("accepts every conventional type", () => {
-    for (const type of TYPES) {
+    for (const type of CONVENTIONAL_EXAMPLE_TYPES) {
       const result = checkMessage(`${type}: do the thing`);
       assert.equal(result.ok, true, type);
       assert.equal(result.skipped, false, type);
@@ -100,14 +128,15 @@ describe("checkMessage subject form", () => {
   });
 
   it("rejects unknown types", () => {
-    assert.equal(checkMessage("update: refresh dependencies").ok, false);
     assert.equal(checkMessage("WIP: half done").ok, false);
     assert.equal(checkMessage("Add thing").ok, false);
+    assert.equal(checkMessage("share_preview: add endpoint").ok, false);
   });
 
   it("rejects an empty description", () => {
     assert.equal(checkMessage("fix:").ok, false);
     assert.equal(checkMessage("fix: ").ok, false);
+    assert.equal(checkMessage("dock: ").ok, false);
   });
 
   it("rejects a whitespace-only description", () => {
@@ -138,6 +167,129 @@ describe("checkMessage subject form", () => {
     const result = checkMessage("feat: replace the transport", "BREAKING CHANGE:");
     assert.equal(result.ok, false);
     assert.match(result.errors.join(";"), /must describe the break/);
+  });
+});
+
+describe("open type grammar", () => {
+  it("accepts repository-specific types from history", () => {
+    assert.equal(checkMessage("dock: one vertical rail").ok, true);
+    assert.equal(checkMessage("share-preview: add endpoint").ok, true);
+    assert.equal(checkMessage("release-config: match the client id").ok, true);
+  });
+
+  it("rejects types outside the grammar", () => {
+    assert.equal(checkMessage("Dock: capitalised type").ok, false);
+    assert.equal(checkMessage("share_preview: underscored type").ok, false);
+    assert.equal(checkMessage(": no type").ok, false);
+    assert.equal(checkMessage("dock no colon").ok, false);
+    assert.equal(checkMessage("dock: ").ok, false);
+  });
+
+  it("accepts a 72-character subject and rejects 73", () => {
+    const atLimit = `dock: ${"x".repeat(66)}`;
+    assert.equal(atLimit.length, 72);
+    assert.equal(checkMessage(atLimit).ok, true);
+
+    const overLimit = `dock: ${"x".repeat(67)}`;
+    assert.equal(overLimit.length, 73);
+    const result = checkMessage(overLimit);
+    assert.equal(result.ok, false);
+    assert.match(result.errors.join(";"), /limit is 72/);
+  });
+
+  it("treats breaking markers on arbitrary types as breaking", () => {
+    assert.deepEqual(parseSubject("dock!: one rail"), {
+      type: "dock",
+      scope: null,
+      breaking: true,
+      description: "one rail",
+    });
+    assert.deepEqual(parseSubject("dock(android)!: one rail"), {
+      type: "dock",
+      scope: "android",
+      breaking: true,
+      description: "one rail",
+    });
+    assert.equal(checkMessage("dock!: one rail").ok, true);
+    assert.equal(checkMessage("dock(android)!: one rail").ok, true);
+  });
+
+  it("recognises a BREAKING CHANGE footer on an arbitrary type", () => {
+    const result = checkMessage("dock: one rail", "BREAKING CHANGE: the old rail is removed");
+    assert.equal(result.ok, true);
+    assert.equal(
+      checkMessage("dock: one rail", "BREAKING CHANGE:").ok,
+      false,
+    );
+  });
+
+  it("accepts the historical release-range subjects", () => {
+    assert.ok(HISTORICAL_SUBJECTS.length >= 12);
+    for (const subject of HISTORICAL_SUBJECTS) {
+      const result = checkMessage(subject);
+      assert.equal(result.ok, true, subject);
+      assert.equal(result.skipped, false, subject);
+    }
+  });
+
+  it("accepts a 91-commit-shaped range built from history", () => {
+    const { io, out } = recorder();
+    const commits = HISTORICAL_SUBJECTS.map((subject, index) => ({
+      sha: `hist${String(index).padStart(3, "0")}`,
+      subject,
+    }));
+    const code = evaluate(["--range", "a1f5cc61...HEAD"], fixedGit(encodeLog(commits)), io);
+    assert.equal(code, EXIT_OK);
+    assert.match(
+      out.join("\n"),
+      new RegExp(`${commits.length} checked, 0 skipped, ${commits.length} total`),
+    );
+  });
+
+  it("still skips generated reverts and merges in a historical range", () => {
+    const revert = checkMessage('Revert "dock: one vertical rail"', "");
+    assert.equal(revert.ok, true);
+    assert.equal(revert.skipped, true);
+
+    const merge = checkMessage("Merge pull request #91 from norfold/dock", "");
+    assert.equal(merge.ok, true);
+    assert.equal(merge.skipped, true);
+  });
+});
+
+describe("isValidType and parseSubject", () => {
+  it("validates the type grammar only", () => {
+    for (const type of ["feat", "dock", "share-preview", "release-config", "ui", "v2"]) {
+      assert.equal(isValidType(type), true, type);
+    }
+    for (const type of ["Dock", "share_preview", "", "1dock", "dock rail", "dock!"]) {
+      assert.equal(isValidType(type), false, type);
+    }
+    assert.equal(isValidType(undefined), false);
+  });
+
+  it("parses type, optional scope, breaking marker and description", () => {
+    assert.deepEqual(parseSubject("feat: add reactions"), {
+      type: "feat",
+      scope: null,
+      breaking: false,
+      description: "add reactions",
+    });
+    assert.deepEqual(parseSubject("fix(api,client)!: align retries"), {
+      type: "fix",
+      scope: "api,client",
+      breaking: true,
+      description: "align retries",
+    });
+    assert.deepEqual(parseSubject("share-preview: add endpoint"), {
+      type: "share-preview",
+      scope: null,
+      breaking: false,
+      description: "add endpoint",
+    });
+    assert.equal(parseSubject("Dock: one rail"), null);
+    assert.equal(parseSubject(": no type"), null);
+    assert.equal(parseSubject("dock no colon"), null);
   });
 });
 
@@ -191,7 +343,7 @@ describe("evaluate range and exit codes", () => {
     const git = fixedGit(
       encodeLog([
         { sha: "aaaaaaa1", subject: "feat: add a thing" },
-        { sha: "bbbbbbb2", subject: "update: nope" },
+        { sha: "bbbbbbb2", subject: "Dock: nope" },
         { sha: "ccccccc3", subject: "fix: repair the thing" },
       ]),
     );
@@ -199,7 +351,7 @@ describe("evaluate range and exit codes", () => {
     assert.equal(code, EXIT_VIOLATION);
     const text = err.join("\n");
     assert.match(text, /bbbbbbb/);
-    assert.match(text, /update: nope/);
+    assert.match(text, /Dock: nope/);
     assert.match(text, /3 checked, 0 skipped, 3 total/);
   });
 
@@ -260,13 +412,13 @@ describe("evaluate range and exit codes", () => {
     const git = (args) => {
       calls += 1;
       if (args.some((arg) => arg.includes("..."))) throw new Error("unknown revision");
-      return encodeLog([{ sha: "badc0de9", subject: "update: nope" }]);
+      return encodeLog([{ sha: "badc0de9", subject: "Dock: nope" }]);
     };
     const code = evaluate(["--range", "deadbeef...HEAD"], git, io);
     assert.equal(code, EXIT_VIOLATION);
     assert.notEqual(code, EXIT_OK);
     assert.ok(calls >= 2);
     assert.match(err.join("\n"), /badc0de/);
-    assert.match(err.join("\n"), /update: nope/);
+    assert.match(err.join("\n"), /Dock: nope/);
   });
 });

@@ -10,9 +10,15 @@ applies to new commits; CI checks the commits in a pull request or push range.
 type(scope)!: description
 ```
 
-- `type` is one of:
+- `type` is an open vocabulary, not a fixed list. Conventional Commits does not
+  define a closed set of types: a type is a lowercase noun that starts with a
+  letter and may contain letters, digits and hyphens, matching
+  `[a-z][a-z0-9-]*`. Repository-specific types such as `dock`,
+  `share-preview`, `release-config`, `supabase`, or `ui` are valid.
 
-  | Type       | Meaning                                              |
+- The following are common examples, not an exhaustive list:
+
+  | Type       | Typical meaning                                      |
   | ---------- | ---------------------------------------------------- |
   | `feat`     | a user-visible feature                               |
   | `fix`      | a user-visible bug fix                               |
