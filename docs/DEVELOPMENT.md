@@ -106,6 +106,3 @@ CI; they are tracked as external gates and are never claimed from a host test.
 
 - Product/status: [README](../README.md), [ROADMAP](../ROADMAP.md)
 - Architecture: [ARCHITECTURE.md](ARCHITECTURE.md)
-- Version history: [history/VERSION_HISTORY.md](history/VERSION_HISTORY.md)
-- Legacy API retirement: [LEGACY_API_RETIREMENT.md](LEGACY_API_RETIREMENT.md)
-- Course-era material: [course/](course/)

@@ -113,9 +113,8 @@ node scripts/device-harness/write-manifest.mjs --dir <evidence-dir>  # re-run af
 override defaults. `captures.sh` stubs print the manual matrix steps, run the
 automatable captures, and point at `NOTES.md` — fill those tables on device
 day. Record retained Needle extraction, USE matching and cloud Chat timings
-separately. Retired model-lab device instructions under
-`docs/history/model-lab/runbooks/` record past runs only; nothing there is
-pending work.
+separately. Historical device runs are not instructions for the current
+harness.
 
 ## 6. After device day
 

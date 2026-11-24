@@ -88,8 +88,7 @@ automated checks that cover its main flows. What is still unproven is behaviour
 under real conditions: two accounts using the app together, one account signed in
 on several devices, and physical Android hardware.
 
-See [ROADMAP.md](ROADMAP.md) for direction and [docs/history/](docs/history/) for
-how the version line is derived.
+See [ROADMAP.md](ROADMAP.md) for direction.
 
 ## For developers
 
@@ -98,7 +97,6 @@ how the version line is derived.
 - Adaptive UI rules and current surfaces: [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md)
 - Canonical brand assets and cache/device acceptance: [BRANDING.md](BRANDING.md)
 - Data model: [docs/erd/](docs/erd/)
-- Version history: [docs/history/VERSION_HISTORY.md](docs/history/VERSION_HISTORY.md)
 
 ## Contributing
 
@@ -117,5 +115,4 @@ reserved ([BRANDING.md](BRANDING.md)); third-party components keep their own lic
 
 Norfold started in 2026 as a university course project and grew into a real
 lost-and-found product. Course-era requirements, plans and evaluation material are
-kept under [docs/course/](docs/course/) for provenance; they are not the current
-product specification.
+not the current product specification.

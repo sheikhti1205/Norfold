@@ -115,6 +115,4 @@ service acceptance. No Edge Function deployment accompanies a source commit.
 ## Where to look next
 
 - Setup and checks: [DEVELOPMENT.md](DEVELOPMENT.md)
-- Legacy retirement boundary: [LEGACY_API_RETIREMENT.md](LEGACY_API_RETIREMENT.md)
-- Version history: [history/VERSION_HISTORY.md](history/VERSION_HISTORY.md)
 - Data model: [erd/](erd/)

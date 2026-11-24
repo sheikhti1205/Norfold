@@ -37,4 +37,4 @@ scanner; those source checks are not device acceptance.
 
 React (MIT), Vite (MIT), Tailwind CSS (MIT), Framer Motion (MIT), Capacitor (MIT), Express (MIT), GraphQL-Yoga (MIT), Socket.IO (MIT), Zod (MIT), JSON Web Token (MIT), bcryptjs (MIT), Supabase JS (MIT).
 
-Last verified: 2026-09-22 (dependency versions re-checked against `apps/mobile/android/app/build.gradle`, `apps/mobile/android/variables.gradle`, and `apps/mobile/package.json`; AAR/JS artifact hashes recorded as `not recorded` — no measured digests exist in-tree; model pins re-checked against `VlmManifests.kt`, `apps/mobile/android/app/src/main/assets/chunks/PROVENANCE.md`, and `docs/specs/model-library/catalogue.v1.json`).
+Last verified: 2026-09-22 (dependency versions re-checked against `apps/mobile/android/app/build.gradle`, `apps/mobile/android/variables.gradle`, and `apps/mobile/package.json`; AAR/JS artifact hashes recorded as `not recorded` — no measured digests exist in-tree; model pins re-checked against `VlmManifests.kt`, `apps/mobile/android/app/src/main/assets/chunks/PROVENANCE.md`, and the published `catalogue.v1.json` release asset).

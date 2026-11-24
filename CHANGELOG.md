@@ -1,9 +1,8 @@
 # Changelog
 
-Norfold is **beta / pre-public**. Versions below are the derived pre-1.0 line
-described in [docs/history/VERSION_HISTORY.md](docs/history/VERSION_HISTORY.md). They
-track real evolution and do not imply a stable release. The per-commit mapping is in
-[docs/history/VERSION_HISTORY.csv](docs/history/VERSION_HISTORY.csv).
+Norfold is **beta / pre-public**. The entries below are the user-facing release
+record, and version numbers follow the published releases. They track real
+evolution and do not imply a stable release.
 
 ## 0.16.0-beta.3
 

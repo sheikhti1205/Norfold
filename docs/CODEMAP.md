@@ -5,7 +5,7 @@ and coordinate its recovery. The TypeScript monorepo contains a React and Vite
 client wrapped with Capacitor in `apps/mobile`, a Supabase backend, and shared
 types, schemas and validation in `@norfold/shared` (`packages/shared`). This
 map is a starting point, not a substitute for reading the implementation or
-the repository rules in [AGENTS.md](../AGENTS.md).
+the repository rules in [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ## Directory map
 
@@ -69,10 +69,7 @@ imports; tests commonly sit next to the implementation they exercise.
 - `docs/`: architecture, operations and historical documents; check dates and source.
 - `docs/auth/`: auth setup and email templates.
 - `docs/bench/`: matching evaluation datasets and policy.
-- `docs/course/`: historical course implementation material.
 - `docs/erd/`: database relationship documentation.
-- `docs/history/`: dated historical reports and CI descriptions.
-- `docs/plans/`: implementation plans; verify status before using one.
 - `docs/release-notes/`: versioned release notes.
 - `docs/runbooks/`: operational procedures and maintenance instructions.
 - `docs/screenshots/`: screenshot files and their manifest.
@@ -197,8 +194,8 @@ can have separate owners. Search callers and migrations before changing one.
 - `apps/mobile/package.json` defines its `test` script as `vitest run`.
 - Root `npm run typecheck` builds shared then runs the mobile typecheck;
   root `npm run lint` invokes `eslint .`.
-- Root `npm run build` builds shared and mobile; build configuration requirements
-  and resource restrictions are in [AGENTS.md](../AGENTS.md).
+- Root `npm run build` builds shared and mobile; the build configuration
+  requirements are in [DEVELOPMENT.md](DEVELOPMENT.md).
 - SQL/live scripts have separate prerequisites; read the individual harness
   before execution. A client test run is not live backend or device acceptance.
 
@@ -217,6 +214,6 @@ can have separate owners. Search callers and migrations before changing one.
    last; replacing it early can reference chunks that have not been committed.
 5. **Media download is not a direct storage shortcut.** The Edge handler asks
    the database for a target and returns a failure when eligibility is absent.
-6. **Historical evidence is not a live-state check.** `docs/history/` contains
-   dated or recorded artifacts; verify current state independently before
-   treating them as deployment evidence.
+6. **Historical evidence is not a live-state check.** A past report describes
+   the state at the time it was written; verify current state independently
+   before treating it as deployment evidence.

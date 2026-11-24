@@ -3,7 +3,7 @@
 The original SQLite mirror/source paths below belong to the retired Node API.
 Current authoritative schema is the immutable `supabase/migrations/` chain; do
 not recreate a second backend from this diagram. See
-[architecture](../ARCHITECTURE.md) and [retirement](../LEGACY_API_RETIREMENT.md).
+[architecture](../ARCHITECTURE.md).
 
 # Norfold — Database Schema & Entity Relationship Diagram (historical)
 

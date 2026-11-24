@@ -3,8 +3,8 @@
 This document preserves the course-era Node/SQLite → Supabase migration narrative.
 Its Node provider files, local demo/seed commands and two-backend architecture
 were retired by Product Fit Reset. Do not follow those commands as current setup.
-See [ARCHITECTURE.md](ARCHITECTURE.md), [DEVELOPMENT.md](DEVELOPMENT.md) and
-[LEGACY_API_RETIREMENT.md](LEGACY_API_RETIREMENT.md). Applied SQL history remains
+See [ARCHITECTURE.md](ARCHITECTURE.md) and [DEVELOPMENT.md](DEVELOPMENT.md). The
+retired Node surface is `services/api/`. Applied SQL history remains
 immutable; the historical paths below are not current runtime dependencies.
 
 **P11 retirement:** every `ai-help` invocation/deployment described below is
@@ -405,7 +405,7 @@ phone SMS is not enabled, and empty/over-long questions returned `400`.
 
 Block 10K removed the mobile app's Node runtime dependency. `services/api.ts`
 (API base URL + `apiFetch`), the `VITE_API_URL`/`__API_URL__` build plumbing,
-`resolveApkApiUrl` (shared) + `check-apk-api-url.mjs`, the `apk:emulator` LAN
+`resolveApkApiUrl` (shared) with its URL-validation check, the `apk:emulator` LAN
 escape hatch, `socket.io-client`, and the Android cleartext/mixed-content
 allowances are gone. Session/error helpers moved to `services/session.ts`, and
 the Verify screen verifies email with the real Supabase OTP while showing an
