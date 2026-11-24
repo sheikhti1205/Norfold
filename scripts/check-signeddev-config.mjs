@@ -13,6 +13,10 @@
  * Presence and SHAPE only — no network calls, no values in output, never a
  * credential. Exits non-zero with one line per failed check.
  *
+ * Also the second half of the versionCode contract: the provenance report
+ * derives the code from `release/state.json` exactly like
+ * `buildVersionCode()` in apps/mobile/android/app/build.gradle does.
+ *
  * Run: `node scripts/check-signeddev-config.mjs [--assets <staged-public-dir>]`
  * (Gradle wires the default to the app's staged web surface).
  */
@@ -174,6 +178,90 @@ function gitOutput(args) {
   }
 }
 
+export const RELEASE_STATE_PATH = resolve(root, "release/state.json");
+
+/**
+ * Android's versionCode ceiling. Kept as a literal for the same reason
+ * apps/mobile/android/app/build.gradle does: that file is the other half of
+ * this contract and cannot import a JS constant.
+ */
+export const MAX_VERSION_CODE = 2_100_000_000;
+
+/**
+ * The versionCode the build being described carries.
+ *
+ * Mirrors `buildVersionCode()` in apps/mobile/android/app/build.gradle — the
+ * other half of the contract, so the APK's code and this report cannot
+ * disagree. Precedence:
+ *   1. `VERSION_CODE_OVERRIDE`, a decimal integer in 1..MAX_VERSION_CODE that
+ *      may raise the code but never drop below the state floor (a lower code
+ *      is a downgrade against devices already carrying the distributed one);
+ *   2. otherwise `release/state.json`'s versionCode (the highest code ever
+ *      distributed) + 1.
+ * A missing or unparseable state file fails closed; nothing is derived from
+ * git history.
+ *
+ * @param {{env?: Record<string, string | undefined>, statePath?: string, read?: typeof readFileSync}} [options]
+ * @returns {number}
+ */
+export function releaseVersionCode({
+  env = process.env,
+  statePath = RELEASE_STATE_PATH,
+  read = readFileSync,
+} = {}) {
+  let raw;
+  try {
+    raw = read(statePath, "utf8");
+  } catch (error) {
+    throw new Error(
+      `release/state.json is missing at ${statePath} (${error.code ?? error.message}): ` +
+        "it holds the highest distributed versionCode, so this build's versionCode cannot be derived",
+    );
+  }
+  let state;
+  try {
+    state = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`release/state.json at ${statePath} is not parseable JSON (${error.message})`);
+  }
+  const stateCode = state?.versionCode;
+  if (!Number.isInteger(stateCode) || stateCode < 1 || stateCode > MAX_VERSION_CODE) {
+    throw new Error(
+      `release/state.json versionCode ${JSON.stringify(stateCode)} is not an integer in 1..${MAX_VERSION_CODE}`,
+    );
+  }
+  const floor = stateCode + 1;
+  const override = String(env.VERSION_CODE_OVERRIDE ?? "").trim();
+  if (override !== "") {
+    if (!/^\d+$/.test(override)) {
+      throw new Error(
+        `VERSION_CODE_OVERRIDE='${override}' is not a decimal integer in 1..${MAX_VERSION_CODE}`,
+      );
+    }
+    const code = Number(override);
+    if (!Number.isSafeInteger(code) || code < 1 || code > MAX_VERSION_CODE) {
+      throw new Error(
+        `VERSION_CODE_OVERRIDE=${override} is outside 1..${MAX_VERSION_CODE}, so it is not a valid Android versionCode`,
+      );
+    }
+    if (code < floor) {
+      throw new Error(
+        `VERSION_CODE_OVERRIDE=${code} is below the monotonic floor release/state.json ` +
+          `versionCode ${stateCode} + 1 = ${floor}: that versionCode is already distributed, ` +
+          "so this build would be a downgrade on devices in the field",
+      );
+    }
+    return code;
+  }
+  if (floor > MAX_VERSION_CODE) {
+    throw new Error(
+      `release/state.json versionCode ${stateCode} + 1 = ${floor} exceeds the Android ` +
+        `versionCode ceiling ${MAX_VERSION_CODE}, so no further build can ship`,
+    );
+  }
+  return floor;
+}
+
 /** Best-effort signer fingerprint: apksigner, then keytool, else UNAVAILABLE. */
 function defaultSignerFingerprint(apkPath) {
   const sdk = ((process.env.ANDROID_HOME ?? "") || (process.env.ANDROID_SDK_ROOT ?? "")).trim();
@@ -209,15 +297,10 @@ export function buildProvenanceReport({ apkPath, deps = {} } = {}) {
   if (!apkPath || !existsSync(apkPath)) throw new Error(`APK not found: ${apkPath ?? "(none)"}`);
   const d = {
     gitSha: () => gitOutput(["rev-parse", "--short=12", "HEAD"]) || "unknown",
-    // Mirrors the Gradle versionCode derivation (100000 + commit count,
-    // VERSION_CODE_OVERRIDE wins); the shallow-clone guard lives in Gradle.
-    versionCode: () => {
-      const override = (process.env.VERSION_CODE_OVERRIDE ?? "").trim();
-      if (/^\d+$/.test(override)) return Number(override);
-      const count = gitOutput(["rev-list", "--count", "HEAD"]);
-      if (/^\d+$/.test(count)) return 100000 + Number(count);
-      return "unknown";
-    },
+    // Same rule as buildVersionCode() in build.gradle: release/state.json's
+    // versionCode + 1, with VERSION_CODE_OVERRIDE allowed to raise it only.
+    // Never a commit count; a missing state file fails the report closed.
+    versionCode: () => releaseVersionCode(),
     appVersion: () =>
       JSON.parse(readFileSync(resolve(root, "apps/mobile/package.json"), "utf8")).version,
     appPackage: () =>

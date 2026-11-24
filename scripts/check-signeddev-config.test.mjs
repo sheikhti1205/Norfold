@@ -4,7 +4,16 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
-import { checkAppLinksManifest, checkSigneddevConfig, buildProvenanceReport, PROVENANCE_FIELDS, MANIFEST_PATH } from "./check-signeddev-config.mjs";
+import {
+  checkAppLinksManifest,
+  checkSigneddevConfig,
+  buildProvenanceReport,
+  PROVENANCE_FIELDS,
+  MANIFEST_PATH,
+  MAX_VERSION_CODE,
+  RELEASE_STATE_PATH,
+  releaseVersionCode,
+} from "./check-signeddev-config.mjs";
 import { writeZipFile } from "./zip-fixture.mjs";
 
 const script = resolve("scripts/check-signeddev-config.mjs");
@@ -412,4 +421,110 @@ test("provenance refuses a missing APK instead of inventing a report", () => {
     { encoding: "utf8", env: { ...process.env, ...baseEnv } });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /APK not found/);
+});
+
+// --- versionCode: a monotonic release counter read from release/state.json,
+// never a commit count. `buildVersionCode()` in
+// apps/mobile/android/app/build.gradle is the other half of this contract;
+// these cases pin the report half so the two can never disagree.
+/** Write a synthetic release/state.json and return its path. */
+function stateFile(contents) {
+  const dir = mkdtempSync(join(tmpdir(), "findback-release-state-"));
+  const path = join(dir, "state.json");
+  writeFileSync(path, typeof contents === "string" ? contents : JSON.stringify(contents));
+  return { dir, path };
+}
+
+test("versionCode is release/state.json's counter + 1", () => {
+  const { dir, path } = stateFile({ versionCode: 101077 });
+  try {
+    assert.equal(releaseVersionCode({ statePath: path, env: {} }), 101078);
+    // The shipped state file is what a real build reads.
+    const shipped = JSON.parse(readFileSync(RELEASE_STATE_PATH, "utf8"));
+    assert.equal(releaseVersionCode({ env: {} }), shipped.versionCode + 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a VERSION_CODE_OVERRIDE at or above the state floor is honoured", () => {
+  const { dir, path } = stateFile({ versionCode: 101077 });
+  try {
+    // Exactly the floor and a deliberately pre-bumped value both build.
+    assert.equal(releaseVersionCode({ statePath: path, env: { VERSION_CODE_OVERRIDE: "101078" } }), 101078);
+    assert.equal(
+      releaseVersionCode({ statePath: path, env: { VERSION_CODE_OVERRIDE: ` ${MAX_VERSION_CODE} ` } }),
+      MAX_VERSION_CODE,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a VERSION_CODE_OVERRIDE below the state floor is a downgrade and fails closed", () => {
+  const { dir, path } = stateFile({ versionCode: 101077 });
+  try {
+    // 101077 is already on devices: shipping it again is a downgrade.
+    assert.throws(
+      () => releaseVersionCode({ statePath: path, env: { VERSION_CODE_OVERRIDE: "101077" } }),
+      /below the monotonic floor release\/state\.json versionCode 101077 \+ 1 = 101078[\s\S]*downgrade/,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a malformed VERSION_CODE_OVERRIDE fails closed", () => {
+  const { dir, path } = stateFile({ versionCode: 101077 });
+  try {
+    for (const bad of ["abc", "101078.0", "1e9", "-101078", "0", "2100000001", "99999999999999999999"]) {
+      assert.throws(
+        () => releaseVersionCode({ statePath: path, env: { VERSION_CODE_OVERRIDE: bad } }),
+        /VERSION_CODE_OVERRIDE/,
+        `override ${JSON.stringify(bad)} was accepted`,
+      );
+    }
+    // An empty override means "unset", not "invalid".
+    assert.equal(releaseVersionCode({ statePath: path, env: { VERSION_CODE_OVERRIDE: "  " } }), 101078);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a missing or unparseable release/state.json fails closed", () => {
+  const { dir, path } = stateFile({ versionCode: 101077 });
+  try {
+    assert.throws(
+      () => releaseVersionCode({ statePath: join(dir, "absent.json"), env: {} }),
+      /release\/state\.json is missing/,
+    );
+    const notJson = stateFile("{not json");
+    try {
+      assert.throws(() => releaseVersionCode({ statePath: notJson.path, env: {} }), /not parseable JSON/);
+    } finally {
+      rmSync(notJson.dir, { recursive: true, force: true });
+    }
+    const noCode = stateFile({ channel: "beta" });
+    try {
+      assert.throws(
+        () => releaseVersionCode({ statePath: noCode.path, env: {} }),
+        /no integer "versionCode"|not an integer in 1\.\./,
+      );
+    } finally {
+      rmSync(noCode.dir, { recursive: true, force: true });
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("Gradle derives versionCode from release/state.json, never from git history", () => {
+  const text = buildGradleText();
+  assert.doesNotMatch(text, /rev-list/, "a commit count must not size versionCode");
+  assert.doesNotMatch(text, /shallow/i, "the shallow-clone guard existed only for the commit count");
+  assert.match(text, /release\/state\.json/);
+  assert.match(text, /VERSION_CODE_OVERRIDE/);
+  assert.match(text, /versionCode buildVersionCode\(\)/);
+  // Parity with this file: the same ceiling is enforced on both sides.
+  assert.match(text, /2100000000/);
 });

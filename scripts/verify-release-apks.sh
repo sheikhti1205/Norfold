@@ -11,12 +11,17 @@
 # The AAB is verified to carry the same signing certificate via keytool.
 #
 # Required env: ANDROID_SIGNING_CERT_SHA256 (hex or colon-separated hex),
-#   EXPECTED_APP_ID, EXPECTED_VERSION_NAME, EXPECTED_VERSION_CODE.
+#   EXPECTED_APP_ID, EXPECTED_VERSION_NAME, and EXPECTED_VERSION_CODE — the
+#   last supplied with --expected-version-code <n> or in the environment
+#   (the flag wins). It is never derived here: it must be the monotonic
+#   release counter from release/state.json (versionCode + 1), validated to
+#   be an integer in 1..2100000000.
 # Never prints fingerprints or key material: match/mismatch only, with
 # lengths on failure.
 #
 # Usage:
-#   scripts/verify-release-apks.sh --apk-dir <dir> [--aab <file>]
+#   scripts/verify-release-apks.sh --apk-dir <dir> --expected-version-code <n> \
+#     [--aab <file>] [--facts-out <file>]
 set -euo pipefail
 
 # --- Pure helpers (no side effects; unit-tested via
@@ -73,6 +78,22 @@ assert_abi_matches_set() {
   return 1
 }
 
+# Android's versionCode ceiling. The expected code is REQUIRED from the caller
+# (--expected-version-code <n> or $EXPECTED_VERSION_CODE) — this script never
+# derives it from git. It must be release/state.json's versionCode + 1, the
+# monotonic counter apps/mobile/android/app/build.gradle stamps into the APK.
+MAX_VERSION_CODE=2100000000
+
+# Fail closed unless $1 is an integer in 1..MAX_VERSION_CODE. Digits only: at
+# most 10 chars keeps the arithmetic below inside bash's signed range.
+assert_version_code() {
+  local raw="$1"
+  [[ "$raw" =~ ^[0-9]{1,10}$ ]] || return 1
+  local value
+  value="$((10#$raw))"
+  (( value >= 1 && value <= MAX_VERSION_CODE ))
+}
+
 # One machine-readable fact row per verified APK. Values are controlled:
 # hex digests, integers, a known ABI token and the app id the caller passed.
 # The certificate digest is public metadata (it is inside every APK); this
@@ -100,7 +121,8 @@ while [[ $# -gt 0 ]]; do
     --apk-dir) APK_DIR="$2"; shift 2 ;;
     --aab) AAB="$2"; shift 2 ;;
     --facts-out) FACTS_OUT="$2"; shift 2 ;;
-    *) echo "verify-release-apks: unknown arg $1 (expected --apk-dir DIR [--aab FILE] [--facts-out FILE])" >&2; exit 1 ;;
+    --expected-version-code) EXPECTED_VERSION_CODE="$2"; shift 2 ;;
+    *) echo "verify-release-apks: unknown arg $1 (expected --apk-dir DIR --expected-version-code N [--aab FILE] [--facts-out FILE])" >&2; exit 1 ;;
   esac
 done
 
@@ -109,7 +131,10 @@ done
 [[ -n "${ANDROID_SIGNING_CERT_SHA256:-}" ]] || { echo "verify-release-apks: ANDROID_SIGNING_CERT_SHA256 is empty" >&2; exit 1; }
 [[ -n "${EXPECTED_APP_ID:-}" ]] || { echo "verify-release-apks: EXPECTED_APP_ID is empty" >&2; exit 1; }
 [[ -n "${EXPECTED_VERSION_NAME:-}" ]] || { echo "verify-release-apks: EXPECTED_VERSION_NAME is empty" >&2; exit 1; }
-[[ -n "${EXPECTED_VERSION_CODE:-}" ]] || { echo "verify-release-apks: EXPECTED_VERSION_CODE is empty" >&2; exit 1; }
+[[ -n "${EXPECTED_VERSION_CODE:-}" ]] || { echo "verify-release-apks: --expected-version-code <n> is required (or export EXPECTED_VERSION_CODE); it is release/state.json's versionCode + 1, never derived from git" >&2; exit 1; }
+assert_version_code "$EXPECTED_VERSION_CODE" || { echo "verify-release-apks: expected versionCode '$EXPECTED_VERSION_CODE' is not an integer in 1..$MAX_VERSION_CODE (use --expected-version-code <n>)" >&2; exit 1; }
+# Canonical digits, so a padded input still matches aapt's versionCode output.
+EXPECTED_VERSION_CODE="$((10#$EXPECTED_VERSION_CODE))"
 [[ "$EXPECTED_APP_ID" =~ ^[A-Za-z0-9._]+$ ]] || { echo "verify-release-apks: EXPECTED_APP_ID is not a package id" >&2; exit 1; }
 
 EXPECTED_FP="$(norm_fp "$ANDROID_SIGNING_CERT_SHA256")"
@@ -293,4 +318,4 @@ if [[ -n "$AAB" ]]; then
   echo "verify-release-apks: $(basename "$AAB") signer OK (same pinned certificate as APKs)"
 fi
 
-echo "verify-release-apks: ALL ${#APKS[@]} APK variant(s) verified (identical pinned cert, identity, ABI, secrets, config, integrity)"
+echo "verify-release-apks: ALL ${#APKS[@]} APK variant(s) verified (versionCode $EXPECTED_VERSION_CODE, identical pinned cert, identity, ABI, secrets, config, integrity)"

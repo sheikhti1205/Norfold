@@ -10,35 +10,93 @@ def appVersionName() {
     return version
 }
 
-def gitVersionCode() {
-    def override = System.getenv("VERSION_CODE_OVERRIDE")
-    if (override != null && override.trim().isInteger()) {
-        return override.trim().toInteger()
-    }
-    // A shallow checkout (e.g. Actions depth=1) does NOT fail rev-list — it
-    // silently returns ~1. Refuse to mint a wrong versionCode from it.
-    def repoGitDir = new File(rootProject.projectDir, "../../.git").getCanonicalFile()
-    if (new File(repoGitDir, "shallow").exists()) {
+// versionCode is a monotonic release counter, never a function of git history:
+// the code for THIS build is release/state.json's versionCode (the highest code
+// ever distributed) + 1, so clone depth, squashes and merge topology cannot
+// change it.
+// scripts/check-signeddev-config.mjs implements the same rule for the
+// provenance report — change both together.
+def releaseStateFile() {
+    // Repo root, resolved from the Gradle project (never the working dir).
+    return new File(rootProject.projectDir, "../../../release/state.json").getCanonicalFile()
+}
+
+def stateVersionCode() {
+    def stateFile = releaseStateFile()
+    if (!stateFile.isFile()) {
         throw new GradleException(
-            "Shallow git checkout detected (.git/shallow exists): " +
-            "rev-list --count would be wrong. Fetch full history " +
-            "(fetch-depth: 0) or set VERSION_CODE_OVERRIDE."
+            "release/state.json is missing at ${stateFile}: it holds the highest " +
+            "distributed versionCode, so this build's versionCode cannot be derived. " +
+            "versionCode is never derived from git history."
         )
     }
+    def state
     try {
-        def out = new ByteArrayOutputStream()
-        exec {
-            commandLine "git", "rev-list", "--count", "HEAD"
-            standardOutput = out
-            workingDir = rootProject.projectDir
-        }
-        return 100000 + out.toString().trim().toInteger()
+        state = new groovy.json.JsonSlurper().parse(stateFile)
     } catch (Exception e) {
         throw new GradleException(
-            "Cannot derive versionCode from git history (shallow clone?). " +
-            "Set VERSION_CODE_OVERRIDE or fetch full history. Cause: ${e.message}"
+            "release/state.json at ${stateFile} is not parseable JSON (${e.message}). " +
+            "versionCode is never derived from git history."
         )
     }
+    def raw = (state instanceof Map) ? state.versionCode : null
+    if (!(raw instanceof Integer || raw instanceof Long || raw instanceof BigInteger)) {
+        throw new GradleException(
+            "release/state.json at ${stateFile} has no integer \"versionCode\" " +
+            "(found: ${raw}), so this build's versionCode cannot be derived."
+        )
+    }
+    // Compare as BigInteger so an absurd value cannot truncate into range;
+    // Android stores versionCode as a Java int and 2100000000 is the published
+    // ceiling, which stays inside Integer.MAX_VALUE.
+    BigInteger code = (raw instanceof BigInteger) ? (BigInteger) raw : new BigInteger(raw.toString())
+    if (code < BigInteger.ONE || code > BigInteger.valueOf(2100000000L)) {
+        throw new GradleException(
+            "release/state.json versionCode ${code} is outside 1..2100000000."
+        )
+    }
+    return code.longValue()
+}
+
+def buildVersionCode() {
+    long stateCode = stateVersionCode()
+    String floorDescription = "release/state.json versionCode ${stateCode} + 1 = ${stateCode + 1}"
+    def override = System.getenv("VERSION_CODE_OVERRIDE")
+    if (override != null && !override.trim().isEmpty()) {
+        def value = override.trim()
+        long code
+        try {
+            code = Long.parseLong(value)
+        } catch (NumberFormatException e) {
+            throw new GradleException(
+                "VERSION_CODE_OVERRIDE='${value}' is not a decimal integer in 1..2100000000."
+            )
+        }
+        if (code < 1L || code > 2100000000L) {
+            throw new GradleException(
+                "VERSION_CODE_OVERRIDE=${value} is outside 1..2100000000, so it is not a " +
+                "valid Android versionCode (a Java int in that range)."
+            )
+        }
+        // Raising the code is allowed (a deliberately pre-bumped build); going
+        // under the state floor would be a downgrade on devices in the field.
+        if (code < stateCode + 1) {
+            throw new GradleException(
+                "VERSION_CODE_OVERRIDE=${code} is below the monotonic floor " +
+                "${floorDescription}: that versionCode is already distributed, so this " +
+                "build would be a downgrade on devices in the field."
+            )
+        }
+        return (int) code
+    }
+    long code = stateCode + 1
+    if (code > 2100000000L) {
+        throw new GradleException(
+            "release/state.json versionCode ${stateCode} + 1 = ${code} exceeds the Android " +
+            "versionCode ceiling 2100000000, so no further build can ship."
+        )
+    }
+    return (int) code
 }
 
 def gitCommitSha() {
@@ -138,13 +196,13 @@ android {
         // versionName from apps/mobile/package.json (appVersionName below).
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // Version sources (audit #29). Single source of truth is the SemVer
-        // "version" in apps/mobile/package.json: versionName is generated
-        // from it, never a duplicated literal. versionCode is deterministic
-        // (100000 + git commit count) so every commit yields a greater
-        // integer with no hand-bumping; VERSION_CODE_OVERRIDE covers
-        // shallow CI clones that cannot count history.
-        versionCode gitVersionCode()
+        // Version sources (audit #29). versionName comes from the SemVer
+        // "version" in apps/mobile/package.json (generated, never a duplicated
+        // literal). versionCode is the monotonic release counter:
+        // release/state.json's versionCode (highest code ever distributed) + 1,
+        // where VERSION_CODE_OVERRIDE may raise it but never lower it. It is
+        // never derived from git history.
+        versionCode buildVersionCode()
         versionName appVersionName()
         resValue "string", "findback_build_git_sha", gitCommitSha()
         manifestPlaceholders = [findbackShareHost: shareLinkHostname()]
@@ -369,7 +427,7 @@ gradle.taskGraph.whenReady { graph ->
 tasks.register("printVersionInfo") {
     doLast {
         println("versionName=${appVersionName()}")
-        println("versionCode=${gitVersionCode()}")
+        println("versionCode=${buildVersionCode()}")
         println("buildGitSha=${gitCommitSha()}")
     }
 }

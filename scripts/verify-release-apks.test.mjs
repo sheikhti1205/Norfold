@@ -9,7 +9,7 @@
  *
  * Run: `node --test scripts/verify-release-apks.test.mjs` from repo root.
  */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -160,6 +160,51 @@ describe("R2 ABI completeness", () => {
       const ref = refFile(UNIVERSAL_GATED, abi);
       sh(`assert_abi_matches_set "${ref}" "${abi}"`, AAB_GATED);
     }
+  });
+});
+
+describe("required expected versionCode", () => {
+  it("accepts only integers in 1..2100000000", () => {
+    for (const ok of ["1", "101078", "2100000000", "000101078"]) {
+      // Exit status 0 proves acceptance; the helper is pure.
+      sh(`assert_version_code "${ok}"`);
+    }
+    for (const bad of ["0", "2100000001", "101078.0", "-1", "1e9", "", "abc", "99999999999"]) {
+      assert.throws(
+        () => sh(`assert_version_code "${bad}"`),
+        `versionCode ${JSON.stringify(bad)} was accepted`,
+      );
+    }
+  });
+
+  it("normalizes padded digits to the canonical value aapt prints", () => {
+    // The script canonicalizes before comparing against aapt's versionCode.
+    assert.equal(sh('printf "%s" "$((10#000101078))"'), "101078");
+  });
+
+  it("the script refuses to run without --expected-version-code", () => {
+    const dir = mkdtempSync(join(tmpdir(), "relapk-nocode-"));
+    const env = {
+      ...process.env,
+      ANDROID_SIGNING_CERT_SHA256: "ab".repeat(32),
+      EXPECTED_APP_ID: "com.findback.app",
+      EXPECTED_VERSION_NAME: "0.16.0-beta.3",
+    };
+    delete env.EXPECTED_VERSION_CODE;
+    const missing = spawnSync("bash", [SHELL_LIB, "--apk-dir", dir], { encoding: "utf8", env });
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, /--expected-version-code/);
+
+    const malformed = spawnSync("bash", [SHELL_LIB, "--apk-dir", dir, "--expected-version-code", "0"],
+      { encoding: "utf8", env });
+    assert.notEqual(malformed.status, 0);
+    assert.match(malformed.stderr, /not an integer in 1\.\.2100000000/);
+
+    // A supplied value passes the gate (the run then fails later, on the
+    // missing artifacts/SDK — never on the versionCode).
+    const accepted = spawnSync("bash",
+      [SHELL_LIB, "--apk-dir", dir, "--expected-version-code", "101078"], { encoding: "utf8", env });
+    assert.doesNotMatch(accepted.stderr, /expected versionCode|--expected-version-code/);
   });
 });
 
