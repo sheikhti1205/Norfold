@@ -923,6 +923,11 @@ jobs:
         # from verify-release-apks.sh's rows, never from a filename. Its
         # `signingChannel` is the INSTALLATION channel from release/state.json —
         # not the release `channel`, which only decides the prerelease flag.
+        env:
+          # `contents: read`, scoped to this step: the CLI needs a token to read
+          # the previous release's catalogue asset. The checkout stays
+          # credential-free (persist-credentials: false).
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           PKG_VERSION=$(node -p "require('./apps/mobile/package.json').version")
@@ -930,6 +935,22 @@ jobs:
           if [ -z "$SIGNING_CHANNEL" ]; then
             echo "::error::release/state.json has no signingChannel; refusing to write a catalogue without an installation channel"
             exit 1
+          fi
+          # Carry the previous release's changelog forward. `retainedHistory` in
+          # write-android-catalogue.mjs folds `--previous` (its history plus its own
+          # release record) into the new history; without it every release that ships
+          # erases the changelog of the one it replaces.
+          PREV_TAG=$(node -p "require('./release/state.json').lastRelease?.tag ?? ''")
+          PREV_ARGS=()
+          if [ -n "$PREV_TAG" ]; then
+            mkdir -p "$RUNNER_TEMP/previous-release"
+            gh release download "$PREV_TAG" \
+              --repo "${{ github.repository }}" \
+              --pattern catalogue.v1.json \
+              --dir "$RUNNER_TEMP/previous-release" \
+              --clobber
+            PREV_ARGS=(--previous "$RUNNER_TEMP/previous-release/catalogue.v1.json")
+            echo "carrying forward the ${PREV_TAG} catalogue history"
           fi
           node scripts/write-android-catalogue.mjs \
             --facts "$RUNNER_TEMP/apk-facts.json" \
@@ -943,7 +964,8 @@ jobs:
             --published-at "$RELEASE_TIMESTAMP" \
             --summary "Norfold ${PKG_VERSION} for Android." \
             --signing-channel "$SIGNING_CHANNEL" \
-            --out release-stage/catalogue.v1.json
+            --out release-stage/catalogue.v1.json \
+            "${PREV_ARGS[@]}"
           cat release-stage/catalogue.v1.json
       - name: release-manifest.json + checksums
         # Same rule as the catalogue: the manifest's signingChannel is the
