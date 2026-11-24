@@ -11,22 +11,44 @@
 #            tests, Android JVM tests). A failure here stops the run. Runs
 #            whenever a candidate version exists, so a dry run verifies
 #            something without publication being enabled.
-#   prepare  writes the version into both package.json files + the lockfile,
-#            records `pendingRelease` in release/state.json and commits/pushes
-#            `chore(release): v<version>` to main. No tag is created here. Runs
-#            only in publish mode, and only when the resolver asks to publish now.
-#   build    builds/signs every APK variant + the AAB from the prepare commit
-#            (the triggering commit in a dry run), verifies the signed bytes,
-#            writes the catalogue + manifest + checksums and uploads them as
-#            workflow artifacts.
-#   publish  creates the tag on the prepare commit (only if it does not already
-#            exist), then the GitHub release.
-#   finalize promotes the pending release in release/state.json and pushes
+#   prepare  writes the version into both package.json files + the lockfile and
+#            commits and pushes that alone (commit A), then records
+#            `pendingRelease` — carrying commit A — in release/state.json and
+#            commits and pushes that alone (commit B). No tag is created here.
+#            Runs only in publish mode, and only when the resolver asks to
+#            publish now.
+#   build    builds/signs every APK variant + the AAB from the pinned commit,
+#            verifies the signed bytes, writes the catalogue + manifest +
+#            checksums and uploads them as workflow artifacts.
+#   publish  creates the tag on the pinned commit (only if it does not already
+#            exist), then the GitHub release — and only skips creation after the
+#            existing release record verifiably matches the build output.
+#   finalize promotes the pending release in release/state.json, points
+#            classificationBase at the pinned commit and pushes
 #            `chore(release): finalise v<version>`.
+#
+# Two commits, one pinned tree. `prepare` produces exactly:
+#
+#   A  "chore(release): v<version>"               the four version locations
+#      only. `RELEASE_SHA` is this commit: it is the tree that is built, tagged
+#      and published.
+#   B  "chore(release): record pending v<version>"  release/state.json only:
+#      `pendingRelease` = { tag, version, versionCode, commit: A }.
+#
+# Every later job checks out exactly `pendingRelease.commit` — or the
+# `RELEASE_SHA` this run just produced — and never falls back to `HEAD` or to
+# `github.sha`. `main` may move past the pin between prepare and publish; the
+# pinned tree is still what ships, and the commits that arrived after it are
+# classified for the next release because `finalize` sets `classificationBase`
+# to the pin. Nothing is rebased, merged or rebuilt against newer `main` once
+# the build has started.
 #
 # A dry run (`workflow_dispatch` with `mode: dry-run`) runs exactly decide, gate
 # and build: nothing is committed, tagged or released, and it needs neither
-# RELEASE_PUBLICATION_ENABLED nor an elapsed batch interval.
+# RELEASE_PUBLICATION_ENABLED nor an elapsed batch interval. It also keeps no
+# installable binary: every `*.apk` and `*.aab` it signed is deleted before the
+# artifact upload, so only the catalogue, the manifest, the checksums and the
+# APK facts are retained as evidence.
 #
 # Triggers: `workflow_dispatch` (defaults to a dry run) and an hourly schedule.
 # There is deliberately NO `push` trigger — not even for tags — because this
@@ -35,8 +57,17 @@
 #
 # Idempotency: a `pendingRelease` in release/state.json is a continuation, not a
 # new decision. Re-running after a failure between prepare and publish resumes
-# the same version and code, reuses the existing prepare commit, and neither
-# creates a second tag nor a second release.
+# the same version, code and pinned commit; it neither creates a second tag nor
+# a second release. An existing release is treated as published only after its
+# assets, sizes, checksums and catalogue tag have been verified against the
+# build output; an existing tag that points anywhere but the pin aborts the run
+# and is never moved.
+#
+# Permissions are least-privilege: the workflow defaults to `contents: read`,
+# and only prepare, publish and finalize — the jobs that push commits, a tag or
+# the release — request `contents: write`. Every checkout in a read-only job
+# sets `persist-credentials: false`, so no write-capable token is left in
+# `.git/config`.
 #
 # Required repo configuration:
 #   Variables: RELEASE_PUBLICATION_ENABLED ("true" is the only value that lets
@@ -55,6 +86,12 @@
 #              AAB; values are never echoed)
 #   Environment `release` (protection rules configured in repo settings) gates
 #   the signed build, so nothing publishes without it succeeding.
+#
+# `release/state.json` carries two independent channel labels: `channel` is the
+# release label (the GitHub prerelease flag and the release title only), while
+# `signingChannel` is the installation label written into the catalogue and
+# compared by the native update policy. They are read separately, and the
+# installation label is never hardcoded here.
 
 name: Release
 env:
@@ -77,9 +114,11 @@ on:
   schedule:
     - cron: "0 * * * *"
 
-# Tag creation, the release, and the release/finalise commits all need write.
+# Read-only by default. Only prepare, publish and finalize override this, because
+# only they push a commit, a tag or the release. Every other job's checkout is
+# credential-free.
 permissions:
-  contents: write
+  contents: read
 
 # One publication at a time. A queued run must not start while another is
 # building, and a cancelled build must never leave a prepared release behind.
@@ -101,6 +140,7 @@ jobs:
       classification_base: ${{ steps.resolve.outputs.classification_base }}
       publication_enabled: ${{ steps.resolve.outputs.publication_enabled }}
       breakdown: ${{ steps.resolve.outputs.breakdown }}
+      pinned_commit: ${{ steps.pinned.outputs.commit }}
     env:
       RELEASE_PUBLICATION_ENABLED: ${{ vars.RELEASE_PUBLICATION_ENABLED }}
       RELEASE_BATCH_INTERVAL_HOURS: ${{ vars.RELEASE_BATCH_INTERVAL_HOURS }}
@@ -112,6 +152,14 @@ jobs:
           # checks whether the candidate tag already exists.
           fetch-depth: 0
           fetch-tags: true
+          # Read-only job: no write-capable token in .git/config.
+          persist-credentials: false
+      - name: Record the tree this decision was made against
+        id: pinned
+        # A dry run has no release commit, so this is the commit it pins: the
+        # exact tree the resolver classified, captured once and named, instead of
+        # a later implicit HEAD or `github.sha`.
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -193,6 +241,7 @@ jobs:
             echo "| Escalated commits | \`${{ steps.resolve.outputs.escalated || 'none' }}\` |"
             echo "| Unparseable commits | \`${{ steps.resolve.outputs.unparseable || 'none' }}\` |"
             echo "| Commits classified | \`${{ steps.resolve.outputs.commits_total || '0' }}\` |"
+            echo "| Classified tree | \`${{ steps.pinned.outputs.commit || '-' }}\` |"
             echo "| Reason | \`${REASON:-'-'}\` |"
             echo "| Publication enabled | \`${PUBLICATION:-false}\` |"
             echo "| Batch interval (hours) | \`${{ steps.resolve.outputs.batch_interval_hours || 'unset' }}\` |"
@@ -223,43 +272,36 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Stage the shared release-preparation script
         if: ${{ success() && steps.resolve.outputs.version != '' }}
-        # `prepare` (publish) and the dry-run rehearsal in `build` must perform the
-        # same two writes, so the script both of them execute is rendered once,
-        # here, and handed over as an artifact. Two writes only:
-        #   1. sync-version.mjs — root + mobile package.json and both lock entries;
-        #   2. the pendingRelease record through state.mjs's validated writer.
+        # `prepare` (publish) and the dry-run rehearsal in `build` must record the
+        # same pin through the same validated writer, so the script both of them
+        # execute is rendered once, here, and handed over as an artifact. It
+        # writes exactly one thing: `pendingRelease` = { tag, version,
+        # versionCode, commit } through state.mjs, whose validator rejects a
+        # record without a commit.
         run: |
           set -euo pipefail
           cat > "$RUNNER_TEMP/write-pending-release.mjs" <<'NODE'
-          import { execFileSync } from "node:child_process";
           import { resolve } from "node:path";
           import { pathToFileURL } from "node:url";
 
-          const [version, code] = process.argv.slice(2);
-          if (!version || !code) {
-            console.error("usage: write-pending-release.mjs <version> <versionCode>");
+          const [version, code, commit] = process.argv.slice(2);
+          if (!version || !code || !commit) {
+            console.error("usage: write-pending-release.mjs <version> <versionCode> <commit>");
             process.exit(2);
           }
           const repo = process.cwd();
-
-          // 1. The four version locations, through the canonical writer.
-          execFileSync(process.execPath, ["scripts/release/sync-version.mjs", version], {
-            cwd: repo,
-            stdio: "inherit",
-          });
-
-          // 2. The pending record. Nothing is published yet, so it is exactly
-          //    { tag, version, versionCode }: no commit SHA, no timestamp.
-          //    version, versionCode, classificationBase and lastRelease keep
-          //    their values; the writer validates before it writes.
           const { loadState, writeState } = await import(
             pathToFileURL(resolve(repo, "scripts/release/state.mjs")).href
           );
+
+          // `commit` is commit A, which already exists before this record is
+          // written. Every later job builds and publishes exactly that commit, so
+          // a newer `main` can never be published under this decision.
           writeState(repo, {
             ...loadState(repo),
-            pendingRelease: { tag: `v${version}`, version, versionCode: Number(code) },
+            pendingRelease: { tag: `v${version}`, version, versionCode: Number(code), commit },
           });
-          console.log(`pendingRelease v${version} code ${code} recorded`);
+          console.log(`pendingRelease v${version} code ${code} pinned at ${commit}`);
           NODE
           node --check "$RUNNER_TEMP/write-pending-release.mjs"
       - name: Upload the release-preparation script
@@ -295,7 +337,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          # `classification_base..HEAD` is what the commit-message gate below and
+          # the release body both range over.
           fetch-depth: 0
+          # Read-only job: no write-capable token in .git/config.
+          persist-credentials: false
       - name: Version sync + clean tree
         # Between prepare and finalise the packages carry the released version
         # while release/state.json still holds the previous one — that gap is the
@@ -389,6 +435,9 @@ jobs:
     if: ${{ needs.decide.outputs.release_required == 'true' && needs.gate.result == 'success' && (github.event_name != 'workflow_dispatch' || inputs.mode == 'publish') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # This job pushes two commits to main.
+    permissions:
+      contents: write
     outputs:
       release_sha: ${{ steps.commit.outputs.release_sha }}
     env:
@@ -399,7 +448,10 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-          # Write credentials: this job pushes the release commit.
+          # The moved-main recheck below asks the resolver whether the candidate
+          # tag already exists.
+          fetch-tags: true
+          # Write credentials: this job pushes the release commits.
           persist-credentials: true
           token: ${{ github.token }}
       - uses: actions/setup-node@v5
@@ -414,102 +466,130 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-      - name: Write the version and pendingRelease, commit and push
+      - name: Write commit A, record commit B, push
         id: commit
         run: |
           set -euo pipefail
           BASE_SHA=$(git rev-parse HEAD)
 
-          # A `pendingRelease` for this exact version/code means an earlier run
-          # already prepared (and pushed) the release commit. Resume it: creating
-          # a second commit would move the release version's commit around.
+          # A `pendingRelease` for this exact version/code is a continuation of an
+          # earlier run, and it carries the tree that run pinned. A record without
+          # a commit, or one whose commit is not in this clone, is a hard failure:
+          # substituting HEAD is exactly how an unclassified commit would get
+          # published under an old decision.
           PENDING=$(node -e '
             const state = require("./release/state.json");
             const pending = state.pendingRelease;
-            process.stdout.write(pending ? `${pending.tag}|${pending.version}|${pending.versionCode}` : "");
+            if (!pending) { process.stdout.write(""); } else {
+              process.stdout.write(`${pending.tag}|${pending.version}|${pending.versionCode}|${pending.commit ?? ""}`);
+            }
           ')
+          PENDING_TAG=${PENDING%%|*}
+          REST=${PENDING#*|}
+          PENDING_VERSION=${REST%%|*}
+          REST=${REST#*|}
+          PENDING_CODE=${REST%%|*}
+          PENDING_COMMIT=${REST#*|}
 
-          if [ "$PENDING" = "v${VERSION}|${VERSION}|${CODE}" ]; then
-            echo "resuming the pending release recorded in release/state.json"
+          # Commit A: the four version locations, and nothing else. This exact tree
+          # is what the signed build, the catalogue, the manifest and Sentry see.
+          write_commit_a() {
+            node scripts/release/sync-version.mjs "$VERSION"
+            if [ -n "$(git status --porcelain)" ]; then
+              git add package.json apps/mobile/package.json package-lock.json
+              git commit -m "chore(release): v${VERSION}"
+            else
+              echo "commit A: the checked-out tree already carries v${VERSION}; no version commit needed"
+            fi
+          }
+
+          # Commit B: the pin, through state.mjs's validated writer. It changes
+          # release/state.json and nothing else, so the tree in A is untouched.
+          write_commit_b() {
+            node "$RUNNER_TEMP/write-pending-release.mjs" "$VERSION" "$CODE" "$RELEASE_SHA"
+            git add release/state.json
+            git commit -m "chore(release): record pending v${VERSION}"
+          }
+
+          if [ "$PENDING_TAG|$PENDING_VERSION|$PENDING_CODE" = "v${VERSION}|${VERSION}|${CODE}" ]; then
+            if [ -z "$PENDING_COMMIT" ]; then
+              echo "::error::release/state.json records pendingRelease ${PENDING_TAG} without a commit pin; refusing to resume at HEAD"
+              exit 1
+            fi
+            if ! git cat-file -e "${PENDING_COMMIT}^{commit}" 2>/dev/null; then
+              echo "::error::release/state.json pins ${PENDING_TAG} at ${PENDING_COMMIT}, which does not exist in this clone; refusing to fall back to HEAD"
+              exit 1
+            fi
+            echo "resuming pendingRelease ${PENDING_TAG} at the pinned commit ${PENDING_COMMIT}"
             node scripts/release/sync-version.mjs --verify "$VERSION"
             if [ -n "$(git status --porcelain)" ]; then
               echo "::error::pendingRelease is recorded but the checkout is not clean"
               git status --porcelain
               exit 1
             fi
-            RELEASE_SHA=$(git rev-parse HEAD)
+            RELEASE_SHA="$PENDING_COMMIT"
           else
-            # The same script the dry-run rehearsal in `build` runs, so the two
-            # paths cannot drift: sync-version.mjs, then the pendingRelease record
-            # through state.mjs's validated writer. Nothing is published yet, so
-            # the record is exactly { tag, version, versionCode } — no commit SHA,
-            # no timestamp — and it is written BEFORE the commit, so the commit
-            # already contains it and no follow-up rewrite is needed.
-            node "$RUNNER_TEMP/write-pending-release.mjs" "$VERSION" "$CODE"
-
-            git add package.json apps/mobile/package.json package-lock.json release/state.json
-            git commit -m "chore(release): v${VERSION}"
+            write_commit_a
             RELEASE_SHA=$(git rev-parse HEAD)
-          fi
+            write_commit_b
 
-          push_once() { git push origin HEAD:main; }
+            if ! git push origin HEAD:main; then
+              echo "push to main was rejected; checking whether main moved"
+              git fetch origin main
+              NEW_MAIN=$(git rev-parse origin/main)
+              if [ "$NEW_MAIN" = "$BASE_SHA" ]; then
+                echo "::error::push failed although origin/main did not move"
+                exit 1
+              fi
 
-          if ! push_once; then
-            echo "push to main was rejected; checking whether main moved"
-            git fetch origin main
-            NEW_MAIN=$(git rev-parse origin/main)
-            if [ "$NEW_MAIN" = "$BASE_SHA" ]; then
-              echo "::error::push failed although origin/main did not move"
-              exit 1
-            fi
+              # Re-run the resolver exactly once against the moved main. It must
+              # still want this same version and code, or the release is aborted.
+              rm -rf "$RUNNER_TEMP/recheck"
+              git worktree add --detach "$RUNNER_TEMP/recheck" "$NEW_MAIN" >/dev/null
+              status=0
+              ( cd "$RUNNER_TEMP/recheck" && node scripts/release/resolve-release.mjs --github-output "$RUNNER_TEMP/recheck.out" ) \
+                > "$RUNNER_TEMP/recheck.json" 2> "$RUNNER_TEMP/recheck.log" || status=$?
+              cat "$RUNNER_TEMP/recheck.log" || true
+              git worktree remove --force "$RUNNER_TEMP/recheck" || true
 
-            # Re-run the resolver exactly once against the moved main. It must
-            # still want this same version and code, or the release is aborted.
-            rm -rf "$RUNNER_TEMP/recheck"
-            git worktree add --detach "$RUNNER_TEMP/recheck" "$NEW_MAIN" >/dev/null
-            status=0
-            ( cd "$RUNNER_TEMP/recheck" && node scripts/release/resolve-release.mjs --github-output "$RUNNER_TEMP/recheck.out" ) \
-              > "$RUNNER_TEMP/recheck.json" 2> "$RUNNER_TEMP/recheck.log" || status=$?
-            cat "$RUNNER_TEMP/recheck.log" || true
-            git worktree remove --force "$RUNNER_TEMP/recheck" || true
+              if [ "$status" -ne 0 ]; then
+                echo "::error::resolve-release could not decide on the moved main (exit $status)"
+                exit 1
+              fi
 
-            if [ "$status" -ne 0 ]; then
-              echo "::error::resolve-release could not decide on the moved main (exit $status)"
-              exit 1
-            fi
+              NEW_DECISION=$(node -e '
+                const fs = require("node:fs");
+                const map = Object.fromEntries(
+                  fs.readFileSync(process.argv[1], "utf8")
+                    .split("\n")
+                    .filter(Boolean)
+                    .map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]),
+                );
+                process.stdout.write(`${map.release_required}|${map.version}|${map.version_code}`);
+              ' "$RUNNER_TEMP/recheck.out")
 
-            NEW_DECISION=$(node -e '
-              const fs = require("node:fs");
-              const map = Object.fromEntries(
-                fs.readFileSync(process.argv[1], "utf8")
-                  .split("\n")
-                  .filter(Boolean)
-                  .map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]),
-              );
-              process.stdout.write(`${map.release_required}|${map.version}|${map.version_code}`);
-            ' "$RUNNER_TEMP/recheck.out")
+              if [ "$NEW_DECISION" != "true|${VERSION}|${CODE}" ]; then
+                echo "::error::main moved and the release decision changed (was v${VERSION}/${CODE}, now ${NEW_DECISION}); nothing was pushed and no force was attempted — re-run the workflow"
+                exit 1
+              fi
 
-            if [ "$NEW_DECISION" != "true|${VERSION}|${CODE}" ]; then
-              echo "::error::main moved and the release decision changed (was v${VERSION}/${CODE}, now ${NEW_DECISION}); nothing was pushed and no force was attempted — re-run the workflow"
-              exit 1
-            fi
-
-            # Same decision: replay the single release commit on the new base.
-            if ! git rebase origin/main; then
-              git rebase --abort || true
-              echo "::error::the release commit does not rebase onto the moved main; nothing was pushed — re-run the workflow"
-              exit 1
-            fi
-            node scripts/release/sync-version.mjs --verify "$VERSION"
-            RELEASE_SHA=$(git rev-parse HEAD)
-            if ! push_once; then
-              echo "::error::push to main was rejected again after one rebase; no force-push attempted"
-              exit 1
+              # Same decision: rebuild both commits on the new base. Nothing of
+              # ours reached the server (the push was rejected), so the local
+              # commits are discarded and recreated — commit B must record the SHA
+              # of the commit A that actually gets built.
+              git reset --hard "$NEW_MAIN"
+              write_commit_a
+              RELEASE_SHA=$(git rev-parse HEAD)
+              write_commit_b
+              if ! git push origin HEAD:main; then
+                echo "::error::push to main was rejected again after rebuilding on the moved main; no force-push attempted"
+                exit 1
+              fi
             fi
           fi
 
           echo "release_sha=${RELEASE_SHA}" >> "$GITHUB_OUTPUT"
-          echo "prepared v${VERSION} (code ${CODE}) at ${RELEASE_SHA}" >> "$GITHUB_STEP_SUMMARY"
+          echo "prepared v${VERSION} (code ${CODE}) pinned at ${RELEASE_SHA}" >> "$GITHUB_STEP_SUMMARY"
       - name: Step summary
         if: always()
         run: |
@@ -520,7 +600,8 @@ jobs:
             echo "| --- | --- |"
             echo "| Version | \`${VERSION}\` |"
             echo "| Version code | \`${CODE}\` |"
-            echo "| Release commit | \`${{ steps.commit.outputs.release_sha }}\` |"
+            echo "| Release commit (the built tree) | \`${{ steps.commit.outputs.release_sha }}\` |"
+            echo "| Recorded as pendingRelease.commit | \`${{ steps.commit.outputs.release_sha }}\` |"
             echo "| Tag | \`not created here\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -538,6 +619,13 @@ jobs:
     env:
       VERSION: ${{ needs.decide.outputs.version }}
       CODE: ${{ needs.decide.outputs.version_code }}
+      # The one tree this build is allowed to use: commit A, either produced by
+      # `prepare` in this run or resumed from `pendingRelease.commit`. A dry run
+      # has no release commit and publishes nothing, so it pins the commit the
+      # resolver classified instead. The value is never `HEAD` by name, and the
+      # step below proves the checkout is exactly this commit.
+      PINNED_COMMIT: ${{ needs.prepare.outputs.release_sha || needs.decide.outputs.pinned_commit }}
+      PREPARED_SHA: ${{ needs.prepare.outputs.release_sha }}
       # build.gradle reads this from the ENVIRONMENT (System.getenv), never a
       # -P property, and refuses any value below release/state.json's floor.
       VERSION_CODE_OVERRIDE: ${{ needs.decide.outputs.version_code }}
@@ -570,11 +658,34 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          # The prepare commit once `prepare` ran; otherwise (a dry run, or a run
-          # the resolver did not arm, where prepare is skipped) the triggering
-          # main commit. Version and code always come from `needs.decide.outputs`.
-          ref: ${{ needs.prepare.outputs.release_sha || github.sha }}
+          # Commit A (the pinned prepare commit), or — in a dry run, where no
+          # release commit exists — the commit the resolver classified. Never an
+          # implicit HEAD.
+          ref: ${{ needs.prepare.outputs.release_sha || needs.decide.outputs.pinned_commit }}
           fetch-depth: 0
+          # Read-only job: no write-capable token in .git/config.
+          persist-credentials: false
+      - name: Assert the pinned tree is what was checked out
+        # A publish run must have a prepared commit, and either way the checkout
+        # must be that exact commit: the version code and the tag are decided
+        # before the build, so a different tree here would ship unclassified work.
+        run: |
+          set -euo pipefail
+          if [ "$RELEASE_MODE" = "publish" ] && [ -z "${PREPARED_SHA:-}" ]; then
+            echo "::error::publish mode needs the prepared release commit for v${VERSION} and prepare produced none"
+            exit 1
+          fi
+          if [ -z "${PINNED_COMMIT:-}" ]; then
+            echo "::error::no pinned commit for v${VERSION}; the build must not fall back to HEAD"
+            exit 1
+          fi
+          HEAD_SHA=$(git rev-parse HEAD)
+          if [ "$HEAD_SHA" != "$PINNED_COMMIT" ]; then
+            echo "::error::checked out ${HEAD_SHA} but v${VERSION} is pinned at ${PINNED_COMMIT}; refusing to build a different tree"
+            exit 1
+          fi
+          echo "building the pinned tree ${PINNED_COMMIT} for v${VERSION} (code ${CODE})"
+          echo "Pinned tree: \`${PINNED_COMMIT}\`" >> "$GITHUB_STEP_SUMMARY"
       - name: Download the shared release-preparation script
         if: ${{ needs.prepare.result == 'skipped' }}
         uses: actions/download-artifact@v8
@@ -587,14 +698,15 @@ jobs:
           cache: npm
       - name: Rehearse prepare in the workspace (never committed)
         if: ${{ needs.prepare.result == 'skipped' }}
-        # No release commit exists in this run, so the four version locations and
-        # the pendingRelease record are written here instead — in the disposable
-        # runner workspace, by the exact script `prepare` runs. Build, verifier and
-        # summary therefore see the publish path's content and flags. Nothing is
-        # staged, committed, tagged or pushed; the runner is thrown away.
+        # No release commit exists in this run, so the four version locations are
+        # written here, then the pendingRelease record is pinned to the commit
+        # this run is rehearsing. Build, verifier and summary therefore see the
+        # publish path's content and flags. Nothing is staged, committed, tagged
+        # or pushed; the runner is thrown away.
         run: |
           set -euo pipefail
-          node "$RUNNER_TEMP/write-pending-release.mjs" "$VERSION" "$CODE"
+          node scripts/release/sync-version.mjs "$VERSION"
+          node "$RUNNER_TEMP/write-pending-release.mjs" "$VERSION" "$CODE" "$PINNED_COMMIT"
           node scripts/release/sync-version.mjs --verify "$VERSION"
           git status --porcelain
       - uses: actions/setup-java@v6
@@ -628,9 +740,11 @@ jobs:
       - name: Fetch pinned USE asset
         run: node scripts/fetch-use-model.mjs
       - name: Compute Sentry release identity (S3)
+        # The SHA token is the pinned commit, so the release string names the tree
+        # these symbols and this APK came from.
         run: |
           VERSION_FROM_PACKAGE=$(node -p "require('./apps/mobile/package.json').version")
-          SHA=$(git rev-parse --short=12 HEAD)
+          SHA=$(git rev-parse --short=12 "$PINNED_COMMIT")
           SENTRY_RELEASE="findback-mobile@${VERSION_FROM_PACKAGE}+${SHA}"
           # GITHUB_ENV applies to LATER steps only; export for the shape check
           # in THIS shell, then publish for the build + upload steps below.
@@ -761,12 +875,12 @@ jobs:
         # Gradle split names (app-<abi>-release.apk, app-universal-release.apk)
         # become Norfold-<TAG>-<abi|universal>.apk so the Release page and the
         # manifest agree. Tagged with the release version in publish mode and
-        # with the dry-run marker otherwise, because a dry run must never look
+        # with the pinned commit otherwise, because a dry run must never look
         # like the published asset set. Unexpected APK names fail closed here.
         run: |
           set -euo pipefail
           OUT=apps/mobile/android/app/build/outputs
-          if [ "$RELEASE_MODE" = "dry-run" ]; then TAG="dry-run-${GITHUB_SHA:0:12}"; else TAG="v${VERSION}"; fi
+          if [ "$RELEASE_MODE" = "dry-run" ]; then TAG="dry-run-${PINNED_COMMIT:0:12}"; else TAG="v${VERSION}"; fi
           echo "ART_TAG=$TAG" >> "$GITHUB_ENV"
           echo "RELEASE_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
           rm -rf release-stage && mkdir -p release-stage
@@ -806,11 +920,17 @@ jobs:
           [ "$MATCHED" -gt 0 ] || { echo "no APKs checked for BuildConfig client ID"; exit 1; }
       - name: Android update catalogue from the verified APK facts
         # The catalogue is what the app reads at launch; every fact in it comes
-        # from verify-release-apks.sh's rows, never from a filename.
+        # from verify-release-apks.sh's rows, never from a filename. Its
+        # `signingChannel` is the INSTALLATION channel from release/state.json —
+        # not the release `channel`, which only decides the prerelease flag.
         run: |
           set -euo pipefail
           PKG_VERSION=$(node -p "require('./apps/mobile/package.json').version")
-          CHANNEL=$(node -p "require('./release/state.json').channel")
+          SIGNING_CHANNEL=$(node -p "require('./release/state.json').signingChannel ?? ''")
+          if [ -z "$SIGNING_CHANNEL" ]; then
+            echo "::error::release/state.json has no signingChannel; refusing to write a catalogue without an installation channel"
+            exit 1
+          fi
           node scripts/write-android-catalogue.mjs \
             --facts "$RUNNER_TEMP/apk-facts.json" \
             --apk-dir release-stage \
@@ -819,28 +939,34 @@ jobs:
             --release-id "$ART_TAG" \
             --version-name "$PKG_VERSION" \
             --version-code "$CODE" \
-            --git-sha "$(git rev-parse HEAD)" \
+            --git-sha "$PINNED_COMMIT" \
             --published-at "$RELEASE_TIMESTAMP" \
             --summary "Norfold ${PKG_VERSION} for Android." \
-            --signing-channel "$CHANNEL" \
+            --signing-channel "$SIGNING_CHANNEL" \
             --out release-stage/catalogue.v1.json
           cat release-stage/catalogue.v1.json
       - name: release-manifest.json + checksums
+        # Same rule as the catalogue: the manifest's signingChannel is the
+        # installation channel, read from the state and never hardcoded.
         run: |
           set -euo pipefail
           MIN_SDK=$(grep -E '^\s*minSdkVersion' apps/mobile/android/variables.gradle | grep -oE '[0-9]+')
           TARGET_SDK=$(grep -E '^\s*targetSdkVersion' apps/mobile/android/variables.gradle | grep -oE '[0-9]+')
-          CHANNEL=$(node -p "require('./release/state.json').channel")
+          SIGNING_CHANNEL=$(node -p "require('./release/state.json').signingChannel ?? ''")
+          if [ -z "$SIGNING_CHANNEL" ]; then
+            echo "::error::release/state.json has no signingChannel; refusing to write a manifest without an installation channel"
+            exit 1
+          fi
           node scripts/generate-release-manifest.mjs \
             --tag "$ART_TAG" \
             --apk-dir release-stage \
             --aab "release-stage/Norfold-${ART_TAG}.aab" \
             --version-code "$CODE" \
-            --git-sha "$(git rev-parse HEAD)" \
+            --git-sha "$PINNED_COMMIT" \
             --min-sdk "$MIN_SDK" \
             --target-sdk "$TARGET_SDK" \
             --facts "$RUNNER_TEMP/apk-facts.json" \
-            --signing-channel "$CHANNEL" \
+            --signing-channel "$SIGNING_CHANNEL" \
             --out release-stage/release-manifest.json
           cat release-stage/release-manifest.json
           (cd release-stage && sha256sum *.apk *.aab release-manifest.json catalogue.v1.json > SHA256SUMS.txt)
@@ -879,7 +1005,29 @@ jobs:
             2) echo "::error::verify-consistency: a required input is missing or unparseable (exit 2) — see the input problems above; nothing was uploaded"; exit 2 ;;
             *) echo "::error::verify-consistency: unexpected exit ${status}"; exit "$status" ;;
           esac
+      - name: Dry run — delete every signed installable binary before upload
+        if: ${{ env.RELEASE_MODE == 'dry-run' }}
+        # A dry run signs with the real keystore at the real next versionCode. An
+        # APK installed from a rehearsal would make the real release at that same
+        # code a downgrade for the device (the client requires a strictly greater
+        # code), so the rehearsal retains no installable binary at all. This runs
+        # after every step that needs the APKs, and before the upload steps, so
+        # the invariant "no uploaded artifact contains a *.apk or *.aab" holds
+        # even if an upload path is widened later. The APK facts join the evidence
+        # directory first, because they are the part that is worth keeping.
+        run: |
+          set -euo pipefail
+          cp "$RUNNER_TEMP/apk-facts.json" release-stage/apk-facts.json
+          rm -f release-stage/*.apk release-stage/*.aab
+          REMAINING=$(find release-stage -maxdepth 1 \( -name '*.apk' -o -name '*.aab' \) -print | wc -l)
+          if [ "$REMAINING" -ne 0 ]; then
+            echo "::error::${REMAINING} installable binar(y/ies) remain in release-stage after the dry-run purge"
+            find release-stage -maxdepth 1 \( -name '*.apk' -o -name '*.aab' \) -print
+            exit 1
+          fi
+          ls -l release-stage/
       - name: Upload signed artifacts
+        if: ${{ env.RELEASE_MODE != 'dry-run' }}
         uses: actions/upload-artifact@v7
         with:
           name: findback-signed-${{ github.run_id }}
@@ -887,6 +1035,20 @@ jobs:
           # Temporary inter-job transport consumed by the publish job in this
           # same run. 3 days is enough to retry a failed release; the published
           # GitHub Release assets are separate and unaffected.
+          retention-days: 3
+          if-no-files-found: error
+      - name: Upload dry-run evidence (no installable binary)
+        if: ${{ env.RELEASE_MODE == 'dry-run' }}
+        uses: actions/upload-artifact@v7
+        with:
+          # Only the non-installable evidence: the signed APKs/AAB were deleted in
+          # the step above, and this path list never names one.
+          name: release-dry-run-evidence-${{ github.run_id }}
+          path: |
+            release-stage/catalogue.v1.json
+            release-stage/release-manifest.json
+            release-stage/SHA256SUMS.txt
+            release-stage/apk-facts.json
           retention-days: 3
           if-no-files-found: error
       - name: Step summary (dry run build)
@@ -902,8 +1064,10 @@ jobs:
             echo "| --- | --- |"
             echo "| Rehearsed version | \`${VERSION}\` |"
             echo "| Rehearsed version code | \`${CODE}\` |"
+            echo "| Pinned tree | \`${PINNED_COMMIT}\` |"
             echo "| APK version stamped | \`$(node -p "require('./apps/mobile/package.json').version")\` |"
             echo "| pendingRelease in the workspace | \`$(node -p "require('./release/state.json').pendingRelease?.tag ?? 'none'")\` |"
+            echo "| Installable artifact retained | \`none\` |"
             echo
             echo "Runner workspace only: \`package.json\`, \`apps/mobile/package.json\`,"
             echo "\`package-lock.json\` and \`release/state.json\` were rewritten by"
@@ -912,6 +1076,12 @@ jobs:
             echo "content \`prepare\` would have committed."
             echo
             echo "Nothing was committed, tagged, pushed or published; the workspace is discarded."
+            echo
+            echo "No installable artifact was retained: every \`*.apk\` and \`*.aab\` this"
+            echo "rehearsal signed was deleted before the artifact upload, so the uploaded"
+            echo "evidence (\`catalogue.v1.json\`, \`release-manifest.json\`,"
+            echo "\`SHA256SUMS.txt\`, \`apk-facts.json\`) contains no binary anyone could"
+            echo "install at the real release's version code."
           } >> "$GITHUB_STEP_SUMMARY"
 
   publish:
@@ -924,18 +1094,24 @@ jobs:
     if: ${{ needs.build.result == 'success' && needs.prepare.result == 'success' && needs.decide.outputs.release_required == 'true' && needs.decide.outputs.publication_enabled == 'true' && (github.event_name != 'workflow_dispatch' || inputs.mode == 'publish') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # This job pushes the tag.
+    permissions:
+      contents: write
     outputs:
       published_at: ${{ steps.release.outputs.published_at }}
     env:
       VERSION: ${{ needs.decide.outputs.version }}
       CODE: ${{ needs.decide.outputs.version_code }}
+      # Commit A: either produced by `prepare` in this run, or read from
+      # `pendingRelease.commit` by it. The tag is created on exactly this SHA and
+      # nothing else is allowed to move it.
       RELEASE_SHA: ${{ needs.prepare.outputs.release_sha }}
       CLASSIFICATION_BASE: ${{ needs.decide.outputs.classification_base }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v5
         with:
-          # The prepare commit; the tag is created on exactly this SHA.
+          # The pinned commit; the tag is created on exactly this SHA.
           ref: ${{ needs.prepare.outputs.release_sha }}
           fetch-depth: 0
           fetch-tags: true
@@ -949,6 +1125,10 @@ jobs:
       - name: Verify the downloaded assets
         run: |
           set -euo pipefail
+          if [ "$(git rev-parse HEAD)" != "$RELEASE_SHA" ]; then
+            echo "::error::checked out $(git rev-parse HEAD) but the release is pinned at ${RELEASE_SHA}"
+            exit 1
+          fi
           ls -l release-files/
           (cd release-files && sha256sum -c SHA256SUMS.txt)
       - name: Create the tag on the prepare commit (never move one)
@@ -959,10 +1139,10 @@ jobs:
           if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
             TAGGED_SHA=$(git rev-parse "refs/tags/${TAG}^{commit}")
             if [ "$TAGGED_SHA" != "$RELEASE_SHA" ]; then
-              echo "::error::tag ${TAG} already exists at ${TAGGED_SHA}, not at the prepared commit ${RELEASE_SHA}; refusing to move it"
+              echo "::error::tag ${TAG} already exists at ${TAGGED_SHA}, not at the pinned commit ${RELEASE_SHA}; refusing to move it"
               exit 1
             fi
-            echo "tag ${TAG} already points at the prepared commit; leaving it in place"
+            echo "tag ${TAG} already points at the pinned commit; leaving it in place"
           else
             git tag "$TAG" "$RELEASE_SHA"
             git push origin "refs/tags/${TAG}"
@@ -973,6 +1153,9 @@ jobs:
         run: |
           set -euo pipefail
           TAG="v${VERSION}"
+          # `channel` is the RELEASE label only: the prerelease flag and the title.
+          # The installation channel the catalogue and the native update policy
+          # compare is `signingChannel`, and the build reads that one.
           CHANNEL=$(node -p "require('./release/state.json').channel")
 
           PRERELEASE_FLAG=""
@@ -983,8 +1166,9 @@ jobs:
           fi
 
           # Curated notes win when the file exists in this tree; otherwise the
-          # body is generated from Conventional Commits over the classified
-          # range, grouped by type. Nothing about signing, scanning or
+          # body is generated from the classified range so that no accepted commit
+          # is dropped: the curated sections first, then every remaining subject
+          # under "Other changes". Nothing about signing, scanning or
           # verification is asserted here — the assets and their checksums are.
           NOTES_FILE="docs/release-notes/${TAG}.md"
           if [ -f "$NOTES_FILE" ]; then
@@ -996,39 +1180,50 @@ jobs:
           import { execFileSync } from "node:child_process";
 
           const [base, head] = process.argv.slice(2);
-          // Same type vocabulary the resolver classifies with.
+          // Curated sections only. Everything else that is accepted below lands
+          // under "Other changes", so an ad-hoc type (`dock:`, `ui:`, `chat:`,
+          // `share-preview:`, …) can never silently vanish from the body.
           const GROUPS = [
             ["feat", "Features"],
             ["fix", "Fixes"],
             ["perf", "Performance"],
-            ["refactor", "Refactors"],
-            ["docs", "Documentation"],
-            ["test", "Tests"],
-            ["build", "Build"],
-            ["ci", "CI"],
-            ["chore", "Chores"],
-            ["style", "Style"],
-            ["revert", "Reverts"],
           ];
-          const SUBJECT = /^([a-z]+)(?:\(([^()\r\n]*)\))?(!)?: +(\S.*)$/;
+          const SUBJECT = /^([a-z][a-z0-9-]*)(?:\(([^()\r\n]*)\))?(!)?: +(\S.*)$/;
           const MERGE = /^Merge (?:pull request #\d+|branch\b|remote-tracking branch\b|tag\b)/;
           const GENERATED_REVERT = /^Revert "[^"]+"$/;
+          // This workflow's own bookkeeping commits, in the exact three forms it writes:
+          // the version bump, the pendingRelease record, and the post-publication
+          // finalise. Anchored, so a real change that happens to use the same type and
+          // scope is still listed.
+          const RELEASE_BOOKKEEPING = /^chore\(release\): (?:v\d+\.\d+\.\d+|record pending v\d+\.\d+\.\d+|finalise v\d+\.\d+\.\d+)$/;
 
-          const raw = execFileSync("git", ["log", "--format=%s%x1f%b%x1e", `${base}..${head}`], {
+          const raw = execFileSync("git", ["log", "--format=%H%x1f%s%x1f%b%x1e", `${base}..${head}`], {
             encoding: "utf8",
           });
 
           const grouped = new Map(GROUPS.map(([type]) => [type, []]));
+          const breaking = [];
+          const other = [];
+
           for (const chunk of raw.split("\x1e")) {
             const text = chunk.replace(/^\n+/, "").trimEnd();
             if (text.trim() === "") continue;
-            const subject = text.split("\x1f")[0].trim();
-            if (MERGE.test(subject) || GENERATED_REVERT.test(subject)) continue;
-            const match = SUBJECT.exec(subject);
-            if (match === null) continue;
-            const type = match[1];
-            if (type === "chore" && /^chore\(release\):/.test(subject)) continue;
-            grouped.get(type)?.push(subject);
+            const [sha, subject, body = ""] = text.split("\x1f");
+            const line = (subject ?? "").trim();
+            if (MERGE.test(line) || GENERATED_REVERT.test(line)) continue;
+            if (RELEASE_BOOKKEEPING.test(line)) continue;
+            const match = SUBJECT.exec(line);
+            const isBreaking = (match !== null && match[3] === "!") || /^BREAKING[ -]CHANGE:/m.test(body);
+            if (isBreaking) {
+              breaking.push(line);
+              continue;
+            }
+            const bucket = match === null ? undefined : grouped.get(match[1]);
+            if (bucket === undefined) {
+              other.push(`${line} (${sha.trim().slice(0, 7)})`);
+              continue;
+            }
+            bucket.push(line);
           }
 
           const lines = [];
@@ -1036,6 +1231,12 @@ jobs:
             const items = grouped.get(type) ?? [];
             if (items.length === 0) continue;
             lines.push(`### ${heading}`, "", ...items.map((item) => `- ${item}`), "");
+          }
+          if (breaking.length > 0) {
+            lines.push("### Breaking changes", "", ...breaking.map((item) => `- ${item}`), "");
+          }
+          if (other.length > 0) {
+            lines.push("### Other changes", "", ...other.map((item) => `- ${item}`), "");
           }
           if (lines.length > 0) {
             process.stdout.write(
@@ -1054,11 +1255,79 @@ jobs:
             BODY_FILE="$RUNNER_TEMP/release-body.md"
           fi
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "release ${TAG} already exists; leaving it untouched (no edit, no delete)"
+          # The completeness check for an existing release record. Nothing here
+          # assumes success because a tag or a release exists: every expected
+          # asset, its size, the checksums and the catalogue tag must agree with
+          # this build's output, or the job fails naming what is wrong.
+          cat > "$RUNNER_TEMP/verify-published-release.mjs" <<'NODE'
+          import { readdirSync, readFileSync, statSync } from "node:fs";
+          import { join } from "node:path";
+
+          const [tag, viewPath, dir] = process.argv.slice(2);
+          if (!tag || !viewPath || !dir) {
+            console.error("usage: verify-published-release.mjs <tag> <gh-release-view.json> <asset-dir>");
+            process.exit(2);
+          }
+
+          const view = JSON.parse(readFileSync(viewPath, "utf8"));
+          const problems = [];
+          if (view.isDraft !== false) problems.push("the release is a draft");
+
+          const remote = new Map((view.assets ?? []).map((asset) => [asset.name, asset.size]));
+          const expected = readdirSync(dir)
+            .filter(
+              (name) =>
+                name.endsWith(".apk") ||
+                name.endsWith(".aab") ||
+                name === "release-manifest.json" ||
+                name === "catalogue.v1.json" ||
+                name === "SHA256SUMS.txt",
+            )
+            .sort();
+          if (expected.length === 0) problems.push(`the build output in ${dir} has no assets to compare`);
+
+          for (const name of expected) {
+            if (!remote.has(name)) {
+              problems.push(`asset ${name} is missing from the release`);
+              continue;
+            }
+            const local = statSync(join(dir, name)).size;
+            if (remote.get(name) !== local) {
+              problems.push(`asset ${name} is ${remote.get(name)} bytes on the release but ${local} bytes locally`);
+            }
+          }
+          for (const name of remote.keys()) {
+            if (!expected.includes(name)) problems.push(`unexpected asset ${name} on the release`);
+          }
+
+          if (!expected.includes("catalogue.v1.json")) {
+            problems.push("catalogue.v1.json is missing from the build output");
+          } else {
+            const catalogue = JSON.parse(readFileSync(join(dir, "catalogue.v1.json"), "utf8"));
+            if (catalogue.tag !== tag) {
+              problems.push(`catalogue.v1.json tag is ${JSON.stringify(catalogue.tag)}, expected ${tag}`);
+            }
+          }
+
+          if (problems.length > 0) {
+            for (const problem of problems) {
+              console.error(`::error::${tag} is recorded as published but is not complete: ${problem}`);
+            }
+            process.exit(1);
+          }
+          console.log(`${tag}: release is complete (${expected.length} assets, sizes and catalogue tag agree)`);
+          NODE
+
+          if gh release view "$TAG" --json assets,isDraft > "$RUNNER_TEMP/release-view.json" 2>/dev/null; then
+            echo "${TAG} already has a release record; verifying it is complete before skipping creation"
+            # The local files are the build output this run would have published.
+            # Every check below is against them.
+            (cd release-files && sha256sum -c SHA256SUMS.txt)
+            node "$RUNNER_TEMP/verify-published-release.mjs" "$TAG" "$RUNNER_TEMP/release-view.json" release-files
+            echo "release ${TAG} already exists and is complete; leaving it untouched (no edit, no upload, no delete)"
           else
             # Intentional word-splitting: PRERELEASE_FLAG is empty (stable) or
-            # --prerelease (channel "beta").
+            # --prerelease (release channel "beta").
             # shellcheck disable=SC2086
             gh release create "$TAG" $PRERELEASE_FLAG \
               --title "$TITLE" \
@@ -1090,6 +1359,9 @@ jobs:
     if: ${{ needs.publish.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # This job pushes the finalise commit.
+    permissions:
+      contents: write
     env:
       VERSION: ${{ needs.decide.outputs.version }}
       CODE: ${{ needs.decide.outputs.version_code }}
@@ -1131,8 +1403,11 @@ jobs:
             ...state,
             version,
             versionCode,
-            // The next classification starts at the published commit, so the
-            // commits that shipped in this release are never released twice.
+            // The next classification starts at the pinned commit that was built
+            // and published, so the commits that shipped in this release are never
+            // released twice — and work that landed on `main` after the pin is
+            // classified for the NEXT release instead of being folded into this
+            // one.
             classificationBase: commit,
             pendingRelease: null,
             lastRelease: {
@@ -1158,4 +1433,4 @@ jobs:
             git rebase origin/main
             git push origin HEAD:main
           fi
-          echo "finalised v${VERSION} at $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+          echo "finalised v${VERSION} at $(git rev-parse HEAD) (pinned tree ${RELEASE_SHA})" >> "$GITHUB_STEP_SUMMARY"
