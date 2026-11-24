@@ -47,13 +47,20 @@ test('a backend outage cannot masquerade as a deleted report or leak upstream er
 test('invalid IDs/methods/queries never query the backend or reflect input', async () => {
   for (const r of [{...request(),params:{id:'<script>oops</script>'}}, {...request(),method:'POST'}, request('?next=https://evil.test'), request('?format=json&format=html')]) {
     const net = network(); const res = await handleShare(r,config,net.fetch);
-    assert.ok([400,404,405].includes(res.status)); assert.equal(net.calls.length,0); assert.doesNotMatch(res.body,/<script>|evil\.test/);
+    assert.ok([400,404,405].includes(res.status)); assert.equal(net.calls.length,0);
+    // Each property is its own assertion: a whole script tag (attributes and
+    // any casing), never the injected input, and never the supplied host.
+    assert.doesNotMatch(res.body,/<script\b/i);
+    assert.doesNotMatch(res.body,/evil\.test/i);
   }
 });
 test('schema drift/extra private columns and arbitrary strings fail closed, even from upstream', async () => {
   for(const data of [[{...preview,email:'private@example.invalid'}],[{...preview,title:'Call +15551234567'}],[{...preview,category:'<script>x</script>'}],[{...preview,event_month:'2026-11-01'}],[preview,preview],{data:preview}]){
     const res=await handleShare(request(),config,network(data).fetch);
-    assert.equal(res.status,503); assert.doesNotMatch(res.body,/private@example|15551234567|<script>/);
+    assert.equal(res.status,503);
+    assert.doesNotMatch(res.body,/<script\b/i);
+    assert.doesNotMatch(res.body,/private@example/i);
+    assert.doesNotMatch(res.body,/15551234567/);
   }
 });
 test('HTML escaping, canonical URLs and CSP cannot be influenced by request host/query/header', async () => {
