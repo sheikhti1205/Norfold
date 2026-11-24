@@ -6,6 +6,9 @@ const require = createRequire(import.meta.url);
 const { load } = require('js-yaml');
 const workflow = load(readFileSync('.github/workflows/android-builds.yml', 'utf8'));
 
+/** Step runs that would create, edit or upload a numbered release. */
+const RELEASE_COMMANDS = [/gh release/i, /release create/i, /release upload/i, /catalogue/i];
+
 test('the Android workflow is driven by one explicit mode', () => {
   const dispatch = workflow.on.workflow_dispatch;
   assert.deepEqual(dispatch.inputs.mode.options, ['auto', 'none', 'build', 'publish']);
@@ -18,17 +21,19 @@ test('build mode produces artifacts and never touches a release', () => {
   const steps = workflow.jobs.apk.steps;
   const artifact = steps.find((s) => s.uses?.startsWith('actions/upload-artifact@'));
   assert.equal(artifact.if, "needs.guard.outputs.decision == 'build'");
-  for (const name of ['Write the update catalogue for exactly these bytes', 'Publish the numbered release']) {
-    assert.equal(steps.find((s) => s.name === name).if, "needs.guard.outputs.decision == 'publish'");
+  for (const step of steps) {
+    const label = step.name ?? step.uses ?? 'unnamed step';
+    for (const command of RELEASE_COMMANDS) assert.doesNotMatch(step.run ?? '', command, label);
   }
 });
 
-test('publish mode still enforces release immutability', () => {
+test('the guard decides and its decision is the only thing the build actions read', () => {
   const steps = workflow.jobs.apk.steps;
   const config = steps.find((s) => s.name === 'Strict installable config and build identity');
-  assert.match(config.run, /\[ "\$DECISION" = publish \]/);
-  assert.equal(config.env.DECISION, '${{ needs.guard.outputs.decision }}');
-  assert.match(config.run, /numbered releases are immutable/);
+  for (const command of RELEASE_COMMANDS) assert.doesNotMatch(config.run, command);
+  assert.equal(workflow.jobs.guard.outputs.decision, '${{ steps.check.outputs.decision }}');
+  assert.ok(workflow.jobs.guard.steps.some((s) => s.id === 'check'));
+  assert.equal(workflow.jobs.apk.if, "needs.guard.outputs.decision != 'skip'");
 });
 
 test('manual Android candidate runs build an exact-SHA upgrade without changing any numbered release', () => {
