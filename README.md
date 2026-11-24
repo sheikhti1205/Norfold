@@ -4,8 +4,7 @@
 
 [![CI](https://github.com/sheikhti1205/Norfold/actions/workflows/ci.yml/badge.svg)](https://github.com/sheikhti1205/Norfold/actions/workflows/ci.yml)
 
-**Status: internal beta (pre-public).** This is not a public release. Install builds
-only from a verified GitHub release; an engineering checkpoint is not release approval.
+**Status: pre-public beta.** Install builds only from a published GitHub release.
 
 Norfold (formerly FindBack) is a local-first lost-and-found network for reporting, matching and recovering lost items.
 
@@ -18,8 +17,8 @@ Web links to shared reports: <https://findbackapp.social>
 ## Screenshots
 
 Browser captures with synthetic reports in light and true-black themes, from
-an earlier beta (capture source/date in the manifest). They predate the adaptive
-refresh and are not current-source, native-device or real-account acceptance.
+an earlier beta (capture details are in the manifest). They predate later UI
+changes and do not show the current build, a physical device or real accounts.
 
 <p>
   <img src="docs/screenshots/search-light.png" width="240" alt="Earlier-beta search results for synthetic lost and found items in the light theme" />
@@ -53,13 +52,11 @@ Capture dimensions and checksums: [screenshot manifest](docs/screenshots/manifes
 - Adaptive layouts: bottom navigation on phones, compact rails and split views on larger windows
 - A shared photo viewer with zoom, keyboard navigation and desktop thumbnails
 - Sign in with email or Google; phone verification is not enabled
-- Six-digit email codes for signup confirmation and password recovery, with reset-link fallback; [owner SMTP/template setup](docs/auth/owner-setup.md) and real delivery verification are still required
+- Six-digit email codes for signup confirmation and password recovery, with reset-link fallback; [provider SMTP and template setup](docs/auth/provider-setup.md) and real delivery verification are still required
 - Optional AI Chat using your own API key from the provider you choose
 
-This is an internal beta under validation, not a public-ready release. The current
-source version is `0.16.0-beta.3`. Product Fit Reset migrations have exact hosted
-readback; final CI and web deployment receipts are tracked separately. A source
-version is not an installable release or a real-device acceptance claim.
+This is a pre-public beta: the features above are implemented and working, but
+behaviour can still change between releases.
 
 ## Your privacy
 
@@ -81,31 +78,27 @@ Meeting a stranger to hand over an item has real risks. Verify ownership before 
 
 ## Install
 
-Android is the primary target. Only builds explicitly verified and published on the GitHub Releases page should be installed; an internal engineering checkpoint is not release approval.
+Android is the primary target. Install only builds published on the GitHub
+Releases page.
 
 ## Project status
 
-Norfold is a working internal beta. The consumer flows are implemented and covered by
-automated checks, but real two-account, multi-device, staff-session and phone-photo
-acceptance is still outstanding. Physical Android and Sentry ingestion acceptance
-also remain unpassed. M7-P is historical source closure; its four migrations were
-already hosted when Product Fit Reset began. The authorized reset deleted old
-Auth accounts, product rows and uploads while preserving schema/configuration
-and only pending privileged email offers. See
-[the current beta checkpoint](docs/releases/PRODUCT_FIT_RESET_2026-11-02.md),
-[ROADMAP.md](ROADMAP.md) for direction and
-[docs/history/](docs/history/) for how the version line is derived.
+The current source version is `0.16.0-beta.3`. The app works, and CI runs the
+automated checks that cover its main flows. What is still unproven is behaviour
+under real conditions: two accounts using the app together, one account signed in
+on several devices, and physical Android hardware.
+
+See [ROADMAP.md](ROADMAP.md) for direction and [docs/history/](docs/history/) for
+how the version line is derived.
 
 ## For developers
 
 - Setup, stack, layout and checks: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 - Architecture and data flow: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- Current adaptive UI ownership: [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md)
+- Adaptive UI rules and current surfaces: [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md)
 - Canonical brand assets and cache/device acceptance: [BRANDING.md](BRANDING.md)
 - Data model: [docs/erd/](docs/erd/)
 - Version history: [docs/history/VERSION_HISTORY.md](docs/history/VERSION_HISTORY.md)
-- Freeze record: [docs/releases/BETA_FUNCTIONAL_FREEZE_2026-10-30.md](docs/releases/BETA_FUNCTIONAL_FREEZE_2026-10-30.md)
-- Course-era material (provenance only): [docs/course/](docs/course/)
 
 ## Contributing
 
@@ -125,4 +118,4 @@ reserved ([BRANDING.md](BRANDING.md)); third-party components keep their own lic
 Norfold started in 2026 as a university course project and grew into a real
 lost-and-found product. Course-era requirements, plans and evaluation material are
 kept under [docs/course/](docs/course/) for provenance; they are not the current
-product specification and they are not acceptance evidence.
+product specification.

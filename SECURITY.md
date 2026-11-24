@@ -7,7 +7,11 @@ seriously, but there is no bug-bounty programme and no guaranteed response time.
 
 **Do not open a public issue for a security problem.**
 
-Email **sheikhti1205@outlook.com** with:
+Use GitHub's private vulnerability reporting for this repository:
+<https://github.com/sheikhti1205/Norfold/security/advisories/new>. A report sent
+there stays private between you and the maintainers.
+
+Include:
 
 - a short description and the impact you believe it has;
 - steps to reproduce, or a proof of concept;
@@ -37,7 +41,6 @@ impact, and social engineering of project maintainers.
   while they are in transit or stored.
 - Push notifications are wake-only and do not carry message text.
 - Phone verification is not enabled in this beta.
-- An internal engineering checkpoint is not a security audit or a release approval.
 
 ## Safe harbour
 

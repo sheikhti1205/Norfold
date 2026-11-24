@@ -4,7 +4,8 @@ Ready-to-paste HTML for the Supabase **Authentication → Emails** (Email
 Templates) page, plus the exact Subject lines and variables each template needs.
 
 These are source files only. Nothing here was applied to the hosted project, and
-no dashboard setting is described as changed. Copy/paste is an owner action.
+no dashboard setting is described as changed. Copy/paste is a manual dashboard
+step.
 
 Supabase does not read this directory. The dashboard "Source" view takes the
 whole HTML file; `supabase/config.toml` does not exist in this repository, so
@@ -45,7 +46,7 @@ nothing and leaves a hole in the sentence.
 `reset-password.html` renders `{{ .Token }}` and contains no
 `{{ .ConfirmationURL }}` at all. Three reasons, in order of weight:
 
-1. The owner's requirement for this work is an OTP reset flow.
+1. This work provides an OTP reset flow.
 2. Link prefetching. Microsoft Defender Safe Links and similar scanners open
    links on delivery, which burns the one-time token before the user clicks
    (Supabase documents this under "Email prefetching"). A code cannot be
@@ -55,16 +56,16 @@ nothing and leaves a hole in the sentence.
    (`apps/mobile/src/screens/Recovery.tsx:72`). The link was the fallback, not
    the main path.
 
-**Consistency note.** `docs/auth/owner-setup.md` step 4 (`:24-30`) points
-owners at `supabase/email-templates/reset-password.html` — the file in this
-directory — as the canonical reset template, and describes it as containing
+**Consistency note.** `docs/auth/provider-setup.md` step 4 (`:24-30`) points a
+new installation at `supabase/email-templates/reset-password.html` — the file in
+this directory — as the canonical reset template, and describes it as containing
 `{{ .Token }}` with no reset link. The canonical reset source lives here.
 
 `docs/auth/reset-password-otp.html` is no longer a template: it is a pointer
 page. It contains no `{{ .ConfirmationURL }}` and no recovery link at all; it
 only directs readers to this directory's `reset-password.html` and to
-`owner-setup.md`. `ConfirmationURL` has zero hits anywhere under `docs/auth/`,
-so the docs and this template now agree.
+`provider-setup.md`. `ConfirmationURL` has zero hits anywhere under
+`docs/auth/`, so the docs and this template now agree.
 
 ## Invite has no code
 
@@ -85,7 +86,7 @@ Site URL / `redirect_to` and then on the allow-list. Confirm in
 - Redirect URLs include `https://findbackapp.social/recovery`
   (`apps/mobile/src/services/auth.ts:295`) and the existing Google callback
   `https://findbackapp.social/auth/callback`
-  (`docs/auth/owner-setup.md:31-34`).
+  (`docs/auth/provider-setup.md:31-34`).
 - Keep whatever native/App-Links entries already exist. Do not add a domain for
   this work.
 
@@ -100,14 +101,14 @@ rewritten auth URL is exactly what `{{ .ConfirmationURL }}` must not become.
 ## OTP settings to confirm (not changed here)
 
 - **Email OTP length: 6.** Required by the code cell (six monospace digits) and
-  by the app's `/^\d{6}$/` check (`docs/auth/owner-setup.md:15`,
+  by the app's `/^\d{6}$/` check (`docs/auth/provider-setup.md:15`,
   `apps/mobile/src/screens/Recovery.tsx:72`). A different length will wrap and
   will fail the client-side check.
 - **Email OTP expiry:** whatever the project uses today. The templates never
   state a number — they say "expires soon" — so changing expiry needs no
   template edit. Default is one hour; confirm the live value rather than trusting
   it.
-- **Confirm email: on** for signup (`docs/auth/owner-setup.md:14-15`).
+- **Confirm email: on** for signup (`docs/auth/provider-setup.md:14-15`).
 - **Custom SMTP with a sender you control**, SPF/DKIM verified. The built-in
   service is testing-only.
 

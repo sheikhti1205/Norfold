@@ -23,16 +23,16 @@ include branding rights; ask for them explicitly if you need them.
 
 ## Current asset authority and regeneration
 
-The current owner-approved identity is the **bird/leaf emblem**, from
+The current identity is the **bird/leaf emblem**, from
 `apps/mobile/src/assets/brand/brand-tile-master.png` (2026-10-19, SHA256
 `27c4f0479e5240b549183731d4302633c31734a405d1bdf2cc154543ebcc0b4d`).
 `logo2-master.jpg` is the historical 2026-10-09 pin/FB mark, retained for
 provenance, **not** an input to current platform assets. Do not redraw or trace
-either asset. The current master matches the owner's header reference.
+either asset. The current master matches the approved header reference.
 
 Use `BrandMark` in React. Its default is the monochrome alpha emblem, with the
-bird/leaf interior keyed out; `shape="tile"` retains the exact prepared owner's
-two-ink treatment. Both preserve the master's geometry. The wordmark is text,
+bird/leaf interior keyed out; `shape="tile"` retains the prepared two-ink
+treatment. Both preserve the master's geometry. The wordmark is text,
 not baked into platform icons.
 
 The shared `AuthShell` (email/Google gateway, verification and profile completion)

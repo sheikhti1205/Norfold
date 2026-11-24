@@ -91,7 +91,7 @@ padded: zero, one or two are valid when there is less evidence. Event dates are
 not misrepresented as report creation dates. No visual signal is implemented.
 
 ```sh
-~/<config>/bin/heavy-run node --experimental-strip-types tools/bench/run-matching-reasons-eval.mjs docs/bench/matching-reasons-eval-v1.json
+node --experimental-strip-types tools/bench/run-matching-reasons-eval.mjs docs/bench/matching-reasons-eval-v1.json
 ```
 
 The twelve hand-authored cases are too small and too synthetic for any matching

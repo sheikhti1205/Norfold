@@ -30,7 +30,7 @@ Never infer hosted acceptance from local SQL/Storage stubs or mocked SDK tests.
    Missing configuration, failed byte removal/ack, fresh leases or remaining
    expired reservations must leave the run red/incomplete, not silently green.
 
-## Bounded worker behavior
+## Limits applied to automated maintenance
 
 - Schedule/manual dispatch only, one invocation at a time, no push/tag trigger.
 - `max_batches`: integer 1–10, default 10. Invalid HTTP controls perform no work.
@@ -46,7 +46,7 @@ Never infer hosted acceptance from local SQL/Storage stubs or mocked SDK tests.
 
 ## Required live evidence (not yet passed by source checks)
 
-Use disposable owner-authorized fixtures; record counts/results, never tokens or
+Use disposable fixtures approved for use; record counts/results, never tokens or
 personal data. Verify reserved photo upload/atomic comment commit, wrong-account
 or wrong-report denial, visibility/block revocation, public object access denied,
 authorized short-lived signing, committed-media discard no-op, deletion cleanup,
@@ -55,4 +55,4 @@ Real two-account/physical-device acceptance remains separate and unpassed until 
 
 The generic deploy planner now gates this worker on `20261102220000`; its legacy
 `--migrations-live` lease-only alias is deliberately insufficient. Direct backend
-deploy remains owner-controlled and must follow the ordered prerequisite check.
+deploy remains manual and must follow the ordered prerequisite check.

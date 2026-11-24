@@ -97,8 +97,6 @@ scripts/              Build, verification and release tooling
 M7-P people search, mute, context/location and forward integrity repair migrations
 were observed hosted at the Product Fit Reset baseline. Product Fit Reset adds
 matching-v2, sanitized public preview and explicit privileged role acceptance.
-Hosted application/readback and publication state are recorded in the
-[current checkpoint](releases/PRODUCT_FIT_RESET_2026-11-02.md).
 Local render/source acceptance does not establish native, real-account or live
 service acceptance. No Edge Function deployment accompanies a source commit.
 
@@ -119,5 +117,4 @@ service acceptance. No Edge Function deployment accompanies a source commit.
 - Setup and checks: [DEVELOPMENT.md](DEVELOPMENT.md)
 - Legacy retirement boundary: [LEGACY_API_RETIREMENT.md](LEGACY_API_RETIREMENT.md)
 - Version history: [history/VERSION_HISTORY.md](history/VERSION_HISTORY.md)
-- Freeze record: [releases/BETA_FUNCTIONAL_FREEZE_2026-10-30.md](releases/BETA_FUNCTIONAL_FREEZE_2026-10-30.md)
 - Data model: [erd/](erd/)

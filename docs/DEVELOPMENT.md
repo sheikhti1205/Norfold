@@ -62,7 +62,6 @@ npm run scan:secrets # repository secret scan
 Additional gates used in CI and before a release:
 
 ```bash
-node scripts/completion-gate.mjs         # ledger integrity + debt/skip policy
 node scripts/check-security-baseline.mjs # dependency CVE tripwire
 node scripts/check-map-provider.mjs      # keyless map provider policy
 node scripts/check-version-sync.mjs      # root and mobile versions agree

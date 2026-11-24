@@ -12,12 +12,15 @@ Nothing in this document grants rights; it only explains how to ask for them.
 
 ## Requesting a commercial license
 
-Email **sheikhti1205@outlook.com** with:
+Open an issue titled **Commercial license request**, including:
 
 - who you are and the legal entity that would hold the license;
 - what you want to run or build with Norfold;
 - whether you need the Norfold name/branding, or only the code;
 - expected scale (users, deployments, distribution model).
+
+Further detail, such as contracts or anything that should not be public, can be
+exchanged privately once contact is made.
 
 A commercial license is a separate written agreement. Until one is signed, no
 commercial rights are granted — nothing in this repository, its issues, or its

@@ -1,15 +1,13 @@
 # Contributing
 
-Norfold is a pre-public beta maintained by a single owner. Contributions are
-welcome as issues and focused pull requests, but the project does not promise
-review timelines, and large unsolicited changes are likely to be declined.
+Norfold is a pre-public beta. Issues and focused pull requests are welcome.
+Review timelines are not promised.
 
 ## Before you start
 
 - Open an issue describing the problem or proposal, especially for anything that
   touches authentication, database policies, chat, media or moderation.
-- Security problems go to **sheikhti1205@outlook.com**, never a public issue
-  (see [SECURITY.md](SECURITY.md)).
+- Security problems go to [SECURITY.md](SECURITY.md), never a public issue.
 - By contributing you agree your contribution is licensed under the project's
   [PolyForm Noncommercial License 1.0.0](LICENSE.md), and that the project may
   relicense it as part of a commercial license.

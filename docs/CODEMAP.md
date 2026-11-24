@@ -67,17 +67,13 @@ imports; tests commonly sit next to the implementation they exercise.
 - `scripts/`: build, configuration checks, deployment helpers and script tests.
 - `scripts/device-harness/`: device capture and APK provenance helpers; observe device consent rules.
 - `docs/`: architecture, operations and historical documents; check dates and source.
-- `docs/acceptance/`: acceptance records and waivers.
 - `docs/auth/`: auth setup and email templates.
 - `docs/bench/`: matching evaluation datasets and policy.
 - `docs/course/`: historical course implementation material.
 - `docs/erd/`: database relationship documentation.
-- `docs/evidence/`: recorded environment and service evidence; not current-state proof.
 - `docs/history/`: dated historical reports and CI descriptions.
 - `docs/plans/`: implementation plans; verify status before using one.
 - `docs/release-notes/`: versioned release notes.
-- `docs/releases/`: release and source-closure records.
-- `docs/reporting/`: reporting documentation.
 - `docs/runbooks/`: operational procedures and maintenance instructions.
 - `docs/screenshots/`: screenshot files and their manifest.
 
@@ -221,6 +217,6 @@ can have separate owners. Search callers and migrations before changing one.
    last; replacing it early can reference chunks that have not been committed.
 5. **Media download is not a direct storage shortcut.** The Edge handler asks
    the database for a target and returns a failure when eligibility is absent.
-6. **Historical evidence is not a live-state check.** `docs/history/` and
-   `docs/evidence/` contain dated or recorded artifacts; verify current state
-   independently before treating them as deployment evidence.
+6. **Historical evidence is not a live-state check.** `docs/history/` contains
+   dated or recorded artifacts; verify current state independently before
+   treating them as deployment evidence.

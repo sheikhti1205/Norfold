@@ -48,4 +48,5 @@ not established here. Aborting fetch cannot prove cancellation of an already
 accepted server-side write. Validate late-write cleanup and the SQL one-hour
 grace before hosted acceptance; do not treat this implementation as proof of
 physical deletion or full report-retention compliance. Gateway/client/rendered
-media acceptance is separate. Physical-device/TalkBack remains owner-deferred.
+media acceptance is separate. Physical-device and TalkBack checks are still
+outstanding.

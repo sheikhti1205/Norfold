@@ -42,7 +42,7 @@ Required GitHub secrets:
 - Android: `GOOGLE_SERVICES_JSON_B64` (public Firebase client configuration).
 - Server-secret sync only: `FIREBASE_SERVICE_ACCOUNT_JSON`, `SUPABASE_ACCESS_TOKEN`.
 - Push dispatch (optional): `PUSH_DISPATCH_SECRET` — a 32–128 character
-  `[A-Za-z0-9_-]` token the owner generates once.
+  `[A-Za-z0-9_-]` token generated once during provisioning.
 
 Run the separate server workflow after rotating the dedicated sender credential:
 
@@ -134,4 +134,4 @@ stays behind the signed-candidate and device gates.
 
 Before a release-range check that includes `abda2c7`, resolve that original
 commit-message defect explicitly. A follow-up commit does not change its body;
-history rewriting requires the owner's authorization.
+the original message can only be corrected by rewriting history.

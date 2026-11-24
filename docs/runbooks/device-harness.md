@@ -1,6 +1,6 @@
 # Device Harness Runbook (offline lab scripts)
 
-Owner-run commands for device day. Nothing here runs in CI. All scripts live
+Commands run by hand on device day. Nothing here runs in CI. All scripts live
 under `scripts/device-harness/`; they were syntax-verified only
 (`bash -n` + `node --check`) with no device attached and no emulator booted.
 
@@ -22,7 +22,7 @@ is authorized by running any of this.
   `Communication/heavy.lock/` is empty, then claim it, e.g.
   `date -u +%FT%TZ > Communication/heavy.lock/device-proof-<name>`; delete
   your claim file when done. `run-device-proof.sh` refuses to run while any
-  other claim exists (override `--force '<reason>'` needs owner approval and
+  other claim exists (override `--force '<reason>'` needs approval and
   is recorded in `LOCK_OVERRIDE.txt`).
 
 ## 1. Syntax re-verify (no device needed)
@@ -113,8 +113,9 @@ node scripts/device-harness/write-manifest.mjs --dir <evidence-dir>  # re-run af
 override defaults. `captures.sh` stubs print the manual matrix steps, run the
 automatable captures, and point at `NOTES.md` — fill those tables on device
 day. Record retained Needle extraction, USE matching and cloud Chat timings
-separately. Retired model-lab device instructions are historical only, under
-`docs/history/model-lab/runbooks/`; they are not an active execution queue.
+separately. Retired model-lab device instructions under
+`docs/history/model-lab/runbooks/` record past runs only; nothing there is
+pending work.
 
 ## 6. After device day
 

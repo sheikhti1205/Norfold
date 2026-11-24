@@ -108,7 +108,7 @@ track real evolution and do not imply a stable release. The per-commit mapping i
   application id, Supabase project, `findback_*` SQL, storage buckets,
   migrations) were intentionally kept.
 - Published later as the `v0.14.0-beta.1` GitHub prerelease; not device
-  acceptance or domain migration. See [the rebrand record](docs/releases/NORFOLD_REBRAND_2026-11-03.md).
+  acceptance or domain migration.
 
 ## 0.13.0-beta.1 — product fit reset (beta checkpoint)
 
@@ -124,7 +124,6 @@ track real evolution and do not imply a stable release. The per-commit mapping i
   and3old sign-in flows;53public tables/four buckets/configuration preserved.
   Only intended2bootstrap email offers and1pending invitation were retained.
 - Beta/source checkpoint, not a GitHub Release or native/account acceptance.
-  See [verification and limitations](docs/releases/PRODUCT_FIT_RESET_2026-11-02.md).
 
 ## 0.12.0-beta.1 — product coherence (historical source checkpoint)
 
@@ -143,14 +142,11 @@ track real evolution and do not imply a stable release. The per-commit mapping i
   observed hosted at the Product Fit Reset baseline; the old LIVE-PENDING label
   is superseded. No release was created by that version change. Real-account/browser,
   physical Android, Sentry and owner phone-photo corpus acceptance remain unpassed.
-  See [source checkpoint](docs/releases/M7_P_SOURCE_CLOSURE_2026-11-01.md).
 
 ## 0.11.0-beta.2 — functional freeze
 
-- Functional freeze recorded in
-  [docs/releases/BETA_FUNCTIONAL_FREEZE_2026-10-30.md](docs/releases/BETA_FUNCTIONAL_FREEZE_2026-10-30.md):
-  frozen source, test totals, live migration head, deployed function inventory and
-  the named external gates that remain.
+- Functional freeze recorded: frozen source, test totals, live migration head,
+  deployed function inventory and the named external gates that remain.
 - Matching/recovery, private chat R4, trust/staff flows and consumer/native truth
   closed in the preceding interval; this interval reconciles the integrated gates
   and records the freeze.
@@ -164,18 +160,18 @@ track real evolution and do not imply a stable release. The per-commit mapping i
 
 ## 0.10.0-beta.1 — pre-1.0 line correction
 
-- Governance, ledger, agent-instruction and map/capability work.
+- Release bookkeeping, tooling instructions and map/capability work.
 - The earlier `1.0.0` label claimed a stable release that never shipped; the project
   stays on the pre-1.0 beta line. Nothing was removed — this period's work is kept
   under the corrected version.
 
 ## 0.9.0-beta.1 — assistant landing
 
-- Assistant landing, neutral palette and a security closure wave.
+- Assistant landing, neutral palette and a security hardening pass.
 
-## 0.8.0-beta.2 — ledger and dependency reconciliation
+## 0.8.0-beta.2 — release bookkeeping and dependency reconciliation
 
-- Completion-ledger reconciliation to the beta.2 bump, non-breaking dependency
+- Completion-record reconciliation to the beta.2 bump, non-breaking dependency
   audit fixes, and release/documentation corrections.
 
 ## 0.7.0-beta.2 / 0.7.0-beta.1 — capability truth
@@ -200,7 +196,7 @@ track real evolution and do not imply a stable release. The per-commit mapping i
 
 ## 0.3.0-beta.1 — AI orchestrator
 
-- Typed-proposal orchestrator contract and the first substantial on-device AI wave.
+- Typed-proposal orchestrator contract and the first substantial on-device AI release.
 
 ## 0.2.0-beta.3 / .2 / .1 — feed, sharing and report redesign
 

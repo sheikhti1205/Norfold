@@ -10,7 +10,7 @@ current dependency or download catalogue. The local generative engines and
 their acquisition paths have since been retired. Current retained local owners
 are Needle and USE/MediaPipe; cloud AI Chat is separate. Exact legal text,
 including retired artifacts, remains in
-`docs/history/model-lab/evidence/model-license-packet.json`. Current package
+`docs/licenses/model-license-packet.json`. Current package
 ownership is checked by `scripts/check-native-retirement.mjs` and the strict APK
 scanner; those source checks are not device acceptance.
 

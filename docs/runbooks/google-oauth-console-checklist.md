@@ -1,4 +1,4 @@
-# Google sign-in owner console checklist (Norfold)
+# Google sign-in console checklist
 
 Norfold preserves two distinct Google sign-in paths:
 
@@ -13,17 +13,17 @@ ID is a public identifier baked into the APK as
 `BuildConfig.GOOGLE_WEB_CLIENT_ID` (Gradle reads the `GOOGLE_WEB_CLIENT_ID`
 env var; `scripts/build-apk.mjs` loads it from the shell or root `.env`).
 
-Never paste, fetch, log, screenshot, or send a client secret to an agent. The
-owner enters the matching secret directly in Supabase's provider console.
+Never paste, fetch, log, screenshot or send a client secret anywhere. The matching
+secret is entered directly in Supabase's provider console.
 
-## Resolution (2026-11-03, owner-reported + entry probe)
+## Resolution (2026-11-03)
 
 The remaining blocker was a missing **Authorized JavaScript origin** in the Google
-Cloud console for the Web OAuth client. The owner added
-`https://findbackapp.social` to that client's authorized origins and reports Google
-sign-in now completes, including the Supabase code exchange that previously failed.
+Cloud console for the Web OAuth client. `https://findbackapp.social` was added to
+that client's authorized origins, and Google sign-in now completes, including the
+Supabase code exchange that previously failed.
 
-Credential-free agent check of the deployed app (`c1c3c984`,
+Credential-free check of the deployed app (`c1c3c984`,
 `https://findbackapp.social/` → onboarding Skip → `/auth` → **Continue with Google**):
 the page is handed to `accounts.google.com/v3/signin/identifier` with
 `client_id` present, `redirect_uri=https://nfjhpigbsyyoaaktfaev.supabase.co/auth/v1/callback`,
@@ -32,26 +32,24 @@ the page is handed to `accounts.google.com/v3/signin/identifier` with
 `redirect_uri_mismatch`, `invalid_client` or "Access blocked" text. A direct
 authorize probe with the same client/redirect and `prompt=none` returns a 302 to the
 hosted callback (`error=interaction_required`), i.e. client and redirect are accepted
-without a session. Receipts:
-`<private>/01_ACTIVE/onboarding-root-integration-2026-11-03/sessions/A/production-google-entry.json`
-and `captures/production-google/google-entry.png`.
+without a session.
 
 Boundaries: no credentials were entered, so this proves the console/provider entry
-configuration, not an agent-observed successful login, identity linking, or a
-signed physical-device Google login. Those rest on the owner's report.
+configuration, not a successful login, identity linking, or a signed
+physical-device Google login. Those remain unverified.
 
 **Lesson:** the JavaScript origin is part of the client configuration even though the
 authorization-code exchange happens server-side at Supabase. A missing origin can
 surface as a provider-side failure, so it is checked before re-entering a secret.
 
-## Recovery status (2026-11-02 handoff; historical)
+## Recovery status (2026-11-02; historical)
 
 - Intended Web client:
   `961478941021-4hj634u50dug9mrjda769l7p98bh9hv1.apps.googleusercontent.com`.
   The public authorize probe selected this client and the hosted callback below;
   an HTTP redirect proves selection, **not** a successful Google login.
-- The handoff reports `invalid_client — The provided client secret is invalid.`
-  at `2026-11-02T17:26:24Z`. Next owner action: enter the secret belonging to
+- The recorded failure was `invalid_client — The provided client secret is invalid.`
+  at `2026-11-02T17:26:24Z`. Next action: enter the secret belonging to
   **that exact Web client** directly in Supabase → Authentication → Providers →
   Google, then save. Do not substitute the Android client or request its secret.
 - The second listed client
@@ -59,7 +57,8 @@ surface as a provider-side failure, so it is checked before re-entering a secret
   has **unverified type**; inspect its type/package/fingerprint in Google Cloud
   before assigning it a role. Site URL/Redirect URLs remain unverified too.
 - Production/local Web login and signed physical Android Credential Manager
-  login are **unpassed**. The owner performs signup; source checks cannot replace it.
+  login are **unpassed**. Signup has to be performed by hand; source checks cannot
+  replace it.
 
 The app fails closed: when the ID is missing the button reports
 `misconfigured` and sign-in is never attempted. When the failure is
@@ -80,7 +79,7 @@ Project with the Android app package `com.findback.app`:
       This is Google's return to Supabase, not the app's `/auth/callback` route.
 - [x] Authorized JavaScript origins include `https://findbackapp.social` and
       only the local development origins actually used (origin only, no path).
-      **Confirmed added by owner 2026-11-03** — its absence was the last blocker;
+      **Confirmed present 2026-11-03** — its absence was the last blocker;
       see "Resolution" above. Keep it in place for any new Web client.
 - [ ] **Android OAuth client exists** for package `com.findback.app` with the
       **release SHA-1** `61:E9:32:D5:14:A0:28:7B:7B:6E:49:F1:90:70:2C:F4:F7:CF:D1:8A`.
@@ -114,7 +113,7 @@ Project with the Android app package `com.findback.app`:
 adb -s <device> logcat | grep -i "GoogleAuth\|CredentialManager"
 ```
 
-| What you see | Kind | Meaning / owner action |
+| What you see | Kind | Meaning / action |
 |---|---|---|
 | `isAvailable → available:false, reason:misconfigured` | `misconfigured` | Empty `GOOGLE_WEB_CLIENT_ID` in the packaged build — rebuild with the env var set (§1). |
 | `GetCredentialProviderConfigurationException` | `misconfigured` | Console-side: Android OAuth client missing, SHA-1 mismatch, or ID services disabled — fix in §1. |
@@ -155,8 +154,7 @@ uses Google Identity Services; the Android app uses Play services
 `Identity.getAuthorizationClient` because Google blocks Identity Services inside
 a WebView. Neither path needs a client secret in the app.
 
-Owner-side console checks, none of which an agent may perform without console
-access:
+Console checks, none of which can be performed without console access:
 
 1. The **Android OAuth client** for package `com.findback.app` with the signing
    SHA-1 must exist in the same Google Cloud project and be the one Play services

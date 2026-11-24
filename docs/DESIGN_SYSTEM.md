@@ -1,9 +1,7 @@
 # Adaptive UI ownership
 
 Product Fit Reset, source version `0.13.0-beta.1`. This describes current source,
-not native or real-account acceptance. The previous
-[M7-P checkpoint](releases/M7_P_SOURCE_CLOSURE_2026-11-01.md) remains historical;
-see [Product Fit Reset](releases/PRODUCT_FIT_RESET_2026-11-02.md) for current limits.
+not native or real-account acceptance.
 
 ## Principles
 
@@ -77,7 +75,8 @@ Final local fixtures exercise compact phone (including 320px/200% text), common
 phone, landscape, tablet, 1024/1280/1440 desktop, themes, reduced motion and relevant
 loading/empty/error/success/input states. Unit tests do not replace capture review.
 These fixtures do not certify real accounts, Android touch/IME/native plugins,
-screen readers, Sentry ingestion or the owner's phone-photo matching corpus.
+screen readers, Sentry ingestion or the phone-photo matching corpus used for media
+checks.
 ## First-run onboarding
 
 The application root uses the same session-first guards on Web and native.

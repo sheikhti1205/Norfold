@@ -1,10 +1,10 @@
 # Practical matching evaluation
 
-Use Node ≥22.18 and the machine-wide heavy wrapper. No build, model download or
+Use Node ≥22.18. No build, model download or
 network is needed. The shipped `rankTextMatches` and `recallAtK` run unchanged:
 
 ```sh
-~/<config>/bin/heavy-run node tools/bench/run-matching-quality.mjs \
+node tools/bench/run-matching-quality.mjs \
   /private/session/dataset.json /private/session/new-report.json --iterations=100
 ```
 
