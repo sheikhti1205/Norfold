@@ -25,6 +25,7 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
 /** Reviewed exceptions. Remove the entry once the advisory is fixed. */
 export const REVIEWED_EXCEPTIONS = [
@@ -202,6 +203,6 @@ function main() {
   if (result.blockers.length > 0) process.exit(1);
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main();
 }

@@ -18,6 +18,8 @@
  * Pure Node builtins.
  */
 
+import { pathToFileURL } from "node:url";
+
 export function derivePublishType(tag) {
   const m = /^v(\d+\.\d+\.\d+)((?:-[0-9A-Za-z.-]+)?)((?:\+[0-9A-Za-z.-]+)?)$/.exec(tag ?? "");
   if (!m) throw new Error(`derive-publish-type: invalid release tag ${JSON.stringify(tag)} (want v<semver>[-prerelease][+build])`);
@@ -39,7 +41,7 @@ export function derivePublishType(tag) {
   };
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const args = process.argv.slice(2);
     const tagIdx = args.indexOf("--tag");
