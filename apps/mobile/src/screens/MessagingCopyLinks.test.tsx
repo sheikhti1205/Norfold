@@ -133,6 +133,34 @@ async function openMessageMenu(label = "Options for received message") {
   return screen.findByRole("menu", { name: "Message actions" });
 }
 
+/** The address of a fetch input (string, URL or Request-like), or "" when absent. */
+function fetchTarget(input: unknown): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  const url = (input as { url?: unknown } | null)?.url;
+  return typeof url === "string" ? url : "";
+}
+
+/**
+ * The exact host of a fetch target, or "" when it cannot be resolved.
+ *
+ * A substring test is not a host check: `example.com.evil.test` and a query
+ * string holding that text both contain "example.com" while addressing another
+ * host. Resolving the input and comparing the parsed hostname is the assertion
+ * this test actually means to make.
+ */
+function fetchHost(input: unknown): string {
+  const target = fetchTarget(input);
+  if (target === "") return "";
+  try {
+    // A relative request resolves against a fixed base: it cannot name the
+    // pasted host, and no test depends on a particular page origin.
+    return new URL(target, "https://norfold.test").hostname;
+  } catch {
+    return "";
+  }
+}
+
 describe("R19 message copy", () => {
   it("copies the exact visible text of an ordinary message", async () => {
     const body = "  keep\nthis exactly 🎉  ";
@@ -443,8 +471,8 @@ describe("R19 chat links and previews", () => {
     expect(anchor?.getAttribute("rel")).toBe("noopener noreferrer");
     // The card may contact only the Norfold metadata service, with the pasted
     // address in its body; unrelated chrome (a badge read) is allowed to run,
-    // but nothing may approach the pasted host directly.
-    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("example.com"))).toBe(false);
+    // but nothing may address the pasted host itself.
+    expect(fetchMock.mock.calls.some(([input]) => fetchHost(input) === "example.com")).toBe(false);
     expect(m.fetchPost).not.toHaveBeenCalled();
   });
 });

@@ -30,6 +30,34 @@ function stubProvider(): void {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({}) }));
 }
 
+/** The address of a fetch input (string, URL or Request-like), or "" when absent. */
+function fetchTarget(input: unknown): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  const url = (input as { url?: unknown } | null)?.url;
+  return typeof url === "string" ? url : "";
+}
+
+/**
+ * The exact host of a fetch target, or "" when it cannot be resolved.
+ *
+ * A substring test is not a host check: `example.com.evil.test` and a query
+ * string holding that text both contain "example.com" while addressing another
+ * host. Resolving the input and comparing the parsed hostname is the assertion
+ * this test actually means to make.
+ */
+function fetchHost(input: unknown): string {
+  const target = fetchTarget(input);
+  if (target === "") return "";
+  try {
+    // A relative request resolves against a fixed base: it cannot name the
+    // pasted host, and no test depends on a particular page origin.
+    return new URL(target, "https://norfold.test").hostname;
+  } catch {
+    return "";
+  }
+}
+
 afterEach(() => {
   cleanup();
   vi.unstubAllEnvs();
@@ -72,8 +100,9 @@ describe("ChatMessageText", () => {
     expect(anchor?.getAttribute("href")).toBe(link);
     expect(anchor?.getAttribute("target")).toBe("_blank");
     expect(anchor?.getAttribute("rel")).toBe("noopener noreferrer");
-    // Rendering prose must never contact the pasted host by itself.
-    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("example.com"))).toBe(false);
+    // Rendering prose must never contact the pasted host by itself, whatever
+    // form the request target takes.
+    expect(fetchMock.mock.calls.some(([input]) => fetchHost(input) === "example.com")).toBe(false);
   });
 
   it("renders one card for a repeated generic destination and hides every raw copy", () => {
