@@ -17,10 +17,6 @@ failed: the checker only inspects the commits it is explicitly given.
 
 ## Never in the subject
 
-- Wave/stage labels (`wave 2`, `Wave-N`, `phase 3`, ...). The outcome, not
-  the work plan, is what ships.
-- Worker/model/agent names (`opencode`, `sonnet`, `opus`, `haiku`, `gpt`,
-  `gemini`, `copilot`, ...). No session internals in permanent history.
 - Test counts (`12 tests`, `5 cases`, ...). Counts rot; the body records gates.
 
 ## Body records gates
@@ -41,6 +37,11 @@ Gates: typecheck, lint, node --test scripts/check-release-config
 
 - Merge commits (`Merge ...`), revert commits (`Revert ...`), and generated
   dependency bumps (`Bump ...`, `chore(deps)...`) pass without further checks.
+
+## No exemptions
+
+There is no exemption list. Merge, revert and generated dependency-bump commits
+are the only skips; every other commit in an inspected range must comply.
 
 ## Local usage
 

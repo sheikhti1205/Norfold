@@ -45,12 +45,11 @@ jobs:
         # an unresolvable range (e.g. all-zero `before` on branch creation)
         # falls back to HEAD instead of failing the job.
         run: |
-          BASELINE="scripts/commit-message-baseline.txt"
           if [[ -n "${{ github.base_ref }}" ]]; then
             git fetch origin "${{ github.base_ref }}" --depth=50 2>/dev/null || true
-            node scripts/check-commit-messages.mjs --range "origin/${{ github.base_ref }}...HEAD" --baseline "$BASELINE"
+            node scripts/check-commit-messages.mjs --range "origin/${{ github.base_ref }}...HEAD"
           elif [[ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" && -n "${{ github.event.before }}" ]]; then
-            node scripts/check-commit-messages.mjs --range "${{ github.event.before }}...${{ github.sha }}" --baseline "$BASELINE" || \
+            node scripts/check-commit-messages.mjs --range "${{ github.event.before }}...${{ github.sha }}" || \
               node scripts/check-commit-messages.mjs --count 1
           else
             node scripts/check-commit-messages.mjs --count 1
@@ -96,7 +95,7 @@ jobs:
         # Gates the release-script regressions (fingerprint parse order, ABI
         # completeness, full-SHA provenance, SemVer publish type) so an
         # unverified release path can never reach a tag. Also the commit-message
-        # checker (range + enforcement baseline). Local tools are covered by
+        # checker (range checks). Local tools are covered by
         # behavioral mobile tests plus the retained native/package gate below.
         run: node --test scripts/verify-release-apks.test.mjs scripts/generate-release-manifest.test.mjs scripts/derive-publish-type.test.mjs scripts/check-commit-messages.test.mjs scripts/beta-claims.test.mjs scripts/audit-gate.test.mjs scripts/check-security-baseline.test.mjs scripts/check-map-provider.test.mjs scripts/check-map-config.test.mjs scripts/legacy-api-retirement.test.mjs scripts/ci-test-runtime.test.mjs scripts/public-screenshots.test.mjs scripts/decide-android-build.test.mjs scripts/android-chat-candidate.test.mjs supabase/tests/delete_account_bucket_coverage.test.mjs
       - name: Sharing and server credential config tests
