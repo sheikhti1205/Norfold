@@ -26,7 +26,7 @@ import type {
 } from "../services/moderation";
 import type { ReputationTier, Standing } from "../services/trust";
 
-/** Ruling O5: public content is revealable; blocking refuses interaction. */
+/** Public content is revealable; blocking refuses interaction. */
 export const BLOCKING_EXPLANATION = "Blocking stops you interacting with each other. Public reports and comments remain behind a warning with an option to reveal them.";
 
 /** Same conditional wording for either server result; never infer direction. */

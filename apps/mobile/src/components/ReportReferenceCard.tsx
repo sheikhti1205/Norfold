@@ -22,7 +22,7 @@ import { useMediaUrl } from "../services/media/privateMedia";
 /**
  * The one unavailable node. States A (absent/unreadable target) and B
  * (tombstone, `reportPostId: null`) both render it, so no viewer can infer why
- * a reference is unavailable — the indistinguishability ruling.
+ * a reference is unavailable — the indistinguishability rule.
  */
 export const REPORT_UNAVAILABLE: ReactNode = (
   <span

@@ -93,8 +93,8 @@ async function defaultFetchCandidates(targetId: string): Promise<PostItem[]> {
  * is a generative VLM that produces text descriptions, not image vectors.
  * Single-resident ownership would also need sequential scheduling of a real
  * image encoder alongside Needle. A visual signal would
- * therefore be a different capability, not a flag on this one — see the
- * E3 handoff for the smallest wiring plan. */
+ * therefore be a different capability, not a flag on this one — see E3 for
+ * the smallest wiring plan. */
 export async function findPossibleMatches(
   target: PostItem,
   deps?: {

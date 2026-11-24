@@ -41,7 +41,7 @@
 -- PUBLISHED, no writer), the owner-scoped block reader
 -- (public.findback_my_blocks), the re-created readers that must read the view
 -- (feed, nearby) and enforce D21's suppression (the notify trigger and the
--- inbox reader's moderation term), and — per §13.8 item 3, ruling O5 — the
+-- inbox reader's moderation term), and the
 -- SURFACED block bit on the view and on both client readers. O5 supersedes
 -- D19: nothing is dropped for a block, so the reply "promotion" walk is not
 -- shipped and the stored parent_id/depth are returned as stored.

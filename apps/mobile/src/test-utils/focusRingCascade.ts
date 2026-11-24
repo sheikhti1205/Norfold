@@ -17,9 +17,9 @@
  *
  * WHAT IT IS NOT: it does not model Tailwind utilities in `@layer utilities`
  * (they cannot set `outline` on the pill today — the app-wide rule is
- * unlayered) and it does not model paint. The rendered readback in the handoff
- * is the browser evidence for the modern path; this covers the branch a browser
- * on this machine cannot enter.
+ * unlayered) and it does not model paint. The rendered browser readback is
+ * the evidence for the modern path; this covers the branch a browser on this
+ * machine cannot enter.
  */
 
 export type RingEngine = { hasSelector: boolean };

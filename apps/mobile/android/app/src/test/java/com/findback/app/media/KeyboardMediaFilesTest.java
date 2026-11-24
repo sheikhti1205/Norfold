@@ -10,7 +10,7 @@ import java.nio.file.Files;
 import org.junit.Test;
 
 /**
- * The keyboard cache write is all-or-nothing. The reviewer's case is a copy
+ * The keyboard cache write is all-or-nothing. The reported case is a copy
  * that fails after the target file already exists: the bytes are refused and
  * the named-but-unpublished file must be gone, never left behind in cache.
  */

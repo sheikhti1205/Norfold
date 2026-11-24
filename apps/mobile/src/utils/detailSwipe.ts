@@ -1,7 +1,7 @@
 /**
  * Shared swipe decision for the detail hero gallery and the photo lightbox.
  *
- * Thresholds (documented for QA handoff):
+ * Thresholds (documented for QA):
  * - DETAIL_SWIPE_MIN_OFFSET_PX = 48: a drag shorter than this is accidental
  *   unless the flick velocity passes.
  * - DETAIL_SWIPE_MIN_VELOCITY_PX_S = 400: a fast flick advances even when the

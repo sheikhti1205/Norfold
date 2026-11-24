@@ -126,7 +126,7 @@ export function Shell() {
   const wideCanvas = WIDE_CANVAS.includes(pathname) || chatThread;
   const ownsInternalScroll =
     pathname === "/" || pathname === "/search" || pathname.startsWith("/help") || pathname.startsWith("/connections") || pathname.startsWith("/chats");
-  // Ruling 4(e): the stored preference is the reader's navigation style.
+  // The stored preference is the reader's navigation style.
   // `auto` turns into the rail only where a side column fits. A chosen rail is
   // honoured on a phone too, where `Shell` renders it as a temporary overlay
   // drawer instead of a permanently open column.

@@ -23,8 +23,8 @@
  *
  * THE PREFERRED END STATE. The right fix is server-side: `findback_my_blocks`
  * should carry the label with the row, so one round trip names the account
- * and no second read can go stale. That change is a PROPOSED DIFF in this
- * lane's handoff; this file is the honest client-side stand-in until the
+ * and no second read can go stale. That change is a PROPOSED DIFF for this
+ * lane; this file is the honest client-side stand-in until the
  * server carries it.
  */
 import { getSupabase } from "./supabaseClient";

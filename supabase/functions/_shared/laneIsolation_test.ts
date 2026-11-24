@@ -76,7 +76,7 @@ const SECRET_CASES: ReadonlyArray<readonly [string, string, string]> = [
   ],
   ["google api key", "fcm denied AIzaSyD-1234567890abcdefghijklmnopqrstu", "AIzaSyD-1234567890abcdefghijklmnopqrstu"],
   // Compound names: `_` is a word character, so a bare `\b` name list misses
-  // `client_secret` / `access_token` entirely. These are the reviewer's exact
+  // `client_secret` / `access_token` entirely. These are the exact
   // counterexamples.
   ["compound client secret", "upstream error client_secret=hunter2", "hunter2"],
   ["compound access token", "denied access_token=abc123", "abc123"],
@@ -84,7 +84,7 @@ const SECRET_CASES: ReadonlyArray<readonly [string, string, string]> = [
   ["hyphenated api key header", "request rejected x-api-key: shortkey1", "shortkey1"],
   ["compound private key", "config failed private_key=abc123", "abc123"],
   ["service role key", "client init failed service_role_key=xyz789", "xyz789"],
-  // The reviewer's second round: an unquoted value with spaces, the `:=`
+  // A second round: an unquoted value with spaces, the `:=`
   // delimiter, and a short Bearer value that the token rule cannot see.
   ["short bearer value", "authorization=Bearer v", "Bearer v"],
   ["walrus-style assignment", "secret := v", "v"],

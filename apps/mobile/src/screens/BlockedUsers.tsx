@@ -17,9 +17,9 @@ import { useSafetyLifetime } from "../utils/useSafetyLifetime";
  * this screen shows is the caller's OWN outgoing blocks, which is the only
  * direction the server can read at all (MC D18).
  *
- * Ruling O5 supersedes hiding content: public content remains revealable,
- * while interaction is refused mutually. Unblocking clears the caller's
- * outgoing direction only; an independent block can still refuse interaction.
+ * Public content stays revealable while interaction is refused mutually.
+ * Unblocking clears the caller's outgoing direction only; an independent
+ * block can still refuse interaction.
  */
 export function BlockedUsers() {
   const { user } = useAuth();

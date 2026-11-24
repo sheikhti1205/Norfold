@@ -77,7 +77,7 @@ public class KeyboardMediaStateTest {
     }
 
     /**
-     * The reviewer's burst: the first copy is still running (its slot held),
+     * The reported burst: the first copy is still running (its slot held),
      * seven more are admitted, and every further arrival is refused rather than
      * queued. Published plus admitted is the only number that matters.
      */

@@ -27,8 +27,7 @@
  *
  * NOTE (interface proposal): `providerContract.ts` `ProviderId` is FROZEN
  * and has no `"mistral"` member, so `id`/`provider` are cast below. Proposed
- * change: extend the union with `| "mistral"` (see handoff for the full
- * proposal text).
+ * change: extend the union with `| "mistral"` (see the interface proposal notes).
  */
 import { priceClassFromLines } from "../providerContract";
 import { cloudCatalogMetadata } from "./catalogueQualification";

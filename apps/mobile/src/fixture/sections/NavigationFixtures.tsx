@@ -34,7 +34,7 @@ export const NAV_VARIANTS: FixtureVariant[] = ["normal", "large-text", "dark", "
  * its paint are rendered. A rail frame selects Notifications rather than Home
  * so a non-first destination is reviewed; the bottom bar keeps Home selected,
  * because a multi-word label in the bar's selected slot is clipped at 320 px
- * (a pre-existing bar limit this wave does not change).
+ * (a pre-existing bar limit this change does not alter).
  */
 const railActivePath = "/chats";
 

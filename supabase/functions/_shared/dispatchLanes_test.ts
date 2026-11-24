@@ -145,7 +145,7 @@ Deno.test("a chat failure's exposed text is secret-safe in body and log", async 
   }
 });
 
-// The reviewer's counterexample: a rejected chat lane is contained, but a
+// The counterexample: a rejected chat lane is contained, but a
 // never-settling one used to hold the invocation open forever, so the report lane
 // never ran. A deadline is the only boundary that can cover a stalled dependency.
 Deno.test("a hung chat lane cannot hold report dispatch open", async () => {

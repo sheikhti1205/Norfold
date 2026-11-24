@@ -131,7 +131,7 @@ describe("builtInHelp", () => {
   });
 
   it("answers account recovery as app help (CF-070 R2 retry-6 R1)", () => {
-    // The retry-5 ruling kept this row refused on the premise that the app has
+    // This row was refused on the premise that the app has
     // Google sign-in and no password. That premise is false, so the refusal was
     // a false denial of a shipped feature: apps/mobile/src/services/auth.ts:186
     // (`signInWithPassword`), apps/mobile/src/services/auth.ts:304
@@ -599,7 +599,7 @@ describe("CF-070 R2 retry-6 — the repaired classes", () => {
  * question's shape plus the absence of any near-miss of an app concept, and the
  * answer itself never asserts that the app lacks anything.
  *
- * Every row below was authored for this wave: one per unreadable-token shape
+ * Every row below was authored for this change: one per unreadable-token shape
  * (misspelling, transposition, truncation) in English, plus Spanish, German,
  * French and Italian.
  */

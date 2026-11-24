@@ -262,7 +262,7 @@ export const MESSAGING_SQLITE_SCHEMA = [
     check ((mime like 'audio/%') = (duration_ms is not null)),
     check (mime not like 'audio/%' or (width = 1 and height = 1))
   )`,
-  // One attachment per message in this wave, and the lookup the adapters use.
+  // One attachment per message in this schema, and the lookup the adapters use.
   // A unique index provides both the uniqueness rule and the index.
   `create unique index if not exists ux_media_attachments_message
     on media_attachments(message_id)`,

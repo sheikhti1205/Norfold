@@ -197,7 +197,7 @@ describe("PullToRefresh scroll handle", () => {
     // `scrollToTop` moves the container itself with a smooth scroll, so no
     // scroll event is guaranteed before the unmount that reads the value. The
     // destination has to be recorded at the call site, or the feed would put the
-    // reader back where they just left (the reviewer's mutation showed this
+    // reader back where they just left (a mutation probe showed this
     // recording was load-bearing while nothing pinned it).
     // jsdom has no `Element.scrollTo` at all, so it is stubbed here the same way
     // the Home tests stub it.

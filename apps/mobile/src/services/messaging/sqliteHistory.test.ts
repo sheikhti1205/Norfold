@@ -928,7 +928,7 @@ describe("tombstones", () => {
     database = reopenDatabase();
 
     const history = await open();
-    // The reviewer's counterexample: before the fix this NULL matched any
+    // The counterexample: before the fix this NULL matched any
     // recipient and was never repaired on this path.
     await history.persistInbound(inbound());
     expect(database.prepare("select recipient_id as recipientId from tombstones where message_id = ?").get(MESSAGE))
@@ -1605,7 +1605,7 @@ describe("chat media schema and migration", () => {
     for (const [label, overrides] of violations) {
       expect(() => insert({ id: ATTACHMENT_2, messageId: MESSAGE, ...overrides }), label).toThrow(/CHECK/);
     }
-    // One attachment per message for this wave.
+    // One attachment per message in this change.
     expect(() => insert({ id: ATTACHMENT_2 })).toThrow(/UNIQUE/);
     // Inbound may be awaiting ACK, ready or evicted.
     raw.prepare("delete from media_attachments").run();

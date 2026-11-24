@@ -33,7 +33,7 @@ export const MATRIX = [
     webCapability: true,
     cells: { LOCAL: C, CI: C, RELEASE: C, WEB: C, LIVE: N },
     notes:
-      "Google login IS a web product feature (capability rule). The web OAuth path is IMPLEMENTED in source this wave (signInWithOAuth → /auth/callback bridge → shared resolver); it stays CONFIG_REQUIRED until the Supabase Google provider carries the web client + the redirect URL allowlist.",
+      "Google login IS a web product feature (capability rule). The web OAuth path is IMPLEMENTED in source (signInWithOAuth → /auth/callback bridge → shared resolver); it stays CONFIG_REQUIRED until the Supabase Google provider carries the web client + the redirect URL allowlist.",
     justification:
       "LIVE N/A because OAuth is a client capability, not a live Norfold service.",
   },
