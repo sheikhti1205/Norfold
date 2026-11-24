@@ -492,7 +492,7 @@ test("a malformed VERSION_CODE_OVERRIDE fails closed", () => {
 });
 
 test("a missing or unparseable release/state.json fails closed", () => {
-  const { dir, path } = stateFile({ versionCode: 101077 });
+  const { dir } = stateFile({ versionCode: 101077 });
   try {
     assert.throws(
       () => releaseVersionCode({ statePath: join(dir, "absent.json"), env: {} }),

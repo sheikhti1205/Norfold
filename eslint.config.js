@@ -50,7 +50,7 @@ export default tseslint.config(
   {
     // Azure Functions v3 entrypoints are intentionally dependency-free CommonJS.
     files: ["apps/share-preview/**/*.cjs"],
-    languageOptions: { globals: { module: "readonly", require: "readonly", Response: "readonly" } },
+    languageOptions: { globals: { console: "readonly", module: "readonly", require: "readonly", Response: "readonly" } },
     rules: { "@typescript-eslint/no-require-imports": "off" },
   },
   {
