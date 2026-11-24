@@ -15,6 +15,20 @@
       "publishedAt": "2026-10-06T19:52:08Z",
       "summary": "Earlier Android beta with a refreshed Help landing and neutral appearance. Its archived downloads have not been verified for in-app installation.",
       "downloadStatus": "unverified"
+    },
+    {
+      "id": "v0.14.0-beta.1",
+      "versionName": "0.14.0-beta.1",
+      "publishedAt": "2026-11-06T09:18:53.000Z",
+      "summary": "docs: explain explicit remote target for Devices deployment. Recent changes: docs: explain explicit remote target for Devices deployment;fix: explicitly target remote for narrow Devices deployment;fix: restore numbered Android releases and gate Devices deployment",
+      "downloadStatus": "unverified"
+    },
+    {
+      "id": "v0.15.0-beta.1",
+      "versionName": "0.15.0-beta.1",
+      "publishedAt": "2026-11-08T17:32:05.000Z",
+      "summary": "test: package the bridge config into the APK gate fixture. Recent changes: test: package the bridge config into the APK gate fixture;test: settle the recovery boundary before route replacement;perf: decode voice peaks without an idle audio sink",
+      "downloadStatus": "unverified"
     }
   ],
   "features": []

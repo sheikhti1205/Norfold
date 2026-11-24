@@ -122,7 +122,7 @@ test('requires the release tag to equal the actual APK version',()=>{
 
 test("successive publications retain changelogs and bundled history without inventing old download verification", () => {
   const baseline=JSON.parse(readFileSync(new URL('../apps/mobile/public/updates/catalogue.v1.json',import.meta.url),'utf8'));
-  const first=buildCatalogue(options({baseline}));
+  const first=buildCatalogue(options({baseline,releaseId:'android-first'}));
   const second=buildCatalogue(options({baseline,previous:first,releaseId:'android-second',versionCode:100124,
     facts:[fact('arm64-v8a',{versionCode:100124})],publishedAt:'2026-11-07T10:00:00Z'}));
   assert.equal(second.releases.length,1);
@@ -140,8 +140,8 @@ test("successive publications retain changelogs and bundled history without inve
 test("bounds rolling build history while preserving canonical historical records",()=>{
   const baseline=JSON.parse(readFileSync(new URL('../apps/mobile/public/updates/catalogue.v1.json',import.meta.url),'utf8'));
   const previous={releases:[],history:Array.from({length:130},(_,i)=>({id:`build-${i}`,versionName:'0.14.0-beta.1',publishedAt:new Date(Date.UTC(2026,9,1,i)).toISOString(),summary:`Build ${i}`,downloadStatus:'unverified'}))};
-  const next=buildCatalogue(options({baseline,previous}));
-  assert.equal(next.history.length,102);
+  const next=buildCatalogue(options({baseline,previous,releaseId:'android-next'}));
+  assert.equal(next.history.length,104);
   assert.ok(next.history.some(h=>h.id==='build-129'));
   assert.ok(!next.history.some(h=>h.id==='build-0'));
   assert.ok(Buffer.byteLength(JSON.stringify(next))<128*1024);

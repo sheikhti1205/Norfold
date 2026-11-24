@@ -9,11 +9,11 @@ describe("curated public update catalogue", () => {
       fetchImpl: async () => { throw new Error("offline"); } });
     const check = await source.check();
     expect(check.status).toBe("error");
-    expect(check.catalogue?.history).toHaveLength(2);
+    expect(check.catalogue?.history).toHaveLength(4);
   });
   it("preserves assetless and unverified historical releases without inventing installable bytes", () => {
     const catalogue = parseAndroidCatalogue(JSON.parse(readFileSync(new URL("../../../public/updates/catalogue.v1.json", import.meta.url), "utf8")));
-    expect(catalogue.history?.map(record => record.id)).toEqual(["v0.10.0-beta.1", "v0.9.0-beta.1"]);
+    expect(catalogue.history?.map(record => record.id)).toEqual(["v0.10.0-beta.1", "v0.9.0-beta.1", "v0.14.0-beta.1", "v0.15.0-beta.1"]);
     expect(catalogue.releases).toEqual([]);
     expect(selectInstallableRelease(catalogue, {
       packageName: "com.findback.app", versionCode: 1, signingChannel: "beta", abi: "arm64-v8a", sdk: 36,
