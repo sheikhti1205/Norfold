@@ -112,7 +112,7 @@ def findbackMapSearchUrl() {
 // compares every signed URL against. It is PUBLIC configuration (already in
 // the web bundle), never a secret and never a JS argument, so a compromised
 // page cannot point the downloader at another host. VITE_SUPABASE_URL is
-// already mandatory for every build (AGENTS.md hard rule 2); this field
+// already mandatory for every build by the release config gate; this field
 // reuses the same value and fails configuration when it is absent instead of
 // shipping a permissive fallback. Backslashes and quotes are escaped so the
 // generated Java string literal stays valid.

@@ -38,12 +38,11 @@ import { motionDurations, motionEasings } from "./uiMotion";
 import "./GlobalSearchOverlay.css";
 
 /**
- * The app's one search surface, reproduced from
- * `docs/design/nav/prototype.html`: a magnifier in a
- * top bar opens a floating pill bar - search icon, `Search reports, messages
- * and people…`, filter, close - over a blurred page. An empty field shows
- * recent searches; typing replaces that card with live report and people
- * results; no match says so and offers to clear the filters.
+ * The app's one search surface: a magnifier in a top bar opens a floating pill
+ * bar - search icon, `Search reports, messages and people…`, filter, close -
+ * over a blurred page. An empty field shows recent searches; typing replaces
+ * that card with live report and people results; no match says so and offers to
+ * clear the filters.
  *
  * The overlay never navigates on open. Picking a result goes to the result;
  * Enter goes to the full `/search` page with the same query and filters, so the

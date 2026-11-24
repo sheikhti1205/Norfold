@@ -122,7 +122,7 @@ device-harness: AI benchmark stub (acceptance matrix: Photo AI + Assistant;
      self-check ships.
   3. Assistant: slow visible partial, retry single-final, rapid double-send
      single-request, Stop with no late emission, photo-only send, large photo.
-  4. LFM/llama.cpp are LAB-ONLY (docs/runbooks/native-model-run.md) — never here.
+  4. LFM/llama.cpp are lab-only engines — never here.
   Automatables run now: baseline screenshot/uixml/perf/logcat.
 EOF
     auto_captures "ai-baseline"

@@ -223,15 +223,14 @@ function themeWindowStyle(mode: ColorMode): CSSProperties {
 /**
  * One navigation choice as a picture, never as a row with a tick.
  *
- * Per `docs/design/APPEARANCE-CHOOSERS.md` §4: two tiles side by
- * side at 4 by 3, the bottom bar holding five destinations and the rail holding
- * four, so the two pictures differ in shape as well as orientation. Selection is
- * the shared ring state (§D-A2), and the label under the tile is the tile's only
- * text.
+ * Two tiles sit side by side at 4 by 3, the bottom bar holding five destinations
+ * and the rail holding four, so the two pictures differ in shape as well as
+ * orientation. Selection is the shared ring state, and the label under the tile
+ * is the tile's only text.
  *
  * The content pane carries three bars rather than a flat block: a blank
  * rectangle read as an unfinished placeholder next to the theme tiles, which
- * already use bars (§3).
+ * already use bars.
  */
 const NAV_TILE_DOTS = { bottom: 5, rail: 4 } as const;
 const NAV_TILE_LABELS = { auto: "Automatic", bottom: "Bottom bar", rail: "Side rail" } as const;

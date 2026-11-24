@@ -36,14 +36,13 @@ import "./Shell.nav.css";
 const MotionLink = motion.create(Link);
 
 /**
- * The rail's destinations, in the order `docs/design/nav/prototype.html` puts
- * them: the work you came to do first, then the secondary shelves under a
- * named group. The phone bar keeps its own four-destination list below; a
- * nine-item pill on a 320px screen would be a row of glyphs.
+ * The rail's destinations: the work you came to do first, then the secondary
+ * shelves under a named group. The phone bar keeps its own four-destination
+ * list below; a nine-item pill on a 320px screen would be a row of glyphs.
  */
 /**
  * One row that opens the shared search overlay instead of navigating: search
- * is not a destination (SPEC §1), while `/search` survives as a deep link.
+ * is not a destination, while `/search` survives as a deep link.
  */
 type NavRow =
   | { to: string; label: string; icon: LucideIcon; search?: false }

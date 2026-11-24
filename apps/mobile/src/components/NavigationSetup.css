@@ -12,12 +12,12 @@
  * Layering: above the rail and bottom bar (in-flow, no z-index), below the
  * message pill (60) and the notification card (90).
  *
- * Elevation is deliberate and is the one place this departs from
- * `docs/design/APPEARANCE-CHOOSERS.md` §5, which specified hairlines and no
- * shadow while the panel was meant to read as the first content of the page.
- * That premise no longer holds now that the panel floats over the app, so it
- * takes the app's existing elevation token and radius instead of inventing a
- * new surface. No colour, gradient or shadow token was added.
+ * Elevation is deliberate and is the one place this departs from the
+ * hairline-and-no-shadow rule that applied while the panel was meant to read as
+ * the first content of the page. That premise no longer holds now that the panel
+ * floats over the app, so it takes the app's existing elevation token and radius
+ * instead of inventing a new surface. No colour, gradient or shadow token was
+ * added.
  */
 .fb-nav-setup-popover {
   position: fixed;

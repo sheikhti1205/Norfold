@@ -19,8 +19,8 @@
  *   android-release | web-production.
  * - Trace rate: a number in [0, 1]. Empty means the code-conservative
  *   default 0.1 — never 1.0 in code; 1.0 arrives only via env/repo-variable
- *   (see docs/runbooks/sentry-max-logging.md). NaN and out-of-range REJECT
- *   (fail closed), unlike the clamping runtime fallback in sentry.ts.
+ *   (see docs/runbooks/production-config-matrix.md). NaN and out-of-range
+ *   REJECT (fail closed), unlike the clamping runtime fallback in sentry.ts.
  *
  * Reports print PRESENT/ABSENT, names, lengths, SHAs, release strings —
  * NEVER secret values. This module handles no secrets at all.

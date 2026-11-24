@@ -93,7 +93,7 @@ describe("uiPrimitives", () => {
       </StateSwap>,
     );
     // The entering state is available immediately, overlapping the outgoing
-    // one. Browser frame/scroll geometry is covered by scripts/ui-review.
+    // one. Browser frame/scroll geometry is outside this test's coverage.
     expect(screen.getByText("second")).toBeTruthy();
   });
 

@@ -7,11 +7,11 @@ import "./NavigationSetup.css";
 /**
  * First authenticated wide use. Never a modal, never an account preference.
  *
- * Per docs/design/APPEARANCE-CHOOSERS.md §4 and §5, with one later
- * correction (2026-11-12): the panel floats over the surface instead of sitting
- * in the page as a band, and it carries the same two picture tiles Appearance
- * uses, so the layout the reader picks here is the layout they will recognise
- * later. The written decisions still hold:
+ * The panel floats over the surface rather than sitting in the page as a band,
+ * and it carries the same two picture tiles Appearance uses, so the layout the
+ * reader picks here is the layout they will recognise later. The copy, the tile
+ * order and the single-control rule below are the written decisions this screen
+ * implements, and they still hold:
  *
  * - The label is `Choose your navigation`, not marketing copy.
  * - The copy says what happens next and points at where to change it.

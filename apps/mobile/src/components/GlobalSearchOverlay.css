@@ -1,9 +1,8 @@
-/* The one search surface. Geometry and copy follow
-   docs/design/nav/prototype.html: a floating pill bar over a blurred page,
-   centred on wide screens and anchored 8px under the measured app bar on a
-   phone. The layer order is explicit because the rail is positioned: backdrop
-   (70) < search (74) < settings window
-   (80). Nothing here moves layout. */
+/* The one search surface. Geometry and copy follow the same picture: a floating
+   pill bar over a blurred page, centred on wide screens and anchored 8px under
+   the measured app bar on a phone. The layer order is explicit because the rail
+   is positioned: backdrop (70) < search (74) < settings window (80). Nothing
+   here moves layout. */
 
 .fb-search-backdrop {
   position: fixed;
