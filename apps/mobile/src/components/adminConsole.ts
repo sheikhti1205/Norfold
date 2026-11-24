@@ -56,7 +56,7 @@ export function describeCapabilities(capabilities: readonly string[]): string {
  * The permissions that stay with the admin.
  *
  * They are never offered for a moderator — the server refuses them — so the
- * console only names them, as the owner's own language names them.
+ * console only names them.
  */
 export function adminOnlySummary(): string {
   return capabilityLabels(ADMIN_ONLY_CAPABILITIES).join(", ");

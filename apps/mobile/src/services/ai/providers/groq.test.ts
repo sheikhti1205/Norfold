@@ -1,5 +1,5 @@
 /**
- * Groq BYOK provider adapter tests (packet AI-020b).
+ * Groq BYOK provider adapter tests.
  *
  * Fixtures are hand-built wire captures shaped by Groq's OpenAI-compatible
  * API (`POST https://api.groq.com/openai/v1/chat/completions`, SSE

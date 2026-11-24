@@ -1,4 +1,4 @@
--- Owner amendment 2026-10-24: public-only probation, 30 days, exactly 30 s
+-- Amendment 2026-10-24: public-only probation, 30 days, exactly 30 s
 -- spacing across covered PUBLIC interactions. Local PG17 roles/time only.
 -- Run with scripts/sql-behavior.mjs; every SELECT probe returns exactly one row.
 -- A must-fail probe catches its own refusal inside a DO block.

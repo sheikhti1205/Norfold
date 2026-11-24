@@ -1,5 +1,5 @@
 /**
- * Feed layout preference (CF-010, packet `09` §6 and §23).
+ * Feed layout preference (CF-010, §6 and §23).
  *
  * The reader picks how the post feed is laid out: `auto` decides from the
  * viewport, the other three are explicit. This module is the single owner of

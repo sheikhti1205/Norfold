@@ -4,8 +4,8 @@ import { detectMotionPhoto } from "./motionPhoto";
 import { probeDimensions, sniffImage } from "./importImage";
 
 // The private user-supplied Xiaomi file is read locally; no image bytes enter git.
-// MANUAL-ONLY suite: runs solely with FINDBACK_XIAOMI_PHOTO_PATH set on an
-// owner machine. Normal CI skips it by design — the deterministic generated
+// MANUAL-ONLY suite: runs solely with FINDBACK_XIAOMI_PHOTO_PATH set. Normal CI
+// skips it by design — the deterministic generated
 // fixture (motionPhotoParser.test.ts) is the CI coverage, not this file.
 const path = process.env.FINDBACK_XIAOMI_PHOTO_PATH;
 

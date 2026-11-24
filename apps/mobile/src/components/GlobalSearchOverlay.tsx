@@ -39,7 +39,7 @@ import "./GlobalSearchOverlay.css";
 
 /**
  * The app's one search surface, reproduced from
- * `docs/design/nav/prototype.html` (owner order 2026-11-13): a magnifier in a
+ * `docs/design/nav/prototype.html`: a magnifier in a
  * top bar opens a floating pill bar - search icon, `Search reports, messages
  * and people…`, filter, close - over a blurred page. An empty field shows
  * recent searches; typing replaces that card with live report and people

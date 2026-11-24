@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Restored coverage for behaviors the packet 11 rewrite removed from the old
+// Restored coverage for behaviors the Help rewrite removed from the old
 // Help suites. Each test below names the deleted file/behavior it stands in
 // for, so the retained contract is auditable rather than silently dropped.
 //
@@ -71,7 +71,7 @@ function send(text: string) {
   fireEvent.submit(screen.getByTestId("chat-composer"));
 }
 
-describe("restored Help behaviors (packet 11)", () => {
+describe("restored Help behaviors", () => {
   it("keeps the privacy disclosure out of the transcript and behind a concise sheet (Help.test.tsx, Help.preU6.test.tsx)", async () => {
     mount();
     // No permanent privacy wall in the conversation.

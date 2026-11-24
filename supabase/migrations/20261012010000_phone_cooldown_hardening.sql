@@ -5,7 +5,7 @@
 -- new IMMUTABLE helper, two same-signature RPC recreations (grants carried
 -- over unchanged), no column drops, no row rewrites, no user/auth data
 -- removal, no edits to any applied migration.
--- LIVE-PENDING (owner-deferred, 2026-10-12): verify on the live project
+-- LIVE-PENDING (2026-10-12): verify on the live project
 -- before PASS — see supabase/tests/verify_20261012010000_phone_cooldown.sql
 -- (no live run ships in this change):
 --   (a) phone_change_eligibility responds for a caller with and without

@@ -37,7 +37,7 @@ export function validateModelNotices(packet, candidates) {
 
 export function checkModelNoticesFile() {
   try {
-    return validateModelNotices(JSON.parse(readFileSync(new URL("../docs/history/model-lab/evidence/model-license-packet.json", import.meta.url), "utf8")), [RETAINED_MODEL_NOTICE_IDENTITY]);
+    return validateModelNotices(JSON.parse(readFileSync(new URL("../docs/licenses/model-license-packet.json", import.meta.url), "utf8")), [RETAINED_MODEL_NOTICE_IDENTITY]);
   } catch { return ["missing or malformed historical legal snapshot"]; }
 }
 

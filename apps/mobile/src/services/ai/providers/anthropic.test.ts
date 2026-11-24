@@ -1,5 +1,5 @@
 /**
- * Anthropic BYOK provider adapter tests (packet P-anthropic / P3).
+ * Anthropic BYOK provider adapter tests.
  *
  * Fixtures are hand-built wire captures shaped by the official Anthropic
  * docs verified on 2026-09-25 (Messages API, streaming events, vision image
@@ -208,7 +208,7 @@ describe("anthropic capabilities", () => {
     expect(caps.contextTokens).toEqual({ state: "unknown" });
     expect(caps.maxOutputTokens).toEqual({ state: "unknown" });
     expect(caps.streaming).toEqual({ state: "known", value: true });
-    // No hardcoded catalogue: prices/limits come from the catalog packet.
+    // No hardcoded catalogue: prices/limits come from the catalogue.
     expect(adapter.listModels).toBeUndefined();
   });
 });

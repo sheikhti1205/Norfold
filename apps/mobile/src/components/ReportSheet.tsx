@@ -99,7 +99,7 @@ export function ReportSheet({ open, onClose, target, onReported, returnFocusRef 
       setError(null);
       setSent(false);
       setSending(false);
-      // The owner's default: the five most recent messages, whatever their
+      // The default: the five most recent messages, whatever their
       // kind. The reporter may change the selection before sending.
       setEvidenceSelection(new Set((evidence ?? []).slice(0, 5).map((message) => message.id)));
     }

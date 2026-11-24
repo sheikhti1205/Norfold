@@ -1,4 +1,4 @@
--- Owner amendment 2026-10-24: real local role probes, not hosted acceptance.
+-- Amendment 2026-10-24: real local role probes, not hosted acceptance.
 -- Run with scripts/sql-behavior.mjs. Each SELECT must produce exactly one row.
 -- Mutation caught: COMMENT moderation canonicalized to POST or permissive child RLS.
 begin;

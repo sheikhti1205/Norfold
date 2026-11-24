@@ -299,7 +299,7 @@ export function createVoiceRecorder(deps: VoiceRecordingDeps) {
       return finalizeNow();
     },
     /**
-     * Send while the microphone is still open (owner direction 2026-11-18):
+     * Send while the microphone is still open:
      * stop the live take, wait for its container to settle, then flush the
      * trailer exactly like a review send. One press sends what was recorded so
      * far instead of making the reader stop first. Null when the take was too

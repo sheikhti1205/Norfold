@@ -911,14 +911,14 @@ describe("the roles migration is shaped for the hosted schema", () => {
     );
   });
 
-  it("seeds the owner's accounts with emails only", () => {
+  it("seeds the privileged accounts with emails only", () => {
     assert.match(sql, /'sheikhti1205@gmail\.com'/i, "the primary admin email is seeded");
     assert.match(sql, /'sheikhti1205@outlook\.com'/i, "the backup admin email is seeded");
     assert.match(sql, /'sheikhti109@gmail\.com'/i, "the first moderator email is seeded");
     assert.match(
       sql,
       /'sheikhti109@gmail\.com',\s*\n\s*'MODERATOR',\s*\n\s*array\['reports_review', 'content_hide'\]/i,
-      "the first moderator is seeded as a MODERATOR with the owner's default capability set",
+      "the first moderator is seeded as a MODERATOR with the default capability set",
     );
     // No password, token or key may ever appear in this file.
     assert.doesNotMatch(

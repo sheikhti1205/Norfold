@@ -398,7 +398,7 @@ describe("Shell nav hide/show with focusability (Wave A)", () => {
   });
 });
 
-describe("Shell adaptive navigation (owner ruling 4(e))", () => {
+describe("Shell adaptive navigation", () => {
   const initialWidth = window.innerWidth;
 
   function storeNavLayout(navLayout: "auto" | "bottom" | "rail") {
@@ -675,7 +675,7 @@ describe("Shell adaptive navigation (owner ruling 4(e))", () => {
     // Same selected-pill treatment as the bar.
     expect(nav.querySelector(".fb-nav-active-bg")).toBeTruthy();
     expect(nav.querySelector(".fb-nav-label")).toBeTruthy();
-    // The pin control is the app mark itself (owner order 2026-11-13): one
+    // The pin control is the app mark itself: one
     // brand button holding the wordmark, with no separate pin glyph beside it.
     const brand = nav.querySelector(".fb-nav-brand");
     expect(brand?.querySelector(".fb-nav-wordmark")?.textContent).toBe("Norfold");

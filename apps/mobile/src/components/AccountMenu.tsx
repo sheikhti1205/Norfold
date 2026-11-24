@@ -18,7 +18,7 @@ import { rememberAuthReturnTo } from "../utils/authReturnTo";
 import { PersonalizationPanel, SwitchAccountPanel } from "./AccountPreviews";
 import "./AccountMenu.css";
 
-/** Owner ruling 2026-11-20: no excess height; the menu never exceeds half the viewport, never above the 30rem ceiling. */
+/** No excess height; the menu never exceeds half the viewport, never above the 30rem ceiling. */
 const ACCOUNT_MENU_MAX_HEIGHT_PX = 480;
 
 type PanelId = "switch" | "personalization" | null;
@@ -26,9 +26,9 @@ type PanelId = "switch" | "personalization" | null;
 /**
  * The rail's single identity control.
  *
- * Owner order 2026-11-13 (reference: the ChatGPT account popover): the menu is
- * the width of the rail, opens above the trigger, and leads with the account
- * line - avatar, name, earned badge, arrow - which opens the account switcher.
+ * The menu is the width of the rail, opens above the trigger, and leads with
+ * the account line - avatar, name, earned badge, arrow - which opens the
+ * account switcher.
  * Then Personalization, Activity preferences, Settings, Report a problem, Help,
  * Log out. Every settings destination opens the floating settings window at
  * that section - the menu never swaps the page behind it for a separate one;

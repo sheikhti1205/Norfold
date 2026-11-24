@@ -68,7 +68,7 @@ export function Insights() {
  * Nothing here is derived from a guess: totals exist only when the report page
  * is complete, a rating average exists only when at least one counterpart
  * rating does, and each chart states its own loading/error/empty case instead
- * of painting zeros over unknown data (owner direction 2026-11-13).
+ * of painting zeros over unknown data.
  */
 function InsightsForAccount() {
   const [reports, setReports] = useState<Result<{ items: PostItem[]; complete: boolean }>>({ kind: "loading" });

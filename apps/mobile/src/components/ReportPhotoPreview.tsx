@@ -6,7 +6,7 @@ import { useMediaUrl } from "../services/media/privateMedia";
 import "./ReportPhotoPreview.css";
 
 /**
- * A report photo's hover card (owner direction 2026-11-18).
+ * A report photo's hover card.
  *
  * Search results are masonry cards where the photo is small. Resting on one
  * opens the same kind of card a person gets: a larger view of the photo and
@@ -14,7 +14,7 @@ import "./ReportPhotoPreview.css";
  * card is not interactive, and the photograph underneath still opens the
  * report. Touch has no hover, so phones keep the direct tap.
  *
- * Hover previews belong to SEARCH only (owner direction 2026-11-18): the
+ * Hover previews belong to SEARCH only: the
  * ordinary Home/feed/list cards are not wrapped. A surface opts in explicitly
  * with {@link ReportPhotoPreviewScope}; shared feed content never infers it
  * from the route.

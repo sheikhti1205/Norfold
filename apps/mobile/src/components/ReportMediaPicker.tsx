@@ -64,7 +64,7 @@ function MotionDisclosure() {
 }
 
 /**
- * The composer's Photos section (packet 05 §2/§4/§5/§6).
+ * The composer's Photos section (§2/§4/§5/§6).
  *
  * Presentation only: the section owns the header, the add affordances and the
  * disclosures, and delegates the selected photos to `ReportPhotoCarousel`

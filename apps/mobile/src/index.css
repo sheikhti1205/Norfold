@@ -181,7 +181,7 @@ body {
   pointer-events: none;
 }
 
-/* Home's visible brand (owner request 2026-11-15). The sidebar owns the
+/* Home's visible brand. The sidebar owns the
  * identity wherever a rail exists; on the bottom-bar layout (phones, and
  * readers who chose the bar) that sign is absent, so the feed's one visible
  * row carries the mark and wordmark again. 44px hit height, no pill: the brand
@@ -822,7 +822,7 @@ html.fb-reduce-motion .fb-morph-bar {
   color: var(--fb-outline);
 }
 
-/* CF-010 (packet `09` §6–§8) true ratio masonry: the photo keeps its natural
+/* CF-010 (§6–§8) true ratio masonry: the photo keeps its natural
  * shape (the shape itself is inline, computed from the stored dimensions), so
  * these rules reserve a surface behind the decode and set the text block that
  * sits under it; the shared media shape owns the corner. No equalising, no

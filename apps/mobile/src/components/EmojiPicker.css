@@ -1,5 +1,5 @@
 /* Emoji palette and the floating layer every picker shares.
-   Owner order 2026-11-12 (R5): emoji, stickers and GIFs in the composers.
+   R5: emoji, stickers and GIFs in the composers.
    The layer is positioned by the nearest `position: relative` ancestor, which
    each composer supplies, so the panel never escapes its field. */
 
@@ -58,7 +58,7 @@
 .fb-peer-attach-menu svg { flex: none; color: var(--fb-on-surface-variant); }
 .fb-peer-attach-menu button:disabled { opacity: 0.45; }
 
-/* One picker for emoji, GIFs and stickers (owner direction 2026-11-18).
+/* One picker for emoji, GIFs and stickers.
    The tab row is the only chrome; the content below it is unframed. */
 .fb-expression-picker { display: flex; flex-direction: column; min-height: 0; max-height: 24rem; }
 .fb-expression-head {

@@ -13,7 +13,7 @@ export interface ChatReportPreviewProps {
 }
 
 /**
- * R19 owner correction 2026-11-20: a shared report inside a chat message reads
+ * R19 correction 2026-11-20: a shared report inside a chat message reads
  * as one compact, message-integrated preview - picture, report kind, real title,
  * place/status/date and host - instead of a second painted card nested inside
  * the bubble. The bubble already owns the surface, so this adds no background,

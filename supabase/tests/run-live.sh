@@ -2,7 +2,7 @@
 # FindBack canonical live-backend behavioral runner (LIVE-PENDING).
 #
 # ONE entry point for every live contract suite. Run ONLY against a disposable
-# test backend with owner-provisioned test-account JWTs. NEVER point this at
+# test backend with manually provisioned test-account JWTs. NEVER point this at
 # production data, and NEVER commit the values below (env only).
 #
 # Required environment (values never printed, never written to disk by this
@@ -63,7 +63,7 @@ sk()   { skip=$((skip + 1)); echo "SKIP: $1"; }
 
 : "${TEST_SUPABASE_URL:?refusing: set TEST_SUPABASE_URL to a disposable test backend}"
 : "${TEST_SUPABASE_PUBLISHABLE_KEY:?refusing: set TEST_SUPABASE_PUBLISHABLE_KEY to the test backend publishable key}"
-: "${TEST_USER_A_JWT:?refusing: set TEST_USER_A_JWT to an owner-provisioned test-account JWT}"
+: "${TEST_USER_A_JWT:?refusing: set TEST_USER_A_JWT to a manually provisioned test-account JWT}"
 : "${TEST_USER_B_JWT:?refusing: set TEST_USER_B_JWT to a second test-account JWT}"
 echo "env present: url_len=${#TEST_SUPABASE_URL} key_len=${#TEST_SUPABASE_PUBLISHABLE_KEY} jwtA_len=${#TEST_USER_A_JWT} jwtB_len=${#TEST_USER_B_JWT} (values never printed)"
 

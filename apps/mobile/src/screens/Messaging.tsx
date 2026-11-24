@@ -269,7 +269,7 @@ export function replySwipeFor(offsetX: number, own: boolean): boolean {
 
 /**
  * The relationship facts the screen may *show* while a routine refresh sits
- * between authoritative sets (owner direction 2026-11-19).
+ * between authoritative sets.
  *
  * The runtime publishes `displayProjections`, the last accepted set, retained
  * only so a row, badge, label or header does not disappear for the length of a
@@ -952,7 +952,7 @@ export function ThreadSession({
   const threadSync = chat.threadSync?.conversationId === conversationId ? chat.threadSync : null;
   const threadReconciled = !!threadSync && (threadSync.mode === "ready" || threadSync.mode === "soft")
     && (threadSync.appliedRevision === undefined || renderedRevision >= threadSync.appliedRevision);
-  // Owner feedback 2026-11-06: a failed refresh must never stop the reader.
+  // A failed refresh must never stop the reader.
   // `threadLive` gates server authority (mark-read, receipts, media upload);
   // the screen itself stays readable and writable from durable local state.
   const threadLive = threadReconciled && !threadReadFailed;
@@ -1051,8 +1051,8 @@ export function ThreadSession({
   // when they started, not against whatever the view says now.
   const photoAuthority = useRef(photoAllowed);
   photoAuthority.current = photoAllowed;
-  // Photos are staged, not selected one at a time: the owner asked for a real
-  // bulk pick with a review surface, so each pick appends an item and every
+  // Photos are staged, not selected one at a time: the picker takes a real
+  // bulk selection with a review surface, so each pick appends an item and every
   // item is reviewed, removed and sent on its own terms.
   const [photos, setPhotos] = useState<StagedChatPhoto[]>([]);
   // The tray is also read from async keyboard/paste completions. A ref keeps
@@ -1907,7 +1907,7 @@ export function ThreadSession({
           && (!boundary || message.server!.sequence > boundary.server!.sequence);
         // Only a message that can change the answer earns a layout read. The
         // old order measured every bubble on every scroll frame, which is the
-        // gesture the owner described as laggy.
+        // gesture that felt laggy.
         if (!ownUnread && !unobservedInbound) continue;
         const bubble = bubbles.get(message.id);
         if (!bubble) continue;
@@ -2027,8 +2027,8 @@ export function ThreadSession({
    * retry is the same note rather than a re-recorded one.
    */
   async function sendVoice() {
-    // Send works during the take as well as from review (owner direction
-    // 2026-11-18): one press stops what has been recorded so far and sends it.
+    // Send works during the take as well as from review:
+    // one press stops what has been recorded so far and sends it.
     if (!row || !voiceAllowed || voiceSending) return;
     if (voiceStatus !== "review" && voiceStatus !== "recording" && voiceStatus !== "pausing") return;
     voiceSendDiscarded.current = false;
@@ -2581,7 +2581,7 @@ export function ThreadSession({
       if (alive.current) setError("Could not confirm this change. Sync and check your chat before trying again.");
     } finally { if (alive.current) setBusy(false); }
   }
-  // Owner direction 2026-11-18: replying to a request is the recipient's
+  // Replying to a request is the recipient's
   // decision, so the composer is available while it is incoming. The send path
   // accepts first; declining or hiding it still keeps it closed.
   const incomingOpen = view?.mode === "REQUEST" && view.request === "INCOMING"
@@ -2598,7 +2598,7 @@ export function ThreadSession({
   // run. The window is the only grouping key the stored rows carry; it is not
   // proof of a real picker batch, so two quick separate sends can share a run.
   const mediaRuns = useMemo(() => buildMediaRuns(messages, media), [messages, media]);
-  // Display rule (owner direction 2026-11-20): a run below the album size stays
+  // Display rule: a run below the album size stays
   // separate - each item is its own message row with its own bubble, time,
   // receipt, swipe and menu - and only four or more collapse into the album.
   const renderRuns = useMemo(() => splitSmallMediaRuns(mediaRuns, MEDIA_RUN_VISIBLE_LIMIT), [mediaRuns]);
@@ -2687,10 +2687,10 @@ export function ThreadSession({
         </button>;
       })}
     </div>}
-    {/* Owner feedback 2026-11-06: a failed refresh is a status, not a lock.
+    {/* A failed refresh is a status, not a lock.
         The transcript keeps its saved messages and the composer keeps working;
         the runtime retries on its own and this stays a single quiet line. */}
-    {/* Owner direction 2026-11-06: a device that is more than ten messages
+    {/* A device that is more than ten messages
         behind holds the screen — blurred, non-dismissible — while the missing
         messages are restored from the account, then releases on its own. */}
     {(threadReadFailed || threadSync?.mode === "error" || runtimeNotice) && <div className="fb-chat-statusline" role="status">
@@ -2803,7 +2803,7 @@ export function ThreadSession({
             && !attachment && !message.replyToId && !message.contextReportId && !message.location
             && isEmojiOnly(message.body);
           // A Klipy GIF or sticker is the message too: no bubble fill, no
-          // padding, no frame around it (owner direction 2026-11-18).
+          // padding, no frame around it.
           const klipyOnly = message.unsentAt === undefined && message.messageType === "TEXT"
             && !attachment && !message.replyToId && !message.contextReportId && !message.location
             && isBareKlipyMediaBody(message.body);

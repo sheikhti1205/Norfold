@@ -47,7 +47,7 @@ export interface ReactionKindMeta {
 }
 
 /**
- * THE ONE canonical reaction presentation map (owner directive 2026-10-14):
+ * THE ONE canonical reaction presentation map:
  * backend kinds LOVE / HELPFUL / SUPPORT / WOW are unchanged — only
  * presentation moves from custom SVG art to platform system-emoji glyphs.
  */

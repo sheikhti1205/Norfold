@@ -1,4 +1,4 @@
-// heavy-run only. Real disposable PostgreSQL, two bounded sessions per race;
+// Manual run only. Real disposable PostgreSQL, two bounded sessions per race;
 // no hosted credentials, remote writes or source-text assertions.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';

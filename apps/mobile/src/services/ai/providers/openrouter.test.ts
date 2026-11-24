@@ -1,5 +1,5 @@
 /**
- * OpenRouter BYOK provider adapter tests (packet P-openrouter).
+ * OpenRouter BYOK provider adapter tests.
  *
  * Fixtures are hand-built wire captures shaped by the official OpenRouter
  * docs (verified 2026-09-25); no real key is ever used and no live call is

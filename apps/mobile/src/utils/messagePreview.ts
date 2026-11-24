@@ -11,12 +11,12 @@ export interface MessagePreviewSource {
 }
 
 /**
- * The one visible name for a picked sticker or GIF (owner direction
- * 2026-11-19). A new send proves its kind in the body fragment; a body that
- * predates the marker proves nothing, so it is named "Sticker/GIF" instead of
- * guessing from an extension, its bytes or the URL shape. Every preview in the
- * app reads this mapping, so the conversation list, the message pill, chat
- * search and a quoted message cannot disagree.
+ * The one visible name for a picked sticker or GIF. A new send proves its
+ * kind in the body fragment; a body that predates the marker proves nothing,
+ * so it is named "Sticker/GIF" instead of guessing from an extension, its
+ * bytes or the URL shape. Every preview in the app reads this mapping, so the
+ * conversation list, the message pill, chat search and a quoted message cannot
+ * disagree.
  */
 export function klipyPreviewLabel(kind: KlipyMessageKind | null): string {
   return kind === "sticker" ? "Sticker" : kind === "gif" ? "GIF" : "Sticker/GIF";

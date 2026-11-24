@@ -3,7 +3,7 @@ import { Button, Dialog, DialogTrigger } from "react-aria-components";
 import { LayeredPopover } from "./overlayFoundation";
 import "./longPress.css";
 
-/** Owner-approved long-press window (repository mobile-interaction skill). */
+/** Long-press window (repository mobile-interaction skill). */
 const HOLD_MS = 400;
 const MOVE_PX = 10;
 

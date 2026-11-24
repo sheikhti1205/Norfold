@@ -252,7 +252,7 @@ test("checkSigneddevConfig reports every failing check, not just the first", () 
 // --- FBX-025 (M-a): assembleSigneddev MUST fail — never debug-sign — when the
 // canonical release signing env is incomplete. No Android SDK or keystore
 // exists in this environment, so assembleSigneddev itself cannot execute here
-// (deferred — see the handoff); these tests PROVE the fail-closed semantics in
+// (not runnable in this environment); these tests PROVE the fail-closed semantics in
 // the packaging contract instead: the readiness predicate, the null-signer
 // else branch, and the task-graph guard that refuses packaging outright.
 const buildGradleText = () => readFileSync(resolve("apps/mobile/android/app/build.gradle"), "utf8");

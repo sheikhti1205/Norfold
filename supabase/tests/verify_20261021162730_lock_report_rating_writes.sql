@@ -3,7 +3,7 @@
 -- APPLIED to the hosted project on 2026-10-21 (hosted version 20261021162730).
 -- The hosted readback (a single-batch behaviour probe that ends in ROLLBACK,
 -- plus a catalog probe) is recorded in
--- <private>/01_ACTIVE/consumer-final/sessions/main/D2-hosted-postapply-2026-10-21.json.
+-- an internal readback archive named D2-hosted-postapply-2026-10-21.json.
 -- The probes below are written to be run by the database owner.
 --
 -- Run AFTER the migration is applied. Every probe states what it expects, so

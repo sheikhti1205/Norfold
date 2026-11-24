@@ -2,7 +2,7 @@
 -- the one-time admin claim.
 --
 -- WHY THIS FILE EXISTS.
--- The owner asked for ONE admin account and ONE moderator account by default,
+-- One admin account and one moderator account are seeded by default,
 -- for the admin to assign moderators BY EMAIL (people are hired through
 -- Discord and granted their role in the app), and for the admin to hold
 -- ABSOLUTE control over what each moderator may do — everything a moderator
@@ -20,7 +20,7 @@
 --        RPC. Hiding admin behind a client check is forbidden.
 --   D37  admin_audit_log is the append-only action and audit record.
 --
--- The owner amendment (CONTRACT-ROLES-ADMIN-2026-10-22.md §2) adds the
+-- The roles contract §2 adds the
 -- CAPABILITY layer on top of the flat role:
 --
 --   A2.1  user_role_capabilities is a sibling relation, not a JSON blob: the
@@ -1374,11 +1374,11 @@ $$;
 comment on table public.user_roles is
   'FindBack roles (MC D34): the role source. USER is implicit; there is no role column on users.';
 comment on table public.user_role_capabilities is
-  'FindBack moderator capabilities (owner amendment A2.1): the per-moderator capability matrix. An ADMIN holds every capability implicitly.';
+  'FindBack moderator capabilities (amendment A2.1): the per-moderator capability matrix. An ADMIN holds every capability implicitly.';
 comment on table public.role_invitations is
-  'FindBack email invitations (owner amendment A2.3): a pending grant by email, consumed when the person signs up.';
+  'FindBack email invitations (amendment A2.3): a pending grant by email, consumed when the person signs up.';
 comment on table public.bootstrap_admins is
-  'FindBack admin bootstrap allowlist (owner amendment A2.4): the addresses allowed to make the one-time admin claim.';
+  'FindBack admin bootstrap allowlist (amendment A2.4): the addresses allowed to make the one-time admin claim.';
 comment on table public.admin_audit_log is
   'FindBack moderation audit log (MC D37): append-only. One row per moderation or role action, with previous_state/new_state/reason.';
 

@@ -132,7 +132,7 @@ describe("resolveFeedLayout", () => {
   });
 
   it("does not change layout for a few pixels of viewport drift", () => {
-    // A band-based rule cannot flap while the user scrolls (packet `09` §6).
+    // A band-based rule cannot flap while the user scrolls (§6).
     const around = [MEDIUM_MAX_PX - 8, MEDIUM_MAX_PX - 1, MEDIUM_MAX_PX, MEDIUM_MAX_PX + 8];
     const resolved = around.map((w) => resolveFeedLayout("auto", w));
     expect(resolved.filter((r) => r === "masonry")).toHaveLength(2);

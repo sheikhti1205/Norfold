@@ -14,7 +14,7 @@
  * `settings_manage`, `data_export`, `data_delete`) that are NEVER offered for
  * a moderator.
  *
- * The owner model this service speaks to (CONTRACT-ROLES-ADMIN-2026-10-22.md):
+ * The owner model this service speaks to (the roles contract):
  * one admin account and one moderator account by default, the admin assigning
  * moderators BY EMAIL, and the admin holding absolute control over what each
  * moderator may do. The default accounts are seeded in the migration; nothing

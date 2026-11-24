@@ -31,8 +31,8 @@ export interface ComposerShellProps {
  * with callers.
  *
  * The field is never `disabled`. A disabled textarea loses focus and, on a
- * phone, tears down the keyboard, which is exactly what the owner reported: you
- * send a comment and the place you were typing stops taking input. `readOnly`
+ * phone, tears down the keyboard: you send a comment and the place you were
+ * typing stops taking input. `readOnly`
  * carries the "this account cannot write" state instead, and Send is the only
  * control that ever goes unavailable. On top of that, a send started from the
  * focused field puts focus back when the send settles, so a slow admission

@@ -1,4 +1,4 @@
-/* R19 owner correction 2026-11-20: one shared report is a compact preview made
+/* R19 correction 2026-11-20: one shared report is a compact preview made
    of a picture and its facts, integrated into the message it arrived in. The
    bubble already supplies the surface; this adds no second background, border,
    shadow or corner ring. Secondary text derives from the bubble's own ink so the

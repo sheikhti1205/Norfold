@@ -26,7 +26,7 @@ export const PERSON_EVIDENCE_MAX = 20;
 /**
  * The message picker inside the one report sheet.
  *
- * The owner's rule: a person report sends the five most recent messages by
+ * A person report sends the five most recent messages by
  * default, whatever their kind, and the reporter may send fewer or more. The
  * default is chosen by the caller when the sheet opens; this component only
  * edits the selection.

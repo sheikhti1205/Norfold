@@ -9,7 +9,7 @@
 -- report receipt (with a trigger and a backfill), and replaces four functions
 -- already shipped (unapplied) by 20261022173000. No DROP, no DELETE.
 --
--- Owner policy (2026-10-23), implemented here rather than assumed:
+-- Moderation policy (2026-10-23), implemented here rather than assumed:
 --   * ONE moderator decides a case. That decision is FINAL.
 --   * Its attribution is that moderator's user id; no second-moderator approval
 --     exists and none may be added.
@@ -69,7 +69,7 @@ alter table public.moderation_case_decisions enable row level security;
 revoke all on table public.moderation_case_decisions from public, anon, authenticated;
 
 comment on table public.moderation_case_decisions is
-  'FindBack final-decision ownership (owner policy 2026-10-23): one decider per logical case is final and is attributed to that moderator; only the same decider may revise it, or any capability holder after a consumer re-evaluation request (action or sanction appeal) or a new report reopens the case. EVERY decision about a COMMENT — a dismissal just as much as a hide — is stored on its POST case, because the comment report and the post visibility are one atom; stored ids, not timestamps, decide what counts as a new report. The decider id has no foreign key and is never nullable, so a deleted account cannot hand the case to someone else. Internal: no client grant, no policy; readers are definer functions.';
+  'FindBack final-decision ownership (policy 2026-10-23): one decider per logical case is final and is attributed to that moderator; only the same decider may revise it, or any capability holder after a consumer re-evaluation request (action or sanction appeal) or a new report reopens the case. EVERY decision about a COMMENT — a dismissal just as much as a hide — is stored on its POST case, because the comment report and the post visibility are one atom; stored ids, not timestamps, decide what counts as a new report. The decider id has no foreign key and is never nullable, so a deleted account cannot hand the case to someone else. Internal: no client grant, no policy; readers are definer functions.';
 
 -- ---------------------------------------------------------------------------
 -- 1b. Durable canonical association.
@@ -172,7 +172,7 @@ alter table public.moderation_case_audits enable row level security;
 revoke all on table public.moderation_case_audits from public, anon, authenticated;
 
 comment on table public.moderation_case_audits is
-  'FindBack durable audit-to-case links (owner policy 2026-10-23): every moderation action records the canonical case it decided, so a proactive comment action survives comment deletion and a parent revision. Internal: no client grant, no policy; readers are definer functions.';
+  'FindBack durable audit-to-case links (policy 2026-10-23): every moderation action records the canonical case it decided, so a proactive comment action survives comment deletion and a parent revision. Internal: no client grant, no policy; readers are definer functions.';
 
 -- Link existing audits. A live comment's authoritative parent wins; a deleted
 -- comment falls back to any retained receipt; only a genuinely unrecoverable
@@ -595,7 +595,7 @@ revoke all on function public.findback_apply_moderation(text, text, text, text, 
 grant execute on function public.findback_apply_moderation(text, text, text, text, text, text, text) to authenticated;
 
 comment on function public.findback_apply_moderation(text, text, text, text, text, text, text) is
-  'FindBack moderation writer (definer, MC D39 + owner policy 2026-10-23): the ONE privileged writer. Each action maps to exactly one D1 capability (NO_ACTION→reports_review, PUBLISH/HIDE→content_hide, REMOVE→content_remove, WARN/PROBATION→members_warn, RESTRICT_POSTING→members_restrict, SUSPEND/BAN→members_suspend). Every decision about a COMMENT shares the POST case key (one visibility atom), while a dismissal closes only the reports of the submitted subject and a content action closes every report the atom owns. A final decision belongs to its decider: another moderator is refused with P0001 MODERATION_DECISION_FINAL until a consumer re-evaluation request (action or sanction appeal) or a report the decision did not already know reopens the case; the same decider may revise, which increments the decision generation. It writes one state change, appends exactly one audit row against the submitted target, updates the case owner, the sanction link and the known-report set, and emits one NULL-actor outcome notification.';
+  'FindBack moderation writer (definer, MC D39, policy 2026-10-23): the ONE privileged writer. Each action maps to exactly one D1 capability (NO_ACTION→reports_review, PUBLISH/HIDE→content_hide, REMOVE→content_remove, WARN/PROBATION→members_warn, RESTRICT_POSTING→members_restrict, SUSPEND/BAN→members_suspend). Every decision about a COMMENT shares the POST case key (one visibility atom), while a dismissal closes only the reports of the submitted subject and a content action closes every report the atom owns. A final decision belongs to its decider: another moderator is refused with P0001 MODERATION_DECISION_FINAL until a consumer re-evaluation request (action or sanction appeal) or a report the decision did not already know reopens the case; the same decider may revise, which increments the decision generation. It writes one state change, appends exactly one audit row against the submitted target, updates the case owner, the sanction link and the known-report set, and emits one NULL-actor outcome notification.';
 
 -- ---------------------------------------------------------------------------
 -- 3. The queue: a reopened case is actionable again.
@@ -1059,4 +1059,4 @@ revoke all on function public.findback_submit_appeal(text, text, text) from publ
 grant execute on function public.findback_submit_appeal(text, text, text) to authenticated;
 
 comment on function public.findback_submit_appeal(text, text, text) is
-  'FindBack appeal writer (definer, authenticated, MC D15 + owner policy 2026-10-23): the caller must own the referenced action or sanction; one open appeal per (subject_kind, subject_id); the refusal is one neutral P0002 and a duplicate is the stable APPEAL_ALREADY_OPEN. An appeal against the current moderation decision OR the current sanction REOPENS that case for re-evaluation (serialised with the writer); an older decision or sanction is not reopened. Emits no notification and no moderator signal.';
+  'FindBack appeal writer (definer, authenticated, MC D15, policy 2026-10-23): the caller must own the referenced action or sanction; one open appeal per (subject_kind, subject_id); the refusal is one neutral P0002 and a duplicate is the stable APPEAL_ALREADY_OPEN. An appeal against the current moderation decision OR the current sanction REOPENS that case for re-evaluation (serialised with the writer); an older decision or sanction is not reopened. Emits no notification and no moderator signal.';

@@ -1,4 +1,4 @@
--- Owner direction 2026-11-17: taking a number that another account already
+-- Taking a number that another account already
 -- verified must be deliberate.
 --
 -- The first version of the claim RPC moved a taken number on a single contact

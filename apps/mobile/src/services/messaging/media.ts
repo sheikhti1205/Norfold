@@ -15,7 +15,7 @@ import { uuid } from "./validation";
 export const MEDIA_MAX_BYTES = 20 * 1024 * 1024;
 
 /**
- * Owner-approved logical per-account budget of decoded bytes, 2026-10-28.
+ * Logical per-account budget of decoded bytes, 2026-10-28.
  * Logical: IndexedDB and page overhead mean real disk use is higher, so the UI
  * must never present this as a disk quota.
  */

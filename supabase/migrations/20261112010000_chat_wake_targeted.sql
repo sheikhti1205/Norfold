@@ -1,7 +1,7 @@
 -- Prepared only; not applied.
 -- Message and state audience wakes include their available conversation and message IDs.
 -- Older clients ignore the extra payload keys and still receive the invalidate hint.
--- Do not push until milestone acceptance and live verification, per the migration gate.
+-- Do not push until acceptance and live verification, per the migration gate.
 begin;
 
 create or replace function public.findback_chat_wake_internal_targeted(

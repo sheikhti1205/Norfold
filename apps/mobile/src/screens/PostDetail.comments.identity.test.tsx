@@ -127,7 +127,7 @@ describe("PostDetail comment identity (W7)", () => {
     const row = document.getElementById("detail-comment-c1")!;
     expect(within(row).getByText("@helper")).toBeTruthy();
     expect(within(row).getByTestId("comment-react-c1")).toBeTruthy();
-    // Like-only: the comment chevron/tray is gone (packet 08 §2).
+    // Like-only: the comment chevron/tray is gone (§2).
     expect(within(row).queryByTestId("comment-choose-c1")).toBeNull();
   });
 });

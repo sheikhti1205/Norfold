@@ -3,7 +3,7 @@ import "./navOutsideBrand.css";
 
 /**
  * The app name painted outside a side rail while that column is an unnamed icon
- * strip (owner direction 2026-11-18).
+ * strip.
  *
  * The shell renders this once, inside the box that also holds the rail, so the
  * name is positioned from the rail's own edge and head height rather than from

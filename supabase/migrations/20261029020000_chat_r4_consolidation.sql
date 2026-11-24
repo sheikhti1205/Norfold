@@ -1,6 +1,6 @@
 -- Chat R4 consolidation (forward-only; historical migrations stay immutable).
 --
--- Canonical contract: `CHAT-R4-CANONICAL.md` / owner packet 01.
+-- Canonical contract: the chat R4 consolidation note.
 --   * conversation mode is REQUEST | CONNECTED only; blocking is the app-wide
 --     directional user_blocks relation and never a conversation mode;
 --   * one member-state owner per (conversation,user) for projection, private

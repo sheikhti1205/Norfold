@@ -167,7 +167,7 @@ export function isKlipyMediaUrl(url: string): boolean {
 }
 
 /**
- * Picker kind of one stored Klipy body (owner direction 2026-11-19).
+ * Picker kind of one stored Klipy body.
  *
  * A GIF and a sticker travel as the same kind of value — one bare provider
  * URL — so the message model cannot tell them apart. The kind is therefore

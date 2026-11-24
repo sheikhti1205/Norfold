@@ -79,7 +79,7 @@ describe("PostCard motion (P6)", () => {
   });
 });
 
-describe("PostCard put-away cross (owner direction 2026-11-18)", () => {
+describe("PostCard put-away cross", () => {
   it("offers no cross when the list owns no put-away action", () => {
     renderCard(0);
     expect(screen.queryByRole("button", { name: "Hide report" })).toBeNull();

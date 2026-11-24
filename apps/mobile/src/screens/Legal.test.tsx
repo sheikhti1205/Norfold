@@ -46,7 +46,7 @@ describe("legal documents", () => {
   it.each([Terms, PrivacyPolicy, CommunityGuidelines])("keeps global search and the bell off every legal document", (Document) => {
     const { container } = render(<MemoryRouter><Document /></MemoryRouter>);
     // Settings owns one search in its own chrome; the tree never paints a
-    // second global entry or a notification bell (owner order 2026-11-13).
+    // second global entry or a notification bell.
     expect(container.querySelector('a[href="/search"]')).toBeNull();
     expect(container.querySelector('a[href="/notifications"]')).toBeNull();
   });

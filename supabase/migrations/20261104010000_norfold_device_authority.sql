@@ -1,6 +1,6 @@
--- LOCAL milestone WIP: device authority and canonical Chat/media/push admission.
+-- Local: device authority and canonical Chat/media/push admission.
 -- Runtime key enrollment and authenticated peer execution remain required before
--- milestone acceptance/publication. Earlier applied migrations remain immutable.
+-- acceptance/publication. Earlier applied migrations remain immutable.
 begin;
 
 alter table public.chat_devices

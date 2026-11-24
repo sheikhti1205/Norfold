@@ -1,5 +1,5 @@
 name: Apply auth email templates
-# Owner-dispatched only. The app signs up and resets passwords with six-digit
+# Manual dispatch only. The app signs up and resets passwords with six-digit
 # codes, so the hosted GoTrue templates are product surface; this copies the
 # canonical files in supabase/email-templates/ into the live project instead of
 # relying on a hand-paste that drifts from the repository.

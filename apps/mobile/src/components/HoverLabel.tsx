@@ -15,7 +15,7 @@ import { FINE_POINTER_QUERY, hasFinePointer } from "./inputCapabilities";
 import "./HoverLabel.css";
 
 /**
- * ONE pointer-only name for icon-only controls (owner request 2026-11-15/16).
+ * ONE pointer-only name for icon-only controls.
  *
  * The rail proved the gesture: rest on an icon, it names itself after the
  * notification action-rail dwell, and the page never reflows because the name

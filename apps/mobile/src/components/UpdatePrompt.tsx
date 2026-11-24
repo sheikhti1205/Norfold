@@ -29,7 +29,7 @@ export function UpdatePrompt() {
   const [shown, setShown] = useState<AndroidRelease | null>(null);
 
   useEffect(() => {
-    // Owner order 2026-11-06: check once when the app launches and propose the
+    // Check once when the app launches and propose the
     // build. Force skips the background interval so minutes-old builds appear.
     void refreshInstalledUpdates().then(() => checkForUpdates(true));
   }, []);

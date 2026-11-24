@@ -6,7 +6,7 @@
   },
   "generator": {
     "path": "scripts/generate-brand-assets.py",
-    "sha256": "bb38315c5608c9541c60ca5147ee5aa17b907ed930bed1af813b4801f2bfd2eb",
+    "sha256": "04789db45317a33c99cbd71b9f809bbf08abb2b6ba6b7c8b50e1da539e2b1629",
     "pillow": "11.1.0"
   },
   "historical_master": "apps/mobile/src/assets/brand/logo2-master.jpg",
@@ -21,7 +21,7 @@
       "sha256": "90691cffa25d18843c95dae289d966f7bc166d5174120ce552cfeaf9b564000e",
       "width": 512,
       "height": 512,
-      "recipe": "owner ink to monochrome alpha"
+      "recipe": "master ink to monochrome alpha"
     },
     "apps/mobile/src/assets/brand/brand-tile-light.png": {
       "sha256": "17a5370d16875e589c52317f95457ae1b39ee81c55717adcc481ebc62624af79",
@@ -33,7 +33,7 @@
       "sha256": "5b3b635d7d95f0b973f69a665823f2db53e4826d9cc84c70f3fb6ce81fdba77d",
       "width": 512,
       "height": 512,
-      "recipe": "owner ink to monochrome alpha"
+      "recipe": "master ink to monochrome alpha"
     },
     "apps/mobile/public/icons/findback-birdleaf-v1-16.png": {
       "sha256": "8d363f9e04f808f80630e7b89f9aa18896f2e359ea4bd7b38c473fb199a42aa3",
@@ -279,67 +279,67 @@
       "sha256": "b95bb3ad1207dddf2a429e9360089a9ac9ca4141a7a757b4dfaa4cb62c309543",
       "width": 480,
       "height": 320,
-      "recipe": "centered owner ink, retained #1a1a1a background"
+      "recipe": "centered master ink, retained #1a1a1a background"
     },
     "apps/mobile/android/app/src/main/res/drawable-port-mdpi/splash.png": {
       "sha256": "6bd01c6fb2a4bc83510222c55629f8e789aeb36177328d63577f8747263399fa",
       "width": 320,
       "height": 480,
-      "recipe": "centered owner ink, retained #1a1a1a background"
+      "recipe": "centered master ink, retained #1a1a1a background"
     },
     "apps/mobile/android/app/src/main/res/drawable-port-hdpi/splash.png": {
       "sha256": "4dc229a18b092f5a6ff997c197dbc311b63461c85aae2da91729dc6e90bf6ef9",
       "width": 480,
       "height": 800,
-      "recipe": "centered owner ink, retained #1a1a1a background"
+      "recipe": "centered master ink, retained #1a1a1a background"
     },
     "apps/mobile/android/app/src/main/res/drawable-port-xhdpi/splash.png": {
       "sha256": "11ed13d738acd6db250f74966a79be003227e56beac977568a1021a069b4cb8b",
       "width": 720,
       "height": 1280,
-      "recipe": "centered owner ink, retained #1a1a1a background"
+      "recipe": "centered master ink, retained #1a1a1a background"
     },
     "apps/mobile/android/app/src/main/res/drawable-port-xxhdpi/splash.png": {
       "sha256": "0707e02b8c3c907e7ae24708504f51278addd3539003e4a70b06b25681733e38",
       "width": 960,
       "height": 1600,
-      "recipe": "centered owner ink, retained #1a1a1a background"
+      "recipe": "centered master ink, retained #1a1a1a background"
     },
     "apps/mobile/android/app/src/main/res/drawable-port-xxxhdpi/splash.png": {
       "sha256": "bab355bbdc5f0fe6f92d40643d9d88775c33e8c59d5f0e787a0fc833768054d8",
       "width": 1280,
       "height": 1920,
-      "recipe": "centered owner ink, retained #1a1a1a background"
+      "recipe": "centered master ink, retained #1a1a1a background"
     },
     "apps/mobile/android/app/src/main/res/drawable-land-mdpi/splash.png": {
       "sha256": "b95bb3ad1207dddf2a429e9360089a9ac9ca4141a7a757b4dfaa4cb62c309543",
       "width": 480,
       "height": 320,
-      "recipe": "centered owner ink, retained #1a1a1a background"
+      "recipe": "centered master ink, retained #1a1a1a background"
     },
     "apps/mobile/android/app/src/main/res/drawable-land-hdpi/splash.png": {
       "sha256": "04c651724fa612dac90bfc77fc3f8f2fb214abcd9a53e19bb72673b0946809ab",
       "width": 800,
       "height": 480,
-      "recipe": "centered owner ink, retained #1a1a1a background"
+      "recipe": "centered master ink, retained #1a1a1a background"
     },
     "apps/mobile/android/app/src/main/res/drawable-land-xhdpi/splash.png": {
       "sha256": "74fc649ad10618a6d979c5ee2caea65a4a66bb13a8cb239da1ab21b860b865a4",
       "width": 1280,
       "height": 720,
-      "recipe": "centered owner ink, retained #1a1a1a background"
+      "recipe": "centered master ink, retained #1a1a1a background"
     },
     "apps/mobile/android/app/src/main/res/drawable-land-xxhdpi/splash.png": {
       "sha256": "7ffcfffc202aac2ca311b9e212d46625b04bc3529641ff8c05e2ae2b12b5073d",
       "width": 1600,
       "height": 960,
-      "recipe": "centered owner ink, retained #1a1a1a background"
+      "recipe": "centered master ink, retained #1a1a1a background"
     },
     "apps/mobile/android/app/src/main/res/drawable-land-xxxhdpi/splash.png": {
       "sha256": "0e07863cf74d32e5c565f461e63d0c42f8af595a6da6d2f5862c42cd73097fd8",
       "width": 1920,
       "height": 1280,
-      "recipe": "centered owner ink, retained #1a1a1a background"
+      "recipe": "centered master ink, retained #1a1a1a background"
     }
   }
 }

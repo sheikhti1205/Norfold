@@ -91,9 +91,8 @@
    inside the 23rem/28rem bounds; the rest scrolls inside `.fb-chat-dock-body`.
    28rem caps header + 44px search + the Recent label + five 52px rows. */
 .fb-chat-dock-window[data-view="picker"] {
-  /* The owner asked for a thinner chooser (2026-11-23): the picker is a list of
-     names and one-line previews, so it keeps the 20rem width while a transcript
-     window takes 24rem. */
+  /* The picker is a list of names and one-line previews, so it keeps the 20rem
+     width while a transcript window takes 24rem. */
   width: min(20rem, calc(100vw - 24px - var(--fb-dock-window-clearance)));
   height: clamp(23rem, 52vh, 28rem);
   height: clamp(23rem, 52dvh, 28rem);

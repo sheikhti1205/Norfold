@@ -23,7 +23,7 @@
  *
  * Pagination IS documented (`offset`/`limit`, max 1000, full list when both omitted,
  * plus `links.next` / `total_count`): parse one page per call and follow `getNextPageLink`.
- * No network here — fixtures only; fetching belongs to a later provider packet.
+ * No network here — fixtures only; fetching is left to a later provider change.
  */
 import {
   isDecimalAmount,

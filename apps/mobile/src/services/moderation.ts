@@ -76,7 +76,7 @@ export const MODERATION_VISIBILITIES = [
 export type ModerationVisibility = (typeof MODERATION_VISIBILITIES)[number];
 
 /**
- * Which capability authorizes each action (CONTRACT-ROLES-ADMIN §A2.1).
+ * Which capability authorizes each action (the roles contract §A2.1).
  *
  * FOR HIDING A CONTROL ONLY. `findback_apply_moderation` holds the same map and
  * re-checks it server-side; a client that ignored this map would collect 42501.
@@ -190,7 +190,7 @@ export interface ModerationDecision {
   createdAt: string;
 }
 
-/** The current decision generation that owns a case (owner policy 2026-10-23). */
+/** The current decision generation that owns a case. */
 export interface ModerationDecisionSummary {
   action: ModerationAction;
   generation: number;

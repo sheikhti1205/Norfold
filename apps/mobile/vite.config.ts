@@ -24,10 +24,10 @@ export function resolveSupabaseBuildEnv(
 
 // FBX-027 maps-config region (keyless MAP pivot): the single build-time source
 // for map provider config is the repo-root env, owned by
-// scripts/check-map-config.mjs. This resolver mirrors the owner's names and
-// defaults so the web bundle receives the SAME effective values the native
-// side compiles into BuildConfig (MAP_STYLE_URL / MAP_SEARCH_CONTACT) —
-// absent custom values resolve to the owner-decided defaults on both sides,
+// scripts/check-map-config.mjs. This resolver mirrors the names and defaults
+// defined there, so the web bundle receives the SAME effective values the
+// native side compiles into BuildConfig (MAP_STYLE_URL / MAP_SEARCH_CONTACT)
+// — absent custom values resolve to the built-in defaults on both sides,
 // never a silent divergence. The Nominatim search-endpoint override
 // (VITE_NOMINATIM_SEARCH_URL → BuildConfig.MAP_SEARCH_URL) is the third owned
 // knob alongside style/contact; it is consumed today by

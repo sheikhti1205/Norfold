@@ -20,7 +20,7 @@ export function fcmSecretValues(env) {
     FCM_PROJECT_ID: sender.project_id,
     PUBLIC_SHARE_ORIGIN: validateShareOrigin(env.VITE_PUBLIC_SHARE_ORIGIN || ""),
   };
-  // Optional: provisioned by the owner as a GitHub secret. When present it is
+  // Optional: provisioned as a GitHub secret. When present it is
   // mirrored into the function environment so the scheduler can authenticate.
   const dispatchSecret = (env.PUSH_DISPATCH_SECRET || "").trim();
   if (dispatchSecret) {

@@ -112,7 +112,7 @@ describe("compact document surface", () => {
 
     expect(screen.getByText("Q3 report.pdf")).toBeTruthy();
     expect(screen.getByText("PDF · 1.2 MB")).toBeTruthy();
-    // The owner's pair: the visible word is the accessible name's own start, so
+    // Both actions keep a visible word: it is the accessible name's own start, so
     // a speech control can say "Save Q3 report.pdf" without guessing.
     expect(button("View Q3 report.pdf").textContent).toBe("View");
     expect(button("Save Q3 report.pdf").textContent).toBe("Save");
@@ -385,7 +385,7 @@ describe("busy and failure handling", () => {
 /**
  * jsdom has no layout, so these read the declarations that own the compact
  * surface. Rendered pixels at 320px and a 32px root remain a deployed-browser
- * item; the owner's reference is geometry, not a white PDF preview to copy.
+ * item; the reference is geometry, not a white PDF preview to copy.
  */
 describe("document surface declarations", () => {
   const css = readFileSync("src/components/ChatFile.css", "utf8");

@@ -1,5 +1,5 @@
 /**
- * CF-010 responsive vocabulary (packet `09` §1, §2, §6, §7, §21, §22).
+ * CF-010 responsive vocabulary (§1, §2, §6, §7, §21, §22).
  *
  * The app used to be one phone column: `Shell` clamped the whole canvas to
  * `max-w-md`, so every screen was 448px wide no matter the device. The shell now
@@ -144,7 +144,7 @@ export type ResolvedFeedLayout = "feed" | "compact" | "masonry";
  * `auto` picks: phone → feed, medium → feed (a 600-840 viewport still reads
  * best as a single comfortable column), expanded → masonry. The rule depends on
  * the band rather than the exact pixel width, so the layout cannot change
- * because the viewport moved a few pixels (packet `09` §6: no unexpected layout
+ * because the viewport moved a few pixels (§6: no unexpected layout
  * change while the user is scrolling).
  */
 export function resolveFeedLayout(

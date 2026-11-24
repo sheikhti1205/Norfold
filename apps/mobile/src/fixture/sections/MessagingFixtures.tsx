@@ -14,7 +14,7 @@ const FIXTURE_PEAKS = [0.18, 0.42, 0.71, 0.88, 0.63, 0.35, 0.22, 0.51, 0.94, 0.7
   0.16, 0.34, 0.61, 0.45];
 
 /**
- * Chat surface preflight (owner handoff 2026-11-03).
+ * Chat surface preflight.
  *
  * The live thread is data-bound (auth, runtime, durable history), so this frame
  * renders the *production* pieces whose hierarchy changed — `ChatIdentity`,

@@ -51,7 +51,7 @@ export function AppBar({
     if (!autoFocus) return;
     heading.current?.focus({ preventScroll: true });
   }, [autoFocus, title]);
-  // Owner direction 2026-11-18: the shell paints the app name once, outside a
+  // The shell paints the app name once, outside a
   // collapsed rail, anchored to the rail itself. This bar is the route's own
   // top row and owns nothing outside the content it is in, so it renders no
   // brand copy of its own. A bar rendered without a rail (a phone drawer, the

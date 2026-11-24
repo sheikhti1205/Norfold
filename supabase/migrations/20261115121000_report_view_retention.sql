@@ -1,4 +1,4 @@
--- Owner audit 2026-11-15 (P2): make report-view retention operational.
+-- Audit 2026-11-15 (P2): make report-view retention operational.
 --
 -- WHAT WAS MISSING. 20261112130000 created the deduplication table, its
 -- increment trigger and findback_prune_report_views(90), but nothing ever

@@ -164,7 +164,7 @@ describe("PostCardContent image crossfade (Wave A)", () => {
   });
 });
 
-describe("search-only photo hover preview (owner direction 2026-11-18)", () => {
+describe("search-only photo hover preview", () => {
   it.each(["home-feed", "masonry"] as const)(
     "does not attach a hover preview to the ordinary %s feed",
     (layout) => {

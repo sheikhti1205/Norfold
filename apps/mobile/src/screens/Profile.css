@@ -1,11 +1,11 @@
 /*
- * Profile hub (owner direction 2026-11-14): the person comes first - a large
+ * Profile hub: the person comes first - a large
  * centred portrait with its own edit control, a name that can be edited in
  * place, a handle that copies on press, and the account's verification state as
  * place. Connected accounts sit under the identity, then the destinations.
  * This is navigation, not a dashboard: no card per group, no marketing
  * paragraphs. Chat-owned settings (contact rules, receipts, backup) are not
- * repeated here (owner order 2026-11-14).
+ * repeated here.
  */
 
 .fb-profile {
@@ -319,7 +319,7 @@
   font-size: 0.9375rem;
 }
 
-/* Connected accounts are one line each (owner request 2026-11-17). A long
+/* Connected accounts are one line each. A long
    address is data, so it truncates with an ellipsis and keeps the full value in
    its title instead of wrapping the row into a second line. */
 .fb-profile .fb-settings-row-value {
@@ -342,7 +342,7 @@
 
 /* The settings list gives a text value its own full-width line below 480px.
    That is right for a settings page and wrong here: these four rows are the
-   connected accounts, and the owner asked for one line each on a phone. The
+   connected accounts, and each is one line on a phone. The
    selector deliberately outranks the shared `:has()` rule. */
 @media (max-width: 480px) {
   .fb-profile .fb-settings-row.fb-profile-account-row:has(.fb-settings-row-value) {

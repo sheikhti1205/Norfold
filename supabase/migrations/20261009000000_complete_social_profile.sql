@@ -1,7 +1,7 @@
 -- FindBack — social profile completion RPC (W0 staged).
 --
--- STAGED ONLY. DO NOT APPLY to any database without explicit owner
--- authorization (per OWNER_DIRECTIVE_2026-10-09_SOCIAL_UI stop conditions:
+-- STAGED ONLY. DO NOT APPLY to any database without explicit
+-- authorization (per the social-UI stop conditions:
 -- "a live DB migration would be required" → stop and report).
 --
 -- Context: the auth.users trigger (20260914130000) skips public.users creation

@@ -9,7 +9,7 @@
 -- trigger + service-role-only claim RPC. No column drops, no row rewrites,
 -- no user/auth data removal, no edits to any applied migration, no grant
 -- touched on any existing object.
--- LIVE-PENDING (owner-deferred, 2026-10-12): verify on the live project
+-- LIVE-PENDING (2026-10-12): verify on the live project
 -- before PASS — see supabase/tests/verify_20261012020000_comment_attachments.sql
 -- (no live run ships in this change), including VALIDATE CONSTRAINT for the
 -- NOT VALID checks below once the table is known-clean.

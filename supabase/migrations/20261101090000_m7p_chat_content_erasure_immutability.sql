@@ -71,7 +71,7 @@ where (message_type<>'TEXT' or btrim(body)<>'')
 -- ambiguous old digest. Leave identity NULL and refuse replay rather than
 -- acknowledge changed content. No content is recovered or resurrected. The
 -- M7-P context migration is still local/LIVE-PENDING; no hosted context rows
--- exist under this programme. New sends always keep a lossless identity.
+-- exist under this rule. New sends always keep a lossless identity.
 
 -- ---------------------------------------------------------------------------
 -- 2. Erasure covers every content column, not only `body`.

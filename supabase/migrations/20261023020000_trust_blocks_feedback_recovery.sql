@@ -33,7 +33,7 @@
 --            reads only, admin_note never in the grant, account deletion
 --            removes the row and keeps no aggregate.
 --
--- OWNER DECISION O3 (§13.5): the report and feedback ceilings are 2× the normal
+-- DECISION O3 (§13.5): the report and feedback ceilings are 2× the normal
 -- interaction limit, expressed as a multiple of ONE base function so the
 -- numbers cannot drift apart. This file introduces
 -- findback_base_interaction_limit(); the report lane (B2a) consumes it.
@@ -63,11 +63,11 @@
 begin;
 
 -- ---------------------------------------------------------------------------
--- 1. The base interaction limit (D29, owner decision O3).
+-- 1. The base interaction limit (D29, decision O3).
 -- ---------------------------------------------------------------------------
 --
 -- ONE number, read by the standing-derived limit below and by the report and
--- feedback ceilings as a MULTIPLE. The owner's ruling is "double the normal
+-- feedback ceilings as a MULTIPLE. The rule is "double the normal
 -- interaction limits"; a literal in three places would drift, so the normal
 -- interaction limit is the base and everything else is expressed against it:
 --
@@ -95,7 +95,7 @@ revoke all on function public.findback_base_interaction_limit() from public, ano
 grant execute on function public.findback_base_interaction_limit() to authenticated;
 
 comment on function public.findback_base_interaction_limit() is
-  'FindBack base interaction limit (owner decision O3): the normal per-UTC-day posting/commenting ceiling. TRUSTED is 2x it, report and feedback ceilings are 2x it, so the numbers cannot drift apart.';
+  'FindBack base interaction limit (decision O3): the normal per-UTC-day posting/commenting ceiling. TRUSTED is 2x it, report and feedback ceilings are 2x it, so the numbers cannot drift apart.';
 
 
 -- ===========================================================================
@@ -1007,7 +1007,7 @@ comment on table public.feedback is
 -- The four optional scalars are BOUNDED here and assembled here. The RPC has no
 -- jsonb parameter; a must-fail fixture asserts the argument list.
 --
--- The rate limit is 2 x the base interaction limit (owner decision O3), counted
+-- The rate limit is 2 x the base interaction limit (decision O3), counted
 -- from this table for the UTC day. It is a product throttle, not a security
 -- boundary: two concurrent submissions inside one transaction window can both
 -- pass, which is accepted and recorded in the handoff.
@@ -1072,7 +1072,7 @@ begin
     raise exception 'Device class is too long' using errcode = '22023';
   end if;
 
-  -- 2 x base (owner decision O3).
+  -- 2 x base (decision O3).
   v_limit := 2 * public.findback_base_interaction_limit();
 
   select count(*)
@@ -1121,7 +1121,7 @@ comment on table public.return_ratings is
   'FindBack return ratings (MC D26): one rating per DIRECTION per recovery, participants only, self impossible (derived counterpart + CHECK). No client table grant: reads via findback_return_ratings(), writes via findback_rate_return().';
 
 -- ---------------------------------------------------------------------------
--- 7. Ownership notes for the reviewer.
+-- 7. Ownership notes.
 -- ---------------------------------------------------------------------------
 -- Nothing here re-creates a shipped object: the block table and its readers are
 -- untouched, the legacy ratings freeze already landed (20261021162730), and no

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 /**
  * How much of the window an on-screen keyboard is covering, read from the
- * visual viewport (packet 05 §8 — the report composer's keyboard mode).
+ * visual viewport (§8 — the report composer's keyboard mode).
  *
  * A WebView can be configured either way, and the difference decides what the
  * composer has to do:

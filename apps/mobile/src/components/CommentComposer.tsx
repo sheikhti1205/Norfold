@@ -40,10 +40,10 @@ import { interactionRefusalCopy } from "../utils/interactionRefusal";
  * - `@` mentions through the shared `MentionAutocomplete` (ranked
  *   participants > owner > server fallback, keyboard nav, caret insertion),
  *   anchored to the composer, keyboard/touch safe.
- * - Emoji through the shared `EmojiPicker` inside `ExpressionPickerButton`
- *   (owner order 2026-11-12, R5), inserted at the caret. The panel is the same
- *   one the conversation composer mounts.
- * - Photo attach only (packet `08` §7): new video intake is stopped at the
+ * - Emoji through the shared `EmojiPicker` inside `ExpressionPickerButton`,
+ *   inserted at the caret. The panel is the same one the conversation
+ *   composer mounts.
+ * - Photo attach only (§7): new video intake is stopped at the
  *   picker's accept list and the client gate, while every stored video row
  *   keeps rendering. On Android photos come through the canonical native
  *   intake (`FindbackMedia` multi-pick + per-URI import, FBX-038); every other
@@ -52,8 +52,8 @@ import { interactionRefusalCopy } from "../utils/interactionRefusal";
  *   own folder (same RLS path as report photos) with progress / retry /
  *   remove and the shared `COMMENT_ATTACH_MAX` cap. The comment body carries
  *   only `https://` remote URLs — never base64.
- * - GIF/Sticker on the same unified picker, as its own tab (owner direction
- *   2026-11-18) behind the `VITE_KLIPY_API_KEY` config flag: stable
+ * - GIF/Sticker on the same unified picker, as its own tab behind the
+ *   `VITE_KLIPY_API_KEY` config flag: stable
  *   customer_id, high content filter, "Search KLIPY" placeholder, provider
  *   URLs/data preserved and loaded directly, share-tracking only after the
  *   comment posts, "Powered by KLIPY" attribution. The tab states honestly
@@ -61,7 +61,7 @@ import { interactionRefusalCopy } from "../utils/interactionRefusal";
  */
 
 /**
- * Packet `08` §21 failure copy. The consumer sentence is fixed — the raw
+ * Failure copy for §21. The consumer sentence is fixed — the raw
  * mapper message is never shown (it can carry provider/transport text). An
  * offline device or an expired session is the one case where a plain "try
  * again" would be a lie, so the sentence gains that single instruction.
@@ -89,7 +89,7 @@ function commentSendFailureCopy(err: unknown, hasReport: boolean): string {
   }
 }
 
-/** Packet `08` §21 upload copy; the strip appends "Retry or remove it to send." */
+/** Upload copy for §21; the strip appends "Retry or remove it to send." */
 function commentUploadFailureCopy(err: unknown): string {
   return friendlyError(err).code === "OFFLINE"
     ? "Couldn't upload this photo. Check your connection and try again."
@@ -123,7 +123,7 @@ export interface CommentComposerProps {  postId: string;
   /**
    * A printable character typed while the report surface had focus. The report
    * viewer hands the first keystroke to the comment field instead of letting it
-   * start a global search (owner direction 2026-11-18).
+   * start a global search.
    */
   typingSeed?: { char: string; nonce: number } | null;
 }

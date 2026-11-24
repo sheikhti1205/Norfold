@@ -43,7 +43,7 @@ type PullDirection = "none" | "vertical" | "horizontal";
  *   React listener cannot, so that call was inert (and logged as much)
  * - resistance (pull distance is dampened)
  * - threshold before refresh triggers
- * - the pull reveals ONLY a compact Morph capsule (§12/§15 of packet 09): the
+ * - the pull reveals ONLY a compact Morph capsule (§12/§15): the
  *   bar stretches with the pull distance, and while the request is under way it
  *   carries the Morph keyframe. The identity is imported from MorphLoader, never
  *   re-declared here, so the indicator and the pagination slot cannot drift.

@@ -13,7 +13,7 @@
  * answers "may this caller claim, and why not" with a sentence the owner
  * reads. The claim itself answers the same question by RAISING a sentence. If
  * those two drift, the app shows one reason and the server refuses for
- * another, and the owner is told a lie by a screen. The claim migration is
+ * another, and the user is told a lie by a screen. The claim migration is
  * applied and must never be edited, so the binding is enforced HERE: the
  * sentences and their ORDER are extracted from both files and compared byte
  * for byte.
@@ -94,7 +94,7 @@ describe("the eligibility read is the claim's own answer", () => {
   });
 
   it("refuses a drifted sentence in either file", () => {
-    // A sentence that no longer matches the claim's is a lie the owner reads.
+    // A sentence that no longer matches the claim's is a lie the user reads.
     const drifted = sql.replace(
       "This account is not in the admin bootstrap list",
       "This account is not on the list",
@@ -212,7 +212,7 @@ describe("the verifier proves the behaviour", () => {
     assert.match(verify, /rollback;/i);
   });
 
-  it("proves every branch the owner can hit", () => {
+  it("proves every branch a user can hit", () => {
     for (const sentence of [
       "This account has no email address, so it cannot claim the admin role",
       "Confirm your email address before claiming the admin role",

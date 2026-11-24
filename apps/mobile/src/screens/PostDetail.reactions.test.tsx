@@ -284,7 +284,7 @@ describe("PostDetail post reactions (Like and Dislike)", () => {
   });
 });
 
-describe("PostDetail comment Like (packet 08 §2 — Like-only)", () => {
+describe("PostDetail comment Like (§2 — Like-only)", () => {
   it("labels each comment with its positive-reaction count and the caller's own state", async () => {
     renderDetail();
     expect(await screen.findByTestId("comment-react-c1")).toBeTruthy();

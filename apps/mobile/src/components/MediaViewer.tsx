@@ -125,7 +125,7 @@ function OpenMediaViewer({ items, index, onIndexChange, onClose }: MediaViewerPr
     // React Aria's enclosing modal must not mark this external portal inert.
     portal={{ container: { ...{ "data-testid": "media-viewer", "data-react-aria-top-layer": "" }, onFocus: () => {},
       onKeyDownCapture: () => setChromeHidden(false),
-      // Owner rule 2026-11-08: the space around a photo is a dismissal surface,
+      // The space around a photo is a dismissal surface,
       // not a dead zone. Anything that is not the photo or a control closes the
       // viewer, including the letterbox bars of a tall or wide image.
       onClick: (event) => {

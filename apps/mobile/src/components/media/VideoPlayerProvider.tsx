@@ -7,8 +7,8 @@ import { VideoPlayer, type VideoPlayerMode } from "./VideoPlayer";
 import "./videoPlayer.css";
 
 /**
- * The one owner of video playback for the whole app (owner requirement
- * 2026-11-15: a real player with a YouTube-style pop-out).
+ * The one owner of video playback for the whole app: a real player with a
+ * YouTube-style pop-out.
  *
  * There is exactly ONE <video> element, so "only one video plays at a time" is
  * structural rather than a rule to remember. It never remounts between the

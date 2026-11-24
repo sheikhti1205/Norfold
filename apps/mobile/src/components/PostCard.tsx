@@ -84,7 +84,7 @@ export function PostCard({ children, index = 0, variant = "default", onHide, hid
       </div>
     );
   // The cross is a sibling of the tossing body, so the report moves and the
-  // control stays still under the pointer (owner direction 2026-11-18).
+  // control stays still under the pointer.
   const shell = (
     <>
       <div className="fb-report-toss">{body}</div>

@@ -52,7 +52,7 @@ export type FixState =
 
 /**
  * User-facing microcopy for each failure kind. Exact strings from the
- * implementation packet — do not change without updating tests.
+ * implementation brief — do not change without updating tests.
  */
 export const FIX_MICROCOPY: Record<
   Exclude<FixState["kind"], "idle" | "requesting-permission" | "locating" | "fix">,
@@ -79,7 +79,7 @@ export const FIX_OFFLINE_MAP_COPY =
   "Map tiles are unavailable. Your typed place and coordinate choice are still saved.";
 
 /**
- * "This estimate is around X m/km; review before using it." — the packet's
+ * "This estimate is around X m/km; review before using it." — the
  * low-accuracy warning. Uses the shared accuracy formatter so the number
  * style stays consistent with the rest of the location UI.
  */

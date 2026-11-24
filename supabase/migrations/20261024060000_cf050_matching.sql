@@ -1,4 +1,4 @@
--- CF-050: owner-confirmed matching (design revision 5, pre-implementation)
+-- CF-050: confirmed matching (design revision 5, pre-implementation)
 -- report_matches table + propose/confirm/cancel RPCs + status guard.
 -- No moderator confirmation. At most one CONFIRMED match per report.
 -- Multiple PENDING proposals allowed. Both reports become MATCHED only when

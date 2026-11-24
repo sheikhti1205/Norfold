@@ -14,7 +14,7 @@
 name: Android builds
 
 on:
-  # Owner testing only: signed Actions artifacts, never a Release/catalogue
+  # Manual testing only: signed Actions artifacts, never a Release/catalogue
   # unless the run explicitly selects mode=publish.
   workflow_dispatch:
     inputs:

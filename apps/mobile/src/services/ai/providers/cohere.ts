@@ -1,5 +1,5 @@
 /**
- * Cohere BYOK provider adapter (packet AI-020d).
+ * Cohere BYOK provider adapter.
  *
  * Wire shape follows Cohere's Chat API v2:
  * - `POST https://api.cohere.com/v2/chat`,
@@ -20,7 +20,7 @@
  *   `image_url` parts (`unresolvable-image` when an id cannot be resolved).
  *
  * No live key is held here: the key arrives per call via the injected
- * `getApiKey` resolver (owned by the credential packet). Without an owner
+ * `getApiKey` resolver (owned by the credential store). Without an owner
  * key every live path is NOT TESTED LIVE. Single attempt only — this
  * adapter never performs a paid or cross-provider photo retry on its own,
  * and it never logs prompt or photo content (no console usage at all).

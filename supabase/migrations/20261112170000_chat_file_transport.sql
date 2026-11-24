@@ -1,4 +1,4 @@
--- Owner order 2026-11-12 (R4): a conversation may carry files that are not
+-- R4: a conversation may carry files that are not
 -- photos - documents, video, audio files - without touching the strict,
 -- byte-verifying chat media gateway.
 --
@@ -6,7 +6,7 @@
 -- JPEG/PNG/WebP (and voice containers) because the gateway re-sniffs every
 -- upload before it commits metadata. Widening that verifier to a dozen office
 -- and video containers would put the one security boundary that protects the
--- database at risk of a rushed parser. The owner's brief also says Storage is
+-- database at risk of a rushed parser. The brief also says Storage is
 -- only transport: a file does not need the media manifest, it needs a private
 -- object the two conversation participants can read and nobody else can.
 --
@@ -26,7 +26,7 @@
 --
 -- RETENTION. Objects are transport, not an archive. A message carries the
 -- object key; deleting the message's row does not currently delete the object.
--- A bounded sweep is recorded as a follow-up in the owner-order ledger rather
+-- A bounded sweep is recorded as a follow-up rather
 -- than guessed here.
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

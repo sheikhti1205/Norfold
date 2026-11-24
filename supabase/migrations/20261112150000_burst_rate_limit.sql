@@ -1,4 +1,4 @@
--- Owner correction 2026-11-12: the frequency limit is too strict.
+-- Correction 2026-11-12: the frequency limit is too strict.
 --
 -- What was wrong: the guard refused a write whenever ANY previous write by the
 -- same reader was less than `burst_cooldown_seconds` old, and that value is 60 s

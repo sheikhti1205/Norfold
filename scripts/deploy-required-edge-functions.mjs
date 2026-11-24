@@ -22,7 +22,7 @@
  *     user-bytes namespace, and unauthenticated calls fail closed with 401.
  *     Deploying the code is non-destructive — deletion only ever runs for a
  *     valid session JWT, and live destructive proof stays a disposable-
- *     account owner step, never CI.
+ *     account by hand, never CI.
  *   - STOPS on missing configuration: the push-dispatch deploy is refused
  *     unless `check-push-config.mjs` reports all PRESENT and the server
  *     project is ALIGNED with the client project.
@@ -32,7 +32,7 @@
  *     (covers delete-account: CURRENT/STALE/MISSING by source sha256).
  *   - Optionally runs a NON-DESTRUCTIVE unauthenticated 401 probe via
  *     `--prove-401 <function-url>` (POST with NO credentials; expects 401;
- *     never sends a token, never deletes anything). Owner-runner only.
+ *     never sends a token, never deletes anything). Run by hand only.
  *
  * Usage:
  *   node scripts/deploy-required-edge-functions.mjs                 # dry-run plan
@@ -111,7 +111,7 @@ export function assertNoForbidden(names, forbidden = FORBIDDEN_FUNCTIONS) {
   const hit = (names ?? []).filter((n) => (forbidden ?? []).includes(n));
   if (hit.length > 0) {
     throw new Error(
-      `deploy-required-edge-functions: refusing to deploy forbidden function(s): ${hit.join(", ")} (owner-side only)`,
+      `deploy-required-edge-functions: refusing to deploy forbidden function(s): ${hit.join(", ")} (manual deployment only)`,
     );
   }
 }
@@ -151,7 +151,7 @@ export function classifyAuthGuardProbe({ status }) {
 }
 
 /**
- * Non-destructive live probe (owner-runner only): POST with NO credentials
+ * Non-destructive live probe (run by hand only): POST with NO credentials
  * and expect the 401 guard. Sends no Authorization header, no apikey, no
  * body with identity — nothing that could delete. fetchFn is injected so
  * unit tests run hermetic; the CLI passes globalThis.fetch.
@@ -208,7 +208,7 @@ usage:
   (cleanup-comment-media needs 20261102220000; delete-account needs 20261014010000)
   (delete-account IS in the deploy set: JWT-verify ON, fail-closed 401.
    --prove-401 posts WITHOUT credentials and expects 401; non-destructive,
-   owner-runner only, never sends a token.)`);
+   manual deployment only, never sends a token.)`);
     process.exit(0);
   }
   const parsed = parseArgs(args);

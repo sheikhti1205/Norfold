@@ -1,4 +1,4 @@
--- LOCAL milestone WIP: account-scoped Drive backup key authority.
+-- Local: account-scoped Drive backup key authority.
 -- The key is issued by the canonical server and gated by the same installation
 -- admission as Chat: a revoked or rebound installation can no longer obtain it.
 -- It is never placed in Drive beside the ciphertext; Drive holds only sealed

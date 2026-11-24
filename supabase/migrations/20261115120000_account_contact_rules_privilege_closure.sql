@@ -1,4 +1,4 @@
--- Owner audit 2026-11-15 (P1): the contact-rule table is RPC-only.
+-- Audit 2026-11-15 (P1): the contact-rule table is RPC-only.
 --
 -- WHAT WENT WRONG. Supabase's default privileges hand a newly created table in
 -- `public` to `anon` and `authenticated` before the migration body runs. The

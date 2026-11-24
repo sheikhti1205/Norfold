@@ -350,7 +350,7 @@ function LikeProbe({ postId }: { postId: string }) {
   );
 }
 
-describe("FeedLoveProvider Like-only reactions (packet 08 §2)", () => {
+describe("FeedLoveProvider Like-only reactions (§2)", () => {
   it("counts the server's positive kinds and reports the caller's own Like", async () => {
     clientMock.rpc.mockResolvedValueOnce({ data: [], error: null });
     clientMock.rpc.mockResolvedValueOnce({
@@ -483,14 +483,14 @@ describe("FeedLoveProvider Like-only reactions (packet 08 §2)", () => {
 });
 
 /**
- * Regressions for the two I1 MAJORs in REVIEW-CF030-CODE.md. Both were visible
+ * Regressions for the two I1 MAJORs in the CF-030 code review. Both were visible
  * to a consumer as a wrong number or a lying heart, and neither had a test:
  * - M1: the optimistic Like was seeded from the legacy bucket even when the card
  *   was displaying a canonical per-kind summary (7 → 5 → 8 instead of 7 → 8).
  * - M2: the caller's own hydrated row lost to a summary snapshot taken before it
  *   moved, and a later page's hydration replaced the write's server summary.
  */
-describe("FeedLoveProvider summary reconciliation (REVIEW-CF030-CODE I1 M1/M2)", () => {
+describe("FeedLoveProvider summary reconciliation (CF-030 code review I1 M1/M2)", () => {
   function deferred<T>() {
     let resolve!: (value: T) => void;
     const promise = new Promise<T>((r) => {

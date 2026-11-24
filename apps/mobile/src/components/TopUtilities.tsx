@@ -72,7 +72,7 @@ function AccountTopUtilities({ showSearch = true, liveBadge, unreadCount, accoun
       {...hoverLabel("Search")}>
       <Search size={20} aria-hidden="true" />
     </button>}
-    {/* The rail has no create button (owner order 2026-11-13). On that layout
+    {/* The rail has no create button. On that layout
         the action lives here, beside the bell, as an icon at the same weight as
         its neighbours; phones keep the floating + in the bottom bar and must
         not show a second one. */}

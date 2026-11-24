@@ -1,7 +1,7 @@
 -- FindBack — saved reports (bookmarks): the `post_saves` table and its three
 -- client RPCs.
 --
--- WHY THIS FILE EXISTS. The owner asked for a visible Save/bookmark action on
+-- WHY THIS FILE EXISTS. A visible Save/bookmark action is required on
 -- a report, and for it to work locally AND on the account. The device half of
 -- that contract is client-side (the local list is written first and always
 -- succeeds); this file is the ACCOUNT half: one table that says which reports
@@ -77,8 +77,8 @@
 -- 20261021090000_post_saves.sql and renamed so that the repository and the
 -- database history agree.
 --
--- WHAT WAS APPLIED. The bytes that ran on the hosted project are archived in
--- <private>/01_ACTIVE/consumer-final/sessions/main/D2-hosted-applied-2026-10-21/post_saves.sql
+-- WHAT WAS APPLIED. The bytes that ran on the hosted project are preserved in
+-- an internal archive named D2-hosted-applied-2026-10-21/post_saves.sql
 -- (sha256 ce969158312ad1b96fa6e607d228c861969c91003c02ebf7f1042b1823293ce3).
 -- Everything this file DOES — the table, the policies, the grants and the
 -- three functions — is identical to that artifact; the only difference

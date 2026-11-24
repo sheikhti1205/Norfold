@@ -197,7 +197,7 @@ describe("MyPosts (My Reports alignment)", () => {
     await waitFor(() => expect(fetchFeedMock).toHaveBeenCalledWith(
       expect.objectContaining({ userId: "u1", status: "CLOSED" }), undefined,
     ));
-    // Owner direction removed the All|Open|Matched|Recovered|Closed chips.
+    // The All|Open|Matched|Recovered|Closed chips are gone.
     expect(screen.queryByRole("radiogroup", { name: /status/i })).toBeNull();
     expect(screen.queryAllByRole("radio")).toHaveLength(0);
     // The applied status is surfaced once, as a removable active filter.

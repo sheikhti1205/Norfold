@@ -4,7 +4,7 @@
  *
  * The app signs up and resets passwords with six-digit codes, so the hosted
  * GoTrue templates are part of the product, not decoration. They live in
- * supabase/email-templates/ and are copied here by an owner-dispatched workflow
+ * supabase/email-templates/ and are copied here by a manually dispatched workflow
  * rather than hand-pasted, so the repository stays the only source of truth.
  *
  * Safety shape, in order:
@@ -40,8 +40,8 @@ const API_BASE = "https://api.supabase.com/v1/projects";
  * link" step, while signup and email change may keep a one-tap link beside the
  * code.
  *
- * `invite` and `magic_link` are deliberately absent. The owner does not use
- * invites, and nothing in the client calls signInWithOtp because it could
+ * `invite` and `magic_link` are deliberately absent. Nothing in the app sends
+ * an invite, and nothing in the client calls signInWithOtp because it could
  * switch accounts (see apps/mobile/src/services/auth.ts). Adding a flow here
  * means it will be written to the live project, so absence is a decision.
  */

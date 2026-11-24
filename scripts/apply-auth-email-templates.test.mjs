@@ -297,7 +297,7 @@ test("every declared flow targets a distinct pair of config fields", () => {
   }
 });
 
-test("the apply set is exactly the four owner-approved flows", () => {
+test("the apply set is exactly the four declared flows", () => {
   // Adding a flow writes it to the live project, so this list is a decision.
   assert.deepEqual(FLOWS.map((flow) => flow.flow), ["recovery", "confirmation", "email_change", "reauthentication"]);
   assert.deepEqual(

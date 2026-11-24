@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # W1-A live contract tests: FBX-009 / FBX-010 / FBX-011 (LIVE-PENDING).
 #
-# Run ONLY against a disposable test backend with an owner-provisioned
+# Run ONLY against a disposable test backend with a manually provisioned
 # test-account JWT. NEVER point this at production data.
 #
 #   FINDBACK_TEST_URL="https://<test-project>.supabase.co" \
@@ -29,7 +29,7 @@ sk()   { skip=$((skip + 1)); echo "SKIP: $1"; }
 
 : "${FINDBACK_TEST_URL:?refusing: set FINDBACK_TEST_URL to a disposable test backend}"
 : "${FINDBACK_TEST_ANON_KEY:?refusing: set FINDBACK_TEST_ANON_KEY to the test backend publishable key}"
-: "${FINDBACK_TEST_JWT:?refusing: set FINDBACK_TEST_JWT to an owner-provisioned test-account JWT}"
+: "${FINDBACK_TEST_JWT:?refusing: set FINDBACK_TEST_JWT to a manually provisioned test-account JWT}"
 POST_ID="${FINDBACK_TEST_POST_ID:-}"
 OWNER_JWT="${FINDBACK_TEST_OWNER_JWT:-}"
 

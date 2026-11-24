@@ -1,5 +1,5 @@
 /**
- * Provider registry tests (packet AI-024a).
+ * Provider registry tests.
  *
  * The registry is pure adapter wiring: every `ProviderId` resolves to the
  * adapter whose `id` matches, and the adapter's live credential always

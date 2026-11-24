@@ -1,5 +1,5 @@
 /**
- * Anthropic direct BYOK provider adapter (packet P-anthropic / P3).
+ * Anthropic direct BYOK provider adapter.
  *
  * Official shape verified 2026-09-25 against
  * https://platform.claude.com/docs/en/api/messages (request/response),
@@ -66,9 +66,9 @@ export type AnthropicImagePayload = {
 };
 
 /**
- * Injected seams. They are structural so this packet never imports the vault
+ * Injected seams. They are structural so this adapter never imports the vault
  * (K1), the media store (M1) or the instruction builder — each of those files
- * stays owned by its own packet and is wired in later by the registry.
+ * stays owned by its own module and is wired in later by the registry.
  */
 export type AnthropicAdapterDeps = {
   /** Account-scoped vault lookup. Returns null when no key is stored. */

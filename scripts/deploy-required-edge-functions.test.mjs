@@ -5,8 +5,8 @@
  * Run: `node --test scripts/deploy-required-edge-functions.test.mjs`.
  * Hermetic: exercises the pure plan/guard/probe API only — never spawns
  * supabase, never deploys anything, never touches the network (the 401
- * probe runs against an injected fake fetch; the live probe is
- * owner-runner only).
+ * probe runs against an injected fake fetch; the live probe runs by hand
+ * only).
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";

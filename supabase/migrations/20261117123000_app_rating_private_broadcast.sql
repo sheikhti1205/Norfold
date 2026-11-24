@@ -1,4 +1,4 @@
--- Owner audit 2026-11-17: the app-rating aggregate was a client-published
+-- Audit 2026-11-17: the app-rating aggregate was a client-published
 -- public broadcast.
 --
 -- `FeedbackForm` called `publishAppRatingAggregate` after its own write, so the

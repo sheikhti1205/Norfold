@@ -1,4 +1,4 @@
--- Owner order 2026-11-15: a conversation carries any ordinary file, not only
+-- A conversation carries any ordinary file, not only
 -- the short office/video list the first transport migration installed.
 --
 -- WHAT CHANGES. `findback-chat-files` keeps its 20 MB ceiling and its private,

@@ -92,7 +92,7 @@ function scrollToSection(id: string, focusOnly = false) {
 }
 
 /**
- * C2 per-comment Like control (packet `08` §2 — reactions are Like-only).
+ * C2 per-comment Like control (§2 — reactions are Like-only).
  *
  * One tap toggles the caller's Like (`LIKE`/null through the real comment RPC),
  * the count is the comment's positive-reaction total, and the thumb is filled
@@ -662,7 +662,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
     return viewedPostIdRef.current !== snap.postId || viewerIdRef.current !== snap.viewer;
   }
 
-  // The Like control's state (packet `08` §2): the count is the target's
+  // The Like control's state (§2): the count is the target's
   // positive-reaction total and "mine" is whether the caller holds one. Server
   // truth wins once a write or realtime event delivers counts; otherwise the
   // detail fetch's own row mapping (`reactionSummaryFromRow`, L-CONSOLIDATE)
@@ -851,7 +851,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
   }
 
   /**
-   * Comment Like write path (packet `08` §2 — Like/null only): optimistic
+   * Comment Like write path (§2 — Like/null only): optimistic
    * myReaction + per-kind counts over the real comment RPC, full revert +
    * inline announce on failure (same actionError pattern as post reactions —
    * never silent).
@@ -889,7 +889,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
     }
   }
 
-  /** Comment Like tap (packet `08` §2): a positive row un-likes, else LIKE. */
+  /** Comment Like tap (§2): a positive row un-likes, else LIKE. */
   function toggleCommentReaction(c: CommentItem) {
     const summary = commentSummaryFor(c);
     void writeCommentReaction(c, nextLikeReaction(summary.myReaction));
@@ -1382,7 +1382,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
               <button type="button" onClick={retrySocial} className="min-h-[48px] shrink-0 px-3 font-medium underline">Retry</button>
             </div>
           )}
-          {/* Report ratings are read-only (packet O4 / D1): the client no
+          {/* Report ratings are read-only (O4 / D1): the client no
               longer writes an arbitrary score onto a report, because that
               score was never backed by a confirmed relationship. Historical
               ratings stay readable — the community average above and the

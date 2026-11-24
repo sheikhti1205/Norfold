@@ -10,7 +10,7 @@ import type { PublicIdentity } from "./identity";
 /**
  * The one people action: message this person.
  *
- * Owner direction 2026-11-18: messaging anyone starts the conversation, and a
+ * Messaging anyone starts the conversation, and a
  * person who is not a friend yet receives it as a message request they can
  * accept or decline. There is no second "connect" action to get wrong, and a
  * friend is a designed state (check + Friends), not another text button.
@@ -59,7 +59,7 @@ function PeerChatSession({ accountId, person, className }: { accountId: string; 
   const href = projection
     ? `/chats/${encodeURIComponent(projection.conversationId)}${reportQuery}`
     : null;
-  // Owner direction 2026-11-18: a stranger is offered the friend action by
+  // A stranger is offered the friend action by
   // name. Sending the first message still starts a normal message request;
   // "Connect" is the label for that one action, not a second flow.
   const label = incoming ? "View request" : outgoing ? "Open chat" : connected ? "Message" : "Connect";

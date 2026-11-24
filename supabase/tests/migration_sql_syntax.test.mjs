@@ -23,8 +23,8 @@
 //
 // LIMIT, stated honestly: this proves lexical balance, not grammar. It cannot
 // tell whether a statement is valid SQL. The engine proof for the R10 pair is
-// the mandatory apply step recorded in each R10 migration header and in the
-// handoff (`FAILED 0` from the disposable PostgreSQL 17 chain); this suite is
+// the mandatory apply step recorded in each R10 migration header
+// (`FAILED 0` from the disposable PostgreSQL 17 chain); this suite is
 // the cheap guard that runs everywhere, including where no engine exists.
 
 import { readdir, readFile } from "node:fs/promises";

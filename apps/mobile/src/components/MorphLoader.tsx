@@ -1,7 +1,7 @@
 import { useShouldReduceMotion } from "./uiMotion";
 
 /**
- * The Morph loading identity (packet 09 §15, owner-preferred concept).
+ * The Morph loading identity: the app's single morphing loading surface.
  *
  * One shell, one bar:
  *

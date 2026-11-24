@@ -67,7 +67,7 @@ describe("HelpGuide", () => {
     renderGuide();
     expect(screen.getAllByText(/best-effort/i).length).toBeGreaterThan(0);
     // The on-device search article is Android-only, so the web guide does not
-    // offer it (owner feedback 2026-11-06).
+    // offer it.
     expect(screen.queryByRole("link", { name: /Local tools and Smart Search/ })).toBeNull();
     expect(screen.getAllByText(/safety records remain/i).length).toBeGreaterThan(0);
   });

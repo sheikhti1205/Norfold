@@ -1,5 +1,5 @@
 /**
- * Google Gemini BYOK provider adapter tests (packet P-google).
+ * Google Gemini BYOK provider adapter tests.
  *
  * Fixtures are hand-built wire captures shaped by the official Google docs
  * verified on 2026-09-25 (streamGenerateContent + alt=sse SSE, inline_data

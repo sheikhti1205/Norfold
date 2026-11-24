@@ -15,7 +15,7 @@ import { duringAppActivity } from "./appActivity";
  *   ownership-scoped RLS convention as report photos. Photos are normalized
  *   on-device first (EXIF/orientation, edge cap — the canonical image
  *   pipeline).
- * - New intake is **photos only** (packet `08` §7): the picker's accept list
+ * - New intake is **photos only** (§7): the picker's accept list
  *   and the client gate below both refuse video, because a short clip in a
  *   comment costs the reader far more than it gives the reporter. The video
  *   vocabulary (`COMMENT_VIDEO_MIME`, the bucket's MIME list, the `video`
@@ -37,7 +37,7 @@ export const COMMENT_REPORTS_ENABLED = false;
 export const COMMENT_ATTACH_MAX_BYTES = 25_000_000;
 
 /**
- * Video vocabulary retained for history only (packet `08` §7).
+ * Video vocabulary retained for history only (§7).
  *
  * Stored rows written before intake stopped must keep their kind, their MIME
  * and their playback surface, so this constant and the bucket's MIME list are
@@ -51,7 +51,7 @@ export const COMMENT_VIDEO_MAX_BYTES = COMMENT_ATTACH_MAX_BYTES;
 export const COMMENT_VIDEO_MIME: readonly string[] = ["video/mp4", "video/webm", "video/quicktime"];
 /**
  * Single `accept` string for the composer file input. Photos only since
- * packet `08` §7 — the `image/*` wildcard already covers the stills the
+ * §7 — the `image/*` wildcard already covers the stills the
  * canonical pipeline advertises plus GIF, which stays available.
  */
 export const COMMENT_ATTACH_ACCEPT = "image/*";
@@ -188,7 +188,7 @@ export function mapCommentAttachmentRefs(rows: unknown): CommentReportReference[
 
 /**
  * Human-readable validation; null when the file is attachable. Photos only
- * (packet `08` §7): a video is refused here as well as in the picker's accept
+ * (§7): a video is refused here as well as in the picker's accept
  * list, so a file that arrives through drag/drop or an "all files" picker
  * still gets an honest sentence instead of a silent upload.
  */

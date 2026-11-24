@@ -236,7 +236,7 @@ describe("Settings home", () => {
 
   it("separates optional AI Chat from notification preferences on web", () => {
     renderSettings();
-    // Owner feedback 2026-11-06: on-device tools are Android-only, so the web
+    // On-device tools are Android-only, so the web
     // Settings list must not advertise them at all.
     expect(screen.queryByRole("link", { name: "Local tools" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Downloaded models" })).toBeNull();
@@ -469,7 +469,7 @@ describe("Settings home", () => {
 });
 
 /**
- * The staff console entry (CONTRACT-ROLES-ADMIN-2026-10-22.md §A2.5).
+ * The staff console entry (the roles contract §A2.5).
  *
  * Team administration is ADMIN-only; review access is a separate capability.
  */

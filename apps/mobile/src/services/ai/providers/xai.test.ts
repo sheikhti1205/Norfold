@@ -1,5 +1,5 @@
 /**
- * xAI (Grok) BYOK provider adapter tests (packet AI-020c).
+ * xAI (Grok) BYOK provider adapter tests.
  *
  * Fixtures are hand-built wire captures shaped by xAI's OpenAI-compatible
  * API (`POST https://api.x.ai/v1/chat/completions`, SSE `data:` chunks,

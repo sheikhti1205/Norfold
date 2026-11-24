@@ -1,5 +1,5 @@
 /**
- * First-run onboarding state (Task B, packet 05_ONBOARDING).
+ * First-run onboarding state (Task B).
  *
  * Versioned persistence: localStorage key `findback.onboarding.version` holds
  * the completed version (`2`). Completion is recorded on Skip OR Get started

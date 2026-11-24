@@ -1,7 +1,7 @@
 import { useId, type ReactNode } from "react";
 
 /**
- * Brand marks for the connected-account rows (owner request 2026-11-17).
+ * Brand marks for the connected-account rows.
  *
  * These are the providers' own shapes, not recoloured Lucide substitutes: the
  * four-colour Google G, the Gmail envelope for Gmail addresses, and Telegram's

@@ -356,8 +356,8 @@ describe("small media runs stay separate", () => {
     const runs = buildMediaRuns([first, second], []);
     expect(runs[0]!.kind).toBe("group");
     const display = splitSmallMediaRuns(runs);
-    // Owner direction 2026-11-20: WhatsApp Desktop keeps three nearby photos as
-    // three messages, so an album needs at least four items and a pair is two
+    // WhatsApp Desktop keeps three nearby photos as three messages, so an album
+    // needs at least four items and a pair is two
     // ordinary rows. The transcript objects themselves never change.
     expect(kinds(display)).toEqual(["single", "single"]);
     expect(display[0]!.key).toBe(`single:${first.id}`);

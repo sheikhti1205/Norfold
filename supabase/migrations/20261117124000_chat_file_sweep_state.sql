@@ -1,4 +1,4 @@
--- Owner audit 2026-11-17: the chat-file sweep restarted at the bucket root on
+-- Audit 2026-11-17: the chat-file sweep restarted at the bucket root on
 -- every capped run.
 --
 -- `sweepChatFiles` stopped after 500 objects, 200 folders or 80 seconds, but

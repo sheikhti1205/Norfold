@@ -4,7 +4,7 @@ const config: CapacitorConfig = {
   appId: "com.findback.app",
   appName: "Norfold",
   webDir: "dist",
-  // Owner direction 2026-11-08: bridge logging is OFF in every packaged build.
+  // Bridge logging is OFF in every packaged build.
   // `production` mirrored every WebView console line AND every plugin call
   // result/parameter into logcat, which exposed a Google OAuth access token,
   // SQL text and message bodies. Release diagnostics stay available through

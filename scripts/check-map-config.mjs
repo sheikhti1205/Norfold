@@ -29,7 +29,7 @@
  *
  * Fail-closed semantics (mirrors the native MapValidation rules, which stay
  * the runtime backstop): an ABSENT custom value resolves to the
- * owner-decided default on both sides; a PRESENT-but-malformed custom value
+ * default defined here on both sides; a PRESENT-but-malformed custom value
  * FAILS the build — it never ships half-applied. There is no secret here
  * (public style endpoint + public contact), but logs still carry only
  * CUSTOM/DEFAULT presence — never values.
@@ -53,7 +53,7 @@ export const MAP_STYLE_ENV = "FINDBACK_MAP_STYLE_URL";
 export const MAP_CONTACT_ENV = "FINDBACK_MAP_CONTACT";
 /** Shared native/web geocoder seam (MAP-2): both layers read this one name. */
 export const MAP_SEARCH_ENV = "VITE_NOMINATIM_SEARCH_URL";
-/** Owner-decided defaults — must equal the Gradle defaults (enforced below). */
+/** Canonical defaults — must equal the Gradle defaults (enforced below). */
 export const DEFAULT_MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 export const DEFAULT_MAP_CONTACT = "https://findbackapp.social";
 export const DEFAULT_MAP_SEARCH_URL = "https://nominatim.openstreetmap.org/search";
@@ -131,7 +131,7 @@ export function effectiveMapConfig({ env = process.env, envDir = root } = {}) {
   };
 }
 
-/** CUSTOM when the owner supplied an override, else ABSENT — never a value. */
+/** CUSTOM when an override is supplied, else ABSENT — never a value. */
 export function mapPresence(config) {
   return config.styleSource === "custom" || config.contactSource === "custom" || config.searchSource === "custom" ? "PRESENT" : "ABSENT";
 }

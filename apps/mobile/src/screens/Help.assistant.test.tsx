@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Packet 11 replaces the old photo/local/FAQ assistant. Retained contracts:
+// The Help rewrite replaces the old photo/local/FAQ assistant. Retained contracts:
 // account-scoped history, stop/retry, transcript, composition and navigation.
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";

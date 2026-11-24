@@ -1,4 +1,4 @@
--- Owner direction 2026-11-17: a typed mobile number has no place in Norfold.
+-- A typed mobile number has no place in Norfold.
 --
 -- Only a Telegram contact share proves ownership of a number. The sign-up form,
 -- the social profile-completion form and both RPCs behind them required a typed

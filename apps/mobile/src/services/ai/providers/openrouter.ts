@@ -1,5 +1,5 @@
 /**
- * OpenRouter BYOK provider adapter (packet P-openrouter).
+ * OpenRouter BYOK provider adapter.
  *
  * Wire shape verified against the official OpenRouter docs on 2026-09-25:
  * - `POST https://openrouter.ai/api/v1/chat/completions`,
@@ -15,7 +15,7 @@
  *   prices in USD/token).
  *
  * No live key is held here: the key arrives per call via the injected
- * `getApiKey` resolver (owned by the credential packet). Without an owner
+ * `getApiKey` resolver (owned by the credential store). Without an owner
  * key every live path is NOT TESTED LIVE. Single attempt only — this
  * adapter never performs a paid or cross-provider photo retry on its own,
  * and it never logs prompt or photo content (no console usage at all).

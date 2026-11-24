@@ -93,7 +93,7 @@ object NominatimClient {
 
     /**
      * Policy-compliant User-Agent: app identity + platform + public contact.
-     * The contact is owner-configured build config (never a secret).
+     * The contact is build config (never a secret).
      */
     fun userAgent(appVersion: String, contact: String): String {
         val version = appVersion.trim().ifEmpty { "unknown" }

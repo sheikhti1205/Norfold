@@ -373,7 +373,7 @@ where (
 --   is intact. The two halves together bracket the policy: the first fails if the
 --   policy was widened (any extra disjunct, e.g. `or true`, returns the media row
 --   to B), the second fails if it was narrowed instead.
---   This is the probe MAJOR-2 of REVIEW-CF060-M2-TRANCHE.md asked for: no other
+--   This is the probe MAJOR-2 of the M2 tranche review asked for: no other
 --   behavioural probe asks a non-owner to read a media row.
 
 -- (o) Client-side (recorded here, asserted in the app suite): an attachment row

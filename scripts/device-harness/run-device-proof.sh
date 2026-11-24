@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # run-device-proof.sh — orchestrator: fresh-install proof + evidence collection.
 #
-# Usage (owner, on a device-authorized host, heavy lock held):
+# Usage (on a device-authorized host, heavy lock held):
 #   scripts/device-harness/run-device-proof.sh --apk <file.apk> [--serial S] [--mode fresh|upgrade]
 #
 # Creates Communication/DEVICE_<SHA12>_<YYYY-MM-DD>/ with deterministic
@@ -48,7 +48,7 @@ done
 # Heavy-lock mutual exclusion (never overlap emulator proofs with npm gates).
 LOCK_DIR="$REPO_ROOT/Communication/heavy.lock"
 if [[ -n "$(ls -A "$LOCK_DIR" 2>/dev/null)" && -z "$FORCE" ]]; then
-  harness_err "heavy lock held ($(ls "$LOCK_DIR")) — refusing to run. See docs/runbooks/device-harness.md. Pass --force '<reason>' only with owner approval."
+  harness_err "heavy lock held ($(ls "$LOCK_DIR")) — refusing to run. See docs/runbooks/device-harness.md. Pass --force '<reason>' only with approval."
   exit 1
 fi
 
@@ -56,7 +56,7 @@ SHA12="$(git -C "$REPO_ROOT" rev-parse HEAD | cut -c1-12)"
 DATE="$(date -u +%Y-%m-%d)"
 EVDIR="$REPO_ROOT/Communication/DEVICE_${SHA12}_${DATE}"
 [[ -e "$EVDIR" ]] && {
-  harness_err "$EVDIR already exists — historical evidence is never overwritten. Remove it only with owner approval, or run on a new date/SHA."
+  harness_err "$EVDIR already exists — historical evidence is never overwritten. Remove it only with approval, or run on a new date/SHA."
   exit 1
 }
 mkdir -p "$EVDIR"/{provenance,install,baseline,notification,map,media,ai-bench}

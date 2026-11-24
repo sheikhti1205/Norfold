@@ -1,5 +1,5 @@
 /**
- * Account-scoped, per-chat local persistence (packet H1, Context & Memory
+ * Account-scoped, per-chat local persistence (Context & Memory
  * Contract §2).
  *
  * - Each account owns isolated chats `{id, title, turns, draft, checkpoint}`.

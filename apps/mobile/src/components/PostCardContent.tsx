@@ -102,7 +102,7 @@ function PostMediaPreview({ post, layout, enableSharedMedia, onOpenReport }: {
 /** One anatomy across retained density modes. Navigation, identity, disclosure,
  * media and actions are independent targets; feature owners supply overflow.
  *
- * Two-stage media (owner decision): a feed/list/masonry/search photo is a
+ * Two-stage media: a feed/list/masonry/search photo is a
  * NAVIGATION target — it opens the report — while the report detail's own hero
  * gallery opens the fullscreen viewer. Feed previews therefore own no lightbox. */
 export function PostCardContent({ post, layout = "classic", enableSharedMedia = false, overflow }: {

@@ -10,7 +10,7 @@ beforeEach(() => { globalThis.localStorage?.clear(); });
 afterEach(() => { globalThis.localStorage?.clear(); });
 
 describe("the conversation pane preference", () => {
-  it("clamps to the packet bounds instead of trusting a stored or dragged number", () => {
+  it("clamps to the documented bounds instead of trusting a stored or dragged number", () => {
     expect(clampPaneWidth(320)).toBe(320);
     expect(clampPaneWidth(10)).toBe(CHAT_PANE.minWidth);
     expect(clampPaneWidth(9999)).toBe(CHAT_PANE.maxWidth);

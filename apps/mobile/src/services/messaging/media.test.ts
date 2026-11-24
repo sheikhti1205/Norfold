@@ -115,7 +115,7 @@ describe("media metadata", () => {
     expect(isMediaEvictable("READY")).toBe(true);
   });
 
-  it("publishes the owner-approved budget and the transport ceiling", () => {
+  it("publishes the per-account media budget and the transport ceiling", () => {
     expect(MEDIA_BUDGET_BYTES).toBe(100 * 1024 * 1024);
     expect(MEDIA_MAX_BYTES).toBe(20 * 1024 * 1024);
   });

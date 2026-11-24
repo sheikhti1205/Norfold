@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { layeredPopoverMaxHeight } from "../components/popoverViewportCap";
 
 /**
- * Owner ruling 2026-11-20: no pop-up may take unnecessary width, excess height
+ * No pop-up may take unnecessary width, excess height
  * or oversized content just to fill the screen. Three small panels each kept a
  * near-window ceiling that their content never needed: the seven-row account
  * menu (30rem ceiling, held by the layered popover `maxHeight` prop — React

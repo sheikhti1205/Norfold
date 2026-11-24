@@ -14,7 +14,7 @@
      width (every phone, portrait and landscape) nothing changes. */
   max-width: 44rem; margin-inline: auto;
 }
-/* Owner preference 2026-11-18: a reader who keeps the bottom bar on a wide
+/* A reader who keeps the bottom bar on a wide
    screen gets a floating capsule, not a full-width slab. It still takes flow
    space, so it never covers content, and the slot itself is transparent. */
 @media (min-width: 600px) {
@@ -122,19 +122,19 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
   .fb-nav-rail,
   .fb-app-viewport { --fb-rail-head-center: 24px; }
 }
-/* Adaptive navigation (owner ruling 4(e)): at the compact breakpoint and up a
+/* Adaptive navigation: at the compact breakpoint and up a
    reader who picks "Side rail" gets a vertical column that takes layout space
    as a flex sibling of <main>. Below the breakpoint the same choice renders as
    the temporary drawer at the end of this file, never an always-open column.
    The collapsed column is exactly wide enough for one 44px icon hit box beside
-   the 6px rail inset - no strip is reserved for text it does not carry
-   (owner direction 2026-11-18). Safe-area insets belong to
+   the 6px rail inset - no strip is reserved for text it does not carry.
+   Safe-area insets belong to
    `.fb-app-viewport` alone (index.css): the in-flow rail is inside that box, so
    it pads by its own 12px and never repeats env(). */
 .fb-nav-rail {
   /* Collapsed rail names nothing but its icons; a resting pointer (2s) or
-     keyboard focus widens it to name every destination, then it contracts
-     (owner order 2026-11-13). The negative inline-end margin cancels the extra
+     keyboard focus widens it to name every destination, then it contracts.
+     The negative inline-end margin cancels the extra
      width, so <main> never reflows while the panel is open - it paints over
      the page. 64px is the narrowest column that still gives the 20px glyph a
      44px hit box beside the 6px rail inset; it removes the dead strip the
@@ -297,7 +297,7 @@ html.fb-reduce-motion .fb-rail-anchor:has(> .fb-nav-rail) { transition: none; }
 }
 /* A shallow desktop window (or a split-screen pane) still shows every
    destination: the rows tighten once more instead of turning the rail into
-   a scroller (owner order 2026-11-13). */
+   a scroller. */
 @media (max-height: 520px) {
   .fb-nav-rail { gap: 2px; padding-block: 4px; }
   .fb-nav-rail[data-pinned="true"] { padding-block: 4px; }
@@ -310,7 +310,7 @@ html.fb-reduce-motion .fb-rail-anchor:has(> .fb-nav-rail) { transition: none; }
 /* The unread badge stays next to the bell icon rather than the far edge. */
 /* Fullscreen editor is a body-level portal: never leave shell chrome behind it
    as an extra tab stop, even though the editor itself lives outside Shell. */
-/* Pinned rail (owner order 2026-11-12, R7): the same in-flow column, 192px by
+/* Pinned rail: the same in-flow column, 192px by
    default and resizable from its handle, with every destination named. The
    panel is a width change on the existing column rather than a drawer or an
    overlay: nothing covers the page and <main> reflows in the same frame. */
@@ -319,7 +319,7 @@ html.fb-reduce-motion .fb-rail-anchor:has(> .fb-nav-rail) { transition: none; }
 }
 /* Icon rail: the 48px brand button centres its mark on the same axis as the
    destination glyphs. Any state that names rows (pinned, hover, keyboard focus)
-   left-aligns the brand with those rows instead (owner order 2026-11-13). */
+   left-aligns the brand with those rows instead. */
 .fb-nav-rail[data-pinned="false"] .fb-nav-rail-head { justify-content: center; }
 .fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-nav-rail-head { justify-content: flex-start; }
 /* `justify-content` only bites when the inset column clamps this button below
@@ -343,7 +343,7 @@ html.fb-reduce-motion .fb-rail-anchor:has(> .fb-nav-rail) { transition: none; }
 /* The head carries the app mark at every width. The wordmark only joins it in
    a panel wide enough to hold both: collapsed, the shell paints the app name
    once just outside this column (`NavOutsideBrand` in the shell's rail
-   anchor), never squeezed into the icon rail (owner direction 2026-11-18).
+   anchor), never squeezed into the icon rail.
    The toggle still names its state for assistive tech. */
 .fb-nav-rail[data-pinned="false"] .fb-nav-wordmark { display: none; }
 .fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-nav-wordmark { display: inline; }
@@ -369,7 +369,7 @@ html.fb-reduce-motion .fb-rail-anchor:has(> .fb-nav-rail) { transition: none; }
   display: none;
 }
 .fb-nav-rail[data-pinned="true"] { width: var(--fb-rail-w, 192px); padding: 10px; }
-/* Owner order 2026-11-13: the pinned sidebar is resizable. The handle sits on
+/* The pinned sidebar is resizable. The handle sits on
    the rail's inner edge (the rail clips at `overflow: hidden`), reads as a
    separator to assistive tech, and drags horizontally; arrows move it in 16px
    steps, Shift doubles the step, Home/End jump to the bounds. */
@@ -405,7 +405,7 @@ body:has(#report-editor-overlay) .fb-nav-slot,
 body:has(#report-editor-overlay) .fb-rail-anchor,
 body:has(#report-editor-overlay) .fb-nav-rail { display: none; }
 
-/* Phone rail (owner direction 2026-11-18): the reader who chose "Side rail"
+/* Phone rail: the reader who chose "Side rail"
    keeps that choice on a phone, where it is a temporary overlay drawer rather
    than a column that eats the screen. The bottom-left trigger occupies the
    place the bottom bar's pill would start from, so it never lands on top of a

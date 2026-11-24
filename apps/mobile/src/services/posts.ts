@@ -725,7 +725,7 @@ export async function reactToPost(
 }
 
 /*
- * There is no client writer for a report rating (D1 / packet O4): an
+ * There is no client writer for a report rating (D1 / O4): an
  * arbitrary score on a report was never backed by a confirmed relationship,
  * so the app stopped writing one. The server-side `findback_rate_client` RPC
  * still exists and is frozen by the backend phase; only the client writer is

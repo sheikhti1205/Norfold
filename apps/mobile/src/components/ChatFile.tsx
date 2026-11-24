@@ -262,7 +262,7 @@ function documentTypeLabel(meta: ChatFileMeta): string {
  * viewer and its real save. Both actions share one busy latch, so a second
  * press cannot start a competing request while the first is still settling.
  * Neither action is ever hidden: a format the platform cannot view is refused
- * with a remedy, because the owner asked for the pair, not a reduced pair.
+ * with a remedy, so the pair is never reduced.
  */
 function ChatDocument({ meta }: { meta: ChatFileMeta }) {
   const [pending, setPending] = useState<DocumentAction | null>(null);

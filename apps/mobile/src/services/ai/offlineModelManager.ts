@@ -21,7 +21,7 @@
  *
  * DELIBERATELY DISCARDED from the archive:
  * - ZIP/`.fbmodel` import/export framing and per-file manifests
- *   (`modelTransfers.ts` import/export paths): a later packet if ever.
+ *   (`modelTransfers.ts` import/export paths): later work, if ever.
  * - Multi-entry catalogue wiring and HF/release URL pins: assets are
  *   injected data (`OfflineAssetPin`), so this module cannot leak origins.
  * - Silent/auto-download and WiFi-gated auto-resume: downloads start only

@@ -818,7 +818,7 @@ where not exists (
 -- B15. The admin passes every action, and the closed vocabulary plus the
 --      sanction mapping still refuse the malformed calls.
 --
---      Owner policy 2026-10-23 (20261023120000): the HIDE by e007 is FINAL.
+--      Policy 2026-10-23 (20261023120000): the HIDE by e007 is FINAL.
 --      The admin cannot reverse it. The AUTHOR asks for re-evaluation first,
 --      which reopens the case; only then may another moderator decide again.
 set local role authenticated;

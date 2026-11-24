@@ -48,7 +48,7 @@ describe("Home brand ownership", () => {
   it("leaves the outside name to the shell while a rail is in flow", () => {
     render(<Harness expanded={false} inlineRail />);
     // One shell-owned name is anchored beside the rail head; this row must not
-    // paint a second copy (owner direction 2026-11-18).
+    // paint a second copy.
     expect(screen.queryByRole("link", { name: "Norfold home" })).toBeNull();
     // The screen still has its one heading.
     expect(screen.getByRole("heading", { name: "Norfold" })).toBeTruthy();

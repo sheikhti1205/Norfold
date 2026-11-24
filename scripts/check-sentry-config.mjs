@@ -2,7 +2,7 @@
 /**
  * Sentry DSN preflight for installable builds (S1).
  *
- * Owner rule: every installable APK (CI build, signed release, local
+ * Every installable APK (CI build, signed release, local
  * `npm run apk`) MUST embed a real Sentry DSN. Unit tests and `vite dev`
  * stay DSN-free with monitoring inert.
  *

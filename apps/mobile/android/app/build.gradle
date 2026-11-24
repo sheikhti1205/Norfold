@@ -81,8 +81,8 @@ def signeddevSigningReady() {
 
 // Keyless map style (MAP pivot): the MapLibre-compatible style URL the native
 // picker/viewer/snapshotter render. Canonical local env name
-// FINDBACK_MAP_STYLE_URL; default is the owner-decided OpenFreeMap Liberty
-// style. This is NON-SECRET provider config (a public style endpoint), never
+// FINDBACK_MAP_STYLE_URL; defaults to the OpenFreeMap Liberty style.
+// This is NON-SECRET provider config (a public style endpoint), never
 // a credential — safe to ship in BuildConfig and safe to log. Switching
 // providers means changing this URL only; no picker logic changes.
 def findbackMapStyleUrl() {
@@ -158,8 +158,8 @@ android {
         buildConfigField "String", "UPDATE_CHANNEL", '"beta"'
         // Google Sign-In (W0-A S1): Web/server OAuth client ID used as the
         // Credential Manager Google ID option audience. Env-provided
-        // (GOOGLE_WEB_CLIENT_ID from the owner-configured Google Cloud
-        // console); default empty = misconfigured → the GoogleAuthPlugin fails
+        // (GOOGLE_WEB_CLIENT_ID from the Google Cloud console); default empty
+        // = misconfigured → the GoogleAuthPlugin fails
         // closed (isAvailable false, signIn rejects) and never fakes success.
         // This is a public identifier, NOT a secret — and no client secret
         // exists anywhere in this path. Never hard-code a real value here.

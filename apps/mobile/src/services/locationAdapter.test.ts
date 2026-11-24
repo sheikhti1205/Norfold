@@ -78,7 +78,7 @@ describe("locationAdapter core types and helpers", () => {
     expect(states).toHaveLength(9);
   });
 
-  it("FIX_MICROCOPY has exact strings from the packet", () => {
+  it("FIX_MICROCOPY has exact strings from the brief", () => {
     expect(FIX_MICROCOPY.denied).toBe(
       "Location access is off for Norfold. Enable it in Settings, or choose a place on the map.",
     );

@@ -57,7 +57,7 @@ function cameraLabel(device: MediaDeviceInfo, index: number): string {
  * live preview and hands a JPEG File to the surface's existing photo
  * preparation path.
  *
- * Owner direction 2026-11-18: every camera the device exposes is reachable,
+ * Every camera the device exposes is reachable,
  * not only a front/rear pair. After permission is granted the browser labels
  * its video inputs, and each one becomes a selectable control; a device with
  * one camera shows no selector at all. Mirroring follows the track's own

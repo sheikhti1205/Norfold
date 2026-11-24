@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 /**
  * Static ownership contract for the app-owned photo-viewer filmstrip.
  *
- * Owner requirement 2026-11-20: "Opening an image shouldn't show only the next
+ * Requirement: "Opening an image shouldn't show only the next
  * thing and prev thing like we're doing rn about photo preview. It should show
  * all the prevs and next ones to allow people to easily scroll and check things
  * as they want."

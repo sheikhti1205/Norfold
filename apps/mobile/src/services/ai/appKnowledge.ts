@@ -1,5 +1,5 @@
 /**
- * Versioned Norfold knowledge, system policy and trust grounding (packet A1).
+ * Versioned Norfold knowledge, system policy and trust grounding.
  *
  * Everything here is code-controlled: no provider call, no stored row, no
  * remote doc. Two versioned blocks are rebuilt on every request so a client

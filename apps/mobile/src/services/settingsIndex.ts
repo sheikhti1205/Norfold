@@ -34,7 +34,7 @@ import {
 } from "./destinations";
 
 /**
- * Local settings search index (packet matrices/settings_search_index.csv).
+ * Local settings search index.
  *
  * The titles, routes and aliases are NOT written here: every entry is generated
  * from the navigation catalogue (`services/destinations.ts`), so Settings search

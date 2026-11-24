@@ -225,7 +225,7 @@ describe("PossibleMatches", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Packet 11-E: a candidate row carries media, the report type, title,
+  // A candidate row carries media, the report type, title,
   // date/place and its reasons, and offers both "View report" and
   // "Propose match". Dates are formatted for a person, never the stored value.
   // -------------------------------------------------------------------------

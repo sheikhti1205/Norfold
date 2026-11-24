@@ -3,7 +3,7 @@ import { useSyncExternalStore } from "react";
 /**
  * One search surface for the whole app.
  *
- * Owner order 2026-11-13: the magnifier in every top bar and the Search row in
+ * The magnifier in every top bar and the Search row in
  * the navigation open the same floating overlay - the prototype's pill bar with
  * recent searches, live results and the advanced card. Search is not a
  * destination, so opening it never navigates; `/search` stays reachable as the

@@ -1,7 +1,7 @@
 /* R19-2 chat body: prose keeps its inline links and previews sit under it as
    compact secondary content. Nothing here paints a new card or duplicates the
    report card / player chrome they already own. A represented report or video
-   URL is no longer printed in the paragraph (owner correction 2026-11-20). */
+   URL is no longer printed in the paragraph (correction 2026-11-20). */
 .fb-chat-message-text { min-width: 0; max-width: 100%; }
 
 .fb-chat-message-link {

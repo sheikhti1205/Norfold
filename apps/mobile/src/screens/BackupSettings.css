@@ -1,6 +1,6 @@
 /* Chat backup: status and actions use the shared settings row language, and a
    stored backup expands in place. No card around the list, no second surface;
-   hairlines and typography carry the grouping (owner order 2026-11-13). */
+   hairlines and typography carry the grouping. */
 
 .fb-backup-row { width: 100%; text-align: start; }
 .fb-backup-row .fb-settings-row-copy { flex: 1; }

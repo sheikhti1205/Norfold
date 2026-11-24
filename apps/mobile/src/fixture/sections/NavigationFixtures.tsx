@@ -9,7 +9,7 @@ import { loadAppearance, type NavLayout } from "../../appearance";
 import { FixtureFrame, FixtureSection, type FixtureVariant } from "../FixtureSection";
 
 /**
- * Adaptive-navigation preflight (owner ruling 4(e)).
+ * Adaptive-navigation preflight.
  *
  * The production navigation is rendered through `PrimaryNav`: the same owner,
  * the same destination list, the same active treatment and create action the

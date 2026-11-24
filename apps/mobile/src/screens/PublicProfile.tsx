@@ -203,7 +203,7 @@ function PublicProfileSession({ username }: { username: string }) {
             {profile.bio ? (
               <p className="whitespace-pre-line break-words text-[0.9375rem] leading-relaxed text-on-surface">{profile.bio}</p>
             ) : (
-              // Owner direction 2026-11-18: an absent bio is a stated tag.
+              // An absent bio is a stated tag.
               <p data-testid="public-profile-no-bio"
                 className="inline-flex max-w-max items-center rounded-full border border-outline-variant px-2 py-0.5 text-xs text-on-surface-variant">
                 No bio

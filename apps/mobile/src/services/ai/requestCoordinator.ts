@@ -1,6 +1,6 @@
 /**
  * Request coordinator: orchestration around one `ProviderAdapter.complete`
- * call (packet R1).
+ * call.
  *
  * The coordinator owns observable phase reporting (`queued`, `sending`,
  * `first-token`, `streaming`, `retrying`, `complete`, `failed`, `cancelled`

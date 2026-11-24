@@ -27,7 +27,7 @@ export interface ExpressionPickerProps {
 }
 
 /**
- * One picker for emoji, GIFs and stickers (owner direction 2026-11-18).
+ * One picker for emoji, GIFs and stickers.
  *
  * The composer row kept three separate panels open for the same intent, and
  * the reader had to know which control hid which content. Here the three are

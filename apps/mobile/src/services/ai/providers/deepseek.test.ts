@@ -1,5 +1,5 @@
 /**
- * DeepSeek BYOK provider adapter tests (packet P-deepseek).
+ * DeepSeek BYOK provider adapter tests.
  *
  * Fixtures are hand-built wire captures shaped by the official DeepSeek docs
  * verified on 2026-09-25 (`api-docs.deepseek.com`: Your First API Call, Chat

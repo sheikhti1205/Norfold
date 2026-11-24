@@ -2,7 +2,7 @@
 -- CF-060 Residual 10 (2/2: nearby reader) — public.findback_query_posts_nearby_client
 -- ===========================================================================
 -- The two feed readers deliberately did NOT project the O5 block bit that B1's
--- public.findback_visible_posts view already exposes (draft-b1/README.md
+-- public.findback_visible_posts view already exposes (the B1 draft note
 -- Residual 10, :357-365). This migration closes that gap for ONE reader.
 --
 -- Shape policy (design §2.2): the body is the applied B1 text with exactly two
@@ -14,7 +14,7 @@
 --
 -- The row set, row order, page clamp (least(greatest(p_limit,0),20)), every
 -- pre-existing column and every filter are unchanged: O5 requires the row to be
--- PRESENT and flagged, never hidden (MODERATION-CONTRACT-DECISION §13.8 item 3).
+-- PRESENT and flagged, never hidden (the moderation contract §13.8 item 3).
 --
 -- PostgreSQL cannot add an OUT column with `create or replace`, so the function
 -- is dropped and re-created. A DROP discards the ACL, so the revokes, the
@@ -32,9 +32,9 @@
 --
 -- APPLIED (parse + behaviour proof): 2026-10-20, disposable local PostgreSQL 17
 -- cluster, THIS worktree's own supabase/migrations chain
--- (FB_SRC=<R10>/supabase, FB_CLUSTER_ROOT=<home>/<local-work>/pgx/clusters):
+-- (FB_SRC=<R10>/supabase, FB_CLUSTER_ROOT=<local-postgres-cluster-root>):
 -- APPLIED 63/63 migrations, FAILED 0. Behaviour probe: F2/F3/F8/F9/F10 PASS.
--- Log: rendered-evidence-r10/logs/engine-apply-and-probe.log.
+-- Log: the R10 rendered-evidence engine run.
 -- Parse-level guard: supabase/tests/migration_sql_syntax.test.mjs.
 
 begin;

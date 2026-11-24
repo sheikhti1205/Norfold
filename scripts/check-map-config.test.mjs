@@ -52,7 +52,7 @@ function run(args, env = {}) {
   });
 }
 
-test("absent custom config resolves to the owner-decided defaults on both sides", () => {
+test("absent custom config resolves to the built-in defaults on both sides", () => {
   const dir = emptyEnvDir();
   try {
     const config = effectiveMapConfig({ env: {}, envDir: dir });

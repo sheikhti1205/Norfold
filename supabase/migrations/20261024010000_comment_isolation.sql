@@ -1,4 +1,4 @@
--- LIVE-PENDING, incomplete local candidate: owner amendment 2026-10-24.
+-- LIVE-PENDING, incomplete local candidate: amendment 2026-10-24.
 -- Never apply without final integrated review, legacy preflight and a quiescent
 -- write window. Historical COMMENT actions really changed POSTs; do not rewrite
 -- their effect history. Public probation is a subsequent, separately tested seam.

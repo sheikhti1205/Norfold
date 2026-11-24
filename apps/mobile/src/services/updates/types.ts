@@ -12,8 +12,8 @@
  * - a **destination** stays owned by `services/destinations.ts` (S5) — this
  *   module never re-declares a route.
  *
- * These are public metadata. `signingChannel` is an owner-controlled label, not
- * signature verification; the native installer independently checks the
+ * These are public metadata. `signingChannel` is a deployment-controlled label,
+ * not signature verification; the native installer independently checks the
  * installed signing identity, and a missing/unverifiable value fails closed.
  */
 import type { DestinationContext, DestinationPlatform, DestinationResolution } from "../destinations";

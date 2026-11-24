@@ -1,8 +1,8 @@
 /**
  * A voice note's real envelope.
  *
- * WhatsApp paints measured amplitude, not a decorative pattern, and the owner
- * asked for the same. The measurement is taken twice in a note's life:
+ * WhatsApp paints measured amplitude, not a decorative pattern. The measurement
+ * is taken twice in a note's life:
  *
  *  - while recording, from the live microphone (see `voiceMeter.ts`);
  *  - everywhere else, by decoding the container the device actually holds.

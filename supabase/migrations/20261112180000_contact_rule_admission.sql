@@ -1,4 +1,4 @@
--- Owner order 2026-11-12 (R3), second half: the contact rules from
+-- R3, second half: the contact rules from
 -- 20261112160000 were stored and re-read but nothing consulted them, so the
 -- settings panel offered a control the product did not honour.
 --

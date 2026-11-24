@@ -21,7 +21,7 @@
   width: min(960px, calc(100vw - 48px)); height: min(720px, calc(100dvh - 48px)); max-height: calc(100dvh - 48px);
   padding: 0; border: 1px solid var(--fb-outline-variant); border-radius: 16px;
   /* The page stays visible through the window, blurred: the surface is a
-     frosted pane, not an opaque wall (owner order 2026-11-13). */
+     frosted pane, not an opaque wall (order 2026-11-13). */
   background: color-mix(in srgb, var(--fb-surface) 84%, transparent);
   -webkit-backdrop-filter: blur(30px) saturate(1.2);
   backdrop-filter: blur(30px) saturate(1.2);
@@ -45,8 +45,8 @@
 /* The one search in settings: the magnifier becomes a field in this same
    header row, beside the title, and the pick list drops below the bar. The
    header never grows a second row, so opening search never pushes the page
-   (owner order 2026-11-14). Same bar language as the app-wide search overlay;
-   no filter control (owner order 2026-11-13). */
+   (order 2026-11-14). Same bar language as the app-wide search overlay;
+   no filter control (order 2026-11-13). */
 .fb-settings-window-search {
   position: relative;
   display: flex; align-items: center; gap: 6px;
@@ -114,7 +114,7 @@
 }
 /* A page mounted directly in the window (Profile, Profile edit) owns the
    scroll here. Without this it was clipped by the body and the wheel did
-   nothing (owner defect 2026-11-14). */
+   nothing (defect 2026-11-14). */
 .fb-settings-window-body > .fb-settings-page {
   overflow-y: auto;
   overscroll-behavior: contain;

@@ -117,7 +117,7 @@ afterEach(() => {
 });
 
 function chooseAttachment(name: "GIF" | "Photo" | "Sticker") {
-  // Emoji, GIFs and stickers share one control (owner direction 2026-11-18);
+  // Emoji, GIFs and stickers share one control;
   // the tab names the content. Photo still lives in the attachment menu.
   if (name !== "Photo") {
     fireEvent.click(screen.getByRole("button", { name: /emoji, gifs and stickers/i }));
@@ -150,13 +150,13 @@ describe("CommentComposer social layout", () => {
     expect(screen.getByTestId("comment-input")).toHaveProperty("value", "");
   });
 
-  it("surfaces parent failures through onError with the packet sentence (never silent, never raw)", async () => {
+  it("surfaces parent failures through onError with the fixed sentence (never silent, never raw)", async () => {
     const onSubmit = vi.fn().mockRejectedValue(new Error("offline down"));
     const onError = vi.fn();
     render(<CommentComposer {...baseProps({ onSubmit, onError })} />);
     fireEvent.change(screen.getByTestId("comment-input"), { target: { value: "hi" } });
     fireEvent.click(screen.getByTestId("comment-send"));
-    // Packet `08` §21: the fixed sentence, not the mapper's raw message.
+    // §21: the fixed sentence, not the mapper's raw message.
     await waitFor(() =>
       expect(onError).toHaveBeenCalledWith("Couldn't post your comment. Try again."),
     );
@@ -239,7 +239,7 @@ describe("CommentComposer mentions", () => {
   });
 });
 
-describe("CommentComposer emoji affordance (owner order 2026-11-12, R5)", () => {
+describe("CommentComposer emoji affordance (R5)", () => {
   it("opens the shared emoji palette and inserts at the caret", () => {
     globalThis.localStorage?.clear();
     render(<CommentComposer {...baseProps()} />);
@@ -266,7 +266,7 @@ describe("CommentComposer emoji affordance (owner order 2026-11-12, R5)", () => 
 });
 
 describe("CommentComposer attachments", () => {
-  it("refuses a video pick with photos-only copy and stages nothing (packet `08` §7)", async () => {
+  it("refuses a video pick with photos-only copy and stages nothing (§7)", async () => {
     render(<CommentComposer {...baseProps()} />);
     fireEvent.change(screen.getByTestId("comment-file-input") as HTMLInputElement, {
       target: { files: [file("clip.mp4", "video/mp4", 4096)] },
@@ -474,7 +474,7 @@ describe("CommentComposer attachments", () => {
     render(<CommentComposer {...baseProps()} />);
     const picker = screen.getByTestId("comment-file-input") as HTMLInputElement;
     fireEvent.change(picker, { target: { files: [file("p.jpg", "image/jpeg")] } });
-    // Packet `08` §21: the fixed upload sentence, never the raw transport text.
+    // §21: the fixed upload sentence, never the raw transport text.
     const alert = await screen.findByTestId("comment-attach-error");
     expect(alert.textContent).toContain("Couldn't upload this photo.");
     expect(alert.textContent).not.toContain("offline blip");

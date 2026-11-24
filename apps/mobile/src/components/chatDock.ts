@@ -550,7 +550,7 @@ export function untuckChatDock(accountId: string): void {
  * forgotten, and focus returns to the control that opened the most recent one.
  * What survives is the rail's resting circle: `closed` keeps the windows ended
  * (no bubble, no window) while the circle still shows the count and opens the
- * dock again. That is the owner's rule — the corner never goes empty, and the
+ * dock again. That is the rule — the corner never goes empty, and the
  * pen never disappears.
  */
 export function closeChatDockSurface(accountId: string): void {

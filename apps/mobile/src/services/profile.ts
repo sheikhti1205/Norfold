@@ -155,8 +155,8 @@ export async function updateMyProfile(input: UpdateMyProfileInput): Promise<Publ
 // resolves the caller from the session and compares against the server clock,
 // so a tampered device clock cannot move the outcome. These helpers only
 // surface that gate — first verified phone and same-number reverification
-// never wait. Live Auth/SMS challenge wiring stays LIVE-PENDING (owner-
-// deferred); no OTP is sent from here.
+// never wait. Live Auth/SMS challenge wiring stays LIVE-PENDING; no OTP is
+// sent from here.
 // ---------------------------------------------------------------------------
 
 /** Stable server marker for a held replacement gate (see spec 25). */

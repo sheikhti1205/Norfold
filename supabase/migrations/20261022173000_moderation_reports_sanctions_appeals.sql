@@ -12,18 +12,18 @@
 -- and backfills nothing.
 --
 -- The accepted contract this implements:
---   MODERATION-CONTRACT-DECISION.md §2 (C1, D1–D7), §3 (C2, D8–D15),
+--   the moderation contract §2 (C1, D1–D7), §3 (C2, D8–D15),
 --   §7 (C6, D34–D39), §13.7 (the picker gate, which stays default-OFF),
---   §13.11 (the owner's 90-day evidence expiry) and §13.12 (O7).
+--   §13.11 (the 90-day evidence expiry) and §13.12 (O7).
 --   The role/capability layer is already applied (D1-ROLES,
 --   20261022143000_roles_capabilities_invitations.sql) and is REUSED here:
 --   findback_can(p_capability) is the one authorization predicate, and
 --   admin_audit_log is the one append-only audit table. Neither is redefined.
---   CONTRACT-ROLES-ADMIN-2026-10-22.md A2.1/A2.2/A2.6 supplies the
+--   the roles contract A2.1/A2.2/A2.6 supplies the
 --   action → capability map this file enforces.
 --
--- THE MEASURED CORRECTIONS (B2-PREFLIGHT-CORRECTIONS-2026-10-21.md §2–§4,
--- B2-TARGET-IDENTITY-AMENDMENT-DRAFT.md), all of which this file implements
+-- THE MEASURED CORRECTIONS (the B2 preflight corrections note §2–§4,
+-- the target-identity amendment note), all of which this file implements
 -- rather than the historical D3/D6 shapes:
 --
 --   1. D3's exact one-live-pointer CHECK is REPLACED, not weakened. A foreign
@@ -62,7 +62,7 @@
 -- NOTHING IS GRANTED BACK TO A CONSUMER ROLE ON A MODERATION TABLE. Every new
 -- table is `revoke all ... from public, anon, authenticated` with RLS enabled
 -- and ZERO policies; Supabase's default ACL grants `authenticated` table rights
--- on every new table, so "no policy" is NOT "no access" (ACL-CLOSURE.md:52-58,
+-- on every new table, so "no policy" is NOT "no access" (the ACL closure note:52-58,
 -- MC D36). The consumer receipt is a definer RPC, not a table grant, which is
 -- STRICTER than D4's five-column grant: no column of content_reports is
 -- readable by any client role. admin_audit_log is append-only and gets no
@@ -77,7 +77,7 @@
 --
 -- OPEN PRECONDITION, NOT CLOSED BY THIS FILE (release blocker, not a defect of
 -- these objects): B2a's moderation-privacy precondition (§0.2 of
--- WORK-ORDER-CF060-B2a-REPORTS.md, WORK_QUEUE Residual 1/12) is not applied in
+-- the CF-060 B2a work order, WORK_QUEUE Residual 1/12) is not applied in
 -- the tree this file sits on. public.item_posts still grants
 -- select (moderation_visibility) to authenticated and its RLS SELECT policy is
 -- `using (true)`. This file introduces the FIRST writer of that column, so
@@ -220,7 +220,7 @@ create index if not exists content_reports_queue_idx
   on public.content_reports (status, target_type, target_id);
 
 comment on table public.content_reports is
-  'FindBack content reports (MC D1, amended for the measured D3/D6/D7 defects). The row is the accountability receipt and survives both the reporter and the target; the LIVE pointer columns may be nulled by their FKs, while target_id (opaque, no FK) and the bounded server-captured evidence snapshot survive until the owner-approved 90-day expiry erases them (§13.11). evidence_snapshot is moderator-only and is never readable by a client role.';
+  'FindBack content reports (MC D1, amended for the measured D3/D6/D7 defects). The row is the accountability receipt and survives both the reporter and the target; the LIVE pointer columns may be nulled by their FKs, while target_id (opaque, no FK) and the bounded server-captured evidence snapshot survive until the 90-day expiry erases them (§13.11). evidence_snapshot is moderator-only and is never readable by a client role.';
 comment on column public.content_reports.target_id is
   'Immutable opaque logical target key (the id the reporter submitted). It is NOT a public projection, NOT target text and NOT a second evidence copy; B2b groups cases by (target_type, target_id).';
 comment on column public.content_reports.evidence_snapshot is

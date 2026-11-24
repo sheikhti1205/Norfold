@@ -1,5 +1,5 @@
 /**
- * Settings → Feed layout (CF-010, packet `09` §6 and §23).
+ * Settings → Feed layout (CF-010, §6 and §23).
  *
  * The Home feed can be arranged four ways. `Auto` is the default and decides
  * from the width band, which is what most readers want; the other three are

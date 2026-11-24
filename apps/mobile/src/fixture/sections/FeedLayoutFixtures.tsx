@@ -18,7 +18,7 @@ import {
 import { LONG_DESCRIPTION, LONG_TITLE, makePost, masonryRatioPosts } from "../posts";
 
 /**
- * CF-010 feed-layout preflight (packet 09 §6-§12).
+ * CF-010 feed-layout preflight (§6-§12).
  *
  * The masonry grid places cards by real photo ratio, so the only honest way to
  * review it is to render the production `PostList` at the width each band

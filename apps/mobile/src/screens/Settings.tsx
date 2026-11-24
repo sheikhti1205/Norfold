@@ -155,7 +155,7 @@ export function notificationSummary(
 }
 
 /**
- * Settings root: profile header, search, packet groups, sign-out.
+ * Settings root: profile header, search, grouped settings, sign-out.
  *
  * Account / Preferences / Intelligence / Privacy / More group the index.
  * Advanced, Legal and Help & about label their directly navigable rows.

@@ -118,7 +118,7 @@ describe("Help response lifecycle (pre-U6.1)", () => {
     };
     renderHelp({ createAdapter: () => adapter, getKey: async () => "test-key" });
     send("How do I search?");
-    // Packet 11: even app-help failures never substitute a FAQ answer.
+    // Even app-help failures never substitute a FAQ answer.
     await screen.findByTestId("chat-error");
     expect(screen.queryByText("Built-in answer")).toBeNull();
     await waitFor(() => expect(screen.queryByTestId("chat-partial")).toBeNull());

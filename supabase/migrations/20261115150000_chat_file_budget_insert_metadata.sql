@@ -1,4 +1,4 @@
--- Owner audit 2026-11-15 (P0 follow-up, fix forward): 20261115140000 read
+-- Audit 2026-11-15 (P0 follow-up, fix forward): 20261115140000 read
 -- `metadata ->> 'size'` in the chat-file insert policy, but Supabase Storage
 -- (1.94.2, the deployed version) writes `{mimetype, contentLength,
 -- contentEncoding}` on the insert probe and adds `size` only when the upload

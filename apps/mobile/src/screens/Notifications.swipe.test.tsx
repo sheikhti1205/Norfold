@@ -47,7 +47,7 @@ function renderNotifications() {
   );
 }
 
-/** Packet `08` §17: every action the swipe offers is reachable by tap too. */
+/** §17: every action the swipe offers is reachable by tap too. */
 async function openRowActions() {
   fireEvent.click(await screen.findByRole("button", { name: /more actions for bob/i }));
   return screen.findByRole("toolbar");

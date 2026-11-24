@@ -2,7 +2,7 @@
 -- per-report occupancy.
 --
 -- WHY THIS FILE EXISTS. `supabase/tests/verify_cf050_admission.sql` is RED on
--- the shipped chain (admission-red-r2b.log, 21 named violations). The current
+-- the shipped chain (the r2b admission run, 21 named violations). The current
 -- writers can be driven into every one of these states:
 --
 --   * `findback_propose_match` trusts the caller's argument order, reads
@@ -40,7 +40,7 @@
 -- owner `type` edits, report/account deletion repair, durable
 -- recovery/rating retention, participant projection, notifications, consumer
 -- wiring, matching-quality calibration, hosted apply and device acceptance
--- remain separate gates named in ADMISSION-DESIGN.md. D25's unilateral
+-- remain separate gates named in the admission design note. D25's unilateral
 -- unlinked recovery is unchanged; no linked escape window is introduced.
 begin;
 

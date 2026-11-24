@@ -7,7 +7,7 @@
 -- conventions — same env contract (TEST_SUPABASE_URL,
 -- TEST_SUPABASE_PUBLISHABLE_KEY, TEST_USER_A_JWT, TEST_USER_B_JWT), never
 -- against production, values never printed. Expected: every probe below
--- returns a row (no EXCEPTION); sections 2a/2b are owner-executed REST
+-- returns a row (no EXCEPTION); sections 2a/2b are manual REST
 -- steps whose expected HTTP codes are recorded inline.
 --
 -- What this migration closes (FB-AUD-03): the pre-existing

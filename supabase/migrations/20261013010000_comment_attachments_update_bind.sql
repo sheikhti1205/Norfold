@@ -15,7 +15,7 @@
 -- No table/column drops, no row rewrites, no grants touched, no edits to
 -- any applied migration (20261011020000 is already applied live and is
 -- NEVER edited; this file supersedes its UPDATE policy at apply time).
--- LIVE-PENDING (owner-deferred): verify on the live project with
+-- LIVE-PENDING: verify on the live project with
 -- supabase/tests/verify_20261013010000_attachment_update_bind.sql
 -- (owner display_order edit still allowed; reassignment to a foreign
 -- comment_id rejected by WITH CHECK).

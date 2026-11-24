@@ -88,7 +88,12 @@ describe("resolveSupabaseBuildEnv", () => {
  */
 describe("resolveChunkGroups", () => {
   const groups = resolveChunkGroups();
-  const id = (path: string) => `<repo>\\apps\\mobile\\node_modules\\${path}`;
+  // Neutral Windows project root: the policy regexes match `node_modules/` and
+  // `src/services/messaging/` anywhere in a module id, never a machine-specific
+  // prefix, so the fixture must not depend on where this repo is checked out.
+  const root = "C:\\work\\repo\\apps\\mobile";
+  const posixRoot = root.replace(/\\/g, "/");
+  const id = (path: string) => `${root}\\node_modules\\${path}`;
   const groupFor = (moduleId: string) => groups.find((group) => group.test.test(moduleId))?.name;
 
   it("names each vendor family explicitly", () => {
@@ -121,13 +126,13 @@ describe("resolveChunkGroups", () => {
     expect(groupFor(id("some-unknown-package\\index.js"))).toBeUndefined();
     expect(groupFor(id("zustand-extra\\index.js"))).toBeUndefined();
     expect(groupFor(id("@sentry\\react\\esm\\index.js"))).toBeUndefined();
-    expect(groupFor("<repo>\\apps\\mobile\\src\\screens\\Home.tsx")).toBeUndefined();
-    expect(groupFor("<repo>\\apps\\mobile\\src\\services\\messaging\\runtime.ts")).toBe("app-messaging");
+    expect(groupFor(`${root}\\src\\screens\\Home.tsx`)).toBeUndefined();
+    expect(groupFor(`${root}\\src\\services\\messaging\\runtime.ts`)).toBe("app-messaging");
   });
 
   it("matches both path separators (Windows builds)", () => {
-    expect(groupFor("<repo>/apps/mobile/node_modules/react/index.js")).toBe("vendor-react");
-    expect(groupFor("<repo>/apps/mobile/src/services/messaging/runtime.ts")).toBe("app-messaging");
+    expect(groupFor(`${posixRoot}/node_modules/react/index.js`)).toBe("vendor-react");
+    expect(groupFor(`${posixRoot}/src/services/messaging/runtime.ts`)).toBe("app-messaging");
   });
 
   it("publishes unique group names", () => {

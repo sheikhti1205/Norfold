@@ -1,5 +1,5 @@
 /**
- * Adaptive, per-chat, history-only compaction (packet H1, Context & Memory
+ * Adaptive, per-chat, history-only compaction (Context & Memory
  * Contract §4–5).
  *
  * - The trigger is a fraction (~60–70%) of the VERIFIED effective window via

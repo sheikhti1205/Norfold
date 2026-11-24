@@ -27,17 +27,15 @@ import "./SettingsWindow.css";
 /**
  * Settings as a floating window, not a page swap.
  *
- * Owner order 2026-11-13 (references: the VS Code settings window and the
- * owner's top-attached search sketch): the Settings row opens the settings
- * surface over the app, and a press outside it closes the window. The surface
- * is the real settings tree - the one settingsRoutes list - so a section cannot
- * exist in the window and be missing at its old URL, or the reverse.
+ * The Settings row opens the settings surface over the app, and a press
+ * outside it closes the window. The surface is the real settings tree - the
+ * one settingsRoutes list - so a section cannot exist in the window and be
+ * missing at its old URL, or the reverse.
  *
  * The window owns the ONE settings search: a single icon in its top bar that
  * expands into a field in the same row, beside the title, with results dropping
- * below it. The field never adds a second row or pushes the page down (owner
- * order 2026-11-14). The tree carries no second search field, and settings
- * carries no notification bell (owner order 2026-11-13).
+ * below it. The field never adds a second row or pushes the page down. The tree
+ * carries no second search field, and settings carries no notification bell.
  *
  * The window keeps its own memory history. Opening it from a row never changes
  * the app's URL, so closing puts the reader back exactly where they were

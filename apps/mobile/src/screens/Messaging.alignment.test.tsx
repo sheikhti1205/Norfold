@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
  * 34rem measure. In an own line the row is right-anchored by row-reverse, so
  * the surface must also be packed to the row's end. Otherwise the leftover
  * width appears as an inboard gap between the bubble and the sender's gutter,
- * which is the owner-reported long-text placement defect.
+ * which is the reported long-text placement defect.
  *
  * A received row is left-anchored and keeps the default start packing. The
  * row and the bubble keep their existing widths; this file pins placement, not

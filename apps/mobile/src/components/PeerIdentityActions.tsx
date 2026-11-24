@@ -11,7 +11,7 @@ import type { PublicIdentity } from "./identity";
  * The person's actions on their full profile: one relationship button, the
  * quiet way out of a friendship, and the safety owner.
  *
- * Owner direction 2026-11-18: there is no connect form and no second way to
+ * There is no connect form and no second way to
  * start a conversation. `PeerChatButton` owns the single action and the
  * relationship labels, so the card and the profile page cannot drift apart.
  */

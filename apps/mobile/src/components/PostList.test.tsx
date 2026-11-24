@@ -106,7 +106,7 @@ describe("PostList refresh contract", () => {
   });
 });
 
-describe("PostList put-away cross (owner direction 2026-11-18)", () => {
+describe("PostList put-away cross", () => {
   it("hides only the report whose cross was pressed and offers Undo", async () => {
     render(list([post("p1", "Keys"), post("p2", "Wallet")]));
     const crosses = screen.getAllByRole("button", { name: "Hide report" });

@@ -92,7 +92,7 @@ export function KlipyPicker({
   // Standalone, this panel owns Escape and outside presses. Embedded in the
   // unified expression picker it must not: the tab row and the close button
   // live outside this component, and its own listener would treat a tab press
-  // as a dismiss and close the whole picker (owner direction 2026-11-18).
+  // as a dismiss and close the whole picker.
   useEffect(() => {
     if (!showTabs) return;
     const onPointerDown = (event: PointerEvent) => {
@@ -114,9 +114,9 @@ export function KlipyPicker({
   useEffect(() => { searchRef.current?.focus(); }, []);
 
   if (!enabled) {
-    // The owner wants the control to exist even when the deployment has no
-    // provider key. It opens a real panel that says so; it never renders fake
-    // tiles or a search field that cannot search.
+    // The control exists even when the deployment has no provider key. It
+    // opens a real panel that says so; it never renders fake tiles or a search
+    // field that cannot search.
     return (
       <div ref={root} className="fb-klipy-picker" data-testid={testId("panel")} role={showTabs ? "dialog" : "group"} aria-label="GIF and sticker picker">
         <div className="fb-klipy-search-row fb-klipy-search-row-plain">

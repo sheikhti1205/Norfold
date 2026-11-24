@@ -1,5 +1,5 @@
 /**
- * Cohere BYOK provider adapter tests (packet AI-020d).
+ * Cohere BYOK provider adapter tests.
  *
  * Fixtures are hand-built wire captures shaped by Cohere's OpenAI-compatible
  * Chat API v2 (`POST https://api.cohere.com/v2/chat`, `Authorization: Bearer

@@ -50,7 +50,7 @@ export HARNESS_OUT="$OUT/$area"
 ensure_outdir "$HARNESS_OUT" >/dev/null
 NOTES="$HARNESS_OUT/NOTES.md"
 [[ -f "$NOTES" ]] || {
-  echo "# $area — owner observations (device day)" >"$NOTES"
+  echo "# $area — observations (device day)" >"$NOTES"
   echo >>"$NOTES"
   echo "| Step | Expected | Observed | PASS/FAIL |" >>"$NOTES"
   echo "|---|---|---|---|" >>"$NOTES"
@@ -116,7 +116,7 @@ device-harness: AI benchmark stub (acceptance matrix: Photo AI + Assistant;
   figures feed the performance measurement template — no claim without them).
   Manual steps (record each in NOTES.md + perf summary):
   1. Report -> Analyze photo (SmolVLM2 local-first, consented cloud fallback).
-  2. Measurement has no consumer screen since 2026-10-25 (owner: no CPU/GPU
+  2. Measurement has no consumer screen since 2026-10-25 (reason: no CPU/GPU
      vocabulary on consumer surfaces). Exercise it through the service seam
      (`service.measure('cpu'|'gpu')`, smol-color-plate-v1) until the background
      self-check ships.

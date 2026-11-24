@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { validateModelNotices, RETAINED_MODEL_NOTICE_IDENTITY } from "./check-model-notices.mjs";
-const packet = JSON.parse(readFileSync(new URL("../docs/history/model-lab/evidence/model-license-packet.json", import.meta.url), "utf8"));
+const packet = JSON.parse(readFileSync(new URL("../docs/licenses/model-license-packet.json", import.meta.url), "utf8"));
 const candidates = [RETAINED_MODEL_NOTICE_IDENTITY];
 
 test("all historical text snapshots and the retained tool identity pass", () => { assert.deepEqual(validateModelNotices(packet, candidates), []); });

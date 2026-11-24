@@ -1,12 +1,12 @@
 -- FindBack — the match-candidate reader (CF-060 D40/D41, the CF-050 gate).
 --
 -- WHY THIS FILE EXISTS.
--- The owner-adopted moderation contract left ONE question open (MC §13.9,
+-- The moderation contract left ONE question open (MC §13.9,
 -- "D40/D41 candidate reconciliation remains an explicit bounded design
 -- gate"): when the app proposes a possible match, may it propose the report
 -- of somebody the reader has blocked?
 --
--- The answer was reviewed and pinned (DESIGN-CF050-CANDIDATE-RECONCILIATION.md
+-- The answer was reviewed and pinned (the candidate-reconciliation design note
 -- r2, independently re-reviewed PASS):
 --
 --   * The exclusion belongs in the READER'S WHERE CLAUSE. The alternative —
@@ -27,7 +27,7 @@
 -- frozen projection contracts during review"), and the candidate reader has
 -- a different contract anyway: it is driven by the TARGET REPORT, not by a
 -- type filter, so the client can no longer lie about the target's type to
--- bypass a filter (packet 12 §23).
+-- bypass a filter (§23).
 --
 -- THE PROJECTION IS COPIED, NOT INVENTED.
 -- The candidate row is the feed reader's row, column for column, so the

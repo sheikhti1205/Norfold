@@ -1,4 +1,4 @@
-// TDD RED: canonical functional color map per OWNER_DIRECTIVE W5.
+// TDD RED: canonical functional color map (W5).
 // Every entry carries light+dark ramps; chip ink-on-bg and text-on-surface
 // must meet AA on neutral surfaces (incl. true black #000000 for dark).
 import { describe, expect, it } from "vitest";

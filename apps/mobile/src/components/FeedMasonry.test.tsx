@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * FeedMasonry DOM contract (CF-010, packet `09` §6–§9, §24).
+ * FeedMasonry DOM contract (CF-010, §6–§9, §24).
  *
  * jsdom has no layout engine, so the two measurement surfaces a browser
  * provides are stubbed on the prototype: the container's `clientWidth` and each
@@ -186,7 +186,7 @@ describe("FeedMasonry", () => {
     expect(items()[1]!.getAttribute("style")).not.toContain(`${SECOND_COLUMN_LEFT_2}px`);
   });
 
-  it("places cards without animating them (packet `09` §19/§24)", () => {
+  it("places cards without animating them (§19/§24)", () => {
     renderGrid();
     measureAt(CONTAINER_WIDTH);
     for (const el of items()) {

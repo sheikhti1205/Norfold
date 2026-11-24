@@ -14,7 +14,7 @@
 -- holds, so EMPTY means FAILED. Refusals are caught inside their own block
 -- because a raised error aborts the enclosing block.
 --
--- The owner policy under test (2026-10-23):
+-- The policy under test (2026-10-23):
 --   1. one moderator decides; that decision is final and attributed to them;
 --   2. another moderator is refused while the decision stands;
 --   3. the SAME decider may revise, which increments the generation;
@@ -455,7 +455,7 @@ where (select decider_user_id from public.moderation_case_decisions
 -- ---------------------------------------------------------------------------
 -- S7. A COMMENT content action owns ONLY the comment atom.
 --
---     OWNER AMENDMENT 2026-10-24 supersedes the earlier comment->post coupling:
+--     AMENDMENT 2026-10-24 supersedes the earlier comment->post coupling:
 --     a report or decision about a comment must never hide, publish or own its
 --     parent post, and an independent post case can neither reverse nor inherit
 --     the comment verdict. The two atoms are decided separately.
@@ -704,7 +704,7 @@ where exists (
 );
 
 -- ---------------------------------------------------------------------------
--- S10. Comment and post atoms are independent (owner amendment 2026-10-24).
+-- S10. Comment and post atoms are independent (amendment 2026-10-24).
 --
 --      A COMMENT decision closes only the comment's own reports. A POST report
 --      that predates it stays OPEN, the post stays PUBLISHED and no POST
@@ -821,7 +821,7 @@ where (select moderation_visibility from public.item_posts where id = 'p-sd-stal
 -- ---------------------------------------------------------------------------
 -- S11. Dismissal and content action on the SAME COMMENT are one comment case.
 --
---      OWNER AMENDMENT 2026-10-24: the case is the comment, not its parent
+--      AMENDMENT 2026-10-24: the case is the comment, not its parent
 --      post. A dismissal and a hide of the same comment share one decision and
 --      one generation; another moderator cannot reverse either. A different
 --      comment, and the parent post, are independent cases. The parent post
@@ -1019,7 +1019,7 @@ where (public.findback_moderation_target('COMMENT', 'c-sd-3')->'decision'->>'act
 -- ---------------------------------------------------------------------------
 -- S12. A reopened comment-origin case keeps its report evidence and history.
 --
---      Owner amendment: the queue row for the reopened COMMENT must count its
+--      Amendment: the queue row for the reopened COMMENT must count its
 --      report, the target reader must project its snapshot and the COMMENT
 --      audit outcome, and decision/reopen must come from the same case.
 -- ---------------------------------------------------------------------------

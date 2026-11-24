@@ -898,7 +898,7 @@ and not exists (
   where c.table_schema = 'public' and c.column_name in ('reputation', 'reputation_tier', 'trust_score', 'trust_tier')
 );
 
--- S3. PROBATION keeps the TIER ceiling and is spaced by 30 s (owner amendment
+-- S3. PROBATION keeps the TIER ceiling and is spaced by 30 s (amendment
 -- 2026-10-24). The superseded 1/day + 120 s branch is replaced, not deleted: the
 -- full contract (tier caps, cross-action spacing, no-op/removal exemptions, the
 -- private/safety bypass, expiry and revocation) is proven in

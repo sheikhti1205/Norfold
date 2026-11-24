@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 /**
- * Settings → Feed layout (CF-010, packet `09` §6, §23).
+ * Settings → Feed layout (CF-010, §6, §23).
  *
  * The screen is a thin owner over two things that each have their own tests:
  * `useFeedLayoutPreference` (where the choice lives) and `resolveFeedLayout`
  * (what it means on a width). What is asserted here is the wiring a reader can
- * actually see: the four packet-named options, apply-on-pick persistence, and
+ * actually see: the four named options, apply-on-pick persistence, and
  * an honest statement of what this screen resolved to — `Auto` must never leave
  * the reader guessing which layout they are looking at.
  */
@@ -64,7 +64,7 @@ describe("feedLayoutSummary", () => {
 });
 
 describe("Feed layout settings screen", () => {
-  it("offers exactly the four layouts the packet names", () => {
+  it("offers exactly the four layouts the design names", () => {
     renderScreen();
     expect(radios().map((el) => el.value)).toEqual(["auto", "feed", "compact", "masonry"]);
     expect(radio("Auto").checked).toBe(true);

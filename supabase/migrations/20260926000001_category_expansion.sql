@@ -1,6 +1,6 @@
 -- FindBack — additive category taxonomy expansion (Report P3).
 --
--- STATUS: STAGED PROPOSAL — NOT APPLIED. Owner approval + staging dry run are
+-- STATUS: STAGED PROPOSAL — NOT APPLIED. Approval + staging dry run are
 -- required before this ever runs against a live database. It is intentionally
 -- additive and forward-only: no enum rewrite, no rename of existing rows.
 --

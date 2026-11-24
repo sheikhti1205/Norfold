@@ -4,7 +4,7 @@ import { ThumbsDown, ThumbsUp } from "lucide-react";
 /**
  * A reaction is an outline placeholder until it is yours.
  *
- * Owner direction 2026-11-18: the emoji is the committed state, not the
+ * The emoji is the committed state, not the
  * default. A neutral control therefore draws a monotone thumbs outline, and
  * only the reader's own reaction shows the platform emoji. Both forms occupy
  * the same box, so pressing a reaction never resizes the row.

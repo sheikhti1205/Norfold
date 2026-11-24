@@ -17,7 +17,7 @@ import { PRODUCT_NAME } from "../brand";
 export type BrandMarkVariant = "dark" | "light" | "auto";
 
 /**
- * `glyph` (default) is the monochrome alpha mark. `tile` is the owner's app-icon
+ * `glyph` (default) is the monochrome alpha mark. `tile` is the app-icon
  * treatment: the same glyph knocked out of a filled squircle, derived from the
  * 2026-10-19 master (`brand-tile-master.png`) by `scripts/generate-brand-assets.py`. The
  * master is an opaque render on a white page field: the page field is keyed

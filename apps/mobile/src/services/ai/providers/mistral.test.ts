@@ -1,5 +1,5 @@
 /**
- * Mistral BYOK provider adapter tests (packet AI-020a).
+ * Mistral BYOK provider adapter tests.
  *
  * Fixtures are hand-built wire captures shaped by the official Mistral La
  * Plateforme docs (OpenAI-compatible `POST /v1/chat/completions` with SSE

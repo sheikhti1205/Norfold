@@ -1,4 +1,4 @@
--- Owner order 2026-11-12 (R3): pressing Settings opens a floating account panel
+-- R3: pressing Settings opens a floating account panel
 -- that carries the account-level rules which had no home.
 --
 -- Nothing here invents a product concept: messaging already has an admission

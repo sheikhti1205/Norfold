@@ -181,7 +181,7 @@ describe("toggleReaction (exclusive LIKE / DISLIKE wire)", () => {
     expect(reactToPostMock).toHaveBeenCalledWith("p1", expected);
   });
 });
-describe("Like-only toggle over canonical-era rows (packet 08 §2)", () => {
+describe("Like-only toggle over canonical-era rows (§2)", () => {
   it("treats any positive reaction as mine, so a tap clears it", async () => {
     reactToPostMock.mockResolvedValue({ postId: "p1", likeCount: 4, dislikeCount: 0, myReaction: null });
 

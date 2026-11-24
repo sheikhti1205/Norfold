@@ -4,8 +4,8 @@
 -- (`![photo](url)` / `[video](url)`), with no typed record of who attached
 -- what to which comment. `parseCommentBody` therefore had to trust any
 -- https URL a body carried, and no server-side surface could ever enforce
--- provenance. This table is the owner-scoped provenance record Wave 4 wires
--- into rendering; readers other than the owner keep the existing body-URL
+-- provenance. This table is the owner-scoped provenance record the rendering
+-- path reads; readers other than the owner keep the existing body-URL
 -- gallery path (the relation never widens what strangers can see).
 --
 -- ADDITIVE ONLY: one new table + RLS. No column drops, no data rewrites, no

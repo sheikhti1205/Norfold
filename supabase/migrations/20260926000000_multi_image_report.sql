@@ -1,6 +1,6 @@
--- FindBack — multi-image report support (packet D1, forward-only).
+-- FindBack — multi-image report support (forward-only).
 --
--- Design (see temp-Com/D1.log.md): extend the existing public.attachments /
+-- Design (see the D1 design note): extend the existing public.attachments /
 -- public.uploads infrastructure instead of adding a parallel image table.
 -- Legacy writers produce at most one attachment per post, so adding a
 -- display_order column with a deterministic backfill keeps every old row

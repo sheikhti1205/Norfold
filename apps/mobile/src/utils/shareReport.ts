@@ -66,8 +66,8 @@ async function writeToClipboard(text: string): Promise<boolean> {
 /**
  * The one share path: copy the canonical link AND open the platform sheet.
  *
- * The owner asked for both in one tap: the link is on the clipboard if the
- * share is cancelled, and the sheet still opens on Android/web. Both actions
+ * Both happen in one tap: the link is on the clipboard if the share is
+ * cancelled, and the sheet still opens on Android/web. Both actions
  * start in the same tick so the web share call keeps its transient user
  * activation while the clipboard write runs alongside it.
  *

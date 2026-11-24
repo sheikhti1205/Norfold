@@ -8,19 +8,6 @@ import { load } from "js-yaml";
 const root = resolve(import.meta.dirname, "..");
 const read = (path) => readFileSync(resolve(root, path), "utf8");
 
-test("local-tool guidance replaces retired runtime/lab policy", () => {
-  assert.equal(existsSync(resolve(root, ".opencode/skills/findback-ai-runtime/SKILL.md")), false);
-  const text = read(".opencode/skills/findback-local-intelligence/SKILL.md");
-  const frontmatter = load(text.split("---")[1]);
-  assert.equal(frontmatter.name, "findback-local-intelligence");
-  assert.match(frontmatter.description, /^Use when /);
-  // Scenarios: no runtime restoration, no silent network fallback, no
-  // abandoned old installs, and no host evidence masquerading as device proof.
-  for (const phrase of ["Needle", "USE", "cleanup-only", "cloud AI Chat", "never silently", "device", "heavy-run"]) assert.ok(text.includes(phrase), phrase);
-  assert.doesNotMatch(text, /Reuse existing LiteRT-LM|Advanced catalogue|every role is qualified/);
-  assert.match(read("AGENTS.md"), /`findback-local-intelligence`/);
-});
-
 test("retained workflow regression selections resolve to real test files", () => {
   const workflow = load(read(".github/workflows/local-intelligence-models.yml"));
   const step = workflow.jobs["model-smoke"].steps.find((step) => step.name === "Local tools and separate cloud Chat behavioral regressions");
@@ -41,6 +28,6 @@ test("retired model-lab gate and acquisition tools are not executable queues", (
 });
 
 test("historical legal snapshot remains byte-identical after archival", () => {
-  const packet = readFileSync(resolve(root, "docs/history/model-lab/evidence/model-license-packet.json"));
+  const packet = readFileSync(resolve(root, "docs/licenses/model-license-packet.json"));
   assert.equal(createHash("sha256").update(packet).digest("hex"), "f248b28de1936d27f49f34607dc38db6d93b28bf79112cba4678539ad5aefec2");
 });

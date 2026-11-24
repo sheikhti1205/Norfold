@@ -10,7 +10,7 @@
 -- hosted project): the R10 worktree's own migration chain plus one fixture
 -- file applied cleanly (the harness prints APPLIED 64/63 because its numerator
 -- includes that fixture, FAILED 0). The separate executable assertion file
--- sessions/trust-backend/harness/r10/verify_r10_flags.sql reported 39 successful
+-- verify_r10_flags.sql reported 39 successful
 -- SELECT probes including subject switches, zero EMPTY and zero ERROR:
 --   F2/F3/F7/F8/F9/F10/F11 PASS for BOTH feed and numeric-coordinate nearby readers
 --     (including one-direction unblock retaining the reverse block's flag)
@@ -22,13 +22,12 @@
 -- RETURNS TABLE record. It now uses proargnames/proargmodes/proallargtypes.
 -- Expected-denial DO blocks catch only 42501; unexpected permission raises an
 -- uncaught error and fails the harness, rather than counting as success.
--- Reproduction: sessions/trust-backend/harness/r10-verify-final.sh; raw log:
--- sessions/trust-backend/harness/r10-final-logs/engine.log.
+-- Reproduction: r10-verify-final.sh; raw log in the R10 run directory.
 -- F7/F12 additionally ran nine nonempty snapshots across four separate
 -- baseline/R10 blocked/empty engine runs: fields/rows/order/cursor windows identical after
 -- removing only blocked_author; both readers clamp 50 requested rows to 20;
 -- feed total_count=27 and numeric-radius nearby total_count=26 on the fixture.
--- Reproduction: sessions/trust-backend/harness/r10-f12-differential.py.
+-- Reproduction: r10-f12-differential.py.
 -- Hosted execution remains unmeasured; local engine evidence is not hosted proof.
 --
 -- No PostgreSQL engine, no local cluster, no hosted project and no PostgREST
@@ -51,7 +50,7 @@
 --     migration chain to a throwaway local PostgreSQL and drives it with
 --     `set role authenticated` plus
 --     `set_config('request.jwt.claim.sub', '<uid>', false)`; the same shape as
---     harness/chain.mjs used for B1. Record the tallies in an evidence file.
+--     the harness runner used for B1. Record the tallies in an evidence file.
 --   * Hosted: only on a DISPOSABLE test project under the
 --     supabase/tests/run-live.sh conventions
 --     (TEST_SUPABASE_URL, TEST_SUPABASE_PUBLISHABLE_KEY, TEST_USER_A_JWT,

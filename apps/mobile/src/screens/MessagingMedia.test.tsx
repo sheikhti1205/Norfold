@@ -586,7 +586,7 @@ it("holds the screen on a blurred restore pop-up while a large gap fills in", as
   const field = screen.getByRole("textbox", { name: "Message" });
   fireEvent.change(field, { target: { value: "Keep this draft" } });
   m.chat.threadSync = { conversationId: "chat", mode: "blocking", missing: 11, reason: "gap" }; rendered.rerender(thread());
-  // Owner direction 2026-11-06: more than ten missing messages is a restore, not
+  // More than ten missing messages is a restore, not
   // a status line. The reader is held on a non-dismissible pop-up, with the page
   // blurred behind it, until reconciliation publishes its durable result.
   const dialog = screen.getByRole("dialog", { name: "Restoring messages" });
@@ -1259,7 +1259,7 @@ it("keeps nearby photos from one selection as separate rows with their own actio
   const run = photoRun(3); run.messages[2]!.readByPeer = true;
   m.messages = run.messages; m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  // Owner direction 2026-11-20: fewer than four items never collapse into an
+  // Fewer than four items never collapse into an
   // album, so each photo keeps its own row, caption, receipt and menu.
   expect(screen.queryByRole("listitem", { name: /photos/i })).toBeNull();
   expect(document.querySelector(".fb-chat-run")).toBeNull();
@@ -1291,7 +1291,7 @@ it("keeps each photo's own caption instead of promoting one inside an album", as
   run.messages[2]!.body = "And this";
   m.messages = run.messages; m.media = run.media; m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  // Owner direction 2026-11-20: four items form the album, and a caption never
+  // Four items form the album, and a caption never
   // moves to a leader or to a neighbour - each stays inside its own cell.
   expect(screen.getByRole("listitem", { name: "4 photos" })).toBeTruthy();
   expect(document.querySelectorAll("[data-chat-message]")).toHaveLength(4);
@@ -1862,7 +1862,7 @@ it("keeps a Klipy row out of a photo album and leaves photo timestamps alone", a
   m.media = run.media;
   m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  // Four photos are a real album under the owner rule, and the expressive row
+  // Four photos are a real album, and the expressive row
   // is not media, so it stays outside the album untouched.
   const album = screen.getByRole("listitem", { name: "4 photos" });
   expect(album.textContent).not.toContain("norfold-media");

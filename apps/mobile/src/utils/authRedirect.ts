@@ -12,7 +12,7 @@
 
 /** Canonical production web origin. */
 export const PROD_AUTH_ORIGIN = "https://findbackapp.social";
-/** Azure Static Web Apps default hostname (secondary, still owner-controlled). */
+/** Azure Static Web Apps default hostname (secondary, still the deployment default). */
 export const AZURE_DEFAULT_AUTH_ORIGIN =
   "https://ambitious-wave-0f1b6c500.3.azurestaticapps.net";
 

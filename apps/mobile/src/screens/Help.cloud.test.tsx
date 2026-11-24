@@ -40,7 +40,7 @@ const row = (provider: ModelRecord["provider"], priceClass: ModelRecord["priceCl
   prices: [], priceClass, retrievedAt: "2026-10-21T00:00:00Z", entitlement: "untested",
 });
 
-describe("packet 11 cloud-only Chat", () => {
+describe("cloud-only Chat", () => {
   it("offers text Chat without local, photo, automatic or configure controls", () => {
     mount();
     expect(screen.getByRole("heading", { name: "Chat", level: 1 })).toBeTruthy();

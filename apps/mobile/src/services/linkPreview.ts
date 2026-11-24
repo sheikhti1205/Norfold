@@ -5,7 +5,7 @@ import { getSupabase } from "./supabaseClient";
  * Automatic server metadata for ordinary chat links, beyond the fixed YouTube
  * provider and Norfold report cards.
  *
- * Owner decision 2026-11-20: a chat link fetches its preview automatically when
+ * A chat link fetches its preview automatically when
  * it becomes visible. The app itself never contacts the linked site: it POSTs
  * the normalized address to the Norfold metadata service, which performs the
  * bounded server-side fetch. The URL therefore never appears in a GET query and

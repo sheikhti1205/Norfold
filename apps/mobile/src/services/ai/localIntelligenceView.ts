@@ -108,7 +108,7 @@ export function localSearchHelperView(descriptor: ModelDescriptor, status: Offli
   const problem = status?.lastError ?? notice;
   // Integrity failure (a checksum mismatch on a finished transfer) and an
   // installed-but-unverified file are DIFFERENT recoveries, so they get
-  // different states: packet `07` §7 pairs "Needs repair" with
+  // different states: §7 pairs "Needs repair" with
   // "Download again"; a file that is present but unverified is only
   // unproven, and the honest action is to check it.
   const integrityFailed = /checksum|verification/i.test(problem ?? "");

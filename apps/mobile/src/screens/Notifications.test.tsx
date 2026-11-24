@@ -74,7 +74,7 @@ function deferred<T>() {
 }
 
 /**
- * Packet `08` §17: the row's actions live behind one overflow trigger, and
+ * §17: the row's actions live behind one overflow trigger, and
  * every input opens the SAME floating icon rail — there is no second menu.
  */
 async function openRowActions(actor = "bob") {

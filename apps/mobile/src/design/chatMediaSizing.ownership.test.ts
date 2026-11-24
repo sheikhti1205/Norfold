@@ -235,7 +235,7 @@ describe("R19 chat photo sizing ownership", () => {
     expect(chatCss.match(/--fb-chat-media-width\s*:/g)).toHaveLength(1);
     expect(bodies(".fb-chat-page").some(body => MEDIA_WIDTH_PATTERN.test(body))).toBe(true);
     expect(mediaWidthPx).toBe(320);
-    // 20rem at the default root: the owner's compact preview, written as a
+    // 20rem at the default root: the compact preview, written as a
     // length so a 200% text setting cannot inflate it past the row it must fit.
     expect(mediaWidthPx).toBe(20 * REM_PX);
     // Photos opt into their own preference without editing the token that video,
@@ -295,7 +295,7 @@ describe("R19 chat photo sizing ownership", () => {
 
   it("bounds a 3:4 portrait to the shared height bound at desktop", () => {
     const desktop = photoPaint(804, 727, 3 / 4);
-    // The 320px bound times 3/4 gives a 240x320 box: the owner's compact
+    // The 320px bound times 3/4 gives a 240x320 box: the compact
     // preview, and the contain-fitted picture fills the box exactly.
     expect(desktop.boxWidth).toBeCloseTo(240, 5);
     expect(desktop.height).toBeCloseTo(320, 5);
@@ -1081,7 +1081,7 @@ describe("R19 media-only bubble ownership", () => {
     expect(klipyBubble).toContain("background:transparent;");
     expect(klipyBubble).toContain("border-radius:0;");
     expect(chatCss).toContain(".fb-chat-message-klipy .fb-chat-message-status { color:var(--fb-on-surface-variant); }");
-    // The label the owner asked for sits after the timestamp in the existing
+    // The label sits after the timestamp in the existing
     // status row, so CSS adds no badge, no pill and no generated text.
     expect(chatCss).not.toContain("fb-chat-expressive-kind");
     expect(chatCss).not.toMatch(/content:\s*["'](?:GIF|Sticker)["']/);

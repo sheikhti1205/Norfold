@@ -4,7 +4,7 @@
 -- push, so this file must be safe to run once against the live schema: new
 -- columns are nullable, new policies/RPCs/triggers only add objects, no row
 -- rewrites, no user/auth data removal, no edits to any applied migration.
--- LIVE-PENDING (owner-deferred, 2026-10-12): verify on the live project
+-- LIVE-PENDING (2026-10-12): verify on the live project
 -- before PASS — (a) the new RPCs respond, (b) the cooldown gate rejects a
 -- different verified phone with PHONE_CHANGE_COOLDOWN while first/same-phone
 -- succeeds, (c) the avatar key RPC accepts an owned key and rejects cross-uid

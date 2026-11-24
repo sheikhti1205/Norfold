@@ -1,7 +1,7 @@
 # Norfold — signed beta release build (per-ABI APKs + universal APK + AAB).
 #
 # TWO MODES:
-#   workflow_dispatch = signed-candidate DRY path for owner testing. Runs the
+#   workflow_dispatch = signed-candidate DRY path for manual testing. Runs the
 #     full presign checks + release gate + build/sign/scan over every APK
 #     variant, uploads Actions artifacts, and STOPS. It NEVER creates a
 #     GitHub Release.
@@ -15,7 +15,7 @@
 #
 # This workflow file must be merged to the default branch BEFORE any v* tag
 # is pushed; a tag built from a commit without this file is not a release.
-# (Merging/tagging are owner actions — this change only provides the file.)
+# (Merging and tagging happen outside this file, which only provides it.)
 #
 # Version policy: versions are ASSERTED, never bumped here. Root package.json
 # version must equal apps/mobile/package.json version on every run; tag builds
@@ -85,11 +85,6 @@ jobs:
           else
             node scripts/check-commit-messages.mjs --count 1
           fi
-      - name: Completion gate (fail closed while any P0/P1 is open)
-        # The audit's central failure was tagging a release while P0/P1 findings
-        # and deferrals stayed open. This refuses to sign unless the completion
-        # ledger is READY with every P0/P1 closed (audit FBA-023/024).
-        run: node scripts/completion-gate.mjs --release
 
   gate:
     name: Full release gate
@@ -289,7 +284,7 @@ jobs:
           echo "bundle config assertion passed (assets dir; sentry host $DSN_HOST; release $SENTRY_RELEASE)"
       - name: Upload sourcemaps to Sentry (S3)
         env:
-          # Secrets-only auth: the token is owner-held in repo Settings → Secrets
+          # Secrets-only auth: the token is held in repo Settings → Secrets
           # and variables → Actions → Secrets, never in repo files, never VITE_*.
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |

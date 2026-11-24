@@ -179,7 +179,7 @@ export function AdvancedSearchFilters({
   };
   /**
    * The LOST/FOUND type. The CONTROL lives in this sheet with every other
-   * filter (owner order 2026-11-14: no permanent All/Lost/Found rail on the
+   * filter (there is no permanent All/Lost/Found rail on the
    * search page), so `value` is the live choice and `onChange` writes it to
    * the same URL contract the old segmented control used.
    */

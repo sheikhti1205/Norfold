@@ -1,7 +1,7 @@
 import { rejectNonEmptyBody } from "../_shared/emptyPost.ts";
 import { withSupabase, type SupabaseEnv } from "npm:@supabase/server@1.6.0";
 
-// Chat-file lifecycle sweep (owner audit 2026-11-15).
+// Chat-file lifecycle sweep (audit 2026-11-15).
 //
 // A file message carries its Storage object key inside the message body; deleting
 // the message clears the body and leaves the object behind. Nothing else removes
@@ -154,7 +154,7 @@ interface Candidate {
  * longer restarts the next run at the root: every completed page advances a
  * persisted `{queue, folder, offset}` cursor. A bucket with thousands of
  * objects is therefore covered over several runs instead of re-reading the
- * first 500 forever (owner audit 2026-11-17).
+ * first 500 forever (audit 2026-11-17).
  *
  * Deletions happen page by page. After a page is fully processed the offset
  * advances by the page length minus the objects removed from it, so entries

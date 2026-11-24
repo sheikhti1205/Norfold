@@ -209,7 +209,7 @@ jobs:
           supabase functions deploy chat-wake --no-verify-jwt --yes
       # NOTE: delete-account is intentionally NOT deployed by this workflow.
       # No delete-account pattern exists here or elsewhere in CI; it deploys
-      # separately, owner-side, after explicit auth review.
+      # separately, by hand, after explicit auth review.
       - name: Deploy chat-media
         if: inputs.deploy_chat_media
         run: |

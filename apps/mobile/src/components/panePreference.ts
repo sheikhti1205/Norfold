@@ -1,9 +1,9 @@
 /**
  * Per-device width/collapse preference for the desktop conversation list pane.
  *
- * Packet `07` asks for a user-resizable pane (about 260–480px, ~320px by
- * default) that collapses to an avatar rail and remembers what this device
- * chose. Nothing here is account data: it is a local layout habit, so it lives
+ * The desktop Chat design asks for a user-resizable pane (about 260–480px,
+ * ~320px by default) that collapses to an avatar rail and remembers what this
+ * device chose. Nothing here is account data: it is a local layout habit, so it lives
  * in `localStorage` and never syncs.
  *
  * Pure module (no React): the split view owns the DOM, this owns the bounds and
@@ -20,7 +20,7 @@ export type PaneBounds = {
   collapsedWidth: number;
 };
 
-/** Packet-07 illustrative bounds, kept in one place for the UI and its tests. */
+/** Illustrative bounds, kept in one place for the UI and its tests. */
 export const CHAT_PANE: PaneBounds = {
   storageKey: "norfold.chat.pane.v1",
   defaultWidth: 320,

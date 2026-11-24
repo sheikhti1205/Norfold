@@ -5,7 +5,7 @@ const css = readFileSync(new URL("./Profile.css", import.meta.url), "utf8");
 const flat = css.replace(/\s+/g, " ");
 
 /**
- * Owner defect 2026-11-17: the connected-account labels must stay on one line
+ * The connected-account labels must stay on one line
  * at every width. The first repair gave every Profile row's title priority over
  * its value, which stopped long settings descriptions from shrinking and made
  * the page scroll horizontally at 320dp. These checks keep that exception on

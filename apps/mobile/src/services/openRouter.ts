@@ -51,7 +51,7 @@ export class OpenRouterError extends Error {
 }
 
 /**
- * Optional verified capability hint for the output reservation (packet R1).
+ * Optional verified capability hint for the output reservation.
  * When absent — or when the window stays unknown — the client keeps the
  * legacy reservation, so current callers observe byte-identical payloads.
  * Full budget-driven input caps remain a caller-contract decision for H2/A1.

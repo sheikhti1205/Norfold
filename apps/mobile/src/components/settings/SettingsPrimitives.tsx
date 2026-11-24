@@ -44,7 +44,7 @@ export interface SettingsPageProps {
  *
  * The bar holds the escape control and the title, nothing else. Settings search
  * is owned by the floating window's top search, so a second global search icon
- * and a notification bell never appear here (owner order 2026-11-13).
+ * and a notification bell never appear here.
  */
 export function SettingsPage({ title, description, children, backTo, backState, backLabel = "Back to Settings", className = "", headingLevel = 1, autoFocus = true }: SettingsPageProps) {
   const heading = useRef<HTMLHeadingElement>(null);
@@ -223,7 +223,7 @@ function themeWindowStyle(mode: ColorMode): CSSProperties {
 /**
  * One navigation choice as a picture, never as a row with a tick.
  *
- * Owner direction `docs/design/APPEARANCE-CHOOSERS.md` §4: two tiles side by
+ * Per `docs/design/APPEARANCE-CHOOSERS.md` §4: two tiles side by
  * side at 4 by 3, the bottom bar holding five destinations and the rail holding
  * four, so the two pictures differ in shape as well as orientation. Selection is
  * the shared ring state (§D-A2), and the label under the tile is the tile's only

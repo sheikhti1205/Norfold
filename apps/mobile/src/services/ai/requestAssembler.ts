@@ -1,6 +1,6 @@
 /**
  * Request assembler: builds a `NormalizedRequest` from trust-layered inputs
- * (packet R1, Context & Memory Contract §1–2).
+ * (Context & Memory Contract §1–2).
  *
  * Layer order on every send: app-controlled immutable system policy, current
  * versioned knowledge (rebuilt by the caller each call, never summarized),

@@ -1,4 +1,4 @@
--- Owner audit 2026-11-15 (P1): close the chat-file lifecycle gap while the
+-- Audit 2026-11-15 (P1): close the chat-file lifecycle gap while the
 -- bucket is still empty.
 --
 -- WHAT WAS MISSING.

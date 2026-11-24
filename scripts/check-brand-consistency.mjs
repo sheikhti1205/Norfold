@@ -14,7 +14,7 @@ export function checkBrandConsistency({read=path=>readFileSync(resolve(root,path
  assert.equal(manifest.generation,token);
  assert.equal(manifest.master.path,`${brand}/brand-tile-master.png`);
  assert.equal(manifest.master.sha256,masterSha);
- assert.equal(sha(read(manifest.master.path)),masterSha,'owner master changed');
+ assert.equal(sha(read(manifest.master.path)),masterSha,'master asset changed');
  assert.equal(manifest.generator.path,'scripts/generate-brand-assets.py');
  assert.equal(sha(read(manifest.generator.path)),manifest.generator.sha256,'generator differs; regenerate outputs');
  const expected=[];
@@ -62,7 +62,7 @@ export function checkBrandConsistency({read=path=>readFileSync(resolve(root,path
  assert.ok(icons.length>=3,'notification presenter lost its channels');
  assert.deepEqual(icons.filter(icon=>icon!=='setSmallIcon(R.drawable.ic_stat_findback)'),[],
   'every notification must use the canonical status icon');
- // Owner feedback 2026-11-13 removed the duplicate mark from Home's app bar;
+ // The duplicate mark no longer sits on Home's app bar;
  // the canonical mark now lives once, in the shell's navigation rail.
  for(const screen of ['Splash','About'])assert.ok(text(`apps/mobile/src/screens/${screen}.tsx`).includes('<BrandMark'));
  assert.ok(text('apps/mobile/src/components/Shell.tsx').includes('<BrandMark'),'the shell rail carries the canonical mark');

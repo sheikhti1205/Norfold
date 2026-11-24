@@ -67,7 +67,7 @@ function file(name: string, type: string, size = 1000): File {
   return new File([new Uint8Array(size)], name, { type });
 }
 
-describe("comment video intake is closed (packet `08` §7)", () => {
+describe("comment video intake is closed (§7)", () => {
   it("aligns the retained video cap exactly with the client and Storage cap (no drift)", () => {
     // History keeps rendering, so the cap stays pinned to the same constant the
     // bucket enforces — a stored row can never be judged by a different limit.

@@ -6,7 +6,7 @@
  * https://platform.openai.com/docs/guides/images-vision (retrieved 2026-09-25).
  *
  * No real key and no network: every test injects a scripted `fetch`. Live
- * provider behaviour is therefore `NOT TESTED LIVE` for this packet.
+ * provider behaviour is therefore `NOT TESTED LIVE` for this provider.
  */
 import { describe, expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";

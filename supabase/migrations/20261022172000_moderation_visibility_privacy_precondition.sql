@@ -16,7 +16,7 @@
 --
 -- ---------------------------------------------------------------------------
 -- WHY THE ATOM MUST MOVE AT ALL (§0.2 of
--- WORK-ORDER-CF060-B2a-REPORTS.md, reproduced because the reviewer will
+-- the CF-060 B2a work order, reproduced because the reviewer will
 -- demand the argument and not the assertion).
 --
 --   "B1 made `findback_visible_posts` a `security_invoker` view whose `WHERE`
@@ -54,8 +54,8 @@
 --   moderation_visibility and no longer needs the column grant.
 --
 -- ---------------------------------------------------------------------------
--- GATE 0 — VARIANT A (settled, measured; B2A-PREREQUISITES.md and
--- GATE0-VISIBILITY-ATOM-EVIDENCE.md).
+-- GATE 0 — VARIANT A (settled, measured; the B2a prerequisites note and
+-- the gate-0 visibility-atom evidence note).
 --
 --   "A caller with no column privilege on moderation_visibility is filtered
 --    correctly by a policy that references it, through a security_invoker
@@ -89,7 +89,7 @@
 --   never existed, and the owner still reads their own row in every state.
 --
 -- ---------------------------------------------------------------------------
--- THE FOUR MOVES (WORK-ORDER-CF060-B2a-REPORTS.md §2.7, rows 14-17):
+-- THE FOUR MOVES (the CF-060 B2a work order §2.7, rows 14-17):
 --   14  revoke select (moderation_visibility) on public.item_posts
 --   15  replace the base SELECT policy with the owner clause + the atom
 --   16  recreate public.findback_visible_posts as an explicit projection
@@ -97,9 +97,9 @@
 --       evaluated explicitly
 --
 -- ---------------------------------------------------------------------------
--- ADDITIVE ONLY (WORK-ORDER §4.1). No column is dropped, no row is rewritten,
--- no table is dropped, no DELETE runs, no backfill runs. The complete
--- guarded-drop inventory is:
+-- ADDITIVE ONLY (the CF-060 B2a work order §4.1). No column is dropped, no row
+-- is rewritten, no table is dropped, no DELETE runs, no backfill runs. The
+-- complete guarded-drop inventory is:
 --   * drop policy if exists item_posts_select_authenticated on public.item_posts
 --       — re-created immediately, in the same transaction (row 15).
 --   * drop view if exists public.findback_visible_posts
@@ -108,7 +108,7 @@
 -- its OUT columns, so `create or replace` is sufficient. A retried apply is
 -- a no-op in the same way the rest of the chain is.
 --
--- ORDER INSIDE THE FILE (B2A-PREREQUISITES.md, "Ordering hazard to respect").
+-- ORDER INSIDE THE FILE (the B2a prerequisites note, "Ordering hazard to respect").
 -- Row 16 is applied AFTER rows 15 and 14: a view recreated before the policy
 -- existed would run under the old permissive USING (true), and a revoke before the
 -- policy existed would make every client read fail 42501 for the duration of
@@ -116,7 +116,7 @@
 -- intermediate state; the order is still the order.
 --
 -- ---------------------------------------------------------------------------
--- ACL CLOSURE (ACL-CLOSURE.md, the fact-#14 default-ACL trap). Every object
+-- ACL CLOSURE (the ACL closure note, the fact-#14 default-ACL trap). Every object
 -- this file touches is closed first and then opened exactly as far as it must
 -- be:
 --   * public.item_posts: ONE revoke — the column privilege. The table-level

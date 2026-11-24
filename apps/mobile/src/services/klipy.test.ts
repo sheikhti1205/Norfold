@@ -522,7 +522,7 @@ describe("createKlipySearchController", () => {
   });
 });
 
-describe("klipy message kind fragment (owner direction 2026-11-19)", () => {
+describe("klipy message kind fragment", () => {
   const GIF = "https://media.klipy.com/a.gif";
   const STICKER = "https://media.klipy.com/s.webp";
   const pick = (kind: "gifs" | "stickers", mediaUrl: string) => ({ kind, mediaUrl });

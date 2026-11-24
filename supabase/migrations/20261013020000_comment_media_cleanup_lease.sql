@@ -18,9 +18,9 @@
 --   instead of orphaning: failures stay queued (attempts++), never lost.
 --
 -- Consumer: supabase/functions/cleanup-comment-media (service-role /
--- internal cron secret only). Scheduled trigger wiring lives owner-side
--- (pg_cron / Supabase scheduled function); this migration only provides
--- the lease/ack primitives the sweeper calls.
+-- internal cron secret only). Scheduled trigger wiring (pg_cron / Supabase
+-- scheduled function) is set up outside this repository; this migration only
+-- provides the lease/ack primitives the sweeper calls.
 -- NEVER edit any applied migration; this file only ADDS columns and
 -- CREATE OR REPLACEs the claim function beside a new ack function.
 

@@ -1,5 +1,5 @@
 /**
- * Provider registry (packet AI-024a): `ProviderId` → adapter wiring.
+ * Provider registry: `ProviderId` → adapter wiring.
  *
  * Pure adapter wiring only. Every factory receives the caller's key through
  * the standard credential-getter seam
@@ -13,7 +13,7 @@
  * - `generic` needs the caller-supplied endpoint (`genericBaseURL`);
  * - `openai` needs caller-owned framing (`assembleSystemText`).
  * Image resolution beyond the shared URL seam (`resolveImageUrl`) stays
- * packet-owned and is left unset, so image-bearing requests fail loudly in
+ * deferred and is left unset, so image-bearing requests fail loudly in
  * the adapter instead of being silently downgraded.
  */
 import { SUPPORTED_AI_PROVIDERS } from "../browserAiCredentials";
@@ -50,7 +50,7 @@ export type ProviderRegistryOptions = {
   readonly resolveKey: RegistryCredentialGetter;
   /** Test seam; defaults to the ambient fetch. No test performs a real call. */
   readonly fetchImpl?: typeof fetch;
-  /** Shared image-URL seam for the URL-based adapters. Packet-owned when set. */
+  /** Shared image-URL seam for the URL-based adapters. Caller-supplied when set. */
   readonly resolveImageUrl?: (imageId: string) => Promise<string | null>;
   /** Caller-supplied OpenAI-compatible endpoint root. Required for `generic`. */
   readonly genericBaseURL?: string;

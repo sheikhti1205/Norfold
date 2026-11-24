@@ -3,7 +3,7 @@ import type { KlipyItem } from "./klipy";
 /**
  * Recently used emoji, GIFs and stickers.
  *
- * Owner direction 2026-11-18: one picker holds all three and remembers what
+ * One picker holds all three and remembers what
  * this device used last. The history is device-local by design: it lives in
  * `localStorage` under one key and never travels to the account, another
  * device or the server. A storage that refuses (private mode, a full quota) is

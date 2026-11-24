@@ -35,7 +35,7 @@ function needsSeparator(previous: string, next: string): boolean {
  * R19-2 chat body rendering: exact visible prose with safe native links, plus
  * compact secondary previews.
  *
- * Owner correction 2026-11-20: a report, video or ordinary previewable link that
+ * A report, video or ordinary previewable link that
  * already has a preview on screen must not also print its raw URL above it. A
  * segment is omitted only when this render produced (or the parent already
  * shows) a representation; an unrepresented link keeps its safe anchor, and an

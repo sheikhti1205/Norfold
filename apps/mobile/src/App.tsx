@@ -101,7 +101,7 @@ function AppMotionConfig({ children }: { children: ReactNode }) {
 }
 
 /**
- * Owner order 2026-11-14: settings is a window, never a page. An old
+ * Settings is a window, never a page. An old
  * `/settings...` address (typed, refreshed, bookmarked, or restored from a
  * return-to after sign-in) hands its exact destination to Home as navigation
  * state, where Shell opens it in the floating window. The redirect replaces
@@ -249,7 +249,7 @@ function AppRouteTree() {
             <Route path="/forgot" element={<ForgotPassword />} />
               <Route path="/recovery" element={<Recovery />} />
               <Route path="/create-password" element={<Navigate to="/" replace />} />
-              {/* Owner order 2026-11-14: settings is a window, never a page.
+              {/* Settings is a window, never a page.
                   Every retired `/settings...` address is a replace-redirect to
                   Home; Shell opens the exact destination in the floating
                   window from the state this passes. */}

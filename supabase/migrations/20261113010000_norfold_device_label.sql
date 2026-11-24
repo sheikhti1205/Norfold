@@ -10,7 +10,7 @@
 -- Body and fences are unchanged from 20261104010000_norfold_device_authority.sql;
 -- only the device_name branch of the upsert differs.
 --
--- Local milestone WIP: applies with the rest of the device-authority chain.
+-- Local: applies with the rest of the device-authority chain.
 -- Verification pointer: supabase/tests/verify_norfold_device_authority.sql.
 begin;
 

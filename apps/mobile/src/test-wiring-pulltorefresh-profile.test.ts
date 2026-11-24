@@ -2,7 +2,7 @@
  * Worker E (M2 QA/security) — PullToRefresh profiling plan inputs for the
  * M4 device trace (FEED-03). NO refactor here: per the frozen contract, D
  * owns `PullToRefresh.tsx` and no transform/MotionValue/rAF change lands
- * until E delivers measured evidence from the owner's hardware.
+ * until measured evidence from real hardware exists.
  *
  * Source-reviewed inputs (HEAD + in-flight tree, PullToRefresh.tsx):
  * THRESHOLD=64, MAX_PULL=100, RESISTANCE=0.45; pullDistance useState set on
@@ -13,14 +13,14 @@
  * This file freezes the measurement plan as executable assertions:
  * thresholds, frame budget, scenario coverage, the touchmove-cost
  * hypothesis, and the no-refactor gate. The device trace itself is
- * owner-hardware-gated → marked NOT TESTED (it.todo), never claimed.
+ * hardware-gated → marked NOT TESTED (it.todo), never claimed.
  */
 import { describe, expect, it } from "vitest";
 
 /** Source-reviewed component constants (PullToRefresh.tsx). */
 const COMPONENT = { threshold: 64, maxPull: 100, resistance: 0.45 } as const;
 
-/** Frame budget on 60Hz owner hardware (handover 08 §Performance). */
+/** Frame budget on 60Hz hardware (handover 08 §Performance). */
 const FRAME_BUDGET_MS = 16.7;
 
 /** Scenarios handover 08 requires measuring (subset relevant to FEED-03 + gesture feel). */

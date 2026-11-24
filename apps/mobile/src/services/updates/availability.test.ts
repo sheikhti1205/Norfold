@@ -17,7 +17,7 @@ function feature(overrides: Partial<FeatureAnnouncement> = {}): FeatureAnnouncem
     destinationId: "search",
     platforms: ["web", "android"],
     acceptedBuildShas: [COMMIT],
-    acceptanceReceipt: "sessions/m2-2026-11-05/T6-ACCEPTANCE.md",
+    acceptanceReceipt: "synthetic-acceptance-receipt",
     prerequisites: ["local-search-helper"],
     ...overrides,
   };

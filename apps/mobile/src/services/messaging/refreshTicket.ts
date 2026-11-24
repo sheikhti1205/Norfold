@@ -1,6 +1,6 @@
 /**
  * Foreground message traffic and relationship/authority recovery are different
- * costs (owner handoff 2026-11-03):
+ * costs:
  *
  *   fast — flush the pending outbox, drain the newest authorized mailbox page
  *          (persist + ACK), reload local summaries. No VIEWS scan, no full

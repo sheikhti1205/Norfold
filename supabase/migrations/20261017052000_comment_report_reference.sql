@@ -1,11 +1,11 @@
 -- FindBack — typed report reference on comments (CF-060 M2).
 --
 -- WHY: the social composer can attach a photo or a GIF to a comment, but not
--- the report the comment is about — the invariant packet 10 asks for. This
+-- the report the comment is about. This
 -- file gives a comment a real pointer to a report, resolved on render through
 -- the canonical report read, so the card shows exactly what the feed shows.
 --
--- SHAPE (decided in <private>/.../trust-backend/M2-CONTRACT-DECISION.md
+-- SHAPE (decided in the trust-backend contract note
 -- §3; every constraint claim below was probed read-only against the live
 -- engine, not inferred):
 --   * The reference is a TAGGED ROW in the existing comment_attachments
@@ -39,7 +39,7 @@
 --     1–1000 rule. Enforced in the RPC, the only write path the app uses.
 --   * NO NEW VISIBILITY PREDICATE and no moderation/block kernel here. The
 --     card resolves its pointer through the existing canonical item_posts read
---     (fetchPost), which is the single place packet 10 moderation (§U) and
+--     (fetchPost), which is the single place moderation (§U) and
 --     §V blocking will filter. M2 creates no second predicate that could
 --     disagree with the feed and claims no filtering.
 --
@@ -55,11 +55,11 @@
 -- LIVE-PENDING — the *behavioural* check is what remains live-pending; the apply
 -- is not. Pushing this file to `main` WAS the apply: a Supabase GitHub
 -- integration connected to the repository auto-applies migrations on push
--- (owner-confirmed 2026-10-18; GOVERNANCE-B1-APPLY-PROVENANCE.md §5), which is why
+-- (confirmed 2026-10-18; the apply-provenance note §5), which is why
 -- this ledger row carries no `created_by`, no `idempotency_key` and no
 -- accompanying Actions run. Hosted readback on 2026-10-17 found migration head
 -- `20261017052000` with all 17 original catalogue conditions true and the
--- four-policy parity intact (M2-HOSTED-READBACK-2026-10-17.md). Re-verify with
+-- four-policy parity intact (the M2 hosted readback note). Re-verify with
 -- supabase/tests/verify_20261017052000_comment_report_reference.sql plus the
 -- read-only pg_constraint / pg_policies / pg_proc probe in the decision doc.
 

@@ -24,10 +24,10 @@
  * and this module maps `unavailable` onto `no_account` copy, which names the
  * common case (no authorized Google account) with an actionable step.
  *
- * REMAINING OWNER ACTION (single item — no console access from source):
- * install the canonical release-signed APK (package `com.findback.app`,
- * signer SHA-1 `61:E9:32:D5:14:A0:28:7B:7B:6E:49:F1:90:70:2C:F4:F7:CF:D1:8A`),
- * tap Google, and capture `adb logcat | grep GoogleAuth`. The
+ * STILL UNVERIFIED: the console-side configuration cannot be checked from
+ * source. The evidence that names it is a `GoogleAuth` logcat capture from the
+ * release-signed APK (package `com.findback.app`, signer SHA-1
+ * `61:E9:32:D5:14:A0:28:7B:7B:6E:49:F1:90:70:2C:F4:F7:CF:D1:8A`): the
  * `exceptionClass=` token names the ONE console fix: provider-configuration
  * → Google Cloud console Android OAuth client for `com.findback.app` must
  * list the release SHA-1 (plus consent test-user covering the account and

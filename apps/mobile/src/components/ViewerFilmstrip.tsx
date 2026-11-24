@@ -16,8 +16,8 @@ function FilmstripThumb({ src }: { src: string }) {
  * The library's Thumbnails plugin renders a three-photo window around the
  * current slide (`preload` is pinned to 1 so the full-size slides are not all
  * fetched) and its stylesheet hides itself on phones, so opening a photo only
- * ever showed its neighbours. The owner rule is the opposite: the strip lists
- * every previous and next photo and is browsed by scrolling it.
+ * ever showed its neighbours. The strip lists every previous and next photo
+ * and is browsed by scrolling it.
  *
  * The strip owns no index. A tap publishes the engine's own navigation action
  * with the distance to the target, so the lightbox state, the counter and the

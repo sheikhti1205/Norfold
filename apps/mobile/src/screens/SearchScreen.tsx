@@ -351,7 +351,7 @@ function ReportSearch(props: SearchScreenProps) {
       <div className="fb-search-canvas flex flex-col gap-2 pb-2 pt-2" data-testid="search-toolbar">
         {/* One search field for this screen. Everything that narrows the feed
             except the words lives behind the filter trigger, including the
-            LOST/FOUND type (owner order 2026-11-14). Smart filters run
+            LOST/FOUND type. Smart filters run
             automatically from the same words; the chips are the receipt. */}
         <div className="fb-search-row">
           <SearchField

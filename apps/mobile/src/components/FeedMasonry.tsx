@@ -1,5 +1,5 @@
 /**
- * FeedMasonry (CF-010, packet `09` §6–§9, §24): true ragged masonry.
+ * FeedMasonry (CF-010, §6–§9, §24): true ragged masonry.
  *
  * The DOM half of `masonryLayout.ts`. Cards keep their **source order in the
  * DOM** and are placed with absolute transforms, so:
@@ -21,7 +21,7 @@
  *
  * Pure module boundary: no colour, no theme, no motion policy. Placement is
  * instant on purpose — re-flowing a measured grid with an animation is
- * continuous main-thread work the packet explicitly warns against.
+ * continuous main-thread work the design explicitly warns against.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";

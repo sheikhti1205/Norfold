@@ -30,7 +30,7 @@ describe("the navigation catalogue", () => {
   });
 
   it("keeps on-device tools out of the web catalogue", () => {
-    // Owner feedback 2026-11-06: the web build has no downloads or on-device
+    // The web build has no downloads or on-device
     // inference, so neither row may be advertised or resolved there. The
     // Android build is untouched.
     const web = settingsDestinations(WEB).map((destination) => destination.id);

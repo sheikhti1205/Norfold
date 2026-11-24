@@ -13,7 +13,7 @@
 --      comments/comment_attachments/reaction+rating reads;
 --   5. report-photo cleanup queue (delete -> object bytes removed, acked);
 --   6. abandoned staging TTL purge;
---   7. comment media new-write governance (photos only) and legacy video kept
+--   7. comment media new-write rules (photos only) and legacy video kept
 --      readable;
 --   8. focused FK indexes and the remaining hot RLS initplan call.
 --

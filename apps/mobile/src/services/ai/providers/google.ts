@@ -1,5 +1,5 @@
 /**
- * Google Gemini direct BYOK provider adapter (packet P-google).
+ * Google Gemini direct BYOK provider adapter.
  *
  * Official shape verified 2026-09-25 (see `temp-Com/P-google.log.md`):
  * - `POST https://generativelanguage.googleapis.com/v1beta/models/<model>:streamGenerateContent?alt=sse`
@@ -83,9 +83,9 @@ export type GoogleImagePayload = {
 };
 
 /**
- * Injected seams. They are structural so this packet never imports the vault
+ * Injected seams. They are structural so this adapter never imports the vault
  * (K1), the media store, or the instruction builder — each of those files
- * stays owned by its own packet and is wired in later by the registry.
+ * stays owned by its own module and is wired in later by the registry.
  */
 export type GoogleAdapterDeps = {
   /** Account-scoped vault lookup. Returns null when no key is stored. */

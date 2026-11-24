@@ -156,7 +156,7 @@ describe("QA L: consumer-tier AI screens render no raw technical terms", () => {
   );
 
   it("no consumer route reaches a benchmark or CPU/GPU screen any more", async () => {
-    // Owner direction 2026-10-25: the benchmark/CPU-GPU surface is not a
+    // The benchmark/CPU-GPU surface is not a
     // consumer surface at all, so the route must not exist and no consumer
     // screen may link to it.
     for (const [route, make] of AI_SCREENS) {

@@ -4,7 +4,7 @@ import "./EmojiPicker.css";
 /**
  * A small emoji picker that ships with the app.
  *
- * Owner order 2026-11-12 (R5): emoji missing from the composers. No new
+ * R5: emoji missing from the composers. No new
  * dependency was added for it: the palette is a curated list, grouped the way
  * people look for them, with a keyword search over the group, the emoji name
  * and a handful of synonyms.

@@ -598,7 +598,7 @@ export function ChatComposer({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(event) => {
-            // Owner order 2026-11-12: on a desktop pointer, Enter sends and
+            // On a desktop pointer, Enter sends and
             // Shift+Enter breaks the line. Touch keeps Enter as a newline and
             // the Android keyboard path is untouched.
             if (event.key !== "Enter" || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
@@ -746,7 +746,7 @@ export function ChatComposer({
           </>
         )}
         {/* Emoji stays in the control row whether or not attachments exist:
-            the owner asked for it while composing, not only before typing. */}
+            it stays available while composing, not only before typing. */}
         <EmojiPickerButton onPick={pickEmoji} disabled={disabled || busy}
           className="flex min-h-[48px] min-w-[48px] shrink-0 items-center justify-center rounded-full border border-outline-variant text-on-surface-variant hover:bg-surface-container disabled:opacity-60" />
         {/* Trailing element keeps the control row width stable across states. */}

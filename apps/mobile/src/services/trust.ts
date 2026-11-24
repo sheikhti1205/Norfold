@@ -179,7 +179,7 @@ export interface InteractionLimit {
 /** The base number and the limit derived from it. */
 export interface InteractionLimits extends InteractionLimit {
   /**
-   * The ONE base number every ceiling is a multiple of (owner decision O3):
+   * The ONE base number every ceiling is a multiple of:
    * NORMAL is base, TRUSTED is twice it, the report and feedback ceilings are
    * twice it.
    */

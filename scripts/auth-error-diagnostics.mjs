@@ -1,4 +1,4 @@
-/** Owner-only, read-only Auth log classification. Never returns raw log text. */
+/** Read-only Auth log classification. Never returns raw log text. */
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 const repo='sheikhti1205/Norfold',owner='sheikhti1205',project='nfjhpigbsyyoaaktfaev';

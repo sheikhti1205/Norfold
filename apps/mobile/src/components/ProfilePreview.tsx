@@ -16,8 +16,7 @@ import "./ProfilePreview.css";
 /**
  * The person card: who this is, and the one thing to do about it.
  *
- * Owner direction 2026-11-18 (reference: the Facebook hover card). Every place
- * a person appears carries the same card, not only desktop:
+ * Every place a person appears carries the same card, not only desktop:
  * - fine pointer: a short rest or a key focus opens it;
  * - touch: a tap opens it and hands it focus, and the card is the way to the
  *   profile, the friend action and the conversation. An activation with no
@@ -426,7 +425,7 @@ function PreviewCard({ person, className, finePointer, openOnFocus, children }: 
                 )}
               </div>
             ) : state.status === "ready" ? (
-              // Owner direction 2026-11-18: a missing bio is stated, not left
+              // A missing bio is stated, not left
               // as a blank gap that reads like a failed load.
               <p className="fb-profile-preview-empty" data-testid="profile-preview-no-bio">No bio</p>
             ) : null}

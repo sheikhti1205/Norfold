@@ -1,5 +1,5 @@
 /**
- * xAI (Grok) BYOK provider adapter (packet AI-020c).
+ * xAI (Grok) BYOK provider adapter.
  *
  * Wire shape follows xAI's OpenAI-compatible API:
  * - `POST https://api.x.ai/v1/chat/completions`,
@@ -16,7 +16,7 @@
  *   pricing is ever invented).
  *
  * No live key is held here: the key arrives per call via the injected
- * `getApiKey` resolver (owned by the credential packet). Without an owner
+ * `getApiKey` resolver (owned by the credential store). Without an owner
  * key every live path is NOT TESTED LIVE. Single attempt only — this
  * adapter never performs a paid or cross-provider photo retry on its own,
  * and it never logs prompt or photo content (no console usage at all).

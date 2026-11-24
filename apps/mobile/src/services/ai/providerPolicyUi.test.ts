@@ -1,8 +1,8 @@
 /**
- * Worker E (M2 QA/security) — paid-consent + provider-entitlement +
+ * Paid-consent, provider-entitlement and
  * no-cross-provider-photo policy battery.
  *
- * Method: test through C's PUBLIC policy functions only —
+ * Method: test only through the public policy functions —
  * `modelPolicy` (defaultSelection, switchAccountSelection,
  * authorizePaidSelection, resolveSelection), `providerContract`
  * (isSelectionAuthorized, priceClassFromLines, hasNoInlineImageBytesOrKeys),
@@ -359,9 +359,10 @@ describe("no-cross-provider-photo — requests carry id references only (AI-13/C
 });
 
 describe("controller lastError hygiene — provider echoes never leak keys/prompts (SEN-03/AI-12)", () => {
-  // C's public sanitizeControllerError clips + scrubs raw provider error text
-  // before it reaches ControllerState.lastError (which B renders and which
-  // may flow into Sentry breadcrumbs). Tested through the public export only.
+  // The public sanitizeControllerError clips + scrubs raw provider error text
+  // before it reaches ControllerState.lastError (which the chat UI renders and
+  // which may flow into Sentry breadcrumbs). Tested through the public export
+  // only.
   const SYN_KEY = ["sk", "synthetic"].join("-") + "-abc123XYZ";
   const PROMPT = "my lost black wallet near central park";
 

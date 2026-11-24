@@ -587,7 +587,7 @@ it("leaves the app name to the shell's rail anchor, not the thread header", asyn
   const header = back.closest("header.fb-chat-header");
   expect(header).not.toBeNull();
   // The shell owns the one outside wordmark, anchored to the rail itself. A
-  // thread header never positions or copies it (owner direction 2026-11-18).
+  // thread header never positions or copies it.
   expect(header!.querySelector(".fb-nav-outside-brand")).toBeNull();
   expect(header!.textContent).not.toContain("Norfold");
   expect(screen.getByRole("heading", { level: 1, name: "Conversation" })).toBeTruthy();

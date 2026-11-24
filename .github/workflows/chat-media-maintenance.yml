@@ -21,7 +21,7 @@
 # Trigger: schedule + manual dispatch ONLY. Never on push/tag: a code push must
 # not sweep production Storage.
 #
-# Required repo configuration (owner actions):
+# Required repo configuration (set by hand in repo Settings):
 #   Secrets:   SUPABASE_SECRET_KEY  (project secret key, service-role equivalent)
 #   Variables: SUPABASE_PROJECT_REF
 #

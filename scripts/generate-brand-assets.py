@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Deterministic current Norfold derivatives. No tracing or invented geometry.
 
-The Oct19 owner master supersedes the historical Oct09 logo2-master.jpg.
+The Oct19 master supersedes the historical Oct09 logo2-master.jpg.
 Tile keying is promoted verbatim in algorithm from the private home-chrome
 derive-brand-tile.py: threshold, close/fill footprint, crop, pad, Lanczos.
 Only monochrome surfaces key the white interior to alpha (not a second tile).
@@ -38,7 +38,7 @@ def square(im, size):
 def prepared():
     data = (ROOT / MASTER).read_bytes()
     if sha(data) != MASTER_SHA:
-        raise ValueError('Owner master hash changed; review provenance before regenerating')
+        raise ValueError('Master image hash changed; review provenance before regenerating')
     master = Image.open(io.BytesIO(data)).convert('RGB')
     ink = master.convert('L').point(lambda v: 255 if v < 128 else 0)
     closed = ink.filter(ImageFilter.MaxFilter(7))
@@ -99,7 +99,7 @@ def generate():
     for variant in ('dark', 'light'):
         save(f'{BRAND}/brand-tile-{variant}.png', tiles[variant], 'historical exact tile keying')
         save(f'{BRAND}/brand-mark-{variant}.png', black if variant == 'dark' else white,
-             'owner ink to monochrome alpha')
+             'master ink to monochrome alpha')
 
     def inset(im, size, art_size, background=(0, 0, 0, 0)):
         canvas = Image.new('RGBA', (size, size), background)
@@ -146,7 +146,7 @@ def generate():
         side = round(min(size) * .2)
         art = white.resize((side, side), Image.Resampling.LANCZOS)
         im.alpha_composite(art, ((size[0] - side) // 2, (size[1] - side) // 2))
-        save(f'{RES}/{directory}/splash.png', im, 'centered owner ink, retained #1a1a1a background')
+        save(f'{RES}/{directory}/splash.png', im, 'centered master ink, retained #1a1a1a background')
 
     manifest = {'generation': TOKEN, 'master': {'path': MASTER, 'sha256': MASTER_SHA},
                 'generator': {'path': 'scripts/generate-brand-assets.py',

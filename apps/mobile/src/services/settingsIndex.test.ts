@@ -17,7 +17,7 @@ describe("settingsIndex", () => {
         "/settings/account",
         "/settings/updates",
         "/settings/accessibility",
-        // Device management (packet 05/06 consumer surface) postdates the
+        // Device management (the consumer surface) postdates the
         // 2026-10-03 route map like the rows above.
         "/settings/devices",
         "/settings/ai",
@@ -25,11 +25,11 @@ describe("settingsIndex", () => {
         "/settings/ai/privacy",
         "/settings/appearance",
         "/settings/diagnostics",
-        // CF-010 (packet `09` §6, §23): the feed layout preference is a settings
+        // CF-010 (§6, §23): the feed layout preference is a settings
         // row like the others. It postdates the 2026-10-03 route map this test
         // was written against.
         "/settings/feed-layout",
-        // Local intelligence (packet `07` §1/§6) is the consumer owner of the
+        // Local intelligence (§1/§6) is the consumer owner of the
         // on-device local tools; it also postdates that route map.
         "/settings/local-intelligence",
         // The consumer AI screens added with the cloud-only Chat and the

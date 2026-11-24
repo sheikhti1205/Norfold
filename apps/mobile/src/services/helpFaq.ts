@@ -431,7 +431,7 @@ function unrecognisedTerms(question: string): readonly string[] {
  * and declines to guess, instead of denying a shipped feature — and it is pinned
  * on both sides of the band by `helpFaq.test.ts` ("keeps the one-unreadable
  * probe a non-asserting claim about the named term"). Recorded as NIT-3 in
- * ACCEPTANCE-CF070-RETRY9-RESIDUALS.md. Tightening the bound to zero unreadable
+ * the CF-070 retry-9 acceptance record. Tightening the bound to zero unreadable
  * terms would refuse those questions instead; that is a different product
  * choice, and it is not the one taken here.
  */

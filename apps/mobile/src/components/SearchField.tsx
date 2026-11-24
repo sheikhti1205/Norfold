@@ -10,8 +10,8 @@ import "./searchField.css";
  * Every search surface renders this pill: Home's expanded row, the global
  * search overlay, the report search page, and Connect. The field owns the
  * geometry, the leading magnifier slot, the elided prompt and the clear
- * action, so a surface cannot grow a second search-bar style of its own
- * (owner order 2026-11-14). Surface actions that do not edit the text
+ * action, so a surface cannot grow a second search-bar style of its own.
+ * Surface actions that do not edit the text
  * (filters, close) live beside the pill, never inside it.
  *
  * `leading` replaces the magnifier when the field is the expanded state of a

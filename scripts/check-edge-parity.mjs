@@ -18,13 +18,13 @@
  * Exit codes: 0 all CURRENT, 1 any STALE/MISSING, 2 usage error.
  *
  * ---------------------------------------------------------------------------
- * DEPLOYMENT PLAN (owner-side; this script only reports, never deploys):
+ * DEPLOYMENT PLAN (by hand; this script only reports, never deploys):
  *   1. push-dispatch: redeploy only after the push-secrets probe
  *      (scripts/check-push-config.mjs) reports all PRESENT. Redeploy command
- *      (owner runs): supabase functions deploy push-dispatch --no-verify-jwt.
+ *      (run manually): supabase functions deploy push-dispatch --no-verify-jwt.
  *   2. cleanup-comment-media: deploy ONLY after migration
  *      20261013020000 (comment_media_cleanup_lease) is live on the target
- *      project. Deploy command (owner runs):
+ *      project. Deploy command (run manually):
  *      supabase functions deploy cleanup-comment-media [--no-verify-jwt per
  *      its invocation contract].
  *   3. reply-comment: redeploy ONLY if this checker proves STALE
@@ -33,9 +33,9 @@
  *   4. delete-account: NOT covered by .github/workflows/backend-deploy.yml
  *      (that workflow patterns only push-dispatch/reply-comment plus
  *      the newly added cleanup-comment-media). delete-account deploys
- *      separately, owner-side, after explicit auth-review — never silently
+ *      separately, by hand, after explicit auth-review — never silently
  *      added to the shared backend pipeline by this change.
- * Actual deploys are owner-side; CI calls this checker read-only.
+ * Actual deploys are manual; CI calls this checker read-only.
  * ---------------------------------------------------------------------------
  *
  * Usage:

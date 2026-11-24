@@ -57,7 +57,7 @@
 .fb-chat-identity { display:flex; align-items:center; gap:.6rem; width:100%; min-height:44px; text-align:start; }
 .fb-chat-identity-copy { min-width:0; flex:1; overflow:hidden; }
 .fb-chat-identity-name { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-/* Dock thread header (owner direction 2026-11-20): circular avatar, the name
+/* Dock thread header: circular avatar, the name
    and the real relationship line stacked in the identity, and the four
    existing window controls on the same 44px top line, 8px apart. The header
    is chrome, not a new surface: it adds no width, paint, elevation or filter
@@ -265,8 +265,8 @@
 .fb-chat-message .fb-chat-klipy { display:block; width:var(--fb-chat-klipy-width, 192px); height:auto;
   max-width:100%; aspect-ratio:1; object-fit:contain; border-radius:.6rem; }
 /* A known GIF is preview media, so it takes the same bounded box as a photo
-   preview. A known sticker is expression, not a picture, and stays smaller: the
-   owner's reference gives it about 56% of the picture width. */
+   preview. A known sticker is expression, not a picture, and stays smaller:
+   about 56% of the picture width. */
 .fb-chat-message .fb-chat-klipy[data-media-kind="gif"] {
   width:var(--fb-chat-photo-width, 320px); max-height:var(--fb-chat-photo-height, min(320px, 50vh)); }
 .fb-chat-message .fb-chat-klipy[data-media-kind="sticker"] {
@@ -400,7 +400,7 @@
    message cap above already makes a preview relative to the transcript, while a
    length keeps the cap from growing without bound on a wide monitor and from
    growing at all when a reader raises the text size to 200%. At the default root
-   these are the owner's 20rem preview, 12rem unknown expressive, 11rem sticker,
+   these are the 20rem preview, 12rem unknown expressive, 11rem sticker,
    plus a separate height bound so one tall picture cannot fill the screen. A
    preview smaller than its cap keeps its own size: nothing here upscales art. */
 .fb-chat-page { --fb-chat-media-width: 320px; --fb-chat-photo-width: 320px;
@@ -637,14 +637,14 @@ a.fb-chat-context:hover, a.fb-chat-context:focus-visible { text-decoration:under
 .fb-chat-row-meta { display:flex; flex-direction:column; align-items:flex-end; flex:none; gap:.3rem; font-size:.75rem; color:var(--fb-on-surface-variant); }
 .fb-chat-row-meta time { font-variant-numeric:tabular-nums; }
 
-/* One optional backup prompt above the conversation list (packet 06). */.fb-chat-backup-prompt { display:flex; flex-direction:column; gap:.75rem; margin:0 .75rem .75rem; padding:.9rem 1rem; border:1px solid var(--fb-outline-variant); border-radius:.9rem; background:var(--fb-surface-container); }
+/* One optional backup prompt above the conversation list. */.fb-chat-backup-prompt { display:flex; flex-direction:column; gap:.75rem; margin:0 .75rem .75rem; padding:.9rem 1rem; border:1px solid var(--fb-outline-variant); border-radius:.9rem; background:var(--fb-surface-container); }
 .fb-chat-backup-prompt h2 { margin:0; font-size:1rem; font-weight:650; }
 .fb-chat-backup-prompt p { margin:.35rem 0 0; font-size:.875rem; line-height:1.45; color:var(--fb-on-surface-variant); }
 .fb-chat-backup-actions { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; }
 .fb-chat-backup-settings { font-size:.8125rem; color:var(--fb-primary); text-decoration:underline; }
 .fb-chat-backup-error { color:var(--fb-error) !important; }
 
-/* Desktop Chat (packet 07): a wide pane keeps a 48rem measure for the thread's
+/* Desktop Chat: a wide pane keeps a 48rem measure for the thread's
    own status rows instead of stretching a short line across the whole monitor.
    The transcript itself owns the pane gutters (see below); phones are narrower
    than the rail by construction. */

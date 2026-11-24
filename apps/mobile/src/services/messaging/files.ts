@@ -2,7 +2,7 @@ import { getSupabase, getSupabaseBackendUrl } from "../supabaseClient";
 import { ApiError } from "../session";
 
 /**
- * Conversation files (owner order 2026-11-12 R4; widened 2026-11-15).
+ * Conversation files (widened 2026-11-15).
  *
  * A conversation carries any ordinary file: documents, images, video, audio,
  * archives and containers this app has never heard of. The bytes travel as a

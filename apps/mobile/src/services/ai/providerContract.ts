@@ -2,7 +2,7 @@
  * Shared provider-independent AI contract.
  *
  * This file freezes the cross-provider task/request/memory shapes that later
- * packets build on. It is intentionally free of networking, storage, and
+ * work builds on. It is intentionally free of networking, storage, and
  * provider-specific behavior: no fetch, no endpoint strings, no model
  * identifiers, no credentials.
  *

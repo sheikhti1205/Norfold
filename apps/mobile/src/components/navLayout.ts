@@ -1,6 +1,5 @@
 /**
- * Primary-navigation layout (owner ruling 4(e), three-way preference
- * 2026-11-18; phone-rail correction 2026-11-18).
+ * Primary-navigation layout.
  *
  * `auto` uses the rail where a side column fits and the bottom bar otherwise.
  * `rail` is the reader's choice on every width: it renders the in-flow column

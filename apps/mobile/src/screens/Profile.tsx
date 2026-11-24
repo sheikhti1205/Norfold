@@ -285,7 +285,7 @@ function VerificationChip({
  * Profile landing: who you are, what is connected to the account, and the
  * places the account can take you.
  *
- * Owner direction 2026-11-14 (references: the enlarged-photo profile headers):
+ * The enlarged-photo profile headers are the reference:
  * the photo is the centre of the page with its own edit control, the name is
  * large and editable in place, the handle copies on press, and verification is
  * a pair of chips rather than a paragraph. Connected accounts sit directly
@@ -293,8 +293,8 @@ function VerificationChip({
  * navigating away. Sign-in and account controls are on the same screen.
  *
  * Chat settings (contact rules, message preferences, backup) live in Chat only:
- * this page is identity, verification and sign-in security (owner order
- * 2026-11-14), never a second door to the same controls.
+ * this page is identity, verification and sign-in security, never a second door
+ * to the same controls.
  *
  * The reputation label stays on Profile; ratings and recoveries have their own
  * Settings destination.

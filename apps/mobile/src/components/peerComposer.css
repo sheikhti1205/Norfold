@@ -1,5 +1,5 @@
 /* Peer composer: independent floating controls, no enclosing capsule.
-   Owner direction 2026-11-18: the field, one attachment control, one
+   The field, one attachment control, one
    emoji/GIF/sticker control, one voice control when the conversation can
    record, and Send. The chevron cluster is gone, so nothing here needs a width
    rule that hides controls. */

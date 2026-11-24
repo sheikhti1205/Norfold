@@ -53,7 +53,7 @@ const DOT_VISUAL_PX = 8;
 const slideTransition = { duration: motionDurations.fast, ease: motionEasings.out } as const;
 
 /**
- * Composer carousel for the selected report photos (packet 05 §4/§6).
+ * Composer carousel for the selected report photos (§4/§6).
  *
  * One large swipeable slide per photo on the shared continuous-paging track
  * (`useSnapPager`/`usePagerTap`) — the same gesture mechanics as the canonical

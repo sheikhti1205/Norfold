@@ -32,7 +32,7 @@
  *     gate plus the packaged-dex proof; `--apk` below gives the same
  *     packaged proof for any signed candidate outside release.yml.
  *
- * REMAINING OWNER ACTION (single item — no console access from source):
+ * REMAINING MANUAL ACTION (single item — no console access from source):
  * from the canonical release-signed APK (package `com.findback.app`, signer
  * SHA-1 `61:E9:32:D5:14:A0:28:7B:7B:6E:49:F1:90:70:2C:F4:F7:CF:D1:8A`), tap
  * Google and capture `adb logcat | grep GoogleAuth`. The `exceptionClass=`

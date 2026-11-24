@@ -3,7 +3,7 @@
 -- STATUS, STATED PLAINLY. The migration this file verifies WAS applied to
 -- the hosted project on 2026-10-21 (hosted version 20261021162726), and the
 -- hosted readback that proves the security properties below is recorded in
--- <private>/01_ACTIVE/consumer-final/sessions/main/D2-hosted-postapply-2026-10-21.json
+-- an internal readback archive named D2-hosted-postapply-2026-10-21.json
 -- (a single-batch behaviour probe that ends in ROLLBACK, plus a catalog
 -- probe). THE PROBES IN THIS FILE WERE NOT EXECUTED IN THAT PASS: the
 -- behavioural section still needs a disposable PostgreSQL 17 with the whole

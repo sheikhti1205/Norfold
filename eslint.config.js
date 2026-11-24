@@ -3,15 +3,14 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    // Agent workspaces and their Vite render caches are not project source:
-    // they are untracked artefacts that otherwise make `npm run lint` fail with
-    // thousands of no-undef errors from bundled dependencies.
+    // Build output, vendored dependencies, and generated Android/coverage data
+    // are not project source, and neither are untracked local scratch files;
+    // linting them fails with thousands of no-undef errors from bundled code.
     ignores: [
       "**/dist/**",
       "**/node_modules/**",
       "**/android/**",
       "**/coverage/**",
-      ".opencode/**",
       "tmp-*.mjs",
     ],
   },

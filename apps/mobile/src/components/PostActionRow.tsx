@@ -15,7 +15,7 @@ import "./PostActionRow.css";
  * controls out evenly and guarantees the row's own affordances (the comment
  * control with its visible + announced count).
  *
- * ORDER IS PART OF THE CONTRACT (owner direction): reactions first, comments
+ * ORDER IS PART OF THE CONTRACT: reactions first, comments
  * third, the views/insights metric fourth, share last. A reactions pair keeps
  * its two controls in one slot so the shared pending/rollback state stays
  * atomic; that slot takes two equal columns.
@@ -54,9 +54,8 @@ export interface PostActionRowProps {
   commentsHref?: string;
   /**
    * A surface that already shows the conversation beside the report does not
-   * need a second control that only scrolls to it (owner direction
-   * 2026-11-18). The control stays on every surface where comments are not
-   * already on screen.
+   * need a second control that only scrolls to it. The control stays on every
+   * surface where comments are not already on screen.
    */
   hideComments?: boolean;
 }

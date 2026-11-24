@@ -1,6 +1,6 @@
 -- Role and permission changes now produce a consumer notification.
 --
--- Owner brief 2026-11-14: "Admin invites/removals/permission changes must
+-- Brief 2026-11-14: "Admin invites/removals/permission changes must
 -- generate notifications." The append-only admin log already records who
 -- changed what; this migration is the other half — the affected account is
 -- told in its own inbox.

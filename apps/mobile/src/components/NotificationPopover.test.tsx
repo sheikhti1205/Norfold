@@ -86,7 +86,7 @@ describe("the notification bell", () => {
     expect(await screen.findByText("Quick inbox")).toBeTruthy();
     expect(bell.getAttribute("aria-expanded")).toBe("true");
 
-    // Owner seq 17460: the same bell hides what it showed. A modal popover
+    // The same bell hides what it showed. A modal popover
     // makes this press impossible, which is why the surface is non-modal.
     fireEvent.click(bell);
     await waitFor(() => expect(screen.queryByText("Quick inbox")).toBeNull());

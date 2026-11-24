@@ -1,6 +1,6 @@
 -- FindBack — public-only probation: 30 days by default, exactly 30 s spacing.
 --
--- OWNER AMENDMENT 2026-10-24 (supersedes the 1/day + 120 s probation branch in
+-- AMENDMENT 2026-10-24 (supersedes the 1/day + 120 s probation branch in
 -- 20261023020000_trust_blocks_feedback_recovery.sql):
 --
 --   * PROBATION lasts 30 days unless a moderator sets an explicit end. The
@@ -55,7 +55,7 @@ alter table public.public_action_admissions enable row level security;
 revoke all on table public.public_action_admissions from public, anon, authenticated;
 
 comment on table public.public_action_admissions is
-  'FindBack public-interaction admission ledger (owner amendment 2026-10-24): one row per admitted public write by a PROBATION account. Server-owned rate-limit state, never a reputation or content record; bounded to 31 days per account by the spender.';
+  'FindBack public-interaction admission ledger (amendment 2026-10-24): one row per admitted public write by a PROBATION account. Server-owned rate-limit state, never a reputation or content record; bounded to 31 days per account by the spender.';
 
 -- ---------------------------------------------------------------------------
 -- 2. One derivation for every limit reader.
@@ -725,7 +725,7 @@ begin
     raise exception 'A moderation target id is required' using errcode='22023';
   end if;
   if p_target_type='USER' and p_action='PROBATION' and p_sanction_ends_at is null then
-    -- Owner amendment 2026-10-24: probation lasts 30 days by default. Derived
+    -- Amendment 2026-10-24: probation lasts 30 days by default. Derived
     -- here, before the retained writer snapshots state, so the row and its audit
     -- agree exactly; no trigger may rewrite the instant afterwards.
     p_sanction_ends_at:=to_char((clock_timestamp()+interval '30 days') at time zone 'utc',

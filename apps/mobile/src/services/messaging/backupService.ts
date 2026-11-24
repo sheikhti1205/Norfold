@@ -92,7 +92,7 @@ export function parseBackupState(raw: unknown): BackupState {
   };
 }
 
-/** Healthy batching interval, jittered inside the packet's 5–15 minute band. */
+/** Healthy batching interval, jittered inside the documented 5–15 minute band. */
 export function healthyDelayMs(random: () => number = Math.random): number {
   return BACKUP_MIN_DELAY_MS + Math.floor(random() * (BACKUP_MAX_DELAY_MS - BACKUP_MIN_DELAY_MS));
 }

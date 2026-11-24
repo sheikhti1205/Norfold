@@ -1,4 +1,4 @@
--- Owner audit 2026-11-15 (P1 follow-up): the chat-file budget predicate was
+-- Audit 2026-11-15 (P1 follow-up): the chat-file budget predicate was
 -- racy by construction.
 --
 -- `findback_chat_file_budget_ok` was `stable` and summed committed objects.

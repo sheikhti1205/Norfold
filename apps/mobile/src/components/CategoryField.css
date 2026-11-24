@@ -1,4 +1,4 @@
-/* Owner ruling 2026-11-20: no excess height. About five 48px rows under the
+/* No excess height. About five 48px rows under the
    search field; the results list scrolls inside, rows keep their targets. */
 .fb-category-popover {
   display: flex;

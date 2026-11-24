@@ -8,15 +8,15 @@
 -- address to be in `bootstrap_admins`, refuses while any ADMIN row exists,
 -- writes exactly one audit row and grants nothing to anon.
 --
--- What was missing is the SURFACE. The owner read the hosted project back on
--- 2026-10-22 and found two allowlisted owner addresses, no account holding
+-- What was missing is the SURFACE. The hosted project was read back on
+-- 2026-10-22 and found two allowlisted addresses, no account holding
 -- ADMIN, and a live but unaccepted moderator invitation. The staff console is
--- ADMIN-only, so the owner had no way to become an admin from the app: the
+-- ADMIN-only, so there was no way to become an admin from the app: the
 -- server could grant the role, but no screen ever asked it to.
 --
 -- A client that guesses is not allowed to guess. If the app decided on its own
 -- whether the reader may claim, it would either offer a button that the server
--- refuses (a dead end the owner cannot understand) or hide the button from the
+-- refuses (a dead end a user cannot understand) or hide the button from the
 -- one person who is allowed to use it. The eligibility question is therefore
 -- answered HERE, by the server, about the caller, and the client only renders
 -- the answer it is given.

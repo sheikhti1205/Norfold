@@ -86,7 +86,7 @@ describe("isReactionKind", () => {
   });
 });
 
-describe("Like model (packet 08 §2 — reactions are Like-only)", () => {
+describe("Like model (§2 — reactions are Like-only)", () => {
   it("counts every positive kind and never a DISLIKE", () => {
     const summary = reactionSummaryFromCounts(
       { LOVE: 2, HELPFUL: 1, SUPPORT: 0, WOW: 3, DISLIKE: 4 },
@@ -295,7 +295,7 @@ describe("reactionSummaryFromCounts (the one aggregator)", () => {
 /**
  * There is no `setPostReaction` any more: a post Like goes through
  * `reactToPost(postId, nextLikeReaction(current))` / `toggleLikeReaction`, so
- * "new writes are LIKE or null only" (packet `08` §2) is structural at the
+ * "new writes are LIKE or null only" (§2) is structural at the
  * call site. The canonical kinds the server still understands (LOVE,
  * HELPFUL, SUPPORT, WOW) remain writable for the widened RPC, but the legacy
  * negative kind DISLIKE is refused (D1): it is readable history, never a write.

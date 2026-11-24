@@ -31,7 +31,7 @@ afterEach(async () => {
 });
 
 describe("resolveMapBuildEnv", () => {
-  it("resolves the owner-decided defaults when no custom map config exists", async () => {
+  it("resolves the built-in defaults when no custom map config exists", async () => {
     envDir = await mkdtemp(join(tmpdir(), "findback-vite-map-"));
     await writeFile(join(envDir, ".env.production"), "# no map overrides\n");
     expect(resolveMapBuildEnv("production", envDir)).toEqual({

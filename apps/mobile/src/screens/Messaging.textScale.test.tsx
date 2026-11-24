@@ -8,7 +8,7 @@ import { chatPaneBounds, Connections } from "./Messaging";
 /**
  * R19 acceptance for the conversation list at an enlarged root text size.
  *
- * Measured in the owner's Chrome at a 1440px window and a 32px root: the list
+ * Measured in Chrome at a 1440px window and a 32px root: the list
  * pane stayed at its authored 260-320px, so "Admin" broke between every letter
  * between the 44px avatar and the timestamp, and the bar's title and the
  * search placeholder were clipped. The pane's track is now derived from the

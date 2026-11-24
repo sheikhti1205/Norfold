@@ -17,8 +17,8 @@ import { describe, expect, it } from "vitest";
  * surfaced first as recommendations. Paid-model protection lives in
  * `modelPolicy.ts` over the frozen `isSelectionAuthorized`, not in string bans.
  *
- * Owner decision 2026-10-08: model-ID literal bans (vendor-qualified and bare
- * paid ids) are removed from SHIPPED_RULES, because the qualification manifest
+ * Model-ID literal bans (vendor-qualified and bare paid ids) are removed from
+ * SHIPPED_RULES, because the qualification manifest
  * must name the families it qualifies. Route/key/secret bans below are
  * unchanged and remain absolute.
  *

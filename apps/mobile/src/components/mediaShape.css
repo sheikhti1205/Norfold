@@ -23,9 +23,9 @@
 
 /* The multi-photo count chip stays a capsule deliberately: a pill is not a
  * rectangle, count chips are pills everywhere else in this product (for
- * example the unread badge in Messaging.css), and the owner's rectangle
- * complaint does not cover a pill. `999px` keeps it round at any size, so it
- * is deliberately outside the squircle arm - `corner-shape` only takes effect
+ * example the unread badge in Messaging.css), and the squircle treatment
+ * does not cover a pill. `999px` keeps it round at any size, so it is
+ * deliberately outside the squircle arm - `corner-shape` only takes effect
  * where a radius exists, and a capsule's edge is already fully round. */
 .fb-masonry-more {
   border-radius: 999px;

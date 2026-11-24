@@ -1,5 +1,5 @@
 /**
- * DeepSeek BYOK provider adapter (packet P-deepseek).
+ * DeepSeek BYOK provider adapter.
  *
  * Wire shape verified against the official DeepSeek API docs on 2026-09-25:
  * - `POST https://api.deepseek.com/chat/completions` (OpenAI-format base URL
@@ -22,10 +22,10 @@
  *   input_modalities, output_modalities, ...}]}` — **no price fields**, so
  *   listed records carry `prices: []` → price class `unknown` (never 0, never
  *   "free"). Price provenance is the Models & Pricing page (peak/off-peak +
- *   cache hit/miss conditions ⇒ `variable`), owned by the catalogue packet.
+ *   cache hit/miss conditions ⇒ `variable`), owned by the catalogue.
  *
  * No live key is held here: the key arrives per call via the injected
- * `getApiKey` resolver (owned by the credential packet). Without an owner
+ * `getApiKey` resolver (owned by the credential store). Without an owner
  * key every live path is NOT TESTED LIVE. Single attempt only — this adapter
  * never performs a paid or cross-provider photo retry on its own, and it
  * never logs prompt or photo content (no console usage at all).
@@ -47,7 +47,7 @@ export const DEEPSEEK_COMPLETIONS_URL = `${DEEPSEEK_API_ORIGIN}/chat/completions
 export const DEEPSEEK_MODELS_URL = `${DEEPSEEK_API_ORIGIN}/models`;
 
 /**
- * Owner decision 2026-10-02: direct client-side keys for DeepSeek are ALLOWED.
+ * Direct client-side keys for DeepSeek are ALLOWED.
  * This reverses the 2026-09-25 "blocked" decision. DeepSeek is an ordinary
  * bring-your-own-key (BYOK) provider: the user supplies their own key, it is
  * stored only in the device credential vault like every other BYOK provider,
@@ -95,8 +95,7 @@ export interface DeepSeekAdapterOptions {
   getApiKey: () => Promise<string | null>;
   fetchImpl?: typeof fetch;
   /**
-   * App-controlled instructions for this request (assembled fresh by another
-   * packet). The adapter never invents instructions and never puts a chat
+   * App-controlled instructions for this request (assembled fresh elsewhere). The adapter never invents instructions and never puts a chat
    * summary into `system`.
    */
   buildSystemText?: (request: NormalizedRequest) => string;

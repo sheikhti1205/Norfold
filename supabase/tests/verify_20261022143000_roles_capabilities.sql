@@ -37,8 +37,8 @@
 --     $$;
 --
 -- Without those, the probes fail with a role or schema error rather than a
--- behavioural one — and the `anon` half of the contract (CONTRACT-ROLES-
--- ADMIN-2026-10-22.md §5) cannot be run at all.
+-- behavioural one — and the `anon` half of the contract (the roles contract
+-- §5) cannot be run at all.
 --
 -- Section 3 is the post-apply READBACK: the exact queries to
 -- run against the hosted project once the migration has been applied, to show
@@ -558,7 +558,7 @@ begin
 end;
 $$;
 
--- B12. THE ANON HALF (CONTRACT-ROLES-ADMIN-2026-10-22.md §5). An anonymous
+-- B12. THE ANON HALF (roles contract §5). An anonymous
 --      caller may not reach a single privileged RPC. The refusal is
 --      42501 — the function is not granted to `anon` at all.
 set local role anon;

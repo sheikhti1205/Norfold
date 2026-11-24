@@ -70,7 +70,7 @@ afterEach(() => resetGlobalSearch());
 /**
  * The inline field only renders when a query is restored from the URL: a
  * shared link must show its active filter. The magnifier itself opens the
- * app-wide search overlay (owner order 2026-11-13), so typing tests either
+ * app-wide search overlay, so typing tests either
  * start from `/?q=…` or drive the overlay's own field.
  */
 
@@ -163,7 +163,7 @@ describe("Home realtime", () => {
     const scroller = container.querySelector(".overflow-y-auto") as HTMLElement;
     const toolbar = screen.getByTestId("home-toolbar");
 
-    // Owner feedback 2026-11-06: the bar must leave at exactly the reader's
+    // The bar must leave at exactly the reader's
     // scroll speed. That is only true when the browser moves it as part of the
     // scroll, so it has to be a child of the feed's scroller — not a fixed row
     // reacting to a timer, which reflowed the feed under the finger.
@@ -216,7 +216,7 @@ describe("Home realtime", () => {
   });
 
   it("ignores a legacy type parameter instead of stranding a filtered feed", async () => {
-    // The All/Lost/Found chips are gone (owner order 2026-11-13). A copied or
+    // The All/Lost/Found chips are gone. A copied or
     // bookmarked `?type=LOST` link must not leave the reader on a filtered feed
     // with no control to clear it.
     renderHome("/?type=LOST");
@@ -469,7 +469,7 @@ describe("Home brand and search affordances", () => {
   it("keeps the brand in the sidebar, not on the feed bar", async () => {
     await renderAndWait();
 
-    // Owner feedback 2026-11-13: the mark and wordmark now live in the sidebar,
+    // The mark and wordmark now live in the sidebar,
     // so a second copy in the feed bar was duplicate chrome. The screen keeps
     // its heading for assistive tech without drawing a second brand row.
     expect(screen.queryByTestId("home-brand")).toBeNull();
@@ -587,7 +587,7 @@ describe("Home feed redesign (reference-inspired)", () => {
   it("offers no discovery scope chips and no post-type radios", async () => {
     renderHome();
     await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
-    // Scope belongs to search now (owner order 2026-11-13): Home must not keep
+    // Scope belongs to search now: Home must not keep
     // a second row of Nearby/Open/Recent buttons.
     for (const name of ["Nearby", "Open", "Recent"]) {
       expect(screen.queryByRole("button", { name })).toBeNull();
@@ -601,7 +601,7 @@ describe("Home feed redesign (reference-inspired)", () => {
     renderHome();
     await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
 
-    // The owner's requirement: an idle Home has no resident search field and no
+    // An idle Home has no resident search field and no
     // second line of chrome, so the feed keeps the space.
     expect(screen.queryByLabelText("Search posts")).toBeNull();
     expect(screen.getByTestId("home-toolbar").textContent).not.toMatch(/signed in as/);

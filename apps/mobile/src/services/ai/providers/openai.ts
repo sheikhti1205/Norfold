@@ -44,7 +44,7 @@ const MODELS_URL = `${OPENAI_API_BASE_URL}/models`;
 const ATTEMPT = 1 as const;
 
 /**
- * Owner decision 2026-10-02: direct client-side keys for OpenAI are ALLOWED.
+ * Direct client-side keys for OpenAI are ALLOWED.
  * This reverses the 2026-09-25 "blocked" decision. OpenAI is an ordinary
  * bring-your-own-key (BYOK) provider: the user supplies their own key, it is
  * stored only in the device credential vault like every other BYOK provider,

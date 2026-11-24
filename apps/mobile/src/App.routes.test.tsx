@@ -639,7 +639,7 @@ describe("consumer route map", () => {
     expect(screen.getByText(markerText)).toBeTruthy();
   });
 
-  // Owner order 2026-11-14: settings is a window, never a page. A retired
+  // Settings is a window, never a page. A retired
   // `/settings...` address is a replace-redirect to Home; the window opens the
   // exact section over it, so the old standalone page cannot resurface.
   it.each([

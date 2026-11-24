@@ -272,8 +272,7 @@ const EMPTY_KEY = "__fb_empty_select__";
  * different on every platform. This is the same anchored list language as the
  * app's action menus (rounded surface, 44px rows, hover tone, a check on the
  * selected row) and it is keyboard- and screen-reader-complete because React
- * Aria owns the listbox behaviour. Every dropdown adopts it (owner order
- * 2026-11-13).
+ * Aria owns the listbox behaviour. Every dropdown adopts it.
  */
 export function SelectField({
   label,

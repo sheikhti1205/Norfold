@@ -1,4 +1,4 @@
--- Owner defect 2026-11-17: a taken-down report lost its photo but stayed in the
+-- Defect 2026-11-17: a taken-down report lost its photo but stayed in the
 -- feed with its title, description and metadata.
 --
 -- Root cause. `findback_query_posts_client` and its Nearby sibling are

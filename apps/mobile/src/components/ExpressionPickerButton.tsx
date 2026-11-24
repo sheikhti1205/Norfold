@@ -20,7 +20,7 @@ export interface ExpressionPickerButtonProps {
 }
 
 /**
- * One trigger for emoji, GIFs and stickers (owner direction 2026-11-18).
+ * One trigger for emoji, GIFs and stickers.
  *
  * The panel stays open after an emoji so several can be added in a row; a GIF
  * or sticker is a whole message, so that pick closes it. Escape or a press

@@ -129,7 +129,7 @@ describe("MediaViewer boundary", () => {
   });
 
 
-  // Owner rule 2026-11-08: the space around a photo dismisses it.
+  // The space around a photo dismisses it.
   it("closes on a tap in the blank space around the photo, not on the photo itself", async () => {
     const onClose = vi.fn();
     render(<MediaViewer items={items} index={0} onClose={onClose} />);

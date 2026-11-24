@@ -25,7 +25,7 @@
 --      a permanent dead end, where before the owner could at least recover
 --      unilaterally.
 --
--- Owner contract (OWNER-APPROVED-CONTRACT-2026-10-24.md:10,11,16,23,26-27):
+-- Contract (§10, §11, §16, §23, §26-27):
 --   * "RECOVERED follows actual handover"; linked recovery is separate from
 --     D25's unilateral declared-helper recovery, which is preserved.
 --   * Either participant may correct an erroneous confirmed link before

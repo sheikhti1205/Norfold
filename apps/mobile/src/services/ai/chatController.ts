@@ -1,5 +1,5 @@
 /**
- * Chat controller (packet H1): glue between the per-chat store, per-chat
+ * Chat controller: glue between the per-chat store, per-chat
  * compaction, and R1's assembler/coordinator (all read-only here).
  *
  * - Builds the outgoing context from store turns + checkpoint + current turn:

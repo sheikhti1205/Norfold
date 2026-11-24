@@ -21,7 +21,7 @@ object MapValidation {
     const val MAX_ZOOM = 20.0
     const val DEFAULT_ZOOM = 15.0
 
-    /** Owner-decided default style (OpenFreeMap Liberty, OSM-derived data). */
+    /** Default style (OpenFreeMap Liberty, OSM-derived data). */
     const val DEFAULT_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty"
 
     /** Style provider seam for the public Nominatim search endpoint. */
@@ -76,7 +76,7 @@ object MapValidation {
 
     /**
      * Renderer-neutral style provider for diagnostics: "openfreemap" only
-     * when the effective style URL is the owner-decided default, "custom"
+     * when the effective style URL is the default, "custom"
      * otherwise. Never carries a URL or secret.
      */
     fun styleProvider(effectiveStyleUrl: String): String =

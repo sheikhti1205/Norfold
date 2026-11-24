@@ -78,7 +78,7 @@ function requireArray(value: unknown, path: string): readonly unknown[] {
   return value;
 }
 
-/** HTTPS, no credentials in the URL, and an owner-approved host. */
+/** HTTPS, no credentials in the URL, and a host on the allowlist. */
 function requireTrustedUrl(value: unknown, path: string, policy: CataloguePolicy): string {
   const raw = requireString(value, path);
   if (!HTTPS.test(raw)) fail(path, "must be https");

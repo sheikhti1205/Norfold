@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 /**
- * Owner correction 2026-11-20: a shared report inside a chat message is one
+ * A shared report inside a chat message is one
  * message-integrated preview, not a second card painted inside the bubble. The
  * bubble already supplies the surface, so these declarations pin the compact
  * geometry and forbid a second background, border or corner ring. Rendered

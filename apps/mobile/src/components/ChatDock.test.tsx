@@ -1164,7 +1164,7 @@ describe("ChatDock surface sizing", () => {
     expect(picker).toContain("var(--fb-dock-bottom)");
 
     // A transcript window keeps its 24rem card beside its neighbours; the
-    // picker is the thinner 20rem chooser the owner asked for.
+    // picker is the thinner 20rem chooser.
     const windowRule = /(?:^|\})\s*\.fb-chat-dock-window\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
     expect(windowRule).toContain("height: min(34rem");
     expect(windowRule).toContain("width: min(24rem");
@@ -1253,7 +1253,7 @@ describe("ChatDock surface sizing", () => {
     const clean = dockCss.replace(/\/\*[\s\S]*?\*\//g, " ");
     const windowRule = /(?:^|\})\s*\.fb-chat-dock-window\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
     // 544px stays the ceiling, never the target: at 720px of viewport the card
-    // is two thirds, not the 76% the owner measured, and 6rem of page plus both
+    // is two thirds, not 76%, and 6rem of page plus both
     // insets always remain.
     expect(windowRule).toContain("height: min(34rem, 66dvh");
     expect(windowRule).toContain("calc(100dvh - 2 * var(--fb-dock-bottom) - 6rem)");
@@ -1265,7 +1265,7 @@ describe("ChatDock surface sizing", () => {
     const [, low = "", share = "", high = ""] = frame ?? [];
     // Four to five 52px rows inside ~154px of chrome (52px header, 44px search
     // with its 8px gap, the Recent label and the body padding) at the heights
-    // the owner measured. Static arithmetic over the declarations, not layout.
+    // tested. Static arithmetic over the declarations, not layout.
     const chrome = 154;
     for (const height of [720, 800, 900]) {
       const box = Math.min(Math.max(Number(low) * 16, height * Number(share) / 100), Number(high) * 16);

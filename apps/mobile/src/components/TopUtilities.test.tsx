@@ -181,8 +181,8 @@ describe("notification utility quick view", () => {
     const trigger = await within(dialog).findByRole("button", { name: /more actions for a hidden notification/i });
     expect(within(dialog).queryByRole("link", { name: /reader-secret/i })).toBeNull();
     fireEvent.click(trigger);
-    // One floating rail per list, exposed as a toolbar rather than a menu
-    // (owner order 2026-11-14): the labels stay generic for a blocked actor.
+    // One floating rail per list, exposed as a toolbar rather than a menu:
+    // the labels stay generic for a blocked actor.
     const rail = await screen.findByRole("toolbar");
     expect(rail.getAttribute("aria-label")).not.toContain("reader-secret");
     act(() => { expect(consumeBackIntercept()).toBe(true); });

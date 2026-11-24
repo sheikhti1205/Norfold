@@ -55,7 +55,7 @@ export function Home() {
   // Search and scope survive in the URL so back-nav, deep-links, and copied
   // links restore the feed the reader was looking at. Post type is no longer a
   // Home dimension: search owns typed filtering, and the old All/Lost/Found
-  // chips duplicated it (owner order 2026-11-13).
+  // chips duplicated it.
   const [qParam, setQParam] = useUrlParam("q");
   const [query, setQuery] = useState(qParam);
   const [appliedQuery, setAppliedQuery] = useState(qParam.trim());
@@ -76,8 +76,7 @@ export function Home() {
   const searchActive = searchFocused || query.length > 0;
   const advanced = useAdvancedSearchFilters();
   // Discovery scope (Nearby, Open, Recent) belongs to search now. Home keeps
-  // only the filters a shared URL can restore; it has no second scope row
-  // (owner order 2026-11-13).
+  // only the filters a shared URL can restore; it has no second scope row.
 
   const feedFilters: FeedFilters = {
     q: appliedQuery || undefined,
@@ -90,7 +89,7 @@ export function Home() {
   const [hasUpdates, setHasUpdates] = useState(false);
   const scrollRef = useRef<PullToRefreshHandle>(null);
 
-  // Owner feedback 2026-11-06: the app bar is part of the feed's own scroll.
+  // The app bar is part of the feed's own scroll.
   // It used to sit outside the scroller and animate its height away on a timer,
   // which reflowed the feed under the reader's finger (the reported yank). It
   // now scrolls out with the content at exactly the speed the reader scrolls
@@ -249,7 +248,7 @@ export function Home() {
   }
 
   /**
-   * The magnifier opens the app's one search overlay (owner order 2026-11-13),
+   * The magnifier opens the app's one search overlay,
    * never a resident field: search is not a destination, and the feed keeps its
    * geometry. A `?q=` URL still shows the active filter below.
    */
@@ -280,7 +279,7 @@ export function Home() {
 
   return (
     <div className="relative flex h-full flex-col">
-      {/* Owner feedback 2026-11-06: the bar is inside the feed's own scroll.
+      {/* The bar is inside the feed's own scroll.
           It leaves at exactly the speed the reader scrolls and comes back the
           moment they reverse — no timer, no height animation, so the feed's
           geometry never changes under the finger. That is the whole fix for

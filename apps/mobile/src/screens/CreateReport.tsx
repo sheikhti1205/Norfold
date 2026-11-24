@@ -1328,7 +1328,7 @@ function ReportForm() {
   }
 
   /**
-   * Moving a photo to the front is what makes it the cover (packet 05 §6), so
+   * Moving a photo to the front is what makes it the cover (§6), so
    * "Make cover" is one reorder with one owner — no separate cover field that
    * could disagree with the visible order.
    */

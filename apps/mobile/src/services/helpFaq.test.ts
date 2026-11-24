@@ -360,7 +360,7 @@ describe("FAQ topic coverage (CF-070 R2 retry-4 MAJOR-2)", () => {
 
 /**
  * CF-070 R2 retry-4 fixtures, carried over verbatim from
- * `REVIEW-CF070-R2-RETRY-4.md` §3 so the repair cannot regress quietly.
+ * the CF-070 R2 retry-4 review §3 so the repair cannot regress quietly.
  */
 describe("CF-070 R2 retry-4 — measured world rows stay refused", () => {
   it.each([

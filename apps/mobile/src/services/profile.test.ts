@@ -259,7 +259,7 @@ describe("searchProfilesByPrefix", () => {
 // ---------------------------------------------------------------------------
 // W5-IDENTITY appended cases: phone-change cooldown (spec 25), public-report
 // pagination, and avatar-key ownership. The migration auto-applies on push;
-// live Auth/SMS verification stays LIVE-PENDING (owner-deferred).
+// live Auth/SMS verification stays LIVE-PENDING.
 // ---------------------------------------------------------------------------
 
 const COOLDOWN_MIGRATION = "supabase/migrations/20261012000000_phone_cooldown_avatar_key.sql";

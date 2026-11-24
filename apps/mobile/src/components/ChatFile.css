@@ -53,7 +53,7 @@
 /* A document is not a second card inside the bubble: the bubble already
    groups the message, so this row paints no fill, border or radius of its own.
    The visible surface is the filename, its type/size and two plain actions
-   joined by one functional hairline, matching the owner's reference without
+   joined by one functional hairline, matching the reference without
    the unrequested white preview. */
 .fb-chat-document {
   display: flex;

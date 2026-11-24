@@ -85,5 +85,5 @@
 .fb-account-password input:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 1px; }
 .fb-account-hint { margin: 0; font-size: 0.75rem; color: var(--fb-on-surface-variant); overflow-wrap: anywhere; }
 
-/* Contact rules moved to Chat (owner order 2026-11-14); the account page keeps
+/* Contact rules moved to Chat; the account page keeps
    identity and sign-in controls only. */

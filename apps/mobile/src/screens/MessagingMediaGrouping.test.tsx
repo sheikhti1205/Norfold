@@ -133,7 +133,7 @@ it("keeps two nearby photos as separate message rows", async () => {
   m.media = [first.attachment, second.attachment];
   m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  // Owner direction 2026-11-20: WhatsApp Desktop keeps three nearby photos as
+  // WhatsApp Desktop keeps three nearby photos as
   // three messages, so an album needs at least four media items and a pair stays
   // two ordinary rows - no album list item, no album label.
   expect(screen.queryByRole("listitem", { name: /photos/i })).toBeNull();
@@ -153,7 +153,7 @@ it("keeps each caption on its own cell in a four-photo album", async () => {
   m.media = shots.map((shot) => shot.attachment);
   m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  // Four items do form the album (owner direction 2026-11-20); it is a native
+  // Four items do form the album; it is a native
   // list item with a name, not a second group node, and a caption never moves
   // to a leader or to a neighbour.
   const album = screen.getByRole("listitem", { name: "4 photos" });
@@ -172,7 +172,7 @@ it("keeps a nearby photo and video as separate message rows", async () => {
   m.media = [still.attachment];
   m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   await open();
-  // Owner direction 2026-11-20: two media items stay separate, so there is no
+  // Two media items stay separate, so there is no
   // album and no "1 photo and 1 video" label; the clip keeps its own row.
   expect(screen.queryByRole("listitem", { name: /photo|video/i })).toBeNull();
   expect(document.querySelector(".fb-chat-run")).toBeNull();
@@ -204,7 +204,7 @@ it("keeps a singleton's own picture element when an album forms around it", asyn
   const rendered = await open();
   const before = document.querySelector('[data-chat-message="photo-1"] .fb-chat-photo');
   expect(before).toBeTruthy();
-  // Owner direction 2026-11-20: one to three items stay separate, so an album
+  // One to three items stay separate, so an album
   // only forms when a fourth photo joins.
   const rest = [photo("photo-2", 1_200), photo("photo-3", 1_400), photo("photo-4", 1_600)];
   m.messages = [first.message, ...rest.map((shot) => shot.message)];
@@ -223,7 +223,7 @@ it("collapses an album back to a plain row when only one member remains", async 
   m.media = shots.map((shot) => shot.attachment);
   m.read.mockResolvedValue(new Uint8Array([1]).buffer);
   const rendered = await open();
-  // Four items are a real album under the owner rule; deleting three members
+  // Four items are a real album; deleting three members
   // must collapse it rather than leave a one-cell album behind.
   expect(screen.getByRole("listitem", { name: "4 photos" })).toBeTruthy();
   m.messages = [shots[0]!.message];
@@ -338,7 +338,7 @@ it("shows four photos with no overflow overlay", async () => {
 it("keeps three photos as three separate rows", async () => {
   photoAlbum(3);
   await open();
-  // Owner direction 2026-11-20: three items are below the four-item album
+  // Three items are below the four-item album
   // threshold, so each is an ordinary row with its own bubble, receipt and
   // menu - never an album, and never a wide opening cell.
   expect(screen.queryByRole("listitem", { name: /photos/i })).toBeNull();

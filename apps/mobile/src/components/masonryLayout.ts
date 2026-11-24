@@ -1,5 +1,5 @@
 /**
- * Masonry placement model (CF-010, packet `09` §7, §8, §9, §10).
+ * Masonry placement model (CF-010, §7, §8, §9, §10).
  *
  * Pure arithmetic, no DOM: the DOM half lives in `FeedMasonry.tsx`. Keeping the
  * model separate is what makes "true masonry" testable without a browser, and
@@ -12,7 +12,7 @@
  * Why not CSS masonry: Chromium (which is what the Android WebView and the
  * desktop shell both are) does not ship `grid-template-rows: masonry`, so it
  * would silently fall back to a normal grid — the fixed-grid fake masonry the
- * packet explicitly rules out. So: source order in the DOM, absolute placement
+ * design explicitly rules out. So: source order in the DOM, absolute placement
  * computed here.
  *
  * Placement rule: walk the items in source order and put each one in the
@@ -57,7 +57,7 @@ export interface PlaceMasonryOptions {
   previous?: ReadonlyMap<string, number> | null;
 }
 
-/** Ratio used when a photo's intrinsic size is unknown (packet `09` §9). */
+/** Ratio used when a photo's intrinsic size is unknown (§9). */
 export const MASONRY_FALLBACK_RATIO = 4 / 3;
 
 /** Ratio from a known size pair, clamped to something a screen can show. */

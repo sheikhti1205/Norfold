@@ -1,6 +1,6 @@
 /**
  * Preflight context budget as a pure function of verified capability metadata
- * (packet R1, Context & Memory Contract §3–4).
+ * (Context & Memory Contract §3–4).
  *
  * `usableInput = verifiedContextWindow - reservedOutput - imageAllowance
  *   - protocolOverhead - safetyMargin`, with every term explicit. Unknown

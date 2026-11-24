@@ -148,7 +148,7 @@ describe("PostDetail inline comment threads", () => {
     }
   });
 
-  it("renders the packet §4 row target: author + time, body, Reply and Like on touch targets", async () => {
+  it("renders the §4 row target: author + time, body, Reply and Like on touch targets", async () => {
     authState.user = { id: "u1", username: "u1" };
     postsMock.fetchComments.mockResolvedValue([makeComment("c1", "u1", "Could this be yours?")]);
     renderDetail();

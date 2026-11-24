@@ -494,21 +494,21 @@ const TYPE_LEAD_WORDS = new Set([
  * Postgres overloads on the ARGUMENT TYPE LIST alone — parameter names and
  * defaults never distinguish two overloads — so a signature is the only correct
  * key for both the function model and its EXECUTE state
- * (REVIEW-M1-ACL-CLOSURE-R2 B4).
+ * (ACL-closure review R2 B4).
  *
  * `kind` is what makes the two spellings reducible to one key. A DECLARATION is
  * `name type` per parameter (or a bare type), so the parameter name is dropped;
  * a GRANT/REVOKE reference is TYPES ONLY, so `double precision` keeps both of
  * its words. Reading a reference as a declaration turned `double precision` into
  * `precision` and made a real statement look unresolvable
- * (REVIEW-M1-ACL-CLOSURE-R3 C2).
+ * (ACL-closure review R3 C2).
  *
  * A declaration is read per parameter: `name type`, unless the first word is one
  * Postgres parses as part of a multi-word type (`double precision`,
  * `character varying`, `timestamp with time zone`), which is how an UNNAMED
  * parameter is told apart from a named one. That keeps the two spellings of
  * `double precision` on one key instead of `precision`
- * (REVIEW-M1-ACL-CLOSURE-R3 C2). Quoting defeats the rule (`"double" precision`
+ * (ACL-closure review R3 C2). Quoting defeats the rule (`"double" precision`
  * is a parameter named double); nothing in this chain does that, and a GRANT or
  * REVOKE that then could not be resolved fails the gate instead of narrowing in
  * silence.
@@ -663,7 +663,7 @@ describe("CREATE OR REPLACE signature-drift guard", () => {
 //     "every column of that table", which is how the original F1/F2 defect
 //     appears in this model without naming any table.
 //
-// MODELLED, and how (REVIEW-M1-ACL-CLOSURE, REVIEW-M1-ACL-CLOSURE-R2, -R3):
+// MODELLED, and how (ACL-closure review, its revisions R2 and R3):
 //   * function identity is the SIGNATURE - name plus argument type list, the
 //     only thing Postgres overloads on - so a `grant/revoke execute on
 //     function f(text, text)` cannot be read onto a sibling overload, and one
@@ -706,7 +706,7 @@ const CLIENT_READ_MEDIA_TABLES = ["uploads", "attachments"];
 
 /**
  * EXECUTE membership that makes a function client-callable
- * (REVIEW-M1-ACL-CLOSURE A2/A4).
+ * (ACL-closure review A2/A4).
  *
  * The reader walk used to select functions by NAME (`_client` suffix). That is a
  * convention, not a fact: `findback_create_post_client_multi` is a shipped
@@ -730,7 +730,7 @@ const CLIENT_EXECUTE_ROLES = ["public", "authenticated"];
  * silently flips from INVOKER to DEFINER would leave the walk without anything
  * to complain about. The set is derived from reachability (EXECUTE membership),
  * not from the `_client` name suffix, so the nine client-reachable definers the
- * suffix filter used to miss are pinned too (REVIEW-M1-ACL-CLOSURE A4).
+ * suffix filter used to miss are pinned too (ACL-closure review A4).
  * Any change here is a security-model change and should be deliberate.
  */
 // M4: 86 names independently verified against the real full-chain PostgreSQL
@@ -1078,7 +1078,7 @@ function findColumnGrantGaps(migrations, tables = CLIENT_READ_MEDIA_TABLES) {
  * `public.f`, `public . f`, `"public"."f"`, `PUBLIC.F` are all the same
  * function to Postgres. A pattern that only read the bare spelling let a whole
  * reader sit outside the walk with nothing red
- * (REVIEW-M1-ACL-CLOSURE-R3 C1, same class as R2 B1).
+ * (ACL-closure review R3 C1, same class as R2 B1).
  */
 const PUBLIC_FN = String.raw`"?public"?\s*\.\s*"?([a-z0-9_]+)"?`;
 
@@ -1086,7 +1086,7 @@ const PUBLIC_FN = String.raw`"?public"?\s*\.\s*"?([a-z0-9_]+)"?`;
  * Functions the chain grants/revokes EXECUTE on but does not declare.
  *
  * Pinned, and by name only, so a typo or a renamed function cannot slip into
- * this class unnoticed (REVIEW-M1-ACL-CLOSURE-R3 C2). `rls_auto_enable` is the
+ * this class unnoticed (ACL-closure review R3 C2). `rls_auto_enable` is the
  * Supabase-managed updater, installed by the platform in `public` and hardened
  * by `20260912170500_restrict_rls_auto_enable.sql`, which revokes its EXECUTE
  * without ever creating it.
@@ -1212,7 +1212,7 @@ function functionBodyAt(tail) {
   // searched across the rest of the file, so a declaration whose body is a
   // single-quoted literal silently absorbed the next `$$…$$` — another function,
   // a `do` block, even a comment — and the walk analysed the wrong body with
-  // both invariants green (REVIEW-M1-ACL-CLOSURE-R4 D1). A `;` before the
+  // both invariants green (ACL-closure review R4 D1). A `;` before the
   // opening delimiter means the quoted region belongs to a later statement.
   const firstSeparator = tail.indexOf(";");
   const dollar = tail.match(/\$([A-Za-z_][A-Za-z0-9_]*)?\$([\s\S]*?)\$\1\$/);
@@ -1224,7 +1224,7 @@ function functionBodyAt(tail) {
   // this chain carries `set search_path = ''`, and accepting any literal as the
   // body read an unreadable declaration as an empty function, which is a silent
   // hole exactly where the walk is supposed to shout
-  // (REVIEW-M1-ACL-CLOSURE-R3 C1/C2).
+  // (ACL-closure review R3 C1/C2).
   const statement = firstSeparator === -1 ? tail : tail.slice(0, firstSeparator + 1);
   const literals = [...statement.matchAll(/'((?:[^']|'')*)'/g)];
   const last = literals[literals.length - 1];
@@ -1288,7 +1288,7 @@ function readFunctionModel(migrations) {
  * twice, an unreadable SECOND declaration leaves the first body in the model and
  * the key is still present, so the walk would analyse a superseded body in
  * silence. This reports the occurrence itself, whatever the final key set looks
- * like (REVIEW-M1-ACL-CLOSURE-R3 C1).
+ * like (ACL-closure review R3 C1).
  *
  * Quantifies over the declarations the DDL pattern MATCHES: a spelling the
  * pattern cannot see at all is outside the walk by construction (R4 D3).
@@ -1309,7 +1309,7 @@ function unreadableDeclarations(migrations) {
  * Independent of `readFunctionModel`'s body step, so a declaration the walk
  * cannot read (an unmodelled spelling, a body with no delimiter it recognises)
  * shows up as a difference and fails the gate instead of disappearing
- * (REVIEW-M1-ACL-CLOSURE-R3 C1).
+ * (ACL-closure review R3 C1).
  */
 function declaredFunctionKeys(migrations) {
   const keys = new Set();
@@ -1345,7 +1345,7 @@ const SQL_WORDS = new Set([
 
 /**
  * One scanner that drops line comments, block comments and string literals, so
- * the walk reads code rather than prose or data (REVIEW-M1-ACL-CLOSURE A3).
+ * the walk reads code rather than prose or data (ACL-closure review A3).
  *
  * One pass on purpose: a `'` inside a `--` comment and a `--` inside a literal
  * both corrupt any sequential-regex approach, and this repo has both kinds of
@@ -1507,7 +1507,7 @@ function unqualifiedColumnRefs(statement, table, columns, scopeDepth, boundNames
 }
 
 /**
- * EXECUTE membership per function (REVIEW-M1-ACL-CLOSURE A2).
+ * EXECUTE membership per function (ACL-closure review A2).
  *
  * A freshly created function is PUBLIC-executable, so the model starts there and
  * applies grant/revoke in source order. PUBLIC and the role are tracked
@@ -1566,7 +1566,7 @@ function readExecuteModel(migrations) {
  *   reachable reader can only add demands, never remove one;
  * - a REVOKE is applied to none of them — narrowing a sibling Postgres never
  *   revoked would drop a real reader out of the walk in silence
- *   (REVIEW-M1-ACL-CLOSURE-R3 C2). `unresolvedExecuteStatements` fails the gate
+ *   (ACL-closure review R3 C2). `unresolvedExecuteStatements` fails the gate
  *   for either case, so this direction is a backstop, not the only defence.
  */
 function executeTargetKeys(op, name, argList, functions) {
@@ -1640,25 +1640,25 @@ function clientReachableFunctions(functions, execute) {
  * The question is asked of READERS: every client-reachable SECURITY INVOKER
  * function runs with the caller's privileges, so every column its body reads is a
  * column the grant model must cover. Readers are selected by EXECUTE membership
- * rather than by the `_client` name suffix (REVIEW-M1-ACL-CLOSURE A2), each one
+ * rather than by the `_client` name suffix (ACL-closure review A2), each one
  * identified by its signature rather than by its name alone (R2 B4), and every
  * shape Postgres expands into a column read is modelled: `*` (including after
  * `distinct on (…)`), `alias.*`, schema-qualified names, comma-joined FROM lists,
  * RETURNING lists, and the unqualified names of a single-table scope
- * (REVIEW-M1-ACL-CLOSURE A1).
+ * (ACL-closure review A1).
  *
  * What it deliberately does not model: dynamic SQL assembled at runtime, and an
  * unqualified name in a scope that has more than one source table (which would
  * be a guess, not an attribution). Both are reported by the guard's own
  * limitations note in the migration's header rather than silently trusted.
  *
- * Three residual classes the reviewer named at R4, all of which need a spelling
+ * Three residual classes the review named at R4, all of which need a spelling
  * this chain does not use, and none of which is silently trusted:
  *
  * - statement text inside a dollar-quoted region (`do $$ … $$`, or a comment
  *   holding one) is read as a statement, because a text scan cannot tell a `do`
  *   block from a string. Dynamic SQL belongs to the not-modelled class above;
- *   REVIEW-M1-ACL-CLOSURE-R4 D2.
+ *   ACL-closure review R4 D2.
  * - a quoted identifier is matched case-insensitively, so `"FINDBACK_X"(text)`
  *   folds onto `findback_x(text)` and could replace its body. Nothing in this
  *   chain quotes an identifier's case for a function; D3.
@@ -1702,7 +1702,7 @@ function findReaderGrantGaps(migrations) {
       // none, a qualified star is handled above, and `*` as multiplication is
       // told apart by the token on either side (an operand, not SELECT/RETURNING
       // or FROM/INTO). The look-ahead matters for `select distinct on (id) *`
-      // (REVIEW-M1-ACL-CLOSURE-R2 B2), where the preceding word is `)`.
+      // (ACL-closure review R2 B2), where the preceding word is `)`.
       for (const m of statement.matchAll(/\*/g)) {
         const before = statement.slice(0, m.index).trimEnd();
         if (before.endsWith("(") || before.endsWith(".")) continue;
@@ -2097,7 +2097,7 @@ describe("reader-driven grant coverage (the whole client-read surface)", () => {
   });
 
   it("walks a client-reachable reader that does not use the `_client` name (A2)", () => {
-    // REVIEW-M1-ACL-CLOSURE A2 in miniature: the same ungranted read, in a
+    // ACL-closure review A2 in miniature: the same ungranted read, in a
     // function whose name does not follow the convention. Reachability is an
     // EXECUTE fact, so the read is a gap here too.
     const unmarked = [
@@ -2983,7 +2983,7 @@ describe("typed report reference on comments (20261017052000)", () => {
     assert.match(
       sql,
       /create or replace function public\.findback_add_comment_with_attachments\(\n\s*p_post_id text,\n\s*p_body text,\n\s*p_parent_id text default null,\n\s*p_attachments jsonb default '\[\]'::jsonb\n\)/,
-      "the atomic create signature is untouched (packet §4)",
+      "the atomic create signature is untouched (signature rule §4)",
     );
   });
 
@@ -3030,7 +3030,7 @@ describe("typed report reference on comments (20261017052000)", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Review R2 (REVIEW-CF060-M2-TRANCHE-R2.md, MAJOR-R2-1). The re-created
+  // Review R2 (the M2 tranche review, round 2, MAJOR-R2-1). The re-created
   // function bodies are pinned as *whole bodies* against the applied text, not
   // as the substrings an author happened to think of. R2 measured two live leaks
   // that passed every layer-1 substring assertion:
@@ -3277,7 +3277,7 @@ describe("typed report reference on comments (20261017052000)", () => {
 // CF-060 B1 — the visibility kernel, blocking, and the D21 readers
 // (20261017070000_visibility_kernel_and_blocks.sql).
 //
-// Authority: MODERATION-CONTRACT-DECISION.md §3 D8–D11, §4 D16–D24, §9 C8,
+// Authority: the moderation contract, §3 D8–D11, §4 D16–D24, §9 C8,
 // §10 C9 fixtures M1–M17 and §13.8 D12 amended (the two-function split plus the
 // O5 rule that blocking is SURFACED, never applied as a row filter). Layer-1b
 // (engine behaviour + inertness) measurements are in inertness-selfcheck.mjs;
@@ -3423,7 +3423,7 @@ describe("visibility kernel, blocking and the O5/D21 readers (20261017070000)", 
     assert.ok(sql.includes("LIVE-PENDING"), "the layer-3 status is stated, not implied");
     assert.ok(
       sql.includes(`supabase/tests/verify_${B1.slice(0, 14)}_visibility_kernel_and_blocks.sql`),
-      "the owner's probe file is named",
+      "the probe file is named",
     );
     assert.ok(sql.includes("ADDITIVE ONLY"), "additive header");
     assert.ok(!/ADDITIVE ONLY[\s\S]*\n\s*drop column/m.test(sql), "the ADDITIVE ONLY claim is not contradicted below it");
@@ -3508,7 +3508,7 @@ describe("visibility kernel, blocking and the O5/D21 readers (20261017070000)", 
     // The full expression. `... or true` (which makes every moderated post
     // world-readable), a dropped owner clause (which would blind an owner to
     // their own report in review), and a re-introduced block term (which would
-    // hide content the owner ruled must stay visible) all change this text; no
+    // hide content that must stay visible) all change this text; no
     // substring test can see the first of those.
     exactStatement(
       "create view public.findback_visible_posts",
@@ -4121,7 +4121,7 @@ describe("visibility kernel, blocking and the O5/D21 readers (20261017070000)", 
     // column's privilege. Without it every authenticated read of the view — and
     // therefore both feed readers — fails 42501 (measured in
     // inertness-selfcheck.mjs). The residual the grant creates against the
-    // table's `using (true)` SELECT policy is an owner decision (README.md).
+    // table's `using (true)` SELECT policy is deliberate (README.md).
     assert.ok(
       grants.includes("grant select (moderation_visibility) on public.item_posts to authenticated"),
       "the invoker view's column privilege is granted, or B1 ships a dead feed",
@@ -4247,7 +4247,7 @@ describe("visibility kernel, blocking and the O5/D21 readers (20261017070000)", 
     assert.ok(!/grant update/.test(code()), "B1 adds no update grant of any kind");
 
     // M13/M15/M17 are live probes: they cannot run here, and the verify file
-    // must still carry them so the owner's run can. They are marked unrun.
+    // must still carry them so a manual run can. They are marked unrun.
     const verify = read(join(ROOT, "tests", "verify_20261017070000_visibility_kernel_and_blocks.sql"));
     for (const fixture of ["M13", "M15", "M17"]) {
       assert.ok(verify.includes(fixture), `${fixture} has a probe`);

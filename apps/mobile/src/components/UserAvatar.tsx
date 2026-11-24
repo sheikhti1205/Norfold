@@ -21,7 +21,7 @@ export interface UserAvatarProps {
   /** Rendered square size in CSS pixels. */
   size?: number;
   className?: string;
-  /** Profile pictures are squircles (owner rule 2026-11-13); a circle is opt-in. */
+  /** Profile pictures are squircles; a circle is opt-in. */
   shape?: "circle" | "squircle";
 }
 

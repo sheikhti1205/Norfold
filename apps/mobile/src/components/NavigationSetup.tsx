@@ -7,7 +7,7 @@ import "./NavigationSetup.css";
 /**
  * First authenticated wide use. Never a modal, never an account preference.
  *
- * Owner direction (docs/design/APPEARANCE-CHOOSERS.md §4 and §5) with one later
+ * Per docs/design/APPEARANCE-CHOOSERS.md §4 and §5, with one later
  * correction (2026-11-12): the panel floats over the surface instead of sitting
  * in the page as a band, and it carries the same two picture tiles Appearance
  * uses, so the layout the reader picks here is the layout they will recognise

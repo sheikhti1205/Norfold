@@ -5,8 +5,7 @@ import { createContext, useContext, useLayoutEffect } from "react";
  *
  * The window owns the single settings search affordance: one icon in its top
  * bar, opening a top-attached field over the tree. A hosted page must never
- * paint a second in-page field, otherwise the surface shows two search entries
- * (owner order 2026-11-13).
+ * paint a second in-page field, otherwise the surface shows two search entries.
  *
  * This is presentation context, not authorisation: it says where the tree is
  * drawn, never who may see it.
@@ -24,8 +23,7 @@ export function useSettingsWindowHosted(): boolean {
  *
  * The window's top bar is the one visible title. A page rendered there keeps
  * its own heading element for focus and screen-reader announcement, but the
- * window must not say "Settings" while the reader is inside Notifications
- * (owner order 2026-11-13: one title, not a duplicate stacked under another).
+ * window must not say "Settings" while the reader is inside Notifications.
  */
 export const SettingsWindowTitle = createContext<((title: string | null) => void) | null>(null);
 

@@ -3,7 +3,7 @@
  * QA L — settings behavior audit (binding brief qa-L-brief.md).
  *
  * Every row proves a real route or real state effect in jsdom; the search
- * index is run against packet matrices/settings_search_index.csv; live
+ * index is run against the settings search index matrix; live
  * summaries must be truthful; every backTo must land on a mounted route.
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -14,7 +14,7 @@ import { searchSettings } from "../services/settingsIndex";
 import { localOperationNotice } from "../services/ai/localIntelligenceView";
 
 /* ------------------------------------------------------------------ */
-/* 1. Search index against packet matrix settings_search_index.csv      */
+/* 1. Search index against the settings search index matrix             */
 /* ------------------------------------------------------------------ */
 
 const SEARCH_MATRIX: ReadonlyArray<{ title: string; keywords: string; route: string }> = [
@@ -31,7 +31,7 @@ const SEARCH_MATRIX: ReadonlyArray<{ title: string; keywords: string; route: str
   { title: "About Norfold", keywords: "version build application", route: "/settings/about" },
 ];
 
-describe("QA L: settings search index resolves every packet alias", () => {
+describe("QA L: settings search index resolves every alias", () => {
   it.each(SEARCH_MATRIX)("aliases for $title resolve to $route", ({ title, keywords, route }) => {
     const byKeywords = searchSettings(keywords).map((entry) => String(entry.route));
     expect(byKeywords).toContain(route);

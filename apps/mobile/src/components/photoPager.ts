@@ -79,7 +79,7 @@ export function useSnapPager(count: number): SnapPager {
   const jumpRef = useRef<{ left: number; width: number } | null>(null);
 
   /**
-   * One gesture, one photo (owner decision).
+   * One gesture, one photo.
    *
    * Native momentum decides where a fling lands, and a strong fling can cross
    * several widths. Norfold limits photo counts, so predictability beats free

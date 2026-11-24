@@ -11,7 +11,7 @@
 -- `/storage/v1/object/public/findback-images/avatars/<caller-uid>/` followed
 -- by an object name, no `..`, no encoded dots. Behavior otherwise unchanged.
 --
--- LIVE-PENDING (owner-deferred): verify on the live project with
+-- LIVE-PENDING: verify on the live project with
 -- `supabase/tests/verify_20261012030000_avatar_host_bind.sql`
 -- (lookalike-host/other-uid/traversal/http/foreign-bucket cases).
 

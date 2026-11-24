@@ -89,8 +89,7 @@ const CONTACT_RULE_HINT =
 /**
  * The account's contact rules belong to Chat: they decide whether a stranger may
  * open a conversation, and the switch beside them decides whether an allowed
- * approach connects automatically. Profile keeps identity and sign-in only
- * (owner order 2026-11-14).
+ * approach connects automatically. Profile keeps identity and sign-in only.
  */
 function ContactRules() {
   const [rules, setRules] = useState<AccountContactRules>(DEFAULT_CONTACT_RULES);

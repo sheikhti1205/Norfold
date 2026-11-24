@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const MIGRATIONS = fileURLToPath(new URL("../../../../supabase/migrations/", import.meta.url));
-// New forward-only migration owned by packet D1. Must sort after the latest
+// New forward-only migration. Must sort after the latest
 // existing migration without rewriting any applied history.
 const MULTI_FILE = "20260926000000_multi_image_report.sql";
 const PREVIOUS_LATEST = "20260925000000_fix_calendar_date_subscript.sql";

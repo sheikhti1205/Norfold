@@ -391,7 +391,7 @@ public final class GoogleAuthPlugin extends Plugin {
     }
 
     /**
-     * Fail-closed diagnostic for the owner run: logs ONLY the exception class
+     * Sign-in failure diagnostic: logs ONLY the exception class
      * plus the mapped kind and a configuration-class hint. NEVER the ID
      * token, the nonce (raw or hashed), the exception message (which can echo
      * account/package details), or any credential material. One logcat line

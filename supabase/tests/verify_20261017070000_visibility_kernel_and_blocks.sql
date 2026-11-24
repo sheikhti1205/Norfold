@@ -3,16 +3,16 @@
 -- STATUS OF THIS FILE. Section 1's catalog probes HAVE BEEN EXECUTED, and the
 -- behavioural matrix behind Section 2 has been executed too. Both runs are on
 -- PostgreSQL 17.5: the real supabase/migrations chain plus this migration,
--- applied to a disposable local cluster by sessions/trust-backend/harness/
--- chain.mjs (`--extra <draft-b1>`), with the behaviour driving the same cluster
+-- applied to a disposable local cluster by the trust-backend harness runner,
+-- with the behaviour driving the same cluster
 -- through `set role authenticated` and
 -- `set_config('request.jwt.claim.sub', <uid>, false)`. MEASURED TALLIES, the
--- exact commands and the mutation controls are in EVIDENCE-B1-R3-AUTHOR.md and
--- EVIDENCE-B1-R4-AUTHOR.md.
+-- exact commands and the mutation controls are in the layer-1 round-3 evidence
+-- record and the layer-1 round-4 evidence record.
 --
--- Section 2 below is the OWNER-RUN SHEET, not executable SQL: it states the
--- expectations the owner checks on a disposable backend. The executable form of
--- the same matrix is `probes/block-matrix-local.sql` (55 labelled rows, run on
+-- Section 2 below is a MANUAL RUN SHEET, not executable SQL: it states the
+-- expected results to check on a disposable backend. The executable form of
+-- the same matrix is `block-matrix-local.sql` (55 labelled rows, run on
 -- the local chain), and its controls are
 -- `block-matrix-negative-controls.mjs` (base 55/55; every one of the three
 -- privacy mutations blinds its probe and exits 1). Reading this file as if its
@@ -46,9 +46,9 @@
 -- D19: nothing is dropped for a block, so the reply "promotion" walk is not
 -- shipped and the stored parent_id/depth are returned as stored.
 --
--- Layer 1 (supabase/tests/migration_parity.test.mjs + draft-b1/parity-block.mjs)
--- and layer 1b (draft-b1/inertness-selfcheck.mjs) are the pre-apply runs;
--- draft-b1/EVIDENCE-B1-R3-AUTHOR.md reports all of them, with numbers.
+-- Layer 1 (supabase/tests/migration_parity.test.mjs + the parity-block runner)
+-- and layer 1b (the inertness self-check runner) are the pre-apply runs;
+-- the layer-1 round-3 evidence record reports all of them, with numbers.
 --
 -- DEPARSED-EXPRESSION NOTE: pg_policies.qual / with_check, pg_get_constraintdef,
 -- pg_get_viewdef, pg_get_function_result and pg_proc.prosrc are rendered by the
@@ -225,7 +225,7 @@ and (
 -- security_invoker view whose body names a column is refused (42501) for a
 -- caller without that column privilege, so without this line both feed readers
 -- fail. anon holds neither. The residual this column grant creates against the
--- table's `using (true)` SELECT policy is an owner decision (README.md).
+-- table's `using (true)` SELECT policy is a deliberate choice.
 select 'P8 view ACL and column privilege' as probe
 where has_table_privilege('authenticated', 'public.findback_visible_posts', 'SELECT')
   and not has_table_privilege('anon', 'public.findback_visible_posts', 'SELECT')
@@ -470,8 +470,8 @@ where (select count(*) from public.user_blocks) = 0
 -- the disposable local cluster described in the header, with the readers called
 -- under `set role authenticated` plus
 -- `set_config('request.jwt.claim.sub', <uid>, false)`. The measured rows are in
--- EVIDENCE-B1-R3-AUTHOR.md §5, EVIDENCE-B1-R4-AUTHOR.md §3 and
--- EVIDENCE-B1-R5-AUTHOR.md §2. The four exceptions say why they cannot be run
+-- the layer-1 evidence records for round 3 §5, round 4 §3 and round 5 §2.
+-- The four exceptions say why they cannot be run
 -- here; three of them are mutations, not applies. (h)'s APPLY half IS run — the
 -- exception is (h-m), its mutation half; round-4 review MINOR-3.
 --
@@ -583,7 +583,7 @@ where (select count(*) from public.user_blocks) = 0
 --   block table carries no anon/authenticated privilege, and the migration's
 --   `revoke all on public.user_blocks …` is what removes it. Measured locally
 --   WITH the platform default ACL modelled
---   (probes/user-blocks-acl.sql): B1-27a proves the model is in force, B1-27
+--   (user-blocks-acl.sql): B1-27a proves the model is in force, B1-27
 --   asserts the revoke defeats it, B1-27b records RLS-with-no-policy as the
 --   second layer. The mutation half — deleting the revoke — is RUN at layer 2
 --   (mut-user-blocks-revoke-deleted goes blind on B1-27). Without the modelled
@@ -604,10 +604,10 @@ where (select count(*) from public.user_blocks) = 0
 --   (§13.8 item 3): the mutation this fixture describes (deleting the promotion
 --   walk from findback_list_comments_client) no longer names a rule B1 ships, so
 --   it cannot be killed by probe (e). Its replacement is B1-X5 in
---   draft-b1/must-fail-fixtures.mjs: "the comment reader re-applies the block as
+--   the must-fail fixture set: "the comment reader re-applies the block as
 --   a filter", killed at layer 1 and measured at layer 2 by 2(e), whose killing
 --   observation is that c2 disappears instead of being flagged. Recorded as an
---   owed amendment in draft-b1/README.md Residual 0.
+--   owed amendment under Residual 0.
 --
 -- (k) LIMITS STAY BLOCK-IMMUNE (fixture M13, D29). [UNRUN HERE] The limit guard
 --   belongs to B2's publish RPC, which does not exist in B1, so this probe can
@@ -634,7 +634,7 @@ where (select count(*) from public.user_blocks) = 0
 --   re-hash. EXPECT: identical hashes, row for row, on the two readers that
 --   gained a column compared over their pre-existing columns (the appended
 --   column is the intended delta and is checked separately). This HAS been
---   measured on the local engine by draft-b1/inertness-selfcheck.mjs, pre-B1 vs
+--   measured on the local engine by the inertness self-check runner, pre-B1 vs
 --   B1, on a fixed fixture; the live form on real data is still owed.
 --
 -- (n) CROSS-USER INBOX ISOLATION (round-3 MAJOR-1, the first blind spot). Seed a

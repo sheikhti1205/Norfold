@@ -1,6 +1,6 @@
 -- Person reports carry the recent messages a reporter chose, not only a name.
 --
--- The owner requirement: reporting a person sends the 5 most recent messages
+-- Requirement: reporting a person sends the 5 most recent messages
 -- from that person by default — text, image or voice — and the reporter may
 -- select fewer or more. One person report is ONE receipt and ONE rate-limit
 -- unit; it never becomes five message reports.

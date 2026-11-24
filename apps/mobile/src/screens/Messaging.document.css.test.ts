@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 /**
- * Owner correction 2026-11-20: a bare document is one message surface. The
+ * A bare document is one message surface. The
  * bubble keeps its fill and tightens its own inset; the file row inside it is
  * transparent. These guards read the actual declarations so a later edit cannot
  * reintroduce a nested painted frame or a second gutter. Rendered geometry still

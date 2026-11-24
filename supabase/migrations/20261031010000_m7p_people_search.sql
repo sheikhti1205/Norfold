@@ -1,7 +1,7 @@
 -- M7-P bounded public people discovery. Existing prefix helper remains intact
 -- for recovery/mention callers. No contact fields, sanctions or provider data.
 -- LIVE-PENDING: supabase/tests/verify_m7p_people_search.sql. Do not push before
--- migration + dependent milestone acceptance; no hosted application in this pass.
+-- migration + dependent acceptance; no hosted application in this pass.
 begin;
 create function public.findback_search_people(
   p_query text, p_cursor jsonb default null, p_limit integer default 20

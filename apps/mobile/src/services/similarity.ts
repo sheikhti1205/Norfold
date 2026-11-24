@@ -253,7 +253,7 @@ export function rankMatches(
  * Weight of the lexical overlap term in the structured/text fallback.
  *
  * The fallback exists because a device without the embedding model must still
- * get working suggestions (M1 packet: "text/structured matching remains
+ * get working suggestions (M1: "text/structured matching remains
  * functional"). It is NOT a semantic comparison and never claims to be: it
  * compares normalized words, then adds the same transparent category/date/
  * place bonuses the semantic path uses. 0.55 keeps shared wording the dominant

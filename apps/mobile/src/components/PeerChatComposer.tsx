@@ -77,11 +77,11 @@ export interface PeerChatComposerProps {
  *
  * One attachment control opens a sheet of real file capabilities (photos,
  * camera, video, document, audio, location) and each row starts a picker
- * narrowed to that type (owner direction 2026-11-18). One control carries
+ * narrowed to that type. One control carries
  * emoji, GIFs and stickers. Voice is a first-class control of its own: when the
  * conversation can record, a mic sits between that expression trigger and Send,
  * so recording never needs a menu first, and the sheet keeps no second copy of
- * it (owner direction 2026-11-18).
+ * it.
  *
  * The field keeps its own rounded surface; every other control floats
  * independently. There is no enclosing capsule. The field is `min-width: 0`, so
@@ -261,8 +261,8 @@ export function PeerChatComposer({
       </div>
       <div className="fb-peer-field">
         <textarea ref={field} value={value} aria-label="Message" placeholder="Message" rows={1}
-          // `readOnly`, never `disabled`: a disabled field blurs, and the owner's
-          // complaint is precisely that the caret leaves the box on send.
+          // `readOnly`, never `disabled`: a disabled field blurs, and the problem
+          // is precisely that the caret leaves the box on send.
           readOnly={locked}
           aria-disabled={locked || undefined}
           // A press precedes focus: it lets the screen advertise the field

@@ -2,7 +2,7 @@ import { getSupabase } from "./supabaseClient";
 import { ApiError } from "./session";
 
 /**
- * The account's contact rules, owner order 2026-11-12 (R3).
+ * The account's contact rules.
  *
  * Closed sets, stored on the account rather than on the device, because "who
  * may start a conversation with me" is a fact messaging admission has to read:

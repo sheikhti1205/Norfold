@@ -102,13 +102,13 @@ function settingsPathFromHref(href: string | null): string | null {
     }
   }
   if (path === "/settings" || path.startsWith("/settings/") || path.startsWith("/settings?")) return path;
-  // Profile is part of the same floating surface (owner order 2026-11-13).
+  // Profile is part of the same floating surface.
   if (path === "/profile" || path.startsWith("/profile/") || path.startsWith("/profile?")) return path;
   return null;
 }
 
 /**
- * Surfaces designed for a wide canvas (packet `09` §1/§2/§21).
+ * Surfaces designed for a wide canvas (§1/§2/§21).
  *
  * The shell used to clamp every screen to a 448px phone column. The feed
  * surfaces now use the canvas and grow more masonry columns; every other route
@@ -127,7 +127,7 @@ export function Shell() {
   const wideCanvas = WIDE_CANVAS.includes(pathname) || chatThread;
   const ownsInternalScroll =
     pathname === "/" || pathname === "/search" || pathname.startsWith("/help") || pathname.startsWith("/connections") || pathname.startsWith("/chats");
-  // Owner ruling 4(e): the stored preference is the reader's navigation style.
+  // Ruling 4(e): the stored preference is the reader's navigation style.
   // `auto` turns into the rail only where a side column fits. A chosen rail is
   // honoured on a phone too, where `Shell` renders it as a temporary overlay
   // drawer instead of a permanently open column.
@@ -287,7 +287,7 @@ export function Shell() {
     return () => document.removeEventListener("click", intercept, true);
   }, [openSettingsWindow]);
 
-  // Owner order 2026-11-14: settings is a window, never a page. A retired
+  // Settings is a window, never a page. A retired
   // `/settings...` address is redirected to Home by the app route, which hands
   // the exact destination over as navigation state; the window opens here and
   // the state is cleared, so the address settles on plain Home.
@@ -328,7 +328,7 @@ export function Shell() {
             shell-owned box. The anchor is the flex item, so the name adds no
             column, no row and no height; it is positioned from the rail's own
             box instead of a route header's padding and therefore cannot move
-            between screens (owner direction 2026-11-18). */}
+            between screens. */}
         <div className="fb-rail-anchor">
           <AnimatePresence key={`fb-rail-boundary-${navLayout}`} initial={false}>
             {showNav && inlineRail && <PrimaryNav key="fb-rail-nav" layout="rail" onOpenSettings={openSettingsWindow} fullscreen={fullscreen} />}
@@ -481,7 +481,7 @@ export function PrimaryNav({
     setRailPinnedState(next);
     saveAppearance({ ...loadAppearance(), railPinned: next });
   };
-  // Owner order 2026-11-13: the pinned sidebar is resizable. The width lives in
+  // The pinned sidebar is resizable. The width lives in
   // the same device-local appearance store as the pin, so it survives reloads
   // and never syncs to the account. The account menu reads it from the root CSS
   // variable because its popover is portalled out of the rail's subtree.
@@ -587,7 +587,7 @@ export function PrimaryNav({
   );
 
   const railPinned = rail && (drawer || railPinnedState);
-  // Owner order 2026-11-13: hovering the icon rail must not open the named
+  // Hovering the icon rail must not open the named
   // panel instantly. A press is usually navigation, not a request to see the
   // overlay expanded, so the pointer has to rest for two seconds before the
   // panel opens. Any press inside the rail cancels the pending expansion.
@@ -742,12 +742,12 @@ export function PrimaryNav({
               <X size={20} aria-hidden="true" />
             </button>
           </> : <>
-            {/* The app mark is the expand/collapse control (owner order 2026-11-13)
+            {/* The app mark is the expand/collapse control
                 and sits in the head at every width. The wordmark joins it only
                 when the panel is named; collapsed, the shell paints the app
                 name once just outside this column (`NavOutsideBrand` inside
                 `Shell`'s rail anchor), never in a route header and never
-                squeezed into the icon rail (owner direction 2026-11-18).
+                squeezed into the icon rail.
                 aria-pressed keeps the control a stateful toggle for assistive
                 tech and existing tests. */}
             <button

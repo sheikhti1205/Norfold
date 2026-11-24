@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # devices.sh — adb discovery + connect + Norfold_API36 boot/wait (documents only
-# the commands; running them requires the owner on a device-authorized host).
+# the commands; running them requires an authorized device host).
 #
 # Usage:
 #   scripts/device-harness/devices.sh list
@@ -47,7 +47,7 @@ case "$cmd" in
     avd="${FINDBACK_AVD}"
     [[ "${2:-}" == "--avd" && -n "${3:-}" ]] && avd="$3"
     cat <<EOF
-device-harness: Norfold_API36 boot commands (run by owner, one at a time):
+device-harness: Norfold_API36 boot commands (run one at a time):
   emulator -avd $avd -no-snapshot-load -no-boot-anim &
   ANDROID_SERIAL=$SERIAL_DEFAULT adb wait-for-device
   ANDROID_SERIAL=$SERIAL_DEFAULT adb shell 'while [ "\$(getprop sys.boot_completed)" != 1 ]; do sleep 2; done'

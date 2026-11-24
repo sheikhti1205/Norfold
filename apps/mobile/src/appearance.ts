@@ -151,13 +151,13 @@ export interface AppearanceSettings {
   reactionAppearance: ReactionAppearance;
   /**
    * The wide navigation rail, pinned open as a labelled panel instead of the
-   * icon column (owner order 2026-11-12, R7). Local layout habit, not account
+   * icon column. Local layout habit, not account
    * data, so it lives here beside `navLayout` and never syncs.
    */
   railPinned: boolean;
   /**
-   * Width of the pinned rail in CSS pixels (owner order 2026-11-13: the sidebar
-   * is resizable). Local layout habit like `railPinned`; never account data.
+   * Width of the pinned rail in CSS pixels. Local layout habit like
+   * `railPinned`; never account data.
    */
   railWidth: number;
 }

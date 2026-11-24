@@ -1,14 +1,14 @@
 /*
  * One identity control, one popover, and sub-panels that take the card over.
  *
- * The footer row is the only thing in the rail footer (owner order 2026-11-12,
- * R1): a full-width button carrying avatar, name, handle and earned badge.
+ * The footer row is the only thing in the rail footer: a full-width button
+ * carrying avatar, name, handle and earned badge.
  *
- * Owner order 2026-11-13 (reference: the ChatGPT account menu): the popover is
- * the width of the rail and opens above its trigger, so it covers the rail's
- * destinations instead of sitting beside them. Rows are click-driven; a row
- * with more inside replaces the list in the same card (the panel is not a
- * second floating layer), which is also why nothing here can chase the pointer.
+ * The popover is the width of the rail and opens above its trigger, so it
+ * covers the rail's destinations instead of sitting beside them. Rows are
+ * click-driven; a row with more inside replaces the list in the same card (the
+ * panel is not a second floating layer), which is also why nothing here can
+ * chase the pointer.
  */
 .fb-account-rail { margin-top: auto; display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
 .fb-account-rail .fb-nav-link { cursor: pointer; }
@@ -29,7 +29,7 @@
 .fb-account-menu {
   display: flex; flex-direction: column;
   width: var(--fb-rail-w, 192px); max-width: min(calc(100vw - 24px), 280px);
-  /* Owner ruling 2026-11-20: no excess height. The height cap now lives in the
+  /* No excess height. The height cap now lives in the
      component as the computed layered-popover maxHeight (half the live viewport,
      never above the 30rem ceiling) and rides the prop React Aria applies as the
      inline max-height; a stylesheet max-height can no longer hold. 30rem holds

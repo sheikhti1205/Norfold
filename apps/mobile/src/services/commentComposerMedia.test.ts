@@ -78,7 +78,7 @@ describe("validateAttachableFile", () => {
     expect(validateAttachableFile(file("b.png", "image/png", 5_000_000))).toBeNull();
   });
 
-  it("refuses video outright (packet `08` §7) with photos-only copy", () => {
+  it("refuses video outright (§7) with photos-only copy", () => {
     for (const mime of ["video/mp4", "video/webm", "video/quicktime"]) {
       expect(validateAttachableFile(file("clip", mime, 2048))).toMatch(/photos, not video/i);
     }
@@ -114,7 +114,7 @@ describe("createCommentAttachment", () => {
     expect(entry.remoteUrl).toBeUndefined();
   });
 
-  it("classifies video defensively — no intake reaches it with a video (packet `08` §7)", () => {
+  it("classifies video defensively — no intake reaches it with a video (§7)", () => {
     // The picker's accept list and `validateAttachableFile` both refuse video
     // first, so the composer can never stage a clip. The classification stays
     // honest for a direct caller (and keeps `kind` in step with the file).

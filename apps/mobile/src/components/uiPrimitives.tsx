@@ -78,7 +78,7 @@ export function FeedSkeleton({
 }) {
   // Masonry reserves the grid it is about to show: same column count, and
   // ragged photo ratios rather than equal rows, because the unequal card
-  // heights are the whole point of the layout (packet `09` §7). Rendering it
+  // heights are the whole point of the layout (§7). Rendering it
   // as stacked rows would make the first paint jump when the real cards land.
   if (density === "masonry") {
     const columnCount = Math.max(1, Math.floor(columns));

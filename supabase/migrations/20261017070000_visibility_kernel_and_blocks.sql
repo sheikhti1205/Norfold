@@ -14,7 +14,7 @@
 -- the re-creations of the five readers that must read the view / surface the
 -- block flag / enforce D21's notification suppression.
 --
--- Authority: <private>/.../trust-backend/MODERATION-CONTRACT-DECISION.md
+-- Authority: the moderation contract note
 -- §3 D8–D11, §4 D16–D24, §8 D40–D42, §9 C8, §10 C9 (layers + fixtures M1–M17),
 -- and §13.8 D12 amended (the two-function split + the O5 visibility
 -- consequence). Nothing is decided here that the contract does not already
@@ -46,14 +46,14 @@
 -- surviving reply to its nearest surviving ancestor. O5 (above) supersedes the
 -- drop: the reader now returns every comment of the post and flags the blocked
 -- ones, so there is nothing left to promote and the recursive promotion walk is
--- not shipped. This is a contract divergence, recorded for the coordinator in
--- README.md Residual 0 alongside the D12 amendment.
+-- not shipped. This is a contract divergence, recorded for the coordinator as
+-- Residual 0 alongside the D12 amendment.
 --
 -- INERT BY CONSTRUCTION. With moderation_visibility all-'PUBLISHED' and
 -- user_blocks empty, the view is a pass-through, every flag is false and every
 -- guard below is a no-op, so this file changes zero rows of output on every
 -- affected reader and zero rows in public.notifications. That is not a claim:
--- it is measured by inertness-selfcheck.mjs, which hashes every affected
+-- it is measured by the inertness self-check runner, which hashes every affected
 -- reader's rows before and after this file on one fixed fixture (layer 1b).
 --
 -- ADDITIVE ONLY. No column drop, no row rewrite, no DELETE, no UPDATE, no
@@ -81,7 +81,7 @@
 -- the view's WHERE moderation atom with the viewer substituted, and pins the
 -- trigger's D21 interaction term separately, so neither half can drift.
 --
--- ACL CLOSURE (ACL-CLOSURE.md, the fact-#14 default-ACL trap). Every object
+-- ACL CLOSURE (the ACL closure note, the fact-#14 default-ACL trap). Every object
 -- this file creates is revoked from public/anon/authenticated first and then
 -- granted to exactly the role that needs it: anon gains nothing, and
 -- authenticated gains EXECUTE on two definer helpers and SELECT on one view.
@@ -90,10 +90,9 @@
 -- because a security_invoker view whose body names a column is unusable for a
 -- caller who does not hold that column's privilege. That grant, and the
 -- indistinguishability residual it creates against the existing
--- `using (true)` SELECT policy on the table, are stated in full in section 3
--- and in README.md.
+-- `using (true)` SELECT policy on the table, are stated in full in section 3.
 --
--- EXECUTION STATUS (see EVIDENCE-B1-R3-AUTHOR.md). Layer 1 (static parity),
+-- EXECUTION STATUS (see the layer-1 evidence record). Layer 1 (static parity),
 -- layer 1b (engine behaviour + inertness) and the layer-2 catalog probes are
 -- RUN. Section 1 of the verify file has now been executed statement-by-statement
 -- against a real PostgreSQL 17.5 cluster with this migration applied on top of
@@ -102,10 +101,10 @@
 -- mutation (negative controls). The D10 audience matrix, the block/unblock
 -- behaviour and the notification suppression have likewise been executed
 -- locally with `set role authenticated` plus a JWT `sub` claim, and are
--- reported as measurements in that file. What remains owner-only is the run
+-- reported as measurements in that file. What remains unrun is the pass
 -- against the hosted project itself (version parity of the deparse output) and
 -- the client-side blur/reveal surface, which has no rendered review anywhere.
--- The owner's probes are
+-- The probes are
 -- supabase/tests/verify_20261017070000_visibility_kernel_and_blocks.sql.
 --
 -- LIVE-PENDING. Reported as pending, never as passed.
@@ -116,7 +115,8 @@
 -- pair oracle is INTERNAL (granted to nobody) and the only client surface is
 -- the self-subject findback_is_blocked_with_me(p_other). This gives up D12's
 -- originally-named two-argument client surface; the contract amendment that
--- documents the substitution is owed and recorded in README.md / EVIDENCE.
+-- documents the substitution is owed and recorded in the layer-1 evidence
+-- record.
 -- §13.8 rules the self-subject form NOT an oracle: it is caller-scoped and
 -- direction-free, one bit about a named other party, computed only from rows in
 -- which the caller is a party. That is exactly the signal O5 needs, which is
@@ -179,10 +179,10 @@ comment on table public.user_blocks is
 -- least-privilege form: it gives up the ability to ask about a pair the caller
 -- is not part of, and nothing else; every sanctioned call site in this file
 -- passes exactly one third party next to the caller. It is also the self-subject
--- signalling surface the owner's "blocking is mutual and visible" ruling
+-- signalling surface the "blocking is mutual and visible" rule
 -- sanctions (a client can label a blocked-pair row without learning who blocked
 -- whom). The contract's D12 names the two-argument form as the client callable;
--- this split is the amendment recorded in README.md, not a silent deviation.
+-- this split is the amendment recorded as Residual 0, not a silent deviation.
 --
 -- The disjunction is symmetric on purpose (D17): the ACT is one-sided, but the
 -- EFFECT is mutual, and that is what the confirmation copy promises the user.
@@ -265,8 +265,8 @@ alter table public.item_posts
 -- every row is 'PUBLISHED' that is inert, and it is inert for the whole life of
 -- B1 because B1 has no writer; it becomes an indistinguishability (P1/D11)
 -- oracle the moment B2 writes the column. Closing it needs a second predicate
--- (an RLS tightening on item_posts), which D11 forbids, so it is recorded as an
--- owner decision in README.md rather than fixed here.
+-- (an RLS tightening on item_posts), which D11 forbids, so it is recorded
+-- as a residual rather than fixed here.
 grant select (moderation_visibility) on public.item_posts to authenticated;
 
 -- ===========================================================================
@@ -294,12 +294,12 @@ grant select (moderation_visibility) on public.item_posts to authenticated;
 -- visible to every viewer and the client can blur the row and offer
 -- tap-to-reveal. Deleting the row is what this revision removed: with a WHERE
 -- filter the client could not render the content at all, which is the opposite
--- of what the owner ruled. The atom that DOES remain in the WHERE is
+-- of what the rule requires. The atom that DOES remain in the WHERE is
 -- moderation: a HIDDEN/PENDING_REVIEW/REMOVED report is absent to everyone but
 -- its author, which is still the "absent == inaccessible" collapse (§13.1).
 -- `blocked_author` is true only for rows the caller is a party to, so a third
 -- party's read is bit-for-bit what it was before this file (measured in
--- EVIDENCE-B1-R3-AUTHOR.md).
+-- the layer-1 evidence record).
 drop view if exists public.findback_visible_posts;
 
 create view public.findback_visible_posts with (security_invoker = true) as
@@ -766,7 +766,7 @@ comment on function public.findback_query_posts_nearby_client(
 -- 8. public.findback_list_comments_client — O5 block flag (D19 superseded)
 -- ===========================================================================
 -- Re-created from the frozen M2 revision 2 text
--- (draft-m2/20261017052000_comment_report_reference.sql, the file B1 depends
+-- (20261017052000_comment_report_reference.sql, the file B1 depends
 -- on). The projection, the attachment aggregate and the reaction aggregate are
 -- untouched; ONE column is appended and the D19 drop is removed.
 --
@@ -1075,9 +1075,9 @@ comment on function public.findback_list_notifications_client(boolean)
   is 'FindBack notification inbox (authenticated): caller-owned rows newest first; p_deleted selects the soft-deleted view. REACTION rows carry the canonical kind in reaction_kind (null on legacy rows). Max 100. blocked_actor is the O5 signal: true when the caller is blocked with the row''s actor (caller-scoped, direction-free); the row is returned either way. Moderation still collapses: a row whose target post is no longer in the caller''s view is not rendered.';
 
 -- ===========================================================================
--- Execution status (see EVIDENCE-B1-R3-AUTHOR.md for the measured record)
+-- Execution status (see the layer-1 evidence record for the measurements)
 -- ===========================================================================
--- Owner probes: supabase/tests/verify_20261017070000_visibility_kernel_and_blocks.sql
+-- Probe file: supabase/tests/verify_20261017070000_visibility_kernel_and_blocks.sql
 --   section 1 catalog probes (executed locally, 1 row each) and section 2
 --   behavioural probes (executed locally with `set role authenticated` + a JWT
 --   `sub` claim).
