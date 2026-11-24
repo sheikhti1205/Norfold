@@ -31,6 +31,7 @@ import {
 import type { CommentAttachmentDescriptor } from "../services/posts";
 import { ApiError } from "../services/session";
 import { friendlyError } from "../utils/friendlyErrors";
+import { isBlobMediaUrl, isHttpsMediaUrl, safeMediaSrc } from "../utils/mediaUrl";
 import { shouldReduceMotion } from "./uiMotion";
 import { interactionRefusalCopy } from "../utils/interactionRefusal";
 
@@ -174,7 +175,7 @@ export function toCommentAttachmentDescriptors(
       if (a.objectKey) descriptor.storage_key = a.objectKey;
       if (a.klipySlug) descriptor.klipy_slug = a.klipySlug;
       if (a.klipyKind) descriptor.klipy_kind = a.klipyKind;
-      if (a.previewUrl.startsWith("https://")) descriptor.preview_url = a.previewUrl;
+      if (isHttpsMediaUrl(a.previewUrl)) descriptor.preview_url = a.previewUrl;
       if (a.mimeType) descriptor.mime_type = a.mimeType;
       if (a.fileName) descriptor.file_name = a.fileName;
       return descriptor;
@@ -559,7 +560,7 @@ export function CommentComposer({
       // keys that are now row-referenced server-side.
       submittedRef.current = true;
       for (const a of attachments) {
-        if (a.kind !== "report" && a.previewUrl.startsWith("blob:")) {
+        if (a.kind !== "report" && isBlobMediaUrl(a.previewUrl)) {
           try {
             URL.revokeObjectURL(a.previewUrl);
           } catch {
@@ -676,6 +677,7 @@ export function CommentComposer({
               );
               const source =
                 a.kind === "gif" ? ("klipy" as const) : a.remoteUrl ? commentMediaProvenance(a.remoteUrl) : null;
+              const previewSrc = safeMediaSrc(a.previewUrl);
               return (
               <figure
                 key={a.id}
@@ -683,18 +685,18 @@ export function CommentComposer({
                 data-status={a.status}
                 className="relative w-full"
               >
-                {a.kind === "video" && a.previewUrl !== "" ? (
+                {a.kind === "video" && previewSrc !== "" ? (
                   <video
-                    src={a.previewUrl}
+                    src={previewSrc}
                     muted
                     playsInline
                     preload="metadata"
                     aria-label={a.fileName}
                     className="h-[96px] w-full rounded-m3-xs border border-outline-variant object-cover"
                   />
-                ) : a.previewUrl !== "" ? (
+                ) : previewSrc !== "" ? (
                   <img
-                    src={a.previewUrl}
+                    src={previewSrc}
                     alt={a.fileName}
                     loading="lazy"
                     className="h-[96px] w-full rounded-m3-xs border border-outline-variant object-cover"

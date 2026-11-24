@@ -13,6 +13,7 @@ import { hasFinePointer } from "./inputCapabilities";
 import { EmojiPickerButton } from "./EmojiPickerButton";
 import { insertEmoji } from "./EmojiPicker";
 import { speechInput } from "../services/speechInput";
+import { safeMediaSrc } from "../utils/mediaUrl";
 import {
   fadeUpVariants,
   motionDurations,
@@ -491,6 +492,10 @@ export function ChatComposer({
         >
           {selections.map((s) => {
             const status = s.status ?? "ready";
+            // A staged preview is a `blob:` object URL or an `https:` provider
+            // image. Anything else is not renderable media: the tile falls back
+            // to the name, so no unsafe value reaches the attribute.
+            const previewSrc = safeMediaSrc(s.previewUrl);
             return (
               <figure
                 key={s.id}
@@ -514,9 +519,9 @@ export function ChatComposer({
                   >
                     Couldn’t add
                   </span>
-                ) : s.previewUrl !== "" ? (
+                ) : previewSrc !== "" ? (
                   <img
-                    src={s.previewUrl}
+                    src={previewSrc}
                     alt={s.name}
                     className="h-16 w-16 rounded-m3-xs border border-outline-variant object-cover"
                   />
