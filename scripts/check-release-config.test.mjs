@@ -31,6 +31,13 @@ const KEY = "sb_publishable_abcdefghijklmnopqrstuvwxyz";
 const DSN = "https://abcdef123456@o123.ingest.sentry.io/123";
 const SHARE = "https://findback.test";
 
+/**
+ * Escape a literal so it can be embedded in a RegExp. The client id's dots are
+ * regex wildcards unless the literal is escaped, which would turn a presence
+ * assertion into an assertion about any four characters.
+ */
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 /** CLI env with every non-Google gate satisfied; Google varied per test. */
 function cliEnv(overrides = {}) {
   return {
@@ -149,7 +156,7 @@ test("readApkDexText round-trips a real APK's dex through unzip", () => {
     const apk = join(dir, "app.apk");
     assert.equal(spawnSync("zip", ["-q", "-j", apk, dex]).status, 0);
     const text = readApkDexText(apk);
-    assert.ok(text.includes(WEB_CLIENT));
+    assert.match(text, new RegExp(escapeRegExp(WEB_CLIENT)));
     assert.ok(checkPackagedGoogleText(text, { clientId: WEB_CLIENT }).ok);
 
     const empty = join(dir, "empty.apk");

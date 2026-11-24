@@ -119,7 +119,10 @@ export function readApkDexText(apkPath, { run = defaultRun } = {}) {
  */
 export function checkPackagedGoogleText(dexText, { clientId } = {}) {
   const text = String(dexText ?? "");
-  if (!text.includes(".apps.googleusercontent.com")) {
+  // The dex is opaque compiled strings, not a URL that can be parsed. The
+  // domain shape is proven by a local part: digits/an id followed by the
+  // domain, rather than one bare substring that says nothing about presence.
+  if (!/[A-Za-z0-9][A-Za-z0-9-]*\.apps\.googleusercontent\.com/.test(text)) {
     return { ok: false, reason: "google-client-missing" };
   }
   if (/GOCSPX-/i.test(text)) return { ok: false, reason: "secret-shaped" };
