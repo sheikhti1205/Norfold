@@ -5,6 +5,11 @@
   "version": "0.16.0-beta.3",
   "versionCode": 101077,
   "classificationBase": "a1f5cc61a9cbf02fabf4d6a2bcbddc0f22f3a02a",
-  "pendingRelease": null,
+  "pendingRelease": {
+    "tag": "v0.16.0",
+    "version": "0.16.0",
+    "versionCode": 101078,
+    "commit": "e4559a0b30823ff90ce4454ee8501986e672fb16"
+  },
   "lastRelease": null
 }
