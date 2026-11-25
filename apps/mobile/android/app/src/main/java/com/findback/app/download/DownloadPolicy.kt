@@ -69,6 +69,18 @@ object DownloadPolicy {
     }
 
     /**
+     * Whether the bytes actually written match an asserted exact size.
+     * A null or non-positive [expectedBytes] means the caller asserted no
+     * size (a dropped numeric argument, an absent hint), so the transfer is
+     * accepted and proven by the digest instead. A resume prefix
+     * ([offset]) counts toward the total.
+     */
+    fun streamSizeAccepted(expectedBytes: Long?, offset: Long, received: Long): Boolean {
+        if (expectedBytes == null || expectedBytes <= 0) return true
+        return offset + received == expectedBytes
+    }
+
+    /**
      * v1 journal JSON (`<staging>.journal.json`). Keys mirror TS
      * `buildJournal`: v, modelId, revision, filePath, url, offset, total,
      * sha, updatedAt.

@@ -45,6 +45,20 @@ class DownloadPolicyTest {
         assertNull(DownloadPolicy.parseTotalFromContentRange(null, 10L))
     }
 
+    @Test fun streamSizeAcceptance() {
+        // No assert: an absent or non-positive expected size never blocks.
+        assertTrue(DownloadPolicy.streamSizeAccepted(null, 0L, 8021L))
+        assertTrue(DownloadPolicy.streamSizeAccepted(0L, 0L, 8021L))
+        assertTrue(DownloadPolicy.streamSizeAccepted(-1L, 0L, 8021L))
+        // Asserted size must match the written bytes exactly.
+        assertTrue(DownloadPolicy.streamSizeAccepted(8021L, 0L, 8021L))
+        assertFalse(DownloadPolicy.streamSizeAccepted(8021L, 0L, 8020L))
+        assertFalse(DownloadPolicy.streamSizeAccepted(8021L, 0L, 8022L))
+        // A resume prefix counts toward the total.
+        assertTrue(DownloadPolicy.streamSizeAccepted(190L, 100L, 90L))
+        assertFalse(DownloadPolicy.streamSizeAccepted(190L, 100L, 89L))
+    }
+
     @Test fun journalJsonMatchesTsV1Shape() {
         val json = DownloadPolicy.journalJson(
             modelId = "needle3-cact-l20",

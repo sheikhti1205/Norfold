@@ -184,6 +184,7 @@ class ModelDownloadPlugin : Plugin() {
             resumeOffset = call.getLong("resumeOffset", 0L) ?: 0L,
             expectedSha256 = call.getString("expectedSha256", "") ?: "",
             maxBytes = call.getLong("maxBytes", DEFAULT_MAX_BYTES) ?: DEFAULT_MAX_BYTES,
+            expectedBytes = call.getLong("expectedBytes", -1L)?.takeIf { it > 0 },
             modelId = call.getString("modelId", "") ?: "",
             revision = call.getString("revision", "") ?: "",
             fileName = call.getString("fileName", "") ?: "",
@@ -439,6 +440,7 @@ class ModelDownloadPlugin : Plugin() {
         val resumeOffset: Long,
         val expectedSha256: String,
         val maxBytes: Long,
+        val expectedBytes: Long?,
         val modelId: String,
         val revision: String,
         val fileName: String,
@@ -501,6 +503,11 @@ class ModelDownloadPlugin : Plugin() {
                 if (status != 200 && status != 206) {
                     throw DownloadFailed("HTTP_$status", "download failed with HTTP $status")
                 }
+                // Server-supplied length is a HINT for progress only. A proxy,
+                // a redirect hop, a chunked response or a dropped numeric
+                // argument can all make it wrong or absent, so it never gates
+                // the transfer: integrity is proven by the digest and by the
+                // exact byte count asserted after streaming.
                 val total: Long? = if (offset > 0) {
                     if (status == 200) {
                         throw DownloadFailed(
@@ -515,12 +522,6 @@ class ModelDownloadPlugin : Plugin() {
                 } else {
                     conn.getHeaderField("Content-Length")?.toLongOrNull()
                         ?.takeIf { it >= 0 }
-                }
-                if (total != null && total != maxBytes) {
-                    throw DownloadFailed(
-                        "SIZE_MISMATCH",
-                        "download size differs from exact expected bytes",
-                    )
                 }
 
                 val digest = MessageDigest.getInstance("SHA-256")
@@ -578,10 +579,15 @@ class ModelDownloadPlugin : Plugin() {
                     }
                 }
                 writeJournal(offset + received, total)
+                if (!DownloadPolicy.streamSizeAccepted(expectedBytes, offset, received)) {
+                    throw DownloadFailed(
+                        "SIZE_MISMATCH",
+                        "streamed ${offset + received} bytes, expected $expectedBytes",
+                    )
+                }
                 val actualHex = digest.digest().joinToString("") { "%02x".format(it) }
                 onProgress(received, total)
                 throwIfCancelled()
-                if (offset + received != maxBytes) throw DownloadFailed("SIZE_MISMATCH", "Truncated transfer")
                 if (actualHex != expectedSha256.lowercase()) throw DownloadFailed("CHECKSUM_MISMATCH", "Checksum mismatch")
                 return DownloadResult(received, total, actualHex, url)
             } finally {

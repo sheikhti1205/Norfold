@@ -384,6 +384,8 @@ interface NativeDownloadPlugin {
     resumeOffset: number;
     expectedSha256: string;
     maxBytes: number;
+    /** Exact size the streamed bytes must equal; non-positive means digest-only. */
+    expectedBytes: number;
     modelId: string;
     revision: string;
     fileName: string;
@@ -480,6 +482,9 @@ export class CapacitorModelDownloadDriver implements ModelDownloadDriver {
         resumeOffset: attempt.resumeOffset,
         expectedSha256: attempt.expectedSha256,
         maxBytes: attempt.maxBytes,
+        // The catalogue's exact byte count, asserted after the stream;
+        // `maxBytes` stays the hard bound during it.
+        expectedBytes: attempt.maxBytes,
         modelId: attempt.modelId,
         revision: attempt.revision,
         fileName: attempt.fileName,
