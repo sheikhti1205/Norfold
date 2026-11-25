@@ -661,6 +661,8 @@ jobs:
       # preflight below before signing; the packaged BuildConfig assert below
       # proves the non-empty value reached the APK.
       GOOGLE_WEB_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID }}
+      GOOGLE_MAPS_ANDROID_API_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
+      GOOGLE_MAPS_WEB_API_KEY: ${{ secrets.GOOGLE_MAPS_WEB_API_KEY }}
     steps:
       - uses: actions/checkout@v5
         with:

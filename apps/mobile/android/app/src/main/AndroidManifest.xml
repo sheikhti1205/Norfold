@@ -109,6 +109,12 @@
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@drawable/ic_stat_findback" />
 
+        <!-- Google Maps Android SDK key (MAP migration): injected at build time
+             through the findbackMapsApiKey manifest placeholder, never a literal. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${findbackMapsApiKey}" />
+
         <!-- Receives the notification-shade reply text and posts it. -->
         <receiver android:name=".update.AppUpdateReceiver" android:exported="false" />
         <receiver

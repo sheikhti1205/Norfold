@@ -11,6 +11,7 @@ const ENV_KEYS = [
   "FINDBACK_MAP_STYLE_URL",
   "FINDBACK_MAP_CONTACT",
   "VITE_NOMINATIM_SEARCH_URL",
+  "VITE_GOOGLE_MAPS_API_KEY",
 ] as const;
 const savedEnv: Record<string, string | undefined> = {};
 
@@ -41,6 +42,8 @@ describe("resolveMapBuildEnv", () => {
       contactSource: "default",
       nominatimSearchUrl: DEFAULT_NOMINATIM_SEARCH_URL,
       searchSource: "default",
+      googleMapsApiKey: "",
+      googleMapsKeySource: "absent",
     });
   });
 
@@ -59,6 +62,8 @@ describe("resolveMapBuildEnv", () => {
       contactSource: "custom",
       nominatimSearchUrl: "https://proxy.provider.net/search",
       searchSource: "custom",
+      googleMapsApiKey: "",
+      googleMapsKeySource: "absent",
     });
   });
 
@@ -75,6 +80,19 @@ describe("resolveMapBuildEnv", () => {
     expect(resolved.contactSource).toBe("default");
     expect(resolved.nominatimSearchUrl).toBe(DEFAULT_NOMINATIM_SEARCH_URL);
     expect(resolved.searchSource).toBe("default");
+  });
+
+  it("treats the Google Maps key as absent by default and passes a custom value through", async () => {
+    envDir = await mkdtemp(join(tmpdir(), "findback-vite-map-"));
+    await writeFile(join(envDir, ".env.production"), "# no Google Maps key\n");
+    const absent = resolveMapBuildEnv("production", envDir);
+    expect(absent.googleMapsApiKey).toBe("");
+    expect(absent.googleMapsKeySource).toBe("absent");
+
+    await writeFile(join(envDir, ".env.production"), "VITE_GOOGLE_MAPS_API_KEY=web-key-for-tests\n");
+    const custom = resolveMapBuildEnv("production", envDir);
+    expect(custom.googleMapsApiKey).toBe("web-key-for-tests");
+    expect(custom.googleMapsKeySource).toBe("custom");
   });
 
   it("keeps the owner defaults in sync with the documented single source", () => {

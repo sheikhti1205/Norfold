@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checkBannedHits, checkMapLibrePin, checkMapProvider, readPin } from "./check-map-provider.mjs";
+import {
+  checkBannedHits,
+  checkGoogleKeyPlumbing,
+  checkMapLibrePin,
+  checkMapProvider,
+  findLiteralApiKeys,
+  readPin,
+} from "./check-map-provider.mjs";
 
 /** Fake FS matched by path suffix (the gate resolves files against repo root). */
 function reader(files) {
@@ -69,12 +76,37 @@ test("rejects a drifted renderer version or missing style wiring", () => {
   assert.match(checkMapLibrePin(reader(floating)).errors.join("\n"), /single version source/);
 });
 
-test("rejects a reintroduced Google Maps key reference", () => {
-  const files = baseFiles();
-  files[REL.buildGradle] += '\nmanifestPlaceholders = [googleMapsApiKey: googleMapsApiKey()]';
-  const result = checkMapProvider(reader(files));
+test("flags a literal Google API key in a build file", () => {
+  const literal = `AIza${"A".repeat(35)}`;
+  const read = reader({
+    "dirty.gradle": `manifestPlaceholders = [findbackMapsApiKey: "${literal}"]`,
+    "clean.gradle": 'manifestPlaceholders = [findbackMapsApiKey: "${findbackMapsApiKey}"]',
+  });
+  assert.deepEqual(findLiteralApiKeys(["dirty.gradle"], read), [
+    "dirty.gradle: literal Google API key",
+  ]);
+  assert.deepEqual(findLiteralApiKeys(["clean.gradle"], read), []);
+  assert.deepEqual(findLiteralApiKeys(["missing.gradle"], read), []);
+});
+
+test("rejects a literal Maps key in the manifest instead of a placeholder", () => {
+  const read = reader({
+    "app/build.gradle": [
+      'def googleMapsApiKey = System.getenv("GOOGLE_MAPS_ANDROID_API_KEY") ?: ""',
+      "manifestPlaceholders = [findbackShareHost: shareLinkHostname(), findbackMapsApiKey: googleMapsApiKey]",
+      'buildConfigField "String", "GOOGLE_MAPS_ANDROID_API_KEY", "\\"${googleMapsApiKey}\\""',
+    ].join("\n"),
+    "AndroidManifest.xml": [
+      "<meta-data",
+      '    android:name="com.google.android.geo.API_KEY"',
+      '    android:value="literal-key-not-a-placeholder" />',
+    ].join("\n"),
+    "vite.config.ts": 'const googleKey = env.VITE_GOOGLE_MAPS_API_KEY?.trim() || "";',
+    ".env.example": "GOOGLE_MAPS_ANDROID_API_KEY=\nVITE_GOOGLE_MAPS_API_KEY=\n",
+  });
+  const result = checkGoogleKeyPlumbing(read);
   assert.equal(result.ok, false);
-  assert.match(result.errors.join("\n"), /GOOGLE_MAPS_API_KEY|googleMapsApiKey/);
+  assert.match(result.errors.join("\n"), /manifest placeholder/);
 });
 
 test("live repo tree passes the provider gate", () => {

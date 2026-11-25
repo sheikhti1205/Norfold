@@ -166,6 +166,13 @@ def findbackMapSearchUrl() {
     return url.trim()
 }
 
+// Google Maps (MAP migration) Android SDK client key. A restricted,
+// public-by-design client key delivered from the CI secret
+// GOOGLE_MAPS_ANDROID_API_KEY. When absent the build stays valid and the
+// Activity refuses to create a map (fail closed). This value is compiled into
+// the APK, so it must never be committed here — CI supplies it at build time.
+def googleMapsApiKey = System.getenv("GOOGLE_MAPS_ANDROID_API_KEY") ?: ""
+
 // Chat-file export: the compiled, trusted Storage origin the native bridge
 // compares every signed URL against. It is PUBLIC configuration (already in
 // the web bundle), never a secret and never a JS argument, so a compromised
@@ -205,7 +212,7 @@ android {
         versionCode buildVersionCode()
         versionName appVersionName()
         resValue "string", "findback_build_git_sha", gitCommitSha()
-        manifestPlaceholders = [findbackShareHost: shareLinkHostname()]
+        manifestPlaceholders = [findbackShareHost: shareLinkHostname(), findbackMapsApiKey: googleMapsApiKey]
         // Native direct-reply endpoint. The Supabase URL is public (it is baked
         // into the web bundle); the publishable key is NOT needed here — the
         // reply-comment function is token-authenticated. Env override first so
@@ -223,6 +230,10 @@ android {
         // exists anywhere in this path. Never hard-code a real value here.
         def googleWebClientId = System.getenv("GOOGLE_WEB_CLIENT_ID") ?: ""
         buildConfigField "String", "GOOGLE_WEB_CLIENT_ID", "\"${googleWebClientId}\""
+        // Google Maps Android SDK key (MAP migration, see googleMapsApiKey
+        // above). Public-by-design restricted client key; empty keeps the build
+        // valid and the map surface fails closed.
+        buildConfigField "String", "GOOGLE_MAPS_ANDROID_API_KEY", "\"${googleMapsApiKey}\""
         // Keyless map style endpoint (see findbackMapStyleUrl above). Public
         // non-secret config; validated natively before use (HTTPS, non-empty,
         // non-placeholder) with the OpenFreeMap default as fallback.

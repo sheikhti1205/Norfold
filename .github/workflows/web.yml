@@ -36,6 +36,8 @@ jobs:
       VITE_KLIPY_API_KEY: ${{ secrets.VITE_KLIPY_API_KEY }}
       SENTRY_ORG: ${{ vars.SENTRY_ORG }}
       SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+      GOOGLE_MAPS_ANDROID_API_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
+      GOOGLE_MAPS_WEB_API_KEY: ${{ secrets.GOOGLE_MAPS_WEB_API_KEY }}
     steps:
       - uses: actions/checkout@v5
         with:

@@ -47,6 +47,7 @@ export function resolveMapBuildEnv(
   const style = env.FINDBACK_MAP_STYLE_URL?.trim() || "";
   const contact = env.FINDBACK_MAP_CONTACT?.trim() || "";
   const search = env.VITE_NOMINATIM_SEARCH_URL?.trim() || "";
+  const googleKey = env.VITE_GOOGLE_MAPS_API_KEY?.trim() || "";
   return {
     styleUrl: style || DEFAULT_MAP_STYLE_URL,
     contact: contact || DEFAULT_MAP_CONTACT,
@@ -54,6 +55,8 @@ export function resolveMapBuildEnv(
     contactSource: (contact ? "custom" : "default") as "custom" | "default",
     nominatimSearchUrl: search || DEFAULT_NOMINATIM_SEARCH_URL,
     searchSource: (search ? "custom" : "default") as "custom" | "default",
+    googleMapsApiKey: googleKey,
+    googleMapsKeySource: (googleKey ? "custom" : "absent") as "custom" | "absent",
   };
 }
 
@@ -250,6 +253,7 @@ export default defineConfig(({ command, mode }) => {
       "import.meta.env.VITE_MAP_SEARCH_CONTACT": JSON.stringify(mapEnv.contact),
       "import.meta.env.VITE_NOMINATIM_SEARCH_URL": JSON.stringify(mapEnv.nominatimSearchUrl),
       "import.meta.env.VITE_GOOGLE_DRIVE_CLIENT_ID": JSON.stringify(driveClientId),
+      "import.meta.env.VITE_GOOGLE_MAPS_API_KEY": JSON.stringify(mapEnv.googleMapsApiKey),
       __SUPABASE_URL__: JSON.stringify(url),
       __SUPABASE_PUBLISHABLE_KEY__: JSON.stringify(publishableKey),
     },
