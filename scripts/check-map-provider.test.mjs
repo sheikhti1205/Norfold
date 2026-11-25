@@ -5,6 +5,7 @@ import {
   checkGoogleKeyPlumbing,
   checkMapLibrePin,
   checkMapProvider,
+  checkWorkflowMapKeyExport,
   findLiteralApiKeys,
   readPin,
 } from "./check-map-provider.mjs";
@@ -24,6 +25,8 @@ const REL = {
   plugin: "apps/mobile/android/app/src/main/java/com/findback/app/map/FindbackMapPlugin.kt",
 };
 
+const WEB_KEY = "${{ secrets.GOOGLE_MAPS_WEB_API_KEY }}";
+
 function baseFiles() {
   return {
     [REL.variables]: "mapLibreVersion = '13.6.1'",
@@ -33,6 +36,16 @@ function baseFiles() {
       'System.getenv("FINDBACK_MAP_STYLE_URL") ?: "https://tiles.openfreemap.org/styles/liberty"',
     ].join("\n"),
     [REL.plugin]: 'const val RENDERER_VERSION = "13.6.1"',
+  };
+}
+
+function workflowFiles() {
+  const block = (indent) => `${indent}env:\n${indent}  VITE_GOOGLE_MAPS_API_KEY: ${WEB_KEY}\n`;
+  return {
+    ".github/workflows/ci.yml": block("      "),
+    ".github/workflows/web.yml": block("      "),
+    ".github/workflows/release.yml": block("      "),
+    ".github/workflows/android-builds.yml": block("  "),
   };
 }
 
@@ -107,6 +120,27 @@ test("rejects a literal Maps key in the manifest instead of a placeholder", () =
   const result = checkGoogleKeyPlumbing(read);
   assert.equal(result.ok, false);
   assert.match(result.errors.join("\n"), /manifest placeholder/);
+});
+
+test("accepts workflows that export the web key under the build name", () => {
+  const result = checkWorkflowMapKeyExport(reader(workflowFiles()));
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.ok, true);
+});
+
+test("rejects a workflow that drops the build name or the secret source", () => {
+  const files = workflowFiles();
+  files[".github/workflows/release.yml"] =
+    "    env:\n      GOOGLE_MAPS_WEB_API_KEY: ${{ secrets.GOOGLE_MAPS_WEB_API_KEY }}\n";
+  files[".github/workflows/ci.yml"] =
+    "    env:\n      VITE_GOOGLE_MAPS_API_KEY: ${{ vars.VITE_GOOGLE_MAPS_API_KEY }}\n";
+  delete files[".github/workflows/web.yml"];
+  const result = checkWorkflowMapKeyExport(reader(files));
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join("\n"), /release\.yml must export VITE_GOOGLE_MAPS_API_KEY/);
+  assert.match(result.errors.join("\n"), /release\.yml must not export the dead/);
+  assert.match(result.errors.join("\n"), /ci\.yml must export VITE_GOOGLE_MAPS_API_KEY/);
+  assert.match(result.errors.join("\n"), /web\.yml unreadable/);
 });
 
 test("live repo tree passes the provider gate", () => {

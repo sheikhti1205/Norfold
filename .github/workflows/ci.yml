@@ -295,7 +295,7 @@ jobs:
       # Public identifier; empty keeps Google sign-in fail-closed in the build.
       GOOGLE_WEB_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID }}
       GOOGLE_MAPS_ANDROID_API_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
-      GOOGLE_MAPS_WEB_API_KEY: ${{ secrets.GOOGLE_MAPS_WEB_API_KEY }}
+      VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_WEB_API_KEY }}
     steps:
       # Full history for the provenance steps; versionCode itself now resolves
       # from release/state.json (build.gradle guard), never from a commit count,

@@ -17,7 +17,9 @@
  * and exposes it as a `findbackMapsApiKey` manifest placeholder and a
  * BuildConfig field; the manifest references it as a placeholder (never a
  * literal); the web build reads `VITE_GOOGLE_MAPS_API_KEY`; `.env.example`
- * documents both names.
+ * documents both names; each CI workflow exports `VITE_GOOGLE_MAPS_API_KEY`
+ * from the `GOOGLE_MAPS_WEB_API_KEY` secret, never under the secret's bare
+ * name, which no build reads.
  *
  * Confirms the retained MapLibre pin:
  * - `mapLibreVersion` pin exists in variables.gradle and is referenced as
@@ -71,6 +73,13 @@ const LITERAL_KEY_FILES = [
   "apps/mobile/android/app/src/main/AndroidManifest.xml",
   "apps/mobile/vite.config.ts",
   ".env.example",
+  ".github/workflows/ci.yml",
+  ".github/workflows/web.yml",
+  ".github/workflows/android-builds.yml",
+  ".github/workflows/release.yml",
+];
+
+const MAP_KEY_WORKFLOW_FILES = [
   ".github/workflows/ci.yml",
   ".github/workflows/web.yml",
   ".github/workflows/android-builds.yml",
@@ -155,6 +164,33 @@ export function checkGoogleKeyPlumbing(read = readFileSync) {
   return { ok: errors.length === 0, errors };
 }
 
+/**
+ * Each workflow must export the web key under the Vite name the build reads,
+ * sourced from the GOOGLE_MAPS_WEB_API_KEY secret. An export under the bare
+ * secret name is dead plumbing: no build ever reads it.
+ */
+export function checkWorkflowMapKeyExport(read = readFileSync) {
+  const errors = [];
+  for (const file of MAP_KEY_WORKFLOW_FILES) {
+    let text;
+    try {
+      text = read(resolve(root, file), "utf8");
+    } catch {
+      errors.push(`${file} unreadable`);
+      continue;
+    }
+    const fromSecret =
+      /^\s*VITE_GOOGLE_MAPS_API_KEY:\s*\$\{\{\s*secrets\.GOOGLE_MAPS_WEB_API_KEY\s*\}\}/m;
+    if (!fromSecret.test(text)) {
+      errors.push(`${file} must export VITE_GOOGLE_MAPS_API_KEY from secrets.GOOGLE_MAPS_WEB_API_KEY`);
+    }
+    if (/^\s*GOOGLE_MAPS_WEB_API_KEY:/m.test(text)) {
+      errors.push(`${file} must not export the dead GOOGLE_MAPS_WEB_API_KEY name`);
+    }
+  }
+  return { ok: errors.length === 0, errors };
+}
+
 // MapLibre is still shipped during the migration; these pin assertions are
 // deleted in the same commit that deletes MapLibre.
 export function readPin(text) {
@@ -213,6 +249,7 @@ export function checkMapProvider(read = readFileSync) {
     errors.push(`literal Google API key: ${hit}`);
   }
   for (const error of checkGoogleKeyPlumbing(read).errors) errors.push(error);
+  for (const error of checkWorkflowMapKeyExport(read).errors) errors.push(error);
   for (const error of checkMapLibrePin(read).errors) errors.push(error);
   return { ok: errors.length === 0, errors };
 }
