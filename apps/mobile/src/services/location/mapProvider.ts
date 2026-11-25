@@ -1,12 +1,15 @@
 /**
  * Which map preview a surface should use.
  *
- * The rule is dormant until a build ships a Google key: with no key the app
- * keeps the keyless OSM raster surface, and a Google key switches the preview
- * over. Nothing calls this yet — it exists so the switch has one home when the
- * preview surface starts choosing a provider.
+ * Two conditions must both hold for Google: a public key was built in, and the
+ * app is running on the web. The key is restricted to
+ * `https://findbackapp.social/*`, and the Android webview sends no such
+ * referrer, so the JavaScript API can never authorise inside the APK — trying
+ * it there would only produce a rejected map. Native keeps the keyless OSM
+ * raster until the APK gets a native Google map.
  */
 
+import { Capacitor } from "@capacitor/core";
 import {
   isGoogleMapsConfigured,
   type GoogleMapsAuthFailureReason,
@@ -14,9 +17,12 @@ import {
 
 export type MapProvider = "google" | "osm";
 
-/** `google` only when a public key was built in; `osm` otherwise. */
+/**
+ * `google` only when a public key was built in and this is not the native
+ * shell; `osm` otherwise.
+ */
 export function resolveMapProvider(): MapProvider {
-  return isGoogleMapsConfigured() ? "google" : "osm";
+  return isGoogleMapsConfigured() && !Capacitor.isNativePlatform() ? "google" : "osm";
 }
 
 /** Consumer-safe copy per failure — never carries key material. */

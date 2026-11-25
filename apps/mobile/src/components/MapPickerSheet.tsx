@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Capacitor } from "@capacitor/core";
 import {
   ChevronDown,
   ChevronLeft,
@@ -12,6 +13,7 @@ import {
 import { motion } from "framer-motion";
 import { BottomSheet } from "./BottomSheet";
 import { Button } from "./Button";
+import { GoogleMapCanvas } from "./GoogleMapCanvas";
 import { RasterTileMosaic } from "./RasterTileMosaic";
 import { announce } from "./LiveRegion";
 import type { LocationValue } from "./LocationPicker";
@@ -37,6 +39,11 @@ import {
   nudgeCenter,
   rasterTilesForCenter,
 } from "../services/location/rasterTiles";
+import {
+  mapProviderFallbackNotice,
+  resolveMapProvider,
+} from "../services/location/mapProvider";
+import type { GoogleMapsAuthFailureReason } from "../services/location/googleMapsLoader";
 import {
   NominatimRateLimitError,
   sharedNominatimThrottler,
@@ -193,10 +200,11 @@ function PickerRasterMap({ center, zoom, onZoomIn, onZoomOut, onNudge }: PickerR
  * (exact opt-in stays in LocationPicker's own toggle, exactly like the GPS,
  * manual, and link entry paths). Cancel never mutates the draft.
  *
- * On web/dev (or when the bridge is missing) a keyless fallback sheet
- * applies: raster tiles under a fixed center pin, explicit-submit Nominatim
- * search, one-shot GPS preview, and manual nudge. Nothing is saved until
- * Confirm in either path.
+ * On web/dev (or when the bridge is missing) a fallback sheet applies: the
+ * interactive Google map when a public key is built in (web only), otherwise
+ * keyless raster tiles under a fixed center pin — plus explicit-submit
+ * Nominatim search, one-shot GPS preview, and manual nudge. Nothing is saved
+ * until Confirm in either path.
  */
 export function MapPickerSheet({
   open,
@@ -245,6 +253,13 @@ export function MapPickerSheet({
   // A coarse fix too imprecise to snap to — held for an explicit opt-in.
   const [pendingFix, setPendingFix] = useState<MapCenter | null>(null);
   const [pendingAccuracy, setPendingAccuracy] = useState<number | null>(null);
+  // Provider and platform are fixed for the life of the mount: a build-time
+  // key cannot change under a session, and the Google JS API is web-only.
+  const [mapProvider] = useState(resolveMapProvider);
+  // Google on the web path only: Android keeps the native picker (a native
+  // Google MapView replaces it later), so the webview never boots the JS API.
+  const googleWebPicker = mapProvider === "google" && !Capacitor.isNativePlatform();
+  const [mapFailure, setMapFailure] = useState<GoogleMapsAuthFailureReason | null>(null);
 
   // Native path: forward to the Activity; Cancel closes with no mutation.
   // `launchedRef` makes the launch once-per-open: a mid-flight value change
@@ -374,6 +389,7 @@ export function MapPickerSheet({
     setPendingFix(null);
     setPendingAccuracy(null);
     setGpsPreview(null);
+    setMapFailure(null);
   }, [open, resolvedPicker, value.latitude, value.longitude, value.label, initialSearchResult]);
 
   /** Moves the fallback camera (the draft is updated by the caller). */
@@ -388,6 +404,17 @@ export function MapPickerSheet({
     setLocating(false);
     setFallbackCenter(nextCenter);
     setDraft(nextCenter);
+  }
+
+  /**
+   * Google picker drag: the map centre is the pin. Same effect as a nudge —
+   * the draft moves, nothing is committed, and an in-flight fix is dropped.
+   */
+  function handleMapCenterChange(center: MapCenter): void {
+    fixGeneration.current += 1;
+    setLocating(false);
+    setFallbackCenter(center);
+    setDraft(center);
   }
 
   /** Snaps the preview to a fix. Never confirms — the user still confirms. */
@@ -540,15 +567,41 @@ export function MapPickerSheet({
           </p>
         ) : null}
         <div className="relative h-64 w-full overflow-hidden rounded-m3-md border border-outline-variant bg-surface-container">
-          <PickerRasterMap
-            center={fallbackCenter}
-            zoom={fallbackZoom}
-            onZoomIn={() => setFallbackZoom((zoom) => clampRasterZoom(zoom + 1))}
-            onZoomOut={() => setFallbackZoom((zoom) => clampRasterZoom(zoom - 1))}
-            onNudge={nudgeFallback}
-          />
+          {googleWebPicker ? (
+            mapFailure ? (
+              <p
+                role="alert"
+                className="flex h-full items-center justify-center px-4 text-center text-sm text-on-surface-variant"
+              >
+                {mapProviderFallbackNotice(mapFailure)}
+              </p>
+            ) : (
+              <GoogleMapCanvas
+                latitude={fallbackCenter.lat}
+                longitude={fallbackCenter.lng}
+                zoom={fallbackZoom}
+                className="absolute inset-0"
+                label="Map. Drag to place the pin."
+                picking
+                onCenterChange={handleMapCenterChange}
+                onFailure={(reason) => setMapFailure(reason)}
+              />
+            )
+          ) : (
+            <PickerRasterMap
+              center={fallbackCenter}
+              zoom={fallbackZoom}
+              onZoomIn={() => setFallbackZoom((zoom) => clampRasterZoom(zoom + 1))}
+              onZoomOut={() => setFallbackZoom((zoom) => clampRasterZoom(zoom - 1))}
+              onNudge={nudgeFallback}
+            />
+          )}
         </div>
-        <p className="text-xs text-on-surface-variant">{RASTER_ATTRIBUTION}</p>
+        {/* The API draws its own attribution on the Google path; the OSM
+          notice must not be stacked over it. */}
+        {googleWebPicker ? null : (
+          <p className="text-xs text-on-surface-variant">{RASTER_ATTRIBUTION}</p>
+        )}
 
         {/* Deliberately NOT a <form>: this sheet renders inside the Report
           <form> (BottomSheet mounts in the component tree, not a portal), and

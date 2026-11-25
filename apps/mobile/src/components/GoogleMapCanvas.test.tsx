@@ -19,26 +19,62 @@ class FakeMap {
   static instances: FakeMap[] = [];
   readonly element: HTMLElement;
   readonly options: Record<string, unknown>;
+  center: { lat: number; lng: number };
+  private readonly idleHandlers = new Set<() => void>();
 
   constructor(element: HTMLElement, options: Record<string, unknown>) {
     this.element = element;
     this.options = options;
+    const center = options.center as { lat: number; lng: number } | undefined;
+    this.center = center ?? { lat: 0, lng: 0 };
     FakeMap.instances.push(this);
   }
 
   setOptions(): void {}
+
+  addListener(event: string, handler: () => void): { remove: () => void } | undefined {
+    if (event !== "idle") return undefined;
+    this.idleHandlers.add(handler);
+    return { remove: () => this.idleHandlers.delete(handler) };
+  }
+
+  getCenter(): { lat: () => number; lng: () => number } {
+    return { lat: () => this.center.lat, lng: () => this.center.lng };
+  }
+
+  setCenter(center: { lat: number; lng: number }): void {
+    this.center = center;
+  }
+
+  /** Test helper: the user finished moving the map to `center`. */
+  settleAt(center: { lat: number; lng: number }): void {
+    this.center = center;
+    for (const handler of this.idleHandlers) handler();
+  }
+
+  /** Test helper: an idle with no user move — e.g. the opening view. */
+  emitIdle(): void {
+    for (const handler of this.idleHandlers) handler();
+  }
 }
 
 class FakeMarker {
   static instances: FakeMarker[] = [];
   readonly options: Record<string, unknown>;
+  position: { lat: number; lng: number } | null;
 
   constructor(options: Record<string, unknown>) {
     this.options = options;
+    const position = options.position as { lat: number; lng: number } | undefined;
+    this.position = position ?? null;
     FakeMarker.instances.push(this);
   }
 
   setMap(): void {}
+
+  setPosition(position: { lat: number; lng: number }): void {
+    this.position = position;
+  }
 }
 
 const API: GoogleMapsApi = { maps: { Map: FakeMap, Marker: FakeMarker } };
@@ -155,5 +191,97 @@ describe("GoogleMapCanvas", () => {
 
     expect(FakeMap.instances).toHaveLength(0);
     expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  it("keeps preview gestures off and never reports a centre", async () => {
+    loadGoogleMapsMock.mockResolvedValue(API);
+    const onCenterChange = vi.fn();
+    render(
+      <GoogleMapCanvas latitude={23.81} longitude={90.41} onCenterChange={onCenterChange} />,
+    );
+
+    await waitFor(() => expect(FakeMap.instances).toHaveLength(1));
+    const map = FakeMap.instances[0];
+    expect(map?.options.gestureHandling).toBe("none");
+    // A preview subscribes to nothing, so a move can never be reported.
+    act(() => map?.settleAt({ lat: 22.35, lng: 91.78 }));
+    expect(onCenterChange).not.toHaveBeenCalled();
+  });
+
+  it("rebuilds the preview map when the coordinate changes", async () => {
+    loadGoogleMapsMock.mockResolvedValue(API);
+    const { rerender } = render(<GoogleMapCanvas latitude={23.81} longitude={90.41} />);
+    await waitFor(() => expect(FakeMap.instances).toHaveLength(1));
+
+    rerender(<GoogleMapCanvas latitude={22.35} longitude={91.78} />);
+    await waitFor(() => expect(FakeMap.instances).toHaveLength(2));
+  });
+
+  it("enables plain drag gestures in picking mode", async () => {
+    loadGoogleMapsMock.mockResolvedValue(API);
+    render(<GoogleMapCanvas latitude={23.81} longitude={90.41} picking onCenterChange={vi.fn()} />);
+
+    await waitFor(() => expect(FakeMap.instances).toHaveLength(1));
+    const options = FakeMap.instances[0]?.options ?? {};
+    // `greedy` is the plain drag/pan mode; `cooperative` would need ctrl.
+    expect(options.gestureHandling).toBe("greedy");
+    // The API's own chrome stays off in a picker as well.
+    expect(options.disableDefaultUI).toBe(true);
+  });
+
+  it("reports the centre the user settles on and moves the marker with it", async () => {
+    loadGoogleMapsMock.mockResolvedValue(API);
+    const onCenterChange = vi.fn();
+    render(
+      <GoogleMapCanvas latitude={23.81} longitude={90.41} picking onCenterChange={onCenterChange} />,
+    );
+
+    await waitFor(() => expect(FakeMarker.instances).toHaveLength(1));
+    act(() => FakeMap.instances[0]?.settleAt({ lat: 22.3569, lng: 91.7832 }));
+
+    expect(onCenterChange).toHaveBeenCalledTimes(1);
+    expect(onCenterChange).toHaveBeenCalledWith({ lat: 22.3569, lng: 91.7832 });
+    // The pin marks the chosen point, not the centre the map started at.
+    expect(FakeMarker.instances[0]?.position).toEqual({ lat: 22.3569, lng: 91.7832 });
+  });
+
+  it("never reports the opening view in picking mode", async () => {
+    loadGoogleMapsMock.mockResolvedValue(API);
+    const onCenterChange = vi.fn();
+    render(
+      <GoogleMapCanvas latitude={23.81} longitude={90.41} picking onCenterChange={onCenterChange} />,
+    );
+
+    await waitFor(() => expect(FakeMap.instances).toHaveLength(1));
+    act(() => FakeMap.instances[0]?.emitIdle());
+    expect(onCenterChange).not.toHaveBeenCalled();
+  });
+
+  it("follows a caller recentre in picking mode without rebuilding the map", async () => {
+    loadGoogleMapsMock.mockResolvedValue(API);
+    const onCenterChange = vi.fn();
+    const { rerender } = render(
+      <GoogleMapCanvas
+        latitude={23.81}
+        longitude={90.41}
+        picking
+        onCenterChange={onCenterChange}
+      />,
+    );
+    await waitFor(() => expect(FakeMap.instances).toHaveLength(1));
+
+    rerender(
+      <GoogleMapCanvas
+        latitude={22.35}
+        longitude={91.78}
+        picking
+        onCenterChange={onCenterChange}
+      />,
+    );
+
+    expect(FakeMap.instances).toHaveLength(1);
+    expect(FakeMap.instances[0]?.center).toEqual({ lat: 22.35, lng: 91.78 });
+    expect(FakeMarker.instances[0]?.position).toEqual({ lat: 22.35, lng: 91.78 });
+    expect(onCenterChange).not.toHaveBeenCalled();
   });
 });

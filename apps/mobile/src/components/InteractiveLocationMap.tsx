@@ -16,7 +16,9 @@ import {
   clampRasterZoom,
   rasterTilesForCenter,
 } from "../services/location/rasterTiles";
+import { mapProviderFallbackNotice, resolveMapProvider } from "../services/location/mapProvider";
 import { motionDurations, motionEasings } from "./uiMotion";
+import { GoogleMapCanvas } from "./GoogleMapCanvas";
 import { RasterTileMosaic } from "./RasterTileMosaic";
 import {
   PIN_ZOOM,
@@ -118,12 +120,13 @@ function ReadonlyRasterFallback({
  * Read-only post map.
  *
  * On Android the preview is a native MapSnapshotter bitmap (never a live
- * MapView under the WebView); tap opens the native viewer. Everywhere else
- * the keyless raster grid renders. Label-only posts render a neutral card:
- * the label is shown, no coordinates are fabricated, and no geocoding is
- * attempted. Snapshot failure degrades to the raster fallback with an
- * "Open map" action — never an endless spinner. The external Open in Maps
- * action stays separate in the caller.
+ * MapView under the WebView); tap opens the native viewer. On the web the
+ * resolved provider picks the surface: a read-only Google canvas, or the
+ * keyless raster grid. Label-only posts render a neutral card: the label is
+ * shown, no coordinates are fabricated, and no geocoding is attempted.
+ * Snapshot failure degrades to the raster fallback with an "Open map" action,
+ * a Google failure to the provider's notice — never an endless spinner. The
+ * external Open in Maps action stays separate in the caller.
  */
 export function InteractiveLocationMap({
   lat,
@@ -148,9 +151,21 @@ export function InteractiveLocationMap({
   const [mapPhase, setMapPhase] = useState<MapPhase>("starting");
   const [snapshotSrc, setSnapshotSrc] = useState<string | null>(null);
   const [snapshotFailed, setSnapshotFailed] = useState(false);
+  const [googleNotice, setGoogleNotice] = useState<string | null>(null);
   const [rasterZoom, setRasterZoom] = useState(PIN_ZOOM);
   const requestSeq = useRef(0);
   useEffect(() => () => { requestSeq.current += 1; }, []);
+
+  // The Google canvas replaces the raster grid only on the surface without a
+  // snapshotter; the native snapshot path keeps its own renderer and fallback.
+  const usesGooglePreview = resolveMapProvider() === "google" && resolvedSnapshotter == null;
+
+  // New coordinates are a new preview, so a stale Google failure must not
+  // outlive them. A rejected key is terminal inside the loader (the retry
+  // costs nothing); a timeout or blocked script is worth one fresh attempt.
+  useEffect(() => {
+    setGoogleNotice(null);
+  }, [centerLat, centerLng]);
 
   useEffect(() => {
     if (centerLat == null || centerLng == null) return;
@@ -261,7 +276,27 @@ export function InteractiveLocationMap({
             />
           </button>
         ) : null}
-        {mapPhase === "fallback" ? (
+        {mapPhase === "fallback" && usesGooglePreview ? (
+          googleNotice ? (
+            <div
+              data-testid="interactive-google-notice"
+              className="absolute inset-0 flex items-center justify-center px-6"
+            >
+              <p role="status" className="text-sm text-on-surface-variant">
+                {googleNotice}
+              </p>
+            </div>
+          ) : (
+            <GoogleMapCanvas
+              latitude={centerLat}
+              longitude={centerLng}
+              zoom={PIN_ZOOM}
+              className="absolute inset-0"
+              onFailure={(reason) => setGoogleNotice(mapProviderFallbackNotice(reason))}
+            />
+          )
+        ) : null}
+        {mapPhase === "fallback" && !usesGooglePreview ? (
           <ReadonlyRasterFallback
             lat={centerLat}
             lng={centerLng}
@@ -271,7 +306,7 @@ export function InteractiveLocationMap({
             onZoomOut={() => setRasterZoom((zoom) => clampRasterZoom(zoom - 1))}
           />
         ) : null}
-        {mapPhase === "fallback" && resolvedViewer != null ? (
+        {mapPhase === "fallback" && !usesGooglePreview && resolvedViewer != null ? (
           <div className="absolute bottom-2 left-2">
             <button
               type="button"
@@ -283,9 +318,11 @@ export function InteractiveLocationMap({
           </div>
         ) : null}
       </div>
-      <p className="px-3 pt-2 text-xs text-on-surface-variant">
-        {RASTER_ATTRIBUTION}
-      </p>
+      {mapPhase === "fallback" && !usesGooglePreview ? (
+        <p className="px-3 pt-2 text-xs text-on-surface-variant">
+          {RASTER_ATTRIBUTION}
+        </p>
+      ) : null}
       {trimmedLabel && (
         <div className="flex items-center gap-1.5 px-3 py-2 text-xs text-on-surface-variant">
           <MapPin size={13} aria-hidden />

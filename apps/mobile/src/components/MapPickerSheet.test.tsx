@@ -9,6 +9,59 @@ import type { PlaceResult } from "../services/location/nominatimSearch";
 
 vi.mock("./LiveRegion", () => ({ announce: vi.fn() }));
 
+// Provider + platform are module-level build/runtime facts; the tests move
+// them per case without rebuilding the sheet.
+const providerState = vi.hoisted(() => ({ provider: "osm" as "google" | "osm" }));
+const platformState = vi.hoisted(() => ({ native: false }));
+const canvasState = vi.hoisted(() => ({
+  props: [] as { picking?: boolean; latitude?: number; longitude?: number }[],
+  center: null as ((center: { lat: number; lng: number }) => void) | null,
+  failure: null as ((reason: string) => void) | null,
+}));
+
+vi.mock("../services/location/mapProvider", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../services/location/mapProvider")>();
+  return { ...actual, resolveMapProvider: () => providerState.provider };
+});
+
+vi.mock("@capacitor/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@capacitor/core")>();
+  return {
+    ...actual,
+    Capacitor: {
+      ...actual.Capacitor,
+      isNativePlatform: () => platformState.native,
+      getPlatform: () => (platformState.native ? "android" : "web"),
+    },
+  };
+});
+
+// The canvas has its own suite; here it is the seam the sheet wires a drag and
+// a load failure through.
+vi.mock("./GoogleMapCanvas", async () => {
+  const { createElement } = await import("react");
+  return {
+    GoogleMapCanvas: (props: {
+      latitude: number;
+      longitude: number;
+      label?: string;
+      picking?: boolean;
+      onCenterChange?: (center: { lat: number; lng: number }) => void;
+      onFailure?: (reason: string) => void;
+    }) => {
+      canvasState.props.push(props);
+      canvasState.center = props.onCenterChange ?? null;
+      canvasState.failure = props.onFailure ?? null;
+      return createElement("div", {
+        "data-testid": "google-map-canvas",
+        role: "region",
+        "aria-label": props.label,
+      });
+    },
+  };
+});
+
 // Test map behavior, not Motion's global RAF/exit scheduler. Keep real sheet
 // semantics, refs and handlers, but mount/unmount motion DOM synchronously.
 vi.mock("framer-motion", async () => {
@@ -52,6 +105,11 @@ afterEach(() => {
   searchState.places = [];
   searchState.error = null;
   searchState.calls = [];
+  providerState.provider = "osm";
+  platformState.native = false;
+  canvasState.props = [];
+  canvasState.center = null;
+  canvasState.failure = null;
 });
 
 const EMPTY_VALUE: LocationValue = {
@@ -390,5 +448,73 @@ describe("MapPickerSheet (keyless fallback path)", () => {
     expect(mosaic.querySelector("button")).toBeNull();
     expect(screen.getByRole("button", { name: "Move pin north" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Zoom in" })).toBeDefined();
+  });
+});
+
+describe("MapPickerSheet (Google web picker path)", () => {
+  it("renders the interactive canvas and no OSM raster or attribution", () => {
+    providerState.provider = "google";
+    renderSheet();
+
+    expect(screen.getByTestId("google-map-canvas")).toBeDefined();
+    expect(screen.queryByTestId("map-picker-map")).toBeNull();
+    expect(screen.queryByTestId("raster-tile-mosaic")).toBeNull();
+    expect(screen.queryByText("© OpenStreetMap contributors")).toBeNull();
+    // The sheet asks for picking, not a preview.
+    expect(canvasState.props[canvasState.props.length - 1]?.picking).toBe(true);
+  });
+
+  it("adopts the dragged centre as the picked location", () => {
+    providerState.provider = "google";
+    const { onConfirm } = renderSheet();
+    expect(screen.getByRole("button", { name: "Confirm location" })).toHaveProperty("disabled", true);
+
+    act(() => canvasState.center?.({ lat: 22.3569, lng: 91.7832 }));
+
+    // The drag is the pin: the draft exists and the readout follows it.
+    expect(screen.getByRole("button", { name: "Confirm location" })).toHaveProperty("disabled", false);
+    expect(screen.getByText("22.357, 91.783")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm location" }));
+
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    const committed = onConfirm.mock.calls[0]?.[0] as LocationValue;
+    expect(committed.latitude).toBe(22.357);
+    expect(committed.longitude).toBe(91.783);
+    expect(committed.precision).toBe("APPROXIMATE");
+  });
+
+  it("surfaces the provider fallback notice when Google fails to load", () => {
+    providerState.provider = "google";
+    renderSheet();
+    act(() => canvasState.failure?.("auth-failure"));
+
+    expect(
+      screen.getByText(
+        "Map preview unavailable — the map key was rejected. The location still saves normally.",
+      ),
+    ).toBeDefined();
+    // The notice stands in for the map instead of a blank box.
+    expect(screen.queryByTestId("google-map-canvas")).toBeNull();
+    // The rest of the sheet stays usable.
+    expect(screen.getByLabelText("Search for a place")).toBeDefined();
+  });
+
+  it("keeps the raster picker on the OSM provider", () => {
+    renderSheet();
+
+    expect(screen.getByTestId("map-picker-map")).toBeDefined();
+    expect(screen.queryByTestId("google-map-canvas")).toBeNull();
+    expect(screen.getByText("© OpenStreetMap contributors")).toBeDefined();
+  });
+
+  it("never boots the Google JS API in the native webview", () => {
+    providerState.provider = "google";
+    platformState.native = true;
+    renderSheet();
+
+    // Native owns the map: the in-place fallback stays keyless and never
+    // constructs the web Google canvas.
+    expect(screen.queryByTestId("google-map-canvas")).toBeNull();
+    expect(screen.getByTestId("map-picker-map")).toBeDefined();
   });
 });
