@@ -693,7 +693,6 @@ jobs:
           echo "building the pinned tree ${PINNED_COMMIT} for v${VERSION} (code ${CODE})"
           echo "Pinned tree: \`${PINNED_COMMIT}\`" >> "$GITHUB_STEP_SUMMARY"
       - name: Download the shared release-preparation script
-        if: ${{ needs.prepare.result == 'skipped' }}
         uses: actions/download-artifact@v8
         with:
           name: release-prepare-${{ github.run_id }}
@@ -702,13 +701,14 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Rehearse prepare in the workspace (never committed)
-        if: ${{ needs.prepare.result == 'skipped' }}
-        # No release commit exists in this run, so the four version locations are
-        # written here, then the pendingRelease record is pinned to the commit
-        # this run is rehearsing. Build, verifier and summary therefore see the
-        # publish path's content and flags. Nothing is staged, committed, tagged
-        # or pushed; the runner is thrown away.
+      - name: Write the pending release into the workspace (never committed)
+        # Commit A, the pinned tree, predates commit B that records
+        # `pendingRelease` on main, and a dry run has no release commit at all.
+        # Write the decision here either way, so the build, the verifier, the
+        # catalogue and the manifest see exactly the state the release records.
+        # In a publish run `sync-version` is a no-op because commit A already
+        # carries the version. Nothing is staged, committed, tagged or pushed;
+        # the runner is thrown away.
         run: |
           set -euo pipefail
           node scripts/release/sync-version.mjs "$VERSION"
