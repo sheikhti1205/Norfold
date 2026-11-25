@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { Updates } from "./Updates";
 import { UpdateChanges } from "../components/UpdateChanges";
@@ -243,16 +243,21 @@ describe("updates screen", () => {
   it("links a new feature only when its destination exists for this platform", () => {
     // A running note need not name a destination. The newest written note that
     // does must still turn it into a link when the reader opens that version.
-    const note = RELEASE_NOTES.find((entry) => entry.features.some((feature) => feature.destinationId))!;
+    const note = RELEASE_NOTES.find(
+      (entry) => entry.versionName !== APP_VERSION && entry.features.some((feature) => feature.destinationId),
+    )!;
     runtime.snapshot = snapshot({
       history: [release({ id: `v${note.versionName}`, versionName: note.versionName, tag: `v${note.versionName}` })],
     });
     renderScreen();
-    fireEvent.click(screen.getByTestId("updates-history-item").querySelector("summary")!);
+    const historyItem = screen.getByTestId("updates-history-item");
+    fireEvent.click(historyItem.querySelector("summary")!);
     const feature = note.features.find((entry) => entry.destinationId)!;
     const destination = destinationFor(feature.destinationId!)!;
     expect(feature.summary).toContain("Personalization");
-    const link = screen.getByRole("link", { name: destination.title });
+    // The featured section also renders the running build's note, which names the
+    // same destination, so the link must be read from the row the reader opened.
+    const link = within(historyItem).getByRole("link", { name: destination.title });
     expect(link.getAttribute("href")).toBe(destination.route);
   });
 
