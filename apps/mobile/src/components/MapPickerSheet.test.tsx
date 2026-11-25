@@ -376,4 +376,19 @@ describe("MapPickerSheet (keyless fallback path)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     await screen.findByText(/Place results:.*OpenStreetMap/);
   });
+
+  it("draws the picker map as one continuous tile mosaic under the pin", () => {
+    renderSheet();
+    const region = screen.getByTestId("map-picker-map");
+    const mosaic = screen.getByTestId("raster-tile-mosaic");
+    expect(region.contains(mosaic)).toBe(true);
+    const images = Array.from(mosaic.querySelectorAll("img"));
+    expect(images).toHaveLength(9);
+    for (const image of images) expect(image.parentElement).toBe(mosaic);
+    // Move and zoom controls stay outside the imagery layer, so they can
+    // never be scaled or clipped with a tile row.
+    expect(mosaic.querySelector("button")).toBeNull();
+    expect(screen.getByRole("button", { name: "Move pin north" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Zoom in" })).toBeDefined();
+  });
 });

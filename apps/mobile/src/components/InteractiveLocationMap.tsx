@@ -17,6 +17,7 @@ import {
   rasterTilesForCenter,
 } from "../services/location/rasterTiles";
 import { motionDurations, motionEasings } from "./uiMotion";
+import { RasterTileMosaic } from "./RasterTileMosaic";
 import {
   PIN_ZOOM,
   isValidCenter,
@@ -71,28 +72,7 @@ function ReadonlyRasterFallback({
       aria-label="Location map. Use the zoom buttons to inspect the pin area."
       className="absolute inset-0"
     >
-      <div className="absolute inset-0 grid grid-cols-3 grid-rows-3" aria-hidden="true">
-        {tiles.map((tile, index) => (
-          <img
-            // Grid position disambiguates: at minimum zoom the 3x3 window
-            // wraps/clamps into repeated z/x/y coordinates, so tile
-            // coordinates alone are NOT unique React keys (duplicate keys
-            // corrupt reconciliation). Repeated tile URLs are fine; repeated
-            // identities are not.
-            key={`${tile.z}/${tile.x}/${tile.y}#${index}`}
-            src={tile.url}
-            alt=""
-            draggable={false}
-            loading="lazy"
-            className="h-full w-full object-cover"
-            // A failed tile (offline/blocked) hides itself instead of showing
-            // a broken-image glyph over the pin area.
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
-          />
-        ))}
-      </div>
+      <RasterTileMosaic tiles={tiles} />
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 flex items-center justify-center"

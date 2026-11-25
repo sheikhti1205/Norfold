@@ -12,6 +12,7 @@ import {
 import { motion } from "framer-motion";
 import { BottomSheet } from "./BottomSheet";
 import { Button } from "./Button";
+import { RasterTileMosaic } from "./RasterTileMosaic";
 import { announce } from "./LiveRegion";
 import type { LocationValue } from "./LocationPicker";
 import {
@@ -108,28 +109,7 @@ function PickerRasterMap({ center, zoom, onZoomIn, onZoomOut, onNudge }: PickerR
       aria-label="Map. Use the move and zoom buttons to position the pin."
       className="absolute inset-0"
     >
-      <div className="absolute inset-0 grid grid-cols-3 grid-rows-3" aria-hidden="true">
-        {tiles.map((tile, index) => (
-          <img
-            // Grid position disambiguates: at minimum zoom the 3x3 window
-            // wraps/clamps into repeated z/x/y coordinates, so tile
-            // coordinates alone are NOT unique React keys (duplicate keys
-            // corrupt reconciliation). Repeated tile URLs are fine; repeated
-            // identities are not.
-            key={`${tile.z}/${tile.x}/${tile.y}#${index}`}
-            src={tile.url}
-            alt=""
-            draggable={false}
-            loading="lazy"
-            className="h-full w-full object-cover"
-            // A failed tile (offline/blocked) hides itself instead of showing
-            // a broken-image glyph over the pin area.
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
-          />
-        ))}
-      </div>
+      <RasterTileMosaic tiles={tiles} />
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 flex items-center justify-center"

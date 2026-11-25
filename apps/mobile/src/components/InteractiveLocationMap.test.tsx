@@ -47,6 +47,18 @@ describe("InteractiveLocationMap", () => {
     expect(screen.getByText(/OpenStreetMap contributors/)).toBeDefined();
   });
 
+  it("draws the fallback as one continuous tile mosaic", () => {
+    renderMap({ snapshotter: null });
+    const region = screen.getByTestId("interactive-fallback-map");
+    const mosaic = screen.getByTestId("raster-tile-mosaic");
+    expect(region.contains(mosaic)).toBe(true);
+    const images = Array.from(mosaic.querySelectorAll("img"));
+    expect(images).toHaveLength(9);
+    // All nine tiles share one grid: a per-row layer would crop rows
+    // independently and tear the map into disconnected bands.
+    for (const image of images) expect(image.parentElement).toBe(mosaic);
+  });
+
   it("requests a snapshot on-device and renders the preview", async () => {
     const snapshotter = vi.fn(async (_input: MapSnapshotInput) => SNAPSHOT);
     const viewer = vi.fn(async (_input: MapViewerInput) => ({ closed: true }));

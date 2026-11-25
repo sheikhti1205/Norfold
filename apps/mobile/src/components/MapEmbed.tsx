@@ -3,6 +3,7 @@ import { MapPin } from "lucide-react";
 import { motionDurations, motionEasings } from "./uiMotion";
 import { rasterTilesForCenter, RASTER_ATTRIBUTION } from "../services/location/rasterTiles";
 import { PIN_ZOOM } from "../services/location/mapPickerState";
+import { RasterTileMosaic } from "./RasterTileMosaic";
 
 interface MapEmbedProps {
   lat?: number | null;
@@ -62,21 +63,7 @@ export function MapEmbed({ lat, lng, label }: MapEmbedProps) {
               role="region"
               aria-label="Location preview"
             >
-              <div className="absolute inset-0 grid grid-cols-3 grid-rows-3" aria-hidden="true">
-                {tiles.map((tile, index) => (
-                  <img
-                    key={`${tile.z}/${tile.x}/${tile.y}#${index}`}
-                    src={tile.url}
-                    alt=""
-                    draggable={false}
-                    loading="lazy"
-                    className="h-full w-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                    }}
-                  />
-                ))}
-              </div>
+              <RasterTileMosaic tiles={tiles} />
               <div
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-0 flex items-center justify-center"
