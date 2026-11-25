@@ -30,6 +30,23 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    versionName: "0.16.0",
+    about:
+      "This build gathers the 0.16 line into one release: a chat that floats over the page you are reading, person cards anywhere a name appears, and a choice of navigation and reaction styles.",
+    changes: [
+      "Chat opens in a compact window over the page you were on, minimizes to its header, and keeps its draft, staged photos and recording.",
+      "The recorder, the preview and the sent note draw the same voice wave, with one bar thickness and a visible gap on a narrow phone.",
+      "Every name opens a person card with their photo, username, a short bio and one clear action: Add friend, or Message once you are friends.",
+      "Personalization offers Automatic, bottom bar and side rail navigation, with adaptive, colorful and monochrome reactions.",
+      "On-device chat and photo analysis have been removed. AI chat uses your own provider key; local search and the sentence model remain.",
+    ],
+    features: [
+      { summary: "Keep a chat open while you use another page, then open it as the full conversation when you need the room." },
+      { summary: "Open a person card anywhere a name appears, then their profile, their chat or a friend request from it." },
+      { summary: "Choose the navigation layout and the reaction style in Personalization.", destinationId: "appearance" },
+    ],
+  },
+  {
     versionName: "0.16.0-beta.3",
     about:
       "Chat can float over the page you are reading, and voice notes share one wave from recording to delivery.",
