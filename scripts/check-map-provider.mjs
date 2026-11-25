@@ -96,7 +96,7 @@ export function checkBannedHits(files, patterns, read = readFileSync) {
 /** Flags any file carrying a literal Google API key (`AIza…`), never a placeholder. */
 export function findLiteralApiKeys(files = LITERAL_KEY_FILES, read = readFileSync) {
   const hits = [];
-  const literal = /\bAIza[0-9A-Za-z_\-]{35}\b/;
+  const literal = /\bAIza[0-9A-Za-z_-]{35}\b/;
   for (const file of files) {
     let text;
     try {
