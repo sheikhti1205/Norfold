@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
-import { createRef, useRef } from "react";
+import { createRef, useRef, type ReactNode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
@@ -8,7 +8,15 @@ import { HomeTopBar } from "./HomeTopBar";
 import { InlineRailProvider } from "../components/navLayout";
 import { NavDrawerProvider } from "../components/navDrawer";
 
-function Harness({ expanded, inlineRail = false }: { expanded: boolean; inlineRail?: boolean }) {
+function Harness({
+  expanded,
+  inlineRail = false,
+  utilities = null,
+}: {
+  expanded: boolean;
+  inlineRail?: boolean;
+  utilities?: ReactNode;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
     <InlineRailProvider show={inlineRail}>
@@ -24,7 +32,7 @@ function Harness({ expanded, inlineRail = false }: { expanded: boolean; inlineRa
           onFieldBlur={() => undefined}
           onBlur={() => undefined}
           inputRef={inputRef}
-          utilities={null}
+          utilities={utilities}
         />
       </MemoryRouter>
     </InlineRailProvider>
@@ -112,5 +120,26 @@ describe("Home brand ownership", () => {
     // The in-flow rail owns the identity and the shell never offers this
     // control there.
     expect(screen.queryByRole("button", { name: "Open navigation" })).toBeNull();
+  });
+
+  it("drops the trailing utilities while searching and restores them on close", () => {
+    const utilities = <button type="button">Create report</button>;
+    const view = render(<Harness expanded={false} utilities={utilities} />);
+    const row = screen.getByTestId("home-search-row");
+    // The idle row keeps the cluster; the 48px floor is unchanged.
+    expect(row.className).toContain("min-h-[48px]");
+    expect(within(row).getByRole("button", { name: "Create report" })).toBeTruthy();
+
+    view.rerender(<Harness expanded utilities={utilities} />);
+    // While the field owns the row the cluster is gone: it is not part of the
+    // search task and only squeezes the input on a 320px screen.
+    expect(row.className).toContain("min-h-[48px]");
+    expect(screen.getByRole("searchbox", { name: "Search posts" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Create report" })).toBeNull();
+
+    view.rerender(<Harness expanded={false} utilities={utilities} />);
+    // Closing restores the idle cluster without moving the row.
+    expect(row.className).toContain("min-h-[48px]");
+    expect(within(row).getByRole("button", { name: "Create report" })).toBeTruthy();
   });
 });

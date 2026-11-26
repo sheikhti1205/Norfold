@@ -42,9 +42,10 @@ const swap = { duration: motionDurations.fast, ease: motionEasings.out } as cons
  *
  * Geometry: the closed and open states are both exactly 48px tall, so the state
  * change swaps the row rather than resizing it and the chips row below never
- * moves. The pill's 1px border sits inside that 48px (border-box) and every
- * child stays under it. The focus ring is drawn on the pill, not on the input —
- * see `index.css` `.fb-search-field-pill`. The field wrapper carries
+ * moves. The pill's 1px border sits inside that 48px (border-box), leaving a
+ * 46px content box that the 48px leading target enters through its -1px block
+ * margins. The focus ring is drawn on the pill, not on the input — see
+ * `index.css` `.fb-search-field-pill`. The field wrapper carries
  * `fb-home-search-field` so the shell can yield the outside app name while the
  * field occupies the row.
  */
@@ -133,10 +134,12 @@ export function HomeTopBar({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -6 }}
             transition={swap}
-            // Height parity with the closed row is the point: the pill is 48px
-            // (box-border) and every child stays at or below 44px, so opening
-            // search never moves the feed. The focus ring belongs to the pill,
-            // see `index.css` `.fb-search-field-pill`.
+            // Height parity with the closed row is the point: the pill is a 48px
+            // box-border frame (46px of content inside its 1px border), the
+            // leading Close is a 48px target whose -1px block margins fit that
+            // 46px, and the row stays 48px in both states, so opening search
+            // never moves the feed. The focus ring belongs to the pill, see
+            // `index.css` `.fb-search-field-pill`.
             className="fb-home-search-field flex min-h-[48px] min-w-0 flex-1"
             data-testid="home-search-field"
           >
@@ -172,7 +175,12 @@ export function HomeTopBar({
           10px toward the edge to align the trailing icon's optical edge with the
           row instead of reading inset-left / padded-right. */}
       <div className="fb-home-search-actions -mr-2.5 ml-auto flex shrink-0 items-center">
-        {utilities}
+        {/* The trailing actions belong to the idle row, not to the search task:
+            search already carries its own Close inside the field. Leaving them
+            here while expanded squeezed the field to a few characters at 320px.
+            The wrapper itself stays mounted so the trigger's `popLayout` exit
+            keeps its slot. */}
+        {!expanded && utilities}
         {/* `popLayout` is load-bearing: the trigger and the field share one flex
             slot. Without it the outgoing trigger keeps its 48px in flow for the
             whole 150ms exit, so the entering pill renders ~48px narrower than it
