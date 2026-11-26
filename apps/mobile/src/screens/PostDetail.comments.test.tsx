@@ -163,7 +163,7 @@ describe("PostDetail inline comment threads", () => {
     expect(like.textContent).toContain("Like");
     expect(like.getAttribute("aria-label")).toMatch(/0 likes/);
     for (const control of [reply, like]) {
-      expect(control.className).toContain("min-h-12");
+      expect(control.className).toContain("min-h-[48px]");
     }
   });
 
