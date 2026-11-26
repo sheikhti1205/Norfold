@@ -91,7 +91,10 @@ describe("PublicProfile", () => {
     fetchPublicProfileMock.mockRejectedValueOnce(new Error("network failure")).mockResolvedValueOnce(profile);
     renderRoute();
     expect(await screen.findByText("That profile could not be loaded. Please try again.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    const retry = screen.getByRole("button", { name: "Try again" });
+    expect(retry.className).toContain("min-h-12");
+    expect(retry.className).toContain("min-w-12");
+    fireEvent.click(retry);
     expect(await screen.findByRole("region", { name: "Public profile" })).toBeTruthy();
   });
 
@@ -179,7 +182,10 @@ describe("PublicProfile", () => {
     expect(screen.queryByText("Found a wallet")).toBeNull();
     expect((await screen.findByRole("alert")).textContent).toMatch(/could not load reports/i);
     expect(screen.queryByText("No public reports yet.")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    const retry = screen.getByRole("button", { name: "Retry" });
+    expect(retry.className).toContain("min-h-12");
+    expect(retry.className).toContain("min-w-12");
+    fireEvent.click(retry);
     expect(await screen.findByText("Found a wallet")).toBeTruthy();
   });
 
@@ -255,6 +261,7 @@ describe("PublicProfile", () => {
       .mockResolvedValueOnce({ items: [post, second], nextCursor: null, total: 2 });
     renderRoute();
     const more = await screen.findByRole("button", { name: /load more reports/i });
+    expect(more.className).toContain("min-h-12");
     fireEvent.click(more);
     await waitFor(() =>
       expect(fetchFeedMock).toHaveBeenCalledWith({ userId: "u2" }, "cursor-1"),

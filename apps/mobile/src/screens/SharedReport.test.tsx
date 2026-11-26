@@ -21,6 +21,8 @@ describe("public shared-report gate", () => {
     renderLink();
     await screen.findByRole("heading", { name: "Black backpack" });
     const brand = screen.getByRole("link", { name: "Norfold" });
+    expect(brand.className).toContain("min-h-12");
+    expect(brand.className).toContain("min-w-12");
     expect(brand.getAttribute("href")).toBe("/");
     fireEvent.click(brand);
     expect(screen.getByRole("status").textContent).toBe(JSON.stringify({ showPublic: true }));
@@ -53,7 +55,10 @@ describe("public shared-report gate", () => {
     expect(await screen.findByRole("heading",{name:"This report is no longer available"})).toBeTruthy();view.unmount();
     data.get.mockRejectedValueOnce(new Error("private diagnostic"));renderLink();
     expect(await screen.findByRole("alert")).toBeTruthy();expect(document.body.textContent).not.toContain("private diagnostic");
-    fireEvent.click(screen.getByRole("button",{name:"Try again"}));expect(await screen.findByRole("heading",{name:"Black backpack"})).toBeTruthy();
+    const retry = screen.getByRole("button",{name:"Try again"});
+    expect(retry.className).toContain("min-h-12");
+    expect(retry.className).toContain("min-w-12");
+    fireEvent.click(retry);expect(await screen.findByRole("heading",{name:"Black backpack"})).toBeTruthy();
   });
   it("does not publish stale old-report data when a delayed request crosses route identity",async()=>{
     let finish!:(value:unknown)=>void;data.get.mockImplementationOnce(()=>new Promise(r=>{finish=r;}));
@@ -86,5 +91,7 @@ describe("public shared-report gate", () => {
     const back = screen.getByRole("link", {name: "Back to Norfold"});
     expect(back.getAttribute("href")).toBe("/");
     expect(back.className.split(/\s+/)).toContain("bg-on-surface");
+    expect(back.className.split(/\s+/)).toContain("min-h-12");
+    expect(back.className.split(/\s+/)).toContain("min-w-12");
   });
 });

@@ -109,6 +109,9 @@ describe("SavedReports", () => {
     const list = screen.getByTestId("saved-reports-list");
     expect(within(list).getByText(/^Saved /)).toBeTruthy();
     expect(screen.getByRole("button", { name: /Remove Lost keys near the park/ })).toBeTruthy();
+    const remove = screen.getByRole("button", { name: /Remove Lost keys near the park/ });
+    expect(remove.className).toContain("min-h-12");
+    expect(remove.className).toContain("min-w-12");
   });
 
   it("labels a report that no longer exists instead of crashing", async () => {
@@ -141,6 +144,8 @@ describe("SavedReports", () => {
     renderScreen();
     await screen.findByRole("link", { name: /Loaded keys/ });
     const retry = await screen.findByRole("button", { name: /Retry loading Lost phone/i });
+    expect(retry.className).toContain("min-h-12");
+    expect(retry.className).toContain("min-w-12");
     const row = retry.closest("li")!;
     expect(within(row).getByText(/Couldn't load/)).toBeTruthy();
     expect(screen.queryByText("Couldn't load your saved reports.")).toBeNull();
@@ -318,7 +323,9 @@ describe("every saved report is reachable", () => {
     expect(screen.getByText("1 more saved report not shown.")).toBeTruthy();
     const firstPage = links();
 
-    fireEvent.click(screen.getByRole("button", { name: /show more/i }));
+    const showMore = screen.getByRole("button", { name: /show more/i });
+    expect(showMore.className).toContain("min-h-12");
+    fireEvent.click(showMore);
 
     // The report that was past the page is on the page now.
     await waitFor(() => expect(links()).toHaveLength(21));

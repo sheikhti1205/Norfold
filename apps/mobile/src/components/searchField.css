@@ -40,7 +40,7 @@
 .fb-search-field-input {
   width: 100%;
   min-width: 0;
-  height: 44px;
+  height: 48px;
   padding: 0;
   border: 0;
   outline: none;
@@ -59,7 +59,7 @@
   overflow: hidden;
   color: var(--fb-on-surface-variant);
   font-size: 0.9375rem;
-  line-height: 44px;
+  line-height: 48px;
   text-overflow: ellipsis;
   white-space: nowrap;
   pointer-events: none;
@@ -70,8 +70,8 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 999px;
   color: var(--fb-on-surface-variant);
   cursor: pointer;

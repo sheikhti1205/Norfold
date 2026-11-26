@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PublicWelcome } from "./PublicWelcome";
 import { isOnboardingComplete } from "../services/onboarding";
 
@@ -48,4 +49,16 @@ it("intro link focuses the explanation without navigating away", () => {
   welcome(); fireEvent.click(screen.getByRole("link", { name: "See how it works" }));
   expect(document.activeElement).toBe(screen.getByRole("heading", { name: "How it works" }));
   expect(isOnboardingComplete()).toBe(false);
+});
+describe("public shell touch targets", () => {
+  const css = readFileSync(new URL("./PublicWelcome.css", import.meta.url), "utf8");
+  it("keeps the brand, navigation, footer and skip link at 48px", () => {
+    const brand = css.match(/\.nf-public-brand\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(brand).toMatch(/min-height:\s*48px/);
+    expect(brand).toMatch(/min-width:\s*48px/);
+    expect(css).toMatch(/\.nf-public nav :is\(a, button, summary\) \{[^}]*min-height:\s*48px/);
+    expect(css).toMatch(/\.nf-public-nav :is\(a, button, summary\), \.nf-public-footer nav :is\(a, button\) \{[^}]*min-width:\s*48px/);
+    expect(css).toMatch(/\.nf-public-skip \{[^}]*min-height:\s*48px/);
+    expect(css).not.toContain("44px");
+  });
 });
