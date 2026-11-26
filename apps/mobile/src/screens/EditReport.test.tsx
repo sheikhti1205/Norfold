@@ -432,6 +432,11 @@ describe("EditReport", () => {
     ], { initialEntries: ["/my/p1/edit"] });
     render(<RouterProvider router={router} />);
     await screen.findByLabelText("What did you lose?");
+    // The field proves the loaded draft's commit, not its effects: the screen
+    // arms its interceptor in the effect that follows that commit. Flush them
+    // before the press — in the app a Back press is a user event and can never
+    // land between a commit and the effects it schedules.
+    await act(async () => {});
 
     let consumed = false;
     act(() => { consumed = consumeBackIntercept(); });
