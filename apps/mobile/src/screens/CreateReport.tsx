@@ -20,7 +20,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ReportMediaPicker } from "../components/ReportMediaPicker";
 import { CameraCapture } from "../components/CameraCapture";
 import { MediaViewer } from "../components/MediaViewer";
-import { AdaptiveTaskSurface, ConfirmDialog } from "../components/AdaptiveTaskSurface";
+import { ConfirmDialog } from "../components/AdaptiveTaskSurface";
+import { TaskScreen } from "../components/TaskScreen";
 import { historyDepth } from "../components/backNavigation";
 import { ReportEditor, type ReportEditorErrors, type ReportEditorValues } from "../components/ReportEditor";
 import { fadeVariants, motionDurations, motionEasings } from "../components/uiMotion";
@@ -1671,17 +1672,15 @@ function ReportForm() {
   }
 
   return (
-    // A real compact task: a centered form at the reader's measure, not the
-    // report viewer's 1280px stage. The body scrolls; the draft survives closing
-    // it.
-    <AdaptiveTaskSurface
-      open
-      onClose={closeSurface}
+    // A real screen, not a task dialog: the composer owns the route, so nothing
+    // is inert behind it and its nested editor and menus work. The page
+    // scrolls; the draft survives leaving it.
+    <TaskScreen
       title="Create report"
       description={
         user?.username ? `Posting as @${user.username}. Be specific — details help reunions.` : undefined
       }
-      width="report-form"
+      onBack={closeSurface}
       busy={busy}
     >
       <form
@@ -2125,6 +2124,6 @@ function ReportForm() {
           {uncertain ? " This report may already be published." : " Nothing has been published."}
         </p>
       </ConfirmDialog>
-    </AdaptiveTaskSurface>
+    </TaskScreen>
   );
 }

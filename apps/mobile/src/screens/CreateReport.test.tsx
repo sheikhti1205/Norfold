@@ -122,11 +122,15 @@ describe("CreateReport", () => {
   it("shows a Lost-specific safety hint by default and a Found-specific one after switching type", async () => {
     render(<CreateReport />);
     expect(await screen.findByText(/Safety tip: post about your own item/i)).toBeTruthy();
-    // The form is its own narrow surface, not the report viewer's 1280px stage.
-    const dialog = await screen.findByRole("dialog", { name: "Create report" });
-    const panel = dialog.closest(".fb-modal-panel");
-    expect(panel?.classList.contains("fb-report-form-panel")).toBe(true);
-    expect(panel?.classList.contains("fb-report-panel")).toBe(false);
+    // The composer is its own screen on /report, at the form's reader measure,
+    // not a dialog and not the report viewer's 1280px stage.
+    const heading = await screen.findByRole("heading", { level: 1, name: "Create report" });
+    const taskScreen = heading.closest("section.fb-task-screen");
+    expect(taskScreen).toBeTruthy();
+    expect(taskScreen?.getAttribute("aria-labelledby")).toBe(heading.id);
+    expect(taskScreen?.querySelector(".fb-task-screen-body")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.querySelector(".fb-modal-backdrop")).toBeNull();
     const foundBtn = screen.getByRole("radio", { name: /i found something/i });
     fireEvent.click(foundBtn);
     expect(await screen.findByText(/Safety tip: describe what you found and where/i)).toBeTruthy();

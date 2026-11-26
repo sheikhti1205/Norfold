@@ -163,9 +163,9 @@ describe("report composer keyboard mode (§8)", () => {
     // In flow inside the same form — the shared editor adds no portal or layer.
     expect(dock.closest("form")).toBe(form);
     expect(dock.className).not.toContain("fixed");
-    // Typing never stacks another modal on the task surface, and the photo
+    // Typing never stacks a dialog over the composer's screen, and the photo
     // controls stay usable while typing.
-    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.queryAllByRole("dialog")).toHaveLength(0);
     expect((screen.getByLabelText("Take photo") as HTMLButtonElement).disabled).toBe(false);
     expect(screen.getByTestId("report-media-picker").className).not.toContain("sticky");
     expect(screen.getByTestId("report-photo-track")).toBeTruthy();

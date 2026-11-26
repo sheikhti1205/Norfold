@@ -1,0 +1,125 @@
+/* A task takeover: the route's page, not a window over it. It renders in place
+   inside <main>, so there is no scrim, no card, no gutter and no second
+   scroller. The page itself scrolls; only the header stays. */
+.fb-task-screen {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100%;
+  background: var(--fb-surface);
+  color: var(--fb-on-surface);
+  /* Arrival is an opacity fade only: no panel travels across the page. */
+  animation: fb-task-screen-in 140ms var(--ease-fb, ease-out) both;
+}
+
+@keyframes fb-task-screen-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-task-screen { animation: none; }
+}
+
+/* The bar stays put while the body scrolls, so Back and the title are always
+   reachable. The inset matches the shell's own safe-area rule. */
+.fb-task-screen-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  flex: none;
+  padding: max(0.5rem, env(safe-area-inset-top)) 0 0.5rem;
+  background: var(--fb-surface);
+  border-bottom: 1px solid var(--fb-outline-variant);
+}
+
+/* Back | centred title | actions. The equal outer columns keep the title on
+   the screen's centre line whatever the action slot holds. */
+.fb-task-screen-bar {
+  display: grid;
+  grid-template-columns: minmax(48px, 1fr) auto minmax(48px, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding-inline: max(8px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right));
+}
+
+/* 48px is the touch target, not the glyph: the arrow keeps its optical size. */
+.fb-task-screen-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  border-radius: var(--radius-m3-md, 12px);
+  color: var(--fb-on-surface);
+  background: transparent;
+  cursor: pointer;
+}
+
+.fb-task-screen-back:hover { background: var(--fb-surface-container); }
+.fb-task-screen-back:disabled { opacity: .45; cursor: default; }
+.fb-task-screen-back:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; }
+
+/* A real heading, centred like the description editor's takeover bar. It is
+   focused programmatically on arrival, so the ring belongs to :focus-visible
+   only; nothing is drawn around the text just for landing here. */
+.fb-task-screen-title {
+  min-width: 0;
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+  overflow-wrap: anywhere;
+  outline: none;
+}
+
+.fb-task-screen-title:focus-visible {
+  outline: 2px solid var(--fb-focus);
+  outline-offset: 4px;
+  border-radius: var(--radius-m3-xs, 4px);
+}
+
+.fb-task-screen-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 48px;
+  min-height: 48px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* The controls stay in the DOM and keep their names; they only stop taking
+   input while the screen's work is in flight. */
+.fb-task-screen-actions:disabled { opacity: .45; }
+
+/* The body keeps the app's page padding on a phone, and the form's own 40rem
+   measure once the window has room. No card, no gutter around the screen. */
+.fb-task-screen-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 16px 16px calc(28px + env(safe-area-inset-bottom));
+}
+
+.fb-task-screen-description {
+  margin: 0 0 16px;
+  color: var(--fb-on-surface-variant);
+  font-size: .875rem;
+  overflow-wrap: anywhere;
+}
+
+/* The form's reader measure, not the report viewer's stage. */
+@media (min-width: 600px) {
+  .fb-task-screen-bar,
+  .fb-task-screen-body {
+    width: 100%;
+    max-width: 40rem;
+    margin-inline: auto;
+  }
+
+  .fb-task-screen-bar { padding-inline: 0; }
+  .fb-task-screen-header { padding-top: max(0.75rem, env(safe-area-inset-top)); }
+}
