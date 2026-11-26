@@ -13,7 +13,7 @@ interface SurfaceProps {
   children: ReactNode;
   footer?: ReactNode;
   busy?: boolean;
-  width?: "standard" | "compact" | "report" | "report-form" | "comments";
+  width?: "standard" | "compact" | "report" | "comments";
   bodyClassName?: string;
   /**
    * Take the whole phone screen. Phone task dialogs are cards by default; only
@@ -35,7 +35,6 @@ function panelClass(width: SurfaceProps["width"], confirmation: boolean) {
   if (confirmation) return "fb-confirm-panel";
   if (width === "compact") return "fb-compact-panel";
   if (width === "report") return "fb-report-panel";
-  if (width === "report-form") return "fb-report-form-panel";
   if (width === "comments") return "fb-comments-panel";
   return "fb-task-panel";
 }

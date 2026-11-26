@@ -144,15 +144,7 @@ it("gives the compact width its own panel and leaves the shared task measure alo
   expect(filters.closest(".fb-modal-panel")?.classList.contains("fb-task-panel")).toBe(true);
 });
 
-it("gives the report form its own narrow panel and leaves the report viewer alone", async () => {
-  const form = render(<AdaptiveTaskSurface open onClose={() => {}} title="Create report" width="report-form"><input aria-label="Report title" /></AdaptiveTaskSurface>);
-  const create = await screen.findByRole("dialog", { name: "Create report" });
-  const panel = create.closest(".fb-modal-panel");
-  expect(panel?.classList.contains("fb-report-form-panel")).toBe(true);
-  expect(panel?.classList.contains("fb-report-panel")).toBe(false);
-  expect(panel?.classList.contains("fb-task-panel")).toBe(false);
-  form.unmount();
-
+it("gives the report viewer its own panel", async () => {
   render(<AdaptiveTaskSurface open onClose={() => {}} title="Report" headerless width="report"><p>Viewer</p></AdaptiveTaskSurface>);
   const viewer = await screen.findByRole("dialog", { name: "Report" });
   expect(viewer.closest(".fb-modal-panel")?.classList.contains("fb-report-panel")).toBe(true);
@@ -221,13 +213,6 @@ describe("compact surface declarations", () => {
 
   it("gives the compact menu a tighter ceiling than the shared cap", () => {
     expect(rule(".fb-compact-panel")).toContain("max-height: min(72vh, 34rem);");
-  });
-
-  it("keeps the report form content-sized at the reader's measure", () => {
-    const formPanel = rule(".fb-report-form-panel");
-    expect(formPanel).toContain("max-width: min(40rem, 100%);");
-    expect(formPanel).toContain("height: auto;");
-    expect(formPanel).not.toMatch(/height:\s*(min\(|\d+px)/);
   });
 
   it("keeps the report viewer in the compact dialog family and sizes comments to the thread", () => {

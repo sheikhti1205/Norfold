@@ -76,11 +76,6 @@
    tighter than the shared dialog cap on purpose: this is a popup over the feed,
    not a page. */
 .fb-report-panel { max-width: min(88%, 50rem); height: auto; max-height: min(86dvh, 44rem); border-radius: 28px; overflow: hidden; }
-/* The create/edit form is a task, not a viewer: it keeps the reader's measure
-   (40rem, tighter than the 50rem viewer), stays centered by the backdrop, and
-   grows only as tall as its fields. The shared `max-height` cap still applies,
-   so a long or invalid form scrolls its own body instead of filling the window. */
-.fb-report-form-panel { max-width: min(40rem, 100%); height: auto; }
 /* Comments at narrow widths are their own floating surface, smaller than the
    report it opened from so the report still reads as the parent. It is as tall
    as the thread it actually holds, capped by the shared ceiling: a report with
