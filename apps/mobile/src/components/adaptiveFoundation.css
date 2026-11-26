@@ -141,7 +141,7 @@
    the reader to do; every other control on the row stays a quiet outline. */
 .fb-peer-chat-primary {
   display: inline-flex; align-items: center; justify-content: center; gap: .375rem;
-  min-height: 40px; padding: 0 1rem;
+  min-height: 48px; padding: 0 1rem;
   border-radius: .625rem;
   background: var(--fb-primary); color: var(--fb-on-primary);
   font-size: .875rem; font-weight: 600;
@@ -219,7 +219,7 @@
      gives no width away, so it never took the list's 8px gutter and its surface
      ran straight into the shell rail's 4px frame - a 4px band beside Chat
      against 8px at the thread and the foot. The column keeps its 64px budget
-     and the 40px avatar / 44px controls still fit the 60px content box; only
+     and the 40px avatar / 48px controls still fit the 60px content box; only
      the face beside the rail takes the missing 4px, so column frame + pane
      inset is the same 8px band as everywhere else. The foot takes the same
      8px the thread's surface does, so both surfaces start and end on the same
@@ -266,7 +266,7 @@
    below), never to the shell that also holds attach, emoji and send. */
 .fb-composer-row { display: flex; align-items: flex-end; gap: 4px; padding: 4px; }
 .fb-composer-field { position: relative; flex: 1; min-width: 0; }
-.fb-composer-row textarea { display: block; width: 100%; min-width: 0; min-height: 44px; max-height: 208px; resize: none; padding: 10px 8px; font: inherit; line-height: 1.5; color: inherit; background: transparent; }
+.fb-composer-row textarea { display: block; width: 100%; min-width: 0; min-height: 48px; max-height: 208px; resize: none; padding: 10px 8px; font: inherit; line-height: 1.5; color: inherit; background: transparent; }
 .fb-composer-row textarea:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: -2px; border-radius: 12px; }
 .fb-composer-send { color: var(--fb-primary); }
 .fb-composer-actions { display: flex; flex-wrap: wrap; flex: none; }
