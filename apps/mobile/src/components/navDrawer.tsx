@@ -94,13 +94,17 @@ export function NavDrawerButton({
     };
   }, [available, triggerRef, onInlineMount]);
   if (!available) return null;
+  // The brand variant shows "Norfold", so its accessible name must start with
+  // that visible text (WCAG 2.5.3). It keeps the name whether or not the
+  // wordmark is currently shown, so search never renames the control under the
+  // reader.
   return (
     <button
       ref={buttonRef}
       type="button"
       className="fb-nav-drawer-inline"
       data-variant={variant}
-      aria-label="Open navigation"
+      aria-label={variant === "brand" ? "Norfold, open navigation" : "Open navigation"}
       aria-haspopup="dialog"
       aria-expanded={expanded}
       onClick={open}

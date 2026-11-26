@@ -94,8 +94,8 @@ describe("Home brand ownership", () => {
     expect(row.className).toContain("min-h-[48px]");
     // The mark itself is the navigation trigger: one button, and no separate
     // home link sharing the row's leading edge.
-    const button = within(row).getByRole("button", { name: "Open navigation" });
-    expect(within(row).queryAllByRole("button", { name: "Open navigation" })).toHaveLength(1);
+    const button = within(row).getByRole("button", { name: /^Norfold, open navigation$/i });
+    expect(within(row).queryAllByRole("button", { name: /^Norfold, open navigation$/i })).toHaveLength(1);
     expect(within(row).queryByRole("link", { name: "Norfold home" })).toBeNull();
     expect(button.textContent).toContain("Norfold");
     // The control owns the shell's focus target, so closing the drawer returns
@@ -112,7 +112,7 @@ describe("Home brand ownership", () => {
     // floating control over the feed.
     expect(row.className).toContain("min-h-[48px]");
     expect(screen.queryByRole("link", { name: "Norfold home" })).toBeNull();
-    const searchingButton = screen.getByRole("button", { name: "Open navigation" });
+    const searchingButton = screen.getByRole("button", { name: /^Norfold, open navigation$/i });
     expect(searchingButton).toBe(button);
     expect(searchingButton.textContent).not.toContain("Norfold");
     expect(triggerRef.current).toBe(button);
@@ -124,7 +124,7 @@ describe("Home brand ownership", () => {
     );
     // The in-flow rail owns the identity and the shell never offers this
     // control there.
-    expect(screen.queryByRole("button", { name: "Open navigation" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Norfold, open navigation$/i })).toBeNull();
   });
 
   it("drops the trailing utilities while searching and restores them on close", () => {
