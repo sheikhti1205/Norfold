@@ -303,9 +303,14 @@ describe("RichTextEditor report pass — accessibility", () => {
     render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     pickRailMore("Expand editor");
     const rail = screen.getByRole("toolbar", { name: "Description formatting" });
+    const names: Array<string | RegExp> = ["Undo", /^Block type: Body$/, "Bold", "Italic", "Bullets", "Link", "More"];
     const slots = within(rail).getAllByRole("button");
-    expect(slots).toHaveLength(7);
-    for (const slot of slots) {
+    // Every rendered button is one of the seven named slots: a slot that lost
+    // its aria-label would leave an extra unnamed button to account for.
+    expect(slots).toHaveLength(names.length);
+    for (const name of names) {
+      const slot = within(rail).getByRole("button", { name });
+      expect(slots).toContain(slot);
       expect(slot.className).toMatch(/min-h-\[48px\]/);
       expect(slot.className).toMatch(/min-w-\[48px\]/);
     }
@@ -314,17 +319,17 @@ describe("RichTextEditor report pass — accessibility", () => {
   it("focus trap in overlay, focus restored on close", () => {
     render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     const moreBtn = screen.getByRole("button", { name: "More" });
-    // Focus the rail trigger first (simulating real user click behavior)
+    // Focus the always-mounted More slot, which is also the element this test
+    // expects to receive focus back. The detached-launcher fallback is not
+    // exercised here: the More slot survives, so the restore targets it.
     moreBtn.focus();
     expect(document.activeElement).toBe(moreBtn);
     pickRailMore("Expand editor");
-    // Focus should move into overlay (to the close button or first focusable)
     const overlay = document.getElementById("report-editor-overlay");
-    // The focus trap should move focus into the overlay
+    // The focus trap moves focus into the overlay.
     expect(overlay?.contains(document.activeElement)).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: /Done/i }));
-    // The menu row that launched the overlay no longer exists, so focus
-    // returns to the slot that does: the rail's More button.
+    // Focus returns to the launcher, which is still mounted.
     const activeEl = document.activeElement as HTMLElement | null;
     expect(activeEl).not.toBeNull();
     expect(activeEl?.getAttribute("aria-label")).toBe("More");

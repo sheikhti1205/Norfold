@@ -49,6 +49,16 @@ describe("menu keyboard handling", () => {
     expect(document.activeElement).toBe(menuButton);
   });
 
+  it("closes the More menu on Tab without trapping the focus move", () => {
+    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    openRailMore();
+    expect(screen.getByRole("listbox", { name: "More formatting actions" })).toBeTruthy();
+    const trigger = screen.getByRole("button", { name: "More" });
+    // Not prevented, so the browser still moves focus to the next control.
+    expect(fireEvent.keyDown(trigger, { key: "Tab" })).toBe(true);
+    expect(screen.queryByRole("listbox", { name: "More formatting actions" })).toBeNull();
+  });
+
   it("outside pointerdown closes an open menu", () => {
     render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /Block type/i }));

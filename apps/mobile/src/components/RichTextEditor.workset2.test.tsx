@@ -25,14 +25,19 @@ describe("RichTextEditor workset2 mobile layout", () => {
   it("keeps the toolbar on one row with 48px touch targets and no scroller", () => {
     render(<RichTextEditor label="Description" value="" onChange={() => {}} />);
     const toolbar = screen.getByRole("toolbar", { name: "Description formatting" });
+    // jsdom has no layout, so geometry is verified in the deployed build. The
+    // slot contract below is what makes one non-scrolling row possible.
     expect(toolbar.className).not.toMatch(/overflow-x-auto/);
     expect(toolbar.className).not.toMatch(/flex-wrap/);
     expect(toolbar.className).toMatch(/flex-nowrap/);
-    expect(toolbar.scrollWidth).toBeLessThanOrEqual(toolbar.clientWidth);
-    for (const name of ["Bold", "Link"]) {
+    const names: Array<string | RegExp> = ["Undo", /^Block type: Body$/, "Bold", "Italic", "Bullets", "Link", "More"];
+    const slots = toolbar.querySelectorAll("button");
+    expect(slots).toHaveLength(names.length);
+    for (const name of names) {
       const btn = screen.getByRole("button", { name });
       expect(btn.className).toMatch(/min-h-\[48px\]/);
       expect(btn.className).toMatch(/min-w-\[48px\]/);
+      expect(btn.className).not.toMatch(/overflow-x-(auto|scroll)/);
     }
   });
 });

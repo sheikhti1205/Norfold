@@ -10,6 +10,7 @@ import { useModalBack } from "../hooks/useModalBack";
 import { isTopModalLayer, useModalLayer } from "../hooks/modalLayers";
 import { ArrowLeft, Bold, Check, Heading1, Heading2, Heading3, Italic, Link2, List, MoreHorizontal, Pilcrow, Undo2 } from "lucide-react";
 import { Slice } from "@tiptap/pm/model";
+import { closeHistory } from "@tiptap/pm/history";
 import {
   fromMarkdown,
   isSafeRichTextHref,
@@ -1271,13 +1272,24 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
   }
 
   /**
-   * Slash command executor. Every chainable command deletes the typed trigger
-   * and acts in ONE transaction, so one undo brings the "/query" back. Commands
-   * without a chain form are documented where they break that guarantee.
+   * Slash command executor. A chainable command deletes the typed trigger and
+   * acts in ONE transaction closed into its own history group, so one undo
+   * restores the "/query" the user typed. Two commands cannot honour that and
+   * say so where they are implemented: `undo` (the trigger is the step it
+   * reverts) and `link` (the dialog spans two transactions).
    */
   function runSlashCommand(target: Editor, commandId: string, range: { from: number; to: number }): boolean {
     if (disabledRef.current) return false;
-    const removeTrigger = () => target.chain().focus().deleteRange(range);
+    // closeHistory keeps the acceptance out of the surrounding typing group.
+    // Without it the deletion is adjacent to the typing and merges into that
+    // history event, so one undo would erase the characters instead of
+    // restoring the trigger.
+    const removeTrigger = () => target.chain().focus()
+      .command(({ tr }) => {
+        closeHistory(tr);
+        return true;
+      })
+      .deleteRange(range);
     switch (commandId) {
       case "bold":
         return removeTrigger().toggleBold().run();
@@ -1309,22 +1321,14 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
         if (!target.can().undo()) return false;
         // prosemirror-history dispatches its own transaction and ignores the
         // chain's, so the trigger cannot be removed in the same step. The typed
-        // trigger *is* the newest history step, so this one undo removes it.
+        // trigger belongs to the newest history event, so this undo removes it.
         return target.chain().focus().undo().run();
       }
-      case "redo": {
-        if (!target.can().redo()) return false;
-        // The trigger leaves without joining history, otherwise redo would
-        // re-apply the deletion instead of the step the user asked for.
-        target.chain().focus().command(({ tr }) => {
-          tr.setMeta("addToHistory", false);
-          return true;
-        }).deleteRange(range).run();
-        return target.chain().focus().redo().run();
-      }
       case "paste.markdown": {
-        // Clipboard access is asynchronous: the trigger is removed first so the
-        // menu closes, and the parsed markdown is inserted when it arrives.
+        // The clipboard read is async, so deletion waits for the insertion:
+        // both leave in one chain once the text arrives, and the menu closes
+        // now so the picked row responds immediately.
+        slash.dismiss();
         void pasteQueryAsMarkdown(target, range);
         return true;
       }
@@ -1333,6 +1337,9 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
         // linking is an existing link under that caret. Anything else leaves
         // the trigger intact for the user to finish or dismiss.
         if (!target.isActive("link")) return false;
+        // The trigger is deleted when the dialog opens, so cancelling leaves it
+        // gone and saving the link is a second undo step: a dialog spanning two
+        // transactions cannot be one.
         removeTrigger().run();
         applyLink();
         return true;
@@ -1343,7 +1350,6 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
   }
 
   async function pasteQueryAsMarkdown(target: Editor, range: { from: number; to: number }): Promise<void> {
-    target.chain().focus().deleteRange(range).run();
     const generation = clipboardGeneration.current;
     const doc = target.state.doc;
     let text = "";
@@ -1362,7 +1368,16 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
       setStatus("The selected text changed. Paste again.");
       return;
     }
-    target.chain().focus().insertContentAt(range.from, markdownToTiptap(text)).run();
+    // One chain, one transaction: the trigger leaves and the parsed markdown
+    // arrives together, so one undo restores the typed query.
+    target.chain().focus()
+      .command(({ tr }) => {
+        closeHistory(tr);
+        return true;
+      })
+      .deleteRange(range)
+      .insertContentAt(range.from, markdownToTiptap(text))
+      .run();
     finishOperation("Pasted as Markdown");
   }
 
@@ -1414,8 +1429,14 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
     if (command) runMoreCommand(command.id);
   }
 
-  /** Arrow keys and Enter reach the More menu from the focused trigger. */
+  /** Arrow keys, Enter and Tab reach the More menu from the focused trigger. */
   function handleMoreKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
+    if (event.key === "Tab" && openMenu === "more") {
+      // Closing without preventing default keeps Tab's focus move; a listbox
+      // must not outlive the keyboard leaving it, matching the Block menu.
+      setOpenMenu(null);
+      return;
+    }
     if (event.key === "Enter" && openMenu === "more") {
       event.preventDefault();
       const command = moreCommands[moreActiveIndex];
@@ -1492,17 +1513,24 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
     editor,
     enabled: Boolean(editor) && !disabled,
     runCommand: runSlashCommand,
+    // The menu is portalled outside this component's subtree; name it so an
+    // outside press can tell it apart from the form around it.
+    isMenuTarget: (target) =>
+      target instanceof Element
+      && target.closest('[role="listbox"][aria-label="Formatting commands"]') !== null,
   });
 
-  // A command that is guaranteed to no-op is not offered at all: the typed
-  // trigger clears the redo stack, so redo only appears when it can act.
+  // A command that is guaranteed to no-op is not offered at all. Redo is never
+  // offered here: typing the trigger is itself an addToHistory transaction, so
+  // the redo stack is already empty before the row could act. Redo stays in the
+  // trailing rail menu, where opening the menu is not an edit.
   const slashItems = useMemo(
     () => slash.items.filter((command) => {
+      if (command.id === "redo") return false;
       if (command.id === "undo") return canUndo;
-      if (command.id === "redo") return canRedo;
       return true;
     }),
-    [slash.items, canUndo, canRedo],
+    [slash.items, canUndo],
   );
   const slashActiveId = slash.items[slash.activeIndex]?.id;
   const slashActiveIndex = slashItems.length === 0
@@ -1696,7 +1724,10 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
           </div>
         ) : null}
       </div>
-      {!isExpanded && (finePointer || editorFocused || openMenu !== null || slash.open) && renderFormattingRail(true)}
+      {/* The link dialog traps focus, so the rail must stay mounted while it is
+          open or the dialog's trigger node is detached and it anchors to the
+          viewport origin instead of the tapped button. */}
+      {!isExpanded && (finePointer || editorFocused || openMenu !== null || slash.open || linkSelection !== null) && renderFormattingRail(true)}
       <FormattingMenu
         open={!disabled && slash.open && slashItems.length > 0}
         items={slashItems}

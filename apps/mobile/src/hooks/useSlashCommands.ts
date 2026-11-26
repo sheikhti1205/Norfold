@@ -26,9 +26,12 @@ export interface SlashCommandState {
   range: SlashRange | null;
   /** Viewport rect of the trigger character, for anchoring a popup; null when closed. */
   getAnchorRect: () => DOMRect | null;
-  /** Runs the command at `index` and removes the trigger in the same undo step. */
+  /** Runs the command at `index`; chainable commands remove the trigger in the same undo step. */
   accept: (index: number) => boolean;
-  /** Closes the menu and removes the typed "/query" as one undoable step. */
+  /**
+   * Closes the menu without editing the document. The same trigger stays closed
+   * until its slash is deleted or a different slash is typed.
+   */
   dismiss: () => void;
 }
 
@@ -40,11 +43,17 @@ export interface UseSlashCommandsOptions {
    * Executes a command. Receives the editor and the range to delete, and is
    * responsible for building ONE chain, e.g.
    *   editor.chain().focus().deleteRange(range).toggleBold().run()
-   * Commands with no chain form (undo, redo, expand, paste) may delete the range
-   * in their own chain and then act.
+   * Commands with no chain form (undo, link) are documented where they use more
+   * than one transaction and so break the single-step guarantee.
    * Return false when the command could not be applied, so the trigger is left alone.
    */
   runCommand: (editor: Editor, commandId: string, range: SlashRange) => boolean;
+  /**
+   * Reports whether a node lives inside the portalled menu panel. The panel is
+   * rendered outside this hook's tree, so without it a press inside the menu
+   * would count as an outside press and close the menu.
+   */
+  isMenuTarget?: (target: Node) => boolean;
 }
 
 interface SlashSnapshot {
@@ -77,10 +86,22 @@ function sameSnapshot(a: SlashSnapshot, b: SlashSnapshot): boolean {
     && sameItems(a.items, b.items);
 }
 
+/** True when the document still holds the dismissed trigger's slash. */
+function slashStillAt(editor: Editor, position: number): boolean {
+  try {
+    return editor.state.doc.textBetween(position, position + 1) === "/";
+  } catch {
+    return false;
+  }
+}
+
 export function useSlashCommands(options: UseSlashCommandsOptions): SlashCommandState {
   const optionsRef = useRef(options);
   const stateRef = useRef<SlashSnapshot>(closedSnapshot());
   const [state, setState] = useState<SlashSnapshot>(stateRef.current);
+  // Absolute offset of the trigger the user dismissed, so it cannot reopen on
+  // the next transaction. Null means no dismissal is in force.
+  const dismissedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     optionsRef.current = options;
@@ -106,6 +127,10 @@ export function useSlashCommands(options: UseSlashCommandsOptions): SlashCommand
     if (!enabled || !editor || editor.isDestroyed || editor.view.composing) {
       return closedSnapshot();
     }
+    // A dismissed trigger that is gone frees the next slash to open normally.
+    if (dismissedAtRef.current !== null && !slashStillAt(editor, dismissedAtRef.current)) {
+      dismissedAtRef.current = null;
+    }
     const { selection } = editor.state;
     if (!selection.empty) return closedSnapshot();
     const { $from } = selection;
@@ -121,14 +146,22 @@ export function useSlashCommands(options: UseSlashCommandsOptions): SlashCommand
     // "/ and then we left" stop being a command once no name matches.
     if (items.length === 0) return closedSnapshot();
 
+    // detectSlashQuery works in offsets inside the block's text; the chain
+    // commands need absolute document positions, so shift by the block start.
+    const from = $from.start() + query.start;
+    if (dismissedAtRef.current !== null) {
+      // The same trigger the user dismissed: stay closed, even when more
+      // characters arrive after it.
+      if (from === dismissedAtRef.current) return closedSnapshot();
+      // A different slash replaced the dismissed one; it may open.
+      dismissedAtRef.current = null;
+    }
     return {
       open: true,
       query: query.query,
       items,
       activeIndex: 0,
-      // detectSlashQuery works in offsets inside the block's text; the chain
-      // commands need absolute document positions, so shift by the block start.
-      range: { from: $from.start() + query.start, to: $from.start() + query.end },
+      range: { from, to: $from.start() + query.end },
     };
   }, []);
 
@@ -174,10 +207,11 @@ export function useSlashCommands(options: UseSlashCommandsOptions): SlashCommand
     if (!editor || editor.isDestroyed) return;
     const snapshot = readSnapshot();
     if (!snapshot.open || !snapshot.range) return;
-    // One chain is one transaction, so one undo brings the typed trigger back
-    // instead of leaving the characters eaten.
-    editor.chain().focus().deleteRange(snapshot.range).run();
-    apply(readSnapshot());
+    // Tapping away or pressing Escape cancels the menu; it never deletes the
+    // characters the user typed. Remember the offset so the same slash does not
+    // reopen on the next transaction. Backspace already cancels the query.
+    dismissedAtRef.current = snapshot.range.from;
+    apply(closedSnapshot());
   }, [apply, readSnapshot]);
 
   const { editor, enabled } = options;
@@ -194,6 +228,41 @@ export function useSlashCommands(options: UseSlashCommandsOptions): SlashCommand
       editor.off("transaction", recompute);
     };
   }, [editor, enabled, apply, readSnapshot]);
+
+  // A menu the user left behind must not stay on screen over the form. Only
+  // registered while open, and only a press or focus move that really leaves
+  // both the editor DOM and the portalled panel closes it.
+  useEffect(() => {
+    if (!state.open) return;
+    const { editor: current, isMenuTarget } = optionsRef.current;
+    if (!current || current.isDestroyed) return;
+    const dom = current.view.dom as HTMLElement;
+
+    const isInside = (target: Node | null): boolean => {
+      if (!target) return false;
+      if (dom.contains(target)) return true;
+      return isMenuTarget?.(target) ?? false;
+    };
+
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target;
+      if (target instanceof Node && isInside(target)) return;
+      dismiss();
+    };
+    // A preventDefaulted rail press never moves focus, so it never reaches this
+    // handler; a real move into the editor or the menu keeps the menu open.
+    const onBlur = (event: FocusEvent): void => {
+      if (event.relatedTarget instanceof Node && isInside(event.relatedTarget)) return;
+      dismiss();
+    };
+
+    document.addEventListener("pointerdown", onPointerDown, true);
+    dom.addEventListener("blur", onBlur, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      dom.removeEventListener("blur", onBlur, true);
+    };
+  }, [state.open, dismiss]);
 
   return {
     open: state.open,

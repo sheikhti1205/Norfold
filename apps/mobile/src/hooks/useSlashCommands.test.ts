@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, fireEvent, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
@@ -47,6 +47,7 @@ function renderSlash(
   options?: {
     enabled?: boolean;
     runCommand?: (editor: Editor, commandId: string, range: SlashRange) => boolean;
+    isMenuTarget?: (target: Node) => boolean;
   },
 ) {
   const runCommand = options?.runCommand ?? vi.fn(() => false);
@@ -54,6 +55,7 @@ function renderSlash(
     editor,
     enabled: options?.enabled ?? true,
     runCommand,
+    isMenuTarget: options?.isMenuTarget,
   }));
   return { ...view, runCommand };
 }
@@ -289,7 +291,7 @@ describe("useSlashCommands", () => {
     expect(runCommand).not.toHaveBeenCalled();
   });
 
-  it("dismiss removes the typed query as one undoable step", () => {
+  it("dismiss closes without touching the typed query", () => {
     const editor = createEditor("<p>/bo</p>");
     const { result } = renderSlash(editor);
     act(() => caretToEnd(editor));
@@ -297,11 +299,101 @@ describe("useSlashCommands", () => {
 
     act(() => result.current.dismiss());
 
-    expect(editor.getText()).toBe("");
+    expect(result.current.open).toBe(false);
+    expect(editor.getText()).toBe("/bo");
+  });
+
+  it("does not reopen the dismissed trigger on later transactions", () => {
+    const editor = createEditor();
+    const { result } = renderSlash(editor);
+    act(() => type(editor, "/bo"));
+    expect(result.current.open).toBe(true);
+
+    act(() => result.current.dismiss());
+    act(() => type(editor, "l"));
+    act(() => type(editor, "d"));
+
+    expect(result.current.open).toBe(false);
+    expect(editor.getText()).toBe("/bold");
+  });
+
+  it("opens for a new slash at a different position", () => {
+    const editor = createEditor();
+    const { result } = renderSlash(editor);
+    act(() => type(editor, "/bo"));
+    act(() => result.current.dismiss());
     expect(result.current.open).toBe(false);
 
-    act(() => { editor.commands.undo(); });
-    expect(editor.getText()).toBe("/bo");
+    act(() => {
+      editor.commands.setContent("<p>/bo</p><p>/b</p>");
+      caretToEnd(editor);
+    });
+
+    expect(result.current.open).toBe(true);
+    expect(result.current.query).toBe("b");
+    expect(result.current.range).toEqual({ from: 6, to: 8 });
+  });
+
+  it("opens again once the dismissed slash is deleted", () => {
+    const editor = createEditor("<p>/bo</p>");
+    const { result } = renderSlash(editor);
+    act(() => caretToEnd(editor));
+    act(() => result.current.dismiss());
+    expect(result.current.open).toBe(false);
+
+    act(() => deleteBeforeCaret(editor, 3));
+    act(() => type(editor, "/"));
+
+    expect(editor.getText()).toBe("/");
+    expect(result.current.open).toBe(true);
+  });
+
+  it("closes on an outside pointerdown but not inside the editor or the menu", () => {
+    const editor = createEditor();
+    const menu = document.createElement("div");
+    document.body.append(menu);
+    try {
+      const { result } = renderSlash(editor, {
+        isMenuTarget: (target) => target === menu || menu.contains(target),
+      });
+      act(() => type(editor, "/"));
+      expect(result.current.open).toBe(true);
+
+      act(() => fireEvent.pointerDown(editor.view.dom));
+      expect(result.current.open).toBe(true);
+
+      act(() => fireEvent.pointerDown(menu));
+      expect(result.current.open).toBe(true);
+
+      act(() => fireEvent.pointerDown(document.body));
+      expect(result.current.open).toBe(false);
+      expect(editor.getText()).toBe("/");
+    } finally {
+      menu.remove();
+    }
+  });
+
+  it("closes on blur unless focus lands in the editor or the menu", () => {
+    const editor = createEditor();
+    const menuButton = document.createElement("button");
+    document.body.append(menuButton);
+    try {
+      const { result } = renderSlash(editor, { isMenuTarget: (target) => target === menuButton });
+      act(() => type(editor, "/"));
+      expect(result.current.open).toBe(true);
+
+      act(() => fireEvent.blur(editor.view.dom, { relatedTarget: editor.view.dom }));
+      expect(result.current.open).toBe(true);
+
+      act(() => fireEvent.blur(editor.view.dom, { relatedTarget: menuButton }));
+      expect(result.current.open).toBe(true);
+
+      act(() => fireEvent.blur(editor.view.dom));
+      expect(result.current.open).toBe(false);
+      expect(editor.getText()).toBe("/");
+    } finally {
+      menuButton.remove();
+    }
   });
 
   it("does nothing on dismiss when closed", () => {

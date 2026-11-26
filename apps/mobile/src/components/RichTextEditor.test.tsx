@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createRef } from "react";
 import type { Editor } from "@tiptap/react";
+import { TextSelection } from "@tiptap/pm/state";
 import { RichTextEditor, markdownToTiptap, tiptapToMarkdown } from "./RichTextEditor";
 import { openRailMore, pickRailMore } from "../test-utils/editorRail";
+import { settleSelectionRender } from "../test-utils/editorSelection";
 
 afterEach(cleanup);
 
@@ -152,12 +154,21 @@ describe("RichTextEditor", () => {
   it("fits every formatting slot in one row without a horizontal scroller", () => {
     render(<RichTextEditor label="Description" value="Wallet" onChange={() => {}} />);
     const rail = screen.getByRole("toolbar", { name: "Description formatting" });
-    // The rail no longer clips: every slot is laid out in the row itself, so
-    // there is no focus-scrolling hack and nothing can sit off-screen.
+    // jsdom has no layout, so pixel geometry is verified in the deployed build.
+    // Here we pin the slot contract that makes one row possible: exact names,
+    // the 48px minimum each slot declares, and no scrolling affordance.
     expect(rail.className).not.toContain("overflow-x-auto");
     expect(rail.className).toContain("flex-nowrap");
-    expect(rail.scrollWidth).toBeLessThanOrEqual(rail.clientWidth);
-    expect(rail.querySelectorAll("button")).toHaveLength(7);
+    const names: Array<string | RegExp> = ["Undo", /^Block type: Body$/, "Bold", "Italic", "Bullets", "Link", "More"];
+    const slots = within(rail).getAllByRole("button");
+    expect(slots).toHaveLength(names.length);
+    for (const name of names) {
+      const slot = within(rail).getByRole("button", { name });
+      expect(slot.className).toMatch(/min-h-\[48px\]/);
+      expect(slot.className).toMatch(/min-w-\[48px\]/);
+      expect(slot.className).not.toMatch(/overflow-x-(auto|scroll)/);
+      expect(slots).toContain(slot);
+    }
   });
 
   it("renders the composing actions, placeholder text, and character count", () => {
@@ -343,6 +354,32 @@ describe("RichTextEditor formatting rail pointer class", () => {
     }
   });
 
+  it("keeps the rail mounted while the link dialog has focus on a touch pointer", async () => {
+    const restore = stubMatchMedia(false);
+    try {
+      const ref = createRef<Editor | null>();
+      render(<RichTextEditor label="Description" value="see map here" onChange={() => {}} editorRef={ref} />);
+      const textbox = screen.getByRole("textbox", { name: "Description" });
+      act(() => textbox.focus());
+      act(() => ref.current?.commands.setTextSelection({ from: 5, to: 8 }));
+      await settleSelectionRender();
+      const link = screen.getByRole("button", { name: "Link" }) as HTMLButtonElement;
+      expect(link.disabled).toBe(false);
+
+      fireEvent.click(link);
+
+      const dialog = screen.getByRole("dialog", { name: "Add link" });
+      // The trap moved focus into the dialog, so the editor is no longer the
+      // focused surface and only the dialog state can be keeping the rail
+      // mounted. It must anchor to this exact button, not a detached node.
+      expect(dialog.contains(document.activeElement)).toBe(true);
+      expect(screen.getByRole("button", { name: "Link" })).toBe(link);
+      expect(document.contains(link)).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
   it("keeps the caret in the field when a rail slot is pressed", () => {
     render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     const textbox = screen.getByRole("textbox", { name: "Description" });
@@ -412,6 +449,105 @@ describe("RichTextEditor slash commands", () => {
     render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
     act(() => ref.current?.commands.insertContent("see pages 1/2"));
     expect(screen.queryByRole("listbox", { name: "Formatting commands" })).toBeNull();
+  });
+
+  it("closes on an outside tap without deleting the typed query", () => {
+    const ref = createRef<Editor | null>();
+    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    act(() => ref.current?.commands.insertContent("/bold"));
+    expect(screen.getByRole("listbox", { name: "Formatting commands" })).toBeTruthy();
+
+    fireEvent.pointerDown(document.body);
+
+    expect(screen.queryByRole("listbox", { name: "Formatting commands" })).toBeNull();
+    expect(ref.current?.getText()).toBe("/bold");
+  });
+
+  it("closes the typed menu when focus leaves the editor", () => {
+    const ref = createRef<Editor | null>();
+    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    try {
+      act(() => ref.current?.commands.insertContent("/bold"));
+      expect(screen.getByRole("listbox", { name: "Formatting commands" })).toBeTruthy();
+
+      fireEvent.blur(ref.current!.view.dom, { relatedTarget: outside });
+
+      expect(screen.queryByRole("listbox", { name: "Formatting commands" })).toBeNull();
+      expect(ref.current?.getText()).toBe("/bold");
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("keeps redo out of the typed menu even while the redo stack is live", () => {
+    const ref = createRef<Editor | null>();
+    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    act(() => ref.current?.commands.insertContent("x"));
+    act(() => ref.current?.commands.undo());
+    expect(ref.current?.can().redo()).toBe(true);
+    // Bring in a line-leading query without a history step, so opening the menu
+    // does not itself clear the redo stack it must be tested against.
+    act(() => {
+      const tr = ref.current!.state.tr.insertText("/re", 1).setMeta("addToHistory", false);
+      tr.setSelection(TextSelection.create(tr.doc, 4));
+      ref.current!.view.dispatch(tr);
+    });
+    expect(ref.current?.can().redo()).toBe(true);
+
+    const menu = screen.getByRole("listbox", { name: "Formatting commands" });
+    expect(within(menu).getByRole("option", { name: "Clear formatting" })).toBeTruthy();
+    expect(within(menu).queryByRole("option", { name: "Redo" })).toBeNull();
+  });
+
+  it.each([
+    ["/bold", "Bold"],
+    ["/italic", "Italic"],
+    ["/body", "Body"],
+    ["/h1", "Heading 1"],
+    ["/h2", "Heading 2"],
+    ["/h3", "Heading 3"],
+    ["/ul", "Bulleted list"],
+    ["/ol", "Numbered list"],
+    ["/quote", "Quote"],
+    ["/clear", "Clear formatting"],
+  ])("restores the typed trigger after one undo for %s", (trigger, option) => {
+    const ref = createRef<Editor | null>();
+    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    act(() => ref.current?.commands.insertContent(trigger));
+    const menu = screen.getByRole("listbox", { name: "Formatting commands" });
+    fireEvent.click(within(menu).getByRole("option", { name: option }));
+    expect(screen.queryByRole("listbox", { name: "Formatting commands" })).toBeNull();
+
+    act(() => ref.current?.commands.undo());
+
+    expect(ref.current?.getText()).toBe(trigger);
+    expect(tiptapToMarkdown(ref.current?.getJSON())).toBe(trigger);
+    expect(ref.current?.isActive("bold")).toBe(false);
+    expect(ref.current?.isActive("heading")).toBe(false);
+    expect(ref.current?.isActive("bulletList")).toBe(false);
+    expect(ref.current?.isActive("orderedList")).toBe(false);
+    expect(ref.current?.isActive("blockquote")).toBe(false);
+  });
+
+  it("pastes Markdown from the typed menu as one undo step", async () => {
+    const readText = vi.fn().mockResolvedValue("**hi**");
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { readText } });
+    try {
+      const ref = createRef<Editor | null>();
+      render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+      act(() => ref.current?.commands.insertContent("/paste"));
+      const menu = screen.getByRole("listbox", { name: "Formatting commands" });
+      fireEvent.click(within(menu).getByRole("option", { name: "Paste as Markdown" }));
+      await waitFor(() => expect(ref.current?.getText()).toContain("hi"));
+
+      act(() => ref.current?.commands.undo());
+
+      expect(ref.current?.getText()).toBe("/paste");
+    } finally {
+      Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
+    }
   });
 });
 
