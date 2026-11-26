@@ -436,11 +436,11 @@ describe("ReportMediaPicker", () => {
     expect(props.onAddCamera).toHaveBeenCalledTimes(1);
   });
 
-  it("calls onAddGallery with remaining when gallery button clicked", () => {
+  it("calls onAddGallery with no argument when gallery button clicked", () => {
     const props = getDefaultProps({ photos: [createMockPhoto("p1"), createMockPhoto("p2")] });
     render(<ReportMediaPicker {...props} />);
     fireEvent.click(screen.getByRole("button", { name: "Choose up to 3 photos" }));
-    expect(props.onAddGallery).toHaveBeenCalledWith(3);
+    expect(props.onAddGallery).toHaveBeenCalledWith();
   });
 
   it("calls onRemove with the active photo's id", () => {

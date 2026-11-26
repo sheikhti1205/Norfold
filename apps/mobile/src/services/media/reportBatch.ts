@@ -1,5 +1,6 @@
 import type { PhotoPipelineOpts, PickedPhoto } from "../photo";
 import { computeSha256Hex, createHashRegistry, type PhotoHashRegistry } from "./dedupe";
+import { MAX_REPORT_PHOTOS } from "./prepareImages";
 
 /**
  * True for conversion failures photo.ts marks as safe to surface verbatim
@@ -85,7 +86,7 @@ export async function processReportBatch(
     throw new Error("processReportBatch requires an explicit convert function");
   }
   const convert = options.convert;
-  const capacity = Math.max(0, 5 - alreadySelectedCount);
+  const capacity = Math.max(0, MAX_REPORT_PHOTOS - alreadySelectedCount);
   const registry = existingHashRegistry ?? createHashRegistry();
   const accepted: PickedPhoto[] = [];
   const duplicates: PickedPhoto[] = [];
@@ -178,6 +179,6 @@ export function formatBatchNotice(
   if (added > 0) parts.push(`${added} photo${added === 1 ? "" : "s"} added`);
   if (duplicateCount > 0) parts.push(`${duplicateCount} already selected`);
   if (unreadableCount > 0) parts.push(`${unreadableCount} unreadable`);
-  if (overflowCount > 0) parts.push(`${overflowCount} over the 5 limit`);
+  if (overflowCount > 0) parts.push(`${overflowCount} over the ${MAX_REPORT_PHOTOS} limit`);
   return parts.join(" · ");
 }

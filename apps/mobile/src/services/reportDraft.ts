@@ -254,7 +254,7 @@ export function clearDraft(accountId?: string | null): void {
 }
 
 /** Drop every stored draft (sign-out path; coordinator wires the call). */
-export function clearAllStoredDrafts(): void {
+function clearAllStoredDrafts(): void {
   for (const key of new Set([...drafts.keys(), ...generations.keys()])) {
     generations.set(key, (generations.get(key) ?? 0) + 1);
   }

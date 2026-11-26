@@ -3,13 +3,14 @@ import { motion } from "framer-motion";
 import { motionDurations, motionEasings, pressFeedback } from "./uiMotion";
 import { ReportPhotoCarousel } from "./ReportPhotoCarousel";
 import type { ReportMediaPhoto } from "./ReportPhotoCarousel";
+import { MAX_REPORT_PHOTOS } from "../services/media/prepareImages";
 
 export type { ReportMediaPhoto };
 
 export interface ReportMediaPickerProps {
   photos: readonly ReportMediaPhoto[];
   onAddCamera: () => void;
-  onAddGallery: (remaining: number) => void;
+  onAddGallery: () => void;
   onRemove: (id: string) => void;
   onMove: (id: string, direction: "earlier" | "later") => void;
   /** Move one photo to the front, which is what makes it the cover. */
@@ -25,8 +26,6 @@ export interface ReportMediaPickerProps {
    */
   photoMaxHeightPx?: number;
 }
-
-const MAX_PHOTOS = 5;
 
 /** Press acknowledgement for the camera/gallery hand-off buttons. */
 const pressTransition = {
@@ -84,16 +83,16 @@ export function ReportMediaPicker({
   disabled = false,
   photoMaxHeightPx,
 }: ReportMediaPickerProps) {
-  const remaining = useMemo(() => MAX_PHOTOS - photos.length, [photos.length]);
-  const atLimit = photos.length >= MAX_PHOTOS;
+  const remaining = useMemo(() => MAX_REPORT_PHOTOS - photos.length, [photos.length]);
+  const atLimit = photos.length >= MAX_REPORT_PHOTOS;
 
   const handleCameraClick = useCallback(() => {
     if (!disabled && !atLimit) onAddCamera();
   }, [disabled, atLimit, onAddCamera]);
 
   const handleGalleryClick = useCallback(() => {
-    if (!disabled && !atLimit) onAddGallery(remaining);
-  }, [disabled, atLimit, remaining, onAddGallery]);
+    if (!disabled && !atLimit) onAddGallery();
+  }, [disabled, atLimit, onAddGallery]);
 
   const handleRemove = useCallback(
     (id: string) => {
@@ -127,7 +126,7 @@ export function ReportMediaPicker({
     <div className="flex flex-col gap-3" data-testid="report-media-picker">
       <header className="flex items-center gap-2">
         <h2 className="text-sm font-medium text-on-surface">Photos</h2>
-        <span className="text-xs text-on-surface-variant">{photos.length}/{MAX_PHOTOS}</span>
+        <span className="text-xs text-on-surface-variant">{photos.length}/{MAX_REPORT_PHOTOS}</span>
         <div className="ml-auto flex items-center gap-2">
           <motion.button
             type="button"
@@ -152,7 +151,7 @@ export function ReportMediaPicker({
             style={{ width: 48, height: 48 }}
             onClick={handleGalleryClick}
             disabled={disabled || atLimit}
-            aria-label={`Choose up to ${remaining} photos`}
+            aria-label={`Choose up to ${remaining} photo${remaining === 1 ? "" : "s"}`}
             aria-disabled={disabled || atLimit}
             whileTap={pressFeedback.iconButton}
             transition={pressTransition}
@@ -163,7 +162,7 @@ export function ReportMediaPicker({
       </header>
 
       {atLimit && (
-        <p className="text-xs text-on-surface-variant">Maximum of 5 photos reached</p>
+        <p className="text-xs text-on-surface-variant">Maximum of {MAX_REPORT_PHOTOS} photo{MAX_REPORT_PHOTOS === 1 ? "" : "s"} reached</p>
       )}
 
       {photos.length > 0 ? (
@@ -178,7 +177,7 @@ export function ReportMediaPicker({
         />
       ) : (
         <p className="text-xs text-on-surface-variant">
-          Add up to 5 photos. The first photo is the cover.
+          Add up to {MAX_REPORT_PHOTOS} photo{MAX_REPORT_PHOTOS === 1 ? "" : "s"}. The first photo is the cover.
         </p>
       )}
 

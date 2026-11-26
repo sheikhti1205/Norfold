@@ -13,7 +13,6 @@ import { motionDurations, motionEasings } from "./uiMotion";
 export interface ReportMediaPhoto {
   id: string;
   webPath: string;
-  format?: string;
   motionPhoto?: boolean;
 }
 
@@ -105,11 +104,10 @@ export function ReportPhotoCarousel({
     goTo(anchored);
   }, [photos, goTo]);
 
-  const onSlideClick = (id: string, index: number, event: MouseEvent<HTMLButtonElement>) => {
+  const onSlideClick = (id: string, event: MouseEvent<HTMLButtonElement>) => {
     // A swipe pages and must never open the viewer; only a real tap opens it.
     if (!isTap(event)) return;
     onPreview(id);
-    void index;
   };
 
   const measure = (id: string, element: HTMLImageElement) => {
@@ -160,7 +158,7 @@ export function ReportPhotoCarousel({
                     const touch = event.touches[0];
                     if (touch) pressStart(touch.clientX, touch.clientY);
                   }}
-                  onClick={(event) => onSlideClick(photo.id, index, event)}
+                  onClick={(event) => onSlideClick(photo.id, event)}
                   className="relative block w-full overflow-hidden rounded-m3-md border border-outline-variant bg-surface-container-low p-0"
                   style={{
                     aspectRatio: ratios[photo.id] ?? DEFAULT_SLIDE_RATIO,
@@ -351,5 +349,3 @@ function TrashIcon({ size = 20 }: { size?: number }) {
     </svg>
   );
 }
-
-export default ReportPhotoCarousel;
