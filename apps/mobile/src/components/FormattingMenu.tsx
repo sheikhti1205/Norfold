@@ -53,9 +53,13 @@ export function FormattingMenu({
 }: FormattingMenuProps) {
   const baseId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
-  // Tracks the index this panel last accounted for. `null` means no baseline
-  // yet: the first pass after opening records it without speaking.
-  const announcedIndexRef = useRef<number | null>(null);
+  // The row this panel last accounted for. `null` means no baseline yet: the
+  // first pass after opening records it without speaking. The key is the
+  // item's identity plus its position and count, never the bare index: a
+  // narrowing query can leave the index alone while a different command (and
+  // a shorter list) sits under it, and index-only deduping then keeps a stale
+  // announcement instead of naming the row that is now selected.
+  const announcedRef = useRef<string | null>(null);
 
   const { refs, floatingStyles } = useFloating({
     open,
@@ -90,16 +94,17 @@ export function FormattingMenu({
   // polite region; opening the panel and the initial index are not moves.
   useEffect(() => {
     if (!open) {
-      announcedIndexRef.current = null;
+      announcedRef.current = null;
       return;
     }
-    if (announcedIndexRef.current === null) {
-      announcedIndexRef.current = activeIndex;
-      return;
-    }
-    if (announcedIndexRef.current === activeIndex) return;
-    announcedIndexRef.current = activeIndex;
     const item = items[activeIndex];
+    const key = item ? `${item.id}|${activeIndex + 1} of ${items.length}` : "none";
+    if (announcedRef.current === null) {
+      announcedRef.current = key;
+      return;
+    }
+    if (announcedRef.current === key) return;
+    announcedRef.current = key;
     if (!item) return;
     announceQuietly(`${item.label}, ${activeIndex + 1} of ${items.length}`);
   }, [open, activeIndex, items]);

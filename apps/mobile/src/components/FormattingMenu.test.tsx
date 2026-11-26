@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { FORMATTING_COMMANDS } from "./formattingCommands";
+import { FORMATTING_COMMANDS, rankCommands } from "./formattingCommands";
 import { FormattingMenu, type FormattingMenuProps } from "./FormattingMenu";
+import { LiveRegion } from "./LiveRegion";
 
 // Two history rows then two text rows: one group pair per heading.
 const TWO_GROUPS = FORMATTING_COMMANDS.slice(0, 4);
@@ -131,6 +132,32 @@ describe("FormattingMenu", () => {
     expect(messages).toEqual([]);
     view.rerender(<FormattingMenu {...BASE_PROPS} activeIndex={2} />);
     expect(messages).toEqual([`${TWO_GROUPS[2]!.label}, 3 of 4`]);
+  });
+
+  it("announces the new row a narrowed list leaves at the same index", () => {
+    // Both lists put a different command at index 0, which is what a query
+    // narrows into: "/bo" keeps the index and replaces the row under it.
+    const wide = [FORMATTING_COMMANDS[6]!, FORMATTING_COMMANDS[2]!];
+    const narrowed = rankCommands("bo");
+    expect(narrowed.map((item) => item.label)).toEqual(["Body", "Bold"]);
+    const view = render(
+      <>
+        <FormattingMenu {...BASE_PROPS} items={wide} activeIndex={0} />
+        <LiveRegion />
+      </>,
+    );
+    const region = screen.getByTestId("live-region-announcement");
+    // Opening the panel is still not a move, so it speaks nothing.
+    expect(region.textContent).toBe("");
+    view.rerender(
+      <>
+        <FormattingMenu {...BASE_PROPS} items={narrowed} activeIndex={0} />
+        <LiveRegion />
+      </>,
+    );
+    // Identity, not the unchanged index, decides: the polite region must name
+    // the selected row and the list it is actually in.
+    expect(region.textContent).toBe("Body, 1 of 2");
   });
 
   it("stays silent when the panel opens and while it is closed", () => {
