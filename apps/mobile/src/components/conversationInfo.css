@@ -57,7 +57,7 @@
 }
 .fb-conversation-confirm p { margin: 0; font-size: 0.875rem; color: var(--fb-on-surface-variant); }
 .fb-conversation-confirm > div { display: flex; justify-content: flex-end; gap: 0.5rem; }
-.fb-conversation-confirm button { min-height: 44px; padding-inline: 0.9rem; border-radius: 999px; font-weight: 600; }
+.fb-conversation-confirm button { min-height: 48px; padding-inline: 0.9rem; border-radius: 999px; font-weight: 600; }
 .fb-conversation-confirm button.destructive { background: var(--fb-error); color: var(--fb-on-error); }
 
 /* A person's avatar/name is a link, never a button that opens a popover.

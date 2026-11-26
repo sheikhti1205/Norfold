@@ -211,8 +211,12 @@
 }
 
 /* The page counter is a control, not a person: a small counter at the stack's
-   end that names the count it hides. */
+   end that names the count it hides. Pressing it pages the stack, so it spreads
+   a transparent target across the 8px row gap: 7px each side reaches 48px
+   across, 4px each side reaches 36px down, and 4+4 exactly fills the gap so it
+   never overlaps a head. */
 .fb-chat-dock-rail-more {
+  position: relative;
   display: grid;
   flex: none;
   place-items: center;
@@ -228,6 +232,12 @@
   font-variant-numeric: tabular-nums;
   cursor: pointer;
   transition: background-color .14s ease, color .14s ease, border-color .14s ease;
+}
+.fb-chat-dock-rail-more::after {
+  content: "";
+  position: absolute;
+  inset: -4px -7px;
+  border-radius: 999px;
 }
 .fb-chat-dock-rail-more:hover {
   background: color-mix(in srgb, var(--fb-primary) 15%, var(--fb-surface-container));

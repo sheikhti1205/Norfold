@@ -1196,10 +1196,15 @@ describe("ChatDock surface sizing", () => {
     expect(head).toContain("width: 48px");
     expect(head).toContain("height: 48px");
     expect(head).toContain("border-radius: 999px");
-    // The page counter is a small counter at the stack's end, not a head.
+    // The page counter is a small counter at the stack's end, not a head. It
+    // pages the stack, so the 28px chip keeps its look and spreads a transparent
+    // target through the 8px row gap instead of growing into the column.
     const more = /\.fb-chat-dock-rail-more\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
     expect(more).toContain("min-width: 34px");
     expect(more).toContain("height: 28px");
+    expect(more).toContain("position: relative");
+    const moreHit = /\.fb-chat-dock-rail-more::after\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
+    expect(moreHit).toContain("inset: -4px -7px");
 
     // The capsule copies the notification rail: 34px actions, 2px gaps, 4px
     // padding, hairline border, the same two-layer shadow.
