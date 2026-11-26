@@ -65,7 +65,10 @@ interface StructuredStrategy {
  * (see GenerateOptions.localTaskInput) and selects/fills its one declared tool
  * from what the user said. The `system` strings below are environment facts,
  * never model-steering instructions; the tool descriptions name the actual
- * extraction action. Required stays empty for extraction (a required value
+ * extraction action. The report tool also carries one worked example: the
+ * schema alone left the tiny model with no sense of what a well-formed record
+ * looks like, which produced values of the wrong kind (a place phrase in the
+ * date slot). Required stays empty for extraction (a required value
  * with no grounding withholds the whole record instead of guessing — partial
  * extraction is the app contract, enforced by validateReportSlots
  * downstream). Category binds the canonical ITEM_CATEGORIES enum; engine
@@ -75,7 +78,12 @@ const STRUCTURED_STRATEGIES: Readonly<Record<string, StructuredStrategy>> = {
   "extract-report-fields": {
     toolName: "record_item",
     system: "Lost-and-found item report details.",
-    toolDescription: "Extract details explicitly stated about a lost or found item.",
+    toolDescription:
+      "Extract details explicitly stated about a lost or found item. " +
+      'Example: "Black umbrella lost on 8 March 2025 near the central market, ' +
+      'wooden handle, small tear on one panel" fills {"title":"Black umbrella",' +
+      '"description":"Black umbrella with a wooden handle and a small tear on one ' +
+      'panel.","dateText":"2025-03-08","locationNote":"central market"}',
     schema: {
       type: "object",
       properties: {
