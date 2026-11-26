@@ -48,6 +48,7 @@ vi.mock("../components/RichTextEditor", () => ({
 
 import { EditReport } from "./EditReport";
 import { ApiError } from "../services/session";
+import { consumeBackIntercept, resetBackInterceptors } from "../components/backNavigation";
 
 function post(overrides: Record<string, unknown> = {}) {
   return {
@@ -112,6 +113,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   routers.splice(0).forEach((router) => router.dispose());
+  resetBackInterceptors();
   vi.restoreAllMocks();
 });
 
@@ -421,6 +423,63 @@ describe("EditReport", () => {
     fireEvent.click(within(confirm).getByRole("button", { name: /keep editing/i }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(screen.queryByText("My Reports")).toBeNull();
+  });
+
+  it("routes hardware Back through the screen's own exit while editing", async () => {
+    const router = makeRouter([
+      { path: "/my", element: <div>My Reports</div> },
+      { path: "/my/:id/edit", element: <EditReport /> },
+    ], { initialEntries: ["/my/p1/edit"] });
+    render(<RouterProvider router={router} />);
+    await screen.findByLabelText("What did you lose?");
+
+    let consumed = false;
+    act(() => { consumed = consumeBackIntercept(); });
+    expect(consumed).toBe(true);
+    // The press took the same destination as the screen's Back control.
+    await waitFor(() => expect(screen.getByText("My Reports")).toBeTruthy());
+    expect(router.state.location.pathname).toBe("/my");
+  });
+
+  it("leaves hardware Back to the open leave question, not the screen", async () => {
+    const router = makeRouter([
+      { path: "/my", element: <div>My Reports</div> },
+      { path: "/my/:id/edit", element: <EditReport /> },
+    ], { initialEntries: ["/my/p1/edit"] });
+    render(<RouterProvider router={router} />);
+    await screen.findByLabelText("What did you lose?");
+    fireEvent.change(screen.getByLabelText("What did you lose?"), { target: { value: "Another title" } });
+    fireEvent.click(screen.getByRole("button", { name: /discard changes/i }));
+    await screen.findByRole("alertdialog");
+
+    // The question's own bridge is topmost: the screen declines, so the dialog
+    // dismisses instead of the editor leaving with the draft.
+    let consumed = false;
+    act(() => { consumed = consumeBackIntercept(); });
+    expect(consumed).toBe(true);
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(router.state.location.pathname).toBe("/my/p1/edit");
+    expect((screen.getByLabelText("What did you lose?") as HTMLInputElement).value).toBe("Another title");
+  });
+
+  it("consumes hardware Back while a save is in flight and moves nothing", async () => {
+    const save = deferred<ReturnType<typeof post>>();
+    updatePostMock.mockReturnValue(save.promise);
+    const router = makeRouter([
+      { path: "/my", element: <div>My Reports</div> },
+      { path: "/my/:id/edit", element: <EditReport /> },
+    ], { initialEntries: ["/my/p1/edit"] });
+    render(<RouterProvider router={router} />);
+    await startSave();
+
+    let consumed = false;
+    act(() => { consumed = consumeBackIntercept(); });
+    expect(consumed).toBe(true);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(router.state.location.pathname).toBe("/my/p1/edit");
+
+    await act(async () => save.resolve(post()));
+    await waitFor(() => expect(screen.getByText("My Reports")).toBeTruthy());
   });
 
   it("saves the changes through the update path and returns to My Reports", async () => {
