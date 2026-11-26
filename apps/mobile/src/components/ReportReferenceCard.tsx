@@ -58,7 +58,7 @@ export function ReportReferenceCard({ postId }: { postId: string | null }) {
         <button
           type="button"
           onClick={state.retry}
-          className="inline-flex min-h-[44px] items-center rounded-full px-2 font-medium underline"
+          className="inline-flex min-h-[48px] items-center rounded-full px-2 font-medium underline"
         >
           Retry
         </button>

@@ -311,7 +311,7 @@ export function RecoverySheet({
               />
               {helper ? (
                 <div
-                  className="flex min-h-[44px] items-center gap-2 rounded-m3-sm bg-surface-variant px-3 py-2"
+                  className="flex min-h-[48px] items-center gap-2 rounded-m3-sm bg-surface-variant px-3 py-2"
                   data-testid="recovery-helper-selected"
                 >
                   <UserAvatar avatarUrl={helper.avatarUrl} username={helper.username} size={28} />
@@ -336,7 +336,7 @@ export function RecoverySheet({
                           setHelper(profile);
                           setError(null);
                         }}
-                        className="flex min-h-[44px] w-full items-center gap-2 rounded-m3-sm px-2 text-left hover:bg-surface-variant"
+                        className="flex min-h-[48px] w-full items-center gap-2 rounded-m3-sm px-2 text-left hover:bg-surface-variant"
                       >
                         <UserAvatar avatarUrl={profile.avatarUrl} username={profile.username} size={28} />
                         <span className="min-w-0 flex-1 break-all text-sm text-on-surface">

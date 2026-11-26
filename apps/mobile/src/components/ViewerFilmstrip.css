@@ -50,5 +50,5 @@
     padding-bottom: max(6px, env(safe-area-inset-bottom));
   }
   .fb-viewer-filmstrip-track { gap: 6px; }
-  .fb-viewer-filmstrip-thumb { width: 60px; height: 44px; border-radius: 5px; }
+  .fb-viewer-filmstrip-thumb { width: 60px; height: 48px; border-radius: 5px; }
 }

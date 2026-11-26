@@ -8,20 +8,24 @@
 /* The engine pages with transforms, not native scrolling. Focus must not scroll
    its oversized carousel and displace the fixed toolbar/navigation with it. */
 .fb-media-viewer .yarl__container { overflow: clip; }
-.fb-media-viewer .yarl__button { min-width: 44px; min-height: 44px; padding: 10px; }
+.fb-media-viewer .yarl__button { min-width: 48px; min-height: 48px; padding: 10px; }
 .fb-media-viewer button:focus-visible { outline: 2px solid #fff; outline-offset: -4px; border-radius: 8px; }
 .fb-viewer-counter { margin-inline-end: auto; padding: 8px; color: #fff; font-size: .875rem; line-height: 1.3; font-variant-numeric: tabular-nums; }
 /* The photo area stops above the app-owned filmstrip: 8px strip padding, a
-   52px thumb, 8px strip padding, and the device's safe area on top of that. */
-.fb-media-viewer .yarl__slide { padding-top: 64px; padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+   52px thumb, 8px strip padding, and the device's safe area on top of that.
+   The top reserve is the 64px toolbar (8px padding, a 48px button, 8px
+   padding) plus 4px. */
+.fb-media-viewer .yarl__slide { padding-top: 68px; padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
 .fb-viewer-unavailable { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px; color: #fff; font-size: 1rem; line-height: 1.4; }
 .fb-viewer-unavailable p { margin: 0; }
-.fb-viewer-unavailable button { min-height: 44px; padding: 8px 16px; border: 1px solid #aaa; border-radius: 8px; color: #fff; background: #222; }
+.fb-viewer-unavailable button { min-height: 48px; padding: 8px 16px; border: 1px solid #aaa; border-radius: 8px; color: #fff; background: #222; }
 @media (max-width: 600px) {
   .fb-media-viewer .yarl__toolbar > :not(.fb-viewer-counter):not([aria-label="Close photo viewer"]) { display: none; }
-  /* The phone strip is 6px + a 44px press target + 6px; the photo never sits
-     under it, and the safe area is added to both sides of the reservation. */
-  .fb-media-viewer .yarl__slide { padding-top: max(56px, env(safe-area-inset-top)); padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+  /* The phone strip is 6px + a 48px press target + 6px; the photo never sits
+     under it, and the safe area is added to both sides of the reservation. The
+     top reserve stays 4px under the 64px toolbar; the bottom keeps its 8px
+     margin over the 60px strip. */
+  .fb-media-viewer .yarl__slide { padding-top: max(60px, env(safe-area-inset-top)); padding-bottom: calc(68px + env(safe-area-inset-bottom)); }
   .fb-viewer-chrome-hidden .yarl__toolbar,
   .fb-viewer-chrome-hidden .yarl__navigation_prev,
   .fb-viewer-chrome-hidden .yarl__navigation_next,

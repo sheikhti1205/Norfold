@@ -97,10 +97,10 @@ describe("viewer filmstrip ownership", () => {
         expect(rule.body, `${file} ${rule.selectors.join(", ")} hides the strip on a phone`).not.toContain("display: none");
       }
     }
-    // Compact phone sizing: a 56x40 picture in a 44px press target, 6px gap.
+    // Compact phone sizing: a 56x44 picture in a 60x48 press target, 6px gap.
     const phoneThumb = bodies(phoneStripRules, ".fb-viewer-filmstrip-thumb");
     expect(phoneThumb).toContain("width: 60px;");
-    expect(phoneThumb).toContain("height: 44px;");
+    expect(phoneThumb).toContain("height: 48px;");
     expect(bodies(phoneStripRules, ".fb-viewer-filmstrip-track")).toContain("gap: 6px;");
   });
 
@@ -121,7 +121,7 @@ describe("viewer filmstrip ownership", () => {
     expect(phoneSlide).toMatch(/padding-bottom:\s*calc\(\d+px \+ env\(safe-area-inset-bottom\)\)/);
     const compactStrip = plainPx(phoneStrip, "padding-top") + plainPx(phoneThumb, "height") + envPx(phoneStrip, "padding-bottom");
     const compactSlide = envPx(phoneSlide, "padding-bottom");
-    expect(compactStrip).toBe(6 + 44 + 6);
+    expect(compactStrip).toBe(6 + 48 + 6);
     expect(compactSlide).toBeGreaterThanOrEqual(compactStrip);
   });
 

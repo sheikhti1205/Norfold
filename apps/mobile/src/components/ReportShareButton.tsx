@@ -135,7 +135,7 @@ export function ReportShareButton({ postId, title }: { postId: string; title: st
                 try { event.currentTarget.select(); }
                 catch { announce("Automatic selection isn't available. Press and hold the link to select it."); }
               }}
-              className="min-h-[44px] w-full min-w-0 rounded-m3-sm border border-outline-variant bg-surface px-2 text-sm text-on-surface"
+              className="min-h-[48px] w-full min-w-0 rounded-m3-sm border border-outline-variant bg-surface px-2 text-sm text-on-surface"
             />
             <p className="text-xs text-on-surface-variant">Select the link to copy it.</p>
           </div>

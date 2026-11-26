@@ -92,7 +92,7 @@ function ReadonlyRasterFallback({
           type="button"
           aria-label="Zoom in"
           onClick={onZoomIn}
-          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface px-2 text-on-surface"
+          className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-m3-sm border border-outline bg-surface px-2 text-on-surface"
         >
           <Plus size={16} aria-hidden />
         </button>
@@ -100,7 +100,7 @@ function ReadonlyRasterFallback({
           type="button"
           aria-label="Zoom out"
           onClick={onZoomOut}
-          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface px-2 text-on-surface"
+          className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-m3-sm border border-outline bg-surface px-2 text-on-surface"
         >
           <Minus size={16} aria-hidden />
         </button>
@@ -311,7 +311,7 @@ export function InteractiveLocationMap({
             <button
               type="button"
               onClick={openViewer}
-              className="inline-flex min-h-[44px] items-center rounded-m3-sm border border-outline bg-surface px-3 text-sm text-on-surface"
+              className="inline-flex min-h-[48px] items-center rounded-m3-sm border border-outline bg-surface px-3 text-sm text-on-surface"
             >
               Open map
             </button>

@@ -68,7 +68,7 @@
 .fb-camera-cam {
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
+  min-height: 48px;
   max-width: 14rem;
   padding: 0 0.75rem;
   border: 1px solid var(--fb-outline-variant);
