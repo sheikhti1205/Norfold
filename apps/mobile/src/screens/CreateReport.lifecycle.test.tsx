@@ -148,7 +148,7 @@ describe("Report publication lifecycle", () => {
 
     // The pause is part of the draft: a remount restores it.
     view.unmount();
-    render(<CreateReport />);
+    const restored = render(<CreateReport />);
     expect(screen.getByText(/this report may already be published/i)).toBeTruthy();
     fireEvent.submit(screen.getByRole("button", { name: /publish/i }).closest("form")!);
     expect(publish).toHaveBeenCalledTimes(1);
@@ -156,6 +156,11 @@ describe("Report publication lifecycle", () => {
     // Checking My Reports and finding nothing lifts the pause, so the same
     // content can be published again.
     fireEvent.click(screen.getByRole("button", { name: /not there/i }));
+    // The lift is persisted with the draft, not just held in memory: a remount
+    // must not resurrect the banner from the stored outcome flag.
+    restored.unmount();
+    render(<CreateReport />);
+    expect(screen.queryByText(/this report may already be published/i)).toBeNull();
     fireEvent.submit(screen.getByRole("button", { name: /publish/i }).closest("form")!);
     await waitFor(() => expect(publish).toHaveBeenCalledTimes(2));
     // The retried publish is uncertain again, and the draft is still intact.

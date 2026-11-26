@@ -975,21 +975,23 @@ function ReportForm() {
     announce("Publishing resumed. Your draft is unchanged.");
   }
 
-  // Derived on change, never during a render pass: `loadDraft` reads the draft
-  // the autosave effect keeps current. A form holding nothing has nothing to
-  // discard, so the control is unavailable rather than silently doing nothing.
+  // Component state only: a storage read here would answer from the draft the
+  // autosave effect has not written yet, and never re-run when it does. Text is
+  // not the whole answer — a text-less draft whose photos failed recovery is
+  // still something the person must be able to discard, or the failed-recovery
+  // screen wedges with no way out. Slots still pending recovery come from
+  // `initialDraft`, the draft this component loaded once at mount. Once
+  // recovery settles only live state counts, so a confirmed prune cannot leave a
+  // phantom photo behind. A form holding nothing has nothing to discard, so the
+  // control is unavailable rather than silently doing nothing.
   const draftHasContent = useMemo(() => {
     const current = { type, title, description, category, eventDate, location, youtubeUrl, aiSuggestInput };
-    // draftIsMeaningful only inspects text: a photo-only draft (including one
-    // whose photos failed recovery) is still a draft the user must be able to
-    // discard, or the failed-recovery screen wedges with no way out. The live
-    // persisted photo list is consulted so pruned removals are honored.
     const hasPhotos =
       photos.length > 0 ||
       failedPhotoIds.length > 0 ||
-      draftPhotoIds(loadDraft(accountId)).length > 0;
+      (!photoRecoveryReady && draftPhotoIds(initialDraft).length > 0);
     return draftIsMeaningful(current) || hasPhotos;
-  }, [type, title, description, category, eventDate, location, youtubeUrl, aiSuggestInput, photos, failedPhotoIds, accountId]);
+  }, [type, title, description, category, eventDate, location, youtubeUrl, aiSuggestInput, photos, failedPhotoIds, accountId, initialDraft, photoRecoveryReady]);
 
   function clearDraftAndReset() {
     clearDraft(accountId);
