@@ -377,8 +377,8 @@ html.fb-reduce-motion .fb-rail-anchor:has(> .fb-nav-rail) { transition: none; }
 .fb-nav-rail[data-pinned="true"] .fb-nav-link {
   flex-direction: row; justify-content: flex-start; gap: 10px;
   /* Horizontal inset only: the vertical padding belongs to the base rule and
-     the shallow-window tiers, which is what keeps the pinned column inside its
-     height budget instead of forcing the destination list to scroll. */
+     the shallow-window tiers. A short window scrolls the destination list
+     rather than shrinking its rows. */
   padding-inline: 10px;
 }
 /* The name and handle are worth showing only when the column has room for them;
