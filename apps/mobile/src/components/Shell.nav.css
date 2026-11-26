@@ -45,7 +45,7 @@
   box-shadow: var(--shadow-sm), inset 0 1px 0 var(--fb-surface);
 }
 .fb-nav-link {
-  position: relative; display: flex; flex: 1 1 0; min-width: 44px;
+  position: relative; display: flex; flex: 1 1 0; min-width: 48px;
   min-height: 48px; align-items: center; justify-content: center;
   gap: 4px; border-radius: 999px;
   text-decoration: none; padding: 4px 2px;
@@ -246,9 +246,11 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
 }
 /* Vertical items keep the bar's grammar (rounded row, active pill) but are
    compact: 38px rows and 20px glyphs let all ten destinations plus the
-   identity control fit a 640px-tall window without scrolling. */
+   identity control fit a 640px-tall window without scrolling. The row takes
+   its inline size from the rail, so the bar's floor cannot widen it past the
+   collapsed column's content box and shift the icon axis. */
 .fb-nav-rail .fb-nav-link {
-  flex: none; width: 100%; min-height: 38px;
+  flex: none; width: 100%; min-width: 0; min-height: 38px;
   flex-direction: column; gap: 2px;
   padding: 6px 4px; border-radius: 12px;
 }
