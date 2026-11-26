@@ -16,7 +16,7 @@
 }
 .fb-icon-control, .fb-surface-button, .fb-quick-trigger {
   display: inline-flex; align-items: center; justify-content: center;
-  min-height: 44px; min-width: 44px; flex-shrink: 0; border-radius: 12px;
+  min-height: 48px; min-width: 48px; flex-shrink: 0; border-radius: 12px;
   color: var(--fb-on-surface); cursor: pointer;
 }
 .fb-icon-control:hover, .fb-icon-control[data-hovered], .fb-surface-button:not(.fb-confirm-danger):not(.fb-confirm-primary):hover { background: var(--fb-surface-container); }
@@ -31,7 +31,7 @@
 }
 .fb-action-menu { width: 15rem; max-width: calc(100vw - 20px); padding: 4px; }
 .fb-menu-item {
-  display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 12px;
+  display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 12px;
   border-radius: 10px; font-size: .875rem; line-height: 1.4; cursor: pointer;
 }
 .fb-menu-item > span { min-width: 0; flex: 1; overflow-wrap: anywhere; }
@@ -62,7 +62,7 @@
    and the tighter chrome keep it a contact sheet instead of a 44rem modal with
    a column of empty row. Its own ceiling is tighter than the shared one, so a
    long account/action list scrolls inside the menu instead of down the window;
-   the 44px row targets are untouched. Only this variant changes; the shared
+   the 48px row targets are untouched. Only this variant changes; the shared
    task, report and comments measures stay as they are. */
 .fb-compact-panel { max-width: 26rem; max-height: min(72vh, 34rem); }
 .fb-compact-panel .fb-surface-header { padding: 10px 12px; }

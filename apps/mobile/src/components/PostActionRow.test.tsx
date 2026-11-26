@@ -176,12 +176,12 @@ describe("PostActionRow (compact flat action row)", () => {
     expect(rowCssRules).toMatch(/\.fb-post-action-row\s*>\s*\.fb-post-action-reactions\s*\{[^}]*flex:\s*2 1 0%/);
   });
 
-  it("keeps a >=44px hit area on every control", () => {
+  it("keeps a >=48px hit area on every control", () => {
     renderRow({ slots: { like: <LikeSlot />, share: <ShareSlot />, save: <SaveSlot /> } });
-    // The house token already guarantees the width; the row's own rule keeps
-    // the height at the 44px minimum instead of the token's 48px card.
-    expect(indexCss).toMatch(/\.fb-report-action\s*\{[^}]*min-width:\s*44px/);
-    expect(rowCss).toMatch(/\.fb-post-action-row \.fb-report-action\s*\{[^}]*min-height:\s*44px/);
+    // The house token guarantees the width and height; the row's own rule
+    // restates the same 48px minimum while dropping the token's card look.
+    expect(indexCss).toMatch(/\.fb-report-action\s*\{[^}]*min-width:\s*48px/);
+    expect(rowCss).toMatch(/\.fb-post-action-row \.fb-report-action\s*\{[^}]*min-height:\s*48px/);
   });
 
   it("fits a 320dp canvas without wrapping or clipping", () => {
@@ -189,9 +189,9 @@ describe("PostActionRow (compact flat action row)", () => {
     // The repo's own width vocabulary: 320dp is the narrowest canvas the app
     // supports and it stays in the compact band.
     expect(widthBand(320)).toBe("compact");
-    // Four controls at the 44px minimum plus the row's 2px gaps and the text
+    // Four controls at the 48px minimum plus the row's 2px gaps and the text
     // block's 16px gutters must fit the narrowest canvas the app supports.
-    const rowWidth = 4 * 44 + 3 * 2 + 2 * 16;
+    const rowWidth = 4 * 48 + 3 * 2 + 2 * 16;
     expect(rowWidth).toBeLessThanOrEqual(320);
     const row = screen.getByTestId("post-action-row");
     expect(row.className).toMatch(/flex-nowrap/);
