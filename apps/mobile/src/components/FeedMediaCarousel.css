@@ -7,16 +7,20 @@
  * offset), so 8px downward still clears the frame edge while upward has the
  * whole photo. 6 + 34 + 8 = 48px.
  *
- * Horizontally: 3px per side, exactly half of the 6px gap. Two 6px dots sit
- * 12px apart, so 6 + 3 + 3 = 12px meets the neighbour at the edge without
- * covering it; an active 16px dot and its neighbour consume their 6px gap the
- * same way. Width cannot reach 48px here without covering the neighbouring
- * dot's photo, and paging to the wrong photo is worse than a narrow target. */
+ * Horizontally: 9px per side, so an inactive dot's target is 6 + 9 + 9 = 24px
+ * wide. The dots sit on a 24px pitch (6px dot + 18px gap), so a 24px circle
+ * centred on one dot touches its neighbour without intersecting it — the
+ * WCAG 2.5.8 floor for a target that is narrower than 24px. An active 16px
+ * dot and its 6px neighbour are 8 + 18 + 3 = 29px apart, against 17 + 12 =
+ * 29px of combined inset: they touch, never overlap. The width stays below
+ * the house 48px because a 48px pitch would spread a 5-photo row across
+ * 240px of a ~340px photo, and paging to the wrong photo is worse than a
+ * narrow target. 24px is the WCAG 2.5.8 minimum. */
 .fb-feed-carousel-dot {
   position: relative;
 }
 .fb-feed-carousel-dot::after {
   content: "";
   position: absolute;
-  inset: -34px -3px -8px;
+  inset: -34px -9px -8px;
 }

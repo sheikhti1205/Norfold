@@ -114,11 +114,12 @@ describe("FeedMediaCarousel dots", () => {
       expect(dot.classList.contains("h-1.5")).toBe(true);
     }
     // jsdom has no layout, so the stylesheet carries the geometry: 6px of dot
-    // plus 34px upward into the photo plus 8px downward = 48px, and 3px per
-    // side stops at the neighbour's edge (6px dot + 6px gap).
+    // plus 34px upward into the photo plus 8px downward = 48px, and 9px per
+    // side gives a 24px-wide target on a 24px pitch, so a 24px circle centred
+    // on a dot touches its neighbour without overlapping it.
     const css = readFileSync("src/components/FeedMediaCarousel.css", "utf8");
     expect(css).toContain(".fb-feed-carousel-dot::after");
-    expect(css).toContain("inset: -34px -3px -8px");
+    expect(css).toContain("inset: -34px -9px -8px");
   });
 });
 

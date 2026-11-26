@@ -95,7 +95,7 @@ export function FeedMediaCarousel({ images, sharedMediaId, onOpenReport }: FeedM
       {images.length > 1 && (
         <div
           data-testid="feed-media-dots"
-          className="absolute bottom-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/35 px-2 py-1"
+          className="absolute bottom-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-[18px] rounded-full bg-black/35 px-2 py-1"
         >
           {windowedDots(active, images.length).map((entry, position) =>
             entry === "gap" ? (
