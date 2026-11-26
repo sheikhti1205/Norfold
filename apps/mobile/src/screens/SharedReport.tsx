@@ -34,7 +34,7 @@ export function SharedReport() {
     }, () => { if (live) setState({ id, status: "error" }); });
     return () => { live = false; controller.abort(); };
   }, [id, valid, user, booting, bootError, contact, attempt]);
-  if (!link) return <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-4 bg-surface px-6 py-12 text-on-surface"><p className="text-lg font-semibold">Norfold</p><h1 ref={title} tabIndex={-1} className="text-3xl font-semibold tracking-tight">Invalid report link</h1><p className="leading-relaxed text-on-surface-variant">Check the link and try again, or head back to Norfold.</p><Link className="inline-flex min-h-12 items-center justify-center rounded-m3-md bg-on-surface px-5 font-medium text-surface focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-on-surface" to="/" state={{ showPublic: true }}>Back to Norfold</Link></main>;
+  if (!link) return <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-4 bg-surface px-6 py-12 text-on-surface"><p className="text-lg font-semibold">Norfold</p><h1 ref={title} tabIndex={-1} className="text-3xl font-semibold tracking-tight">Invalid report link</h1><p className="leading-relaxed text-on-surface-variant">Check the link and try again, or head back to Norfold.</p><Link className="inline-flex min-h-12 min-w-12 items-center justify-center rounded-m3-md bg-on-surface px-5 font-medium text-surface focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-on-surface" to="/" state={{ showPublic: true }}>Back to Norfold</Link></main>;
   if (booting || (bootError && !user)) return <Splash />;
   if (user) return <Navigate to={link.route} replace />;
   if (contact) return <Navigate to="/signin" replace />;

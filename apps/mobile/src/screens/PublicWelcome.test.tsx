@@ -51,7 +51,7 @@ it("intro link focuses the explanation without navigating away", () => {
   expect(isOnboardingComplete()).toBe(false);
 });
 describe("public shell touch targets", () => {
-  const css = readFileSync(new URL("./PublicWelcome.css", import.meta.url), "utf8");
+  const css = readFileSync("src/screens/PublicWelcome.css", "utf8");
   it("keeps the brand, navigation, footer and skip link at 48px", () => {
     const brand = css.match(/\.nf-public-brand\s*\{([^}]*)\}/)?.[1] ?? "";
     expect(brand).toMatch(/min-height:\s*48px/);
