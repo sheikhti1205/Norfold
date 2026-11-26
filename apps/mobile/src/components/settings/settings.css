@@ -99,7 +99,7 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 3.75rem;
+  min-height: 60px;
   padding: 0.625rem 0.25rem;
   color: var(--fb-on-surface);
   text-align: start;
@@ -184,11 +184,11 @@ a.fb-settings-row:focus-visible, button.fb-settings-row:focus-visible {
 .fb-switch-thumb { position: absolute; inset: 2px auto auto 2px; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: var(--fb-on-surface-variant); }
 .fb-switch-track[data-checked="true"] { background: var(--fb-control-active); border-color: var(--fb-control-active); }
 .fb-switch-track[data-checked="true"] .fb-switch-thumb { transform: translateX(18px); background: var(--fb-on-primary); color: var(--fb-primary); }
-.fb-settings-search-field { display: flex; align-items: center; gap: 0.625rem; min-height: 3rem; padding-inline: 0.875rem 0.25rem; border: 1px solid var(--fb-outline-variant); border-radius: 0.875rem; background: var(--fb-surface-container); color: var(--fb-on-surface-variant); }
-.fb-settings-search-field input { width: 100%; min-width: 0; min-height: 3rem; color: var(--fb-on-surface); background: transparent; font-size: 1rem; }
+.fb-settings-search-field { display: flex; align-items: center; gap: 0.625rem; min-height: 48px; padding-inline: 0.875rem 0.25rem; border: 1px solid var(--fb-outline-variant); border-radius: 0.875rem; background: var(--fb-surface-container); color: var(--fb-on-surface-variant); }
+.fb-settings-search-field input { width: 100%; min-width: 0; min-height: 48px; color: var(--fb-on-surface); background: transparent; font-size: 1rem; }
 .fb-settings-search-field input::placeholder { color: var(--fb-on-surface-variant); opacity: 1; }
 .fb-settings-search-field input::-webkit-search-cancel-button { display: none; }
-.fb-settings-search-field button { display: flex; align-items: center; justify-content: center; min-width: 3rem; min-height: 3rem; border-radius: 50%; }
+.fb-settings-search-field button { display: flex; align-items: center; justify-content: center; min-width: 48px; min-height: 48px; border-radius: 50%; }
 .fb-settings-search-status { margin-block: 0.75rem; font-size: 0.8125rem; color: var(--fb-on-surface-variant); }
 .fb-settings-results { list-style: none; margin: 0; padding: 0; }
 .fb-settings-results > li { position: relative; }
@@ -197,7 +197,7 @@ a.fb-settings-row:focus-visible, button.fb-settings-row:focus-visible {
    their grid-swatches presentation via the .fb-accent-grid override below. */
 .fb-choice-fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
 .fb-choice-list { display: flex; flex-direction: column; gap: 0; padding: 0; }
-.fb-choice { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 0.125rem; min-width: 0; min-height: 3rem; padding: 0.625rem 0.25rem; border: none; border-radius: 0; background: transparent; color: var(--fb-on-surface); cursor: pointer; }
+.fb-choice { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 0.125rem; min-width: 0; min-height: 48px; padding: 0.625rem 0.25rem; border: none; border-radius: 0; background: transparent; color: var(--fb-on-surface); cursor: pointer; }
 .fb-choice + .fb-choice { border-top: 1px solid var(--fb-outline-variant); }
 .fb-choice[data-checked="true"] { border-color: var(--fb-outline-variant); background: transparent; color: var(--fb-on-surface); }
 .fb-choice[data-checked="true"] .fb-choice-title { color: var(--fb-primary); }
@@ -269,7 +269,7 @@ a.fb-settings-row:focus-visible, button.fb-settings-row:focus-visible {
 .fb-theme-preview[data-theme="system"] > span { background: #6c757d; }
 /* C6 exception: accent stays a grid of swatches. Compact 24px dot; the label
    keeps a 48px row target independent of the dot size. */
-.fb-accent-grid .fb-choice.fb-accent-swatch { align-items: center; gap: 0.375rem; min-height: 3rem; padding: 0.5rem 0.25rem; border: none; }
+.fb-accent-grid .fb-choice.fb-accent-swatch { align-items: center; gap: 0.375rem; min-height: 48px; padding: 0.5rem 0.25rem; border: none; }
 .fb-accent-swatch { align-items: center; padding: 0.5rem 0.25rem; }
 .fb-accent-dot { display: flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; border-radius: 50%; background: var(--fb-swatch-light); color: var(--fb-swatch-on-light); }
 .dark .fb-accent-dot { background: var(--fb-swatch-dark); color: var(--fb-swatch-on-dark); }
@@ -279,7 +279,7 @@ a.fb-settings-row:focus-visible, button.fb-settings-row:focus-visible {
 .fb-status-pill[data-tone="error"] { background: var(--fb-lost-bg); color: var(--fb-lost-ink); }
 .fb-status-pill[data-tone="warning"] { background: var(--fb-surface-container); color: var(--fb-warning); }
 .fb-advanced-disclosure { border-radius: 0.75rem; background: transparent; border-top: 1px solid var(--fb-outline-variant); }
-.fb-advanced-disclosure summary { min-height: 3rem; padding: 0.625rem 0.25rem; cursor: pointer; font-size: 0.875rem; font-weight: 500; }
+.fb-advanced-disclosure summary { min-height: 48px; padding: 0.625rem 0.25rem; cursor: pointer; font-size: 0.875rem; font-weight: 500; }
 .fb-advanced-disclosure > div { padding: 0 0.25rem 0.875rem; font-size: 0.875rem; }
 @media (min-width: 480px) { .fb-settings-page { padding-inline: 1.5rem; } .fb-settings-sticky { margin-inline: -1.5rem; padding-inline: 1.5rem; } }
 @media (forced-colors: active) {

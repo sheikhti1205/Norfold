@@ -101,7 +101,7 @@
 }
 .fb-settings-window-results { list-style: none; margin: 0; padding: 0; }
 .fb-settings-window-results .fb-settings-row {
-  min-height: 3.25rem;
+  min-height: 52px;
   padding: 0.5rem 0.75rem;
   border-radius: 10px;
 }

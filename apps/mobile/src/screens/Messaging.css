@@ -169,7 +169,7 @@
 .fb-chat-message { position:relative; }
 .fb-chat-message-options { position:absolute; inset-block-start:0; inset-inline-end:0;
   display:inline-flex; align-items:center; justify-content:center;
-  width:3rem; height:3rem; min-width:0; min-height:0; padding:0; overflow:visible;
+  width:48px; height:48px; min-width:0; min-height:0; padding:0; overflow:visible;
   border-radius:.75rem; color:var(--fb-on-surface-variant); background:transparent;
   opacity:0; pointer-events:none; transition:opacity .12s linear; z-index:1; }
 /* The glyph keeps a fixed 20px size whatever the press target is, so the bigger
@@ -603,12 +603,12 @@
   border:2px solid var(--fb-outline-variant); border-top-color:var(--fb-primary); }
 @media (prefers-reduced-motion:no-preference) { .fb-chat-photo-spinner { animation:fb-chat-spin 1s linear infinite; } }
 .fb-chat-photo-draft .fb-chat-photo-remove { position:absolute; top:-.3rem; inset-inline-end:-.3rem; display:grid; place-items:center;
-  width:1.55rem; height:1.55rem; min-width:0; min-height:0; padding:0; border-radius:50%;
+  width:24px; height:24px; min-width:0; min-height:0; padding:0; border-radius:50%;
   background:var(--fb-inverse-surface, #1f1f23); color:var(--fb-inverse-on-surface, #f4f4f6);
   text-decoration:none; }
 /* The visual badge stays small; the hit area is the full house target so a
    thumb can remove one photo without removing two. */
-.fb-chat-photo-remove::after { content:""; position:absolute; inset:-.75rem; border-radius:50%; }
+.fb-chat-photo-remove::after { content:""; position:absolute; inset:-12px; border-radius:50%; }
 .fb-chat-photo-options { display:flex; align-items:center; flex-wrap:wrap; gap:.4rem .75rem; }
 .fb-chat-photo-options p { margin:0; flex:1 1 10rem; min-width:0; }
 /* Shared voice-note geometry lives in components/voiceNote.css. */

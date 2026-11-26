@@ -184,11 +184,11 @@ body {
 /* Home's visible brand. The sidebar owns the
  * identity wherever a rail exists; on the bottom-bar layout (phones, and
  * readers who chose the bar) that sign is absent, so the feed's one visible
- * row carries the mark and wordmark again. 44px hit height, no pill: the brand
+ * row carries the mark and wordmark again. 48px hit height, no pill: the brand
  * is a link home, not a third button competing with Search and Activity. */
 .fb-home-brand {
   display: inline-flex;
-  min-height: 44px;
+  min-height: 48px;
   align-items: center;
   gap: 8px;
   flex: none;

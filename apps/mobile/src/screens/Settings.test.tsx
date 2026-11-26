@@ -625,7 +625,7 @@ describe("settings row touch-target contract", () => {
   }
 
   it("keeps the shared row minimum at the house 60px target", () => {
-    expect(ruleBlock(sharedCss, ".fb-settings-row")).toMatch(/min-height:\s*3\.75rem/);
+    expect(ruleBlock(sharedCss, ".fb-settings-row")).toMatch(/min-height:\s*60px/);
   });
 
   it("keeps compact category navigation at least 48px tall independently of text scale", () => {

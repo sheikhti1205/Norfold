@@ -6,7 +6,7 @@
 .fb-safety-facts dt { font-size: .8125rem; color: var(--fb-on-surface-variant); }
 .fb-safety-facts dd { margin: .125rem 0 0; overflow-wrap: anywhere; font-size: .9375rem; }
 .fb-safety-toolbar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
-.fb-safety-read-action { min-height: 3rem; padding: .5rem .75rem; color: var(--fb-primary); border-radius: .5rem; cursor: pointer; }
+.fb-safety-read-action { min-height: 48px; padding: .5rem .75rem; color: var(--fb-primary); border-radius: .5rem; cursor: pointer; }
 .fb-safety-read-action:hover { background: var(--fb-surface-container); }
 .fb-safety-read-action:disabled { opacity: .6; cursor: default; }
 .fb-safety-read-action:focus-visible { outline: 2px solid var(--fb-primary); outline-offset: 2px; }

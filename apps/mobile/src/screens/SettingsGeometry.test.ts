@@ -76,9 +76,9 @@ describe("Settings control floors", () => {
   }
 
   it("keeps the search field and its clear button at 48px", () => {
-    expect(rule(primitiveCss, ".fb-settings-search-field input")).toMatch(/min-height:\s*3rem/);
-    expect(rule(primitiveCss, ".fb-settings-search-field button")).toMatch(/min-height:\s*3rem/);
-    expect(rule(primitiveCss, ".fb-settings-search-field button")).toMatch(/min-width:\s*3rem/);
+    expect(rule(primitiveCss, ".fb-settings-search-field input")).toMatch(/min-height:\s*48px/);
+    expect(rule(primitiveCss, ".fb-settings-search-field button")).toMatch(/min-height:\s*48px/);
+    expect(rule(primitiveCss, ".fb-settings-search-field button")).toMatch(/min-width:\s*48px/);
   });
 
   it("keeps picture choices at a 48px minimum", () => {

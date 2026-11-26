@@ -20,7 +20,7 @@
 .fb-device-form { display: flex; flex-direction: column; gap: 6px; }
 .fb-device-form label { font-size: .8125rem; font-weight: 600; }
 .fb-device-form input {
-  min-height: 46px; width: 100%; padding: 10px 12px;
+  min-height: 48px; width: 100%; padding: 10px 12px;
   border: 1px solid var(--fb-outline-variant); border-radius: 12px;
   background: var(--fb-surface); color: var(--fb-on-surface); font-size: 1rem;
 }

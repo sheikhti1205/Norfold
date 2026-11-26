@@ -208,7 +208,7 @@ describe("QA I — touch-target CSS contracts (SC 2.5.8, house 44px / rows 60px)
   }
 
   it("settings rows keep a 60px minimum target", () => {
-    expect(ruleBlock(settingsCss, ".fb-settings-row")).toMatch(/min-height:\s*3\.75rem/);
+    expect(ruleBlock(settingsCss, ".fb-settings-row")).toMatch(/min-height:\s*60px/);
   });
 
   it("bottom-nav links and search clear keep >=48px targets", () => {
@@ -216,23 +216,23 @@ describe("QA I — touch-target CSS contracts (SC 2.5.8, house 44px / rows 60px)
     expect(ruleBlock(navCss, ".fb-nav-link")).toMatch(/min-width:\s*48px/);
     // The clear button is a round icon target: it clears 48px in both axes.
     expect(ruleBlock(settingsCss, ".fb-settings-search-field button")).toMatch(
-      /min-height:\s*3rem/,
+      /min-height:\s*48px/,
     );
     expect(ruleBlock(settingsCss, ".fb-settings-search-field button")).toMatch(
-      /min-width:\s*3rem/,
+      /min-width:\s*48px/,
     );
   });
 
   it("choice cards (theme/accent/text-size/motion radios) keep >=44px targets", () => {
-    // Shipped value is 3rem (48px), which exceeds the 44px house floor — the
-    // old 2.75rem pin went stale when choice rows were raised to 48px.
-    expect(ruleBlock(settingsCss, ".fb-choice")).toMatch(/min-height:\s*3rem/);
+    // Shipped value is 48px, which meets the house floor — the old 2.75rem pin
+    // went stale when choice rows were raised to 48px.
+    expect(ruleBlock(settingsCss, ".fb-choice")).toMatch(/min-height:\s*48px/);
   });
 
   it("disclosures keep a >=44px summary target", () => {
-    // Shipped value is 3rem (48px), which exceeds the 44px house floor.
+    // Shipped value is 48px, which meets the house floor.
     expect(ruleBlock(settingsCss, ".fb-advanced-disclosure summary")).toMatch(
-      /min-height:\s*3rem/,
+      /min-height:\s*48px/,
     );
   });
 });

@@ -948,8 +948,8 @@ describe("R19 inside-corner message menu ownership", () => {
     expect(rem(options, "inset-block-start")).toBeGreaterThanOrEqual(0);
     expect(rem(options, "inset-inline-end")).toBeGreaterThanOrEqual(0);
     expect(options).not.toMatch(/inset-(?:block-start|inline-end)\s*:\s*-/);
-    expect(rem(options, "width") * 16).toBeGreaterThanOrEqual(48);
-    expect(rem(options, "height") * 16).toBeGreaterThanOrEqual(48);
+    expect(px(options, "width")).toBeGreaterThanOrEqual(48);
+    expect(px(options, "height")).toBeGreaterThanOrEqual(48);
   });
 
   it("keeps the glyph at 20px and paints no 48px circle", () => {
@@ -985,7 +985,7 @@ describe("R19 inside-corner message menu ownership", () => {
   it("reserves a fixed paragraph clearance wide enough for the glyph", () => {
     const bubble = bodies(".fb-chat-message").find(body => body.includes("max-width:min(100%, 34rem);")) ?? "";
     const bubbleInline = Number(/padding:[\d.]+rem ([\d.]+)rem;/.exec(bubble)?.[1] ?? 0);
-    const box = rem(options, "width") * 16;
+    const box = px(options, "width");
     const glyphPx = rem(glyph, "width") * 16;
     // The glyph is centred in the target; only its inner edge reaches the text.
     const intrusion = (box - glyphPx) / 2 + glyphPx - bubbleInline * 16;
