@@ -460,12 +460,13 @@ html.fb-reduce-motion .fb-nav-drawer-inline:active { transform: none; }
    state: once the route's row scrolls the inline control away, the fallback
    takes over at the top-left, where the bar's control was. A surface with no
    top bar never carries either attribute, so it keeps the bottom-left control
-   unchanged. */
+   unchanged. Pinned, it keeps that 8px top-left offset on a flat screen and
+   still clears a notch in landscape. */
 .fb-nav-drawer-trigger[data-inline-mounted]:not([data-pinned="true"]) { display: none; }
 .fb-nav-drawer-trigger[data-pinned="true"] {
   inset-block-end: auto;
   inset-block-start: calc(8px + env(safe-area-inset-top));
-  inset-inline-start: 8px;
+  inset-inline-start: max(8px, env(safe-area-inset-left));
   animation: fb-nav-drawer-pin-in 140ms ease;
 }
 @keyframes fb-nav-drawer-pin-in {
