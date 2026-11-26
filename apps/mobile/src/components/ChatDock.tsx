@@ -46,12 +46,12 @@ const WINDOW_GAP = 12;
 const DESKTOP_MAX_WINDOWS = 3;
 /**
  * Width the rail reserves in the corner: the wide capsule (a 12px edge inset, a
- * 122px capsule of three 34px actions and an 8px gap) grows to 184px on a
- * coarse pointer, where the actions are 44px. The larger figure is the one the
+ * 122px capsule of three 34px actions and an 8px gap) grows to 196px on a
+ * coarse pointer, where the actions are 48px. The larger figure is the one the
  * capacity formula reserves, so it never promises a row the CSS has to shrink
  * below the width the header was laid out for.
  */
-const RAIL_RESERVE = 184;
+const RAIL_RESERVE = 196;
 /**
  * Heads in the rail before it pages. The rail is a column, so the fit is a
  * height question the drawing already answered: five 48px heads, the two +N

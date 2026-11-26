@@ -5,7 +5,7 @@
 .fb-chat-details-person strong { font-size:1rem; }
 .fb-chat-details :is(button,a):focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }
 /* Shell owns viewport insets; Chat only adds the compact header's own padding. */
-/* The identity's 44px avatar/name row and every 44px control start on one top
+/* The identity's 48px avatar/name row and every 48px control start on one top
    line. The "Friends" status line intentionally hangs below that row, so
    centering the controls against the taller heading block pushed them 13px
    under the avatar. Full-page chat and the dock share this header. */
@@ -15,7 +15,7 @@
    horizontally at phone width instead of becoming a second panel. */
 .fb-chat-pins { display:flex; gap:.35rem; flex:none; padding:0 .6rem .3rem; overflow-x:auto; scrollbar-width:none; }
 .fb-chat-pins::-webkit-scrollbar { display:none; }
-.fb-chat-pin { display:flex; align-items:center; gap:.3rem; max-width:min(16rem,72vw); min-height:44px; padding:.2rem .6rem;
+.fb-chat-pin { display:flex; align-items:center; gap:.3rem; max-width:min(16rem,72vw); min-height:48px; padding:.2rem .6rem;
   border:0; border-radius:.65rem; background:var(--fb-surface-container); color:var(--fb-on-surface);
   font:inherit; font-size:.75rem; line-height:1.25; text-align:start; }
 .fb-chat-pin:hover { background:var(--fb-surface-container-high); }
@@ -26,7 +26,7 @@
 .fb-chat-list-title { flex:1; padding-inline:.35rem; }
 .fb-chat-search { display:flex; align-items:center; gap:.5rem; margin:.5rem .75rem; padding:0 .65rem; border:1px solid var(--fb-outline-variant); border-radius:.6rem; }
 .fb-chat-search svg { flex:none; color:var(--fb-on-surface-variant); }
-.fb-chat-search input { min-width:0; width:100%; min-height:44px; padding:.5rem 0; font-size:.875rem; background:transparent; color:inherit; }
+.fb-chat-search input { min-width:0; width:100%; min-height:48px; padding:.5rem 0; font-size:.875rem; background:transparent; color:inherit; }
 .fb-chat-search:focus-within { outline:2px solid var(--fb-on-surface); outline-offset:2px; }
 .fb-chat-search input:focus { outline:none; }
 .fb-chat-count { margin-inline-start:.4rem; font-size:.75rem; }
@@ -41,7 +41,7 @@
 .fb-chat-search-task .fb-chat-search { margin:0; }
 .fb-chat-search-results { list-style:none; margin:0; padding:0; }
 .fb-chat-search-results li + li { margin-top:.25rem; }
-.fb-chat-search-results button { display:flex; flex-direction:column; gap:.25rem; width:100%; min-height:44px; padding:.75rem 0; text-align:start; overflow-wrap:anywhere; }
+.fb-chat-search-results button { display:flex; flex-direction:column; gap:.25rem; width:100%; min-height:48px; padding:.75rem 0; text-align:start; overflow-wrap:anywhere; }
 .fb-chat-search-results button > [dir] { white-space:pre-wrap; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
 .fb-chat-gallery { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(8rem,100%),1fr)); gap:.5rem; list-style:none; margin:0; padding:0; }
 .fb-chat-gallery .fb-chat-photo { width:100%; max-height:20rem; }
@@ -54,12 +54,12 @@
    own. Mirrors the app bar and Settings heading exception. */
 .fb-chat-heading h1[tabindex="-1"]:focus,
 .fb-chat-heading h1[tabindex="-1"]:focus-visible { outline:none; }
-.fb-chat-identity { display:flex; align-items:center; gap:.6rem; width:100%; min-height:44px; text-align:start; }
+.fb-chat-identity { display:flex; align-items:center; gap:.6rem; width:100%; min-height:48px; text-align:start; }
 .fb-chat-identity-copy { min-width:0; flex:1; overflow:hidden; }
 .fb-chat-identity-name { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* Dock thread header: circular avatar, the name
    and the real relationship line stacked in the identity, and the four
-   existing window controls on the same 44px top line, 8px apart. The header
+   existing window controls on the same 48px top line, 8px apart. The header
    is chrome, not a new surface: it adds no width, paint, elevation or filter
    and reuses the page's text tokens. Messaging carries no presence signal, so
    there is no dot and no "Active now" line; the secondary line stays the
@@ -72,12 +72,12 @@
   font-size:.8125rem; text-overflow:ellipsis; white-space:nowrap; }
 [data-surface="dock"] .fb-chat-header .fb-chat-icon > svg { width:20px; height:20px; }
 .fb-chat-full-name { padding:16px; overflow-wrap:anywhere; }
-.fb-chat-icon { display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; flex:none; border-radius:50%; }
+.fb-chat-icon { display:inline-flex; align-items:center; justify-content:center; min-width:48px; min-height:48px; flex:none; border-radius:50%; }
 .fb-chat-icon:hover, .fb-chat-icon:active { background:var(--fb-surface-container); }
 .fb-chat-page button:disabled { opacity:.5; cursor:default; }
 .fb-chat-page :is(button,a,textarea):focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }
 .fb-chat-filters { display:flex; flex-wrap:wrap; gap:.25rem; padding:.25rem .75rem; }
-.fb-chat-filters button { min-height:44px; padding:.4rem .65rem; font-size:.875rem; border-bottom:2px solid transparent; }
+.fb-chat-filters button { min-height:48px; min-width:48px; padding:.4rem .65rem; font-size:.875rem; border-bottom:2px solid transparent; }
 .fb-chat-filters button[aria-pressed="true"] { border-color:var(--fb-primary); font-weight:650; }
 /* The wide sidebar keeps only its collapse control in the header. The list
    filter menu moved into this row, where it cannot squeeze the "Chats" title. */
@@ -123,14 +123,14 @@
 .fb-chat-statusline { display:flex; align-items:center; gap:.45rem; flex:none; margin:0; padding:.25rem 1rem .3rem; font-size:.78rem; line-height:1.35; color:var(--fb-on-surface-variant); }
 .fb-chat-statusline > svg { flex:none; }
 .fb-chat-statusline > span { min-width:0; overflow-wrap:anywhere; }
-.fb-chat-statusline > button { flex:none; margin-inline-start:auto; min-height:44px; padding:.2rem .5rem; border:0; border-radius:.5rem; background:transparent; color:var(--fb-primary); font:inherit; font-size:.78rem; font-weight:600; text-decoration:underline; }
+.fb-chat-statusline > button { flex:none; margin-inline-start:auto; min-height:48px; padding:.2rem .5rem; border:0; border-radius:.5rem; background:transparent; color:var(--fb-primary); font:inherit; font-size:.78rem; font-weight:600; text-decoration:underline; }
 .fb-chat-unread { background:var(--fb-primary); color:var(--fb-on-primary); border-radius:1rem; padding:.1rem .4rem; font-size:.75rem; font-weight:650; flex:none; }
 .fb-chat-empty { padding:2rem 1.25rem; color:var(--fb-on-surface-variant); font-size:.9rem; line-height:1.5; }
 .fb-chat-empty h2 { font-size:1.1rem; color:var(--fb-on-surface); font-weight:600; margin-bottom:.4rem; }
 .fb-chat-messages { padding:.5rem .8rem; overflow-anchor:none; scroll-padding-block:1rem; }
 .fb-chat-request { font-size:.85rem; color:var(--fb-on-surface-variant); padding:.7rem .2rem; line-height:1.5; }
 .fb-chat-actions { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.5rem; }
-.fb-chat-actions button { padding:.5rem .9rem; min-height:44px; font-weight:600; color:var(--fb-on-surface); border:0; border-radius:.75rem; background:var(--fb-surface-container); }
+.fb-chat-actions button { padding:.5rem .9rem; min-height:48px; font-weight:600; color:var(--fb-on-surface); border:0; border-radius:.75rem; background:var(--fb-surface-container); }
 .fb-chat-actions button:first-child { background:var(--fb-primary-container); color:var(--fb-on-primary-container); }
 .fb-chat-transcript { display:flex; flex-direction:column; gap:.55rem; padding-block:.5rem 1rem; }
 .fb-chat-line { display:flex; align-items:center; max-width:100%; }
@@ -160,7 +160,7 @@
    the box it is given, so 70% of 70% cannot compound down the tree. */
 .fb-chat-line > .fb-chat-line-row { max-width:70%; }
 /* The message menu control lives in the bubble's own top-inline-end corner.
-   Its button is a transparent 44px square, the project's house minimum for a
+   Its button is a transparent 48px square, the project's house minimum for a
    press target, anchored flush inside the bubble so the whole target sits
    inside the message. A 20px glyph is centred in it, so the visible chevron
    stays well clear of the rounded corner. Only opacity and pointer-events
@@ -169,14 +169,14 @@
 .fb-chat-message { position:relative; }
 .fb-chat-message-options { position:absolute; inset-block-start:0; inset-inline-end:0;
   display:inline-flex; align-items:center; justify-content:center;
-  width:2.75rem; height:2.75rem; min-width:0; min-height:0; padding:0; overflow:visible;
+  width:3rem; height:3rem; min-width:0; min-height:0; padding:0; overflow:visible;
   border-radius:.75rem; color:var(--fb-on-surface-variant); background:transparent;
   opacity:0; pointer-events:none; transition:opacity .12s linear; z-index:1; }
 /* The glyph keeps a fixed 20px size whatever the press target is, so the bigger
    target never grows the symbol. */
 .fb-chat-message-options > svg { width:1.25rem; height:1.25rem; }
 /* Hover paint stays on the glyph-sized disc inside the transparent target, so
-   the 44px area itself never becomes a painted circle. */
+   the 48px area itself never becomes a painted circle. */
 .fb-chat-message-options::before { content:""; position:absolute; inset:calc(50% - .625rem);
   border-radius:50%; background:transparent; pointer-events:none; }
 .fb-chat-message-options:hover::before, .fb-chat-message-options:focus-visible::before {
@@ -196,8 +196,8 @@
   .fb-chat-run .fb-chat-line-row:hover .fb-chat-message-options,
   .fb-chat-message-surface:focus-within .fb-chat-message-options,
   .fb-chat-message-options:focus-visible { opacity:1; pointer-events:auto; }
-  .fb-chat-message > p:not(.fb-chat-emoji-only) { padding-right:1.25rem; }
-  [dir="rtl"] .fb-chat-message > p:not(.fb-chat-emoji-only) { padding-right:0; padding-left:1.25rem; }
+  .fb-chat-message > p:not(.fb-chat-emoji-only) { padding-right:1.375rem; }
+  [dir="rtl"] .fb-chat-message > p:not(.fb-chat-emoji-only) { padding-right:0; padding-left:1.375rem; }
 }
 @media (prefers-reduced-motion:reduce) { .fb-chat-message-options { transition:none; } }
 /* The long-press surface is the only flex item now: the bubble keeps its own
@@ -279,7 +279,7 @@
 .fb-chat-message-media:has(> .fb-chat-photo > button) > .fb-chat-photo { border-radius:inherit; }
 /* On a flush photo the menu glyph sits on picture pixels, where the ordinary
    on-surface-variant glyph can disappear. Keep the 20px disc and give it the
-   same dark scrim as the time chip; the 44px press target stays unpainted. */
+   same dark scrim as the time chip; the 48px press target stays unpainted. */
 .fb-chat-message-media:has(> .fb-chat-photo > button) .fb-chat-message-options { color:#fff; }
 .fb-chat-message-media:has(> .fb-chat-photo > button) .fb-chat-message-options::before {
   background:rgb(0 0 0 / .55); }
@@ -327,7 +327,7 @@
 /* A quoted message is part of the bubble: one accent edge, the author, and at
    most two lines of the original. Tapping it scrolls the original into view;
    it never opens a second screen. */
-.fb-chat-quote { display:flex; flex-direction:row; align-items:center; gap:.5rem; width:100%; min-width:0; min-height:44px; text-align:start;
+.fb-chat-quote { display:flex; flex-direction:row; align-items:center; gap:.5rem; width:100%; min-width:0; min-height:48px; text-align:start;
   margin:0 0 .3rem; padding:.25rem .5rem; border:0; border-inline-start:3px solid currentColor;
   border-radius:.45rem; background:color-mix(in srgb, currentColor 9%, transparent); color:inherit;
   font-size:.8rem; line-height:1.3; }
@@ -345,21 +345,21 @@
 .fb-chat-reply-copy { display:flex; flex-direction:column; min-width:0; flex:1; padding:.25rem 0; font-size:.8rem; line-height:1.3; }
 .fb-chat-reply-author { font-weight:650; }
 .fb-chat-reply-preview { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; opacity:.85; }
-.fb-chat-reply-chip > button { flex:none; width:44px; min-width:44px; height:44px; border-radius:50%; }
+.fb-chat-reply-chip > button { flex:none; width:48px; min-width:48px; height:48px; border-radius:50%; }
 .fb-chat-ticks { display:inline-flex; align-items:center; vertical-align:-1px; color:inherit; }
 .fb-chat-ticks svg { fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
 .fb-chat-ticks.is-read { color:var(--fb-link); }
 
 /* Floating message actions. A menu annotates the message you pressed; it is
    never a second screen. One portal layer, above every task surface (70+). */
-.fb-chat-message-status button { text-decoration:underline; min-height:44px; min-width:44px; }
+.fb-chat-message-status button { text-decoration:underline; min-height:48px; min-width:48px; }
 .fb-chat-composer { display:flex; align-items:flex-end; gap:.4rem; flex:none; padding:8px 12px; background:var(--fb-surface); padding-bottom:max(8px, env(safe-area-inset-bottom)); }
-.fb-chat-composer textarea { flex:1; min-width:0; min-height:44px; max-height:9rem; resize:vertical; border:1px solid var(--fb-control-outline); border-radius:1.25rem; padding:.6rem .9rem; background:var(--fb-surface-container); color:var(--fb-on-surface); font-size:1rem; }
+.fb-chat-composer textarea { flex:1; min-width:0; min-height:48px; max-height:9rem; resize:vertical; border:1px solid var(--fb-control-outline); border-radius:1.25rem; padding:.6rem .9rem; background:var(--fb-surface-container); color:var(--fb-on-surface); font-size:1rem; }
 .fb-chat-error { font-size:.875rem; color:var(--fb-error); padding:.5rem 1rem; }
 .fb-chat-sheet { display:flex; flex-direction:column; gap:0; }
 .fb-chat-info-scroll { scrollbar-width:thin; scrollbar-color:var(--fb-outline) transparent; overflow-y:auto; overscroll-behavior:contain; }
 .fb-chat-review-copy { white-space:pre-wrap; overflow-wrap:anywhere; padding:.55rem .7rem; border-radius:.6rem; background:var(--fb-surface-container); }
-.fb-chat-sheet > :is(button,a) { text-align:start; min-height:44px; padding:.5rem .25rem; font-size:.875rem; }
+.fb-chat-sheet > :is(button,a) { text-align:start; min-height:48px; padding:.5rem .25rem; font-size:.875rem; }
 .fb-chat-info-row, .fb-chat-info-block { display:flex; align-items:center; gap:.75rem; width:100%; min-width:0; }
 .fb-chat-info-row svg, .fb-chat-info-block > svg { flex:none; color:var(--fb-on-surface-variant); }
 .fb-chat-info-row > span { min-width:0; overflow-wrap:anywhere; }
@@ -371,9 +371,9 @@
 .fb-chat-info-divider { border:0; border-top:1px solid var(--fb-outline-variant); margin:.4rem 0; }
 .fb-chat-info-block { padding-inline:.25rem; }
 .fb-chat-info-block > div { flex:1; }
-.fb-chat-info-block > div > button { width:100%; min-height:44px; padding:.5rem 0; border:0; border-radius:0; text-align:start; justify-content:flex-start; font-size:.875rem; font-weight:400; }
+.fb-chat-info-block > div > button { width:100%; min-height:48px; padding:.5rem 0; border:0; border-radius:0; text-align:start; justify-content:flex-start; font-size:.875rem; font-weight:400; }
 .fb-chat-sheet :is(button,a):focus-visible, .fb-chat-search-results button:focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }
-/* Inside the compact info panel only: the same 44px rows and 20px icons, with a
+/* Inside the compact info panel only: the same 48px rows and 20px icons, with a
    tighter gutter and divider so a short menu does not read as empty space. The
    wide details pane keeps the base density. */
 .fb-compact-panel .fb-chat-info-row, .fb-compact-panel .fb-chat-info-block { gap:.65rem; }
@@ -384,7 +384,7 @@
    maxHeight prop, because React Aria writes the open overlay's max-height
    inline and a stylesheet rule cannot outrank it. The popover is never the
    scrollport: .fb-chat-info-scroll inside the dialog owns overflow, rows stay
-   44px, and a short panel paints with no empty space below it. */
+   48px, and a short panel paints with no empty space below it. */
 .fb-chat-info-popover {
   display: flex; flex-direction: column;
   width: min(20rem, calc(100vw - 16px));
@@ -450,7 +450,7 @@
 .fb-chat-photo[data-loading]::after { content:""; position:absolute; inset:0; margin:auto; width:1.35rem; height:1.35rem;
   border-radius:50%; border:2px solid var(--fb-outline-variant); border-top-color:var(--fb-primary); }
 @media (prefers-reduced-motion:no-preference) { .fb-chat-photo[data-loading]::after { animation:fb-chat-spin 1s linear infinite; } }
-.fb-chat-photo > button { display:block; width:100%; height:100%; min-width:44px; min-height:44px; }
+.fb-chat-photo > button { display:block; width:100%; height:100%; min-width:48px; min-height:48px; }
 /* The button fills its wrapper, and both the wrapper and a flush bubble clip
    overflow, so the app-wide 2px ring with a positive offset would be cut off at
    the picture edge. Draw it inside instead, and put the white contrast ring on
@@ -464,8 +464,8 @@
 .fb-chat-photo > div { display:flex; height:100%; min-height:0; overflow:auto; flex-direction:column; align-items:center; gap:.4rem; padding:.5rem; font-size:.875rem; }
 /* The retry button is the only ELEMENT child of its status box, so a
    `:not(:first-child)` rule never reached it and it measured 21px tall.
-   Match the status box's button directly and keep the 44px house minimum. */
-.fb-chat-photo > div button, .fb-chat-photo-draft button, .fb-chat-message > button:not(.fb-chat-message-options) { min-height:44px; min-width:44px; padding:.3rem .5rem; text-decoration:underline; }
+   Match the status box's button directly and keep the 48px house minimum. */
+.fb-chat-photo > div button, .fb-chat-photo-draft button, .fb-chat-message > button:not(.fb-chat-message-options) { min-height:48px; min-width:48px; padding:.3rem .5rem; text-decoration:underline; }
 
 /* Photos from one send read as one bubble: a 2-up row, a tall-left 3-up, or a
    2x2 with the remainder counted on the last cell. Every cell is the same
@@ -608,7 +608,7 @@
   text-decoration:none; }
 /* The visual badge stays small; the hit area is the full house target so a
    thumb can remove one photo without removing two. */
-.fb-chat-photo-remove::after { content:""; position:absolute; inset:-.6rem; border-radius:50%; }
+.fb-chat-photo-remove::after { content:""; position:absolute; inset:-.75rem; border-radius:50%; }
 .fb-chat-photo-options { display:flex; align-items:center; flex-wrap:wrap; gap:.4rem .75rem; }
 .fb-chat-photo-options p { margin:0; flex:1 1 10rem; min-width:0; }
 /* Shared voice-note geometry lives in components/voiceNote.css. */
@@ -625,10 +625,10 @@ a.fb-chat-context:hover, a.fb-chat-context:focus-visible { text-decoration:under
 .fb-chat-location { display:grid; grid-template-columns:17px minmax(0,1fr); align-items:start; gap:.25rem .5rem; margin-bottom:.35rem; }
 .fb-chat-location > div { min-width:0; }
 .fb-chat-location p { margin:0; }
-.fb-chat-location a { grid-column:2; justify-self:start; white-space:nowrap; font-size:.85rem; text-decoration:underline; min-height:44px; display:inline-flex; align-items:center; }
+.fb-chat-location a { grid-column:2; justify-self:start; white-space:nowrap; font-size:.85rem; text-decoration:underline; min-height:48px; display:inline-flex; align-items:center; }
 .fb-chat-context-banner { display:flex; align-items:center; flex-wrap:wrap; gap:.25rem .75rem; margin:0;
   padding:.25rem .8rem; font-size:.8rem; color:var(--fb-on-surface-variant); }
-.fb-chat-context-banner button { min-height:44px; text-decoration:underline; }
+.fb-chat-context-banner button { min-height:48px; text-decoration:underline; }
 /* The ready shared-report card is components/ChatReportPreview.css. It lives
    beside the bubble instead of a second painted card here, so the two owners
    cannot diverge or layer a background, border and padding ring. */
@@ -665,9 +665,9 @@ a.fb-chat-context:hover, a.fb-chat-context:focus-visible { text-decoration:under
 .fb-chat-rail-list { list-style: none; margin: 0; padding: .25rem 0 .5rem; display: flex; flex-direction: column;
   flex: 1; min-height: 0; gap: .2rem; overflow-y: auto; overscroll-behavior: contain; }
 .fb-chat-rail-item { position: relative; display: flex; align-items: center; justify-content: center;
-  min-width: 44px; min-height: 48px; }
+  min-width: 48px; min-height: 48px; }
 .fb-chat-rail-identity { position: relative; display: flex; align-items: center; pointer-events: none;
-  justify-content: center; min-width: 44px; min-height: 44px; }
+  justify-content: center; min-width: 48px; min-height: 48px; }
 .fb-chat-rail-row { position: absolute; inset: 0; border-radius: .75rem; }
 .fb-chat-rail-row:hover, .fb-chat-rail-row:focus-visible { background: var(--fb-surface-container); }
 .fb-chat-rail-row[aria-current="page"] { background: var(--fb-surface-container); }
@@ -689,7 +689,7 @@ a.fb-chat-context:hover, a.fb-chat-context:focus-visible { text-decoration:under
 .fb-chat-jump-row { display:flex; justify-content:flex-end; flex:none; padding:0 .9rem .25rem; }
 .fb-chat-jump {
   display:flex; align-items:center; justify-content:center;
-  min-width:44px; min-height:44px; border-radius:999px;
+  min-width:48px; min-height:48px; border-radius:999px;
   background:var(--fb-surface-container-high); color:var(--fb-on-surface);
   border:1px solid var(--fb-outline-variant); box-shadow:var(--shadow-md); z-index:6;
 }

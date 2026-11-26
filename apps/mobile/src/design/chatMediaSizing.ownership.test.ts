@@ -918,7 +918,7 @@ describe("R19 expressive preview bounds", () => {
 });
 
 /**
- * R19 inside-corner message menu. The control is a transparent 44px press
+ * R19 inside-corner message menu. The control is a transparent 48px press
  * target, the project's house minimum, anchored flush inside the bubble's
  * top-inline-end corner; a 20px glyph is centred in it. These are declarations
  * read from source, not measured pixels: the reveal may change paint only, the
@@ -943,7 +943,7 @@ describe("R19 inside-corner message menu ownership", () => {
   const px = (body: string, property: string) =>
     Number(new RegExp(`${property}\\s*:\\s*(-?[\\d.]+)px`).exec(body)?.[1] ?? NaN);
 
-  it("anchors a 44px press target flush inside the bubble", () => {
+  it("anchors a 48px press target flush inside the bubble", () => {
     expect(options).toContain("position:absolute;");
     expect(rem(options, "inset-block-start")).toBeGreaterThanOrEqual(0);
     expect(rem(options, "inset-inline-end")).toBeGreaterThanOrEqual(0);
@@ -952,11 +952,11 @@ describe("R19 inside-corner message menu ownership", () => {
     expect(rem(options, "height") * 16).toBeGreaterThanOrEqual(44);
   });
 
-  it("keeps the glyph at 20px and paints no 44px circle", () => {
+  it("keeps the glyph at 20px and paints no 48px circle", () => {
     expect(rem(glyph, "width") * 16).toBe(20);
     expect(rem(glyph, "height") * 16).toBe(20);
     expect(options).toContain("background:transparent;");
-    // No hover paint on the 44px box itself.
+    // No hover paint on the 48px box itself.
     expect(chatCss).not.toMatch(/\.fb-chat-message-options:hover\s*\{[^{}]*background:/);
     // The only hover paint is the glyph-sized disc inside the target.
     expect(disc).toContain("pointer-events:none");
@@ -996,8 +996,8 @@ describe("R19 inside-corner message menu ownership", () => {
     // The clearance lives in the same fine-pointer query as the reveal, so a
     // touch screen reserves no inset for a control it does not render, and the
     // inset cannot move on hover because it is fixed while the query matches.
-    expect(fine).toContain(".fb-chat-message > p:not(.fb-chat-emoji-only) { padding-right:1.25rem; }");
-    expect(fine).toContain('[dir="rtl"] .fb-chat-message > p:not(.fb-chat-emoji-only) { padding-right:0; padding-left:1.25rem; }');
+    expect(fine).toContain(".fb-chat-message > p:not(.fb-chat-emoji-only) { padding-right:1.375rem; }");
+    expect(fine).toContain('[dir="rtl"] .fb-chat-message > p:not(.fb-chat-emoji-only) { padding-right:0; padding-left:1.375rem; }');
     expect(chatCss.match(/\.fb-chat-message > p:not\(\.fb-chat-emoji-only\)/g)).toHaveLength(2);
     // No unconditional copy survives outside the query.
     expect(chatCss.replace(/@media \(hover:hover\) and \(pointer:fine\)\s*\{[\s\S]*?\n\}/, ""))
@@ -1099,7 +1099,7 @@ describe("R19 media-only bubble ownership", () => {
  * a positive-offset focus ring is clipped by the bubble's overflow guard; the
  * ring moves inside the picture edge with a white backplate so it survives a
  * same-coloured photo. The corner menu keeps its 20px glyph disc and takes the
- * compact time-chip scrim instead of painting the 44px target. The passive
+ * compact time-chip scrim instead of painting the 48px target. The passive
  * metadata keeps the .75rem scale. Declarations only: rendered paint remains a
  * deployed-browser check.
  */
@@ -1126,14 +1126,14 @@ describe("R19 flush photo focus and menu contrast", () => {
     expect(chatCss).toContain(".fb-chat-page :is(button,a,textarea):focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }");
     expect(photoFocus).not.toMatch(/outline\s*:\s*none/);
     // The picture keeps the house minimum press target.
-    expect(bodies(".fb-chat-photo > button").join("\n")).toContain("min-width:44px;");
-    expect(bodies(".fb-chat-photo > button").join("\n")).toContain("min-height:44px;");
+    expect(bodies(".fb-chat-photo > button").join("\n")).toContain("min-width:48px;");
+    expect(bodies(".fb-chat-photo > button").join("\n")).toContain("min-height:48px;");
   });
 
   it("keeps the 20px menu disc and gives it the time-chip scrim on a photo", () => {
     expect(glyph).toContain("color:#fff;");
     expect(disc).toContain("background:rgb(0 0 0 / .55);");
-    // The scrim never resizes or repaints the 44px press target.
+    // The scrim never resizes or repaints the 48px press target.
     expect(disc).not.toMatch(/(?:^|[;\s])(?:inset|width|height|padding)\s*:/);
     expect(discHover).toContain("background:");
     expect(discFocus).toContain("background:");

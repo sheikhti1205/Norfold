@@ -18,7 +18,7 @@ import { UserIdentityTrigger } from "./UserIdentityTrigger";
  * `variant="dock"` is the window's Messenger-style hierarchy: a 40px circular
  * avatar beside ONE copy column that stacks the name and the relationship
  * line. The status line moves inside the identity copy for the dock only, so
- * the 40px avatar and both text lines are a single ~44px row instead of three
+ * the 40px avatar and both text lines are a single ~48px row instead of three
  * lines hanging under the avatar. It is a `span` there because the copy sits
  * inside the heading link; the full-page heading keeps its status paragraph
  * below the `h1`. Shape and size stay here because the avatar is part of the

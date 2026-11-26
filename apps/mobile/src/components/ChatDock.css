@@ -62,7 +62,7 @@
   display: flex;
   /* Shrink only when the rail leaves less room than the capacity formula
      assumed; the preferred width stays the 24rem card, because a 320px panel
-     leaves the peer's name about 90px beside four 44px header controls and it
+     leaves the peer's name about 90px beside four 48px header controls and it
      truncates to "Arif…". A floating popup is a side panel, not a page: 384px
      keeps the transcript readable and the row of windows compact. */
   flex: 0 1 auto;
@@ -89,7 +89,7 @@
    instead of the full conversation height, so a two-row Recent list cannot
    collapse it to two rows. 52dvh moves it towards five rows on a tall viewport
    inside the 23rem/28rem bounds; the rest scrolls inside `.fb-chat-dock-body`.
-   28rem caps header + 44px search + the Recent label + five 52px rows. */
+   28rem caps header + 48px search + the Recent label + five 52px rows. */
 .fb-chat-dock-window[data-view="picker"] {
   /* The picker is a list of names and one-line previews, so it keeps the 20rem
      width while a transcript window takes 24rem. */
@@ -298,11 +298,11 @@
    grows to a real touch target, exactly as the notification rail does. */
 @media (hover: none), (pointer: coarse) {
   .fb-chat-dock-rail-strip { gap: 4px; padding: 6px; }
-  .fb-chat-dock-rail-action { width: 44px; height: 44px; }
-  /* The 44px actions and the roomier gaps and padding fill 164px:
-     12 + 164 + 8 = the window row's clearance. */
+  .fb-chat-dock-rail-action { width: 48px; height: 48px; }
+  /* The 48px actions and the roomier gaps and padding fill 176px:
+     12 + 176 + 8 = the window row's clearance. */
   .fb-chat-dock,
-  .fb-chat-dock-rail { --fb-dock-window-clearance: 184px; }
+  .fb-chat-dock-rail { --fb-dock-window-clearance: 196px; }
 }
 
 .fb-chat-dock-rail button:focus-visible {
@@ -310,7 +310,7 @@
   outline-offset: 2px;
 }
 
-/* Four 44px header controls must wrap rather than crush the identity at
+/* Four 48px header controls must wrap rather than crush the identity at
    320px or large text. The canonical header keeps its own order; only the
    wrap, the identity's shrink floor and this dock-local container are added.
    The header is its own query container, so a dock measures itself and the
@@ -325,13 +325,13 @@
   flex: 1 1 5rem;
   min-width: min(100%, 5rem);
 }
-/* One row needs 288px of content: the 80px identity floor plus four 44px
-   controls and four 8px gaps. Below 18rem (288px) that row cannot fit; the old
+/* One row needs 304px of content: the 80px identity floor plus four 48px
+   controls and four 8px gaps. Below 19rem (304px) that row cannot fit; the old
    wrap split it three-and-one and left Close alone above a dead band. The
    identity takes the whole first line, and the auto inline-start margin on the
    first control starts the entire group at the second line's end. The column
    gap stays .5rem (8px) and the row gap stays .25rem (4px). */
-@container fb-chat-dock-header (max-width: 18rem) {
+@container fb-chat-dock-header (max-width: 19rem) {
   .fb-chat-dock .fb-chat-header > .fb-chat-heading {
     flex: 1 0 100%;
     min-width: 0;
@@ -342,7 +342,7 @@
 }
 
 /* The dock stacks the relationship line inside the identity copy, directly
-   under the name, so the avatar and both lines form one 44px row. Because that
+   under the name, so the avatar and both lines form one 48px row. Because that
    copy now lives inside the heading link, the status would inherit the name's
    650 weight; the relationship line stays the page's regular secondary line,
    with no extra margin between the two lines. */
@@ -390,7 +390,7 @@
 .fb-chat-dock-search input {
   width: 100%;
   min-width: 0;
-  min-height: 44px;
+  min-height: 48px;
   padding: .5rem 0;
   border: 0;
   background: transparent;

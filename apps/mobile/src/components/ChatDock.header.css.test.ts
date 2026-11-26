@@ -8,10 +8,10 @@ import { describe, expect, it } from "vitest";
  * The served 320px / root16 and root32 screenshots wrapped the identity row
  * with three controls and left "Close chat" alone on a third line. These
  * assertions pin the replacement geometry in the real declarations: the dock
- * header is its own container, and only below its 18rem content width — the
- * 288px a single row actually needs (80px heading floor, four 44px controls
+ * header is its own container, and only below its 19rem content width — the
+ * 304px a single row actually needs (80px heading floor, four 48px controls
  * and four 8px gaps) — does the canonical identity own line one and every dock
- * control start a right-aligned group on line two, at 44px, with the wrap
+ * control start a right-aligned group on line two, at 48px, with the wrap
  * spacing the dock already uses. The full-page header keeps its own rule
  * untouched.
  *
@@ -85,7 +85,7 @@ function singleRule(rules: CssRule[], selector: string): CssRule {
 const HEADER = ".fb-chat-dock .fb-chat-header";
 const HEADING = ".fb-chat-dock .fb-chat-header > .fb-chat-heading";
 const FIRST_CONTROL = ".fb-chat-dock .fb-chat-header > :nth-child(2)";
-const CONTAINER_QUERY = "@container fb-chat-dock-header (max-width: 18rem)";
+const CONTAINER_QUERY = "@container fb-chat-dock-header (max-width: 19rem)";
 
 describe("ChatDock header, narrow two-row contract", () => {
   it("makes the dock header its own container and keeps the wrap spacing", () => {
@@ -102,17 +102,17 @@ describe("ChatDock header, narrow two-row contract", () => {
     expect(canonicalGap).toBeLessThanOrEqual(8);
   });
 
-  it("scopes the compact header to an 18rem dock container query", () => {
+  it("scopes the compact header to a 19rem dock container query", () => {
     const narrowRules = dockRules.filter(rule => rule.context?.startsWith("@container"));
     expect(narrowRules.length).toBeGreaterThan(0);
     const contexts = [...new Set(narrowRules.map(rule => rule.context ?? ""))];
     expect(contexts).toEqual([CONTAINER_QUERY]);
     const [context = ""] = contexts;
     const limit = /max-width\s*:\s*([\d.]+)rem/.exec(context);
-    // 18rem is exactly the 288px one row occupies (80px heading floor, four
-    // 44px controls, four 8px gaps); wrapping at 22rem cost a second control
+    // 19rem is exactly the 304px one row occupies (80px heading floor, four
+    // 48px controls, four 8px gaps); wrapping at 22rem cost a second control
     // row at the 366px phone window even though the row fit.
-    expect(Number(limit?.[1] ?? NaN)).toBe(18);
+    expect(Number(limit?.[1] ?? NaN)).toBe(19);
     // Only the dock header is a container: the full chat page is never queried.
     const containers = dockRules.filter(rule => /container-type\s*:/.test(rule.body));
     expect(containers.flatMap(rule => rule.selectors)).toEqual([HEADER]);
@@ -148,10 +148,10 @@ describe("ChatDock header, narrow two-row contract", () => {
     }
   });
 
-  it("keeps every dock header control at the 44px minimum", () => {
+  it("keeps every dock header control at the 48px minimum", () => {
     const icon = singleRule(chatRules, ".fb-chat-icon").body;
-    expect(px(declaration(icon, "min-width"))).toBeGreaterThanOrEqual(44);
-    expect(px(declaration(icon, "min-height"))).toBeGreaterThanOrEqual(44);
+    expect(px(declaration(icon, "min-width"))).toBeGreaterThanOrEqual(48);
+    expect(px(declaration(icon, "min-height"))).toBeGreaterThanOrEqual(48);
 
     const controlRules = dockRules.filter(rule => rule.selectors.some(selector =>
       selector.includes(".fb-chat-icon") || selector.includes(FIRST_CONTROL)));
@@ -159,7 +159,7 @@ describe("ChatDock header, narrow two-row contract", () => {
       for (const property of ["width", "height", "min-width", "min-height", "max-width", "max-height", "inline-size", "block-size", "flex-basis"]) {
         const value = declaration(rule.body, property);
         if (value === null || value === "auto") continue;
-        expect(px(value), `${rule.selectors.join(", ")} ${property}`).toBeGreaterThanOrEqual(44);
+        expect(px(value), `${rule.selectors.join(", ")} ${property}`).toBeGreaterThanOrEqual(48);
       }
     }
   });
@@ -209,18 +209,18 @@ describe("ChatDock header, narrow two-row contract", () => {
     }
   });
 
-  it("starts the 44px identity row and every header control on one top line", () => {
+  it("starts the 48px identity row and every header control on one top line", () => {
     const canonical = singleRule(chatRules, ".fb-chat-header").body;
     expect(declaration(canonical, "align-items")).toBe("flex-start");
     // The dock reuses this header inside its own wrap container, so it must
     // inherit the top line instead of centring the controls again.
     const dockHeader = singleRule(dockRules, HEADER).body;
     expect(declaration(dockHeader, "align-items")).toBeNull();
-    // One 44px line: the avatar/name identity and every icon control.
-    expect(px(declaration(singleRule(chatRules, ".fb-chat-identity").body, "min-height"))).toBe(44);
+    // One 48px line: the avatar/name identity and every icon control.
+    expect(px(declaration(singleRule(chatRules, ".fb-chat-identity").body, "min-height"))).toBe(48);
     const icon = singleRule(chatRules, ".fb-chat-icon").body;
-    expect(px(declaration(icon, "min-width"))).toBe(44);
-    expect(px(declaration(icon, "min-height"))).toBe(44);
+    expect(px(declaration(icon, "min-width"))).toBe(48);
+    expect(px(declaration(icon, "min-height"))).toBe(48);
   });
 
   it("dresses only the dock surface with the Messenger chrome", () => {

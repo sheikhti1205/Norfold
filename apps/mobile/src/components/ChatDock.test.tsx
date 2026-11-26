@@ -1217,12 +1217,12 @@ describe("ChatDock surface sizing", () => {
     // name pill rule to drift out of step with it.
     expect(clean).not.toContain(".fb-chat-dock-rail-name");
 
-    // A coarse pointer widens the capsule to three 44px actions, so the window
+    // A coarse pointer widens the capsule to three 48px actions, so the window
     // row reserves the wider clearance on the same two elements.
     const coarseAt = clean.indexOf("@media (hover: none), (pointer: coarse)");
     expect(coarseAt).toBeGreaterThan(-1);
     const coarse = clean.slice(coarseAt, clean.indexOf("\n}", coarseAt));
-    expect(coarse).toContain("--fb-dock-window-clearance: 184px");
+    expect(coarse).toContain("--fb-dock-window-clearance: 196px");
 
     // The window row sits beside the rail and reserves the widest capsule.
     const panelRule = /(?:^|\})\s*\.fb-chat-dock\s*\{([^}]*)\}/.exec(clean)?.[1] ?? "";
@@ -1263,10 +1263,10 @@ describe("ChatDock surface sizing", () => {
     const frame = /height:\s*clamp\(\s*([\d.]+)rem\s*,\s*([\d.]+)dvh\s*,\s*([\d.]+)rem\s*\)/.exec(picker);
     expect(frame).not.toBeNull();
     const [, low = "", share = "", high = ""] = frame ?? [];
-    // Four to five 52px rows inside ~154px of chrome (52px header, 44px search
+    // Four to five 52px rows inside ~158px of chrome (52px header, 48px search
     // with its 8px gap, the Recent label and the body padding) at the heights
     // tested. Static arithmetic over the declarations, not layout.
-    const chrome = 154;
+    const chrome = 158;
     for (const height of [720, 800, 900]) {
       const box = Math.min(Math.max(Number(low) * 16, height * Number(share) / 100), Number(high) * 16);
       const rows = (box - chrome) / 52;
