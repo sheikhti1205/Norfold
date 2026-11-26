@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { isReleasedCategory, type Category, type PostType } from "@norfold/shared";
 import { useAuth } from "../auth";
@@ -22,7 +22,7 @@ import { CameraCapture } from "../components/CameraCapture";
 import { MediaViewer } from "../components/MediaViewer";
 import { ConfirmDialog } from "../components/AdaptiveTaskSurface";
 import { TaskScreen } from "../components/TaskScreen";
-import { historyDepth } from "../components/backNavigation";
+import { historyDepth, registerBackInterceptor } from "../components/backNavigation";
 import { ReportEditor, type ReportEditorErrors, type ReportEditorValues } from "../components/ReportEditor";
 import { fadeVariants, motionDurations, motionEasings } from "../components/uiMotion";
 import { createHashRegistry, formatBatchNotice, processReportBatch } from "../services/media/reportBatch";
@@ -1666,10 +1666,26 @@ function ReportForm() {
 
   // Leaving the surface never publishes and never discards: the draft is saved
   // per account, so closing and coming back restores exactly what was typed.
-  function closeSurface() {
+  const closeSurface = useCallback(() => {
     if (historyDepth() > 0) navigate(-1);
     else navigate("/", { replace: true });
-  }
+  }, [navigate]);
+
+  // Hardware Back used to be the task surface's bridge, which called this same
+  // exit; the composer is a route now, so the screen consumes the press itself
+  // and takes the identical destination.
+  const screenDialogOpen = confirmDiscard || confirmRemovePhotos || aiConfirmReplace !== null;
+  useEffect(() => {
+    return registerBackInterceptor(() => {
+      // A publish in flight owns the draft: the press moves nothing, so a late
+      // settle cannot land on a screen the person left.
+      if (busy) return true;
+      // A question inside the screen is topmost: its own bridge takes the press.
+      if (screenDialogOpen) return false;
+      closeSurface();
+      return true;
+    });
+  }, [busy, screenDialogOpen, closeSurface]);
 
   return (
     // A real screen, not a task dialog: the composer owns the route, so nothing

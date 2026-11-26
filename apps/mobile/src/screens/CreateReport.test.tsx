@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { CLIENT_ERROR_MESSAGES, ClientError, PhotoImportError } from "../utils/clientErrors";
 
-const { publishReportMock, publishReportWithPhotosMock, photo, nativeMedia, announceMock } = vi.hoisted(() => ({
+const { navigateMock, publishReportMock, publishReportWithPhotosMock, photo, nativeMedia, announceMock } = vi.hoisted(() => ({
   announceMock: vi.fn(),
+  navigateMock: vi.fn(),
   publishReportMock: vi.fn(),
   publishReportWithPhotosMock: vi.fn(),
   photo: {
@@ -43,7 +44,7 @@ vi.mock("@capacitor/core", () => ({
   Capacitor: { isNativePlatform: () => false, getPlatform: () => "web" },
   Plugins: { ShortLinkResolver: { resolve: vi.fn() } },
 }));
-vi.mock("react-router", () => ({ useNavigate: () => vi.fn() }));
+vi.mock("react-router", () => ({ useNavigate: () => navigateMock }));
 vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "u1", username: "tester" } }) }));
 vi.mock("../services/posts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/posts")>();
@@ -73,6 +74,7 @@ import { todayInputValue } from "../utils/dates";
 import * as photoStore from "../services/photoStore";
 
 import { chooseCategory } from "../test-utils/reportCategory";
+import { consumeBackIntercept, resetBackInterceptors } from "../components/backNavigation";
 
 /** The discard is destructive, so it asks through the canonical dialog. */
 function confirmDiscardDraft() {
@@ -104,6 +106,7 @@ function pickFile(file: File) {
 
 beforeEach(() => {
   announceMock.mockReset();
+  navigateMock.mockReset();
   publishReportMock.mockReset();
   publishReportWithPhotosMock.mockReset();
   clearDraft();
@@ -116,6 +119,7 @@ afterEach(() => {
   cleanup();
   clearDraft();
   clearPhotoStore();
+  resetBackInterceptors();
 });
 
 describe("CreateReport", () => {
@@ -135,6 +139,59 @@ describe("CreateReport", () => {
     fireEvent.click(foundBtn);
     expect(await screen.findByText(/Safety tip: describe what you found and where/i)).toBeTruthy();
     expect(screen.queryByText(/Safety tip: post about your own item/i)).toBeNull();
+  });
+
+  it("leaves through the screen's own exit on hardware Back", async () => {
+    // A cold link has nothing behind it, so the screen's exit goes home — the
+    // destination its own Back control takes.
+    window.history.replaceState({}, "", "/");
+    render(<CreateReport />);
+    await screen.findByRole("heading", { level: 1, name: "Create report" });
+
+    act(() => expect(consumeBackIntercept()).toBe(true));
+    expect(navigateMock).toHaveBeenCalledWith("/", { replace: true });
+  });
+
+  it("walks back through history when the app has an entry to return to", async () => {
+    window.history.replaceState({ idx: 2 }, "", "/");
+    try {
+      render(<CreateReport />);
+      await screen.findByRole("heading", { level: 1, name: "Create report" });
+
+      act(() => expect(consumeBackIntercept()).toBe(true));
+      expect(navigateMock).toHaveBeenCalledWith(-1);
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
+  it("keeps hardware Back on the screen while a publish is in flight", async () => {
+    // The outcome is still unknown: the press must move nothing.
+    publishReportMock.mockReturnValue(new Promise(() => {}));
+    seedDescription("a black phone lost near the library");
+    render(<CreateReport />);
+    fireEvent.change(screen.getByLabelText(/what did you lose/i), { target: { value: "Lost phone" } });
+    await chooseCategory("Electronics");
+    fireEvent.submit(screen.getByRole("button", { name: /publish/i }).closest("form")!);
+    await waitFor(() => expect(publishReportMock).toHaveBeenCalled());
+
+    act(() => expect(consumeBackIntercept()).toBe(true));
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it("leaves hardware Back to the open discard question, not the screen", async () => {
+    seedDescription("a black phone lost near the library");
+    render(<CreateReport />);
+    await screen.findByLabelText(/what did you lose/i);
+    fireEvent.click(screen.getByRole("button", { name: /discard draft/i }));
+    await screen.findByRole("alertdialog");
+
+    // The question's own bridge is topmost: it dismisses, and the screen does
+    // not leave with the draft.
+    act(() => expect(consumeBackIntercept()).toBe(true));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { level: 1, name: "Create report" })).toBeTruthy();
   });
 
   it("does not offer the generic file picker on native, keeping capture paths in the media pipeline", async () => {
