@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createRef } from "react";
 import type { Editor } from "@tiptap/react";
 import { RichTextEditor, markdownToTiptap, tiptapToMarkdown } from "./RichTextEditor";
 import { MarkdownView } from "./MarkdownView";
 import { measureDescription } from "../services/richText";
+import { openRailMore } from "../test-utils/editorRail";
 
 afterEach(cleanup);
 
@@ -41,11 +42,14 @@ describe("ED-02/ED-06 heading + toolbar menus", () => {
     expect(tiptapToMarkdown(ref.current?.getJSON())).toBe("hello");
   });
 
-  it("groups directly accessible structure and cleanup actions", () => {
+  it("keeps structure and cleanup actions one tap from the rail", () => {
     render(<RichTextEditor label="Description" value="" onChange={() => {}} />);
-    expect(screen.getByRole("group", { name: "Structure" })).toBeTruthy();
-    for (const name of ["Bullets", "Numbered", "Quote", "Clear all formatting"]) {
-      expect(screen.getByRole("button", { name })).toBeTruthy();
+    // Composing actions keep their own slot; block-level insertion, cleanup and
+    // the secondary clipboard action live in the trailing menu.
+    expect(screen.getByRole("button", { name: "Bullets" })).toBeTruthy();
+    const more = openRailMore();
+    for (const name of ["Numbered list", "Quote", "Clear formatting"]) {
+      expect(within(more).getByRole("option", { name })).toBeTruthy();
     }
   });
 });

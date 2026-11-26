@@ -8,7 +8,7 @@ import { createPortal } from "react-dom";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { useModalBack } from "../hooks/useModalBack";
 import { isTopModalLayer, useModalLayer } from "../hooks/modalLayers";
-import { ArrowLeft, Bold, Check, Italic, Link2, List, ListOrdered, Quote, Redo2, RemoveFormatting, Undo2, Expand, ClipboardPaste } from "lucide-react";
+import { ArrowLeft, Bold, Check, Heading1, Heading2, Heading3, Italic, Link2, List, MoreHorizontal, Pilcrow, Undo2 } from "lucide-react";
 import { Slice } from "@tiptap/pm/model";
 import {
   fromMarkdown,
@@ -30,8 +30,50 @@ import {
 } from "@floating-ui/react";
 import { motion } from "framer-motion";
 import { motionDurations, popoverVariants, pressFeedback } from "./uiMotion";
+import { FormattingMenu } from "./FormattingMenu";
+import { FORMATTING_COMMANDS } from "./formattingCommands";
+import { useSlashCommands } from "../hooks/useSlashCommands";
+import { FINE_POINTER_QUERY } from "./inputCapabilities";
 
 export const RICH_TEXT_DEBOUNCE_MS = 300;
+
+/**
+ * Actions behind the rail's trailing slot. The rail itself keeps the actions a
+ * writer presses while composing; history replay, block insertion, clipboard
+ * and the full-screen mode are a second tap, not a hidden feature.
+ */
+const MORE_COMMAND_IDS: ReadonlyArray<string> = ["redo", "list.number", "quote", "paste.markdown", "clear", "expand"];
+
+// Portalled layers. The report form owns the modal ladder's first slot
+// (70 + depth x 10 = 80) and a dialog opened from it takes 90; FormattingMenu
+// stays at 92. The full-screen editor is opened from either, so it sits between
+// them, and the link dialog it can open sits just above its own menus.
+const EDITOR_OVERLAY_Z_INDEX = 91;
+const EDITOR_MENU_Z_INDEX = 92;
+const EDITOR_DIALOG_Z_INDEX = 93;
+
+/**
+ * `inputCapabilities.useFinePointer` with the opposite missing-API fallback:
+ * the rail is a formatting surface, so an environment without matchMedia
+ * (jsdom, SSR, an old WebView) keeps it visible instead of removing every
+ * action. Pointer class, never viewport width: a touch laptop is still touch.
+ */
+function useRailFinePointer(): boolean {
+  const [fine, setFine] = useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return true;
+    return window.matchMedia(FINE_POINTER_QUERY).matches;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia(FINE_POINTER_QUERY);
+    const onChange = (event: MediaQueryListEvent) => setFine(event.matches);
+    setFine(query.matches);
+    if (typeof query.addEventListener !== "function") return;
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+  return fine;
+}
 
 interface LinkSelection {
   from: number;
@@ -114,11 +156,11 @@ function LinkSheet({ selection, triggerRef, onCancel, onSave, onRemove }: {
           refs.setFloating(el);
           setTrapRef(el);
         }}
-        style={floatingStyles}
+        style={{ ...floatingStyles, zIndex: EDITOR_DIALOG_Z_INDEX }}
         role="dialog"
         aria-modal="true"
         aria-labelledby={`${id}-title`}
-        className="z-50 w-full max-w-md rounded-m3-lg bg-surface shadow-xl"
+        className="w-full max-w-md rounded-m3-lg bg-surface shadow-xl"
         tabIndex={-1}
       >
         <div className="space-y-4 p-5">
@@ -283,11 +325,11 @@ function FloatingMenu({ open, onClose, triggerRef, children, label, placement = 
       {/* Positioning shell only: floating-ui owns this element's transform for
         anchoring, so the enter animation lives on the inner motion element
         (transform/opacity only, anchored at the trigger edge). */}
-      <div ref={setFloatingRef} style={floatingStyles}>
+      <div ref={setFloatingRef} style={{ ...floatingStyles, zIndex: EDITOR_MENU_Z_INDEX }}>
         <motion.div
           role="menu"
           aria-label={label}
-          className="z-50 max-w-[calc(100vw-2rem)] w-64 max-h-[min(20rem,40vh)] overflow-y-auto rounded-m3-sm border border-outline-variant bg-surface p-1 shadow-xl"
+          className="max-w-[calc(100vw-2rem)] w-64 max-h-[min(20rem,40vh)] overflow-y-auto rounded-m3-sm border border-outline-variant bg-surface p-1 shadow-xl"
           tabIndex={-1}
           onKeyDown={handleKeyDown}
           initial="hidden"
@@ -632,8 +674,11 @@ export function tiptapToMarkdown(json: unknown): string {
  * the parent immediately so no keystroke is lost on submit or unmount, while
  * external value changes (draft restore, reset) replace the editor content.
  *
- * Toolbar: visible History, Text, Structure, and Insert groups; block type
- * alone opens a choices popup. The rail scrolls horizontally on narrow screens.
+ * Rail: seven stable slots for the actions used while composing (Undo, block
+ * type, Bold, Italic, Bullets, Link, More); the trailing menu holds history
+ * replay, block-level insertion, clipboard, cleanup and full screen. It is
+ * attached to focus on touch/coarse pointers and always visible on fine ones,
+ * and a line-leading "/" opens the same actions as a typed command menu.
  *
  * Selection safety (ED-04): a toolbar `pointerdown` captures the pending range
  * before Android/WebView focus loss collapses the DOM selection; the stashed
@@ -650,13 +695,17 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
   const [counts, setCounts] = useState({ stored: 0, visible: 0 });
   const [, refreshSelection] = useState(0);
   const [linkSelection, setLinkSelection] = useState<LinkSelection | null>(null);
-  const [openMenu, setOpenMenu] = useState<null | "block">(null);
+  const [openMenu, setOpenMenu] = useState<null | "block" | "more">(null);
   const [status, setStatus] = useState<string | null>(null);
   const [listNotice, setListNotice] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [editorFocused, setEditorFocused] = useState(false);
+  const [moreActive, setMoreActive] = useState(0);
+  const finePointer = useRailFinePointer();
+  const rootRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const overlayPreviouslyFocusedRef = useRef<HTMLElement | null>(null);
-  const expandButtonRef = useRef<HTMLButtonElement>(null);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
   const setOverlayRef = useFocusTrap(overlayRef, () => setIsExpanded(false), isExpanded, overlayPreviouslyFocusedRef);
   useModalBack(isExpanded, () => setIsExpanded(false));
 
@@ -667,12 +716,28 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
       overlayPreviouslyFocusedRef.current = null;
       if (document.contains(previous)) {
         previous.focus();
-      } else if (expandButtonRef.current) {
-        // Fallback: focus the expand button if the previous element is no longer in the document
-        expandButtonRef.current.focus();
+      } else if (moreButtonRef.current) {
+        // The More slot is the one trigger that stays mounted, so it is the
+        // stable place to return focus when the remember-ed element is gone.
+        moreButtonRef.current.focus();
       }
     }
   }, [isExpanded]);
+  // The rail is attached to focus on touch: "focused" means focus is anywhere
+  // in this field's own chrome (the contenteditable or a rail control), read
+  // from the live active element so a menu that moves focus out and back does
+  // not flicker the rail.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const sync = () => setEditorFocused(root.contains(document.activeElement));
+    document.addEventListener("focusin", sync);
+    document.addEventListener("focusout", sync);
+    return () => {
+      document.removeEventListener("focusin", sync);
+      document.removeEventListener("focusout", sync);
+    };
+  }, []);
   const baseId = useId();
   const errorId = `${baseId}-error`;
   const countId = `${baseId}-count`;
@@ -758,6 +823,43 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
             return true;
           } catch {
             return false;
+          }
+        },
+        handleKeyDown: (_view, event) => {
+          // Never intercept Backspace: Tiptap's Android delete plugin force-
+          // flushes the DOM observer on deleteContentBackward, and steering it
+          // here desyncs the view. The trigger is text, so Backspace closes the
+          // menu the same way any other edit does.
+          if (event.isComposing) return false;
+          const slashState = slashRef.current;
+          if (!slashState.open || slashState.items.length === 0) return false;
+          switch (event.key) {
+            case "ArrowDown":
+              event.preventDefault();
+              slashState.move(1);
+              return true;
+            case "ArrowUp":
+              event.preventDefault();
+              slashState.move(-1);
+              return true;
+            case "Enter":
+              event.preventDefault();
+              slashState.accept(slashState.activeIndex);
+              return true;
+            case "Escape":
+              event.preventDefault();
+              // Escape must stop at the menu: the form dialog or the
+              // full-screen overlay beneath it also listens on document, and
+              // dismissing a menu must not dismiss the surface around it.
+              event.stopPropagation();
+              slashState.dismiss();
+              return true;
+            case "Tab":
+              // Closing without preventing default keeps Tab's focus move.
+              slashState.dismiss();
+              return false;
+            default:
+              return false;
           }
         },
       },
@@ -884,8 +986,13 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
   useEffect(() => {
     if (!openMenu) return;
     function onDocPointerDown(event: PointerEvent) {
-      if (toolbarRef.current && !toolbarRef.current.contains(event.target as Node) &&
-          !(event.target as Element).closest('[role="menu"]')) setOpenMenu(null);
+      // The menus are portalled, so the toolbar cannot contain their targets.
+      // Match each panel by its own role/name instead of every listbox on the
+      // page, so picking from an unrelated control still dismisses this one.
+      const target = event.target as Node;
+      const element = target instanceof Element ? target : null;
+      const inMenu = element?.closest('[role="menu"], [aria-label="More formatting actions"]') != null;
+      if (toolbarRef.current && !toolbarRef.current.contains(target) && !inMenu) setOpenMenu(null);
     }
     function onDocKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -1163,6 +1270,173 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
     });
   }
 
+  /**
+   * Slash command executor. Every chainable command deletes the typed trigger
+   * and acts in ONE transaction, so one undo brings the "/query" back. Commands
+   * without a chain form are documented where they break that guarantee.
+   */
+  function runSlashCommand(target: Editor, commandId: string, range: { from: number; to: number }): boolean {
+    if (disabledRef.current) return false;
+    const removeTrigger = () => target.chain().focus().deleteRange(range);
+    switch (commandId) {
+      case "bold":
+        return removeTrigger().toggleBold().run();
+      case "italic":
+        return removeTrigger().toggleItalic().run();
+      case "block.body":
+        return removeTrigger().setParagraph().run();
+      case "block.h1":
+        return removeTrigger().setHeading({ level: 1 }).run();
+      case "block.h2":
+        return removeTrigger().setHeading({ level: 2 }).run();
+      case "block.h3":
+        return removeTrigger().setHeading({ level: 3 }).run();
+      case "list.bullet":
+        return removeTrigger().toggleBulletList().run();
+      case "list.number":
+        return removeTrigger().toggleOrderedList().run();
+      case "quote":
+        return removeTrigger().toggleBlockquote().run();
+      case "clear":
+        return removeTrigger().clearNodes().unsetAllMarks().run();
+      case "expand": {
+        if (isExpanded) return false;
+        if (!removeTrigger().run()) return false;
+        openExpandedEditor();
+        return true;
+      }
+      case "undo": {
+        if (!target.can().undo()) return false;
+        // prosemirror-history dispatches its own transaction and ignores the
+        // chain's, so the trigger cannot be removed in the same step. The typed
+        // trigger *is* the newest history step, so this one undo removes it.
+        return target.chain().focus().undo().run();
+      }
+      case "redo": {
+        if (!target.can().redo()) return false;
+        // The trigger leaves without joining history, otherwise redo would
+        // re-apply the deletion instead of the step the user asked for.
+        target.chain().focus().command(({ tr }) => {
+          tr.setMeta("addToHistory", false);
+          return true;
+        }).deleteRange(range).run();
+        return target.chain().focus().redo().run();
+      }
+      case "paste.markdown": {
+        // Clipboard access is asynchronous: the trigger is removed first so the
+        // menu closes, and the parsed markdown is inserted when it arrives.
+        void pasteQueryAsMarkdown(target, range);
+        return true;
+      }
+      case "link": {
+        // The menu only opens at a collapsed caret, so the only range worth
+        // linking is an existing link under that caret. Anything else leaves
+        // the trigger intact for the user to finish or dismiss.
+        if (!target.isActive("link")) return false;
+        removeTrigger().run();
+        applyLink();
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+
+  async function pasteQueryAsMarkdown(target: Editor, range: { from: number; to: number }): Promise<void> {
+    target.chain().focus().deleteRange(range).run();
+    const generation = clipboardGeneration.current;
+    const doc = target.state.doc;
+    let text = "";
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      if (!target.isDestroyed && generation === clipboardGeneration.current) setStatus("Clipboard is unavailable");
+      return;
+    }
+    if (target.isDestroyed || disabledRef.current || generation !== clipboardGeneration.current) return;
+    if (text.trim() === "") {
+      setStatus("Clipboard is empty");
+      return;
+    }
+    if (target.state.doc !== doc) {
+      setStatus("The selected text changed. Paste again.");
+      return;
+    }
+    target.chain().focus().insertContentAt(range.from, markdownToTiptap(text)).run();
+    finishOperation("Pasted as Markdown");
+  }
+
+  function openExpandedEditor() {
+    const active = document.activeElement;
+    // The inline route to full screen is the More menu, and its rows unmount
+    // with the menu. Remember the trigger only when it survives; otherwise
+    // focus returns to the always-mounted More slot instead of to <body>.
+    overlayPreviouslyFocusedRef.current = active instanceof HTMLElement && active !== document.body
+      ? active
+      : moreButtonRef.current;
+    setOpenMenu(null);
+    setIsExpanded(true);
+  }
+
+  /** Runs an action picked from the rail's trailing menu. */
+  function runMoreCommand(commandId: string): boolean {
+    if (!editor || disabledRef.current) return false;
+    // The menu is a picker, not a toggle panel: every row closes it.
+    setOpenMenu(null);
+    switch (commandId) {
+      case "redo":
+        if (!canRedo) return false;
+        applyRedo();
+        return true;
+      case "list.number":
+        applyList("ordered");
+        return true;
+      case "quote":
+        applyQuote();
+        return true;
+      case "paste.markdown":
+        void pasteClipboardAsMarkdown();
+        return true;
+      case "clear":
+        applyClearAll();
+        return true;
+      case "expand":
+        if (isExpanded) return false;
+        openExpandedEditor();
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  function pickMore(index: number): void {
+    const command = moreCommands[index];
+    if (command) runMoreCommand(command.id);
+  }
+
+  /** Arrow keys and Enter reach the More menu from the focused trigger. */
+  function handleMoreKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
+    if (event.key === "Enter" && openMenu === "more") {
+      event.preventDefault();
+      const command = moreCommands[moreActiveIndex];
+      if (command) runMoreCommand(command.id);
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    if (openMenu !== "more") {
+      lastMenuButtonRef.current = moreButtonRef.current;
+      setMoreActive(event.key === "ArrowDown" ? 0 : Math.max(0, moreCommands.length - 1));
+      setOpenMenu("more");
+      return;
+    }
+    if (moreCommands.length === 0) return;
+    setMoreActive((index) => {
+      const current = Math.min(Math.max(index, 0), moreCommands.length - 1);
+      return (current + (event.key === "ArrowDown" ? 1 : -1) + moreCommands.length) % moreCommands.length;
+    });
+  }
+
   function saveLink(href: string): string | null {
     if (disabledRef.current) return "The editor is currently read-only.";
     if (!editor || !linkSelection) return "Selection is no longer available.";
@@ -1211,14 +1485,92 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
     ? editor.state.selection.empty && !editor.isActive("link") && !validSavedRange()
     : true;
 
+  // One editor instance serves the inline field and the full-screen overlay, so
+  // the trigger is enabled wherever that editor is editable; gating on
+  // `isExpanded` would switch the menu off exactly while it is on screen.
+  const slash = useSlashCommands({
+    editor,
+    enabled: Boolean(editor) && !disabled,
+    runCommand: runSlashCommand,
+  });
+
+  // A command that is guaranteed to no-op is not offered at all: the typed
+  // trigger clears the redo stack, so redo only appears when it can act.
+  const slashItems = useMemo(
+    () => slash.items.filter((command) => {
+      if (command.id === "undo") return canUndo;
+      if (command.id === "redo") return canRedo;
+      return true;
+    }),
+    [slash.items, canUndo, canRedo],
+  );
+  const slashActiveId = slash.items[slash.activeIndex]?.id;
+  const slashActiveIndex = slashItems.length === 0
+    ? -1
+    : Math.max(0, slashItems.findIndex((command) => command.id === slashActiveId));
+
+  /** Indices differ because unavailable history rows are filtered out. */
+  function hookIndexFor(visibleIndex: number): number {
+    const command = slashItems[visibleIndex];
+    if (!command) return -1;
+    return slash.items.findIndex((item) => item.id === command.id);
+  }
+
+  function acceptSlash(visibleIndex: number): boolean {
+    const hookIndex = hookIndexFor(visibleIndex);
+    if (hookIndex < 0) return false;
+    return slash.accept(hookIndex);
+  }
+
+  function moveSlashActive(delta: number): void {
+    if (slashItems.length === 0) return;
+    const current = slashActiveIndex < 0 ? (delta > 0 ? -1 : 0) : slashActiveIndex;
+    const next = ((current + delta) % slashItems.length + slashItems.length) % slashItems.length;
+    const hookIndex = hookIndexFor(next);
+    if (hookIndex >= 0) slash.setActiveIndex(hookIndex);
+  }
+
+  // The editor's key handler is created once, so it reads the live menu state
+  // through a ref rather than a stale first render.
+  const slashRef = useRef({
+    open: false,
+    items: slashItems,
+    activeIndex: 0,
+    move: moveSlashActive,
+    accept: acceptSlash,
+    dismiss: slash.dismiss,
+  });
+  slashRef.current = {
+    open: slash.open,
+    items: slashItems,
+    activeIndex: slashActiveIndex,
+    move: moveSlashActive,
+    accept: acceptSlash,
+    dismiss: slash.dismiss,
+  };
+
+  const moreCommands = useMemo(
+    () => FORMATTING_COMMANDS.filter((command) => {
+      if (!MORE_COMMAND_IDS.includes(command.id)) return false;
+      if (command.id === "redo") return canRedo;
+      if (command.id === "expand") return !isExpanded;
+      return true;
+    }),
+    [canRedo, isExpanded],
+  );
+  const moreActiveIndex = moreCommands.length === 0 ? -1 : Math.min(moreActive, moreCommands.length - 1);
+
+  // A typed slash query takes over from a rail menu that is already open.
+  useEffect(() => {
+    if (slash.open) setOpenMenu(null);
+  }, [slash.open]);
+
   const currentBlock: "Body" | "Heading 1" | "Heading 2" | "Heading 3" =
     editor?.isActive("heading", { level: 1 }) ? "Heading 1"
     : editor?.isActive("heading", { level: 2 }) ? "Heading 2"
     : editor?.isActive("heading", { level: 3 }) ? "Heading 3"
     : "Body";
   const bulletActive = editor?.isActive("bulletList") ?? false;
-  const orderedActive = editor?.isActive("orderedList") ?? false;
-  const quoteActive = editor?.isActive("blockquote") ?? false;
   const boldActive = editor?.isActive("bold") ?? false;
   const italicActive = editor?.isActive("italic") ?? false;
   const linkActive = editor?.isActive("link") ?? false;
@@ -1230,12 +1582,13 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
   const menuItemCls =
     "flex min-h-[48px] w-full items-center gap-2 rounded-m3-xs px-3 text-left text-on-surface hover:bg-surface-container";
 
-  function toggleMenu(kind: "block", button: RefObject<HTMLButtonElement | null>) {
+  function toggleMenu(kind: "block" | "more", button: RefObject<HTMLButtonElement | null>) {
     if (disabledRef.current) return;
     if (openMenu === kind) {
       setOpenMenu(null);
     } else {
       lastMenuButtonRef.current = button.current;
+      if (kind === "more") setMoreActive(0);
       setOpenMenu(kind);
     }
   }
@@ -1257,56 +1610,44 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
         <Icon size={18} aria-hidden />
       </motion.button>
     );
+    // The block style is shown by its level, so the slot stays 48px wide
+    // instead of spending 63px on a text label.
+    const BlockTypeIcon = currentBlock === "Heading 1" ? Heading1
+      : currentBlock === "Heading 2" ? Heading2
+      : currentBlock === "Heading 3" ? Heading3
+      : Pilcrow;
     return (
-      <div ref={toolbarRef} className="relative flex-shrink-0 border-t border-outline-variant bg-surface-container px-2 py-1 shadow-[0_-4px_16px_rgba(0,0,0,0.12)]"
+      <div ref={toolbarRef} className="relative flex-shrink-0 border-t border-outline-variant bg-surface-container px-2 shadow-[0_-4px_16px_rgba(0,0,0,0.12)]"
         style={inline ? undefined : { paddingBottom: "max(4px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))" }}>
+        {/* Six action slots plus the trailing More slot: 7 x 48px fits the
+          390px composer and the 374px overlay with no clipped action. */}
         <div role="toolbar" aria-label={`${label} formatting`}
-          className="flex flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain py-1"
-          onFocusCapture={(event) => {
-            // Browser focus scrolling may stop at the containing group,
-            // leaving the focused action partially beyond the clipped rail.
-            const button = (event.target as HTMLElement).closest("button");
-            button?.scrollIntoView?.({ block: "nearest", inline: "nearest", behavior: "instant" });
-          }}
-          onPointerDownCapture={captureToolbarRange} onMouseDownCapture={captureToolbarRange} onTouchStartCapture={captureToolbarRange}>
-          <div role="group" aria-label="History" className="flex shrink-0 items-center gap-0.5 rounded-m3-sm bg-surface px-1">
-            {action("Undo", Undo2, applyUndo, false, !canUndo)}
-            {action("Redo", Redo2, applyRedo, false, !canRedo)}
-          </div>
-          <div role="group" aria-label="Text" className="flex shrink-0 items-center gap-0.5 rounded-m3-sm bg-surface px-1">
-            <motion.button ref={blockButtonRef} type="button" title={`Block type: ${currentBlock}`}
-              aria-label={`Block type: ${currentBlock}`} aria-haspopup="menu" aria-expanded={openMenu === "block"}
-              disabled={!editor || disabled} onClick={() => toggleMenu("block", blockButtonRef)}
-              className={toolButtonCls(currentBlock !== "Body")}
-              whileTap={pressFeedback.rail} transition={{ duration: motionDurations.instant }}>
-              <span aria-hidden className="whitespace-nowrap text-sm">{currentBlock} ▾</span>
-            </motion.button>
-            {action("Bold", Bold, () => toggleMarkWithSavedSelection("bold"), boldActive)}
-            {action("Italic", Italic, () => toggleMarkWithSavedSelection("italic"), italicActive)}
-          </div>
-          <div role="group" aria-label="Structure" className="flex shrink-0 items-center gap-0.5 rounded-m3-sm bg-surface px-1">
-            {action("Bullets", List, () => applyList("bullet"), bulletActive)}
-            {action("Numbered", ListOrdered, () => applyList("ordered"), orderedActive)}
-            {action("Quote", Quote, applyQuote, quoteActive)}
-          </div>
-          <div role="group" aria-label="Insert" className="flex shrink-0 items-center gap-0.5 rounded-m3-sm bg-surface px-1">
-            <motion.button ref={linkButtonRef} type="button" title={linkDisabled ? "Select text to add a link" : "Link"}
-              aria-label="Link" aria-pressed={linkActive} disabled={!editor || disabled || linkDisabled}
-              onClick={applyLink} className={toolButtonCls(linkActive)}
-              whileTap={pressFeedback.rail} transition={{ duration: motionDurations.instant }}><Link2 size={18} aria-hidden /></motion.button>
-            {action("Paste as Markdown", ClipboardPaste, () => void pasteClipboardAsMarkdown())}
-          </div>
-          <div role="group" aria-label="Other actions" className="flex shrink-0 items-center gap-0.5 rounded-m3-sm bg-surface px-1">
-            {action("Clear all formatting", RemoveFormatting, applyClearAll)}
-            {inline && <motion.button ref={expandButtonRef} type="button" title="Expand description editor"
-              aria-label="Expand description editor" disabled={!editor || disabled} className={toolButtonCls(false)}
-              whileTap={pressFeedback.rail} transition={{ duration: motionDurations.instant }}
-              onClick={() => {
-                overlayPreviouslyFocusedRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-                setOpenMenu(null);
-                setIsExpanded(true);
-              }}><Expand size={18} aria-hidden /></motion.button>}
-          </div>
+          className="flex flex-nowrap items-center gap-0.5"
+          onPointerDownCapture={captureToolbarRange} onMouseDownCapture={captureToolbarRange} onTouchStartCapture={captureToolbarRange}
+          onMouseDown={(event) => event.preventDefault()}
+          onPointerDown={(event) => event.preventDefault()}>
+          {action("Undo", Undo2, applyUndo, false, !canUndo)}
+          <motion.button ref={blockButtonRef} type="button" title={`Block type: ${currentBlock}`}
+            aria-label={`Block type: ${currentBlock}`} aria-haspopup="menu" aria-expanded={openMenu === "block"}
+            disabled={!editor || disabled} onClick={() => toggleMenu("block", blockButtonRef)}
+            className={toolButtonCls(currentBlock !== "Body")}
+            whileTap={pressFeedback.rail} transition={{ duration: motionDurations.instant }}>
+            <BlockTypeIcon size={18} aria-hidden />
+          </motion.button>
+          {action("Bold", Bold, () => toggleMarkWithSavedSelection("bold"), boldActive)}
+          {action("Italic", Italic, () => toggleMarkWithSavedSelection("italic"), italicActive)}
+          {action("Bullets", List, () => applyList("bullet"), bulletActive)}
+          <motion.button ref={linkButtonRef} type="button" title={linkDisabled ? "Select text to add a link" : "Link"}
+            aria-label="Link" aria-pressed={linkActive} disabled={!editor || disabled || linkDisabled}
+            onClick={applyLink} className={toolButtonCls(linkActive)}
+            whileTap={pressFeedback.rail} transition={{ duration: motionDurations.instant }}><Link2 size={18} aria-hidden /></motion.button>
+          <motion.button ref={moreButtonRef} type="button" title="More" aria-label="More"
+            aria-haspopup="listbox" aria-expanded={openMenu === "more"}
+            disabled={!editor || disabled} onClick={() => toggleMenu("more", moreButtonRef)}
+            onKeyDown={handleMoreKeyDown} className={toolButtonCls(openMenu === "more")}
+            whileTap={pressFeedback.rail} transition={{ duration: motionDurations.instant }}>
+            <MoreHorizontal size={18} aria-hidden />
+          </motion.button>
         </div>
         <FloatingMenu open={!disabled && openMenu === "block"} onClose={() => setOpenMenu(null)}
           triggerRef={blockButtonRef} label="Block type" placement="top">
@@ -1321,6 +1662,15 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
             })}
           </div>
         </FloatingMenu>
+        <FormattingMenu
+          open={!disabled && openMenu === "more"}
+          items={moreCommands}
+          activeIndex={moreActiveIndex}
+          getAnchorRect={() => moreButtonRef.current?.getBoundingClientRect() ?? null}
+          onHover={setMoreActive}
+          onPick={pickMore}
+          label="More formatting actions"
+        />
       </div>
     );
   }
@@ -1331,7 +1681,7 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
       : `${counts.stored} ${counts.stored === 1 ? "character" : "characters"}${counts.stored !== counts.visible ? ` (${counts.visible} visible)` : ""}`;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div ref={rootRef} className="flex flex-col gap-2">
       <span className="text-sm font-medium text-on-surface">{label}</span>
       <div
         className="relative"
@@ -1346,7 +1696,19 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
           </div>
         ) : null}
       </div>
-      {!isExpanded && renderFormattingRail(true)}
+      {!isExpanded && (finePointer || editorFocused || openMenu !== null || slash.open) && renderFormattingRail(true)}
+      <FormattingMenu
+        open={!disabled && slash.open && slashItems.length > 0}
+        items={slashItems}
+        activeIndex={slashActiveIndex}
+        getAnchorRect={slash.getAnchorRect}
+        onHover={(index) => {
+          const hookIndex = hookIndexFor(index);
+          if (hookIndex >= 0) slash.setActiveIndex(hookIndex);
+        }}
+        onPick={acceptSlash}
+        label="Formatting commands"
+      />
       {linkSelection && <LinkSheet selection={linkSelection} triggerRef={linkButtonRef} onCancel={() => setLinkSelection(null)} onSave={saveLink} onRemove={removeLink} />}
       {listNotice ? (
         <p role="status" aria-label="List simplification notice" className="text-xs text-on-surface-variant">
@@ -1373,8 +1735,9 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
           role="dialog"
           aria-modal="true"
           aria-labelledby="report-editor-overlay-title"
-          className="fixed inset-0 z-50 flex flex-col bg-surface"
+          className="fixed inset-0 flex flex-col bg-surface"
           style={{
+            zIndex: EDITOR_OVERLAY_Z_INDEX,
             height: "var(--fb-visible-height, 100vh)",
             top: "var(--fb-visible-top, 0)",
             display: "flex",

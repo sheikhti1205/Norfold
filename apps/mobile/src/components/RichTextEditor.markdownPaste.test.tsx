@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { createRef } from "react";
 import type { Editor } from "@tiptap/react";
 import { RichTextEditor, markdownToTiptap, tiptapToMarkdown } from "./RichTextEditor";
+import { pickRailMore } from "../test-utils/editorRail";
 
 afterEach(cleanup);
 
@@ -114,8 +115,7 @@ describe("RichTextEditor Markdown paste", () => {
       const { container } = render(
         <RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />,
       );
-      const item = screen.getByRole("button", { name: "Paste as Markdown" });
-      fireEvent.click(item);
+      pickRailMore("Paste as Markdown");
       await waitFor(() => {
         expect(tiptapToMarkdown(ref.current?.getJSON())).toContain("# Lost Wallet");
       });
@@ -132,7 +132,7 @@ describe("RichTextEditor Markdown paste", () => {
     Object.defineProperty(navigator, "clipboard", { value: { readText }, configurable: true });
     try {
       render(<RichTextEditor label="Description" value="" onChange={() => {}} />);
-      fireEvent.click(screen.getByRole("button", { name: "Paste as Markdown" }));
+      pickRailMore("Paste as Markdown");
       await waitFor(() => {
         expect(screen.getByRole("status", { name: "Formatting status" }).textContent).toMatch(
           /unavailable/i,
@@ -149,7 +149,7 @@ describe("RichTextEditor fullscreen scroller contract", () => {
     const { container } = render(
       <RichTextEditor label="Description" value="hello" onChange={() => {}} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Expand description editor" }));
+    pickRailMore("Expand editor");
     const overlay = document.body.querySelector("#report-editor-overlay") as HTMLElement;
     expect(overlay).toBeTruthy();
     const scroller = screen.getByTestId("report-editor-scroller");

@@ -5,6 +5,7 @@ import { createRef } from "react";
 import type { Editor } from "@tiptap/react";
 import { RichTextEditor, tiptapToMarkdown } from "./RichTextEditor";
 import { settleSelectionRender } from "../test-utils/editorSelection";
+import { openRailMore, pickRailMore } from "../test-utils/editorRail";
 
 afterEach(cleanup);
 // jsdom does not implement Range geometry used by ProseMirror's scroll-to-selection.
@@ -71,25 +72,28 @@ describe("Report editor caret formatting", () => {
 });
 
 describe("Report editor formatting rail", () => {
-  it("exposes all primary actions in grouped horizontally scrollable rail in both modes", () => {
+  it("keeps the composing slots in both modes and the rest one tap away", () => {
     render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     for (const mode of ["inline", "fullscreen"]) {
-      if (mode === "fullscreen") fireEvent.click(screen.getByRole("button", { name: "Expand description editor" }));
+      if (mode === "fullscreen") pickRailMore("Expand editor");
       const rail = screen.getByRole("toolbar", { name: "Description formatting" });
-      expect(rail.className).toContain("overflow-x-auto");
+      expect(rail.className).not.toContain("overflow-x-auto");
       expect(rail.className).toContain("flex-nowrap");
-      for (const name of ["Undo", "Redo", "Bold", "Italic", "Bullets", "Numbered", "Quote", "Link", "Paste as Markdown"]) {
+      expect(rail.querySelectorAll("button")).toHaveLength(7);
+      for (const name of ["Undo", "Bold", "Italic", "Bullets", "Link", "More"]) {
         expect(within(rail).getByRole("button", { name })).toBeTruthy();
       }
       expect(within(rail).getByRole("button", { name: /Block type/ })).toBeTruthy();
-      expect(within(rail).getByRole("button", { name: "Clear all formatting" })).toBeTruthy();
-      expect(within(rail).queryByRole("button", { name: "More" })).toBeNull();
+      const more = openRailMore();
+      for (const name of ["Numbered list", "Quote", "Paste as Markdown", "Clear formatting"]) {
+        expect(within(more).getByRole("option", { name })).toBeTruthy();
+      }
     }
   });
 
   it("keeps one independently scrolling content area above the pinned rail inside the visual viewport", () => {
     render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
-    fireEvent.click(screen.getByRole("button", { name: "Expand description editor" }));
+    pickRailMore("Expand editor");
     const overlay = document.getElementById("report-editor-overlay")!;
     const scroller = screen.getByTestId("report-editor-scroller");
     const rail = within(overlay).getByRole("toolbar", { name: "Description formatting" });
@@ -111,7 +115,7 @@ describe("Report editor formatting rail", () => {
       render(<RichTextEditor label="Description" value="before after" onChange={() => {}} editorRef={ref} />);
       act(() => ref.current?.commands.setTextSelection({ from: 8, to: 13 }));
       await settleSelectionRender();
-      fireEvent.click(screen.getByRole("button", { name: "Paste as Markdown" }));
+      pickRailMore("Paste as Markdown");
       act(() => ref.current?.commands.setTextSelection(1));
       await act(async () => resolveClipboard("**replacement**"));
       expect(tiptapToMarkdown(ref.current?.getJSON())).toBe("before \n\n**replacement**");
@@ -127,7 +131,7 @@ describe("Report editor formatting rail", () => {
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { readText: () => new Promise<string>((resolve) => { resolveClipboard = resolve; }) } });
     try {
       const { rerender } = render(<RichTextEditor label="Description" value="before after" onChange={onChange} editorRef={ref} />);
-      fireEvent.click(screen.getByRole("button", { name: "Paste as Markdown" }));
+      pickRailMore("Paste as Markdown");
       rerender(<RichTextEditor label="Description" value="before after" onChange={onChange} editorRef={ref} disabled />);
       rerender(<RichTextEditor label="Description" value="before after" onChange={onChange} editorRef={ref} />);
       await act(async () => resolveClipboard("**late clipboard**"));

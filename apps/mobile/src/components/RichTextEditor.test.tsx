@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createRef } from "react";
 import type { Editor } from "@tiptap/react";
 import { RichTextEditor, markdownToTiptap, tiptapToMarkdown } from "./RichTextEditor";
+import { openRailMore, pickRailMore } from "../test-utils/editorRail";
 
 afterEach(cleanup);
 
@@ -136,7 +137,7 @@ describe("RichTextEditor", () => {
   it("locks the same editor and formatting rail in fullscreen without trapping the close action", () => {
     const ref = createRef<Editor | null>();
     const { rerender } = render(<RichTextEditor label="Description" value="Wallet" onChange={() => {}} editorRef={ref} />);
-    fireEvent.click(screen.getByRole("button", { name: /expand description editor/i }));
+    pickRailMore("Expand editor");
     rerender(<RichTextEditor label="Description" value="Wallet" onChange={() => {}} editorRef={ref} disabled />);
     expect(ref.current?.isEditable).toBe(false);
     expect(ref.current?.view.dom.getAttribute("contenteditable")).toBe("false");
@@ -148,21 +149,29 @@ describe("RichTextEditor", () => {
     expect(ref.current?.getText()).toBe("Wallet");
   });
 
-  it("scrolls a keyboard-focused formatting action fully into its rail", () => {
+  it("fits every formatting slot in one row without a horizontal scroller", () => {
     render(<RichTextEditor label="Description" value="Wallet" onChange={() => {}} />);
-    const button = screen.getByRole("button", { name: "Numbered" });
-    const scrollIntoView = vi.fn();
-    button.scrollIntoView = scrollIntoView;
-    fireEvent.focus(button);
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest", inline: "nearest", behavior: "instant" });
+    const rail = screen.getByRole("toolbar", { name: "Description formatting" });
+    // The rail no longer clips: every slot is laid out in the row itself, so
+    // there is no focus-scrolling hack and nothing can sit off-screen.
+    expect(rail.className).not.toContain("overflow-x-auto");
+    expect(rail.className).toContain("flex-nowrap");
+    expect(rail.scrollWidth).toBeLessThanOrEqual(rail.clientWidth);
+    expect(rail.querySelectorAll("button")).toHaveLength(7);
   });
 
-  it("renders grouped formatting actions, placeholder text, and character count", () => {
+  it("renders the composing actions, placeholder text, and character count", () => {
     render(<RichTextEditor label="Description" value="" onChange={() => {}} placeholder="Describe the item" />);
-    for (const name of ["Bold", "Italic", "Link", "Bullets", "Numbered", "Quote", "Clear all formatting", "Undo", "Redo", "Paste as Markdown"]) {
+    for (const name of ["Bold", "Italic", "Link", "Bullets", "Undo"]) {
       expect(screen.getByRole("button", { name })).toBeTruthy();
     }
     expect(screen.getByRole("button", { name: /Block type/i })).toBeTruthy();
+    // Actions that are not pressed while composing stay one tap away, named
+    // in the trailing menu rather than hidden.
+    const more = openRailMore();
+    for (const name of ["Numbered list", "Quote", "Paste as Markdown", "Clear formatting", "Expand editor"]) {
+      expect(within(more).getByRole("option", { name })).toBeTruthy();
+    }
     // Block menu options.
     fireEvent.click(screen.getByRole("button", { name: /Block type/i }));
     for (const name of ["Body", "Heading 1", "Heading 2", "Heading 3"]) {
@@ -257,7 +266,7 @@ describe("RichTextEditor", () => {
     expect(ref.current?.getText()).toContain("hello");
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     expect(ref.current?.getText()).not.toContain("hello");
-    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    pickRailMore("Redo");
     expect(ref.current?.getText()).toContain("hello");
   });
 
@@ -268,7 +277,7 @@ describe("RichTextEditor", () => {
       ref.current?.commands.setContent(markdownToTiptap("**bold** and *italic*"));
       ref.current?.commands.selectAll();
     });
-    fireEvent.click(screen.getByRole("button", { name: "Clear all formatting" }));
+    pickRailMore("Clear formatting");
     expect(tiptapToMarkdown(ref.current?.getJSON())).toBe("bold and italic");
   });
 
@@ -278,9 +287,131 @@ describe("RichTextEditor", () => {
     act(() => {
       ref.current?.commands.insertContent("item");
     });
-    fireEvent.click(screen.getByRole("button", { name: "Numbered" }));
+    pickRailMore("Numbered list");
     expect(ref.current?.isActive("orderedList")).toBe(true);
     expect(tiptapToMarkdown(ref.current?.getJSON())).toBe("1. item");
+  });
+});
+
+describe("RichTextEditor formatting rail pointer class", () => {
+  const FINE = "(hover: hover) and (pointer: fine)";
+
+  function stubMatchMedia(matches: boolean): () => void {
+    const original = window.matchMedia;
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: (query: string) => ({
+        matches: query === FINE ? matches : false,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }),
+    });
+    return () => Object.defineProperty(window, "matchMedia", { configurable: true, value: original });
+  }
+
+  it("attaches the rail to focus on a touch pointer", () => {
+    const restore = stubMatchMedia(false);
+    try {
+      render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+      expect(screen.queryByRole("toolbar", { name: "Description formatting" })).toBeNull();
+      const textbox = screen.getByRole("textbox", { name: "Description" });
+      act(() => textbox.focus());
+      expect(screen.getByRole("toolbar", { name: "Description formatting" })).toBeTruthy();
+      act(() => textbox.blur());
+      expect(screen.queryByRole("toolbar", { name: "Description formatting" })).toBeNull();
+    } finally {
+      restore();
+    }
+  });
+
+  it("keeps the rail visible on a fine pointer, focused or not", () => {
+    const restore = stubMatchMedia(true);
+    try {
+      render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+      const textbox = screen.getByRole("textbox", { name: "Description" });
+      expect(screen.getByRole("toolbar", { name: "Description formatting" })).toBeTruthy();
+      act(() => textbox.focus());
+      act(() => textbox.blur());
+      expect(screen.getByRole("toolbar", { name: "Description formatting" })).toBeTruthy();
+    } finally {
+      restore();
+    }
+  });
+
+  it("keeps the caret in the field when a rail slot is pressed", () => {
+    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    const textbox = screen.getByRole("textbox", { name: "Description" });
+    act(() => textbox.focus());
+    const bold = screen.getByRole("button", { name: "Bold" });
+    // Default prevented is the mechanism: the browser would otherwise move
+    // focus (and collapse the selection) before the click handler runs.
+    expect(fireEvent.mouseDown(bold)).toBe(false);
+    expect(fireEvent.pointerDown(bold)).toBe(false);
+    expect(document.activeElement).toBe(textbox);
+  });
+
+  it("reaches every action from the seven-slot rail, including redo once it can run", () => {
+    const ref = createRef<Editor | null>();
+    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    for (const name of ["Undo", "Bold", "Italic", "Bullets", "Link", "More"]) {
+      expect(screen.getByRole("button", { name })).toBeTruthy();
+    }
+    expect(screen.getByRole("button", { name: /^Block type/ })).toBeTruthy();
+    const more = openRailMore();
+    for (const name of ["Numbered list", "Quote", "Paste as Markdown", "Clear formatting", "Expand editor"]) {
+      expect(within(more).getByRole("option", { name })).toBeTruthy();
+    }
+    // Redo is not offered while it would no-op; it appears when it can act.
+    expect(within(more).queryByRole("option", { name: "Redo" })).toBeNull();
+    act(() => ref.current?.commands.insertContent("typed"));
+    act(() => ref.current?.commands.undo());
+    expect(within(more).getByRole("option", { name: "Redo" })).toBeTruthy();
+  });
+});
+
+describe("RichTextEditor slash commands", () => {
+  it("opens on a line-leading slash, narrows to matching commands, and accepts with keyboard", () => {
+    const ref = createRef<Editor | null>();
+    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    const viewDom = ref.current!.view.dom;
+    act(() => ref.current?.commands.insertContent("/"));
+    const menu = screen.getByRole("listbox", { name: "Formatting commands" });
+    expect(within(menu).getByRole("option", { name: "Bold" })).toBeTruthy();
+    act(() => ref.current?.commands.insertContent("bo"));
+    const narrowed = screen.getByRole("listbox", { name: "Formatting commands" });
+    expect(within(narrowed).getAllByRole("option").map((row) => row.textContent)).toEqual(["Body", "Bold"]);
+    // ArrowDown moves from Body to Bold; Enter runs it and removes the trigger.
+    fireEvent.keyDown(viewDom, { key: "ArrowDown" });
+    fireEvent.keyDown(viewDom, { key: "Enter" });
+    expect(screen.queryByRole("listbox", { name: "Formatting commands" })).toBeNull();
+    act(() => ref.current?.commands.insertContent("word"));
+    expect(tiptapToMarkdown(ref.current?.getJSON())).toBe("**word**");
+  });
+
+  it("dismisses on Escape without closing the surface around it", () => {
+    const ref = createRef<Editor | null>();
+    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    pickRailMore("Expand editor");
+    const overlay = document.getElementById("report-editor-overlay");
+    expect(overlay).not.toBeNull();
+    act(() => ref.current?.commands.insertContent("/"));
+    expect(screen.getByRole("listbox", { name: "Formatting commands" })).toBeTruthy();
+    fireEvent.keyDown(ref.current!.view.dom, { key: "Escape" });
+    expect(screen.queryByRole("listbox", { name: "Formatting commands" })).toBeNull();
+    // One Escape closed the menu only, not the full-screen editor beneath it.
+    expect(document.getElementById("report-editor-overlay")).not.toBeNull();
+  });
+
+  it("leaves a slash in ordinary prose alone", () => {
+    const ref = createRef<Editor | null>();
+    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    act(() => ref.current?.commands.insertContent("see pages 1/2"));
+    expect(screen.queryByRole("listbox", { name: "Formatting commands" })).toBeNull();
   });
 });
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createRef } from "react";
 import type { Editor } from "@tiptap/react";
 import {
@@ -10,6 +10,7 @@ import {
   tiptapToMarkdown,
 } from "./RichTextEditor";
 import { settleSelectionRender } from "../test-utils/editorSelection";
+import { openRailMore } from "../test-utils/editorRail";
 
 afterEach(cleanup);
 
@@ -56,12 +57,13 @@ describe("menu keyboard handling", () => {
     expect(screen.queryByRole("menu", { name: "Block type" })).toBeNull();
   });
 
-  it("keeps unavailable history actions visible but disabled on a fresh editor", () => {
-    const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+  it("offers only the history actions that can run on a fresh editor", () => {
+    render(<RichTextEditor label="Description" value="" onChange={() => {}} />);
     expect((screen.getByRole("button", { name: "Undo" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Redo" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Quote" }) as HTMLButtonElement).disabled).toBe(false);
+    const more = openRailMore();
+    // Redo would be a guaranteed no-op here, so it is not offered at all.
+    expect(within(more).queryByRole("option", { name: "Redo" })).toBeNull();
+    expect(within(more).getByRole("option", { name: "Quote" })).toBeTruthy();
   });
 });
 

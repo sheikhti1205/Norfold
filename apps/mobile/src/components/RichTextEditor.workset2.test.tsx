@@ -22,12 +22,13 @@ describe("RichTextEditor workset2 mobile layout", () => {
     expect(order).toEqual(["label", "editor", "toolbar", "count"]);
   });
 
-  it("keeps the toolbar on one horizontally scrollable row with 44px targets", () => {
+  it("keeps the toolbar on one row with 48px touch targets and no scroller", () => {
     render(<RichTextEditor label="Description" value="" onChange={() => {}} />);
     const toolbar = screen.getByRole("toolbar", { name: "Description formatting" });
-    expect(toolbar.className).toMatch(/overflow-x-auto/);
+    expect(toolbar.className).not.toMatch(/overflow-x-auto/);
     expect(toolbar.className).not.toMatch(/flex-wrap/);
-    expect(toolbar.className).toMatch(/flex-nowrap|whitespace-nowrap/);
+    expect(toolbar.className).toMatch(/flex-nowrap/);
+    expect(toolbar.scrollWidth).toBeLessThanOrEqual(toolbar.clientWidth);
     for (const name of ["Bold", "Link"]) {
       const btn = screen.getByRole("button", { name });
       expect(btn.className).toMatch(/min-h-\[48px\]/);

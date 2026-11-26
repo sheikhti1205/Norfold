@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createRef } from "react";
 import type { Editor } from "@tiptap/react";
 import { RichTextEditor, tiptapToMarkdown } from "./RichTextEditor";
 import { settleSelectionRender } from "../test-utils/editorSelection";
+import { openRailMore, pickRailMore } from "../test-utils/editorRail";
 
 afterEach(cleanup);
 
@@ -23,16 +24,16 @@ describe("RichTextEditor report pass — bounded inline growth", () => {
 });
 
 describe("RichTextEditor report pass — Expand/Collapse full-screen overlay", () => {
-  it("renders an Expand button with accessible label", () => {
+  it("offers Expand as a named row in the rail's trailing menu", () => {
     render(<RichTextEditor label="Description" value="hello world" onChange={() => {}} />);
-    const expandBtn = screen.getByRole("button", { name: /Expand description editor/i }) as HTMLButtonElement;
-    expect(expandBtn).toBeTruthy();
-    expect(expandBtn.disabled).toBe(false);
+    const more = openRailMore();
+    const expand = within(more).getByRole("option", { name: "Expand editor" });
+    expect(expand.textContent).toBe("Expand editor");
   });
 
-  it("opens full-screen overlay on Expand click", () => {
+  it("opens full-screen overlay on Expand", () => {
     render(<RichTextEditor label="Description" value="hello world" onChange={() => {}} />);
-    fireEvent.click(screen.getByRole("button", { name: /Expand description editor/i }));
+    pickRailMore("Expand editor");
     // Overlay should be rendered via portal to document.body
     const overlay = document.getElementById("report-editor-overlay");
     expect(overlay).toBeTruthy();
@@ -46,7 +47,7 @@ describe("RichTextEditor report pass — Expand/Collapse full-screen overlay", (
       <RichTextEditor label="Description" value="**bold** and *italic*" onChange={() => {}} editorRef={ref} />,
     );
     const initialMarkdown = tiptapToMarkdown(ref.current?.getJSON());
-    fireEvent.click(screen.getByRole("button", { name: /Expand description editor/i }));
+    pickRailMore("Expand editor");
     const _overlay = document.getElementById("report-editor-overlay");
     expect(tiptapToMarkdown(ref.current?.getJSON())).toBe(initialMarkdown);
   });
@@ -65,7 +66,7 @@ describe("RichTextEditor report pass — Expand/Collapse full-screen overlay", (
     act(() => {
       ref.current?.commands.setTextSelection({ from: 1, to: 6 }); // select "hello"
     });
-    fireEvent.click(screen.getByRole("button", { name: /Expand description editor/i }));
+    pickRailMore("Expand editor");
     // Selection should be preserved in the overlay
     const _overlay = document.getElementById("report-editor-overlay");
     // The same editor instance should have the same selection
@@ -84,7 +85,7 @@ describe("RichTextEditor report pass — Expand/Collapse full-screen overlay", (
         editorRef={ref}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /Expand description editor/i }));
+    pickRailMore("Expand editor");
     // Edit in overlay - insert at end of "hello" (position 6 in Tiptap/ProseMirror)
     act(() => {
       ref.current?.commands.setTextSelection({ from: 6, to: 6 }); // after "hello"
@@ -101,7 +102,7 @@ describe("RichTextEditor report pass — Expand/Collapse full-screen overlay", (
 
   it("Android Back (Escape) dismisses menu first, then overlay", () => {
     render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
-    fireEvent.click(screen.getByRole("button", { name: /Expand description editor/i }));
+    pickRailMore("Expand editor");
     // Open a menu in overlay
     fireEvent.click(screen.getByRole("button", { name: /Block type/i }));
     expect(screen.getByRole("menu", { name: "Block type" })).toBeTruthy();
@@ -121,7 +122,7 @@ describe("RichTextEditor report pass — Expand/Collapse full-screen overlay", (
     render(
       <RichTextEditor label="Description" value="see map here" onChange={() => {}} editorRef={ref} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /Expand description editor/i }));
+    pickRailMore("Expand editor");
     expect(document.getElementById("report-editor-overlay")).not.toBeNull();
     act(() => {
       ref.current?.commands.setTextSelection({ from: 5, to: 8 });
@@ -142,7 +143,7 @@ describe("RichTextEditor report pass — Expand/Collapse full-screen overlay", (
 describe("RichTextEditor report pass — formatting rail keyboard visibility", () => {
   it("rail sits at bottom of usable screen when IME hidden (replaces tab bar position)", () => {
     render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
-    fireEvent.click(screen.getByRole("button", { name: /Expand description editor/i }));
+    pickRailMore("Expand editor");
     const overlay = document.getElementById("report-editor-overlay");
     const rail = overlay?.querySelector('[role="toolbar"]');
     expect(rail).toBeTruthy();
@@ -153,7 +154,7 @@ describe("RichTextEditor report pass — formatting rail keyboard visibility", (
 
   it("overlay uses CSS custom properties for visualViewport positioning", () => {
     render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
-    fireEvent.click(screen.getByRole("button", { name: /Expand description editor/i }));
+    pickRailMore("Expand editor");
     const overlay = document.getElementById("report-editor-overlay");
     // The overlay should use visualViewport.height/offsetTop for positioning
     // Not keyboardHeight + visualViewport (double subtraction)
@@ -173,7 +174,7 @@ describe("RichTextEditor report pass — formatting rail keyboard visibility", (
     Object.defineProperty(window, "visualViewport", { configurable: true, value: viewport });
     try {
       render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
-      fireEvent.click(screen.getByRole("button", { name: /Expand description editor/i }));
+      pickRailMore("Expand editor");
       const overlay = document.getElementById("report-editor-overlay")!;
       expect(overlay.style.getPropertyValue("--fb-visible-height")).toBe("430px");
       expect(overlay.style.getPropertyValue("--fb-visible-top")).toBe("24px");
@@ -240,7 +241,7 @@ describe("RichTextEditor report pass — collision-safe formatting menus (Floati
 
   it("Escape/Back/outside click closes one layer at a time", () => {
     render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
-    fireEvent.click(screen.getByRole("button", { name: /Expand description editor/i }));
+    pickRailMore("Expand editor");
     fireEvent.click(screen.getByRole("button", { name: /Block type/i }));
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("menu", { name: "Block type" })).toBeNull();
@@ -266,12 +267,12 @@ describe("RichTextEditor report pass — selection and undo preservation across 
       ref.current?.commands.insertContent(" world");
     });
     expect(ref.current?.can().undo()).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: /Expand description editor/i }));
+    pickRailMore("Expand editor");
     // Undo in overlay
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     expect(tiptapToMarkdown(ref.current?.getJSON())).toBe("hello");
     // Redo in overlay
-    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    pickRailMore("Redo");
     expect(tiptapToMarkdown(ref.current?.getJSON())).toBe("hello world");
   });
 
@@ -281,7 +282,7 @@ describe("RichTextEditor report pass — selection and undo preservation across 
       <RichTextEditor label="Description" value="hello" onChange={() => {}} editorRef={ref} />,
     );
     const historyBefore = ref.current?.state.doc.content.size;
-    fireEvent.click(screen.getByRole("button", { name: /Expand description editor/i }));
+    pickRailMore("Expand editor");
     fireEvent.click(screen.getByRole("button", { name: /Done/i }));
     const historyAfter = ref.current?.state.doc.content.size;
     expect(historyAfter).toBe(historyBefore);
@@ -291,38 +292,41 @@ describe("RichTextEditor report pass — selection and undo preservation across 
 describe("RichTextEditor report pass — accessibility", () => {
   it("overlay has proper ARIA: role=dialog, aria-modal=true, labelled header", () => {
     render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
-    fireEvent.click(screen.getByRole("button", { name: /Expand description editor/i }));
+    pickRailMore("Expand editor");
     const overlay = document.getElementById("report-editor-overlay");
     expect(overlay?.getAttribute("role")).toBe("dialog");
     expect(overlay?.getAttribute("aria-modal")).toBe("true");
     expect(overlay?.querySelector("header")).toBeTruthy();
   });
 
-  it("rail buttons have ≥48dp touch targets and accessible labels", () => {
+  it("rail slots have ≥48dp touch targets and accessible labels", () => {
     render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
-    fireEvent.click(screen.getByRole("button", { name: /Expand description editor/i }));
-    for (const name of ["Undo", "Redo", "Bold", "Italic", "Link", "Bullets", "Numbered", "Quote", "Paste as Markdown"]) {
-      const btn = screen.getByRole("button", { name });
-      expect(btn.className).toMatch(/min-h-\[48px\]/);
-      expect(btn.className).toMatch(/min-w-\[48px\]/);
+    pickRailMore("Expand editor");
+    const rail = screen.getByRole("toolbar", { name: "Description formatting" });
+    const slots = within(rail).getAllByRole("button");
+    expect(slots).toHaveLength(7);
+    for (const slot of slots) {
+      expect(slot.className).toMatch(/min-h-\[48px\]/);
+      expect(slot.className).toMatch(/min-w-\[48px\]/);
     }
   });
 
   it("focus trap in overlay, focus restored on close", () => {
     render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
-    const expandBtn = screen.getByRole("button", { name: /Expand description editor/i });
-    // Focus the expand button first (simulating real user click behavior)
-    expandBtn.focus();
-    expect(document.activeElement).toBe(expandBtn);
-    fireEvent.click(expandBtn);
+    const moreBtn = screen.getByRole("button", { name: "More" });
+    // Focus the rail trigger first (simulating real user click behavior)
+    moreBtn.focus();
+    expect(document.activeElement).toBe(moreBtn);
+    pickRailMore("Expand editor");
     // Focus should move into overlay (to the close button or first focusable)
     const overlay = document.getElementById("report-editor-overlay");
     // The focus trap should move focus into the overlay
     expect(overlay?.contains(document.activeElement)).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: /Done/i }));
-    // Focus should return to expand button (check by aria-label since element is re-rendered)
+    // The menu row that launched the overlay no longer exists, so focus
+    // returns to the slot that does: the rail's More button.
     const activeEl = document.activeElement as HTMLElement | null;
     expect(activeEl).not.toBeNull();
-    expect(activeEl?.getAttribute("aria-label")).toBe("Expand description editor");
+    expect(activeEl?.getAttribute("aria-label")).toBe("More");
   });
 });
