@@ -20,7 +20,7 @@ arrive through build config.
 | Surface | Android APK | Web, key built in | Web, no key |
 |---|---|---|---|
 | Report → Choose on map | `FindbackMapActivity` picker: Google Maps `MapView`, fixed centre pin | `GoogleMapCanvas` in picking mode | OSM 3×3 raster grid with move/zoom controls |
-| Report location preview (`MapEmbed`) | OSM 3×3 raster grid | Google preview | OSM 3×3 raster grid |
+| Report form location row (`location-row`) → picker sheet | No in-form map: the row opens `FindbackMapActivity` | The same row opens the sheet's `GoogleMapCanvas` picking surface, with search, one-shot GPS, the exact toggle and Open in Maps | The same row opens the sheet's OSM 3×3 raster grid, with the same sheet controls |
 | Post detail / shared location (`InteractiveLocationMap`) | MapLibre snapshot bitmap; tap opens the native viewer | Google preview | OSM 3×3 raster grid |
 | Post/shared-location viewer | `FindbackMapActivity` viewer: Google Maps `MapView`, read-only | — | — |
 
@@ -77,8 +77,10 @@ gate scans them for that pattern and fails on a hit.
 The web key is restricted to the production site, and the Android WebView sends
 no such referrer, so the JavaScript API cannot authorise inside the APK. Trying
 it there would only produce a rejected map. Native therefore uses the Android
-SDK with its own key, while the in-page report preview keeps the keyless
-raster grid. `mapProvider.ts` encodes this rule: Google only when a key was
+SDK with its own key, and the picker sheet never asks the JavaScript API to draw
+inside the APK: on device it hands off to the native Activity, and its in-place
+fallback (bridge missing or launch rejected) is the keyless raster grid.
+`mapProvider.ts` encodes this rule: Google only when a key was
 built in *and* the platform is not native.
 
 ## Search policy
