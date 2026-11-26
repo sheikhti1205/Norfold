@@ -948,8 +948,8 @@ describe("R19 inside-corner message menu ownership", () => {
     expect(rem(options, "inset-block-start")).toBeGreaterThanOrEqual(0);
     expect(rem(options, "inset-inline-end")).toBeGreaterThanOrEqual(0);
     expect(options).not.toMatch(/inset-(?:block-start|inline-end)\s*:\s*-/);
-    expect(rem(options, "width") * 16).toBeGreaterThanOrEqual(44);
-    expect(rem(options, "height") * 16).toBeGreaterThanOrEqual(44);
+    expect(rem(options, "width") * 16).toBeGreaterThanOrEqual(48);
+    expect(rem(options, "height") * 16).toBeGreaterThanOrEqual(48);
   });
 
   it("keeps the glyph at 20px and paints no 48px circle", () => {
