@@ -15,15 +15,19 @@
 }
 .fb-search-field-pill:focus-within { border-color: var(--fb-on-surface); }
 
-/* The magnifier occupies the same 44px slot as Home's back arrow, so the text
-   starts at one x-position across every search surface. */
+/* The pill is a 48px border-box: 1px border + 46px content. The magnifier
+   occupies the same 48px slot as the 48px action that replaces it on Home, so
+   the text starts at one x-position across every search surface. The -1px block
+   margins pull the 48px slot into the pill's 46px content box, keeping the pill
+   48px tall. */
 .fb-search-field-leading {
   display: flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  min-height: 44px;
+  width: 48px;
+  min-height: 48px;
+  margin-block: -1px;
   color: var(--fb-on-surface-variant);
 }
 
@@ -65,6 +69,9 @@
   pointer-events: none;
 }
 
+/* A 48px hit target. The -1px block margins make its margin box 46px, so the
+   action fits the pill's 46px content box and the pill stays 48px tall when the
+   clear action mounts. */
 .fb-search-field-action {
   display: inline-flex;
   flex: none;
@@ -72,6 +79,7 @@
   justify-content: center;
   width: 48px;
   height: 48px;
+  margin-block: -1px;
   border-radius: 999px;
   color: var(--fb-on-surface-variant);
   cursor: pointer;

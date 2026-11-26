@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 
 const css = readFileSync(new URL("./GlobalSearchOverlay.css", import.meta.url), "utf8");
 const flat = css.replace(/\s+/g, " ");
+const sharedCss = readFileSync(new URL("./searchField.css", import.meta.url), "utf8");
+const sharedFlat = sharedCss.replace(/\s+/g, " ");
 
 /** Every declarations block written for one class selector, phone override included. */
 function declarationsFor(selector: string) {
@@ -57,13 +59,16 @@ describe("global search overlay touch targets", () => {
     }
   });
 
-  it("raises the field's own input and clear action inside this surface", () => {
-    // The shared field keeps a 44px entry and action inside its 48px pill; in
-    // the overlay both are the tap target. The entry fills the pill; the action
-    // keeps its visual and reaches 48px through a centred hit patch.
+  it("fills the field's own input and keeps a 48px action inside this surface", () => {
+    // The shared pill is 48px (1px border + 46px content). In the overlay the
+    // entry fills it with the same 1px negative block margin, so the pill stays
+    // 48px. The clear action is already 48px in searchField.css, so this sheet
+    // needs no extra hit patch for it.
     expect(flat).toMatch(/\.fb-search-overlay-field \.fb-search-field-input \{[^}]*height:\s*48px/);
-    expect(flat).toMatch(/\.fb-search-overlay-field \.fb-search-field-action::after \{[^}]*width:\s*48px/);
-    expect(flat).toMatch(/\.fb-search-overlay-field \.fb-search-field-action::after \{[^}]*height:\s*48px/);
+    expect(flat).toMatch(/\.fb-search-overlay-field \.fb-search-field-input \{[^}]*margin-block:\s*-1px/);
+    expect(flat).not.toMatch(/\.fb-search-overlay-field \.fb-search-field-action/);
+    expect(sharedFlat).toMatch(/\.fb-search-field-action \{[^}]*width:\s*48px/);
+    expect(sharedFlat).toMatch(/\.fb-search-field-action \{[^}]*height:\s*48px/);
     // The category filter's own search field is a tap target too.
     expect(flat).toMatch(/\.fb-search-menu-search input \{[^}]*min-height:\s*48px/);
   });

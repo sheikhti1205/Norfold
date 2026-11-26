@@ -46,24 +46,13 @@
 /* The overlay's field sits on a raised panel, so it keeps the panel's
    elevation cue. Geometry stays the shared pill's. */
 .fb-search-overlay-field { box-shadow: var(--shadow-md); }
-/* Inside this overlay the field's entry and clear action are the tap targets,
-   while the shared field keeps them 44px inside a 48px pill. The entry fills
-   the pill's full height here; the 1px negative block margin keeps the pill
-   itself 48px, so only the hit area grows, not the visible bar. The clear
-   action keeps its 44px circle and reaches 48px through a centred hit patch,
-   which stops 2px short of the entry so the two targets never overlap. */
+/* The pill is a 48px border-box: 1px border + 46px content. The entry fills the
+   pill's full height here; the same 1px negative block margin keeps the pill
+   itself 48px, so only the hit area grows, not the visible bar. The shared
+   clear action is already a 48px target with its own 1px negative block margin,
+   so this surface adds no hit patch for it. */
 .fb-search-overlay-field .fb-search-field-input { height: 48px; margin-block: -1px; }
 .fb-search-overlay-field .fb-search-field-placeholder { line-height: 46px; }
-.fb-search-overlay-field .fb-search-field-action { position: relative; }
-.fb-search-overlay-field .fb-search-field-action::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 48px;
-  height: 48px;
-  translate: -50% -50%;
-}
 
 .fb-search-iconbtn {
   display: inline-flex;
