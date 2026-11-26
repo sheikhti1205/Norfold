@@ -23,8 +23,6 @@
     <string name="findback_map_style_failed">The map could not load — check your connection.</string>
     <string name="findback_map_retry">Try again</string>
     <string name="findback_map_no_pin">No location yet — pan the map to place the pin.</string>
-    <string name="findback_map_attribution">© OpenStreetMap contributors</string>
-    <string name="findback_map_search_results">© OpenStreetMap contributors (Nominatim)</string>
     <string name="findback_map_pin_description">Map pin — the map moves underneath it</string>
     <string name="findback_map_view">Location map</string>
 </resources>

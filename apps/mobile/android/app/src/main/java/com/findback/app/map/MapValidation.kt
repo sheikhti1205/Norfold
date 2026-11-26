@@ -27,9 +27,6 @@ object MapValidation {
     /** Style provider seam for the public Nominatim search endpoint. */
     const val DEFAULT_NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/search"
 
-    /** Attribution line for surfaces the SDK does not annotate itself. */
-    const val MAP_ATTRIBUTION = "© OpenStreetMap contributors"
-
     /** Snapshot output caps (doc: max 1024 px per side) to avoid memory abuse. */
     const val MIN_SNAPSHOT_EDGE_PX = 64
     const val MAX_SNAPSHOT_EDGE_PX = 1024
