@@ -41,8 +41,10 @@ Legend — Class: `PUBLIC` | `SECRET` | `DERIVED`. Cell source vocabulary:
 | `ANDROID_KEY_ALIAS` | SECRET | `n/a` | `shell` (required) | `n/a` | `GH-secret` | `n/a` | `n/a` | `gradle` signing | presence-only, never echoed | Missing aborts signing | `build-apk.mjs:434`; `release.yml:353` |
 | `ANDROID_KEY_PASSWORD` | SECRET | `n/a` | `shell` (required) | `n/a` | `GH-secret` | `n/a` | `n/a` | `gradle` signing | presence-only, never echoed | Missing aborts signing | `build-apk.mjs:434`; `release.yml:354` |
 | `ANDROID_SIGNING_CERT_SHA256` | SECRET | `n/a` unless association check | verified when exported | exported for association | `GH-secret` (pin every variant + AAB) | `GH-secret` (association) | `n/a` | `verify-release-apks.sh` + web association | `verify-release-apks.sh` + `check-web-association.mjs` | Mismatch blocks publish; fingerprint never echoed | `release.yml:371`; `verify-release-apks.sh:95`; `check-web-association.mjs:95`; `check-signeddev-config.mjs:117`; `web.yml:99` |
-| `FINDBACK_MAP_STYLE_URL` | PUBLIC | `shell`/`root .env` → `default` | same as dev | `default` (unset) | `default` (unset) | `default` (unset) | `n/a` | `vite` define + `gradle` `BuildConfig` | `check-map-config.mjs` | Malformed custom fails build; absent = built-in default both sides | `check-map-config.mjs:52`; `check-map-config.mjs:57`; `check-map-config.mjs:119`; `vite.config.ts:47`; `.env.example:65` |
-| `FINDBACK_MAP_CONTACT` | PUBLIC | `shell`/`root .env` → `default` | same as dev | `default` (unset) | `default` (unset) | `default` (unset) | `n/a` | `vite` define + `gradle` `BuildConfig` | `check-map-config.mjs` | Malformed custom fails build; ships in User-Agent verbatim | `check-map-config.mjs:53`; `check-map-config.mjs:58`; `check-map-config.mjs:119`; `vite.config.ts:48`; `.env.example:69` |
+| `GOOGLE_MAPS_ANDROID_API_KEY` | SECRET | `shell` only (Gradle reads the process env; `root .env` is not forwarded); absent = map Activity fails closed | same as dev | `GH-secret` | `GH-secret` | `GH-secret` (exported; no web consumer) | `n/a` | `gradle` → `BuildConfig` + `findbackMapsApiKey` manifest placeholder | `check-map-provider.mjs` | Compiled into the APK; blank leaves the native picker/viewer with no map; a literal `AIza…` fails the gate | `build.gradle:174`; `build.gradle:215`; `build.gradle:236`; `AndroidManifest.xml:115`; `check-map-provider.mjs:139`; `check-map-provider.mjs:145`; `.env.example:56`; `ci.yml:297`; `release.yml:664`; `web.yml:39`; `android-builds.yml:58` |
+| `VITE_GOOGLE_MAPS_API_KEY` | SECRET | `shell`/`root .env` → absent = keyless raster grid | same as dev | `GH-secret` (`GOOGLE_MAPS_WEB_API_KEY`) | `GH-secret` (`GOOGLE_MAPS_WEB_API_KEY`) | `GH-secret` (`GOOGLE_MAPS_WEB_API_KEY`) | `n/a` | `vite` → `googleMapsLoader` | `check-map-provider.mjs` | Baked into the bundle; native ignores it (no referrer, so it cannot authorise); absent = raster grid, rejected key = notice | `vite.config.ts:50`; `vite.config.ts:256`; `googleMapsLoader.ts:92`; `mapProvider.ts:25`; `check-map-provider.mjs:155`; `check-map-provider.mjs:183`; `.env.example:57`; `ci.yml:298`; `release.yml:665`; `web.yml:40`; `android-builds.yml:59` |
+| `FINDBACK_MAP_STYLE_URL` | PUBLIC | `shell`/`root .env` → `default` | same as dev | `default` (unset) | `default` (unset) | `default` (unset) | `n/a` | `vite` define + `gradle` `BuildConfig` | `check-map-config.mjs` | Malformed custom fails build; absent = built-in default both sides; feeds MapLibre snapshots only | `check-map-config.mjs:52`; `check-map-config.mjs:57`; `check-map-config.mjs:119`; `vite.config.ts:47`; `.env.example:47` |
+| `FINDBACK_MAP_CONTACT` | PUBLIC | `shell`/`root .env` → `default` | same as dev | `default` (unset) | `default` (unset) | `default` (unset) | `n/a` | `vite` define + `gradle` `BuildConfig` | `check-map-config.mjs` | Malformed custom fails build; ships in User-Agent verbatim | `check-map-config.mjs:53`; `check-map-config.mjs:58`; `check-map-config.mjs:119`; `vite.config.ts:48`; `.env.example:51` |
 | `VITE_NOMINATIM_SEARCH_URL` | PUBLIC | `shell`/`root .env` → `default` | same as dev | `default` (unset) | `default` (unset) | `default` (unset) | `n/a` | `vite` + native search endpoint | `check-map-config.mjs` | Non-https/malformed custom fails build; explicit-submit only | `check-map-config.mjs:55`; `check-map-config.mjs:59`; `check-map-config.mjs:101`; `vite.config.ts:49`; `nominatimSearch.ts:80` |
 | `VITE_KLIPY_API_KEY` | SECRET | `mobile .env`/`shell`; blank = picker hidden | same as dev | `n/a` (unset) | baked if configured | baked if configured | `n/a` | `vite` → Klipy adapter | `klipy.ts` enable-gate | Blank disables GIF control gracefully; key in path, never logged; live contract validated 2026-10-13 (`data.data` + `file.<size>.<fmt>.url`, share POST 200) | `klipy.ts:43`; `klipy.ts:75`; `klipy.ts:80` |
 
@@ -55,6 +57,17 @@ Notes
   `vite.config.ts:20`).
 - Canonical owners: release/dist/rate → `build-context.mjs:34,115,134,147`;
   Sentry shape → `release.ts:56,84`; Google → `check-google-config.mjs:28`;
-  maps → `check-map-config.mjs:119`; share → `check-share-config.mjs:20`.
+  map style/contact/search → `check-map-config.mjs:119`; map key plumbing →
+  `check-map-provider.mjs:239`; share → `check-share-config.mjs:20`.
+- Map keys travel one way only: each build workflow exports the
+  `GOOGLE_MAPS_WEB_API_KEY` secret as `VITE_GOOGLE_MAPS_API_KEY`, the name the
+  Vite build reads (`check-map-provider.mjs:183`). Exporting the bare secret
+  name is dead plumbing, since no build reads it, and the gate refuses it
+  (`check-map-provider.mjs:187`). The Android key keeps its own name end to end
+  (secret → `System.getenv` → `BuildConfig` → manifest placeholder).
+- Map surfaces: the native picker and viewer use the Google Maps Android SDK,
+  the web picker/preview/post map uses the Maps JavaScript API when a key was
+  built in, the keyless OSM raster grid is the fallback, and MapLibre renders
+  snapshots only (see [maps](maps.md)).
 - Edge `PUBLIC_SHARE_ORIGIN` (no `VITE_` prefix) is derived from
   `VITE_PUBLIC_SHARE_ORIGIN` at sync time (`sync-fcm-secrets.mjs:21`).
