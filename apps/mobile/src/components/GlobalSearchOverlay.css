@@ -46,14 +46,32 @@
 /* The overlay's field sits on a raised panel, so it keeps the panel's
    elevation cue. Geometry stays the shared pill's. */
 .fb-search-overlay-field { box-shadow: var(--shadow-md); }
+/* Inside this overlay the field's entry and clear action are the tap targets,
+   while the shared field keeps them 44px inside a 48px pill. The entry fills
+   the pill's full height here; the 1px negative block margin keeps the pill
+   itself 48px, so only the hit area grows, not the visible bar. The clear
+   action keeps its 44px circle and reaches 48px through a centred hit patch,
+   which stops 2px short of the entry so the two targets never overlap. */
+.fb-search-overlay-field .fb-search-field-input { height: 48px; margin-block: -1px; }
+.fb-search-overlay-field .fb-search-field-placeholder { line-height: 46px; }
+.fb-search-overlay-field .fb-search-field-action { position: relative; }
+.fb-search-overlay-field .fb-search-field-action::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 48px;
+  height: 48px;
+  translate: -50% -50%;
+}
 
 .fb-search-iconbtn {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   color: var(--fb-on-surface-variant);
   cursor: pointer;
@@ -116,7 +134,7 @@
   gap: 10px;
   width: 100%;
   min-width: 0;
-  min-height: 44px;
+  min-height: 48px;
   padding: 8px 10px;
   border-radius: 10px;
   color: var(--fb-on-surface);
@@ -211,7 +229,7 @@
   flex: none;
   align-items: center;
   gap: 6px;
-  min-height: 40px;
+  min-height: 48px;
   padding: 0 8px 0 10px;
   border: 1px solid var(--fb-outline-variant);
   border-radius: 999px;
@@ -255,7 +273,7 @@
    force; it is not an underlined link under the pills. */
 .fb-search-clear-filters {
   flex: none;
-  min-height: 44px;
+  min-height: 48px;
   padding: 0 10px;
   border: 1px solid var(--fb-outline-variant);
   border-radius: 999px;
@@ -300,7 +318,7 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 40px;
+  min-height: 48px;
   padding: 6px 10px;
   border: 0;
   border-radius: 10px;
@@ -342,7 +360,7 @@
 }
 .fb-search-menu-search input {
   width: 100%;
-  min-height: 44px;
+  min-height: 48px;
   padding: 0 12px 0 34px;
   border: 1px solid var(--fb-outline-variant);
   border-radius: 10px;
@@ -380,7 +398,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  min-height: 40px;
+  min-height: 48px;
   padding: 0 10px;
   border: 1px solid var(--fb-outline-variant);
   border-radius: 10px;
@@ -415,7 +433,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 44px;
+  min-height: 48px;
   padding-inline: 2px;
 }
 .fb-search-date-field-label {
@@ -430,8 +448,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border: 0;
   border-radius: 50%;
   background: transparent;
@@ -452,7 +470,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 40px;
+  min-height: 48px;
   padding: 0 14px;
   border: 1px solid var(--fb-outline-variant);
   border-radius: 999px;
@@ -478,8 +496,8 @@
     margin: 0;
   }
   .fb-search-bar { min-height: 48px; }
-  /* Search-surface controls keep the 44px tap target at phone width. */
-  .fb-search-pill { min-height: 44px; font-size: 0.8125rem; }
-  .fb-search-clear-filters { min-height: 44px; padding: 0 9px; }
-  .fb-search-menu-option { min-height: 44px; }
+  /* Search-surface controls keep the 48px tap target at phone width. */
+  .fb-search-pill { min-height: 48px; font-size: 0.8125rem; }
+  .fb-search-clear-filters { min-height: 48px; padding: 0 9px; }
+  .fb-search-menu-option { min-height: 48px; }
 }
