@@ -432,6 +432,10 @@ body:has(#report-editor-overlay) .fb-nav-rail { display: none; }
 .fb-nav-drawer-trigger:active { transform: scale(0.96); }
 .fb-nav-drawer-trigger:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: 2px; }
 html.fb-reduce-motion .fb-nav-drawer-trigger:active { transform: none; }
+/* The trigger is the whole navigation in a chosen rail on a phone. While the
+   compact settings card is open it must stay above that card; tapping it closes
+   the card and opens the drawer. */
+.fb-nav-drawer-trigger[data-settings-open] { z-index: 90; }
 /* The drawer sits above the dock and below search and modal surfaces. Its
    account popover uses the overlay depth provider in Shell.tsx. */
 .fb-nav-drawer { position: fixed; inset: 0; z-index: 65; }

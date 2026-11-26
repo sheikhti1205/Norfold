@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Button, Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 import {
   UNSAFE_createMemoryHistory,
@@ -20,6 +21,7 @@ import { SettingsRow } from "./settings";
 import { SettingsWindowHost, SettingsWindowQuery, SettingsWindowTitle } from "./settingsWindowHost";
 import { OverlayStackBridge } from "./overlayFoundation";
 import { RouterDepthProvider } from "./routerHistory";
+import { useViewportWidth, widthBand } from "./responsive";
 import { searchSettings } from "../services/settingsIndex";
 import { useHoverLabel } from "./HoverLabel";
 import "./SettingsWindow.css";
@@ -54,27 +56,47 @@ import "./SettingsWindow.css";
  * router's own escape hatch (`UNSAFE_` contexts) and keeps every settings
  * page's `useNavigate`, `Link` and `useParams` pointed at the window instead of
  * the page behind it.
+ *
+ * Width decides the container, not the content. On a desktop viewport the
+ * window is the modal it has always been: a portal over the app with the page
+ * behind it inert. On a phone the same surface is a non-modal card drawn inside
+ * the page's content box, with a dimmed gutter around it, because the primary
+ * navigation is a sibling of that box and must stay visible and usable while
+ * settings is open. The desktop modal path inerts and focuses from
+ * `document.body` (react-aria's `useModalOverlay`); on compact the window inerts
+ * only the page host and leaves the bar reachable by pointer, keyboard and
+ * assistive technology.
  */
-export function SettingsWindow({ open, initialPath = "/settings", onClose, onExit }: {
+export function SettingsWindow({ open, initialPath = "/settings", onClose, onExit, compactHost, returnFocus }: {
   open: boolean;
   /** Section to open at, e.g. `/settings/notifications` from the account menu. */
   initialPath?: string;
   onClose: () => void;
   /** Navigate the real app after leaving the window for a non-settings route. */
   onExit: (path: string) => void;
+  /**
+   * The `<main>` content box compact draws inside. The window is portalled
+   * there so `inset: 0` is the page area and the bottom bar stays its sibling.
+   */
+  compactHost?: HTMLElement | null;
+  /** The control to return focus to when the compact window closes. */
+  returnFocus?: HTMLElement | null;
 }) {
   // Mounted only while open, so every open starts at the requested section and
   // the memory history (and its listener) belongs to exactly one showing of the
   // window. Keyed by the entry path: opening another row while the window is
   // already open starts that section rather than inheriting the old stack.
   if (!open) return null;
-  return <SettingsWindowSurface key={initialPath} initialPath={initialPath} onClose={onClose} onExit={onExit} />;
+  return <SettingsWindowSurface key={initialPath} initialPath={initialPath} onClose={onClose} onExit={onExit}
+    compactHost={compactHost ?? null} returnFocus={returnFocus ?? null} />;
 }
 
-function SettingsWindowSurface({ initialPath, onClose, onExit }: {
+function SettingsWindowSurface({ initialPath, onClose, onExit, compactHost, returnFocus }: {
   initialPath: string;
   onClose: () => void;
   onExit: (path: string) => void;
+  compactHost: HTMLElement | null;
+  returnFocus: HTMLElement | null;
 }) {
   const historyRef = useRef<ReturnType<typeof UNSAFE_createMemoryHistory> | null>(null);
   if (historyRef.current === null) {
@@ -143,61 +165,141 @@ function SettingsWindowSurface({ initialPath, onClose, onExit }: {
     return true;
   }, [searchOpen, closeSearch]);
 
-  return <ModalOverlay isOpen onOpenChange={(next) => { if (!next) onClose(); }} isDismissable
-    className="fb-modal-backdrop fb-settings-backdrop">
-    <Modal className="fb-modal-panel fb-settings-window">
-      <OverlayStackBridge onClose={onClose} onBack={goBack} onEscape={consumeEscape} />
-      {/* The window's router wraps the chrome as well as the tree. Search
-          results are links, so they must navigate the window's memory history;
-          outside these providers they would silently drive the app behind. */}
-      <UNSAFE_NavigationContext.Provider value={navigation}>
-        <UNSAFE_LocationContext.Provider value={location}>
-          <UNSAFE_RouteContext.Provider value={route}>
-            <Dialog aria-label="Settings" className="fb-settings-dialog">
-              <header className="fb-settings-window-head" data-searching={searchOpen || undefined}>
-                {canGoBack && (
-                  <Button aria-label="Back" className="fb-icon-control fb-settings-window-back" onPress={goBack} {...hoverLabel("Back")}>
-                    <ArrowLeft size={18} aria-hidden="true" />
-                  </Button>
-                )}
-                <Heading slot="title" className="fb-settings-window-title">{windowTitle}</Heading>
-                <div className="fb-settings-window-actions">
-                  {searchOpen
-                     ? <SettingsWindowSearch query={searchQuery} setQuery={setSearchQuery} onDismiss={closeSearch} onPicked={() => { setSearchOpen(false); setSearchQuery(""); }} />
-                    : <Button ref={searchToggle} aria-label="Search settings" className="fb-icon-control"
-                        onPress={() => setSearchOpen(true)} {...hoverLabel("Search settings")}>
-                        <Search size={18} aria-hidden="true" />
-                      </Button>}
-                  <Button aria-label="Close settings" className="fb-icon-control" onPress={onClose} {...hoverLabel("Close settings")}>
-                    <X size={18} aria-hidden="true" />
-                  </Button>
-                </div>
-              </header>
-              <div className="fb-settings-window-body">
-                <SettingsWindowHost.Provider value>
-                  <SettingsWindowQuery.Provider value={searchQuery}>
-                  <SettingsWindowTitle.Provider value={setPageTitle}>
-                    <RouterDepthProvider depth={depth}>
-                      <Routes>
-                        <Route path="/settings" element={<Settings />}>{settingsRouteElements()}</Route>
-                        {/* Own profile lives in the window too: the settings
-                            identity header links here, and Profile's own edit
-                            link must not close the surface mid-flow. */}
-                        <Route path="/profile" element={<Profile />} />
-                        <Route path="/profile/edit" element={<ProfileEdit />} />
-                        <Route path="*" element={<ExitToApp onExit={onExit} />} />
-                      </Routes>
-                    </RouterDepthProvider>
-                  </SettingsWindowTitle.Provider>
-                  </SettingsWindowQuery.Provider>
-                </SettingsWindowHost.Provider>
+  // The shell's compact breakpoint: below 600 CSS px. Exactly 600 stays the
+  // desktop path so this gate agrees with `widthBand` and the shell's own
+  // `min-width: 600px` navigation boundary; the CSS block below uses
+  // `max-width: 599.98px` to make the same cut.
+  const compact = widthBand(useViewportWidth()) === "compact";
+
+  const surface = <>
+    <OverlayStackBridge onClose={onClose} onBack={goBack} onEscape={consumeEscape} />
+    {/* The window's router wraps the chrome as well as the tree. Search
+        results are links, so they must navigate the window's memory history;
+        outside these providers they would silently drive the app behind. */}
+    <UNSAFE_NavigationContext.Provider value={navigation}>
+      <UNSAFE_LocationContext.Provider value={location}>
+        <UNSAFE_RouteContext.Provider value={route}>
+          <Dialog aria-label="Settings" className="fb-settings-dialog">
+            <header className="fb-settings-window-head" data-searching={searchOpen || undefined}>
+              {canGoBack && (
+                <Button aria-label="Back" className="fb-icon-control fb-settings-window-back" onPress={goBack} {...hoverLabel("Back")}>
+                  <ArrowLeft size={18} aria-hidden="true" />
+                </Button>
+              )}
+              <Heading slot="title" className="fb-settings-window-title">{windowTitle}</Heading>
+              <div className="fb-settings-window-actions">
+                {searchOpen
+                   ? <SettingsWindowSearch query={searchQuery} setQuery={setSearchQuery} onDismiss={closeSearch} onPicked={() => { setSearchOpen(false); setSearchQuery(""); }} />
+                  : <Button ref={searchToggle} aria-label="Search settings" className="fb-icon-control"
+                      onPress={() => setSearchOpen(true)} {...hoverLabel("Search settings")}>
+                      <Search size={18} aria-hidden="true" />
+                    </Button>}
+                <Button aria-label="Close settings" className="fb-icon-control" onPress={onClose} {...hoverLabel("Close settings")}>
+                  <X size={18} aria-hidden="true" />
+                </Button>
               </div>
-            </Dialog>
-          </UNSAFE_RouteContext.Provider>
-        </UNSAFE_LocationContext.Provider>
-      </UNSAFE_NavigationContext.Provider>
-    </Modal>
-  </ModalOverlay>;
+            </header>
+            <div className="fb-settings-window-body">
+              <SettingsWindowHost.Provider value>
+                <SettingsWindowQuery.Provider value={searchQuery}>
+                <SettingsWindowTitle.Provider value={setPageTitle}>
+                  <RouterDepthProvider depth={depth}>
+                    <Routes>
+                      <Route path="/settings" element={<Settings />}>{settingsRouteElements()}</Route>
+                      {/* Own profile lives in the window too: the settings
+                          identity header links here, and Profile's own edit
+                          link must not close the surface mid-flow. */}
+                      <Route path="/profile" element={<Profile />} />
+                      <Route path="/profile/edit" element={<ProfileEdit />} />
+                      <Route path="*" element={<ExitToApp onExit={onExit} />} />
+                    </Routes>
+                  </RouterDepthProvider>
+                </SettingsWindowTitle.Provider>
+                </SettingsWindowQuery.Provider>
+              </SettingsWindowHost.Provider>
+            </div>
+          </Dialog>
+        </UNSAFE_RouteContext.Provider>
+      </UNSAFE_LocationContext.Provider>
+    </UNSAFE_NavigationContext.Provider>
+  </>;
+
+  if (!compact) {
+    // Desktop: the surface is still the modal it has always been, so its
+    // focus containment, outside-press dismissal and scroll lock are unchanged.
+    return <ModalOverlay isOpen onOpenChange={(next) => { if (!next) onClose(); }} isDismissable
+      className="fb-modal-backdrop fb-settings-backdrop">
+      <Modal className="fb-modal-panel fb-settings-window">{surface}</Modal>
+    </ModalOverlay>;
+  }
+
+  return <CompactSettingsLayer host={compactHost} returnFocus={returnFocus} onClose={onClose}>{surface}</CompactSettingsLayer>;
+}
+
+/**
+ * The compact window: a non-modal card drawn inside the `<main>` content box.
+ *
+ * `<main>` is `position: relative` and its box ends exactly where the bottom
+ * navigation slot begins, so `inset: 0` is the page area - the surface never
+ * paints over the bar and never becomes a fixed full-viewport backdrop. The
+ * card keeps a small gutter (CSS), so the dimmed page area outside it is a real
+ * press target; the bar stays outside the layer entirely. No `ModalOverlay` or
+ * `Modal` is mounted, so react-aria never inerts the app outside the window:
+ * the bar stays pointer-, keyboard- and screen-reader-live, and focus is not
+ * trapped.
+ *
+ * `Dialog` still supplies `role="dialog"`, the accessible name and its own
+ * initial focus. Focus returns to the opener on close unless a press already
+ * moved focus to a bar destination (closing by navigating must not yank it
+ * back).
+ */
+function CompactSettingsLayer({ host, returnFocus, onClose, children }: {
+  host: HTMLElement | null;
+  returnFocus: HTMLElement | null;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const layer = useRef<HTMLDivElement>(null);
+  // Captured by the shell at open time: once the page host is inert, the
+  // browser has already dropped focus to <body>, so reading it here would lose
+  // the opener. Direct mounts fall back to the live active element.
+  const opener = useRef<HTMLElement | null>(returnFocus);
+  useLayoutEffect(() => {
+    if (opener.current === null && document.activeElement instanceof HTMLElement) {
+      opener.current = document.activeElement;
+    }
+    if (opener.current === document.body) opener.current = null;
+    const node = layer.current;
+    // Only take focus back when nothing else has claimed it. A bar destination
+    // (or the navigation drawer) that was activated owns focus already, and
+    // restoring over it would strand a keyboard reader behind the surface. The
+    // retry covers the opener living in the page host, which is still inert
+    // during deletion; by the next frame the commit has cleared it.
+    const restore = () => {
+      const active = document.activeElement;
+      const claimedElsewhere = active !== null && active !== document.body && !node?.contains(active);
+      if (claimedElsewhere) return;
+      const target = opener.current;
+      if (target === null || !target.isConnected) return;
+      target.focus({ preventScroll: true });
+    };
+    return () => {
+      restore();
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(restore);
+    };
+  }, []);
+
+  return createPortal(
+    <div ref={layer} className="fb-settings-layer" data-compact="true">
+      {/* The scrim sits above the inert page host and below the window, so a
+          press on the dimmed page area closes without any listener inside the
+          inert host. It stops at the bar, which stays fully interactive. */}
+      <div className="fb-settings-scrim" aria-hidden="true"
+        onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }} />
+      <div className="fb-settings-window fb-settings-window-compact">{children}</div>
+    </div>,
+    host ?? document.body,
+  );
 }
 
 /**

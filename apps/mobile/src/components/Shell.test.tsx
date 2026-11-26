@@ -953,6 +953,75 @@ describe("Shell adaptive navigation", () => {
       style.remove();
     }
   });
+
+  it("keeps the bar live while the compact settings window is open, and toggles it from Settings", async () => {
+    setWidth(390);
+    storeNavLayout("bottom");
+    // A route that scrolls in <main> itself, so the lock is observable.
+    renderShell("/my");
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    fireEvent.click(within(nav).getByRole("link", { name: "Settings" }));
+    await waitFor(() => expect(screen.getByTestId("settings-window")).toBeTruthy());
+
+    // The bar is a sibling of the inert host, so it is neither hidden to
+    // assistive technology nor removed from pointer/keyboard reach.
+    expect(nav.hasAttribute("inert")).toBe(false);
+    expect(nav.getAttribute("aria-hidden")).not.toBe("true");
+    expect(nav.closest("[inert]")).toBeNull();
+
+    // Only the routed page host is inert, and its scroll is locked on <main>.
+    const main = screen.getByRole("main");
+    const host = main.firstElementChild as HTMLElement;
+    expect(host.hasAttribute("inert")).toBe(true);
+    expect(host.getAttribute("aria-hidden")).toBe("true");
+    expect(main.className).toContain("overflow-hidden");
+
+    // The bar's Settings entry toggles: it closes instead of remounting a fresh
+    // window under the reader.
+    fireEvent.click(within(nav).getByRole("link", { name: "Settings" }));
+    await waitFor(() => expect(screen.queryByTestId("settings-window")).toBeNull());
+    expect(host.hasAttribute("inert")).toBe(false);
+    expect(main.className).toContain("overflow-y-auto");
+    expect(screen.getByText("My Reports screen")).toBeTruthy();
+  });
+
+  it("closes the compact window when a bar destination moves the app location", async () => {
+    setWidth(390);
+    storeNavLayout("bottom");
+    renderShell("/");
+    fireEvent.click(screen.getByRole("link", { name: "Settings" }));
+    await waitFor(() => expect(screen.getByTestId("settings-window")).toBeTruthy());
+
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    fireEvent.click(within(nav).getByRole("link", { name: "Chats" }));
+    await waitFor(() => expect(screen.queryByTestId("settings-window")).toBeNull());
+    expect(screen.getByText("Chats screen")).toBeTruthy();
+  });
+
+  it("keeps the chosen-rail navigation control usable over the compact settings card", async () => {
+    setWidth(390);
+    stubMatchMedia(false);
+    storeNavLayout("rail");
+    render(
+      <HoverLabelProvider>
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes><Route element={<Shell />}>
+          <Route index element={<Link to="/settings/notifications">Open notification settings</Link>} />
+        </Route></Routes>
+      </MemoryRouter>
+      </HoverLabelProvider>,
+    );
+    fireEvent.click(screen.getByRole("link", { name: "Open notification settings" }));
+    await waitFor(() => expect(screen.getByTestId("settings-window")).toBeTruthy());
+
+    // In this layout the floating trigger is the whole navigation, so it must
+    // stay above the page card and replace it with the drawer.
+    const trigger = screen.getByRole("button", { name: "Open navigation" });
+    expect(trigger.getAttribute("data-settings-open")).toBe("true");
+    fireEvent.click(trigger);
+    await waitFor(() => expect(screen.queryByTestId("settings-window")).toBeNull());
+    expect(screen.getByRole("dialog", { name: "Navigation" })).toBeTruthy();
+  });
 });
 
 describe("Shell chat dock host (R19 T3)", () => {

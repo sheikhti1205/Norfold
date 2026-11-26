@@ -7,8 +7,10 @@ import { describe, expect, it } from "vitest";
  *
  * The window is a floating surface for a nav tree plus a detail pane, so it
  * needs a definite height, but not the near-full-canvas 1040x760 it used to
- * take on an ordinary laptop. These assertions pin the bounded sizes in the
- * real declarations; the phone block stays full-bleed.
+ * take on an ordinary laptop. These assertions pin the bounded desktop sizes
+ * and the compact contract: the phone surface is anchored to the page's content
+ * box (inside `<main>`), with a gutter, never a fixed full-viewport backdrop
+ * over the bottom bar.
  *
  * Static declarations only. Rendered proof at desktop and phone widths is a
  * deployed-browser check and is not claimed here.
@@ -16,6 +18,7 @@ import { describe, expect, it } from "vitest";
 type CssRule = { context: string | null; selectors: string[]; body: string };
 
 const css = readFileSync(new URL("./SettingsWindow.css", import.meta.url), "utf8");
+const COMPACT = "max-width: 599.98px";
 
 /** Rules paired with the at-rule prelude they live under, so blocks stay scoped. */
 function cssRules(source: string): CssRule[] {
@@ -53,7 +56,8 @@ function declaration(body: string, property: string): string | null {
 
 const windowRules = cssRules(css).filter(rule => rule.selectors.includes(".fb-settings-window"));
 const baseRule = windowRules.find(rule => rule.context === null);
-const phoneRule = windowRules.find(rule => rule.context?.includes("max-width: 600px"));
+const compactRules = cssRules(css).filter(rule => rule.context?.includes(COMPACT));
+const compactRule = (selector: string) => compactRules.find(rule => rule.selectors.includes(selector));
 
 describe("settings window geometry", () => {
   it("caps the floating window below the old near-full-canvas size", () => {
@@ -67,10 +71,33 @@ describe("settings window geometry", () => {
     expect(declaration(baseRule!.body, "max-height")).toBe("calc(100dvh - 48px)");
   });
 
-  it("still hands phones the whole canvas", () => {
-    expect(phoneRule).toBeTruthy();
-    expect(declaration(phoneRule!.body, "width")).toBe("100%");
-    expect(declaration(phoneRule!.body, "height")).toBe("100%");
-    expect(declaration(phoneRule!.body, "max-height")).toBe("100%");
+  it("anchors the surface to the page content box, not the viewport", () => {
+    const layer = compactRule(".fb-settings-layer");
+    expect(layer).toBeTruthy();
+    // Absolute inside <main> (position: relative): the box that ends where the
+    // bottom bar begins, so the bar is neither covered nor disabled.
+    expect(declaration(layer!.body, "position")).toBe("absolute");
+    expect(declaration(layer!.body, "inset")).toBe("0");
+    const window = compactRule(".fb-settings-window-compact");
+    expect(window).toBeTruthy();
+    // A floating card inside that box, leaving the dimmed gutter the outside
+    // press closes on. Size comes from the inset, not from the desktop width.
+    expect(declaration(window!.body, "position")).toBe("absolute");
+    expect(declaration(window!.body, "inset")).toBe("10px");
+    expect(declaration(window!.body, "width")).toBe("auto");
+    expect(declaration(window!.body, "height")).toBe("auto");
+    expect(declaration(window!.body, "max-height")).toBe("none");
+  });
+
+  it("dims the page with an in-content scrim, not a fixed backdrop", () => {
+    const scrim = compactRule(".fb-settings-scrim");
+    expect(scrim).toBeTruthy();
+    expect(declaration(scrim!.body, "position")).toBe("absolute");
+    expect(declaration(scrim!.body, "inset")).toBe("0");
+    // Every compact rule stays inside the content box.
+    expect(compactRules.length).toBeGreaterThan(0);
+    for (const rule of compactRules) {
+      expect(declaration(rule.body, "position")).not.toBe("fixed");
+    }
   });
 });

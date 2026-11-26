@@ -6,7 +6,7 @@ import { Archive, BarChart3, Bell, Bookmark, ClipboardList, Heart, Home, Menu, M
 import { Focusable, Tooltip, TooltipTrigger } from "react-aria-components";
 import { TabTapProvider, useTabTap } from "./TabTap";
 import { LiveRegion } from "./LiveRegion";
-import { MEDIUM_MAX_PX, READABLE_COLUMN_CLASS, useViewportWidth, useWideViewport, WIDE_CANVAS_CLASS } from "./responsive";
+import { MEDIUM_MAX_PX, READABLE_COLUMN_CLASS, useViewportWidth, useWideViewport, WIDE_CANVAS_CLASS, widthBand } from "./responsive";
 import { InlineRailProvider, useNavLayout } from "./navLayout";
 import { clampRailWidth, loadAppearance, RAIL_WIDTH_MAX, RAIL_WIDTH_MIN, RAIL_WIDTH_STEP, saveAppearance, type NavLayout } from "../appearance";
 import { RouteTransition } from "./RouteTransition";
@@ -119,7 +119,7 @@ const WIDE_CANVAS = ["/", "/search", "/chats", "/connections", "/my"];
 
 /** The document never scrolls: routes own the bounded viewport scroller. */
 export function Shell() {
-  const { pathname, state: locationState } = useLocation();
+  const { pathname, search, state: locationState } = useLocation();
   const width = useViewportWidth();
   const chatThread = pathname.startsWith("/chats/") || pathname.startsWith("/connections/");
   const showNav = chatThread ? width >= MEDIUM_MAX_PX : !HIDE_NAV.some((p) => pathname.startsWith(p));
@@ -165,9 +165,29 @@ export function Shell() {
   const [settingsWindow, setSettingsWindow] = useState<{ path: string; id: number } | null>(null);
   const settingsWindowId = useRef(0);
   const settingsFromDrawer = useRef(false);
-  const openSettingsWindow = useCallback((path = "/settings") => {
+  // The element the reader activated to open the window. Captured at call time,
+  // before the page host becomes inert (inert focus removal would leave only
+  // <body> to remember).
+  const settingsOpener = useRef<HTMLElement | null>(null);
+  // The compact window is portalled into `<main>`, the box that ends where the
+  // bottom bar begins. The ref is current before any window can open.
+  const mainRef = useRef<HTMLElement>(null);
+  // Read during the same render that opens the window, so the bar's Settings
+  // entry can toggle a window that is already open instead of remounting it.
+  const settingsWindowRef = useRef(settingsWindow);
+  settingsWindowRef.current = settingsWindow;
+  const openSettingsWindow = useCallback((path = "/settings", opener?: HTMLElement | null) => {
     settingsFromDrawer.current = railOpen;
+    settingsOpener.current = opener ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setRailOpen(false);
+    // The bar's Settings entry is a toggle once the window is open: creating a
+    // new {path,id} would remount and reset the surface under the reader's
+    // finger (now visible because the bar stays live on a phone).
+    if (path === "/settings" && settingsWindowRef.current !== null) {
+      settingsFromDrawer.current = false;
+      setSettingsWindow(null);
+      return;
+    }
     setSettingsWindow({ path, id: ++settingsWindowId.current });
   }, [railOpen]);
   const navigationContext = useContext(UNSAFE_NavigationContext);
@@ -280,7 +300,7 @@ export function Shell() {
       if (!path) return;
       event.preventDefault();
       event.stopPropagation();
-      openSettingsWindow(path);
+      openSettingsWindow(path, anchor instanceof HTMLElement ? anchor : null);
     };
     document.addEventListener("click", intercept, true);
     return () => document.removeEventListener("click", intercept, true);
@@ -296,6 +316,50 @@ export function Shell() {
     openSettingsWindow(settingsDeepLink);
     navigate("/", { replace: true, state: null });
   }, [settingsDeepLink, navigate, openSettingsWindow]);
+
+  // A settings link inside the window moves only the window's own memory
+  // history, so a change in the app location while the window is open is a real
+  // navigation (a bar destination, a deep link, an in-app route). Close the
+  // window then. Opening it never changes the location, so this cannot fire on
+  // open; the bar's own Settings entry is the separate toggle above. A layout
+  // effect keeps this after the deep-link effect in the same commit, whose
+  // first pass records the location instead of comparing it.
+  const lastSettingsLocation = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const key = `${pathname}${search}`;
+    const previous = lastSettingsLocation.current;
+    lastSettingsLocation.current = key;
+    if (previous === null || previous === key) return;
+    if (settingsWindowRef.current === null) return;
+    settingsFromDrawer.current = false;
+    setSettingsWindow(null);
+  }, [pathname, search]);
+
+  // The compact settings window is a non-modal surface inside the page area.
+  // Only then is the page host inert and its scroll locked: the bar is a
+  // sibling of <main> and must stay live. Desktop keeps the modal path, which
+  // handles both from document.body.
+  const compactSettings = settingsWindow !== null && widthBand(width) === "compact";
+
+  // The layer is laid out in <main>'s scroll coordinates, so a route already
+  // scrolled down would open the window off-screen. Freeze the page at its top
+  // while the window is open and put the reader back where they were when it
+  // closes on the same page. Closing through a bar destination has its own
+  // page, which starts at its top.
+  const pageScroll = useRef<{ href: string; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const main = mainRef.current;
+    if (main === null) return;
+    const href = `${pathname}${search}`;
+    if (compactSettings) {
+      pageScroll.current = { href, top: main.scrollTop };
+      main.scrollTop = 0;
+      return;
+    }
+    const saved = pageScroll.current;
+    pageScroll.current = null;
+    if (saved?.href === href) main.scrollTop = saved.top;
+  }, [compactSettings, pathname, search]);
 
   return (
     <InlineRailProvider show={inlineRail && showNav}>
@@ -335,12 +399,21 @@ export function Shell() {
           <NavOutsideBrand />
         </div>
         <main
+          ref={mainRef}
           data-canvas={wideCanvas ? "wide" : "readable"}
           className={`relative min-h-0 flex-1 ${inlineRail ? `min-w-0 ${column}` : ""} ${
-            ownsInternalScroll ? "overflow-hidden" : "overflow-y-auto"
+            ownsInternalScroll || compactSettings ? "overflow-hidden" : "overflow-y-auto"
           }`}
         >
-          <div className="flex h-full min-h-0 flex-col">
+          {/* The routed page lives in this host. On compact it is the only
+              region the settings window hides and freezes: `inert` removes it
+              from pointer, keyboard and assistive technology, and overflow is
+              locked on <main> above. The bottom bar is outside both. */}
+          <div
+            className="flex h-full min-h-0 flex-col"
+            inert={compactSettings || undefined}
+            aria-hidden={compactSettings || undefined}
+          >
             {showNav && <NavigationSetup />}
             {showNav && <RoleOfferNotice />}
             {/* One top bar per route: the route owns it (AppBar / HomeTopBar /
@@ -363,7 +436,16 @@ export function Shell() {
               aria-label="Open navigation"
               aria-haspopup="dialog"
               aria-expanded={railOpen}
-              onClick={() => setRailOpen(true)}
+              data-settings-open={compactSettings || undefined}
+              onClick={() => {
+                // The drawer is a navigation surface: opening it replaces the
+                // settings window instead of stacking under the page card.
+                // Without this the trigger is the only nav control in this
+                // layout and would stay under the card.
+                settingsFromDrawer.current = false;
+                setSettingsWindow(null);
+                setRailOpen(true);
+              }}
             >
               <Menu size={22} aria-hidden="true" />
             </button>
@@ -406,6 +488,8 @@ export function Shell() {
             navigation never unmounts it and discards a draft. */}
         <ChatDock hostOccluded={dockOccluded} bottomNavVisible={bottomNavVisible} />
         <SettingsWindow key={settingsWindow?.id} open={settingsWindow !== null} initialPath={settingsWindow?.path ?? "/settings"}
+          compactHost={mainRef.current}
+          returnFocus={settingsOpener.current}
           onClose={() => {
             setSettingsWindow(null);
             if (settingsFromDrawer.current) {

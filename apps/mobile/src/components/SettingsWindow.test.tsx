@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
@@ -44,13 +45,55 @@ vi.mock("../screens/settingsRoutes", async () => {
   };
 });
 
-afterEach(() => { cleanup(); vi.resetAllMocks(); });
+const initialWidth = window.innerWidth;
+
+afterEach(() => { cleanup(); vi.resetAllMocks(); Object.defineProperty(window, "innerWidth", { configurable: true, value: initialWidth }); });
+
+/**
+ * jsdom has no media engine, so the window reads its width from
+ * `useViewportWidth` (which starts at `window.innerWidth`). Setting the width
+ * before render is the same value the CSS block switches on.
+ */
+function setWidth(width: number) {
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+}
 
 function renderWindow(initialPath?: string) {
   const onClose = vi.fn();
   const onExit = vi.fn();
   render(<MemoryRouter initialEntries={["/"]}>
     <SettingsWindow open initialPath={initialPath} onClose={onClose} onExit={onExit} />
+  </MemoryRouter>);
+  return { onClose, onExit };
+}
+
+/**
+ * The compact mount: a real `<nav>` and a `<main>` content box around the
+ * window, with the window portalled into `<main>`. The nav stands in for the
+ * bottom bar, which is a sibling of `<main>` in the shell.
+ */
+function CompactHarness({ initialPath, onClose, onExit }: {
+  initialPath?: string;
+  onClose: () => void;
+  onExit: (path: string) => void;
+}) {
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  return <>
+    <nav aria-label="Test navigation"><button type="button">Home</button></nav>
+    <main data-testid="content" ref={setHost}>
+      <div data-testid="page-host"><p>Page behind</p></div>
+    </main>
+    {host !== null && <SettingsWindow open initialPath={initialPath} compactHost={host}
+      onClose={onClose} onExit={onExit} />}
+  </>;
+}
+
+function renderCompactWindow(initialPath?: string) {
+  setWidth(390);
+  const onClose = vi.fn();
+  const onExit = vi.fn();
+  render(<MemoryRouter initialEntries={["/"]}>
+    <CompactHarness initialPath={initialPath} onClose={onClose} onExit={onExit} />
   </MemoryRouter>);
   return { onClose, onExit };
 }
@@ -166,5 +209,71 @@ describe("settings window", () => {
     const { onExit } = renderWindow();
     fireEvent.click(screen.getByRole("link", { name: "My reports link" }));
     await waitFor(() => expect(onExit).toHaveBeenCalledWith("/my"));
+  });
+});
+
+describe("settings window on a phone", () => {
+  it("draws the surface inside the page content box, with no fixed backdrop", async () => {
+    renderCompactWindow();
+    const dialog = await screen.findByRole("dialog", { name: "Settings" });
+    // Neither react-aria modal container is mounted on compact.
+    expect(document.querySelector(".fb-modal-backdrop")).toBeNull();
+    expect(document.querySelector(".fb-settings-backdrop")).toBeNull();
+    const layer = document.querySelector(".fb-settings-layer");
+    expect(layer).toBeTruthy();
+    expect(layer!.closest("main")).toBeTruthy();
+    expect(layer!.parentElement).toBe(screen.getByTestId("content"));
+    expect(document.querySelector(".fb-settings-scrim")).toBeTruthy();
+    // It is a dialog, not a modal one: focus is free to reach the bar.
+    expect(dialog.getAttribute("aria-modal")).not.toBe("true");
+  });
+
+  it("leaves the navigation reachable and announced while the window is open", async () => {
+    renderCompactWindow();
+    await screen.findByRole("dialog", { name: "Settings" });
+    const nav = screen.getByRole("navigation", { name: "Test navigation" });
+    // No ariaHideOutside/inert walk from the window touches anything outside it.
+    expect(nav.hasAttribute("inert")).toBe(false);
+    expect(nav.getAttribute("aria-hidden")).not.toBe("true");
+    expect(nav.closest("[inert]")).toBeNull();
+  });
+
+  it("closes on a press on the dimmed page area", async () => {
+    const { onClose } = renderCompactWindow();
+    await screen.findByRole("dialog", { name: "Settings" });
+    fireEvent.pointerDown(document.querySelector(".fb-settings-scrim")!);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it("closes on Escape without the modal layer", async () => {
+    const { onClose } = renderCompactWindow();
+    await screen.findByRole("dialog", { name: "Settings" });
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it("starts focus inside the window and gives it back to the opener", async () => {
+    setWidth(390);
+    function FocusHarness() {
+      const [open, setOpen] = useState(false);
+      const [host, setHost] = useState<HTMLElement | null>(null);
+      return <>
+        <button type="button" onClick={() => setOpen(true)}>Open settings</button>
+        <nav aria-label="Test navigation"><button type="button">Home</button></nav>
+        <main ref={setHost}><p>Page behind</p></main>
+        {host !== null && <SettingsWindow open={open} compactHost={host}
+          onClose={() => setOpen(false)} onExit={() => {}} />}
+      </>;
+    }
+    render(<MemoryRouter initialEntries={["/"]}><FocusHarness /></MemoryRouter>);
+    const opener = screen.getByRole("button", { name: "Open settings" });
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = await screen.findByRole("dialog", { name: "Settings" });
+    // Dialog carries its own mount focus; nothing outside the window is hidden.
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Settings" })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(opener));
   });
 });

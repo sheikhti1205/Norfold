@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Search, Settings as SettingsIcon } from "lucide-react";
 import { AppBar } from "../components/AppBar";
 import { GlobalSearchOverlay } from "../components/GlobalSearchOverlay";
@@ -9,16 +9,17 @@ import { SettingsWindow } from "../components/SettingsWindow";
  * Dev-only stage for the two surfaces that sit outside a screen: the app-wide
  * search overlay and the floating settings window.
  *
- * Both are `position: fixed`, so a frame inside `/__fixture` cannot show their
- * real geometry. This route is the production shell's layout in miniature: the
- * real `AppBar` outside a scrolling content pane, the one search trigger, and
- * the experiences opened from it. No auth, no network, no fixture data. It is
- * compiled out of production with `import.meta.env.DEV`, exactly like
- * `/__fixture`.
+ * Search is `position: fixed`; settings is a fixed modal above the desktop
+ * breakpoint and an in-pane card on phones, so this route keeps the production
+ * shell's shape: the real `AppBar` outside a scrolling content pane, the one
+ * search trigger, and the experiences opened from it. No auth, no network, no
+ * fixture data. It is compiled out of production with `import.meta.env.DEV`,
+ * exactly like `/__fixture`.
  */
 export function ChromeFixtureRoute() {
   const searchOpen = useGlobalSearchOpen();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
 
   // The store is module-level: leaving the stage must not leave search open for
   // the next route.
@@ -41,7 +42,7 @@ export function ChromeFixtureRoute() {
       />
     </div>
 
-    <main className="min-h-0 flex-1 overflow-y-auto px-4 py-6">
+    <main ref={mainRef} className="relative min-h-0 flex-1 overflow-y-auto px-4 py-6">
       <div className="mx-auto flex w-full max-w-[560px] flex-col gap-4">
         <p className="text-sm font-medium text-on-surface-variant">Fixture stage</p>
         <h2 className="text-xl font-semibold">Route content behind the chrome</h2>
@@ -69,6 +70,7 @@ export function ChromeFixtureRoute() {
     <SettingsWindow
       open={settingsOpen}
       initialPath="/settings/appearance"
+      compactHost={mainRef.current}
       onClose={() => setSettingsOpen(false)}
       onExit={() => setSettingsOpen(false)}
     />
