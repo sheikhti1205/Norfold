@@ -4,7 +4,7 @@
   /* Consumer accent: selection + create action follow the accent-driven
      primary tokens (Tailwind-mapped --fb-*), so they track the Appearance
      accent. Status colors (error badge, Lost/Found) are never recolored. */
-  padding: 8px 16px 12px; background: var(--fb-surface);
+  padding: 8px 16px 12px; background: transparent;
 }
 .fb-nav-row {
   display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0;
@@ -14,27 +14,16 @@
      width (every phone, portrait and landscape) nothing changes. */
   max-width: 44rem; margin-inline: auto;
 }
-/* A reader who keeps the bottom bar on a wide
-   screen gets a floating capsule, not a full-width slab. It still takes flow
-   space, so it never covers content, and the slot itself is transparent. */
+/* A reader who keeps the bottom bar on a wide screen keeps the same capsule
+   controls, not a full-width slab. The strip still takes flow space, so it
+   never covers content; only the pill and the create button paint a surface. */
 @media (min-width: 600px) {
   .fb-nav-slot[data-layout="bottom"] {
-    background: transparent;
     padding-top: 10px;
     padding-bottom: calc(14px + env(safe-area-inset-bottom));
   }
   .fb-nav-slot[data-layout="bottom"] .fb-nav-row {
     max-width: 36rem;
-    padding: 6px;
-    border: 1px solid var(--fb-outline-variant);
-    border-radius: 999px;
-    background: var(--fb-surface-container-low);
-    box-shadow: var(--shadow-md);
-  }
-  .fb-nav-slot[data-layout="bottom"] .fb-nav-pill {
-    border: 0;
-    box-shadow: none;
-    background: transparent;
   }
 }
 .fb-nav-pill {
@@ -42,7 +31,7 @@
   padding: 4px; border-radius: 999px;
   background: var(--fb-surface-container-low);
   border: 1px solid var(--fb-outline-variant);
-  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--fb-surface);
+  box-shadow: var(--shadow-md);
 }
 .fb-nav-link {
   position: relative; display: flex; flex: 1 1 0; min-width: 48px;
