@@ -401,7 +401,12 @@ body:has(#report-editor-overlay) .fb-nav-rail { display: none; }
    than a column that eats the screen. The bottom-left trigger occupies the
    place the bottom bar's pill would start from, so it never lands on top of a
    route's own header. The drawer is modal: backdrop, Escape, a destination, or
-   a route change closes it and focus returns to the trigger. */
+   a route change closes it and focus returns to the trigger.
+
+   The control is the Norfold app tile itself, not a hamburger in a disc. The
+   tile asset is opaque and self-contrasting (its own squircle field carries the
+   glyph), so it needs no plate, border or shadow to sit over a photo; hover
+   still answers with a surface fill behind the mark. */
 .fb-nav-drawer-trigger {
   position: fixed;
   inset-inline-start: max(14px, env(safe-area-inset-left));
@@ -410,13 +415,13 @@ body:has(#report-editor-overlay) .fb-nav-rail { display: none; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  border: 1px solid var(--fb-outline-variant);
-  border-radius: 50%;
-  background: var(--fb-surface-container-high);
-  color: var(--fb-on-surface);
-  box-shadow: var(--shadow-md);
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
   cursor: pointer;
 }
 .fb-nav-drawer-trigger:hover { background: var(--fb-surface-container); }
@@ -427,9 +432,11 @@ html.fb-reduce-motion .fb-nav-drawer-trigger:active { transform: none; }
    compact settings card is open it must stay above that card; tapping it closes
    the card and opens the drawer. */
 .fb-nav-drawer-trigger[data-settings-open] { z-index: 90; }
-/* The top-bar trigger performs the same job inside its route's own row. It is
-   a plain icon control, never the floating circle: the row supplies the 48px
-   height, so this only owns the hit target and the pressed feedback. */
+/* The top-bar trigger performs the same job inside its route's own row: the
+   same app tile, bare, with the row supplying the 48px height. The default
+   icon variant is a 48px round target. The brand variant sizes itself to the
+   lockup instead (mark 24 + gap 8 + wordmark + trailing 6) and keeps a 12px
+   corner so it reads as the app's leading identity, not a pill. */
 .fb-nav-drawer-inline {
   display: inline-flex;
   align-items: center;
@@ -446,6 +453,13 @@ html.fb-reduce-motion .fb-nav-drawer-trigger:active { transform: none; }
   box-shadow: none;
   position: static;
   cursor: pointer;
+}
+.fb-nav-drawer-inline[data-variant="brand"] {
+  width: auto;
+  min-width: 48px;
+  gap: 8px;
+  padding-inline: 0 6px;
+  border-radius: 12px;
 }
 .fb-nav-drawer-inline:hover { background: var(--fb-surface-container); }
 .fb-nav-drawer-inline:active { transform: scale(0.96); }

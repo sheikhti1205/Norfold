@@ -600,6 +600,9 @@ describe("Shell adaptive navigation", () => {
       act(() => observer.callback(intersection(false), observer as unknown as IntersectionObserver));
       expect(fallback.getAttribute("data-pinned")).toBe("true");
       expect(getComputedStyle(fallback).display).toBe("inline-flex");
+      // The pinned control is the app tile, not a hamburger glyph in a disc.
+      expect(fallback.querySelector("img")).toBeTruthy();
+      expect(fallback.querySelector("svg")).toBeNull();
 
       act(() => observer.callback(intersection(true), observer as unknown as IntersectionObserver));
       expect(fallback.hasAttribute("data-pinned")).toBe(false);

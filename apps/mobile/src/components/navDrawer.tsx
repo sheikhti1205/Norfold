@@ -1,12 +1,12 @@
 import { createContext, useContext, useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
-import { Menu } from "lucide-react";
+import { BrandMark } from "./BrandMark";
 
 /**
  * The shell publishes one drawer trigger so a route's own top bar can carry
- * the control beside its brand instead of the shell painting a floating circle
- * over the content. The default context is unavailable, which is why a header
- * rendered outside the shell (the dev fixture, a settings window, a test)
- * never grows a stray navigation control.
+ * the control in its own row instead of the shell painting a fallback over the
+ * content. The default context is unavailable, which is why a header rendered
+ * outside the shell (the dev fixture, a settings window, a test) never grows a
+ * stray navigation control.
  */
 export interface NavDrawerContextValue {
   available: boolean;
@@ -60,13 +60,24 @@ export function NavDrawerProvider({
   );
 }
 
+/** The drawer value, so a caller can ask `available` without rendering the control. */
+export function useNavDrawer(): NavDrawerContextValue {
+  return useContext(NavDrawerContext);
+}
+
 /** The one inline navigation control, mounted by a route's top bar. */
-export function NavDrawerButton() {
-  const { available, expanded, open, triggerRef, onInlineMount } = useContext(NavDrawerContext);
+export function NavDrawerButton({
+  variant = "icon",
+  showWordmark = true,
+}: {
+  variant?: "icon" | "brand";
+  showWordmark?: boolean;
+}) {
+  const { available, expanded, open, triggerRef, onInlineMount } = useNavDrawer();
   const buttonRef = useRef<HTMLButtonElement>(null);
   // A layout effect, not a passive one: the shell's fixed fallback must be
   // hidden before the first paint of a route that carries this control, or the
-  // rejected bottom-left circle would paint for a frame on every mount. The
+  // fallback would paint for a frame on every mount. The
   // shared shell ref is handed over here instead of through the `ref` prop:
   // AnimatePresence keeps the previous route's bar mounted through its exit
   // animation, and that later unmount would otherwise null the ref the entering
@@ -88,12 +99,16 @@ export function NavDrawerButton() {
       ref={buttonRef}
       type="button"
       className="fb-nav-drawer-inline"
+      data-variant={variant}
       aria-label="Open navigation"
       aria-haspopup="dialog"
       aria-expanded={expanded}
       onClick={open}
     >
-      <Menu size={22} aria-hidden="true" />
+      <BrandMark shape="tile" size={24} alt="" />
+      {variant === "brand" && showWordmark && (
+        <span className="fb-home-brand-name">Norfold</span>
+      )}
     </button>
   );
 }

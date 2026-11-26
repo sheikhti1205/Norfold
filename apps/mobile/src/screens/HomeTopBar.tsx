@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Search } from "lucide-react";
 import { SearchField } from "../components/SearchField";
 import { BrandMark } from "../components/BrandMark";
-import { NavDrawerButton } from "../components/navDrawer";
+import { NavDrawerButton, useNavDrawer } from "../components/navDrawer";
 import { useInlineRail } from "../components/navLayout";
 import { useHoverLabel } from "../components/HoverLabel";
 import { motionDurations, motionEasings, pressFeedback, scaleInVariants } from "../components/uiMotion";
@@ -17,19 +17,24 @@ const swap = { duration: motionDurations.fast, ease: motionEasings.out } as cons
 /**
  * Home's app bar: ONE compact row with the essential actions trailing.
  *
- * The rail's head carries the app mark at every width. While that column is
- * collapsed the shell paints the app name once, just outside the rail and
- * anchored to it, so this row does not repeat the name; with no rail in flow
- * this row is the only brand surface and keeps the full lockup (owner
- * direction 2026-11-18). The screen keeps one visually hidden `h1` so the
- * document still has its heading, and the row's height does not move when
- * search opens.
+ * The row's leading control is the Norfold brand mark itself. Where a rail is
+ * available as a drawer (the chosen side rail on a phone) that mark opens the
+ * navigation, and it is the only control there: the row shows mark plus
+ * wordmark at rest and keeps the mark alone while search owns the field. Where
+ * no drawer exists (the bottom-bar layout, a fixture, a test) the same lockup
+ * is a link home instead. The rail's own head carries the app mark at every
+ * width, and while that column is collapsed the shell paints the app name once,
+ * just outside it, anchored to it; with no rail in flow this row is the only
+ * brand surface (owner direction 2026-11-18). The screen keeps one visually
+ * hidden `h1` so the document still has its heading, and the row's height does
+ * not move when search opens.
  *
  * The search field is deliberately not resident. The row holds either the field
- * or nothing but its trailing actions, never both, so an idle Home spends its
- * vertical space on the feed; the field appears only on an explicit activation
- * and returns focus to its trigger on close. Account identity lives in the
- * profile surface, and a result count was duplicate chrome on every visit.
+ * or just the leading mark and its trailing actions, never the field and the
+ * full lockup, so an idle Home spends its vertical space on the feed; the field
+ * appears only on an explicit activation and returns focus to its trigger on
+ * close. Account identity lives in the profile surface, and a result count was
+ * duplicate chrome on every visit.
  *
  * Motion: a crossfade of the same slot at `motionDurations.fast` (150ms) — the
  * app's existing state-acknowledgement token, which matches Material's
@@ -89,10 +94,12 @@ export function HomeTopBar({
   const wasExpanded = useRef(expanded);
   // The shell publishes whether an in-flow rail is on screen. That rail's head
   // carries the mark and the shell paints the one app name just outside it, so
-  // this row must not paint a second name. With no rail (the bottom bar, or a
-  // phone where the chosen rail is a drawer) this row is the only brand surface
-  // and keeps the full lockup.
+  // this row must not paint a second name. With no rail in flow this row is the
+  // only brand surface. Where the shell also offers a drawer (the chosen rail on
+  // a phone) the mark itself is the navigation trigger; without one (the bottom
+  // bar, a fixture, a test) the lockup stays a link home.
   const inlineRail = useInlineRail();
+  const navDrawerAvailable = useNavDrawer().available;
   const showBrand = !expanded;
   const { hoverLabel } = useHoverLabel();
   useEffect(() => {
@@ -115,13 +122,14 @@ export function HomeTopBar({
         if (!(next instanceof Node) || !event.currentTarget.contains(next)) onBlur();
       }}
     >
-      {!inlineRail && <NavDrawerButton />}
-      {showBrand && !inlineRail && (
-        <Link to="/" aria-label="Norfold home" className="fb-home-brand fb-home-brand--target">
-          <BrandMark size={24} shape="tile" alt="" />
-          <span className="fb-home-brand-name">Norfold</span>
-        </Link>
-      )}
+      {!inlineRail && (navDrawerAvailable
+        ? <NavDrawerButton variant="brand" showWordmark={showBrand} />
+        : showBrand && (
+          <Link to="/" aria-label="Norfold home" className="fb-home-brand fb-home-brand--target">
+            <BrandMark size={24} shape="tile" alt="" />
+            <span className="fb-home-brand-name">Norfold</span>
+          </Link>
+        ))}
       {/* One heading is always present. The shell paints the app name while a
           rail is in flow, anchored beside the rail head; this row keeps the
           full lockup only when there is no rail. */}

@@ -2,7 +2,7 @@ import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, u
 import { Capacitor } from "@capacitor/core";
 import { Link, UNSAFE_NavigationContext, useLocation, useNavigate } from "react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { Archive, BarChart3, Bell, Bookmark, ClipboardList, Heart, Home, Menu, MessageCircle, Plus, Search, Settings as SettingsIcon, UserRound, X, type LucideIcon } from "lucide-react";
+import { Archive, BarChart3, Bell, Bookmark, ClipboardList, Heart, Home, MessageCircle, Plus, Search, Settings as SettingsIcon, UserRound, X, type LucideIcon } from "lucide-react";
 import { Focusable, Tooltip, TooltipTrigger } from "react-aria-components";
 import { TabTapProvider, useTabTap } from "./TabTap";
 import { LiveRegion } from "./LiveRegion";
@@ -526,7 +526,7 @@ export function Shell() {
               data-settings-open={compactSettings || undefined}
               onClick={openRailDrawer}
             >
-              <Menu size={22} aria-hidden="true" />
+              <BrandMark shape="tile" size={32} alt="" />
             </button>
             <AnimatePresence>
               {railOpen && (

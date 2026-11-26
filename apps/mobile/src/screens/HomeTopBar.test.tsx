@@ -92,11 +92,14 @@ describe("Home brand ownership", () => {
     );
     const row = screen.getByTestId("home-search-row");
     expect(row.className).toContain("min-h-[48px]");
+    // The mark itself is the navigation trigger: one button, and no separate
+    // home link sharing the row's leading edge.
     const button = within(row).getByRole("button", { name: "Open navigation" });
-    const brand = within(row).getByRole("link", { name: "Norfold home" });
-    // The control sits immediately before the brand and owns the shell's focus
-    // target, so closing the drawer returns focus to the visible trigger.
-    expect(button.nextElementSibling).toBe(brand);
+    expect(within(row).queryAllByRole("button", { name: "Open navigation" })).toHaveLength(1);
+    expect(within(row).queryByRole("link", { name: "Norfold home" })).toBeNull();
+    expect(button.textContent).toContain("Norfold");
+    // The control owns the shell's focus target, so closing the drawer returns
+    // focus to the visible trigger.
     expect(triggerRef.current).toBe(button);
 
     view.rerender(
@@ -104,12 +107,14 @@ describe("Home brand ownership", () => {
         <Harness expanded />
       </NavDrawerProvider>,
     );
-    // Search swaps the lockup for the field but leaves the row exactly 48px
-    // tall; the drawer control must stay mounted so the rejected floating
-    // circle never reappears at the bottom-left.
+    // Search yields the wordmark to the field but leaves the row exactly 48px
+    // tall; the mark stays mounted so the shell fallback never flashes a
+    // floating control over the feed.
     expect(row.className).toContain("min-h-[48px]");
     expect(screen.queryByRole("link", { name: "Norfold home" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Open navigation" })).toBe(button);
+    const searchingButton = screen.getByRole("button", { name: "Open navigation" });
+    expect(searchingButton).toBe(button);
+    expect(searchingButton.textContent).not.toContain("Norfold");
     expect(triggerRef.current).toBe(button);
 
     view.rerender(
