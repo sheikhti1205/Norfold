@@ -15,7 +15,7 @@
 }
 .fb-peer-icon {
   display: inline-flex; align-items: center; justify-content: center;
-  min-width: 44px; min-height: 44px; flex: none;
+  min-width: 48px; min-height: 48px; flex: none;
   border-radius: 999px; color: var(--fb-on-surface-variant);
 }
 .fb-peer-icon:hover { background: var(--fb-surface-container); }
@@ -29,7 +29,7 @@
 }
 .fb-peer-field:focus-within { border-color: var(--fb-focus); }
 .fb-peer-field textarea {
-  display: block; width: 100%; min-width: 0; min-height: 44px; max-height: 160px;
+  display: block; width: 100%; min-width: 0; min-height: 48px; max-height: 160px;
   resize: none; padding: 10px 12px; font: inherit; line-height: 1.4;
   color: inherit; background: transparent; border: 0;
   /* The component owns the textarea height inline and used to leave a blurred
@@ -50,7 +50,7 @@
 /* R19 dock composer at 320dp: the single inline row left the field about
    108 CSS px, so a 27-character draft painted as "r19 / comp" over clipped
    lines. Below 20rem the field takes the whole first row and the four actions
-   share a second row, each still a real 44px target. The DOM order stays
+   share a second row, each still a real 48px target. The DOM order stays
    attach, field, expressions, voice, Send, so tab order and accessible names do
    not move: the field is placed on row 1 and the actions auto-place after it,
    with Send held at the row's trailing edge. Above 20rem the flex row is
@@ -58,7 +58,7 @@
 @container composer (max-width: 20rem) {
   .fb-peer-composer-row {
     display: grid;
-    grid-template-columns: repeat(3, minmax(44px, auto)) minmax(44px, 1fr);
+    grid-template-columns: repeat(3, minmax(48px, auto)) minmax(48px, 1fr);
   }
   .fb-peer-field { grid-row: 1; grid-column: 1 / -1; }
   .fb-peer-send { grid-column: 4; justify-self: end; }

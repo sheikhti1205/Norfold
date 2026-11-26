@@ -287,6 +287,6 @@ it("sizes the media frame to the picture while the row keeps the useful width", 
   expect(videoFrame).toContain("margin-inline: auto;");
 
   const download = rule(".fb-chat-image-download");
-  expect(download).toContain("width: 44px;");
-  expect(download).toContain("height: 44px;");
+  expect(download).toContain("width: 48px;");
+  expect(download).toContain("height: 48px;");
 });

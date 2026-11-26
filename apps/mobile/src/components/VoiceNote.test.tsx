@@ -471,6 +471,23 @@ describe("voice-note compact and motion contract", () => {
     expect(status).not.toMatch(/position:absolute|calc\(100% - 5rem\)/);
   });
 
+  it("gives every voice control a 48px touch target", () => {
+    for (const selector of [".fb-chat-voice-toggle", ".fb-chat-voice-rate", ".fb-voice-panel-preview"]) {
+      const control = ruleBody(selector) ?? "";
+      expect(control).toMatch(/min-width:48px/);
+      expect(control).toMatch(/min-height:48px/);
+    }
+    for (const selector of [
+      ".fb-chat-voice-state button",
+      ".fb-voice-panel-actions button",
+      ".fb-chat-voice-draft button",
+    ]) {
+      const control = ruleBody(selector) ?? "";
+      expect(control).toMatch(/min-width:48px/);
+      expect(control).toMatch(/min-height:48px/);
+    }
+  });
+
   it("pulses the last-minute warning once, not on a loop, and holds the bar still under reduced motion", () => {
     expect(css).toContain("@media (prefers-reduced-motion:no-preference) { .fb-voice-panel-remaining { animation:fb-voice-warning .4s var(--ease-fb) 1; }");
     expect(css).toContain("@keyframes fb-voice-warning {");

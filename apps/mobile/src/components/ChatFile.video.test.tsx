@@ -554,7 +554,7 @@ describe("message frame declarations", () => {
 
   it("keeps a compact band before metadata and lets a refused file grow", () => {
     const pending = block('.fb-chat-video-frame[data-active="true"][data-pending="true"]');
-    expect(pending).toContain("height: 144px;");
+    expect(pending).toContain("height: 152px;");
     expect(pending).toContain("aspect-ratio: auto;");
 
     const failed = block('.fb-chat-video-frame[data-active="true"]:has(.fb-vp-error)');
@@ -567,12 +567,12 @@ describe("message frame declarations", () => {
     expect(block('.fb-chat-video-frame[data-active="true"]:has(.fb-vp-error) .fb-vp-error'))
       .toContain("position: static;");
     expect(block('.fb-chat-video-frame[data-active="true"]:has(.fb-vp-error) .fb-vp-stage'))
-      .toContain("padding-block-end: 56px;");
+      .toContain("padding-block-end: 60px;");
     expect(block('.fb-chat-video-frame[data-active="true"]:has(.fb-vp-error) .fb-vp-track'))
       .toContain("display: none;");
   });
 
-  it("lets the album tile fill its cell with a 44px focusable play target", () => {
+  it("lets the album tile fill its cell with a 48px focusable play target", () => {
     const tile = block(".fb-chat-video-tile");
     expect(tile).toContain("width: 100%;");
     expect(tile).toContain("height: 100%;");
@@ -581,8 +581,8 @@ describe("message frame declarations", () => {
     expect(tile).toContain("border-radius: inherit;");
 
     const button = block(".fb-chat-video-tile-button");
-    expect(button).toContain("min-width: 44px;");
-    expect(button).toContain("min-height: 44px;");
+    expect(button).toContain("min-width: 48px;");
+    expect(button).toContain("min-height: 48px;");
     expect(block(".fb-chat-video-tile-button:focus-visible")).toContain("var(--fb-focus)");
   });
 });

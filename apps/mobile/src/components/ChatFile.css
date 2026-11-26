@@ -36,7 +36,7 @@
   align-items: center;
   gap: 4px;
   flex: none;
-  min-height: 40px;
+  min-height: 48px;
   padding-inline: 10px;
   border-radius: 999px;
   background: var(--fb-surface-container-high);
@@ -112,7 +112,7 @@
   justify-content: center;
   gap: 5px;
   min-width: 0;
-  min-height: 44px;
+  min-height: 48px;
   padding: 0 6px;
   border-radius: 8px;
   background: transparent;
@@ -171,10 +171,10 @@
   margin-inline: auto;
   aspect-ratio: var(--fb-chat-video-ratio);
   max-height: min(30rem, 80vh);
-  /* The transport is 100px tall (44px seek, 44px controls, bar padding). An
+  /* The transport is 108px tall (48px seek, 48px control row, bar padding). An
      extreme wide source would otherwise make the frame shorter than its own
      controls; the floor keeps them inside while contain keeps every pixel. */
-  min-height: 100px;
+  min-height: 108px;
   background: #000;
 }
 /* No ratio exists until this source's own metadata arrives, and the file name
@@ -183,14 +183,14 @@
    portrait; the same <video> element is already mounted inside it. */
 .fb-chat-video-frame[data-active="true"][data-pending="true"] {
   width: 100%;
-  height: 144px;
+  height: 152px;
   max-height: none;
   aspect-ratio: auto;
 }
-/* The band itself is the loading state, so the spinner sits in the 44px above
-   the 100px transport instead of on its seek rail. */
+/* The band itself is the loading state, so the spinner sits in the loading
+   band above the 108px transport instead of on its seek rail. */
 .fb-chat-video-frame[data-active="true"][data-pending="true"] .fb-vp-loading {
-  inset-block-end: 100px;
+  inset-block-end: 108px;
 }
 /* A refused file still needs room for its message and Download even though no
    ratio ever arrived. Here the frame takes its height from that content: the
@@ -207,7 +207,7 @@
 .fb-chat-video-frame[data-active="true"]:has(.fb-vp-error) .fb-vp--inline { position: static; }
 .fb-chat-video-frame[data-active="true"]:has(.fb-vp-error) .fb-vp-stage {
   position: static;
-  padding-block-end: 56px;
+  padding-block-end: 60px;
 }
 .fb-chat-video-frame[data-active="true"]:has(.fb-vp-error) .fb-vp-video {
   position: absolute;
@@ -236,8 +236,8 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   background: var(--fb-primary);
   box-shadow: var(--shadow-sm);
@@ -302,8 +302,8 @@
   gap: 6px;
   width: 100%;
   height: 100%;
-  min-width: 44px;
-  min-height: 44px;
+  min-width: 48px;
+  min-height: 48px;
   padding: 6px;
   border: 0;
   border-radius: inherit;
@@ -366,8 +366,8 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   background: var(--fb-primary);
   color: var(--fb-on-primary);
@@ -394,7 +394,7 @@
 }
 .fb-chat-audio-size { flex: none; font-size: 0.6875rem; color: var(--fb-on-surface-variant); }
 .fb-chat-audio-time { font-size: 0.6875rem; font-variant-numeric: tabular-nums; color: var(--fb-on-surface-variant); }
-.fb-chat-audio-track { position: relative; display: flex; align-items: center; height: 18px; }
+.fb-chat-audio-track { position: relative; display: flex; align-items: center; height: 48px; }
 .fb-chat-audio-rail,
 .fb-chat-audio-buffered,
 .fb-chat-audio-played {
@@ -410,7 +410,7 @@
 .fb-chat-audio-seek {
   position: relative;
   width: 100%;
-  height: 18px;
+  height: 48px;
   margin: 0;
   appearance: none;
   -webkit-appearance: none;
@@ -434,8 +434,8 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 48px;
+  height: 48px;
   border-radius: 999px;
   color: var(--fb-on-surface-variant);
   background: transparent;
@@ -471,15 +471,15 @@ html.fb-reduce-motion .fb-chat-video-spin { animation-duration: 2.4s; }
   min-width: 0;
 }
 .fb-chat-image .fb-chat-file { width: 100%; max-width: 100%; }
-/* Both actions in this row share the 44px house target. */
-.fb-chat-image .fb-chat-file-action { min-height: 44px; }
+/* Both actions in this row share the 48px house target. */
+.fb-chat-image .fb-chat-file-action { min-height: 48px; }
 .fb-chat-image-actions { display: flex; flex: none; align-items: center; gap: 4px; }
 .fb-chat-image-download {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   flex: none;
   border-radius: 999px;
   background: transparent;

@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
  * 108 CSS px wide, so a 27-character draft painted as "r19 / comp" over clipped
  * lines. jsdom has no container queries and no layout engine, so this file
  * pins the declared mechanism only: below 20rem the field owns the whole first
- * row, the actions keep four real 44px slots on a second row, Send sits at the
+ * row, the actions keep four real 48px slots on a second row, Send sits at the
  * trailing edge, the wide flex row and the documented DOM order are unchanged,
  * and the field's over-cap draft stays scrollable instead of hidden. Rendered
  * geometry remains a deployed-browser acceptance item, not a claim from here.
@@ -73,16 +73,16 @@ describe("peer composer narrow container layout", () => {
     expect(row).not.toMatch(/border|background|box-shadow/);
   });
 
-  it("keeps four 44px action slots with Send at the trailing edge", () => {
+  it("keeps four 48px action slots with Send at the trailing edge", () => {
     const row = body(".fb-peer-composer-row", narrow);
-    expect(row).toContain("grid-template-columns: repeat(3, minmax(44px, auto)) minmax(44px, 1fr);");
+    expect(row).toContain("grid-template-columns: repeat(3, minmax(48px, auto)) minmax(48px, 1fr);");
     const send = body(".fb-peer-send", narrow);
     expect(send).toContain("grid-column: 4;");
     expect(send).toContain("justify-self: end;");
-    // Every action keeps the base 44px target; the old 40px shrink is gone.
+    // Every action keeps the base 48px target; the old 40px shrink is gone.
     const icon = body(".fb-peer-icon", wide);
-    expect(icon).toContain("min-width: 44px;");
-    expect(icon).toContain("min-height: 44px;");
+    expect(icon).toContain("min-width: 48px;");
+    expect(icon).toContain("min-height: 48px;");
     expect(narrow).not.toMatch(/min-(?:width|height):\s*\d+px/);
     expect(narrow).not.toMatch(/min-width:\s*40px/);
   });
@@ -103,6 +103,7 @@ describe("peer composer narrow container layout", () => {
 
   it("keeps an over-cap draft scrollable instead of hidden", () => {
     const textarea = body(".fb-peer-field textarea", wide);
+    expect(textarea).toContain("min-height: 48px;");
     expect(textarea).toContain("max-height: 160px;");
     // The component sets `overflow-y: hidden` inline while blurred; the
     // stylesheet has to outrank that inline value or the draft stays clipped.

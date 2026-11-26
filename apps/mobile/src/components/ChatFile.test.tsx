@@ -412,7 +412,7 @@ describe("document surface declarations", () => {
     expect(fileRow).toContain("padding: 10px 12px;");
   });
 
-  it("wraps a long filename and gives both actions equal 44px targets", () => {
+  it("wraps a long filename and gives both actions equal 48px targets", () => {
     const name = rule(".fb-chat-document-name");
     expect(name).toContain("overflow-wrap: anywhere;");
     expect(name).toContain("word-break: normal;");
@@ -424,7 +424,21 @@ describe("document surface declarations", () => {
     expect(actions).toContain("border-top: 1px solid color-mix(in srgb, currentColor 16%, transparent);");
 
     const action = rule(".fb-chat-document-action");
-    expect(action).toContain("min-height: 44px;");
+    expect(action).toContain("min-height: 48px;");
     expect(action).toContain("background: transparent;");
+  });
+
+  it("keeps the file row and audio actions at 48px", () => {
+    expect(rule(".fb-chat-file-action")).toContain("min-height: 48px;");
+    const play = rule(".fb-chat-audio-play");
+    expect(play).toContain("width: 48px;");
+    expect(play).toContain("height: 48px;");
+    // The rail stays thin because the input, not the painted line, is the target.
+    const track = rule(".fb-chat-audio-track");
+    expect(track).toContain("height: 48px;");
+    expect(rule(".fb-chat-audio-seek")).toContain("height: 48px;");
+    const save = rule(".fb-chat-audio-save");
+    expect(save).toContain("width: 48px;");
+    expect(save).toContain("height: 48px;");
   });
 });
