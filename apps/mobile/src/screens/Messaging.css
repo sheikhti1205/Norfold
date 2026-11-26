@@ -631,12 +631,30 @@ a.fb-chat-context:hover, a.fb-chat-context:focus-visible { text-decoration:under
 .fb-chat-location:hover { background:color-mix(in srgb, currentColor 8%, transparent); }
 .fb-chat-location:active { background:color-mix(in srgb, currentColor 12%, transparent); }
 .fb-chat-location-copy, .fb-chat-location-copy > span { display:block; min-width:0; }
-/* The sheet: one map, one coordinate line, two actions. */
-.fb-chat-location-sheet { display:flex; flex-direction:column; gap:.35rem; }
+/* The sheet: one map, one coordinate line, two actions. It is a container so
+   the action row measures the space it actually has — the same sheet is 288 px
+   of content inside a 320 px phone and 416 px on desktop — instead of asking
+   the viewport, which the sheet's own width cap already ignores. */
+.fb-chat-location-sheet { display:flex; flex-direction:column; gap:.35rem; container-type:inline-size; }
 .fb-chat-location-sheet p { margin:0; }
 .fb-chat-location-sheet .fb-chat-location-coords { margin-top:.45rem; font-size:.9rem; font-variant-numeric:tabular-nums; }
-.fb-chat-location-actions { display:flex; gap:.5rem; padding-top:.75rem; }
-.fb-chat-location-actions .fb-surface-button { flex:1 1 0; gap:.4rem; }
+/* Two equal columns while both labels fit, and each label is one line that is
+   never ellipsised or shrunk. `nowrap` plus `flex-wrap` is the backstop: if a
+   different font or a wider text scale makes a label outgrow the measured
+   requirement, the row stacks rather than breaking the words or spilling. */
+.fb-chat-location-actions { display:flex; flex-wrap:wrap; gap:.5rem; padding-top:.75rem; }
+.fb-chat-location-actions .fb-surface-button { flex:1 1 0; gap:.4rem; white-space:nowrap; }
+/* Below the row's own requirement the two actions become full-width rows
+   (Directions, then Open in Maps), still on the shared 48 px floor. The
+   threshold is that requirement, not a device breakpoint: the 98 px is two
+   16 px paddings plus two 17 px icons and the 12.1rem is both 6.16em labels
+   (.875rem type) plus the .4rem icon gaps and the .5rem column gap, so it
+   follows the reader's text scale. A 320 px sheet holds 288 px of content and
+   a 360 px sheet holds 328 px. */
+@container (max-width:calc(98px + 12.1rem)) {
+  .fb-chat-location-actions { flex-direction:column; }
+  .fb-chat-location-actions .fb-surface-button { flex:0 0 auto; width:100%; }
+}
 .fb-chat-location-actions :is(button,a):focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }
 .fb-chat-context-banner { display:flex; align-items:center; flex-wrap:wrap; gap:.25rem .75rem; margin:0;
   padding:.25rem .8rem; font-size:.8rem; color:var(--fb-on-surface-variant); }
