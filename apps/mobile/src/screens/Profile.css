@@ -152,7 +152,7 @@
 .fb-profile-name-field input {
   flex: 1;
   min-width: 0;
-  min-height: 44px;
+  min-height: 48px;
   padding: 0.35rem 0.75rem;
   border: 1px solid var(--fb-outline-variant);
   border-radius: 0.75rem;
@@ -170,6 +170,7 @@
 
 .fb-profile-name-save,
 .fb-profile-name-cancel {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -179,6 +180,18 @@
   border: 0;
   border-radius: 999px;
   cursor: pointer;
+}
+
+/* The 36px buttons keep their size. The 48px row (the input sets it) allows
+   the full 6px vertical expansion; 6px each side would overlap the input and
+   each other across the 4px field gap, so horizontal growth stops at 2px and
+   the hit area is 40x48. */
+.fb-profile-name-save::after,
+.fb-profile-name-cancel::after {
+  content: "";
+  position: absolute;
+  inset: -6px -2px;
+  border-radius: inherit;
 }
 
 .fb-profile-name-save {

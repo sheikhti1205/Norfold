@@ -44,6 +44,7 @@
 .fb-search-result-title { font-weight:600; }
 .fb-search-result-meta, .fb-search-result-note { font-size:.75rem; color:var(--fb-on-surface-variant); }
 .fb-search-result-banner { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.fb-search-result-banner button { min-height:48px; min-width:48px; }
 .fb-search-result-skeleton-row { display:flex; align-items:center; gap:10px; min-height:52px; }
 .fb-search-result-skeleton-thumb { width:36px; height:36px; border-radius:8px; background:var(--fb-surface-container-high); }
 .fb-search-result-skeleton-copy { display:flex; flex-direction:column; gap:6px; flex:1; }
