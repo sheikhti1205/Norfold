@@ -24,6 +24,7 @@ describe('cold-launch preservation boundary',()=>{
     f.prepare.mockRejectedValue(new Error('synthetic private stored state'));
     await import('./main');
     await waitFor(()=>expect(document.querySelector('button')?.textContent).toBe('Try again'));
+    expect(document.querySelector('button')!.className).toContain('min-h-12');
     expect(document.body.textContent).toContain('Your saved data has not been cleared');
     expect(document.body.textContent).not.toContain('synthetic private');
     expect(document.documentElement.style.getPropertyValue('--fb-surface')).not.toBe('');
