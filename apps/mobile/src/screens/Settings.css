@@ -239,7 +239,7 @@ a.fb-settings-profile:hover {
 }
 
 .fb-settings-nested-page-header { display:flex; align-items:center; gap:.5rem; min-height:3.5rem; }
-.fb-settings-nested-page-header button { display:grid; place-items:center; width:44px; height:44px; cursor:pointer; }
+.fb-settings-nested-page-header button { display:grid; place-items:center; width:48px; height:48px; cursor:pointer; }
 .fb-settings-nested-page-header h2 { font-size:1.125rem; font-weight:600; }
 .fb-settings-nested-page-header button:focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }
 

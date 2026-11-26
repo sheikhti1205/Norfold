@@ -227,7 +227,7 @@ function ScopedFeedbackForm() {
             <fieldset aria-busy={ratingBusy} className="flex flex-wrap gap-1">
               <legend className="sr-only">Rate your experience with Norfold</legend>
               {[1, 2, 3, 4, 5].map((score) => (
-                <label key={score} className="flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center gap-1 text-sm text-on-surface">
+                <label key={score} className="flex min-h-[48px] min-w-[48px] cursor-pointer items-center justify-center gap-1 text-sm text-on-surface">
                   <input type="radio" name="app-rating" value={score} aria-label={`${score} out of 5`}
                     checked={(pendingScore ?? rating.myScore) === score} onChange={() => setPendingScore(score)}
                     onClick={() => void saveRating(score)} className="accent-primary" />
@@ -243,7 +243,7 @@ function ScopedFeedbackForm() {
           {ratingNotice && <p className="text-sm text-on-surface-variant">{ratingNotice}</p>}
           {ratingError && <div role="alert" className="text-sm text-error">
             <p>{ratingError === "load" ? "Could not load ratings." : "Could not save your rating."}</p>
-            <button type="button" className="min-h-[44px] underline" onClick={() => {
+            <button type="button" className="min-h-[48px] underline" onClick={() => {
               if (ratingError === "load") void loadRating();
               else if (pendingScore !== null) void saveRating(pendingScore);
             }}>Retry rating</button>
@@ -318,7 +318,7 @@ function ScopedFeedbackForm() {
       >
         {historyError && <div role="alert" data-testid="feedback-history-error">
           <p>{historyError}</p>
-          <button type="button" className="min-h-[44px] px-3" onClick={() => void loadMine()}>Retry feedback history</button>
+          <button type="button" className="min-h-[48px] px-3" onClick={() => void loadMine()}>Retry feedback history</button>
         </div>}
         {!historyError && mine === null ? (
           <p role="status" className="fb-settings-row-description">

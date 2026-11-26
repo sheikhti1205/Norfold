@@ -117,7 +117,7 @@ function ScopedBlockedUsers() {
             {unavailable}
           </p>
         ) : null}
-        {(error || unavailable) && <button type="button" className="min-h-[44px] px-3" onClick={() => void load()}>Retry blocked accounts</button>}
+        {(error || unavailable) && <button type="button" className="min-h-[48px] px-3" onClick={() => void load()}>Retry blocked accounts</button>}
 
         {!error && !unavailable && rows === null ? (
           <p role="status" className="fb-settings-row-description">

@@ -74,7 +74,7 @@
   color: var(--fb-on-surface-variant);
 }
 .fb-account-password input {
-  min-height: 44px;
+  min-height: 48px;
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--fb-outline);
   border-radius: 0.7rem;

@@ -12,7 +12,7 @@ export function UpdateChanges({ features, context }: { features: readonly Featur
       return <li key={feature.id} className="text-sm text-on-surface-variant">
         <p>{feature.summary}</p>
         {availability.kind === "available"
-          ? <Link className="inline-flex min-h-11 items-center underline underline-offset-4" to={availability.route}>
+          ? <Link className="inline-flex min-h-12 items-center underline underline-offset-4" to={availability.route}>
             {destinationFor(feature.destinationId)?.title}
           </Link>
           : <p className="mt-1 text-xs">{availability.reason === "platform" || (availability.reason === "build" && context.buildGitSha.trim() !== "")

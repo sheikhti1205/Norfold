@@ -370,7 +370,7 @@ function AccountNotificationSettings() {
                   type="button"
                   disabled={busy}
                   onClick={() => void openSystemSettings()}
-                  className="mt-2 inline-flex min-h-[44px] items-center rounded-full bg-on-surface px-4 text-sm font-medium text-surface disabled:opacity-60"
+                  className="mt-2 inline-flex min-h-[48px] items-center rounded-full bg-on-surface px-4 text-sm font-medium text-surface disabled:opacity-60"
                 >
                   Open notification settings
                 </button>
@@ -389,7 +389,7 @@ function AccountNotificationSettings() {
                 type="button"
                 disabled={busy}
                 onClick={() => void (permission === "denied" ? openSystemSettings() : enableDeviceNotifications())}
-                className="mt-2 inline-flex min-h-[44px] items-center rounded-full bg-on-surface px-4 text-sm font-medium text-surface disabled:opacity-60"
+                className="mt-2 inline-flex min-h-[48px] items-center rounded-full bg-on-surface px-4 text-sm font-medium text-surface disabled:opacity-60"
               >
                 {permission === "denied" ? "Open notification settings" : "Enable device notifications"}
               </button>
@@ -438,7 +438,7 @@ function AccountNotificationSettings() {
         <div>
           <p role="alert" className="px-1 pt-1 text-xs text-error">{error}</p>
           {pushOff && deviceRegistered !== false ? <button type="button" disabled={busy}
-            className="min-h-[44px] px-2 text-sm underline"
+            className="min-h-[48px] px-2 text-sm underline"
             onClick={() => void toggle("pushEnabled", false)}>Retry turning off alerts</button> : null}
         </div>
       ) : null}

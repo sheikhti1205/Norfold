@@ -12,7 +12,7 @@ import type { ModelRecord } from "../services/ai/providerContract";
 import { CLOUD_PROVIDERS, CLOUD_PROVIDER_LABELS, loadCloudModelPreferences, loadUnresolvedLegacyModelId, sameCloudModel, saveCloudModelDefault, toggleCloudFavorite, type CloudModel, type CloudProvider } from "../services/ai/cloudModelPreferences";
 
 export const CLOUD_COST_COPY = "Charges may apply according to your provider account and selected model.";
-const fieldClass = "min-h-[44px] min-w-0 w-full rounded-m3-sm border border-outline bg-surface px-3 text-sm text-on-surface";
+const fieldClass = "min-h-[48px] min-w-0 w-full rounded-m3-sm border border-outline bg-surface px-3 text-sm text-on-surface";
 /**
  * A provider that never answers must not strand this screen on "Loading
  * models…" forever: the list call is raced against this bound, and Refresh
@@ -156,8 +156,8 @@ function AccountModelPicker({ accountId, selected, onSelect, listModels }: Cloud
       const isDefault = sameCloudModel(prefs.defaultModel, model);
       return <li key={`${provider}:${model.modelId}`} className="flex min-w-0 items-center gap-2 py-2">
         <div className="min-w-0 flex-1"><p className="break-words text-sm font-medium">{title}</p><p className="text-xs text-on-surface-variant">{[isDefault ? "Default" : null, prefs.lastUsed.some((item) => sameCloudModel(item, model)) ? "Last used" : null, favorite ? "Favorite" : null].filter(Boolean).join(" · ")}</p></div>
-        <button type="button" className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full" aria-label={`Favorite ${title}`} aria-pressed={favorite} onClick={() => { try { setPrefs(toggleCloudFavorite(accountId, model)); } catch { setError("Couldn’t save favorites on this device."); } }} {...hoverLabel(favorite ? "Remove favorite" : "Add favorite")}><Star size={18} fill={favorite ? "currentColor" : "none"} aria-hidden /></button>
-        <button type="button" className="min-h-[44px] shrink-0 rounded-full px-2 text-xs font-medium underline" aria-label={onSelect ? `Use ${title}` : `Set ${title} as default`} aria-pressed={sameCloudModel(selected ?? prefs.defaultModel, model)} onClick={() => choose(model, title)}>{onSelect ? "Use" : isDefault ? "Default" : "Set default"}</button>
+        <button type="button" className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-full" aria-label={`Favorite ${title}`} aria-pressed={favorite} onClick={() => { try { setPrefs(toggleCloudFavorite(accountId, model)); } catch { setError("Couldn’t save favorites on this device."); } }} {...hoverLabel(favorite ? "Remove favorite" : "Add favorite")}><Star size={18} fill={favorite ? "currentColor" : "none"} aria-hidden /></button>
+        <button type="button" className="min-h-[48px] shrink-0 rounded-full px-2 text-xs font-medium underline" aria-label={onSelect ? `Use ${title}` : `Set ${title} as default`} aria-pressed={sameCloudModel(selected ?? prefs.defaultModel, model)} onClick={() => choose(model, title)}>{onSelect ? "Use" : isDefault ? "Default" : "Set default"}</button>
       </li>;
     })}</ul>
     <form className="flex flex-col gap-2" onSubmit={(event) => { event.preventDefault(); const id = manual.trim(); if (id !== "") choose({ provider, modelId: id }, id); }}>

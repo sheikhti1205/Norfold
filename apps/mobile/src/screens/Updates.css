@@ -58,7 +58,7 @@
   display: flex;
   width: fit-content;
   align-items: center;
-  min-height: 44px;
+  min-height: 48px;
   margin-top: 0.125rem;
   color: var(--fb-primary);
   font-weight: 500;

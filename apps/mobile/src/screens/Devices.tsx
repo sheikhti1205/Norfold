@@ -127,7 +127,7 @@ export function Devices() {
           </p>
         ) : null}
         {error ? (
-          <button type="button" className="min-h-[44px] px-3 text-sm text-on-surface" onClick={() => void load()}>
+          <button type="button" className="min-h-[48px] px-3 text-sm text-on-surface" onClick={() => void load()}>
             Retry devices
           </button>
         ) : null}

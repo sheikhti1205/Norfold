@@ -76,7 +76,7 @@ function MessagingPrivacySession({ accountId }: { accountId: string }) {
     {busy && <p role="status" className="text-sm text-on-surface-variant">Saving…</p>}
     {saved && <p role="status" className="text-sm text-on-surface-variant">Settings saved.</p>}
     {error && <div><p role="alert" className="text-sm text-error">{error}</p>
-      <button type="button" className="min-h-[44px] px-2 underline" disabled={busy} onClick={() => { setSaved(false); setAttempt((value) => value + 1); }}>Reload settings</button></div>}
+      <button type="button" className="min-h-[48px] px-2 underline" disabled={busy} onClick={() => { setSaved(false); setAttempt((value) => value + 1); }}>Reload settings</button></div>}
     <BackupSettings />
     <MediaSettings />
   </SettingsPage>;

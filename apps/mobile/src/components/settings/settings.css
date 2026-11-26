@@ -185,10 +185,10 @@ a.fb-settings-row:focus-visible, button.fb-settings-row:focus-visible {
 .fb-switch-track[data-checked="true"] { background: var(--fb-control-active); border-color: var(--fb-control-active); }
 .fb-switch-track[data-checked="true"] .fb-switch-thumb { transform: translateX(18px); background: var(--fb-on-primary); color: var(--fb-primary); }
 .fb-settings-search-field { display: flex; align-items: center; gap: 0.625rem; min-height: 3rem; padding-inline: 0.875rem 0.25rem; border: 1px solid var(--fb-outline-variant); border-radius: 0.875rem; background: var(--fb-surface-container); color: var(--fb-on-surface-variant); }
-.fb-settings-search-field input { width: 100%; min-width: 0; min-height: 2.75rem; color: var(--fb-on-surface); background: transparent; font-size: 1rem; }
+.fb-settings-search-field input { width: 100%; min-width: 0; min-height: 3rem; color: var(--fb-on-surface); background: transparent; font-size: 1rem; }
 .fb-settings-search-field input::placeholder { color: var(--fb-on-surface-variant); opacity: 1; }
 .fb-settings-search-field input::-webkit-search-cancel-button { display: none; }
-.fb-settings-search-field button { display: flex; align-items: center; justify-content: center; min-width: 2.75rem; min-height: 2.75rem; border-radius: 50%; }
+.fb-settings-search-field button { display: flex; align-items: center; justify-content: center; min-width: 3rem; min-height: 3rem; border-radius: 50%; }
 .fb-settings-search-status { margin-block: 0.75rem; font-size: 0.8125rem; color: var(--fb-on-surface-variant); }
 .fb-settings-results { list-style: none; margin: 0; padding: 0; }
 .fb-settings-results > li { position: relative; }
@@ -209,7 +209,7 @@ a.fb-settings-row:focus-visible, button.fb-settings-row:focus-visible {
 .fb-preview-grid { display: grid; gap: 0.75rem; }
 .fb-preview-grid-theme { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .fb-preview-grid-nav { grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); }
-.fb-preview-choice { position: relative; display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; min-height: 44px; text-align: center; cursor: pointer; }
+.fb-preview-choice { position: relative; display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; min-height: 48px; text-align: center; cursor: pointer; }
 .fb-preview-frame { display: flex; overflow: hidden; min-height: 3.5rem; border: 1px solid var(--fb-outline-variant); border-radius: 0.75rem; background: var(--fb-surface); }
 .fb-preview-choice[data-checked="true"] .fb-preview-frame { border-color: transparent; box-shadow: 0 0 0 2px var(--fb-primary); }
 .fb-preview-choice:has(input:focus-visible) .fb-preview-frame { outline: 2px solid var(--fb-focus); outline-offset: 4px; }

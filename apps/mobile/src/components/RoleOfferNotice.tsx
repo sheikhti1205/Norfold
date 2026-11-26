@@ -57,9 +57,9 @@ function ScopedRoleOfferNotice() {
   if(!offer)return null;
   if(accepted)return <section aria-label="Team invitation" className={cls}>
     <p ref={status} role="status" tabIndex={-1}>{title} access accepted.</p>
-    <Link to="/settings" className="inline-flex min-h-11 items-center underline">Open Settings</Link>
+    <Link to="/settings" className="inline-flex min-h-12 items-center underline">Open Settings</Link>
   </section>;
-  if(deferred)return <div className={cls}><button ref={review} type="button" className="min-h-11 underline" onClick={()=>setDeferred(false)}>Review {title} offer</button></div>;
+  if(deferred)return <div className={cls}><button ref={review} type="button" className="min-h-12 underline" onClick={()=>setDeferred(false)}>Review {title} offer</button></div>;
   return <section aria-labelledby="role-offer-title" className={cls}>
     <h2 id="role-offer-title" className="font-semibold">{title} access offered</h2>
     <p className="mt-1 text-on-surface-variant">You'll receive {title} access only after you accept. You can keep using Norfold without it.</p>
