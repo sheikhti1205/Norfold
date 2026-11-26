@@ -65,7 +65,7 @@ export function useLocalIntelligenceService(service: LocalIntelligenceService) {
   return { helper, phase, notice } as const;
 }
 
-function megabytes(bytes: number): string {
+export function megabytes(bytes: number): string {
   return `${(Math.max(0, bytes) / 1_000_000).toFixed(1)} MB`;
 }
 

@@ -4,8 +4,9 @@ import { Button } from "../components/Button";
 import { SettingsGroup, SettingsPage, SettingsRow } from "../components/settings";
 import { getApplicationAi } from "../services/ai/applicationAi";
 import type { ModelDescriptor } from "../services/ai/modelDescriptors";
+import { acquisitionBytes } from "../services/ai/modelSupply";
 import {
-  localOperationNotice, localSearchHelperView, olderGenerativeDownloads, useLocalIntelligenceService,
+  localOperationNotice, localSearchHelperView, megabytes, olderGenerativeDownloads, useLocalIntelligenceService,
   type LocalAssetAction, type LocalIntelligenceService,
 } from "../services/ai/localIntelligenceView";
 
@@ -99,7 +100,7 @@ export function LocalSearchHelperRow({ service, descriptor, phase, onRemove, des
     </div>
     <p role="status" className="text-sm text-on-surface-variant">{state}</p>
     {view && <>
-      {!view.sizeInAction && <p className="text-xs text-on-surface-variant">{view.downloadSize} download</p>}
+      {!view.sizeInAction && <p className="text-xs text-on-surface-variant">{view.downloadSize} {view.installed ? "on this device" : "download"}</p>}
       {view.transferDetail && <p className="text-xs text-on-surface-variant">{view.transferDetail}</p>}
       {status?.download === "downloading" && <progress className="w-full accent-primary" aria-label="Local search helper download progress" max={100} value={view.progress ?? undefined} />}
       {available && view.notice && <p className="text-sm text-on-surface-variant">{view.notice}</p>}
@@ -133,6 +134,34 @@ export function DownloadedModels({ service = getApplicationAi(), backTo = "/sett
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [removalKind, setRemovalKind] = useState<"helper" | "older">("helper");
   const olderDownloads = olderGenerativeDownloads(service);
+  // Storage is measured from the tools this device actually holds: the helper
+  // and any retired generative file whose own status is installed. A partial
+  // or merely-present record is not an installed tool.
+  const helperStatus = helper ? service.manager.statusOf(helper.modelId) : undefined;
+  const installedTools = [
+    ...(helper && helperStatus?.download === "installed" && helperStatus?.checksumVerified === true ? [helper] : []),
+    ...olderDownloads.filter((download) => {
+      const status = service.manager.statusOf(download.modelId);
+      return status?.download === "installed" && status?.checksumVerified === true;
+    }),
+  ];
+  const installedBytes = installedTools.map(acquisitionBytes);
+  // A summary only aggregates more than one installed tool; a single install
+  // is already stated on its own row. Nothing is claimed before the download
+  // check finishes, and an unreadable store makes no total claim either.
+  const storageSummary = phase === "checking"
+    ? null
+    : phase === "storage-unverified" || phase === "failed"
+      ? "Total storage use unavailable"
+      : installedTools.length === 0
+        ? "Nothing downloaded yet."
+        : installedTools.length === 1
+          ? null
+          : installedBytes.some((bytes) => bytes <= 0)
+            // An installed tool with no pinned size makes the total unknowable;
+            // say so instead of printing a number that would understate it.
+            ? "Total storage use unavailable"
+            : `${megabytes(installedBytes.reduce((total, bytes) => total + bytes, 0))} on this device`;
   const [removing, setRemoving] = useState(false);
   const removingRef = useRef(false);
   const removalSucceeded = useRef(false);
@@ -163,9 +192,9 @@ export function DownloadedModels({ service = getApplicationAi(), backTo = "/sett
   return <>
     <div inert={confirmRemove || undefined}>
       <SettingsPage title="Downloaded models" description="Manage the local tools stored on this device." backTo={backTo} backLabel="Back to Local intelligence">
-        <div className="px-1 text-sm text-on-surface-variant">
-          <p>Total storage use unavailable</p>
-        </div>
+        {storageSummary && <div className="px-1 text-sm text-on-surface-variant">
+          <p>{storageSummary}</p>
+        </div>}
         <SettingsGroup title="Smart Search">
           <LocalSearchHelperRow service={service} descriptor={helper} phase={phase} onRemove={() => confirm("helper")} />
         </SettingsGroup>

@@ -105,17 +105,71 @@ describe("Downloaded models", () => {
   it("groups assets without fabricating storage totals or removable built-in files", async () => {
     const service = new ApplicationAiService({ android: false });
     const { container } = render(<MemoryRouter><DownloadedModels service={service} /></MemoryRouter>);
-    expect(screen.getByText("Total storage use unavailable")).toBeTruthy();
     const builtIn = screen.getByRole("region", { name: "Built-in" });
     expect(within(builtIn).getByText("Semantic text matching")).toBeTruthy();
     expect(within(builtIn).queryByRole("button")).toBeNull();
     expect(screen.getByRole("region", { name: "Smart Search" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Matching" })).toBeTruthy();
     await screen.findByText("Downloads need the Android app.");
+    // Once the check has settled, an empty device is stated honestly.
+    expect(screen.getByText("Nothing downloaded yet.")).toBeTruthy();
+    expect(screen.queryByText("Total storage use unavailable")).toBeNull();
+    expect(container.textContent).not.toMatch(/0\.0 MB/);
     expect(container.textContent).not.toMatch(/Qwen|Smol|checksum|runtime|SHA|Balanced|Best/);
     // No stale pointer to the retired generative catalogue on a clean install.
     expect(container.textContent).not.toMatch(/other on-device models|AI & models/);
     expect(container.textContent).not.toMatch(/older files may also use space/i);
+  });
+  it("leaves a single installed tool's size on its row without a summary", async () => {
+    const { service } = device();
+    await service.ready;
+    act(() => {
+      service.manager.dispatch(descriptor.modelId, { type: "QUEUE_DOWNLOAD", userInitiated: true });
+      service.manager.dispatch(descriptor.modelId, { type: "START" });
+      service.manager.dispatch(descriptor.modelId, { type: "VERIFY_START" });
+      service.manager.dispatch(descriptor.modelId, { type: "VERIFY_OK", actualSha256: descriptor.sha256 });
+    });
+    const { container } = render(<MemoryRouter><DownloadedModels service={service} /></MemoryRouter>);
+    await screen.findByText("Installed");
+    const smart = screen.getByRole("region", { name: "Smart Search" });
+    expect(within(smart).getByText("35.3 MB on this device")).toBeTruthy();
+    // One install aggregates nothing: the row states its size and no summary
+    // element is rendered at all.
+    expect(container.querySelector("div.px-1 > p")).toBeNull();
+    expect(screen.queryByText("Total storage use unavailable")).toBeNull();
+    expect(screen.queryByText("Nothing downloaded yet.")).toBeNull();
+  });
+  it("states no storage fact while the download check is still running", async () => {
+    const service = new ApplicationAiService({ android: false });
+    const { container } = render(<MemoryRouter><DownloadedModels service={service} /></MemoryRouter>);
+    // Before the check settles the screen has established nothing.
+    expect(screen.getByText("Checking downloads…")).toBeTruthy();
+    expect(container.querySelector("div.px-1 > p")).toBeNull();
+    await screen.findByText("Downloads need the Android app.");
+    expect(screen.getByText("Nothing downloaded yet.")).toBeTruthy();
+  });
+  it("describes the helper size as stored once installed and as a download before", async () => {
+    const before = device();
+    await before.service.ready;
+    act(() => { before.service.manager.dispatch(descriptor.modelId, { type: "FAIL", reason: "transfer failed" }); });
+    const first = render(<MemoryRouter><DownloadedModels service={before.service} /></MemoryRouter>);
+    const pending = screen.getByRole("region", { name: "Smart Search" });
+    expect(await within(pending).findByText("35.3 MB download")).toBeTruthy();
+    first.unmount();
+
+    const after = device();
+    await after.service.ready;
+    act(() => {
+      after.service.manager.dispatch(descriptor.modelId, { type: "QUEUE_DOWNLOAD", userInitiated: true });
+      after.service.manager.dispatch(descriptor.modelId, { type: "START" });
+      after.service.manager.dispatch(descriptor.modelId, { type: "VERIFY_START" });
+      after.service.manager.dispatch(descriptor.modelId, { type: "VERIFY_OK", actualSha256: descriptor.sha256 });
+    });
+    render(<MemoryRouter><DownloadedModels service={after.service} /></MemoryRouter>);
+    await screen.findByText("Installed");
+    const installed = screen.getByRole("region", { name: "Smart Search" });
+    expect(within(installed).getByText("35.3 MB on this device")).toBeTruthy();
+    expect(within(installed).queryByText("35.3 MB download")).toBeNull();
   });
   it("removes an unfinished download as the confirmation promises", async () => {
     const { service, files } = device();
@@ -223,6 +277,7 @@ describe("Downloaded models", () => {
     await service.ready;
     render(<MemoryRouter><DownloadedModels service={service} /></MemoryRouter>);
     await screen.findByText("Couldn't check the downloaded files on this device.");
+    expect(screen.getByText("Total storage use unavailable")).toBeTruthy();
     expect(screen.queryByText("Not downloaded")).toBeNull();
     expect(screen.queryByRole("button", { name: /download/i })).toBeNull();
   });
