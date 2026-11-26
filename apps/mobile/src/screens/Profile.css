@@ -50,6 +50,9 @@
   position: absolute;
   right: -4px;
   bottom: -4px;
+  /* Painted above the avatar and the name row so the whole hit area, not just
+     the part clear of them, receives the pointer. */
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -63,12 +66,11 @@
   text-decoration: none;
 }
 
-/* The 32px visual stays; the hit area is 48px tall (12px above, 4px below the
-   4px overhang) and stops at the name row 8px below it. */
+/* The 32px visual stays; the hit area is a full 48x48 box centred on it. */
 .fb-profile-portrait-edit::after {
   content: "";
   position: absolute;
-  inset: -12px -8px -4px;
+  inset: -8px;
   border-radius: inherit;
 }
 
@@ -422,7 +424,7 @@
   }
 
   .fb-profile-portrait-edit::after {
-    inset: -14px -9px -4px;
+    inset: -9px;
   }
 }
 
