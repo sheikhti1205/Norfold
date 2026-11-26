@@ -211,11 +211,15 @@ describe("QA I — touch-target CSS contracts (SC 2.5.8, house 44px / rows 60px)
     expect(ruleBlock(settingsCss, ".fb-settings-row")).toMatch(/min-height:\s*3\.75rem/);
   });
 
-  it("bottom-nav links and search clear keep >=44px targets", () => {
+  it("bottom-nav links and search clear keep >=48px targets", () => {
     expect(ruleBlock(navCss, ".fb-nav-link")).toMatch(/min-height:\s*48px/);
     expect(ruleBlock(navCss, ".fb-nav-link")).toMatch(/min-width:\s*44px/);
+    // The clear button is a round icon target: it must clear 48px in both axes.
     expect(ruleBlock(settingsCss, ".fb-settings-search-field button")).toMatch(
-      /min-height:\s*2\.75rem/,
+      /min-height:\s*3rem/,
+    );
+    expect(ruleBlock(settingsCss, ".fb-settings-search-field button")).toMatch(
+      /min-width:\s*3rem/,
     );
   });
 

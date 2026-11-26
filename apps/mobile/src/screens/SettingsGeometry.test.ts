@@ -62,3 +62,32 @@ describe("Settings row geometry", () => {
     expect(splitCss).toMatch(/\.fb-split-list, \.fb-split-detail \{[^}]*min-width:\s*0/);
   });
 });
+
+/**
+ * The house floor is 48px, not 44px. These read the rules the settings
+ * controls are built from, so a lowered value fails here instead of only in a
+ * browser measurement.
+ */
+describe("Settings control floors", () => {
+  function rule(css: string, selector: string): string {
+    const start = css.indexOf(`${selector} {`);
+    expect(start, selector).toBeGreaterThanOrEqual(0);
+    return css.slice(start).split("}")[0]!;
+  }
+
+  it("keeps the search field and its clear button at 48px", () => {
+    expect(rule(primitiveCss, ".fb-settings-search-field input")).toMatch(/min-height:\s*3rem/);
+    expect(rule(primitiveCss, ".fb-settings-search-field button")).toMatch(/min-height:\s*3rem/);
+    expect(rule(primitiveCss, ".fb-settings-search-field button")).toMatch(/min-width:\s*3rem/);
+  });
+
+  it("keeps picture choices at a 48px minimum", () => {
+    expect(rule(primitiveCss, ".fb-preview-choice")).toMatch(/min-height:\s*48px/);
+  });
+
+  it("keeps the nested back control 48px square", () => {
+    const back = rule(screenCss, ".fb-settings-nested-page-header button");
+    expect(back).toMatch(/width:\s*48px/);
+    expect(back).toMatch(/height:\s*48px/);
+  });
+});
