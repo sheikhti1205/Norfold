@@ -856,8 +856,10 @@ it.each([0, -1, Number.NaN])("does not invent an accuracy estimate for location 
   fireEvent.click(within(sheet).getByRole("button", { name: "Use my location once" }));
   await waitFor(() => expect(geo.request).toHaveBeenCalledTimes(1));
   await act(async () => geo.resolve(accuracy)); expect(m.location).not.toHaveBeenCalled();
-  fireEvent.click(within(sheet).getByRole("button", { name: "Confirm location" }));
-  await waitFor(() => expect(screen.queryByRole("dialog", { name: "Choose location" })).toBeNull());
+  // A conversation pin needs a usable estimate: the fix is refused, never
+  // previewed with a made-up accuracy.
+  expect(within(sheet).getByRole("alert").textContent).toMatch(/Location is unavailable/);
+  expect(within(sheet).getByRole("button", { name: "Confirm location" })).toHaveProperty("disabled", true);
   expect(within(picker).getByRole("button", { name: "Send location" })).toHaveProperty("disabled", true);
 });
 it.each(["account", "relationship", "blocked"])("drops a delayed location result after %s changes", async (change) => {

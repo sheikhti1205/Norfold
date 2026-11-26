@@ -501,6 +501,20 @@ export function MapPickerSheet({
         }
         return;
       }
+      // A conversation pin carries the fix estimate, so a fix without a
+      // usable accuracy is not a shareable pin. Unusable numbers are
+      // rejected here, never turned into a fabricated estimate.
+      const unusableAccuracy =
+        (visibility === "conversation" && outcome.accuracy === null) ||
+        (outcome.accuracy !== null &&
+          (!Number.isFinite(outcome.accuracy) ||
+            outcome.accuracy <= 0 ||
+            outcome.accuracy > 100_000));
+      if (unusableAccuracy) {
+        setGeoError(locationFailureMessage("unavailable"));
+        setGeoErrorKind("unavailable");
+        return;
+      }
       const fix: MapCenter = { lat: outcome.lat, lng: outcome.lng };
       if (isLowAccuracy(outcome.accuracy)) {
         setPendingFix(fix);
