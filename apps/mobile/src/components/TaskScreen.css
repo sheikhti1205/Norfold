@@ -8,17 +8,6 @@
   min-height: 100%;
   background: var(--fb-surface);
   color: var(--fb-on-surface);
-  /* Arrival is an opacity fade only: no panel travels across the page. */
-  animation: fb-task-screen-in 140ms var(--ease-fb, ease-out) both;
-}
-
-@keyframes fb-task-screen-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fb-task-screen { animation: none; }
 }
 
 /* The bar stays put while the body scrolls, so Back and the title are always
@@ -61,8 +50,8 @@
 .fb-task-screen-back:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; }
 
 /* A real heading, centred like the description editor's takeover bar. It is
-   focused programmatically on arrival, so the ring belongs to :focus-visible
-   only; nothing is drawn around the text just for landing here. */
+   focused programmatically on arrival so focus never lands in a field, and its
+   tabIndex of -1 keeps it out of the tab order, so nothing is drawn on it. */
 .fb-task-screen-title {
   min-width: 0;
   margin: 0;
@@ -72,12 +61,6 @@
   text-align: center;
   overflow-wrap: anywhere;
   outline: none;
-}
-
-.fb-task-screen-title:focus-visible {
-  outline: 2px solid var(--fb-focus);
-  outline-offset: 4px;
-  border-radius: var(--radius-m3-xs, 4px);
 }
 
 .fb-task-screen-actions {
