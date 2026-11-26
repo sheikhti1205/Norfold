@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
-import { useRef } from "react";
+import { createRef, useRef } from "react";
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { HomeTopBar } from "./HomeTopBar";
 import { InlineRailProvider } from "../components/navLayout";
+import { NavDrawerProvider } from "../components/navDrawer";
 
 function Harness({ expanded, inlineRail = false }: { expanded: boolean; inlineRail?: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -71,5 +72,36 @@ describe("Home brand ownership", () => {
     render(<Harness expanded />);
     expect(screen.queryByRole("link", { name: "Norfold home" })).toBeNull();
     expect(screen.getByRole("searchbox", { name: "Search posts" })).toBeTruthy();
+  });
+
+  it("puts the drawer control beside the lockup only while the lockup shows", () => {
+    const triggerRef = createRef<HTMLButtonElement>();
+    const open = () => undefined;
+    const view = render(
+      <NavDrawerProvider available expanded={false} open={open} triggerRef={triggerRef}>
+        <Harness expanded={false} />
+      </NavDrawerProvider>,
+    );
+    const row = screen.getByTestId("home-search-row");
+    const button = within(row).getByRole("button", { name: "Open navigation" });
+    const brand = within(row).getByRole("link", { name: "Norfold home" });
+    // The control sits immediately before the brand and owns the shell's focus
+    // target, so closing the drawer returns focus to the visible trigger.
+    expect(button.nextElementSibling).toBe(brand);
+    expect(triggerRef.current).toBe(button);
+
+    view.rerender(
+      <NavDrawerProvider available expanded open={open} triggerRef={triggerRef}>
+        <Harness expanded />
+      </NavDrawerProvider>,
+    );
+    expect(screen.queryByRole("button", { name: "Open navigation" })).toBeNull();
+
+    view.rerender(
+      <NavDrawerProvider available expanded={false} open={open} triggerRef={triggerRef}>
+        <Harness expanded={false} inlineRail />
+      </NavDrawerProvider>,
+    );
+    expect(screen.queryByRole("button", { name: "Open navigation" })).toBeNull();
   });
 });

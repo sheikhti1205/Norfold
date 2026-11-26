@@ -427,6 +427,37 @@ html.fb-reduce-motion .fb-nav-drawer-trigger:active { transform: none; }
    compact settings card is open it must stay above that card; tapping it closes
    the card and opens the drawer. */
 .fb-nav-drawer-trigger[data-settings-open] { z-index: 90; }
+/* The top-bar trigger performs the same job inside its route's own row. It is
+   a plain icon control, never the floating circle: the row supplies the 48px
+   height, so this only owns the hit target and the pressed feedback. */
+.fb-nav-drawer-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fb-on-surface);
+  box-shadow: none;
+  position: static;
+  cursor: pointer;
+}
+.fb-nav-drawer-inline:hover { background: var(--fb-surface-container); }
+.fb-nav-drawer-inline:active { transform: scale(0.96); }
+.fb-nav-drawer-inline:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: 2px; }
+html.fb-reduce-motion .fb-nav-drawer-inline:active { transform: none; }
+/* The route bar is 48px tall with 4px vertical padding. Pulling the 48px
+   control's block margins in keeps the bar's existing height unchanged while
+   the hit target itself stays 48px. */
+.fb-app-bar > .fb-nav-drawer-inline { margin-block: -4px; }
+/* A route's own top bar now carries the control. Only surfaces with no top bar
+   keep the fixed fallback visible. */
+.fb-app-viewport:has(.fb-nav-drawer-inline) .fb-nav-drawer-trigger { display: none; }
 /* The drawer sits above the dock and below search and modal surfaces. Its
    account popover uses the overlay depth provider in Shell.tsx. */
 .fb-nav-drawer { position: fixed; inset: 0; z-index: 65; }

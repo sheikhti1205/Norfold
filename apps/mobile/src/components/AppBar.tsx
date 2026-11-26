@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { BackButton } from "./BackButton";
+import { NavDrawerButton } from "./navDrawer";
 import { TopUtilities } from "./TopUtilities";
 import "./appBar.css";
 
@@ -58,6 +59,7 @@ export function AppBar({
   // dev fixture, a window) is likewise bare.
   return (
     <header className={`fb-app-bar ${className}`} data-testid="app-bar">
+      <NavDrawerButton />
       {backTo && <BackButton fallbackTo={backTo} label={backLabel} />}
       <div className={`fb-app-bar-title${inlineSearch ? " fb-app-bar-title-searching" : ""}`}>
         <div className="fb-app-bar-title-copy">

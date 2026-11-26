@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Search } from "lucide-react";
 import { SearchField } from "../components/SearchField";
 import { BrandMark } from "../components/BrandMark";
+import { NavDrawerButton } from "../components/navDrawer";
 import { useInlineRail } from "../components/navLayout";
 import { useHoverLabel } from "../components/HoverLabel";
 import { motionDurations, motionEasings, pressFeedback, scaleInVariants } from "../components/uiMotion";
@@ -118,10 +119,13 @@ export function HomeTopBar({
           full lockup only when there is no rail. */}
       <h1 className="sr-only">Norfold</h1>
       {showBrand && !inlineRail && (
-        <Link to="/" aria-label="Norfold home" className="fb-home-brand fb-home-brand--target">
-          <BrandMark size={24} shape="tile" alt="" />
-          <span className="fb-home-brand-name">Norfold</span>
-        </Link>
+        <>
+          <NavDrawerButton />
+          <Link to="/" aria-label="Norfold home" className="fb-home-brand fb-home-brand--target">
+            <BrandMark size={24} shape="tile" alt="" />
+            <span className="fb-home-brand-name">Norfold</span>
+          </Link>
+        </>
       )}
       <AnimatePresence initial={false} mode="popLayout">
         {expanded ? (

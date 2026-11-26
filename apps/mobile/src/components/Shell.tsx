@@ -13,6 +13,7 @@ import { RouteTransition } from "./RouteTransition";
 import { requestHistorySuppression } from "./backNavigation";
 import { NavigationSetup } from "./NavigationSetup";
 import { RoleOfferNotice } from "./RoleOfferNotice";
+import { NavDrawerProvider } from "./navDrawer";
 import { AccountMenu } from "./AccountMenu";
 import { BrandMark } from "./BrandMark";
 import { NavOutsideBrand } from "./NavOutsideBrand";
@@ -136,11 +137,19 @@ export function Shell() {
   const railDrawer = rail && !wideViewport;
   const inlineRail = rail && !railDrawer;
   const [railOpen, setRailOpen] = useState(false);
+  // A route's top bar can mount the inline drawer control while the shell's
+  // fixed fallback stays in the tree for surfaces that have no top bar. The
+  // inline one is what the reader sees, so it owns `railTrigger`; the fallback
+  // keeps its own node so neither ref can overwrite the other's focus target.
   const railTrigger = useRef<HTMLButtonElement>(null);
+  const railFallbackTrigger = useRef<HTMLButtonElement>(null);
+  const focusRailTrigger = useCallback(() => {
+    (railTrigger.current ?? railFallbackTrigger.current)?.focus({ preventScroll: true });
+  }, []);
   const closeRail = useCallback((restoreFocus = true) => {
     setRailOpen(false);
-    if (restoreFocus) railTrigger.current?.focus({ preventScroll: true });
-  }, []);
+    if (restoreFocus) focusRailTrigger();
+  }, [focusRailTrigger]);
   // A temporary drawer is open for one decision, not for a session: following a
   // destination, changing route, Escape or a backdrop press closes it.
   useEffect(() => { setRailOpen(false); }, [pathname]);
@@ -190,6 +199,13 @@ export function Shell() {
     }
     setSettingsWindow({ path, id: ++settingsWindowId.current });
   }, [railOpen]);
+  const openRailDrawer = useCallback(() => {
+    // The drawer is a navigation surface: opening it replaces the settings
+    // window instead of stacking under the page card.
+    settingsFromDrawer.current = false;
+    setSettingsWindow(null);
+    setRailOpen(true);
+  }, []);
   const navigationContext = useContext(UNSAFE_NavigationContext);
   const windowNavigation = useMemo(() => {
     const navigator = navigationContext.navigator;
@@ -362,6 +378,12 @@ export function Shell() {
   }, [compactSettings, pathname, search]);
 
   return (
+    <NavDrawerProvider
+      available={railDrawer && showNav}
+      expanded={railOpen}
+      open={openRailDrawer}
+      triggerRef={railTrigger}
+    >
     <InlineRailProvider show={inlineRail && showNav}>
     <UNSAFE_NavigationContext.Provider value={windowNavigation}>
     <TabTapProvider>
@@ -424,28 +446,22 @@ export function Shell() {
           </div>
         </main>
         {/* A chosen side rail on a phone is a temporary drawer, never a column
-            that steals width from a 320px screen. The trigger stays available
-            at the bottom edge (where the bottom bar would sit) and the panel
-            closes on a destination, Escape, the backdrop or a route change. */}
+            that steals width from a 320px screen. A route's own top bar mounts
+            the inline trigger beside its brand; this fixed control remains the
+            fallback for surfaces with no top bar, and CSS hides it whenever the
+            inline control is in the tree. The panel closes on a destination,
+            Escape, the backdrop or a route change. */}
         {showNav && railDrawer && (
           <>
             <button
-              ref={railTrigger}
+              ref={railFallbackTrigger}
               type="button"
               className="fb-nav-drawer-trigger"
               aria-label="Open navigation"
               aria-haspopup="dialog"
               aria-expanded={railOpen}
               data-settings-open={compactSettings || undefined}
-              onClick={() => {
-                // The drawer is a navigation surface: opening it replaces the
-                // settings window instead of stacking under the page card.
-                // Without this the trigger is the only nav control in this
-                // layout and would stay under the card.
-                settingsFromDrawer.current = false;
-                setSettingsWindow(null);
-                setRailOpen(true);
-              }}
+              onClick={openRailDrawer}
             >
               <Menu size={22} aria-hidden="true" />
             </button>
@@ -494,7 +510,7 @@ export function Shell() {
             setSettingsWindow(null);
             if (settingsFromDrawer.current) {
               settingsFromDrawer.current = false;
-              requestAnimationFrame(() => railTrigger.current?.focus({ preventScroll: true }));
+              requestAnimationFrame(() => focusRailTrigger());
             }
           }}
           onExit={(path) => { settingsFromDrawer.current = false; setSettingsWindow(null); navigate(path); }} />
@@ -503,6 +519,7 @@ export function Shell() {
     </TabTapProvider>
     </UNSAFE_NavigationContext.Provider>
     </InlineRailProvider>
+    </NavDrawerProvider>
   );
 }
 

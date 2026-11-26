@@ -529,6 +529,22 @@ describe("Shell adaptive navigation", () => {
     expect(screen.getByText("Home screen")).toBeTruthy();
   });
 
+  it("returns focus to the inline top-bar trigger when the drawer closes", async () => {
+    setWidth(390);
+    stubMatchMedia(false);
+    storeNavLayout("rail");
+    renderShell("/brand");
+    const trigger = within(screen.getByTestId("app-bar")).getByRole("button", { name: "Open navigation" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog", { name: "Navigation" })).toBeTruthy();
+    // Opening moves focus to the panel's Close control.
+    expect(document.activeElement).not.toBe(trigger);
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("renders the stored rail at the breakpoint", () => {
     setWidth(COMPACT_MAX_PX);
     storeNavLayout("rail");
@@ -878,7 +894,11 @@ describe("Shell adaptive navigation", () => {
     storeNavLayout("rail");
     renderShell("/brand");
     expect(document.querySelector(".fb-nav-outside-brand")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Open navigation" }));
+    const appBar = screen.getByTestId("app-bar");
+    const trigger = within(appBar).getByRole("button", { name: "Open navigation" });
+    // The route's own bar now carries the control as its first child.
+    expect(appBar.firstElementChild).toBe(trigger);
+    fireEvent.click(trigger);
     const drawer = screen.getByRole("dialog", { name: "Navigation" });
     // The drawer's own head names the app; the shell anchor stays empty.
     expect(within(drawer).getByText("Norfold")).toBeTruthy();
