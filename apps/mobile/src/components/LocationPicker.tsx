@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { MapPin, X } from "lucide-react";
 import { MapPickerSheet } from "./MapPickerSheet";
 import {
-  FIND_IN_MAPS_HELP,
   parseLocationInput,
   resolveShortLink,
   roundToApproximate,
@@ -248,7 +247,9 @@ export function LocationPicker({ value, onChange, maxLength, locationAdapter, di
       {parseError && (
         <p role="alert" className="text-xs text-error">{parseError}</p>
       )}
-      <p className="text-xs text-on-surface-variant">{FIND_IN_MAPS_HELP} Paste the coordinates or link back here.</p>
+      <p className="text-xs text-on-surface-variant">
+        Paste decimal coordinates or a Maps link, or choose the spot on the map.
+      </p>
 
       <MapPickerSheet
         open={mapOpen && !disabled}
