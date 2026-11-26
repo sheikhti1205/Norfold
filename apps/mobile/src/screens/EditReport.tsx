@@ -4,6 +4,7 @@ import { RESOLVED_STATUSES, type PostItem } from "@norfold/shared";
 import { useIsPresent } from "framer-motion";
 import { ConfirmDialog } from "../components/AdaptiveTaskSurface";
 import { TaskScreen } from "../components/TaskScreen";
+import { registerBackInterceptor } from "../components/backNavigation";
 import { useAuth } from "../auth";
 import { Button } from "../components/Button";
 import { announce } from "../components/LiveRegion";
@@ -295,6 +296,24 @@ function EditReportSession({ id, userId }: { id: string; userId?: string }) {
     }
     navigate("/my");
   }, [navigate]);
+
+  // The editor is the page now, so Android back has no overlay to dismiss: the
+  // screen consumes it and runs the same guard as its own Back control, leaving
+  // the open question to its own bridge.
+  const editing = !loading && !loadError && post !== null && values !== null;
+  useEffect(() => {
+    if (!editing) return;
+    return registerBackInterceptor(() => {
+      if (!activeRef.current) return false;
+      // A save in flight owns the screen: the press is consumed and nothing
+      // moves, so a late settle cannot land on a screen the person left.
+      if (saving) return true;
+      // The leave question is open: its own bridge takes the press.
+      if (leaving) return false;
+      leave();
+      return true;
+    });
+  }, [editing, saving, leaving, leave]);
 
   if (loading) {
     return (
