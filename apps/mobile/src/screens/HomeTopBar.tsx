@@ -114,19 +114,17 @@ export function HomeTopBar({
         if (!(next instanceof Node) || !event.currentTarget.contains(next)) onBlur();
       }}
     >
+      {!inlineRail && <NavDrawerButton />}
+      {showBrand && !inlineRail && (
+        <Link to="/" aria-label="Norfold home" className="fb-home-brand fb-home-brand--target">
+          <BrandMark size={24} shape="tile" alt="" />
+          <span className="fb-home-brand-name">Norfold</span>
+        </Link>
+      )}
       {/* One heading is always present. The shell paints the app name while a
           rail is in flow, anchored beside the rail head; this row keeps the
           full lockup only when there is no rail. */}
       <h1 className="sr-only">Norfold</h1>
-      {showBrand && !inlineRail && (
-        <>
-          <NavDrawerButton />
-          <Link to="/" aria-label="Norfold home" className="fb-home-brand fb-home-brand--target">
-            <BrandMark size={24} shape="tile" alt="" />
-            <span className="fb-home-brand-name">Norfold</span>
-          </Link>
-        </>
-      )}
       <AnimatePresence initial={false} mode="popLayout">
         {expanded ? (
           <motion.div

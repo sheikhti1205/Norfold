@@ -74,7 +74,7 @@ describe("Home brand ownership", () => {
     expect(screen.getByRole("searchbox", { name: "Search posts" })).toBeTruthy();
   });
 
-  it("puts the drawer control beside the lockup only while the lockup shows", () => {
+  it("keeps the drawer control in the row while search opens and drops it only for an in-flow rail", () => {
     const triggerRef = createRef<HTMLButtonElement>();
     const open = () => undefined;
     const view = render(
@@ -83,6 +83,7 @@ describe("Home brand ownership", () => {
       </NavDrawerProvider>,
     );
     const row = screen.getByTestId("home-search-row");
+    expect(row.className).toContain("min-h-[48px]");
     const button = within(row).getByRole("button", { name: "Open navigation" });
     const brand = within(row).getByRole("link", { name: "Norfold home" });
     // The control sits immediately before the brand and owns the shell's focus
@@ -95,13 +96,21 @@ describe("Home brand ownership", () => {
         <Harness expanded />
       </NavDrawerProvider>,
     );
-    expect(screen.queryByRole("button", { name: "Open navigation" })).toBeNull();
+    // Search swaps the lockup for the field but leaves the row exactly 48px
+    // tall; the drawer control must stay mounted so the rejected floating
+    // circle never reappears at the bottom-left.
+    expect(row.className).toContain("min-h-[48px]");
+    expect(screen.queryByRole("link", { name: "Norfold home" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Open navigation" })).toBe(button);
+    expect(triggerRef.current).toBe(button);
 
     view.rerender(
       <NavDrawerProvider available expanded={false} open={open} triggerRef={triggerRef}>
         <Harness expanded={false} inlineRail />
       </NavDrawerProvider>,
     );
+    // The in-flow rail owns the identity and the shell never offers this
+    // control there.
     expect(screen.queryByRole("button", { name: "Open navigation" })).toBeNull();
   });
 });
