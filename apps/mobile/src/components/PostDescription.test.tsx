@@ -31,7 +31,7 @@ describe("shared post description", () => {
     act(() => { height = 100; resized?.(); });
     const more = screen.getByRole("button", { name: "See more" });
     // 48px disclosure target; the label keeps its 14px type.
-    expect(more.className).toContain("min-h-12");
+    expect(more.className).toContain("min-h-[48px]");
     expect(document.getElementById(more.getAttribute("aria-controls")!)).toBeTruthy();
     fireEvent.click(more);
     act(() => { height = 40; resized?.(); });

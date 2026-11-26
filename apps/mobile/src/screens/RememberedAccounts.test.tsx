@@ -27,6 +27,6 @@ describe("remembered accounts touch targets", () => {
     const remove = screen.getByRole("button", { name: "Remove route-tester, @route-tester from this device" });
     expect(remove.className).toContain("h-12");
     expect(remove.className).toContain("w-12");
-    expect(screen.getByRole("button", { name: "Use another account" }).className).toContain("min-h-12");
+    expect(screen.getByRole("button", { name: "Use another account" }).className).toContain("min-h-[48px]");
   });
 });

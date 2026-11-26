@@ -92,8 +92,8 @@ describe("PublicProfile", () => {
     renderRoute();
     expect(await screen.findByText("That profile could not be loaded. Please try again.")).toBeTruthy();
     const retry = screen.getByRole("button", { name: "Try again" });
-    expect(retry.className).toContain("min-h-12");
-    expect(retry.className).toContain("min-w-12");
+    expect(retry.className).toContain("min-h-[48px]");
+    expect(retry.className).toContain("min-w-[48px]");
     fireEvent.click(retry);
     expect(await screen.findByRole("region", { name: "Public profile" })).toBeTruthy();
   });
@@ -183,8 +183,8 @@ describe("PublicProfile", () => {
     expect((await screen.findByRole("alert")).textContent).toMatch(/could not load reports/i);
     expect(screen.queryByText("No public reports yet.")).toBeNull();
     const retry = screen.getByRole("button", { name: "Retry" });
-    expect(retry.className).toContain("min-h-12");
-    expect(retry.className).toContain("min-w-12");
+    expect(retry.className).toContain("min-h-[48px]");
+    expect(retry.className).toContain("min-w-[48px]");
     fireEvent.click(retry);
     expect(await screen.findByText("Found a wallet")).toBeTruthy();
   });
@@ -261,7 +261,7 @@ describe("PublicProfile", () => {
       .mockResolvedValueOnce({ items: [post, second], nextCursor: null, total: 2 });
     renderRoute();
     const more = await screen.findByRole("button", { name: /load more reports/i });
-    expect(more.className).toContain("min-h-12");
+    expect(more.className).toContain("min-h-[48px]");
     fireEvent.click(more);
     await waitFor(() =>
       expect(fetchFeedMock).toHaveBeenCalledWith({ userId: "u2" }, "cursor-1"),

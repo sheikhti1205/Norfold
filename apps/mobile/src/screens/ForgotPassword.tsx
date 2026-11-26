@@ -78,7 +78,7 @@ export function ForgotPassword() {
           </Button>
           <Link
             to="/signin"
-            className="min-h-12 self-center px-2 py-2 text-sm font-medium text-on-surface underline focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="min-h-[48px] self-center px-2 py-2 text-sm font-medium text-on-surface underline focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             Back to sign in
           </Link>

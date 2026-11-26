@@ -110,7 +110,7 @@ export function LocalSearchHelperRow({ service, descriptor, phase, onRemove, des
         {service.android && removable && onRemove && <Button variant="text" disabled={locked} aria-label="Remove local search helper" onClick={onRemove}>Remove</Button>}
       </div>
       {available && view.installed && onRemove && <details>
-        <summary className="min-h-12 cursor-pointer py-3 text-sm">File options</summary>
+        <summary className="min-h-[48px] cursor-pointer py-3 text-sm">File options</summary>
         <Button variant="text" disabled={locked || pending !== null} onClick={() => run("verify")}>Check downloaded file</Button>
       </details>}
     </>}

@@ -34,14 +34,14 @@ export function SharedReport() {
     }, () => { if (live) setState({ id, status: "error" }); });
     return () => { live = false; controller.abort(); };
   }, [id, valid, user, booting, bootError, contact, attempt]);
-  if (!link) return <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-4 bg-surface px-6 py-12 text-on-surface"><p className="text-lg font-semibold">Norfold</p><h1 ref={title} tabIndex={-1} className="text-3xl font-semibold tracking-tight">Invalid report link</h1><p className="leading-relaxed text-on-surface-variant">Check the link and try again, or head back to Norfold.</p><Link className="inline-flex min-h-12 min-w-12 items-center justify-center rounded-m3-md bg-on-surface px-5 font-medium text-surface focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-on-surface" to="/" state={{ showPublic: true }}>Back to Norfold</Link></main>;
+  if (!link) return <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-4 bg-surface px-6 py-12 text-on-surface"><p className="text-lg font-semibold">Norfold</p><h1 ref={title} tabIndex={-1} className="text-3xl font-semibold tracking-tight">Invalid report link</h1><p className="leading-relaxed text-on-surface-variant">Check the link and try again, or head back to Norfold.</p><Link className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-m3-md bg-on-surface px-5 font-medium text-surface focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-on-surface" to="/" state={{ showPublic: true }}>Back to Norfold</Link></main>;
   if (booting || (bootError && !user)) return <Splash />;
   if (user) return <Navigate to={link.route} replace />;
   if (contact) return <Navigate to="/signin" replace />;
   const current = state.id === id ? state : { id, status: "loading" as const };
   const preview = current.preview;
   return <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-5 bg-surface px-[min(1.5rem,5vw)] py-12 text-on-surface">
-    <Link to="/" state={{ showPublic: true }} className="inline-flex min-h-12 min-w-12 items-center self-start text-lg font-semibold">Norfold</Link>
+    <Link to="/" state={{ showPublic: true }} className="inline-flex min-h-[48px] min-w-[48px] items-center self-start text-lg font-semibold">Norfold</Link>
     <article aria-label="Shared report preview" className="min-w-0 break-words" aria-live="polite" aria-busy={current.status === "loading"}>
       {preview && <span className="inline-block rounded-full px-3 py-1 text-xs font-semibold" style={{background:`var(--fb-${preview.type.toLowerCase()}-bg)`,color:`var(--fb-${preview.type.toLowerCase()}-ink)`}}>{preview.type === "LOST" ? "Lost" : "Found"}</span>}
       <h1 ref={title} tabIndex={-1} className="mt-4 text-3xl font-semibold tracking-tight">{preview?.title ?? (current.status === "unavailable" ? "This report is no longer available" : current.status === "error" ? "Couldn't load this report" : "Shared report")}</h1>
@@ -51,11 +51,11 @@ export function SharedReport() {
         <p className="mt-4 leading-relaxed text-on-surface-variant">{preview.excerpt}</p>
       </>}
       {current.status === "unavailable" && <p className="mt-4 text-on-surface-variant">The link may have been withdrawn, or the report is no longer shared.</p>}
-      {current.status === "error" && <div role="alert"><p className="mt-4 text-on-surface-variant">Check your connection and try again.</p><button type="button" onClick={() => setAttempt(v => v + 1)} className="mt-2 inline-flex min-h-12 min-w-12 items-center underline">Try again</button></div>}
+      {current.status === "error" && <div role="alert"><p className="mt-4 text-on-surface-variant">Check your connection and try again.</p><button type="button" onClick={() => setAttempt(v => v + 1)} className="mt-2 inline-flex min-h-[48px] min-w-[48px] items-center underline">Try again</button></div>}
     </article>
-    {preview && <><Link to="/signin" className="inline-flex min-h-12 items-center justify-center rounded-m3-md bg-primary px-5 font-medium text-on-primary focus-visible:outline-2 focus-visible:outline-offset-4">Sign in to contact</Link>
-      <a href={url} className="inline-flex min-h-12 items-center justify-center rounded-m3-md border border-outline px-5 font-medium focus-visible:outline-2 focus-visible:outline-offset-4">Open in Norfold</a>
+    {preview && <><Link to="/signin" className="inline-flex min-h-[48px] items-center justify-center rounded-m3-md bg-primary px-5 font-medium text-on-primary focus-visible:outline-2 focus-visible:outline-offset-4">Sign in to contact</Link>
+      <a href={url} className="inline-flex min-h-[48px] items-center justify-center rounded-m3-md border border-outline px-5 font-medium focus-visible:outline-2 focus-visible:outline-offset-4">Open in Norfold</a>
       <p className="text-sm text-on-surface-variant">Sign in for the full description, photos and contact options.</p></>}
-    {current.status !== "ready" && current.status !== "loading" && <Link to="/" state={{ showPublic: true }} className="inline-flex min-h-12 min-w-12 items-center underline">Back to Norfold</Link>}
+    {current.status !== "ready" && current.status !== "loading" && <Link to="/" state={{ showPublic: true }} className="inline-flex min-h-[48px] min-w-[48px] items-center underline">Back to Norfold</Link>}
   </main>;
 }

@@ -156,7 +156,7 @@ function PublicProfileSession({ username }: { username: string }) {
           className="rounded-m3-sm border border-error px-3 py-2 text-sm text-error"
         >
           {error}
-        </p>{retryable && <button type="button" className="inline-flex min-h-12 min-w-12 items-center text-sm text-on-surface" onClick={() => setRetry((value) => value + 1)}>Try again</button>}</div>
+        </p>{retryable && <button type="button" className="inline-flex min-h-[48px] min-w-[48px] items-center text-sm text-on-surface" onClick={() => setRetry((value) => value + 1)}>Try again</button>}</div>
       )}
       {profile && (
         <>
@@ -228,7 +228,7 @@ function PublicProfileSession({ username }: { username: string }) {
               <div className="flex flex-col gap-2 p-4">
                 <p role="alert" className="text-sm text-error">Could not load reports. Check your connection and try again.</p>
                 <button type="button" onClick={() => void loadReports(profile.id)}
-                  className="inline-flex min-h-12 min-w-12 items-center self-start px-2 text-sm font-medium underline">Retry</button>
+                  className="inline-flex min-h-[48px] min-w-[48px] items-center self-start px-2 text-sm font-medium underline">Retry</button>
               </div>
             ) : reports.length === 0 ? (
               <p className="p-4 text-sm text-on-surface-variant">No public reports yet.</p>
@@ -262,7 +262,7 @@ function PublicProfileSession({ username }: { username: string }) {
                   onClick={() => void loadMoreReports()}
                   disabled={loadingMore}
                   aria-busy={loadingMore}
-                  className="min-h-12 rounded-m3-sm bg-surface-container px-3 py-2 text-sm font-medium text-on-surface hover:bg-surface-container-high"
+                  className="min-h-[48px] rounded-m3-sm bg-surface-container px-3 py-2 text-sm font-medium text-on-surface hover:bg-surface-container-high"
                 >
                   {loadingMore ? "Loading more reports…" : "Load more reports"}
                 </button>

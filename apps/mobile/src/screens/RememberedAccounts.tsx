@@ -52,7 +52,7 @@ export function SignedOutEntry() {
             }}><Trash2 size={18} aria-hidden="true" /></button>
         </li>)}
       </ul> : <p className="text-sm text-on-surface-variant">No accounts saved on this device.</p>}
-      <button type="button" className="min-h-12 rounded-m3-sm px-3 text-primary hover:bg-surface-container-low focus-visible:outline-2 focus-visible:outline-primary" onClick={() => navigate("/auth")}>Use another account</button>
+      <button type="button" className="min-h-[48px] rounded-m3-sm px-3 text-primary hover:bg-surface-container-low focus-visible:outline-2 focus-visible:outline-primary" onClick={() => navigate("/auth")}>Use another account</button>
       <p role="status" className="sr-only">{notice}</p>
       {error && <p role="alert" className="text-sm text-error">{error}</p>}
     </div>

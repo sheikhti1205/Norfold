@@ -232,7 +232,7 @@ export function ReportPhotoCarousel({
               onClick={() => onMakeCover(current.id)}
               disabled={disabled}
               aria-label={`Make photo ${activeIndex + 1} the cover`}
-              className="flex min-h-12 items-center rounded-m3-sm bg-surface-container px-3 text-sm font-medium text-on-surface disabled:opacity-40"
+              className="flex min-h-[48px] items-center rounded-m3-sm bg-surface-container px-3 text-sm font-medium text-on-surface disabled:opacity-40"
             >
               Make cover
             </button>

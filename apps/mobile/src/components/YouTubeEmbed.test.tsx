@@ -101,16 +101,16 @@ describe("YouTubeEmbed link safety", () => {
   it("keeps the pop-out controls at the 48px minimum", async () => {
     render(<YouTubeEmbed url="https://www.youtube.com/watch?v=dQw4w9WgXcQ" />);
     const larger = screen.getByRole("button", { name: "Watch larger" });
-    expect(larger.className).toContain("min-h-12");
-    expect(larger.className).toContain("min-w-12");
+    expect(larger.className).toContain("min-h-[48px]");
+    expect(larger.className).toContain("min-w-[48px]");
 
     fireEvent.click(larger);
     await screen.findByRole("dialog", { name: "Video player" });
     const close = screen.getByRole("button", { name: "Close video" });
-    expect(close.className).toContain("min-h-12");
-    expect(close.className).toContain("min-w-12");
+    expect(close.className).toContain("min-h-[48px]");
+    expect(close.className).toContain("min-w-[48px]");
     const watch = screen.getAllByRole("link", { name: "Watch on YouTube" }).at(-1)!;
-    expect(watch.className).toContain("min-h-12");
+    expect(watch.className).toContain("min-h-[48px]");
   });
 
   it("unmounts the inline player while the pop-out is open", async () => {

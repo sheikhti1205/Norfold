@@ -229,7 +229,7 @@ export function CompleteProfile({
             <button
               type="button"
               onClick={() => setAvatarUrl(null)}
-              className="flex min-h-12 items-center self-start px-2 text-sm font-medium text-on-surface underline focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="flex min-h-[48px] items-center self-start px-2 text-sm font-medium text-on-surface underline focus-visible:outline-2 focus-visible:outline-offset-2"
             >
               Remove photo
             </button>

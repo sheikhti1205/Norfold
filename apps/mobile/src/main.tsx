@@ -24,7 +24,7 @@ async function boot(){
     message.setAttribute('role','alert');message.className='mt-3 text-on-surface-variant';
     message.textContent='Your saved data has not been cleared. Check available storage, then try again.';
     const retry=document.createElement('button');
-    retry.type='button';retry.className='fb-button-primary mt-5 min-h-12 rounded-full bg-primary px-5 py-2 text-on-primary';
+    retry.type='button';retry.className='fb-button-primary mt-5 min-h-[48px] rounded-full bg-primary px-5 py-2 text-on-primary';
     retry.textContent='Try again';retry.addEventListener('click',()=>{
       // Keep the captured callback in memory; reload would discard it.
       retry.disabled=true;

@@ -119,7 +119,7 @@ function ScopedReportMatches({ accountId, post, onChanged }: Props) {
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-medium">Your match activity</h3>
         <button type="button" aria-label="Refresh matches" disabled={loading || sending}
-          onClick={() => void load()} className="inline-flex min-h-12 min-w-12 items-center justify-center rounded-full disabled:opacity-40"
+          onClick={() => void load()} className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-full disabled:opacity-40"
           {...hoverLabel("Refresh matches")}>
           <RefreshCw size={18} aria-hidden className={loading ? "animate-spin motion-reduce:animate-none" : ""} />
         </button>
@@ -144,7 +144,7 @@ function ScopedReportMatches({ accountId, post, onChanged }: Props) {
               <Button variant="outline" disabled={sending} onClick={() => review({ kind: "handover", match })}>Record handover</Button>}
             {(match.state === "PENDING" || match.state === "CONFIRMED") &&
               <Button variant="text" disabled={sending} onClick={() => review({ kind: "cancel", match })}>{match.state === "CONFIRMED" ? "Wrong match?" : "Cancel proposal"}</Button>}
-            {match.state === "RECOVERED" && <Link to="/returns" className="inline-flex min-h-12 items-center text-sm font-medium underline">View recovery</Link>}
+            {match.state === "RECOVERED" && <Link to="/returns" className="inline-flex min-h-[48px] items-center text-sm font-medium underline">View recovery</Link>}
           </div>
         </li>)}
       </ul>

@@ -51,7 +51,7 @@ describe("shared auth branding", () => {
 
     render(<MemoryRouter><AuthShell title="Welcome"><p>Form</p></AuthShell></MemoryRouter>);
     for (const name of ["Norfold", "Back to Norfold", "Privacy", "Terms", "Community Guidelines"]) {
-      expect(screen.getByRole("link", { name }).className).toContain("min-h-12");
+      expect(screen.getByRole("link", { name }).className).toContain("min-h-[48px]");
     }
   });
 });

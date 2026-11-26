@@ -233,7 +233,7 @@ export function YouTubeEmbed({ url, compact = false }: { url: string; compact?: 
                   type="button"
                   onClick={() => setExpanded(false)}
                   aria-label="Close video"
-                  className="flex min-h-12 min-w-12 items-center justify-center rounded-full text-white hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                  className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-full text-white hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                   {...hoverLabel("Close video")}
                 >
                   <X size={22} aria-hidden />
@@ -246,7 +246,7 @@ export function YouTubeEmbed({ url, compact = false }: { url: string; compact?: 
                 href={watchUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-2 inline-flex min-h-12 items-center gap-2 text-xs text-white/80 hover:text-white"
+                className="mt-2 inline-flex min-h-[48px] items-center gap-2 text-xs text-white/80 hover:text-white"
               >
                 <ExternalLink size={14} aria-hidden />
                 Watch on YouTube
@@ -401,7 +401,7 @@ export function YouTubeEmbed({ url, compact = false }: { url: string; compact?: 
           href={watchUrl}
           target="_blank"
           rel="noreferrer"
-          className="flex min-h-12 items-center gap-2 text-xs text-on-surface-variant"
+          className="flex min-h-[48px] items-center gap-2 text-xs text-on-surface-variant"
         >
           <PlayCircle size={14} aria-hidden />
           Watch on YouTube
@@ -413,7 +413,7 @@ export function YouTubeEmbed({ url, compact = false }: { url: string; compact?: 
             setExpanded(true);
           }}
           aria-label="Watch larger"
-          className="flex min-h-12 min-w-12 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           {...hoverLabel("Watch larger")}
         >
           <Maximize2 size={18} aria-hidden />

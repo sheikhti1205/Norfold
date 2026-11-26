@@ -302,7 +302,7 @@ export function SavedReports() {
                       aria-label={`Retry loading ${title}`}
                       onClick={() => setRetryToken((token) => token + 1)}
                       disabled={contentLoading}
-                      className="inline-flex min-h-12 min-w-12 items-center justify-center px-2 text-sm font-medium underline"
+                      className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center px-2 text-sm font-medium underline"
                     >
                       Retry
                     </button>
@@ -311,7 +311,7 @@ export function SavedReports() {
                     type="button"
                     aria-label={`Remove ${title} from saved reports`}
                     onClick={() => void remove(row.id)}
-                    className="flex min-h-12 min-w-12 shrink-0 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container"
+                    className="flex min-h-[48px] min-w-[48px] shrink-0 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container"
                   >
                     <X size={18} aria-hidden />
                   </button>
@@ -327,7 +327,7 @@ export function SavedReports() {
               <button
                 type="button"
                 onClick={() => setVisibleCount((count) => Math.min(count + PAGE_SIZE, rows.length))}
-                className="min-h-12 rounded-m3-sm border border-outline-variant px-3 py-2 text-sm font-medium text-on-surface"
+                className="min-h-[48px] rounded-m3-sm border border-outline-variant px-3 py-2 text-sm font-medium text-on-surface"
               >
                 Show more
               </button>

@@ -188,8 +188,8 @@ function RecoveryFlow() {
           <Button type="button" variant="outline" onClick={() => void resend()} disabled={busy || seconds > 0}>
             {seconds > 0 ? unknownLimit ? "Please wait before retrying" : `Resend in ${seconds}s` : "Resend code"}
           </Button>
-          <Link to="/forgot" className="min-h-12 py-3 text-sm underline">Use a different email</Link>
-          <Link to="/signin" className="min-h-12 py-3 text-sm underline">Back to sign in</Link>
+          <Link to="/forgot" className="min-h-[48px] py-3 text-sm underline">Use a different email</Link>
+          <Link to="/signin" className="min-h-[48px] py-3 text-sm underline">Back to sign in</Link>
         </form>
       )}
       {phase === "exchanging" && (
@@ -200,7 +200,7 @@ function RecoveryFlow() {
           <p role="alert" className="text-sm text-error">{RECOVERY_INVALID_LINK}</p>
           <Link
             to="/forgot"
-            className="min-h-12 self-start px-2 py-2 text-sm font-medium text-on-surface underline focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="min-h-[48px] self-start px-2 py-2 text-sm font-medium text-on-surface underline focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             Request a new code
           </Link>
@@ -235,7 +235,7 @@ function RecoveryFlow() {
           <Button type="submit" size="lg" loading={busy}>
             Update password
           </Button>
-          {otpMode && <Link to="/signin" className="min-h-12 py-3 text-sm underline">Back to sign in</Link>}
+          {otpMode && <Link to="/signin" className="min-h-[48px] py-3 text-sm underline">Back to sign in</Link>}
         </form>
       )}
       {phase === "done" && (
