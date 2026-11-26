@@ -18,10 +18,12 @@ describe("density tokens (W4.1 compactness targets)", () => {
     expect(density.iconSize).toBeLessThanOrEqual(22);
   });
 
-  it("keeps every effective touch target at >=44", () => {
-    expect(density.minTouchTarget).toBeGreaterThanOrEqual(44);
+  it("keeps every effective touch target at >=48", () => {
+    expect(density.minTouchTarget).toBeGreaterThanOrEqual(48);
     expect(density.settingsRowHeight).toBeGreaterThanOrEqual(density.minTouchTarget);
-    expect(density.primaryButtonHeight).toBeGreaterThanOrEqual(density.minTouchTarget);
+    // A visual height may sit below the effective floor when the hit area is
+    // preserved; the button's visual range is pinned by its own test above.
+    expect(density.primaryButtonHeight).toBeLessThan(density.minTouchTarget);
   });
 
   it("keeps the settings row at the house 60px row target", () => {

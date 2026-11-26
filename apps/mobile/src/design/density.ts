@@ -25,7 +25,7 @@ export const density = {
   /** Common corner radius (target 10–14). */
   radius: 12,
   /** Minimum effective touch target; visual size may be smaller only when the hit area is preserved. */
-  minTouchTarget: 44,
+  minTouchTarget: 48,
   /** Comfortable touch target for primary rows. */
   minTouchTargetComfortable: 48,
 } as const;

@@ -98,12 +98,12 @@
 /* A headerless surface has no bar to sit in, so the close control floats over
    the content. It is a solid disc with a hairline edge: an opaque control over
    scrolling text reads as a control, while a translucent one lets the text
-   underneath show through the icon. The 44px target stays constant at every
+   underneath show through the icon. The 48px target stays constant at every
    text size. */
 .fb-floating-close {
   position: absolute; top: 8px; right: 8px; z-index: 3;
   display: inline-flex; align-items: center; justify-content: center;
-  width: 44px; height: 44px; border-radius: 999px;
+  width: 48px; height: 48px; border-radius: 999px;
   color: var(--fb-on-surface);
   background: var(--fb-surface);
   border: 1px solid var(--fb-outline-variant);
