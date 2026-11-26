@@ -17,9 +17,10 @@
 
 /* The pill is a 48px border-box: 1px border + 46px content. The magnifier
    occupies the same 48px slot as the 48px action that replaces it on Home, so
-   the text starts at one x-position across every search surface. The -1px block
-   margins pull the 48px slot into the pill's 46px content box, keeping the pill
-   48px tall. */
+   the text starts at one x-position across every search surface. All three 48px
+   children — leading slot, input, action — carry -1px block margins, pulling
+   each 48px border box over the pill's 46px content box; every margin box is
+   46px, while each border box and hit target stays 48px, so the pill is 48px. */
 .fb-search-field-leading {
   display: flex;
   flex: none;
@@ -41,10 +42,14 @@
   padding-inline-end: 4px;
 }
 
+/* The third 48px child, pulled into the pill's 46px content box exactly like the
+   leading slot and the action: its margin box is 46px, its border box and hit
+   target stay 48px. */
 .fb-search-field-input {
   width: 100%;
   min-width: 0;
   height: 48px;
+  margin-block: -1px;
   padding: 0;
   border: 0;
   outline: none;

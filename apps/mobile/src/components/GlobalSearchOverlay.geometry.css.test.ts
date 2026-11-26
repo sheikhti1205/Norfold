@@ -73,6 +73,14 @@ describe("global search overlay touch targets", () => {
     expect(flat).toMatch(/\.fb-search-menu-search input \{[^}]*min-height:\s*48px/);
   });
 
+  it("pulls the shared input into the pill's content box so every surface is 48px", () => {
+    // The shared sheet owns the geometry. The 48px input is the third child that
+    // needs the -1px block margin; without it a surface with no overlay override
+    // gets a 48px child + 2px border = 50px pill.
+    expect(sharedFlat).toMatch(/\.fb-search-field-input \{[^}]*margin-block:\s*-1px/);
+    expect(sharedFlat).toMatch(/\.fb-search-field-input \{[^}]*height:\s*48px/);
+  });
+
   it("leaves no 40px or 44px height anywhere in the sheet", () => {
     // Test the whole sheet, not a list: a new control must not reintroduce the
     // sub-48 floor, and the phone block must not override one back down.
