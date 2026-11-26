@@ -706,6 +706,7 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
   const rootRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const overlayPreviouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const initialFocusClaimedRef = useRef(false);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   const setOverlayRef = useFocusTrap(overlayRef, () => setIsExpanded(false), isExpanded, overlayPreviouslyFocusedRef);
   useModalBack(isExpanded, () => setIsExpanded(false));
@@ -723,6 +724,30 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
         moreButtonRef.current.focus();
       }
     }
+  }, [isExpanded]);
+
+  // The dialog itself owns the initial focus, not the first control the trap
+  // finds: that control is the close button, and an opener who tapped Expand
+  // must not see a keyboard ring on a button they never aimed at. The trap
+  // focuses it from a passive effect, so the first focus to land anywhere in
+  // the overlay is moved to the container; Tab reaches the header controls in
+  // order from there.
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    if (!isExpanded || !overlay) {
+      initialFocusClaimedRef.current = false;
+      return;
+    }
+    const claim = () => {
+      if (initialFocusClaimedRef.current) return;
+      initialFocusClaimedRef.current = true;
+      if (document.activeElement !== overlay) overlay.focus();
+    };
+    overlay.addEventListener("focusin", claim);
+    // A trap that focused before this effect committed leaves its control
+    // focused without a later focus event to hear.
+    if (overlay.contains(document.activeElement)) claim();
+    return () => overlay.removeEventListener("focusin", claim);
   }, [isExpanded]);
   // The rail is attached to focus on touch: "focused" means focus is anywhere
   // in this field's own chrome (the contenteditable or a rail control), read
@@ -1771,6 +1796,7 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
           role="dialog"
           aria-modal="true"
           aria-labelledby="report-editor-overlay-title"
+          tabIndex={-1}
           className="fixed inset-0 flex flex-col bg-surface"
           style={{
             zIndex: EDITOR_OVERLAY_Z_INDEX,

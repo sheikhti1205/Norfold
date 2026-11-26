@@ -334,4 +334,20 @@ describe("RichTextEditor report pass — accessibility", () => {
     expect(activeEl).not.toBeNull();
     expect(activeEl?.getAttribute("aria-label")).toBe("More");
   });
+
+  it("gives the dialog the initial focus, not the close control", () => {
+    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    const moreBtn = screen.getByRole("button", { name: "More" });
+    moreBtn.focus();
+    pickRailMore("Expand editor");
+    const overlay = document.getElementById("report-editor-overlay")!;
+    const close = screen.getByRole("button", { name: "Close full-screen editor" });
+    // The container is not a control, so nothing is announced as pressed and
+    // no ring lands on a button the opener never aimed at.
+    expect(document.activeElement).toBe(overlay);
+    expect(document.activeElement).not.toBe(close);
+    // Tab still reaches the close control first, at a moment the user chose.
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(close);
+  });
 });

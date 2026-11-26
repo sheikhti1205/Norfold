@@ -359,6 +359,9 @@ html.fb-reduce-motion .fb-morph-bar {
 /* Full-screen report editor: the overlay keeps the whole canvas, but the
  * editable field stays a readable writing column instead of full-width lines. */
 #report-editor-overlay .tiptap { max-width: 44rem; margin-inline: auto; }
+/* The dialog takes the initial focus on open (it is not a control), so it
+ * draws no ring of its own; Tab reaches the header buttons from there. */
+#report-editor-overlay:focus { outline: none; }
 
 /* U2 hybrid visual rollout (Home Variant A editorial / Search Variant B compact).
  * Large surfaces stay grayscale; colour only on links/buttons/meaningful status. */
