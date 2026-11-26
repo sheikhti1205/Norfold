@@ -136,19 +136,25 @@ describe("RichTextEditor", () => {
     expect(input.getAttribute("aria-disabled")).toBe("true");
   });
 
-  it("locks the same editor and formatting rail in fullscreen without trapping the close action", () => {
+  it("locks the same editor in fullscreen and drops the dead rail while read-only", () => {
     const ref = createRef<Editor | null>();
     const { rerender } = render(<RichTextEditor label="Description" value="Wallet" onChange={() => {}} editorRef={ref} />);
     pickRailMore("Expand editor");
     rerender(<RichTextEditor label="Description" value="Wallet" onChange={() => {}} editorRef={ref} disabled />);
     expect(ref.current?.isEditable).toBe(false);
     expect(ref.current?.view.dom.getAttribute("contenteditable")).toBe("false");
-    expect(screen.getByRole("button", { name: "Bold" })).toHaveProperty("disabled", true);
+    // Read-only means no rail at all: every slot would be a dead control, so
+    // the overlay keeps only its own actions.
+    expect(screen.queryByRole("toolbar", { name: "Description formatting" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Bold" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /close full-screen editor/i }));
     expect(screen.queryByRole("dialog")).toBeNull();
     rerender(<RichTextEditor label="Description" value="Wallet" onChange={() => {}} editorRef={ref} />);
     expect(ref.current?.isEditable).toBe(true);
     expect(ref.current?.getText()).toBe("Wallet");
+    // Re-enabling restores the rail with live controls.
+    expect(screen.getByRole("toolbar", { name: "Description formatting" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Bold" })).toHaveProperty("disabled", false);
   });
 
   it("fits every formatting slot in one row without a horizontal scroller", () => {

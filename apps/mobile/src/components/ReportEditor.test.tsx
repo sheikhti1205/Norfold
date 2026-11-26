@@ -87,12 +87,16 @@ describe("ReportEditor", () => {
     const description = container.querySelector(".tiptap")!;
     expect(description.getAttribute("contenteditable")).toBe("false");
     expect(description.getAttribute("aria-disabled")).toBe("true");
-    expect((screen.getByRole("button", { name: /expand description editor/i }) as HTMLButtonElement).disabled).toBe(true);
+    // A read-only report renders no formatting rail: every slot would be a dead
+    // control, and the old Expand action only ever lived inside its More menu.
+    expect(screen.queryByRole("toolbar", { name: "Description formatting" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /expand description editor/i })).toBeNull();
     const dateTrigger = screen.getByRole("button", { name: /date of event/i }) as HTMLButtonElement;
     expect(dateTrigger.disabled).toBe(true);
     rerender(<ReportEditor values={values()} onChange={() => {}} />);
     expect(description.getAttribute("contenteditable")).toBe("true");
     expect(dateTrigger.disabled).toBe(false);
+    expect(screen.getByRole("toolbar", { name: "Description formatting" })).toBeTruthy();
   });
   it("hydrates the stored report into the fields", () => {
     render(<ReportEditor values={values()} onChange={() => {}} photos={post.attachments} />);

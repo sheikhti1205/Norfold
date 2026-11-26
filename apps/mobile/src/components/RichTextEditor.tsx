@@ -1382,6 +1382,7 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
   }
 
   function openExpandedEditor() {
+    if (disabledRef.current) return;
     const active = document.activeElement;
     // The inline route to full screen is the More menu, and its rows unmount
     // with the menu. Remember the trigger only when it survives; otherwise
@@ -1629,6 +1630,9 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
   ];
 
   function renderFormattingRail(inline: boolean) {
+    // A read-only editor has no rail: a strip of disabled buttons is dead
+    // chrome, and the full-screen route lives inside its More menu.
+    if (disabled) return null;
     // Rail buttons keep their stable slot (no layout animation) and confirm
     // every press with a fast spring scale plus the active background.
     const action = (name: string, Icon: typeof Bold, onClick: () => void, active = false, unavailable = false) => (
