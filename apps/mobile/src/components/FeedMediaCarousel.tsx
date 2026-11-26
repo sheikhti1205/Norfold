@@ -116,8 +116,8 @@ export function FeedMediaCarousel({ images, sharedMediaId, onOpenReport }: FeedM
                 aria-current={entry === active ? "true" : undefined}
                 aria-label={`Go to photo ${entry + 1}`}
                 onClick={() => goTo(entry)}
-                className={`fb-feed-carousel-dot h-1.5 rounded-full transition-all ${
-                  entry === active ? "w-4 bg-white" : "w-1.5 bg-white/60"
+                className={`fb-feed-carousel-dot h-[6px] rounded-full transition-all ${
+                  entry === active ? "w-[16px] bg-white" : "w-[6px] bg-white/60"
                 }`}
               />
             ),

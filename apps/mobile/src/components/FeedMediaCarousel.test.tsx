@@ -111,7 +111,11 @@ describe("FeedMediaCarousel dots", () => {
     for (const dot of screen.getAllByTestId("carousel-dot")) {
       expect(dot.classList.contains("fb-feed-carousel-dot")).toBe(true);
       // The visible dot is unchanged: the target is the pseudo-element.
-      expect(dot.classList.contains("h-1.5")).toBe(true);
+      expect(dot.classList.contains("h-[6px]")).toBe(true);
+      // px, never rem: the 6/16px box must not shrink with the root font, or
+      // the fixed 48px/24px ::after inset would miss its floors at 14px.
+      const active = dot.getAttribute("aria-current") === "true";
+      expect(dot.classList.contains(active ? "w-[16px]" : "w-[6px]")).toBe(true);
     }
     // jsdom has no layout, so the stylesheet carries the geometry: 6px of dot
     // plus 34px upward into the photo plus 8px downward = 48px, and 9px per

@@ -1,6 +1,8 @@
 /* The dot row sits inside the photo and is a real control, so each dot carries
  * an invisible 48px-tall target. The visible dot keeps its 6px (the active one
- * its 16px): the pseudo-element only extends the hit area.
+ * its 16px) in px, not rem, so the target is exactly 48px tall and 24px wide
+ * at the 14px and 16px roots alike: the pseudo-element only extends the hit
+ * area.
  *
  * Vertically: 34px upward into the photo, 8px down. The dot's bottom edge is
  * 12px above the clipped frame (4px of pill padding plus the pill's 8px
