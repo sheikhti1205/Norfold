@@ -620,14 +620,14 @@ export function MyPosts() {
                 announce("Automatic selection isn't available. Press and hold the link to select it.");
               }
             }}
-            className="min-h-[44px] w-full min-w-0 rounded-m3-sm border border-outline-variant bg-surface px-2 text-sm text-on-surface"
+            className="min-h-[48px] w-full min-w-0 rounded-m3-sm border border-outline-variant bg-surface px-2 text-sm text-on-surface"
           />
           <p className="text-xs text-on-surface-variant">Select the link to copy it.</p>
           <div className="flex justify-end">
             <button
               type="button"
               onClick={() => setManualCopyUrl(null)}
-              className="min-h-[44px] rounded-full px-3 text-sm font-semibold underline"
+              className="min-h-[48px] rounded-full px-3 text-sm font-semibold underline"
             >
               Done
             </button>
@@ -663,7 +663,7 @@ export function MyPosts() {
           />
           {searchTerm && visibleItems.length === 0 && hasMore && !loading && !error && (
             <div className="flex justify-center">
-              <button type="button" className="min-h-[44px] px-3 text-sm font-semibold underline"
+              <button type="button" className="min-h-[48px] px-3 text-sm font-semibold underline"
                 disabled={loadingMore} onClick={() => void loadMore()}>
                 {loadingMore ? "Loading more reports" : "Load more reports"}
               </button>
@@ -716,7 +716,7 @@ export function MyPosts() {
           <button
             type="button"
             onClick={undoDelete}
-            className="min-h-[44px] rounded-full px-3 font-semibold underline"
+            className="min-h-[48px] rounded-full px-3 font-semibold underline"
           >
             Undo
           </button>
@@ -735,7 +735,7 @@ export function MyPosts() {
           <button
             type="button"
             onClick={undoStatus}
-            className="min-h-[44px] rounded-full px-3 font-semibold underline"
+            className="min-h-[48px] rounded-full px-3 font-semibold underline"
           >
             Undo
           </button>

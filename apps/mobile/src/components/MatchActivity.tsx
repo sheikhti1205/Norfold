@@ -72,7 +72,7 @@ function ScopedMatchActivity({ accountId }: { accountId: string }) {
   const last = matches.at(-1);
   return <LongPressArea label="Match activity" popup="dialog" className="mx-4 mb-3 min-w-0 border-b border-outline-variant">
     {({ open, setOpen }) => <>
-      <span className="flex min-h-11 items-center gap-2 py-3 text-sm font-medium">
+      <span className="flex min-h-12 items-center gap-2 py-3 text-sm font-medium">
         Match activity
         {actionWaiting && <span className="text-xs text-on-surface-variant">Action waiting</span>}
       </span>
@@ -82,7 +82,7 @@ function ScopedMatchActivity({ accountId }: { accountId: string }) {
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm text-on-surface-variant">Review proposals and handovers across your reports.</p>
         <button type="button" aria-label="Refresh match activity" disabled={loading}
-          onClick={() => void load()} className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full disabled:opacity-40"
+          onClick={() => void load()} className="inline-flex min-h-12 min-w-12 shrink-0 items-center justify-center rounded-full disabled:opacity-40"
           {...hoverLabel("Refresh match activity")}>
           <RefreshCw size={18} aria-hidden className={loading ? "animate-spin motion-reduce:animate-none" : ""} />
         </button>
@@ -93,7 +93,7 @@ function ScopedMatchActivity({ accountId }: { accountId: string }) {
       <ul className="divide-y divide-outline-variant" aria-busy={loading}>
         {matches.map((match) => <li key={match.matchId} className="min-w-0 py-2">
           {match.myReportId ? <PostLink to={`/posts/${match.myReportId}#detail-matches`}
-            className="flex min-h-11 min-w-0 flex-col justify-center gap-1 break-words py-1 focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2">
+            className="flex min-h-12 min-w-0 flex-col justify-center gap-1 break-words py-1 focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2">
             <span className="text-sm font-medium underline">{match.myTitle ?? "Your report"}</span>
             <span className="text-sm text-on-surface-variant">{activityLabel(match)}</span>
           </PostLink> : <>

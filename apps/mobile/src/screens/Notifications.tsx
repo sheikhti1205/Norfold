@@ -659,7 +659,7 @@ function AccountNotifications({ preview, onNavigate, onReport }: NotificationsPr
             to="/settings/notifications"
             onClick={onNavigate}
             aria-label="Notification settings"
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full px-2 text-on-surface-variant"
+            className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-full px-2 text-on-surface-variant"
           >
             <Settings size={18} aria-hidden />
           </Link>
@@ -671,7 +671,7 @@ function AccountNotifications({ preview, onNavigate, onReport }: NotificationsPr
               clearUndo();
             }}
             aria-pressed={view === "deleted"}
-            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-outline-variant px-3 text-sm font-medium text-on-surface"
+            className="inline-flex min-h-[48px] items-center gap-1.5 rounded-full border border-outline-variant px-3 text-sm font-medium text-on-surface"
           >
             {view === "inbox" ? <Trash2 size={15} aria-hidden /> : <Inbox size={15} aria-hidden />}
             {view === "inbox" ? "Deleted" : "Inbox"}
@@ -720,7 +720,7 @@ function AccountNotifications({ preview, onNavigate, onReport }: NotificationsPr
               ? "Deleted notifications you can restore will appear here."
               : "You're all caught up. Reactions, comments, and mentions on your reports will show up here."}
           </p>
-          {view === "inbox" && filter === "unread" && <button type="button" className="min-h-[44px] underline" onClick={() => setFilter("all")}>Show all</button>}
+          {view === "inbox" && filter === "unread" && <button type="button" className="min-h-[48px] underline" onClick={() => setFilter("all")}>Show all</button>}
         </section>
       ) : (
         <ul ref={listRef} className="fb-notification-list" aria-label="Notifications">
@@ -988,7 +988,7 @@ function AccountNotifications({ preview, onNavigate, onReport }: NotificationsPr
           <button
             type="button"
             onClick={() => void handleUndoDelete()}
-            className="min-h-[44px] rounded-full px-3 font-semibold underline"
+            className="min-h-[48px] rounded-full px-3 font-semibold underline"
           >
             Undo
           </button>
