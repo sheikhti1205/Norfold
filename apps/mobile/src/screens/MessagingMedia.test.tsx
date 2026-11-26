@@ -824,16 +824,25 @@ async function locationPicker() {
   fireEvent.click(await screen.findByRole("button", { name: "Share location" }));
   return await screen.findByRole("dialog", { name: "Share a location" });
 }
+/** The form's one location row opens the sheet; search/GPS/exact live there. */
+async function mapSheet(picker: HTMLElement) {
+  fireEvent.click(within(picker).getByRole("button", { name: /choose on map/i }));
+  return await screen.findByRole("dialog", { name: "Choose location" });
+}
 it("reviews an approximate or exact pin and sends only on a separate activation, keeping the draft", async () => {
   const geo = geolocation(); await open();
   const field = screen.getByRole("textbox", { name: "Message" }); fireEvent.change(field, { target: { value: "Keep draft" } });
   const picker = await locationPicker(); expect(geo.request).not.toHaveBeenCalled();
   expect(within(picker).getByRole("button", { name: "Send location" })).toHaveProperty("disabled", true);
-  fireEvent.click(within(picker).getByRole("button", { name: "Use my location once" }));
+  const sheet = await mapSheet(picker);
+  fireEvent.click(within(sheet).getByRole("button", { name: "Use my location once" }));
   await waitFor(() => expect(geo.request).toHaveBeenCalledTimes(1));
   await act(async () => geo.resolve());
   expect(m.location).not.toHaveBeenCalled();
-  fireEvent.click(within(picker).getByRole("button", { name: "Use exact pin" }));
+  fireEvent.click(within(sheet).getByRole("button", { name: "Use exact pin" }));
+  expect(within(sheet).getByText(/shared in this chat/)).toBeTruthy();
+  fireEvent.click(within(sheet).getByRole("button", { name: "Confirm location" }));
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: "Choose location" })).toBeNull());
   expect(within(picker).getByText(/shared in this chat/)).toBeTruthy();
   fireEvent.click(within(picker).getByRole("button", { name: "Send location" }));
   await waitFor(() => expect(m.location).toHaveBeenCalledExactlyOnceWith("account", "chat", "peer", { lat: 23, lng: 90, accuracy: 25 }));
@@ -843,14 +852,18 @@ it("reviews an approximate or exact pin and sends only on a separate activation,
 });
 it.each([0, -1, Number.NaN])("does not invent an accuracy estimate for location %s", async (accuracy) => {
   const geo = geolocation(); await open(); const picker = await locationPicker();
-  fireEvent.click(within(picker).getByRole("button", { name: "Use my location once" }));
+  const sheet = await mapSheet(picker);
+  fireEvent.click(within(sheet).getByRole("button", { name: "Use my location once" }));
   await waitFor(() => expect(geo.request).toHaveBeenCalledTimes(1));
   await act(async () => geo.resolve(accuracy)); expect(m.location).not.toHaveBeenCalled();
+  fireEvent.click(within(sheet).getByRole("button", { name: "Confirm location" }));
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: "Choose location" })).toBeNull());
   expect(within(picker).getByRole("button", { name: "Send location" })).toHaveProperty("disabled", true);
 });
 it.each(["account", "relationship", "blocked"])("drops a delayed location result after %s changes", async (change) => {
   const geo = geolocation(); const rendered = await open();
-  const picker = await locationPicker(); fireEvent.click(within(picker).getByRole("button", { name: "Use my location once" }));
+  const picker = await locationPicker(); const sheet = await mapSheet(picker);
+  fireEvent.click(within(sheet).getByRole("button", { name: "Use my location once" }));
   await waitFor(() => expect(geo.request).toHaveBeenCalledTimes(1));
   if (change === "account") m.chat.accountId = "another";
   else if (change === "relationship") m.view.mode = "REQUEST";
@@ -859,15 +872,16 @@ it.each(["account", "relationship", "blocked"])("drops a delayed location result
 });
 it("shows a location permission failure without sending or losing the draft", async () => {
   const geo = geolocation(); await open(); const picker = await locationPicker();
-  fireEvent.click(within(picker).getByRole("button", { name: "Use my location once" }));
+  const sheet = await mapSheet(picker);
+  fireEvent.click(within(sheet).getByRole("button", { name: "Use my location once" }));
   await waitFor(() => expect(geo.request).toHaveBeenCalledTimes(1));
   await act(async () => geo.reject()); expect(m.location).not.toHaveBeenCalled();
-  expect(screen.getByRole("alert").textContent).toMatch(/Location permission/);
+  expect(within(sheet).getByRole("alert").textContent).toMatch(/Location permission/);
 });
 it("shares a manual approximate pin without a permission request or invented accuracy", async () => {
   const geo = geolocation(); await open(); const picker = await locationPicker();
   fireEvent.change(within(picker).getByRole("textbox", { name: "Approximate location" }), { target: { value: "23.810332, 90.412518" } });
-  expect(within(picker).getByText("Pin rounded to ~100 m precision.")).toBeTruthy();
+  expect(within(picker).getByText("23.810, 90.413")).toBeTruthy();
   fireEvent.click(within(picker).getByRole("button", { name: "Send location" }));
   await waitFor(() => expect(m.location).toHaveBeenCalledExactlyOnceWith("account", "chat", "peer", { lat: 23.81, lng: 90.413, accuracy: null }));
   expect(geo.request).not.toHaveBeenCalled();

@@ -462,6 +462,24 @@ describe("MapPickerSheet (keyless fallback path)", () => {
       expect(control.className).toContain("min-w-[48px]");
     }
   });
+
+  it("hands the draft pin to the external Maps app from one icon-only 48px action", async () => {
+    const openSpy = vi.fn();
+    vi.stubGlobal("open", openSpy);
+    try {
+      renderSheet({ value: PINNED_VALUE });
+      const action = screen.getByRole("button", { name: "Open in Maps" });
+      // Icon-only: no visible text, and the full 48px target.
+      expect(action.textContent).toBe("");
+      expect(action.className).toContain("min-h-[48px]");
+      expect(action.className).toContain("min-w-[48px]");
+      fireEvent.click(action);
+      await waitFor(() => expect(openSpy).toHaveBeenCalledTimes(1));
+      expect(String(openSpy.mock.calls[0]?.[0])).toContain("google.com/maps");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe("MapPickerSheet (Google web picker path)", () => {

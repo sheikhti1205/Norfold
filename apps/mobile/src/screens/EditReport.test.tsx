@@ -234,8 +234,6 @@ describe("EditReport", () => {
       screen.getByLabelText("YouTube link (optional)"), screen.getByTestId("category-trigger"),
       screen.getByPlaceholderText("Place, decimal coords, or a Google Maps link"),
       screen.getByRole("button", { name: /choose on map/i }),
-      screen.getByRole("button", { name: /use exact pin/i }),
-      screen.getByRole("button", { name: /use my location once/i }),
     ]) expect((field as HTMLInputElement).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText("Description"), { target: { value: "late edit" } });
     await act(async () => save.reject(new ApiError("Post not found or you do not own it", 403)));

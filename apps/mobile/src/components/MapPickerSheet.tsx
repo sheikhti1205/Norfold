@@ -6,6 +6,7 @@ import {
   ChevronRight,
   ChevronUp,
   Crosshair,
+  ExternalLink,
   MapPin,
   Minus,
   Plus,
@@ -25,8 +26,14 @@ import {
 import {
   createProductionLocationAdapter,
   requestFixWithGeneration,
+  type FixState,
   type LocationAdapter,
 } from "../services/locationAdapter";
+import {
+  isNativeLocationServicesAvailable,
+  requestEnableDeviceLocation,
+} from "../services/locationServices";
+import { openInMaps } from "../utils/location";
 import {
   isNativeMapPickerAvailable,
   openMapPickerNative,
@@ -88,6 +95,8 @@ export interface MapPickerSheetProps {
    */
   nativePicker?: ((options: MapPickerInput) => Promise<MapPickerResult>) | null;
   locationAdapter?: LocationAdapter;
+  /** Conversation pins may carry the fix accuracy; public pins never do. */
+  visibility?: "public" | "conversation";
 }
 
 /** Collapses accidental double-taps on the Search button into one request. */
@@ -226,8 +235,7 @@ function PickerRasterMap({ center, zoom, onZoomIn, onZoomOut, onNudge }: PickerR
  * On Android the native MapLibre picker owns the interaction: this component
  * renders nothing and forwards Confirm/Cancel from the Activity. Confirm
  * commits through the same approximate-by-default path as LocationPicker
- * (exact opt-in stays in LocationPicker's own toggle, exactly like the GPS,
- * manual, and link entry paths). Cancel never mutates the draft.
+ * (exact opt-in is this sheet's own toggle). Cancel never mutates the draft.
  *
  * On web/dev (or when the bridge is missing) a fallback sheet applies: the
  * interactive Google map when a public key is built in (web only), otherwise
@@ -244,6 +252,7 @@ export function MapPickerSheet({
   nominatimOverride,
   nativePicker,
   locationAdapter,
+  visibility = "public",
 }: MapPickerSheetProps) {
   const [defaultAdapter] = useState(createProductionLocationAdapter);
   const adapter = locationAdapter ?? defaultAdapter;
@@ -282,6 +291,13 @@ export function MapPickerSheet({
   // A coarse fix too imprecise to snap to — held for an explicit opt-in.
   const [pendingFix, setPendingFix] = useState<MapCenter | null>(null);
   const [pendingAccuracy, setPendingAccuracy] = useState<number | null>(null);
+  // Accuracy of the previewed fix, carried into a conversation pin only. It is
+  // dropped as soon as the pin moves for any other reason.
+  const [fixAccuracy, setFixAccuracy] = useState<number | null>(null);
+  // Which failure the message describes; services-off alone offers the native
+  // enable-location action (never for other failures).
+  const [geoErrorKind, setGeoErrorKind] = useState<FixState["kind"] | null>(null);
+  const [enablingServices, setEnablingServices] = useState(false);
   // Provider and platform are fixed for the life of the mount: a build-time
   // key cannot change under a session, and the Google JS API is web-only.
   const [mapProvider] = useState(resolveMapProvider);
@@ -346,7 +362,7 @@ export function MapPickerSheet({
         if (stale) return;
         if (!result.cancelled) {
           // Approximate-by-default, identical to every other entry path;
-          // exact opt-in lives in LocationPicker's toggle.
+          // exact opt-in is the fallback sheet's own toggle.
           confirm(
             commitCenterAsLocation(
               label,
@@ -377,6 +393,9 @@ export function MapPickerSheet({
         setGeoError(null);
         setPendingFix(null);
         setPendingAccuracy(null);
+        setFixAccuracy(null);
+        setGeoErrorKind(null);
+        setEnablingServices(false);
         setGpsPreview(null);
         setNativeUnavailable(true);
       },
@@ -417,6 +436,9 @@ export function MapPickerSheet({
     setGeoError(null);
     setPendingFix(null);
     setPendingAccuracy(null);
+    setFixAccuracy(null);
+    setGeoErrorKind(null);
+    setEnablingServices(false);
     setGpsPreview(null);
     setMapFailure(null);
   }, [open, resolvedPicker, value.latitude, value.longitude, value.label, initialSearchResult]);
@@ -431,6 +453,7 @@ export function MapPickerSheet({
     const nextCenter = nudgeCenter(fallbackCenter, fallbackZoom, dxTiles, dyTiles);
     fixGeneration.current += 1;
     setLocating(false);
+    setFixAccuracy(null);
     setFallbackCenter(nextCenter);
     setDraft(nextCenter);
   }
@@ -442,15 +465,17 @@ export function MapPickerSheet({
   function handleMapCenterChange(center: MapCenter): void {
     fixGeneration.current += 1;
     setLocating(false);
+    setFixAccuracy(null);
     setFallbackCenter(center);
     setDraft(center);
   }
 
   /** Snaps the preview to a fix. Never confirms — the user still confirms. */
-  function snapPreviewTo(fix: MapCenter): void {
+  function snapPreviewTo(fix: MapCenter, accuracy: number | null): void {
     setGpsPreview(fix);
     setPendingFix(null);
     setPendingAccuracy(null);
+    setFixAccuracy(accuracy);
     setDraft(fix);
     setFallbackCenter(fix);
     announce("Preview recentered on your location. Confirm to use it.");
@@ -463,6 +488,7 @@ export function MapPickerSheet({
   function useCurrentLocation(): void {
     setLocating(true);
     setGeoError(null);
+    setGeoErrorKind(null);
     setPendingFix(null);
     setPendingAccuracy(null);
     void requestFixWithGeneration(adapter, { generation: fixGeneration }).then((outcome) => {
@@ -471,6 +497,7 @@ export function MapPickerSheet({
       if (outcome.kind !== "fix") {
         if (outcome.kind !== "locating" && outcome.kind !== "requesting-permission") {
           setGeoError(locationFailureMessage(outcome.kind === "services-off" ? "disabled" : outcome.kind));
+          setGeoErrorKind(outcome.kind);
         }
         return;
       }
@@ -480,13 +507,29 @@ export function MapPickerSheet({
         setPendingAccuracy(outcome.accuracy);
         return;
       }
-      snapPreviewTo(fix);
+      snapPreviewTo(fix, outcome.accuracy);
     });
   }
 
   function acceptPendingFix(): void {
     if (!pendingFix) return;
-    snapPreviewTo(pendingFix);
+    snapPreviewTo(pendingFix, pendingAccuracy);
+  }
+
+  /**
+   * User-controlled enable-location flow: presents Android's own dialog and
+   * retries the fix only when the switch is actually on. Dismissal keeps the
+   * map/search/manual path — nothing is force-enabled.
+   */
+  async function enableServicesAndRetry(): Promise<void> {
+    if (enablingServices) return;
+    setEnablingServices(true);
+    try {
+      const enabled = await requestEnableDeviceLocation();
+      if (enabled) useCurrentLocation();
+    } finally {
+      setEnablingServices(false);
+    }
   }
 
   async function handleSearchSubmit(event?: FormEvent): Promise<void> {
@@ -551,6 +594,7 @@ export function MapPickerSheet({
   function pickResult(place: PlaceResult): void {
     fixGeneration.current += 1;
     setLocating(false);
+    setFixAccuracy(null);
     const center: MapCenter = { lat: place.latitude, lng: place.longitude };
     setDraft(center);
     setDraftLabel(place.displayName);
@@ -560,8 +604,13 @@ export function MapPickerSheet({
   function handleConfirm(): void {
     if (!draft) return;
     const label = draftLabel.trim() || "Pinned location";
+    const committed = commitCenterAsLocation(label, draft, exact ? "EXACT" : "APPROXIMATE");
+    // Only a conversation pin carries the fix estimate, and only while the
+    // confirmed pin is still the one the fix produced.
     onConfirm(
-      commitCenterAsLocation(label, draft, exact ? "EXACT" : "APPROXIMATE"),
+      fixAccuracy != null && visibility === "conversation"
+        ? { ...committed, accuracy: fixAccuracy }
+        : committed,
     );
     announce(
       exact ? "Exact pin selected." : "Approximate location selected (~100 m).",
@@ -735,7 +784,20 @@ export function MapPickerSheet({
             </Button>
           </div>
         ) : null}
-        {geoError ? <p className="text-xs text-error">{geoError}</p> : null}
+        {geoError ? <p role="alert" className="text-xs text-error">{geoError}</p> : null}
+        {geoErrorKind === "services-off" && isNativeLocationServicesAvailable() ? (
+          <div>
+            <Button
+              type="button"
+              variant="outline"
+              size="md"
+              loading={enablingServices}
+              onClick={() => void enableServicesAndRetry()}
+            >
+              Turn on location
+            </Button>
+          </div>
+        ) : null}
         {gpsPreview ? (
           <p className="text-xs text-on-surface-variant">
             Preview centered on your location — confirm to use it. Your location
@@ -746,8 +808,9 @@ export function MapPickerSheet({
         {draft && exact ? (
           <div className="flex flex-wrap items-center gap-2 rounded-m3-sm border border-error px-3 py-2">
             <p className="text-xs text-error">
-              Warning: this is an exact pin and will be shown publicly. Prefer
-              the approximate area.
+              {visibility === "conversation"
+                ? "Warning: this is an exact pin and will be shared in this chat. Prefer the approximate area."
+                : "Warning: this is an exact pin and will be shown publicly. Prefer the approximate area."}
             </p>
             <Button
               type="button"
@@ -770,15 +833,28 @@ export function MapPickerSheet({
           </div>
         ) : null}
 
-        <Button
-          type="button"
-          variant="primary"
-          size="lg"
-          disabled={!draft}
-          onClick={handleConfirm}
-        >
-          Confirm location
-        </Button>
+        <div className="flex items-stretch gap-2">
+          <Button
+            type="button"
+            variant="primary"
+            size="lg"
+            className="flex-1"
+            disabled={!draft}
+            onClick={handleConfirm}
+          >
+            Confirm location
+          </Button>
+          {draft ? (
+            <button
+              type="button"
+              aria-label="Open in Maps"
+              onClick={() => openInMaps(draft.lat, draft.lng, draftLabel.trim() || "Pinned location")}
+              className="inline-flex min-h-[48px] min-w-[48px] shrink-0 items-center justify-center rounded-m3-md border border-outline text-on-surface focus:outline-none"
+            >
+              <ExternalLink size={18} aria-hidden />
+            </button>
+          ) : null}
+        </div>
       </div>
     </BottomSheet>
   );

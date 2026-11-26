@@ -222,7 +222,10 @@ describe("CreateReport", () => {
     const { unmount } = render(<CreateReport />);
     const locationInput = screen.getByLabelText(/approximate location/i);
     fireEvent.change(locationInput, { target: { value: "23.810332, 90.412518" } });
+    // Exact selection moved into the map picker sheet; the form only has one row.
+    fireEvent.click(await screen.findByRole("button", { name: /choose on map/i }));
     fireEvent.click(await screen.findByRole("button", { name: /use exact pin/i }));
+    fireEvent.click(screen.getByRole("button", { name: /confirm location/i }));
     await screen.findByText(/exact pin and will be shown publicly/i);
 
     unmount();

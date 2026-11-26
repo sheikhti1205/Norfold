@@ -1,35 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { Crosshair, ExternalLink, MapPin } from "lucide-react";
-import { Button } from "./Button";
-import { announce } from "./LiveRegion";
-import { MapEmbed } from "./MapEmbed";
+import { MapPin, X } from "lucide-react";
 import { MapPickerSheet } from "./MapPickerSheet";
 import {
   FIND_IN_MAPS_HELP,
-  openInMaps,
   parseLocationInput,
   resolveShortLink,
   roundToApproximate,
 } from "../utils/location";
 import {
-  formatAccuracy,
-  isLowAccuracy,
-  locationFailureMessage,
-} from "./locationPermission";
-import {
   createProductionLocationAdapter,
-  requestFixWithGeneration,
-  type FixState,
   type LocationAdapter,
 } from "../services/locationAdapter";
-import {
-  isNativeLocationServicesAvailable,
-  requestEnableDeviceLocation,
-} from "../services/locationServices";
-
-function fixFailureMessage(kind: Exclude<FixState["kind"], "idle" | "requesting-permission" | "locating" | "fix">): string {
-  return locationFailureMessage(kind === "services-off" ? "disabled" : kind);
-}
 
 export interface LocationValue {
   label: string;
@@ -57,41 +38,19 @@ interface LocationPickerProps {
 }
 
 /**
- * One-time approximate location: optional "use my location once" (permission
- * optional + graceful fallback) plus a free-text place label, decimal
- * coordinates, or a Google Maps link. No tracking.
+ * One-time approximate location: a free-text place label, decimal
+ * coordinates, or a Google Maps link, plus one row that opens the map picker
+ * sheet for search, GPS preview and map selection. No tracking.
  */
 export function LocationPicker({ value, onChange, maxLength, locationAdapter, disabled = false, visibility = "public" }: LocationPickerProps) {
   const disabledRef = useRef(disabled);
   disabledRef.current = disabled;
   const [defaultAdapter] = useState(createProductionLocationAdapter);
   const adapter = locationAdapter ?? defaultAdapter;
-  const fixGeneration = useRef(0);
-  const [locating, setLocating] = useState(false);
-  const [geoError, setGeoError] = useState<string | null>(null);
-  // Which failure the message describes; services-off alone offers the
-  // native enable-location action (never for other failures).
-  const [geoErrorKind, setGeoErrorKind] = useState<FixState["kind"] | null>(null);
-  const [enablingServices, setEnablingServices] = useState(false);
-  // A coarse fix too imprecise to publish on its own — held until confirmed.
-  const [pendingFix, setPendingFix] = useState<{ lat: number; lng: number; accuracy: number | null } | null>(null);
-  // The embedded preview is a deliberate step, never an automatic load.
-  const [previewOpen, setPreviewOpen] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
-  // Legacy drafts carry no precision; they were always rounded.
-  const [approx, setApprox] = useState(() => value.precision !== "EXACT");
   const [sourceText, setSourceText] = useState(value.label);
-  // Keep the unrounded coordinates so "Use exact pin" can really restore them.
-  const [precise, setPrecise] = useState<{ lat: number; lng: number } | null>(() => {
-    if (value.preciseLatitude != null && value.preciseLongitude != null) {
-      return { lat: value.preciseLatitude, lng: value.preciseLongitude };
-    }
-    return value.latitude != null && value.longitude != null
-      ? { lat: value.latitude, lng: value.longitude }
-      : null;
-  });
   // Guards a short-link A resolving after the user replaced it with link B.
   const resolveSeq = useRef(0);
   // The last value this picker emitted, so an external reset (discard draft)
@@ -100,35 +59,19 @@ export function LocationPicker({ value, onChange, maxLength, locationAdapter, di
 
   useEffect(() => {
     if (!disabled) return;
-    fixGeneration.current += 1;
     resolveSeq.current += 1;
-    setLocating(false);
     setResolving(false);
-    setPendingFix(null);
     setMapOpen(false);
   }, [disabled]);
 
   useEffect(() => {
     if (value === emittedRef.current) return;
-    fixGeneration.current += 1;
     emittedRef.current = value;
     setSourceText(value.label);
-    setPrecise(
-      value.preciseLatitude != null && value.preciseLongitude != null
-        ? { lat: value.preciseLatitude, lng: value.preciseLongitude }
-        : value.latitude != null && value.longitude != null
-          ? { lat: value.latitude, lng: value.longitude }
-          : null,
-    );
-    setApprox(value.precision !== "EXACT");
-    setLocating(false);
-    setGeoError(null);
-    setGeoErrorKind(null);
-    setPendingFix(null);
     setParseError(null);
   }, [value]);
 
-  useEffect(() => () => { fixGeneration.current += 1; resolveSeq.current += 1; }, []);
+  useEffect(() => () => { resolveSeq.current += 1; }, []);
 
   function emit(next: LocationValue) {
     if (disabledRef.current) return;
@@ -145,101 +88,23 @@ export function LocationPicker({ value, onChange, maxLength, locationAdapter, di
   ) {
     if (disabledRef.current) return;
     if (lat == null || lng == null) {
-      setPrecise(null);
-      setApprox(true);
       emit({ label, latitude: lat, longitude: lng, precision: "APPROXIMATE", preciseLatitude: null, preciseLongitude: null });
       return;
     }
-    setPrecise({ lat, lng });
     if (precision === "EXACT") {
-      setApprox(false);
       emit({ label, latitude: lat, longitude: lng, precision: "EXACT", preciseLatitude: lat, preciseLongitude: lng,
         ...(visibility === "conversation" && accuracy !== undefined ? { accuracy } : {}) });
       return;
     }
     const rounded = roundToApproximate(lat, lng);
-    setApprox(true);
     emit({ label, latitude: rounded.lat, longitude: rounded.lng, precision: "APPROXIMATE", preciseLatitude: lat, preciseLongitude: lng,
       ...(visibility === "conversation" && accuracy !== undefined ? { accuracy } : {}) });
-  }
-
-  async function useCurrentLocation() {
-    if (disabledRef.current) return;
-    setLocating(true);
-    setGeoError(null);
-    setGeoErrorKind(null);
-    setPendingFix(null);
-
-    const outcome = await requestFixWithGeneration(adapter, { generation: fixGeneration });
-    if (outcome.kind === "idle" || disabledRef.current) return;
-    if (outcome.kind === "fix") {
-      if ((visibility === "conversation" && outcome.accuracy === null)
-        || (outcome.accuracy !== null && (!Number.isFinite(outcome.accuracy) || outcome.accuracy <= 0 || outcome.accuracy > 100_000))) {
-        setGeoError(locationFailureMessage("unavailable")); setGeoErrorKind("unavailable"); setLocating(false); return;
-      }
-      if (isLowAccuracy(outcome.accuracy)) {
-        // Coarser than the published ~100 m pin: hold it for an explicit
-        // opt-in instead of attaching a misleading pin.
-        setPendingFix({
-          lat: outcome.lat,
-          lng: outcome.lng,
-          accuracy: outcome.accuracy,
-        });
-        setLocating(false);
-        return;
-      }
-      setCoords(value.label || "Pinned location", outcome.lat, outcome.lng, "APPROXIMATE", outcome.accuracy);
-      announce("Approximate location imported (~100 m).");
-      setLocating(false);
-      return;
-    }
-
-    if (outcome.kind !== "locating" && outcome.kind !== "requesting-permission") {
-      setGeoError(fixFailureMessage(outcome.kind));
-      setGeoErrorKind(outcome.kind);
-    }
-    setLocating(false);
-  }
-
-  /**
-   * User-controlled enable-location flow: presents Android's own dialog and
-   * retries the fix only when the switch is actually on. Dismissal keeps the
-   * typed-place / manual-map fallback — nothing is force-enabled.
-   */
-  async function enableServicesAndRetry() {
-    if (enablingServices || disabledRef.current) return;
-    setEnablingServices(true);
-    try {
-      const enabled = await requestEnableDeviceLocation();
-      if (enabled) {
-        await useCurrentLocation();
-      }
-    } finally {
-      setEnablingServices(false);
-    }
-  }
-
-  function acceptPendingFix() {
-    if (!pendingFix || disabledRef.current) return;
-    setPendingFix(null);
-    setGeoError(null);
-    setCoords(
-      value.label || "Pinned location",
-      pendingFix.lat,
-      pendingFix.lng,
-      "APPROXIMATE",
-      pendingFix.accuracy,
-    );
-    announce("Approximate location imported.");
   }
 
   function handleInput(raw: string) {
     if (disabledRef.current) return;
     resolveSeq.current += 1;
     setResolving(false);
-    fixGeneration.current += 1;
-    setLocating(false);
-    setPendingFix(null);
     setSourceText(raw);
     const parsed = parseLocationInput(raw);
     setParseError(parsed.error);
@@ -266,8 +131,6 @@ export function LocationPicker({ value, onChange, maxLength, locationAdapter, di
       setCoords(parsed.label, parsed.latitude, parsed.longitude, "APPROXIMATE");
       return;
     }
-    setPrecise(null);
-    setApprox(true);
     emit({
       label: parsed.label,
       latitude: parsed.latitude,
@@ -278,46 +141,49 @@ export function LocationPicker({ value, onChange, maxLength, locationAdapter, di
     });
   }
 
-  function handleApproximate() {
-    if (disabledRef.current) return;
-    const lat = precise?.lat ?? value.latitude;
-    const lng = precise?.lng ?? value.longitude;
-    if (lat == null || lng == null) return;
-    const rounded = roundToApproximate(lat, lng);
-    setPrecise({ lat, lng });
-    emit({ ...value, latitude: rounded.lat, longitude: rounded.lng, precision: "APPROXIMATE", preciseLatitude: lat, preciseLongitude: lng });
-    setApprox(true);
-  }
-
-  function handleUseExact() {
-    if (disabledRef.current) return;
-    if (!precise) return;
-    emit({ ...value, latitude: precise.lat, longitude: precise.lng, precision: "EXACT", preciseLatitude: precise.lat, preciseLongitude: precise.lng });
-    setApprox(false);
-    announce(visibility === "conversation" ? "Exact pin enabled. It will be shared in this chat." : "Exact pin enabled. It will be shown publicly.");
-  }
-
   function handleMapConfirm(next: LocationValue) {
     if (disabledRef.current) return;
-    fixGeneration.current += 1;
-    setLocating(false);
-    setPendingFix(null);
     // The sheet already commits through the same approximate-by-default path;
-    // re-enter via setCoords so precise/approx state stays in sync, and show
-    // the confirmed label in the text field.
+    // re-enter via setCoords so approximate state stays in sync, and show the
+    // confirmed label in the text field.
     setSourceText(next.label);
     setParseError(null);
-    setGeoError(null);
-    setGeoErrorKind(null);
     setCoords(
       next.label,
       next.preciseLatitude ?? next.latitude,
       next.preciseLongitude ?? next.longitude,
       next.precision ?? "APPROXIMATE",
+      next.accuracy,
     );
   }
 
+  function clearLocation() {
+    if (disabledRef.current) return;
+    resolveSeq.current += 1;
+    setResolving(false);
+    setSourceText("");
+    setParseError(null);
+    emit({
+      label: "",
+      latitude: null,
+      longitude: null,
+      precision: "APPROXIMATE",
+      preciseLatitude: null,
+      preciseLongitude: null,
+    });
+  }
+
   const hasCoords = value.latitude != null && value.longitude != null;
+  const approx = value.precision !== "EXACT";
+  const readout = hasCoords
+    ? approx
+      // The readout must not imply more precision than the mode holds:
+      // approximate pins show the 3 decimals they were rounded to.
+      ? `${value.latitude!.toFixed(3)}, ${value.longitude!.toFixed(3)}`
+      : `${value.latitude}, ${value.longitude}`
+    : null;
+  const locationTitle = hasCoords ? value.label || "Pinned location" : "Choose on map";
+  const locationDetail = hasCoords ? readout : "Set a location for this report";
 
   return (
     <div className="flex flex-col gap-3">
@@ -325,131 +191,64 @@ export function LocationPicker({ value, onChange, maxLength, locationAdapter, di
         <span className="mb-1 block text-sm font-medium text-on-surface">
           Approximate location
         </span>
-        <div className="flex gap-2">
-          <input
-            disabled={disabled}
-            value={sourceText}
-            onChange={(e) => handleInput(e.target.value)}
-            placeholder="Place, decimal coords, or a Google Maps link"
-            className="w-full rounded-m3-sm border border-outline-variant bg-surface px-3.5 py-3 text-base placeholder:text-on-surface-variant focus:border-on-surface focus:outline-none"
-            maxLength={maxLength}
-          />
-        </div>
+        <input
+          disabled={disabled}
+          value={sourceText}
+          onChange={(e) => handleInput(e.target.value)}
+          placeholder="Place, decimal coords, or a Google Maps link"
+          aria-busy={resolving || undefined}
+          className="w-full rounded-m3-sm border border-outline-variant bg-surface px-3.5 py-3 text-base placeholder:text-on-surface-variant focus:border-on-surface focus:outline-none"
+          maxLength={maxLength}
+        />
         {value.label && value.label !== sourceText && (
           <p className="mt-1 text-xs text-on-surface-variant">Parsed: {value.label}</p>
         )}
       </label>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
+      <div className="flex w-full items-stretch gap-2">
+        <button
           type="button"
-          variant="outline"
-          size="md"
-          loading={locating || resolving}
-          onClick={useCurrentLocation}
+          data-testid="location-row"
+          onClick={() => setMapOpen(true)}
           disabled={disabled}
+          aria-label={hasCoords
+            ? `Choose on map. ${locationTitle}. ${readout}`
+            : "Choose on map. Set a location for this report"}
+          className="flex min-h-[48px] min-w-0 flex-1 items-center gap-3 rounded-m3-sm border border-outline-variant bg-surface px-3.5 py-1.5 text-left focus:border-on-surface focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <Crosshair size={16} aria-hidden />
-          Use my location once
-        </Button>
-        <Button type="button" variant="outline" size="md" disabled={disabled} onClick={() => setMapOpen(true)}>
-          <MapPin size={16} aria-hidden />
-          Choose on map
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="md"
-          disabled={disabled || (!sourceText.trim() && !hasCoords)}
-          onClick={() => void openInMaps(value.latitude, value.longitude, sourceText.trim() || value.label)}
-        >
-          <ExternalLink size={16} aria-hidden />
-          Find location in Maps
-        </Button>
-        {hasCoords && (
-          <Button type="button" variant="text" size="md" disabled={disabled} onClick={() => void openInMaps(value.latitude, value.longitude, value.label)}>
-            <ExternalLink size={16} aria-hidden />
-            Open in Maps
-          </Button>
-        )}
-        {hasCoords && (
-          <span className="flex items-center gap-1 text-xs text-on-surface-variant">
-            <MapPin size={13} aria-hidden />
-            {/* The readout must not imply more precision than the mode holds:
-                approximate pins show the 3 decimals they were rounded to. */}
-            {approx
-              ? `${value.latitude!.toFixed(3)}, ${value.longitude!.toFixed(3)}`
-              : `${value.latitude}, ${value.longitude}`}
+          <MapPin size={18} aria-hidden className="shrink-0 text-on-surface-variant" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-on-surface">{locationTitle}</span>
+            <span className="block truncate text-xs text-on-surface-variant">{locationDetail}</span>
           </span>
+        </button>
+        {hasCoords && (
+          <button
+            type="button"
+            aria-label="Clear location"
+            onClick={clearLocation}
+            disabled={disabled}
+            className="inline-flex min-h-[48px] min-w-[48px] shrink-0 items-center justify-center rounded-m3-sm border border-outline-variant bg-surface text-on-surface-variant hover:bg-surface-container focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <X size={18} aria-hidden />
+          </button>
         )}
       </div>
 
       {hasCoords && !approx && (
-        <div className="flex flex-wrap items-center gap-2 rounded-m3-sm border border-error px-3 py-2">
-          <p className="text-xs text-error">
-            {visibility === "conversation" ? "Warning: this is an exact pin and will be shared in this chat. Prefer the approximate area."
-              : "Warning: this is an exact pin and will be shown publicly. Prefer the approximate area."}
-          </p>
-          <Button type="button" variant="outline" size="md" disabled={disabled} onClick={handleApproximate}>
-            Round to ~100 m
-          </Button>
-        </div>
-      )}
-      {hasCoords && approx && (
-        <div className="flex flex-wrap items-center gap-2 rounded-m3-sm bg-surface-container px-3 py-2">
-          <p className="text-xs text-on-surface-variant">
-            Pin rounded to ~100 m precision.
-          </p>
-          <Button type="button" variant="text" size="md" disabled={disabled} onClick={handleUseExact}>
-            Use exact pin
-          </Button>
-        </div>
+        <p className="text-xs text-error">
+          {visibility === "conversation" ? "Warning: this is an exact pin and will be shared in this chat. Prefer the approximate area."
+            : "Warning: this is an exact pin and will be shown publicly. Prefer the approximate area."}
+        </p>
       )}
 
-      {pendingFix && (
-        <div
-          data-testid="low-accuracy-notice"
-          className="flex flex-wrap items-center gap-3 rounded-m3-sm border border-outline-variant bg-surface-container px-3 py-2"
-        >
-          <p className="text-xs text-on-surface">
-            This location is only accurate to about{" "}
-            {pendingFix.accuracy != null ? formatAccuracy(pendingFix.accuracy) : "a few km"}
-            . Nothing was saved — confirm if you still want to use it.
-          </p>
-          <Button type="button" variant="outline" size="md" disabled={disabled} onClick={acceptPendingFix}>
-            Use this location anyway
-          </Button>
-        </div>
+      {resolving && (
+        <p className="text-xs text-on-surface-variant">Resolving map link…</p>
       )}
-
-      {(geoError || parseError) && (
-        <p role="alert" className="text-xs text-error">{geoError ?? parseError}</p>
-      )}
-      {geoErrorKind === "services-off" && isNativeLocationServicesAvailable() && (
-        <div>
-          <Button
-            type="button"
-            variant="outline"
-            size="md"
-            loading={enablingServices}
-            disabled={disabled}
-            onClick={() => void enableServicesAndRetry()}
-          >
-            Turn on location
-          </Button>
-        </div>
+      {parseError && (
+        <p role="alert" className="text-xs text-error">{parseError}</p>
       )}
       <p className="text-xs text-on-surface-variant">{FIND_IN_MAPS_HELP} Paste the coordinates or link back here.</p>
-
-      {hasCoords && !previewOpen && (
-        <Button type="button" variant="outline" size="md" onClick={() => setPreviewOpen(true)}>
-          <MapPin size={16} aria-hidden />
-          Preview map in app
-        </Button>
-      )}
-      {hasCoords && previewOpen && (
-        <MapEmbed lat={value.latitude} lng={value.longitude} label={value.label} />
-      )}
 
       <MapPickerSheet
         open={mapOpen && !disabled}
@@ -457,6 +256,7 @@ export function LocationPicker({ value, onChange, maxLength, locationAdapter, di
         value={value}
         onConfirm={handleMapConfirm}
         locationAdapter={adapter}
+        visibility={visibility}
       />
     </div>
   );
