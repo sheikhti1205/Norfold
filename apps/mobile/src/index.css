@@ -359,6 +359,12 @@ html.fb-reduce-motion .fb-morph-bar {
 /* Full-screen report editor: the overlay keeps the whole canvas, but the
  * editable field stays a readable writing column instead of full-width lines. */
 #report-editor-overlay .tiptap { max-width: 44rem; margin-inline: auto; }
+/* The writing surface fills the scroller so the editable card ends at the
+ * pinned rail instead of stopping at its content height. EditorContent renders
+ * the field's own wrapper, which needs a definite height before the field's
+ * `min-height: 100%` can resolve; the inline composer never renders this
+ * scroller, so its 120-240px field is untouched by the fill. */
+#report-editor-overlay .fb-report-editor-scroller > div { height: 100%; }
 /* The dialog takes the initial focus on open (it is not a control), so it
  * draws no ring of its own; Tab reaches the header buttons from there. */
 #report-editor-overlay:focus { outline: none; }

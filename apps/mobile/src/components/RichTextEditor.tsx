@@ -1834,7 +1834,7 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
           </header>
            <div
             data-testid="report-editor-scroller"
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+            className="fb-report-editor-scroller min-h-0 flex-1 overflow-y-auto overscroll-contain"
             style={{ touchAction: "pan-y", WebkitOverflowScrolling: "touch" }}
             onPointerDown={handleEditorIntentionalInteraction} onTouchStart={handleEditorIntentionalInteraction} onKeyDown={handleEditorIntentionalInteraction}>
             <EditorContent editor={editor} />

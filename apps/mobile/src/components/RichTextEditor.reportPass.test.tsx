@@ -350,4 +350,21 @@ describe("RichTextEditor report pass — accessibility", () => {
     fireEvent.keyDown(document, { key: "Tab" });
     expect(document.activeElement).toBe(close);
   });
+
+  it("opts the full-screen writing surface into the fill rule only", () => {
+    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    // The inline field lives outside the overlay, so the scoped fill cannot
+    // reach it and its 120-240px box is unchanged.
+    const inline = document.querySelector(".tiptap") as HTMLElement;
+    expect(inline.closest("#report-editor-overlay")).toBeNull();
+    pickRailMore("Expand editor");
+    const scroller = screen.getByTestId("report-editor-scroller");
+    // jsdom has no layout: the height comes from the scoped CSS rule, and this
+    // pins the hook that rule targets plus the one wrapper it must size.
+    expect(scroller.classList.contains("fb-report-editor-scroller")).toBe(true);
+    expect(scroller.children).toHaveLength(1);
+    expect((scroller.firstElementChild as HTMLElement).querySelector(".tiptap")).toBe(
+      screen.getByRole("textbox", { name: "Description" }),
+    );
+  });
 });
