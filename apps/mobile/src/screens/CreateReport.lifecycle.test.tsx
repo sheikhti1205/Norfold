@@ -136,7 +136,7 @@ describe("Report publication lifecycle", () => {
     expect(publish.mock.calls[0]![0]).toMatchObject({ expectedAccountId: "u1" });
   });
 
-  it("blocks a second publish after an uncertain response, including on remount", async () => {
+  it("pauses publishing after an uncertain response, including on remount, until the outcome is cleared", async () => {
     saveDraft(fixture("Old bag"), "u1");
     publish.mockRejectedValue(new PublishOutcomeUncertainError());
     const view = render(<CreateReport />);
@@ -146,9 +146,60 @@ describe("Report publication lifecycle", () => {
     expect(publish).toHaveBeenCalledTimes(1);
     expect(loadDraft("u1")?.title).toBe("Old bag");
 
+    // The pause is part of the draft: a remount restores it.
     view.unmount();
     render(<CreateReport />);
+    expect(screen.getByText(/this report may already be published/i)).toBeTruthy();
     fireEvent.submit(screen.getByRole("button", { name: /publish/i }).closest("form")!);
     expect(publish).toHaveBeenCalledTimes(1);
+
+    // Checking My Reports and finding nothing lifts the pause, so the same
+    // content can be published again.
+    fireEvent.click(screen.getByRole("button", { name: /not there/i }));
+    fireEvent.submit(screen.getByRole("button", { name: /publish/i }).closest("form")!);
+    await waitFor(() => expect(publish).toHaveBeenCalledTimes(2));
+    // The retried publish is uncertain again, and the draft is still intact.
+    await screen.findByText(/publication outcome is uncertain/i);
+    expect(loadDraft("u1")?.title).toBe("Old bag");
+  });
+
+  it("clears an uncertain pause without losing the draft's text or photos", async () => {
+    saveDraft(fixture("Old bag"), "u1");
+    publish.mockRejectedValue(new PublishOutcomeUncertainError());
+    render(<CreateReport />);
+    const input = document.querySelector('input[type="file"]');
+    if (!input) throw new Error("file input not found");
+    fireEvent.change(input, { target: { files: [new File(["bag"], "bag.jpg", { type: "image/jpeg" })] } });
+    await screen.findByRole("button", { name: /remove photo/i });
+
+    fireEvent.submit(screen.getByRole("button", { name: /publish/i }).closest("form")!);
+    await screen.findByText(/publication outcome is uncertain/i);
+    expect((screen.getByRole("button", { name: /publish lost report/i }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: /not there/i }));
+
+    // Publish is live again and every part of the draft survived the clear.
+    expect((screen.getByRole("button", { name: /publish lost report/i }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByLabelText(/what did you lose/i) as HTMLInputElement).value).toBe("Old bag");
+    expect(screen.getByLabelText("Description").textContent).toContain("A black bag near the north gate entrance");
+    expect(screen.getAllByTestId("report-photo-slide")).toHaveLength(1);
+    expect(loadDraft("u1")?.title).toBe("Old bag");
+  });
+
+  it("takes discard offline on an empty form and while a publish is in flight", async () => {
+    const empty = render(<CreateReport />);
+    const discardButton = () => screen.getByRole("button", { name: /discard draft/i }) as HTMLButtonElement;
+    expect(discardButton().disabled).toBe(true);
+    empty.unmount();
+
+    saveDraft(fixture("Old bag"), "u1");
+    publish.mockReturnValue(new Promise<string>(() => {}));
+    render(<CreateReport />);
+    await waitFor(() => expect(discardButton().disabled).toBe(false));
+
+    fireEvent.submit(screen.getByRole("button", { name: /publish/i }).closest("form")!);
+    await waitFor(() => expect(publish).toHaveBeenCalledTimes(1));
+    // The upload owns the draft until it settles; Cancel upload is the exit.
+    await waitFor(() => expect(discardButton().disabled).toBe(true));
   });
 });

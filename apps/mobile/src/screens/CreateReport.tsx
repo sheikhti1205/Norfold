@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { extractYouTubeId, isReleasedCategory, type Category, type PostType } from "@norfold/shared";
+import { isReleasedCategory, type Category, type PostType } from "@norfold/shared";
 import { useAuth } from "../auth";
 import { Button } from "../components/Button";
 import { tiptapToMarkdown } from "../components/RichTextEditor";
@@ -37,6 +37,7 @@ import {
   stashPhotoFile,
 } from "../services/photoStore";
 import { todayInputValue, isFutureDate } from "../utils/dates";
+import { isValidPostYouTubeUrl } from "../utils/youtubeUrl";
 import { useKeyboardInset } from "../hooks/keyboardInset";
 import { profileFor } from "../services/ai/modelProfiles";
 import type { GenerateFn } from "../services/ai/types";
@@ -942,7 +943,6 @@ function ReportForm() {
       photos.map((p) => ({
         id: p.id,
         webPath: p.previewUrl,
-        format: p.picked?.format,
         motionPhoto: p.picked?.motionPhoto,
       })),
     [photos],
@@ -958,11 +958,27 @@ function ReportForm() {
   // The discard is destructive, so it asks through the canonical dialog inside
   // this task surface rather than a browser prompt.
   function discardDraft() {
-    if (!draftHasContent()) return;
+    if (!draftHasContent) return;
     setConfirmDiscard(true);
   }
 
-  function draftHasContent(): boolean {
+  /**
+   * An uncertain publish pauses the form until the person reconciles it. They
+   * come back from My Reports to the same content, so the pause is lifted here
+   * and nothing else changes: only the outcome flag, never a field or a photo.
+   */
+  function clearUncertainOutcome() {
+    setUncertain(false);
+    // The failure message's instruction ("check My Reports before trying
+    // again") is exactly what the person just did, so it goes with the lock.
+    setError(null);
+    announce("Publishing resumed. Your draft is unchanged.");
+  }
+
+  // Derived on change, never during a render pass: `loadDraft` reads the draft
+  // the autosave effect keeps current. A form holding nothing has nothing to
+  // discard, so the control is unavailable rather than silently doing nothing.
+  const draftHasContent = useMemo(() => {
     const current = { type, title, description, category, eventDate, location, youtubeUrl, aiSuggestInput };
     // draftIsMeaningful only inspects text: a photo-only draft (including one
     // whose photos failed recovery) is still a draft the user must be able to
@@ -973,7 +989,7 @@ function ReportForm() {
       failedPhotoIds.length > 0 ||
       draftPhotoIds(loadDraft(accountId)).length > 0;
     return draftIsMeaningful(current) || hasPhotos;
-  }
+  }, [type, title, description, category, eventDate, location, youtubeUrl, aiSuggestInput, photos, failedPhotoIds, accountId]);
 
   function clearDraftAndReset() {
     clearDraft(accountId);
@@ -1431,7 +1447,7 @@ function ReportForm() {
         ? "Location label is too long."
         : undefined,
       youtubeUrl:
-        trimmedYoutube && !extractYouTubeId(trimmedYoutube)
+        trimmedYoutube && !isValidPostYouTubeUrl(trimmedYoutube)
           ? "That doesn't look like a YouTube link."
           : undefined,
     };
@@ -1732,7 +1748,10 @@ function ReportForm() {
       {uncertain && (
         <div role="status" className="rounded-m3-sm border border-outline-variant px-3 py-2 text-sm">
           This report may already be published. Your draft is kept; publishing again is paused.
-          <Button type="button" variant="text" size="md" onClick={() => navigate("/my")}>Check My Reports</Button>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button type="button" variant="text" size="md" onClick={() => navigate("/my")}>Check My Reports</Button>
+            <Button type="button" variant="outline" size="md" onClick={clearUncertainOutcome}>Not there — keep editing</Button>
+          </div>
         </div>
       )}
 
@@ -1766,7 +1785,7 @@ function ReportForm() {
           <section className="flex flex-col gap-3">
             <ReportMediaPicker
               photos={mediaPickerPhotos}
-              disabled={submitting.current || uncertain || !photoRecoveryReady}
+              disabled={busy || uncertain || !photoRecoveryReady}
               onAddCamera={onAddCamera}
               onAddGallery={() => void onAddGallery()}
               onRemove={removePhoto}
@@ -2050,7 +2069,7 @@ function ReportForm() {
       <Button type="submit" size="lg" loading={busy} disabled={uncertain || !photoRecoveryReady}>
         Publish {type === "LOST" ? "lost" : "found"} report
       </Button>
-      <Button type="button" variant="text" size="md" onClick={discardDraft}>
+      <Button type="button" variant="text" size="md" onClick={discardDraft} disabled={busy || !draftHasContent}>
         Discard draft
       </Button>
       </form>
@@ -2091,12 +2110,18 @@ function ReportForm() {
         confirmLabel="Discard draft"
         cancelLabel="Keep writing"
         destructive
+        // A publish in flight owns the draft: the discard cannot be confirmed
+        // while its outcome is still unknown.
+        confirmDisabled={busy}
         onConfirm={() => {
           setConfirmDiscard(false);
           clearDraftAndReset();
         }}
       >
-        <p>The draft and its photos are cleared from this device. Nothing has been published.</p>
+        <p>
+          The draft and its photos are cleared from this device.
+          {uncertain ? " This report may already be published." : " Nothing has been published."}
+        </p>
       </ConfirmDialog>
     </AdaptiveTaskSurface>
   );
