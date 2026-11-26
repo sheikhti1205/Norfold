@@ -284,27 +284,34 @@ describe("Shell floating primary navigation", () => {
   });
 
   it("hides the primary navigation on the create report surface", () => {
+    const stored = localStorage.getItem(APPEARANCE_STORAGE_KEY);
     localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout: "bottom", navLayoutChosen: true }));
     renderShell("/report");
     expect(screen.getByText("Report screen")).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
-    localStorage.clear();
+    // Restore rather than clear: later tests in this file read the stored layout.
+    if (stored === null) localStorage.removeItem(APPEARANCE_STORAGE_KEY);
+    else localStorage.setItem(APPEARANCE_STORAGE_KEY, stored);
   });
 
   it("hides the primary navigation on the edit report surface", () => {
+    const stored = localStorage.getItem(APPEARANCE_STORAGE_KEY);
     localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout: "bottom", navLayoutChosen: true }));
     renderShell("/my/123/edit");
     expect(screen.getByText("Edit report screen")).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
-    localStorage.clear();
+    if (stored === null) localStorage.removeItem(APPEARANCE_STORAGE_KEY);
+    else localStorage.setItem(APPEARANCE_STORAGE_KEY, stored);
   });
 
   it("keeps the primary navigation on the My Reports list", () => {
+    const stored = localStorage.getItem(APPEARANCE_STORAGE_KEY);
     localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout: "bottom", navLayoutChosen: true }));
     renderShell("/my");
     expect(screen.getByText("My Reports screen")).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "Primary" })).toBeTruthy();
-    localStorage.clear();
+    if (stored === null) localStorage.removeItem(APPEARANCE_STORAGE_KEY);
+    else localStorage.setItem(APPEARANCE_STORAGE_KEY, stored);
   });
 
   it("removes nav during fullscreen and restores it on exit", () => {
