@@ -472,9 +472,35 @@ describe("Shell adaptive navigation", () => {
       .map((nav) => nav.getAttribute("data-layout") ?? "unknown");
   }
 
+  /**
+   * jsdom has no `IntersectionObserver`. The shell creates exactly one, for the
+   * route's inline drawer control, so the test holds its callback and drives
+   * the trigger in and out of the viewport by hand.
+   */
+  class CapturingObserver {
+    static created: CapturingObserver[] = [];
+    readonly callback: IntersectionObserverCallback;
+    readonly options?: IntersectionObserverInit;
+    readonly targets: Element[] = [];
+    disconnected = false;
+    constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+      this.callback = callback;
+      this.options = options;
+      CapturingObserver.created.push(this);
+    }
+    observe(target: Element) { this.targets.push(target); }
+    unobserve() {}
+    disconnect() { this.disconnected = true; }
+  }
+
+  function intersection(isIntersecting: boolean): IntersectionObserverEntry[] {
+    return [{ isIntersecting } as IntersectionObserverEntry];
+  }
+
   afterEach(() => {
     localStorage.clear();
     vi.unstubAllGlobals();
+    CapturingObserver.created = [];
     Object.defineProperty(window, "innerWidth", { configurable: true, value: initialWidth });
   });
 
@@ -543,6 +569,85 @@ describe("Shell adaptive navigation", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull());
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it("pins the fallback once the route's inline control scrolls away", async () => {
+    setWidth(390);
+    stubMatchMedia(false);
+    storeNavLayout("rail");
+    vi.stubGlobal("IntersectionObserver", CapturingObserver);
+    // jsdom does not run Vite's CSS import, so the shipped cascade is injected
+    // and the fallback's visibility is read from the real rules.
+    const style = document.createElement("style");
+    style.textContent = readFileSync("src/components/Shell.nav.css", "utf8");
+    document.head.appendChild(style);
+    try {
+      renderShell("/brand");
+
+      const inline = within(screen.getByTestId("app-bar")).getByRole("button", { name: "Open navigation" });
+      const fallback = document.querySelector<HTMLButtonElement>(".fb-nav-drawer-trigger")!;
+      await waitFor(() => expect(CapturingObserver.created).toHaveLength(1));
+      const observer = CapturingObserver.created[0]!;
+      // The route's own control is what scrolls, and the viewport is the root.
+      expect(observer.targets).toEqual([inline]);
+      expect(observer.options).toMatchObject({ root: null, threshold: 0 });
+
+      // At the top the bar's control is visible, so the fixed fallback yields.
+      expect(fallback.getAttribute("data-inline-mounted")).toBe("true");
+      expect(fallback.hasAttribute("data-pinned")).toBe(false);
+      expect(getComputedStyle(fallback).display).toBe("none");
+
+      act(() => observer.callback(intersection(false), observer as unknown as IntersectionObserver));
+      expect(fallback.getAttribute("data-pinned")).toBe("true");
+      expect(getComputedStyle(fallback).display).toBe("inline-flex");
+
+      act(() => observer.callback(intersection(true), observer as unknown as IntersectionObserver));
+      expect(fallback.hasAttribute("data-pinned")).toBe(false);
+      expect(getComputedStyle(fallback).display).toBe("none");
+    } finally {
+      style.remove();
+    }
+  });
+
+  it("closes the pinned drawer back to the control the reader can see", async () => {
+    setWidth(390);
+    stubMatchMedia(false);
+    storeNavLayout("rail");
+    vi.stubGlobal("IntersectionObserver", CapturingObserver);
+    renderShell("/brand");
+
+    const inline = within(screen.getByTestId("app-bar")).getByRole("button", { name: "Open navigation" });
+    const fallback = document.querySelector<HTMLButtonElement>(".fb-nav-drawer-trigger")!;
+    await waitFor(() => expect(CapturingObserver.created).toHaveLength(1));
+    const observer = CapturingObserver.created[0]!;
+    act(() => observer.callback(intersection(false), observer as unknown as IntersectionObserver));
+    expect(fallback.getAttribute("data-pinned")).toBe("true");
+
+    fireEvent.click(fallback);
+    expect(screen.getByRole("dialog", { name: "Navigation" })).toBeTruthy();
+    // Both nodes carry the one drawer state even though only one is on screen.
+    expect(fallback.getAttribute("aria-expanded")).toBe("true");
+    expect(inline.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull());
+    // Focus returns to the pinned fallback, not the off-screen inline control
+    // (focusing that one would scroll the page back to the top).
+    expect(document.activeElement).toBe(fallback);
+  });
+
+  it("keeps the bottom-left fallback on a surface with no top bar", () => {
+    setWidth(390);
+    stubMatchMedia(false);
+    storeNavLayout("rail");
+    vi.stubGlobal("IntersectionObserver", CapturingObserver);
+    renderShell("/");
+    const fallback = document.querySelector<HTMLButtonElement>(".fb-nav-drawer-trigger")!;
+    // No route bar mounted a control, so the shell neither hides nor pins it:
+    // the original bottom-left placement is the whole navigation here.
+    expect(fallback.hasAttribute("data-inline-mounted")).toBe(false);
+    expect(fallback.hasAttribute("data-pinned")).toBe(false);
+    expect(CapturingObserver.created).toHaveLength(0);
   });
 
   it("renders the stored rail at the breakpoint", () => {

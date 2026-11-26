@@ -455,9 +455,24 @@ html.fb-reduce-motion .fb-nav-drawer-inline:active { transform: none; }
    control's block margins in keeps the bar's existing height unchanged while
    the hit target itself stays 48px. */
 .fb-app-bar > .fb-nav-drawer-inline { margin-block: -4px; }
-/* A route's own top bar now carries the control. Only surfaces with no top bar
-   keep the fixed fallback visible. */
-.fb-app-viewport:has(.fb-nav-drawer-inline) .fb-nav-drawer-trigger { display: none; }
+/* A route's own top bar carries the control, so the fixed fallback yields while
+   that inline control is mounted. `data-pinned` is the shell's visible-node
+   state: once the route's row scrolls the inline control away, the fallback
+   takes over at the top-left, where the bar's control was. A surface with no
+   top bar never carries either attribute, so it keeps the bottom-left control
+   unchanged. */
+.fb-nav-drawer-trigger[data-inline-mounted]:not([data-pinned="true"]) { display: none; }
+.fb-nav-drawer-trigger[data-pinned="true"] {
+  inset-block-end: auto;
+  inset-block-start: calc(8px + env(safe-area-inset-top));
+  inset-inline-start: 8px;
+  animation: fb-nav-drawer-pin-in 140ms ease;
+}
+@keyframes fb-nav-drawer-pin-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+html.fb-reduce-motion .fb-nav-drawer-trigger[data-pinned="true"] { animation: none; }
 /* The drawer sits above the dock and below search and modal surfaces. Its
    account popover uses the overlay depth provider in Shell.tsx. */
 .fb-nav-drawer { position: fixed; inset: 0; z-index: 65; }

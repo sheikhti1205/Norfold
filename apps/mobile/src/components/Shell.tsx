@@ -143,16 +143,43 @@ export function Shell() {
   // keeps its own node so neither ref can overwrite the other's focus target.
   const railTrigger = useRef<HTMLButtonElement>(null);
   const railFallbackTrigger = useRef<HTMLButtonElement>(null);
-  const focusRailTrigger = useCallback(() => {
-    (railTrigger.current ?? railFallbackTrigger.current)?.focus({ preventScroll: true });
+  // The inline control scrolls with its route's row. `inlineMounted` separates
+  // "a top bar carries the control" from "this surface has no bar" (where the
+  // fallback is the whole navigation); `triggerInView` tracks whether that
+  // control is still on screen, so the fallback can take over once it is not.
+  const [inlineMounted, setInlineMounted] = useState(false);
+  const [triggerInView, setTriggerInView] = useState(true);
+  // Counted, not a flag: AnimatePresence keeps the previous route's bar mounted
+  // through its exit animation, so the entering route registers before the old
+  // one unregisters. A flag would be cleared by that late cleanup while a
+  // control is still on screen.
+  const inlineMounts = useRef(0);
+  const onInlineMount = useCallback((mounted: boolean) => {
+    inlineMounts.current = Math.max(0, inlineMounts.current + (mounted ? 1 : -1));
+    setInlineMounted(inlineMounts.current > 0);
   }, []);
+  const pinnedRailTrigger = railDrawer && showNav && inlineMounted && !triggerInView;
+  const focusRailTrigger = useCallback(() => {
+    // Focus follows the node the reader can actually see. When the bar has
+    // scrolled away that is the pinned fallback; focusing the off-screen inline
+    // control instead would scroll the page back to the top.
+    const target = pinnedRailTrigger
+      ? railFallbackTrigger.current
+      : (railTrigger.current ?? railFallbackTrigger.current);
+    target?.focus({ preventScroll: true });
+  }, [pinnedRailTrigger]);
   const closeRail = useCallback((restoreFocus = true) => {
     setRailOpen(false);
     if (restoreFocus) focusRailTrigger();
   }, [focusRailTrigger]);
   // A temporary drawer is open for one decision, not for a session: following a
-  // destination, changing route, Escape or a backdrop press closes it.
-  useEffect(() => { setRailOpen(false); }, [pathname]);
+  // destination, changing route, Escape or a backdrop press closes it. Every
+  // route starts at its own top, so its inline control is back in view even if
+  // the previous page had scrolled it away; the observer confirms it.
+  useEffect(() => {
+    setRailOpen(false);
+    setTriggerInView(true);
+  }, [pathname]);
   useEffect(() => {
     if (!railOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -166,6 +193,36 @@ export function Shell() {
     const first = document.querySelector<HTMLElement>("[data-nav-drawer-close]");
     first?.focus({ preventScroll: true });
   }, [railOpen]);
+  // A chosen rail is the only navigation on a phone, so a reader must never be
+  // stranded once Home's header scrolls away. The inline control lives in the
+  // route's own row and scrolls with it; when it leaves the viewport the fixed
+  // fallback pins to the top-left instead. The document itself never scrolls
+  // (routes own their scroller), so viewport intersection is the right test.
+  useEffect(() => {
+    if (!railDrawer || !inlineMounted) return;
+    if (typeof IntersectionObserver === "undefined") return;
+    let frame = 0;
+    let observer: IntersectionObserver | null = null;
+    // One frame lets the routed row mount its control before the ref is read.
+    frame = requestAnimationFrame(() => {
+      const node = railTrigger.current;
+      if (node === null) return;
+      observer = new IntersectionObserver(
+        (entries) => {
+          const entry = entries[entries.length - 1];
+          if (entry !== undefined) setTriggerInView(entry.isIntersecting);
+        },
+        { root: null, threshold: 0 },
+      );
+      observer.observe(node);
+    });
+    return () => {
+      if (frame !== 0) cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
+    // The node can change with the route, the layout and the drawer's own
+    // mount, so each re-arms the observation against the current control.
+  }, [pathname, railDrawer, railOpen, inlineMounted]);
   const column = wideCanvas ? WIDE_CANVAS_CLASS : READABLE_COLUMN_CLASS;
   const navigate = useNavigate();
   // `null` = closed. A string is the settings section the window opens at, so a
@@ -383,6 +440,8 @@ export function Shell() {
       expanded={railOpen}
       open={openRailDrawer}
       triggerRef={railTrigger}
+      inlineMounted={inlineMounted}
+      onInlineMount={onInlineMount}
     >
     <InlineRailProvider show={inlineRail && showNav}>
     <UNSAFE_NavigationContext.Provider value={windowNavigation}>
@@ -448,9 +507,11 @@ export function Shell() {
         {/* A chosen side rail on a phone is a temporary drawer, never a column
             that steals width from a 320px screen. A route's own top bar mounts
             the inline trigger beside its brand; this fixed control remains the
-            fallback for surfaces with no top bar, and CSS hides it whenever the
-            inline control is in the tree. The panel closes on a destination,
-            Escape, the backdrop or a route change. */}
+            fallback for surfaces with no top bar. While the inline control is
+            mounted CSS hides it, and once that control scrolls out of view it
+            pins to the top-left (`data-pinned`) so the drawer stays reachable.
+            The panel closes on a destination, Escape, the backdrop or a route
+            change. */}
         {showNav && railDrawer && (
           <>
             <button
@@ -460,6 +521,8 @@ export function Shell() {
               aria-label="Open navigation"
               aria-haspopup="dialog"
               aria-expanded={railOpen}
+              data-inline-mounted={inlineMounted ? "true" : undefined}
+              data-pinned={pinnedRailTrigger ? "true" : undefined}
               data-settings-open={compactSettings || undefined}
               onClick={openRailDrawer}
             >
