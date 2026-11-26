@@ -28,7 +28,7 @@ export function resolveByokProvider(explicit: unknown, routed: unknown): ByokPro
   return "openrouter";
 }
 export type AiConnectionProps = { provider?: ProviderId };
-const fieldClass = "min-h-[44px] min-w-0 w-full rounded-m3-sm border border-outline bg-surface px-3 text-sm text-on-surface";
+const fieldClass = "min-h-[48px] min-w-0 w-full rounded-m3-sm border border-outline bg-surface px-3 text-sm text-on-surface";
 
 export function AiConnection({ provider }: AiConnectionProps) {
   const { user } = useAuth();
@@ -137,7 +137,7 @@ function ProviderKeyForm({ accountId, provider }: { accountId: string; provider:
     {error && <p role="alert" className="text-sm text-error">{error}</p>}
     <form onSubmit={(event) => void save(event)} className="flex flex-col gap-3">
       <label className="flex flex-col gap-1 text-sm">{label} API key<input type="password" value={key} onChange={(event) => setKey(event.target.value)} className={fieldClass} autoComplete="off" autoCapitalize="none" spellCheck={false} required disabled={busy} /></label>
-      <label className="flex min-h-[44px] items-center gap-3 text-sm"><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} disabled={busy} />Remember on this device</label>
+      <label className="flex min-h-[48px] items-center gap-3 text-sm"><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} disabled={busy} />Remember on this device</label>
       {(remember || (saved && !present)) && !native && <label className="flex flex-col gap-1 text-sm">Unlock phrase<input type="password" className={fieldClass} value={phrase} onChange={(event) => setPhrase(event.target.value)} minLength={12} autoComplete="new-password" disabled={busy} /><span className="text-xs text-on-surface-variant">Use at least 12 characters. You’ll need this phrase to unlock the remembered key.</span></label>}
       <p className="text-xs text-on-surface-variant">{native ? "Android protects remembered keys with device storage." : "Without Remember, the key lasts for this session."} Signing out removes session and remembered keys.</p>
       <Button type="submit" disabled={busy || !key.trim() || (!native && remember && phrase.length < 12)} loading={busy}>Save key</Button>

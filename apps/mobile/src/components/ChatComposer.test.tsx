@@ -124,6 +124,7 @@ describe("ChatComposer M2", () => {
     expect(field.tagName).toBe("TEXTAREA");
     expect(field.getAttribute("maxlength")).toBeNull();
     expect(field.className).toMatch(/overflow-y-auto/);
+    expect(field.className).toMatch(/min-h-\[48px\]/);
     expect(field.value.length).toBe(600);
   });
 

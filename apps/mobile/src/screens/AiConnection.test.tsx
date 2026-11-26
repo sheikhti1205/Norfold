@@ -42,6 +42,11 @@ it("deletes a saved key and keeps a masked saved state", async () => {
   await waitFor(() => expect(state.remove).toHaveBeenCalledWith("account-a", "openrouter"));
   await screen.findByText("No key saved");
 });
+it("keeps the key field and the remember row at a 48px target", () => {
+  render(tree());
+  expect(screen.getByLabelText("OpenRouter API key").className).toMatch(/min-h-\[48px\]/);
+  expect(screen.getByLabelText("Remember on this device").closest("label")?.className).toMatch(/min-h-\[48px\]/);
+});
 it("does not paint a pending save into the next account", async () => {
   let resolve!: () => void;
   state.connect.mockImplementationOnce(() => new Promise<void>((done) => { resolve = done; }));

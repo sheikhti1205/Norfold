@@ -623,7 +623,7 @@ export function ChatComposer({
           enterKeyHint="enter"
           autoComplete="off"
           rows={1}
-          className={`min-w-0 w-full resize-none rounded-m3-md border border-outline-variant bg-surface px-4 py-2.5 text-sm text-on-surface placeholder:text-on-surface-variant focus:border-on-surface focus:outline-none disabled:opacity-60 ${
+          className={`min-w-0 w-full min-h-[48px] resize-none rounded-m3-md border border-outline-variant bg-surface px-4 py-2.5 text-sm text-on-surface placeholder:text-on-surface-variant focus:border-on-surface focus:outline-none disabled:opacity-60 ${
             expanded ? "max-h-[40dvh]" : "max-h-[9rem]"
           } overflow-y-auto`}
         />
