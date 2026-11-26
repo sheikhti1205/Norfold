@@ -138,7 +138,7 @@ describe("rankCommands", () => {
   });
 
   it("breaks score ties by catalogue order", () => {
-    expect(rankCommands("h", { limit: 5 }).map((command) => command.id)).toEqual([
+    expect(rankCommands("head", { limit: 5 }).map((command) => command.id)).toEqual([
       "block.h1",
       "block.h2",
       "block.h3",
