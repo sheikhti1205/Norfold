@@ -211,17 +211,18 @@
 }
 
 /* The page counter is a control, not a person: a small counter at the stack's
-   end that names the count it hides. Pressing it pages the stack, so it spreads
-   a transparent target across the 8px row gap: 7px each side reaches 48px
-   across, 4px each side reaches 36px down, and 4+4 exactly fills the gap so it
-   never overlaps a head. */
+   end that names the count it hides. Pressing it pages the stack, so a 2px
+   vertical margin widens the 8px row gap to 10px and the transparent target
+   reaches 10px each way — 28 + 10 + 10 = 48 — stopping exactly where the
+   neighbouring head's box starts. */
 .fb-chat-dock-rail-more {
   position: relative;
   display: grid;
   flex: none;
   place-items: center;
-  min-width: 34px;
   height: 28px;
+  margin-block: 2px;
+  min-width: 34px;
   padding: 0 7px;
   border: 1px solid var(--fb-outline-variant);
   border-radius: 999px;
@@ -236,7 +237,7 @@
 .fb-chat-dock-rail-more::after {
   content: "";
   position: absolute;
-  inset: -4px -7px;
+  inset: -10px -7px;
   border-radius: 999px;
 }
 .fb-chat-dock-rail-more:hover {

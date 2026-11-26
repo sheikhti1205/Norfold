@@ -567,8 +567,13 @@ export function ReportDatePicker({
             </div>
           )}
 
+          {/* The day grid alone bleeds 8px into the sheet's horizontal padding:
+              seven columns otherwise miss the 48px floor by 1.4px at 390dp.
+              Every other row keeps the sheet padding, and the columns are
+              unchanged, so the numerals stay centred in their cells. */}
           <div
             data-testid="calendar-swipe-zone"
+            className="-mx-[8px]"
             onTouchStart={handleGridTouchStart}
             onTouchEnd={handleGridTouchEnd}
           >
