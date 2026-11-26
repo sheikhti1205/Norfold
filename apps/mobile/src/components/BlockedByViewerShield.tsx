@@ -138,7 +138,7 @@ export function BlockedByViewerShield({
           <button
             type="button"
             onClick={reveal}
-            className="ms-auto inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-end px-1 text-sm font-semibold text-primary underline decoration-1 underline-offset-4"
+            className="ms-auto inline-flex min-h-[48px] min-w-[48px] shrink-0 items-center justify-end px-1 text-sm font-semibold text-primary underline decoration-1 underline-offset-4"
           >
             Show content
           </button>
@@ -157,7 +157,7 @@ export function BlockedByViewerShield({
               <button
                 type="button"
                 onClick={reveal}
-                className="min-h-[44px] rounded-full border border-outline-variant px-4 text-sm font-semibold text-on-surface"
+                className="min-h-[48px] rounded-full border border-outline-variant px-4 text-sm font-semibold text-on-surface"
               >
                 Show content
               </button>

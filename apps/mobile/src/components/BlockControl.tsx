@@ -90,7 +90,7 @@ function ScopedBlockControl({ userId, name, blocked, onChanged, className, accou
     </button>
     {message && <p role="status" data-testid="block-outcome">{message}</p>}
     {error && <p role="alert" data-testid="block-error">{error}</p>}
-    {error && known === null && <button type="button" className="min-h-[44px] px-3" onClick={() => setAttempt((value) => value + 1)}>Retry</button>}
+    {error && known === null && <button type="button" className="min-h-[48px] px-3" onClick={() => setAttempt((value) => value + 1)}>Retry</button>}
     <ConfirmDialog
       open={confirming}
       onClose={() => setConfirming(false)}

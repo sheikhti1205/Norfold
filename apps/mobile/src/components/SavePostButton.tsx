@@ -67,7 +67,7 @@ export function SavePostButton({
       aria-busy={pending}
       disabled={!hasAccount}
       onClick={onAction}
-      className={`fb-report-action min-h-[44px] min-w-[44px] gap-1 ${
+      className={`fb-report-action min-h-[48px] min-w-[48px] gap-1 ${
         saved ? "bg-surface-container text-on-surface" : "text-on-surface-variant"
       } ${className}`}
     >

@@ -331,7 +331,7 @@ export function PostList({
       action={
         <button
           type="button"
-          className="min-h-[40px] shrink-0 rounded-full px-2 text-sm font-semibold underline"
+          className="min-h-[48px] shrink-0 rounded-full px-2 text-sm font-semibold underline"
           onClick={() => {
             if (undo) unhideFeedPost(undo.id);
             setUndo(null);

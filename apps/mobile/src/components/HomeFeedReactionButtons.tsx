@@ -79,7 +79,7 @@ export function HomeFeedReactionButtons({ postId, likeCount, dislikeCount }: {
 
   const likeActive = likeMine(myReaction);
   const dislikeActive = myReaction === "DISLIKE";
-  const buttonClass = (active: boolean) => `fb-report-action min-h-[44px] min-w-[44px] gap-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${active ? "bg-surface-container text-on-surface" : "text-on-surface-variant"}`;
+  const buttonClass = (active: boolean) => `fb-report-action min-h-[48px] min-w-[48px] gap-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${active ? "bg-surface-container text-on-surface" : "text-on-surface-variant"}`;
   const { hoverLabel } = useHoverLabel();
 
   return (

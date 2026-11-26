@@ -337,11 +337,11 @@ describe("PostCardContent home-feed (content-first Home layout)", () => {
     expect(order.indexOf("post-footer")).toBe(order.length - 1);
   });
 
-  it("meets the 44px minimum touch target on the Like toggle", () => {
+  it("meets the 48px minimum touch target on the Like toggle", () => {
     renderHomeFeed(imagePost());
     const love = screen.getByTestId("home-feed-love");
-    expect(love.className).toMatch(/min-h-\[44px\]/);
-    expect(love.className).toMatch(/min-w-\[44px\]/);
+    expect(love.className).toMatch(/min-h-\[48px\]/);
+    expect(love.className).toMatch(/min-w-\[48px\]/);
   });
 
   it("shows and announces a failure message when a Like toggle fails", async () => {

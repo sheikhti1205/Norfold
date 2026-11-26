@@ -140,14 +140,14 @@ describe("HomeFeedReactionButtons (Like and Dislike)", () => {
     expect(countOf(screen.getByTestId("home-feed-love"))).toBe("26");
     expect(screen.getByTestId("home-feed-love").getAttribute("aria-pressed")).toBe("true");
   });
-  it("keeps the like testid, flat styling and 44px target, and offers no picker", () => {
+  it("keeps the like testid, flat styling and 48px target, and offers no picker", () => {
     renderButton();
     const like = screen.getByTestId("home-feed-love");
     expect(like.tagName).toBe("BUTTON");
     expect(like.getAttribute("type")).toBe("button");
     expect(like.className).toMatch(/fb-report-action/);
-    expect(like.className).toMatch(/min-h-\[44px\]/);
-    expect(like.className).toMatch(/min-w-\[44px\]/);
+    expect(like.className).toMatch(/min-h-\[48px\]/);
+    expect(like.className).toMatch(/min-w-\[48px\]/);
     // The tray, its chevron and every hold gesture are gone.
     expect(screen.queryByTestId("home-feed-choose-reaction")).toBeNull();
     expect(screen.queryByTestId("reaction-tray")).toBeNull();
@@ -278,8 +278,8 @@ describe("HomeFeedReactionButtons (Like and Dislike)", () => {
     const dislike = screen.getByRole("button", { name: "Dislike, 1 dislike" });
     await waitFor(() => expect(like.getAttribute("aria-pressed")).toBe("true"));
     expect(countOf(dislike)).toBe("1");
-    expect(dislike.className).toContain("min-h-[44px]");
-    expect(dislike.className).toContain("min-w-[44px]");
+    expect(dislike.className).toContain("min-h-[48px]");
+    expect(dislike.className).toContain("min-w-[48px]");
     fireEvent.click(dislike);
     await waitFor(() => expect(likeToggleMock).toHaveBeenCalledWith("p1", "LIKE", "DISLIKE"));
     await waitFor(() => expect(dislike.getAttribute("aria-pressed")).toBe("true"));

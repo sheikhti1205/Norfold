@@ -236,7 +236,7 @@ function AccountMatches({ account, post, onConfirmMatch }: PossibleMatchesProps 
                   <PostLink
                     to={`/posts/${match.post.id}`}
                     aria-label={`View report: ${match.post.title}`}
-                    className="flex min-h-[44px] items-center rounded-m3-sm bg-surface-container px-3 text-xs font-medium text-on-surface transition-colors hover:bg-surface-container-high active:bg-surface-container"
+                    className="flex min-h-[48px] items-center rounded-m3-sm bg-surface-container px-3 text-xs font-medium text-on-surface transition-colors hover:bg-surface-container-high active:bg-surface-container"
                   >
                     View report
                   </PostLink>
@@ -245,7 +245,7 @@ function AccountMatches({ account, post, onConfirmMatch }: PossibleMatchesProps 
                       type="button"
                       onClick={() => onConfirmMatch(match)}
                       aria-label={`Propose match: ${match.post.title}`}
-                      className="min-h-[44px] rounded-m3-sm bg-surface-container px-3 text-xs font-medium text-on-surface transition-colors hover:bg-surface-container-high active:bg-surface-container"
+                      className="min-h-[48px] rounded-m3-sm bg-surface-container px-3 text-xs font-medium text-on-surface transition-colors hover:bg-surface-container-high active:bg-surface-container"
                     >
                       Propose match
                     </button>

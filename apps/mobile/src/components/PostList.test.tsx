@@ -121,6 +121,13 @@ describe("PostList put-away cross", () => {
     expect(screen.getByText("Keys")).toBeTruthy();
   });
 
+  it("keeps the Undo action at a 48px target", async () => {
+    render(list([post("p1", "Keys")]));
+    fireEvent.click(screen.getByRole("button", { name: "Hide report" }));
+    const undo = await screen.findByRole("button", { name: "Undo" });
+    expect(undo.className).toContain("min-h-[48px]");
+  });
+
   it("keeps own reports free of the cross and the hide action", () => {
     render(
       <MemoryRouter>

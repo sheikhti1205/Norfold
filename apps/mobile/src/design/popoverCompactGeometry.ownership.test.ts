@@ -65,8 +65,8 @@ describe("account menu ceiling", () => {
     const dialog = bodies(accountCss, ".fb-account-dialog");
     expect(dialog).toContain("overflow-y: auto;");
     expect(dialog).toContain("min-height: 0;");
-    expect(bodies(accountCss, ".fb-account-row")).toContain("min-height: 44px;");
-    expect(bodies(accountCss, ".fb-account-switch-row")).toContain("min-height: 44px;");
+    expect(bodies(accountCss, ".fb-account-row")).toContain("min-height: 48px;");
+    expect(bodies(accountCss, ".fb-account-switch-row")).toContain("min-height: 48px;");
   });
 
   it("keeps the rail width and the phone width", () => {

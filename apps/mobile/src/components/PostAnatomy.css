@@ -31,7 +31,7 @@
    parenthetical text. */
 .fb-title-status { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
 .fb-title-status .fb-type-badge { font-size: .8125rem; padding: .25rem .7rem; }
-.fb-post-photo { display: block; min-width: 44px; min-height: 44px; padding: 0; text-align: start; }
+.fb-post-photo { display: block; min-width: 48px; min-height: 48px; padding: 0; text-align: start; }
 .fb-post-photo > .fb-thumb { display: block; }
 .fb-post-home-feed .fb-post-heading, .fb-post-home-feed > .fb-post-identity, .fb-post-home-feed > .fb-post-description, .fb-post-home-feed > .fb-post-facts { margin-inline: .5rem; }
 /* The action row spans the full width of the home card's media, edge to edge:

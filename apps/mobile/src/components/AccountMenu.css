@@ -56,7 +56,7 @@
    desktop windows. Phones keep the computed, end-aligned position. */
 
 .fb-account-row {
-  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px;
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 48px;
   padding: 8px; border: 0; border-radius: 10px; background: transparent;
   color: var(--fb-on-surface); text-align: start; text-decoration: none;
   font-size: 0.9375rem; cursor: pointer;
@@ -84,7 +84,7 @@
 .fb-account-panel-head { display: flex; align-items: center; gap: 4px; padding: 0 0 6px; }
 .fb-account-back {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px; flex: none; padding: 0; border: 0; border-radius: 8px;
+  width: 48px; height: 48px; flex: none; padding: 0; border: 0; border-radius: 8px;
   background: transparent; color: var(--fb-on-surface); cursor: pointer;
 }
 .fb-account-back:hover { background: var(--fb-surface-container); }
@@ -99,22 +99,31 @@
 .fb-account-panel .fb-preview-grid-theme { grid-template-columns: 1fr; gap: 4px; }
 .fb-account-panel .fb-preview-grid-theme .fb-preview-choice {
   display: flex; flex-direction: row-reverse; align-items: center; justify-content: space-between;
-  gap: 10px; min-height: 38px; text-align: start;
+  gap: 10px; min-height: 48px; text-align: start;
 }
 .fb-account-panel .fb-preview-grid-theme .fb-preview-frame { width: 68px; min-height: 36px; flex: none; }
 .fb-account-panel .fb-preview-grid-theme .fb-preview-label { flex: 1; font-size: 0.875rem; }
 
 /* Two even rows of four. A wrapping flex row left 6 swatches on one line and 2
    on the next, which reads as an accident rather than a palette. */
-.fb-account-accents { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; justify-items: center; }
-.fb-account-accent { width: 26px; height: 26px; border-radius: 999px; border: 2px solid transparent; cursor: pointer; }
+.fb-account-accents { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 48px; align-items: center; gap: 6px; justify-items: center; }
+.fb-account-accent {
+  position: relative;
+  width: 26px; height: 26px; border-radius: 999px; border: 2px solid transparent; cursor: pointer;
+}
+/* The swatch is the visual. The target reaches 48px through a centred patch
+   that stays inside its grid cell, so neighbouring swatches never overlap. */
+.fb-account-accent::after {
+  content: ""; position: absolute; top: 50%; left: 50%;
+  width: 48px; height: 48px; transform: translate(-50%, -50%); border-radius: 999px;
+}
 .fb-account-accent[data-selected="true"] { border-color: var(--fb-on-surface); box-shadow: 0 0 0 2px var(--fb-surface); }
 .fb-account-accent:focus-visible { outline: 3px solid var(--fb-focus); outline-offset: 2px; }
 
 .fb-account-panel-links { display: flex; flex-direction: column; }
 .fb-account-panel-link {
   display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%;
-  min-height: 40px; margin-top: 6px; padding: 4px 2px; border: 0; border-top: 1px solid var(--fb-outline-variant);
+  min-height: 48px; margin-top: 6px; padding: 4px 2px; border: 0; border-top: 1px solid var(--fb-outline-variant);
   background: transparent; color: var(--fb-primary); font-size: 0.8125rem; font-weight: 600; text-align: start; cursor: pointer;
 }
 .fb-account-panel-link:hover { text-decoration: underline; }
@@ -131,7 +140,7 @@
 }
 .fb-account-switch-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .fb-account-switch-row {
-  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px;
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 48px;
   padding: 6px; border: 0; border-radius: 8px; background: transparent;
   color: var(--fb-on-surface); text-align: start; cursor: pointer;
 }
@@ -145,7 +154,7 @@
 .fb-account-switch-empty { margin: 6px 2px 8px; font-size: 0.8125rem; color: var(--fb-on-surface-variant); }
 .fb-account-add {
   display: inline-flex; align-items: center; align-self: flex-start; gap: 6px;
-  min-height: 40px; max-width: 100%; padding: 0 8px; border: 0; border-radius: 8px;
+  min-height: 48px; max-width: 100%; padding: 0 8px; border: 0; border-radius: 8px;
   background: transparent; color: var(--fb-primary); font-size: 0.8125rem; font-weight: 600;
   cursor: pointer;
 }

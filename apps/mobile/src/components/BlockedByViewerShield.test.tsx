@@ -47,7 +47,7 @@ describe("BlockedByViewerShield", () => {
     expect(warning.textContent).not.toMatch(/\bblocked you\b/i);
     expect(reveal.tagName).toBe("BUTTON");
     expect(reveal.getAttribute("type")).toBe("button");
-    expect(reveal.className).toContain("min-h-[44px]");
+    expect(reveal.className).toContain("min-h-[48px]");
   });
 
   it("keeps the reveal control a sibling of the inert subtree, never inside an anchor", () => {

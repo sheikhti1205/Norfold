@@ -38,11 +38,11 @@ const finePointer = mediaBlocks("(hover: hover) and (pointer: fine)");
 const noFinePointer = mediaBlocks("(hover: none), (pointer: coarse)");
 
 describe("report put-away target", () => {
-  it("reserves a separate 44px target beside the report overflow", () => {
+  it("reserves a separate 48px target beside the report overflow", () => {
     const hide = css.match(/\.fb-report-hide\s*\{([^}]*)\}/)?.[1] ?? "";
-    expect(hide).toMatch(/width:\s*44px/);
-    expect(hide).toMatch(/height:\s*44px/);
-    expect(css).toMatch(/\.fb-report-card\[data-hideable="true"\] \.fb-post-identity\s*\{\s*padding-inline-end:\s*44px/);
+    expect(hide).toMatch(/width:\s*48px/);
+    expect(hide).toMatch(/height:\s*48px/);
+    expect(css).toMatch(/\.fb-report-card\[data-hideable="true"\] \.fb-post-identity\s*\{\s*padding-inline-end:\s*48px/);
   });
 
   it("plays the toss only while hovering the cross and respects reduced motion", () => {
@@ -55,7 +55,7 @@ describe("report put-away target", () => {
     const reveals = finePointer.filter(({ body }) => /\.fb-report-card:hover \.fb-report-hide\s*\{[^}]*opacity:\s*1/.test(body));
     expect(reveals.length).toBeGreaterThan(0);
     // A tap leaves :hover stuck on touch, so the reveal must not exist outside
-    // the fine-pointer block that also reserves its 44px slot.
+    // the fine-pointer block that also reserves its 48px slot.
     expect(withoutBlocks(finePointer)).not.toMatch(/\.fb-report-card:hover \.fb-report-hide/);
     // Keyboard reachability stays: focus-visible is the only unconditional reveal.
     expect(withoutBlocks(finePointer)).toMatch(/\.fb-report-hide:focus-visible\s*\{[^}]*opacity:\s*1/);

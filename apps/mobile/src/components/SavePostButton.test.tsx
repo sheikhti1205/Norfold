@@ -67,12 +67,12 @@ describe("SavePostButton", () => {
     expect(button.textContent).toContain("Save");
   });
 
-  it("keeps a 44px touch target and the house action class", () => {
+  it("keeps a 48px touch target and the house action class", () => {
     renderButton();
     const button = screen.getByTestId("save-report-button");
     expect(button.className).toMatch(/fb-report-action/);
-    expect(button.className).toMatch(/min-h-\[44px\]/);
-    expect(button.className).toMatch(/min-w-\[44px\]/);
+    expect(button.className).toMatch(/min-h-\[48px\]/);
+    expect(button.className).toMatch(/min-w-\[48px\]/);
   });
 
   it("fills the bookmark and changes the word when saved", async () => {

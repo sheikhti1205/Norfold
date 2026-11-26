@@ -19,8 +19,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 999px;
   color: #fff;
   background: radial-gradient(circle, rgb(0 0 0 / 0.62) 13px, transparent 13.5px);
@@ -41,13 +41,13 @@
   }
 
   .fb-report-card[data-hideable="true"] .fb-post-identity {
-    padding-inline-end: 44px;
+    padding-inline-end: 48px;
   }
 }
 
 /*
  * No fine pointer, no control. A tap leaves :hover stuck on touch screens, and
- * the header's action cluster never reserves the 44px slot there, so the cross
+ * the header's action cluster never reserves the 48px slot there, so the cross
  * would land on top of the kebab. Touch readers use the labelled row in the
  * report menu instead.
  */

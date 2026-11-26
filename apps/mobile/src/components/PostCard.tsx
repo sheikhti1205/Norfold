@@ -185,7 +185,7 @@ export function EmptyState({
         <button
           type="button"
           onClick={action.onPress}
-          className="mt-1 min-h-[44px] shrink-0 px-2 text-sm font-medium text-on-surface underline"
+          className="mt-1 min-h-[48px] shrink-0 px-2 text-sm font-medium text-on-surface underline"
         >
           {action.label}
         </button>
