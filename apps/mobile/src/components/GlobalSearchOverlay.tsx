@@ -277,6 +277,10 @@ function SearchSurface() {
   const filterRevision = useRef(0);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [openMenu, setOpenMenu] = useState<FilterMenuKey | null>(null);
+  // A cleared bound asks for focus here and gets it after the render that
+  // empties the field, never in the click handler itself (see the effect).
+  const pendingBoundFocus = useRef<DateBound | null>(null);
+  const [boundFocusTicket, setBoundFocusTicket] = useState(0);
   const [categoryQuery, setCategoryQuery] = useState("");
   const [recent, setRecent] = useState<string[]>(() => readRecent(user?.id));
   const [reports, setReports] = useState<PostItem[]>([]);
@@ -412,6 +416,18 @@ function SearchSurface() {
     target?.focus();
   }, [openMenu]);
 
+  // Clearing a bound leaves the reader on the field it emptied, but the hand-off
+  // has to wait for the render that empties it. Focus set in the click handler
+  // runs against the pre-clear tree, and the date sheet's own focus return still
+  // arrives afterwards, taking the reader back to the bound they did not clear.
+  useEffect(() => {
+    if (boundFocusTicket === 0) return;
+    const bound = pendingBoundFocus.current;
+    pendingBoundFocus.current = null;
+    if (!bound) return;
+    document.getElementById(bound === "from" ? dateFromId : dateToId)?.focus();
+  }, [boundFocusTicket, dateFromId, dateToId]);
+
   // A press anywhere outside the filter tray dismisses the panel without
   // dismissing the search surface. The tray stays mounted for the pointerdown
   // that lands on another pill.
@@ -542,8 +558,9 @@ function SearchSurface() {
   /** The picker has no Clear control, so each bound keeps its own: clearing
    *  means "any date" and keeps the reader on the field it emptied. */
   function clearDateBound(bound: DateBound) {
+    pendingBoundFocus.current = bound;
+    setBoundFocusTicket((ticket) => ticket + 1);
     applyDateBound(bound, "");
-    document.getElementById(bound === "from" ? dateFromId : dateToId)?.focus();
   }
 
   function seeAll() {

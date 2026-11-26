@@ -657,8 +657,12 @@ describe("app-wide search", () => {
       expect(call?.dateFrom).toBeUndefined();
       expect(call?.dateTo).toBe(last.iso);
     });
-    const cleared = within(menu).getByRole("button", { name: "From date. Any date" });
-    expect(document.activeElement).toBe(cleared);
+    // Read the focus back after the clear has rendered: the closing date
+    // sheet's focus return is still in flight when the click lands.
+    await waitFor(() => {
+      const emptied = within(menu).getByRole("button", { name: "From date. Any date" });
+      expect(document.activeElement).toBe(emptied);
+    });
   });
 
   it("blocks the days after the end bound when choosing the start bound", async () => {
