@@ -313,11 +313,16 @@ describe("EditReport", () => {
     );
     expect(screen.getByTestId("category-trigger").textContent).toContain("Electronics");
     expect(screen.getByRole("button", { name: /no changes to save/i })).toBeTruthy();
-    // The edit form is the same narrow surface as the create form, not the
-    // report viewer's 1280px stage.
-    const panel = screen.getByRole("dialog", { name: "Edit report" }).closest(".fb-modal-panel");
-    expect(panel?.classList.contains("fb-report-form-panel")).toBe(true);
-    expect(panel?.classList.contains("fb-report-panel")).toBe(false);
+    // The edit form is a real screen on /my/:id/edit, at the form's reader
+    // measure, not a dialog and not the report viewer's 1280px stage.
+    const heading = screen.getByRole("heading", { level: 1, name: "Edit report" });
+    const taskScreen = heading.closest("section.fb-task-screen");
+    expect(taskScreen).toBeTruthy();
+    expect(taskScreen?.getAttribute("aria-labelledby")).toBe(heading.id);
+    expect(taskScreen?.querySelector(".fb-task-screen-body")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Back" })).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.querySelector(".fb-modal-backdrop")).toBeNull();
   });
 
   it("shows the stored YouTube link as an editable field and saves the replacement", async () => {

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useBlocker, useNavigate, useParams, type BlockerFunction } from "react-router";
 import { RESOLVED_STATUSES, type PostItem } from "@norfold/shared";
 import { useIsPresent } from "framer-motion";
-import { AdaptiveTaskSurface, ConfirmDialog } from "../components/AdaptiveTaskSurface";
+import { ConfirmDialog } from "../components/AdaptiveTaskSurface";
+import { TaskScreen } from "../components/TaskScreen";
 import { useAuth } from "../auth";
 import { Button } from "../components/Button";
 import { announce } from "../components/LiveRegion";
@@ -186,7 +187,7 @@ function EditReportSession({ id, userId }: { id: string; userId?: string }) {
   );
   dirtyRef.current = dirty;
 
-  // One guard for shell links, deep-link navigation, the surface's own Close,
+  // One guard for shell links, deep-link navigation, the screen's own Back,
   // the discard button and POP. Native back still lets topmost dialogs consume
   // it first; when it reaches router navigation this blocker asks exactly once.
   const blocker = useBlocker(useCallback<BlockerFunction>(({ currentLocation, nextLocation }) => {
@@ -318,12 +319,12 @@ function EditReportSession({ id, userId }: { id: string; userId?: string }) {
   const isResolved = RESOLVED_STATUSES.includes(post.status);
 
   return (
-    <AdaptiveTaskSurface
-      open
-      onClose={leave}
+    // A real screen, not a task dialog: the editor owns the route, so nothing
+    // is inert behind it and its nested editor and menus work.
+    <TaskScreen
       title="Edit report"
       description={saved ? "Saved." : "Change the details of your report."}
-      width="report-form"
+      onBack={leave}
       busy={saving}
     >
     <div className="flex flex-col gap-4" data-testid="edit-report">
@@ -392,6 +393,6 @@ function EditReportSession({ id, userId }: { id: string; userId?: string }) {
     >
       <p>{UNSAVED_CHANGES_MESSAGE}</p>
     </ConfirmDialog>
-    </AdaptiveTaskSurface>
+    </TaskScreen>
   );
 }
