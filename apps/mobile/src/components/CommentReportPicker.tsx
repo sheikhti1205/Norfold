@@ -59,7 +59,7 @@ export function CommentReportPicker({ disabled, onPick, onClose }: {
       <div className="flex items-center justify-between gap-2">
         <label htmlFor={inputId} className="text-xs font-medium text-on-surface">Report link</label>
         <button type="button" onClick={onClose} aria-label="Close report picker"
-          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container focus-visible:outline-2 focus-visible:outline-on-surface"
+          className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container focus-visible:outline-2 focus-visible:outline-on-surface"
           {...hoverLabel("Close report picker")}>
           <X size={16} aria-hidden />
         </button>
@@ -71,9 +71,9 @@ export function CommentReportPicker({ disabled, onPick, onClose }: {
           onKeyDown={(event) => {
             if (event.key === "Enter") { event.preventDefault(); void addReport(); }
           }}
-          className="min-h-[44px] min-w-0 flex-1 basis-40 rounded-m3-sm border border-outline-variant bg-surface px-3 text-sm text-on-surface focus-visible:outline-2 focus-visible:outline-on-surface" />
+          className="min-h-[48px] min-w-0 flex-1 basis-40 rounded-m3-sm border border-outline-variant bg-surface px-3 text-sm text-on-surface focus-visible:outline-2 focus-visible:outline-on-surface" />
         <button type="button" onClick={() => void addReport()} disabled={disabled || loading || !link.trim()}
-          className="min-h-[44px] rounded-full px-3 text-xs font-semibold text-on-surface hover:bg-surface-container disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-on-surface">
+          className="min-h-[48px] rounded-full px-3 text-xs font-semibold text-on-surface hover:bg-surface-container disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-on-surface">
           Add report
         </button>
       </div>

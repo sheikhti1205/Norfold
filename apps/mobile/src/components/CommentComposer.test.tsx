@@ -93,6 +93,11 @@ it("uses short guidance without losing the reply target's accessible name", () =
   expect(input.getAttribute("placeholder")).toBe("Reply…");
 });
 
+it("gives the comment field a 48px minimum height", () => {
+  render(<CommentComposer {...baseProps()} />);
+  expect((screen.getByTestId("comment-input") as HTMLTextAreaElement).style.minHeight).toBe("48px");
+});
+
 beforeEach(() => {
   attachMock.upload.mockReset();
   attachMock.remove.mockReset();
@@ -719,17 +724,17 @@ describe("CommentComposer Klipy picker feel", () => {
     expect(tall.getAttribute("style")).toContain("aspect-ratio: 0.5 / 1");
   });
 
-  it("keeps the tab and retry controls at the repo 44px touch-target minimum", async () => {
+  it("keeps the tab and retry controls at the repo 48px touch-target minimum", async () => {
     vi.stubEnv("VITE_KLIPY_API_KEY", "testing-key");
     klipyMock.searchGifs.mockRejectedValueOnce(new Error("offline"));
     render(<CommentComposer {...baseProps()} />);
     chooseAttachment("GIF");
     for (const tab of ["comment-gif-tab-gifs", "comment-gif-tab-stickers"]) {
-      expect(screen.getByTestId(tab).className).toContain("min-h-[44px]");
+      expect(screen.getByTestId(tab).className).toContain("min-h-[48px]");
     }
-    expect(screen.getByTestId("comment-gif-search").className).toContain("min-h-[44px]");
+    expect(screen.getByTestId("comment-gif-search").className).toContain("min-h-[48px]");
     const retry = await screen.findByTestId("comment-gif-retry");
-    expect(retry.className).toContain("min-h-[44px]");
+    expect(retry.className).toContain("min-h-[48px]");
   });
 
   it("clears the query with a dedicated control (returns to trending)", async () => {

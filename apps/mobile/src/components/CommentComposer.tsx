@@ -640,7 +640,7 @@ export function CommentComposer({
         <ComposerShell value={text} onChange={setText} onSend={() => void onSend()}
           inputRef={fieldRef} placeholder={placeholder}
           inputLabel={replyToUsername ? `Reply to ${replyToUsername}` : "Comment"}
-          inputProps={{ "data-testid": "comment-input" } as React.TextareaHTMLAttributes<HTMLTextAreaElement>}
+          inputProps={{ "data-testid": "comment-input", style: { minHeight: 48 } } as React.TextareaHTMLAttributes<HTMLTextAreaElement>}
           disabled={disabled} busy={sending} canSend={!sendDisabled}
           sendLabel={replyToUsername ? "Send reply" : "Send comment"} sendTestId="comment-send"
           inputOverlay={<MentionAutocomplete inputRef={fieldRef} value={text} participants={participants} owner={owner} onInsert={handleMentionInsert} />}
@@ -670,7 +670,7 @@ export function CommentComposer({
                   <span className="min-w-0 flex-1 break-words text-xs">{a.title}</span>
                   <button type="button" aria-label={`Remove report: ${a.title}`} disabled={disabled || sending}
                     onClick={() => void removeAttachment(a)}
-                    className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full hover:bg-surface-container disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-on-surface">
+                    className="flex min-h-[48px] min-w-[48px] shrink-0 items-center justify-center rounded-full hover:bg-surface-container disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-on-surface">
                     <X size={16} aria-hidden />
                   </button>
                 </div>
@@ -748,7 +748,7 @@ export function CommentComposer({
                     data-testid={`comment-attachment-retry-${a.id}`}
                     onClick={() => retryAttachment(a)}
                     aria-label={`Retry attaching ${a.fileName}`}
-                    className="absolute inset-x-0 bottom-0 flex min-h-[44px] items-center justify-center rounded-b-m3-xs border border-outline-variant bg-surface-container-high text-xs font-semibold text-error"
+                    className="absolute inset-x-0 bottom-0 flex min-h-[48px] items-center justify-center rounded-b-m3-xs border border-outline-variant bg-surface-container-high text-xs font-semibold text-error"
                   >
                     Retry
                   </button>
@@ -759,7 +759,7 @@ export function CommentComposer({
                   disabled={disabled || sending}
                   onClick={() => void removeAttachment(a)}
                   aria-label={`Remove ${a.fileName}`}
-                  className="absolute -right-2 -top-2 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-outline-variant bg-surface text-on-surface shadow"
+                  className="absolute -right-2 -top-2 flex min-h-[48px] min-w-[48px] items-center justify-center rounded-full border border-outline-variant bg-surface text-on-surface shadow"
                 >
                   <X size={16} aria-hidden />
                 </button>

@@ -73,7 +73,8 @@ export function ExpressionPicker({
               aria-selected={tab === id}
               data-testid={testId(`tab-${id}`)}
               onClick={() => setTab(id)}
-              className="fb-expression-tab min-h-[44px]"
+              className="fb-expression-tab min-h-[48px]"
+              style={{ minHeight: 48 }}
             >
               <Icon size={15} aria-hidden="true" />
               {label}

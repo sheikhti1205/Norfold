@@ -248,4 +248,17 @@ describe("typed report references in the composer", () => {
       { kind: "report", display_order: 2, report_post_id: reportId },
     ]);
   });
+
+  it("keeps the report picker and staged-reference controls at 48px", async () => {
+    render(<CommentComposer {...props()} />);
+    chooseAttachment("Report");
+    expect(screen.getByLabelText("Report link").className).toContain("min-h-[48px]");
+    expect(screen.getByRole("button", { name: "Add report" }).className).toContain("min-h-[48px]");
+    expect(screen.getByRole("button", { name: "Close report picker" }).className).toContain("min-h-[48px]");
+    fireEvent.change(screen.getByLabelText("Report link"), { target: { value: reportUrl } });
+    fireEvent.click(screen.getByRole("button", { name: "Add report" }));
+    const remove = await screen.findByRole("button", { name: "Remove report: Found blue wallet" });
+    expect(remove.className).toContain("min-h-[48px]");
+    expect(remove.className).toContain("min-w-[48px]");
+  });
 });
