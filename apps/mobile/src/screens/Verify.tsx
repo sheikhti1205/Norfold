@@ -232,13 +232,13 @@ function PendingEmailVerify({ email }: { email: string }) {
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="flex min-h-[44px] min-w-[44px] shrink-0 items-center px-2 text-sm font-medium text-on-surface underline focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="flex min-h-12 min-w-12 shrink-0 items-center px-2 text-sm font-medium text-on-surface underline focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             Back
           </button>
           <Link
             to="/auth"
-            className="flex min-h-[44px] max-w-full shrink-0 items-center px-2 text-sm font-medium text-on-surface underline focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="flex min-h-12 max-w-full shrink-0 items-center px-2 text-sm font-medium text-on-surface underline focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             Use a different email
           </Link>

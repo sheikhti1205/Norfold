@@ -162,4 +162,15 @@ describe("Onboarding", () => {
     expect(phone).toMatch(/\.fb-onboarding-route--v\s*\{\s*display:\s*none;\s*\}/);
     expect(css).not.toContain("1.1875rem");
   });
+  it("keeps the brand, quiet, guidelines and legal links on a 48px hit area", async () => {
+    const { existsSync, readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const local = join(process.cwd(), "src/screens/Onboarding.css");
+    const css = readFileSync(existsSync(local) ? local : join(process.cwd(), "apps/mobile/src/screens/Onboarding.css"), "utf8");
+    const rule = (selector: string) => new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{[^}]*\\}`).exec(css)?.[0];
+    expect(rule(".fb-onboarding-brand-link")).toMatch(/min-height:\s*48px/);
+    expect(rule(".fb-onboarding-quiet")).toMatch(/min-height:\s*48px/);
+    expect(rule(".fb-onboarding-guidelines")).toMatch(/min-height:\s*48px/);
+    expect(rule(".fb-onboarding-legal a")).toMatch(/min-width:\s*48px;\s*min-height:\s*48px/);
+  });
 });

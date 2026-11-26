@@ -177,6 +177,7 @@ describe("CompleteProfile seeds (W0.5)", () => {
     renderProfile();
     const avatarImage = () => document.querySelector('[data-testid="user-avatar"] img');
     expect(avatarImage()).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove photo" }).className).toContain("min-h-12");
     fireEvent.click(screen.getByRole("button", { name: "Remove photo" }));
     expect(avatarImage()).toBeNull();
     await waitFor(() => expect(screen.getByText(/username available/i)).toBeTruthy());

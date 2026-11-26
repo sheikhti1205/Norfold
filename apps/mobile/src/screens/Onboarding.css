@@ -7,7 +7,7 @@
 }
 .fb-onboarding-inner, .fb-onboarding-header { width: min(100%, 80rem); margin-inline: auto; padding-inline: clamp(1.25rem, 4vw, 4rem); }
 .fb-onboarding-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; padding-top: max(1rem, env(safe-area-inset-top)); }
-.fb-onboarding-brand-link { display: inline-flex; align-items: center; min-height: 44px; color: inherit; text-decoration: none; border-radius: 8px; }
+.fb-onboarding-brand-link { display: inline-flex; align-items: center; min-height: 48px; color: inherit; text-decoration: none; border-radius: 8px; }
 .fb-onboarding-brand { display: flex; align-items: center; gap: .6rem; font-size: 1.25rem; font-weight: 700; letter-spacing: -.04em; }
 .fb-onboarding-intro { padding-block: clamp(3.5rem, 9vw, 7rem) clamp(3rem, 7vw, 5rem); }
 .fb-onboarding h1, .fb-onboarding h2, .fb-onboarding h3 { text-wrap: balance; overflow-wrap: break-word; scroll-margin-top: 2rem; }
@@ -27,7 +27,7 @@
 .fb-onboarding-primary svg { transition: transform .18s var(--ease-fb); }
 .fb-onboarding-primary:hover svg, .fb-onboarding-primary:focus-visible svg { transform: translateX(4px); }
 .fb-onboarding-primary:active { opacity: .8; }
-.fb-onboarding-quiet { min-height: 44px; padding: .5rem 0; background: transparent; color: var(--fb-on-surface-variant); }
+.fb-onboarding-quiet { min-height: 48px; padding: .5rem 0; background: transparent; color: var(--fb-on-surface-variant); }
 .fb-onboarding-quiet:hover { color: var(--fb-on-surface); }
 .fb-onboarding .fb-onboarding-note { font-size: .875rem; }
 .fb-onboarding-section { padding-block: clamp(4rem, 9vw, 8rem); }
@@ -51,11 +51,11 @@
 .fb-onboarding-safety ul { display: grid; gap: 1rem; list-style: none; padding: 0; margin: 2rem 0; }
 .fb-onboarding-safety li { display: flex; align-items: flex-start; gap: .75rem; font-size: 1rem; line-height: 1.6; overflow-wrap: break-word; }
 .fb-onboarding-safety li svg { flex: 0 0 auto; margin-top: .25rem; }
-.fb-onboarding-guidelines { display: inline-flex; align-items: center; gap: .4rem; min-height: 44px; margin-top: 1rem; color: var(--fb-primary); }
+.fb-onboarding-guidelines { display: inline-flex; align-items: center; gap: .4rem; min-height: 48px; margin-top: 1rem; color: var(--fb-primary); }
 .fb-onboarding-closing h2 { font-size: clamp(2rem, 6vw, 4rem); }
 .fb-onboarding-closing .fb-onboarding-primary { margin-top: 1.75rem; }
 .fb-onboarding-legal { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; padding-top: 3rem; padding-bottom: env(safe-area-inset-bottom); }
-.fb-onboarding-legal a { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; color: var(--fb-on-surface-variant); }
+.fb-onboarding-legal a { display: inline-flex; align-items: center; justify-content: center; min-width: 48px; min-height: 48px; color: var(--fb-on-surface-variant); }
 @media (min-width: 48rem) {
   .fb-onboarding-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2rem; }
   .fb-onboarding-route--v { display: none; }

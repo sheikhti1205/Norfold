@@ -21,13 +21,13 @@
 
 .fb-profile-preview-close {
   position: absolute;
-  top: 0.375rem;
-  right: 0.375rem;
+  top: 0.25rem;
+  right: 0.25rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 999px;
   color: var(--fb-on-surface-variant);
   background: transparent;
@@ -94,8 +94,13 @@
   white-space: pre-line;
 }
 .fb-profile-preview-bio[data-expanded="true"] { display: block; -webkit-line-clamp: unset; overflow: visible; }
+/* 48px target. The label stays 2px under the bio and the extra height sits
+ * below it, so growing the target does not push the label away from the text
+ * it discloses; type size and colour are unchanged. */
 .fb-profile-preview-more {
-  min-height: 32px;
+  display: inline-flex;
+  align-items: flex-start;
+  min-height: 48px;
   padding: 0;
   color: var(--fb-on-surface-variant);
   font-size: 0.8125rem; font-weight: 600;
@@ -121,12 +126,12 @@
   display: flex; flex-wrap: wrap; align-items: stretch; gap: 0.5rem;
   margin-top: 0.25rem;
 }
-.fb-profile-preview-actions .fb-peer-chat-primary { flex: 1 1 8.5rem; min-height: 40px; }
+.fb-profile-preview-actions .fb-peer-chat-primary { flex: 1 1 8.5rem; min-height: 48px; }
 .fb-profile-preview-actions .fb-peer-chat-note { flex-basis: 100%; }
 .fb-profile-preview-action {
   display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem;
   flex: 0 1 auto;
-  min-height: 40px; padding: 0 0.875rem;
+  min-height: 48px; padding: 0 0.875rem;
   border: 1px solid var(--fb-outline-variant); border-radius: 0.625rem;
   color: var(--fb-on-surface);
   font-size: 0.8125rem; font-weight: 600;

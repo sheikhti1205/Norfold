@@ -62,6 +62,7 @@ describe("ForgotPassword", () => {
     expect(main!.className).toMatch(/min-h-dvh/);
     expect(main!.style.paddingTop).toBe("max(2rem, env(safe-area-inset-top))");
     expect(main!.style.paddingBottom).toBe("max(2rem, env(safe-area-inset-bottom))");
+    expect(screen.getByRole("link", { name: "Back to sign in" }).className).toContain("min-h-12");
   });
 
   it("prefills the email carried from sign-in", () => {
@@ -104,6 +105,9 @@ describe("Recovery", () => {
     expect(input.maxLength).toBe(10); expect(input.autocomplete).toBe("one-time-code");
     fireEvent.paste(input, { clipboardData: { getData: () => "123 456" } });
     expect(input.value).toBe("123456");
+    for (const name of ["Use a different email", "Back to sign in"]) {
+      expect(screen.getByRole("link", { name }).className).toContain("min-h-12");
+    }
     fireEvent.submit(input.closest("form")!);
     await screen.findByLabelText("New password");
     expect(recoveryMock.verify).toHaveBeenCalledWith("recover@example.invalid", "123456");
@@ -248,6 +252,7 @@ describe("Recovery", () => {
     renderRecovery("/recovery");
     await screen.findByText(/invalid or expired/i);
     expect(screen.queryByLabelText("New password")).toBeNull();
+    expect(screen.getByRole("link", { name: "Request a new code" }).className).toContain("min-h-12");
     expect(servicesMock.updatePassword).not.toHaveBeenCalled();
   });
 

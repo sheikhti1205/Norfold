@@ -126,7 +126,7 @@ function CommentLikeButton({
       disabled={pending}
       aria-busy={pending}
       onClick={onToggle}
-      className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1 rounded-full px-1.5 text-xs font-medium ${state.mine ? "text-primary" : "text-on-surface-variant"}`}
+      className={`inline-flex min-h-12 min-w-12 items-center justify-center gap-1 rounded-full px-1.5 text-xs font-medium ${state.mine ? "text-primary" : "text-on-surface-variant"}`}
     >
       <ReactionGlyph kind="LIKE" mine={state.mine} size={18} />
       <span>{state.mine ? "Liked" : "Like"}</span>
@@ -1063,7 +1063,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
             onClick={() => showMoreReplies(c)}
             aria-expanded={expandedBeyondDefault}
             aria-label={`View ${remaining} more ${remaining === 1 ? "reply" : "replies"} to ${c.author.username}`}
-            className="inline-flex min-h-[44px] items-center gap-1 rounded-full px-2 text-xs font-medium text-on-surface-variant underline"
+            className="inline-flex min-h-12 items-center gap-1 rounded-full px-2 text-xs font-medium text-on-surface-variant underline"
           >
             View {remaining} more {remaining === 1 ? "reply" : "replies"}
           </button>
@@ -1074,7 +1074,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
             onClick={() => hideReplies(c)}
             aria-expanded="true"
             aria-label={`Hide replies to ${c.author.username}`}
-            className="inline-flex min-h-[44px] items-center gap-1 rounded-full px-2 text-xs font-medium text-on-surface-variant underline"
+            className="inline-flex min-h-12 items-center gap-1 rounded-full px-2 text-xs font-medium text-on-surface-variant underline"
           >
             Hide replies
           </button>
@@ -1099,7 +1099,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
             type="button"
             onClick={() => jumpToComment(c.parentId as string)}
             aria-label={`Jump to parent comment by ${parentName}`}
-            className="mb-1 inline-flex min-h-[44px] items-center rounded-full text-xs font-semibold text-on-surface-variant underline"
+            className="mb-1 inline-flex min-h-12 items-center rounded-full text-xs font-semibold text-on-surface-variant underline"
           >
             @{parentName}
           </button>
@@ -1133,7 +1133,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
                     <CommentMediaPreview media={{ ...m, alt: `Attached video ${i + 1}` }} />
                   ) : (
                     <button type="button" aria-label={`Open attached photo ${i + 1}`}
-                      className="block rounded-m3-sm focus-visible:outline-2 focus-visible:outline-primary"
+                      className="block min-w-12 rounded-m3-sm focus-visible:outline-2 focus-visible:outline-primary"
                       onClick={() => setCommentPhoto({ id: c.id, photoId: `${c.id}:${i}`, blocked: !!c.blockedAuthor })}>
                     <CommentMediaPreview media={{ ...m, alt: `Attached photo ${i + 1}${provenance === "klipy" ? " via KLIPY" : ""}` }} />
                     </button>
@@ -1182,7 +1182,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
             onClick={() => setReplyTo(isReplyTarget ? null : c)}
             aria-pressed={isReplyTarget}
             aria-label={`Reply to ${c.author.username}`}
-            className="inline-flex min-h-[44px] items-center gap-1 rounded-full px-1.5 text-xs font-medium text-on-surface-variant"
+            className="inline-flex min-h-12 items-center gap-1 rounded-full px-1.5 text-xs font-medium text-on-surface-variant"
           >
             <CornerDownRight size={13} aria-hidden /> Reply
           </button>
@@ -1237,7 +1237,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
                   id="detail-love"
                   data-testid="detail-like"
                   data-action="like"
-                  className={`fb-report-action min-h-[44px] gap-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${postLike.mine ? "bg-surface-container text-on-surface" : "text-on-surface-variant"}`}
+                  className={`fb-report-action min-h-12 gap-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${postLike.mine ? "bg-surface-container text-on-surface" : "text-on-surface-variant"}`}
                   onClick={() => toggleLike("LIKE")}
                   disabled={reactionPending}
                   aria-busy={reactionPending}
@@ -1252,7 +1252,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
                   type="button"
                   data-testid="detail-dislike"
                   data-action="dislike"
-                  className={`fb-report-action min-h-[44px] gap-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${myReaction === "DISLIKE" ? "bg-surface-container text-on-surface" : "text-on-surface-variant"}`}
+                  className={`fb-report-action min-h-12 gap-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${myReaction === "DISLIKE" ? "bg-surface-container text-on-surface" : "text-on-surface-variant"}`}
                   onClick={() => toggleLike("DISLIKE")}
                   disabled={reactionPending}
                   aria-busy={reactionPending}
@@ -1324,7 +1324,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
                 type="button"
                 onClick={() => setRecoveryPost(current)}
                 disabled={ownerControlsDisabled}
-                className="mt-2 flex min-h-[44px] items-center gap-1.5 text-sm font-medium underline disabled:opacity-50 focus:outline-2 focus:outline-offset-2 focus:outline-on-surface"
+                className="mt-2 flex min-h-12 items-center gap-1.5 text-sm font-medium underline disabled:opacity-50 focus:outline-2 focus:outline-offset-2 focus:outline-on-surface"
               >
                 <CircleCheck size={16} aria-hidden /> Record recovery…
               </button>
@@ -1460,7 +1460,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
     {replyTo ? (
       <div role="status" className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-on-surface-variant">
         <span className="min-w-0 flex-1 basis-[160px] [overflow-wrap:anywhere]">Replying to <span className="font-semibold text-on-surface">@{replyTo.author.username}</span></span>
-        <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply" className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-full px-2 font-medium"><X size={13} aria-hidden /> Cancel</button>
+        <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply" className="inline-flex min-h-12 shrink-0 items-center gap-1 rounded-full px-2 font-medium"><X size={13} aria-hidden /> Cancel</button>
       </div>
     ) : null}
     <CommentComposer postId={current.id} replyToUsername={replyTo?.author.username ?? null} currentUser={user} participants={mentionParticipants}
@@ -1501,7 +1501,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
                   type="button"
                   onClick={() => setCommentsExpanded(true)}
                   aria-expanded="false"
-                  className="min-h-[44px] self-start px-1 text-sm font-medium underline"
+                  className="min-h-12 self-start px-1 text-sm font-medium underline"
                 >
                   View all {comments.length} comments
                 </button>
@@ -1511,7 +1511,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
                   type="button"
                   onClick={() => setCommentsExpanded(false)}
                   aria-expanded="true"
-                  className="min-h-[44px] self-start px-1 text-sm font-medium underline"
+                  className="min-h-12 self-start px-1 text-sm font-medium underline"
                 >
                   Show fewer comments
                 </button>

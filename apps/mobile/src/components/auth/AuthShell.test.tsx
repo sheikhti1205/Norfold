@@ -40,4 +40,18 @@ describe("shared auth branding", () => {
     expect(screen.getByRole("link", { name: "Back to Norfold" }).getAttribute("href")).toBe("/");
     expect(screen.getByRole("link", { name: "Privacy" }).getAttribute("href")).toBe("/privacy");
   });
+  it("keeps every shell link on a 48px hit area", async () => {
+    const { existsSync, readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const local = join(process.cwd(), "src/components/auth/AuthShell.css");
+    const css = readFileSync(existsSync(local) ? local : join(process.cwd(), "apps/mobile/src/components/auth/AuthShell.css"), "utf8");
+    const footerRule = /\.fb-auth-shell footer a \{[^}]*\}/s.exec(css)?.[0];
+    expect(footerRule).toMatch(/min-inline-size:\s*48px/);
+    expect(footerRule).toMatch(/min-block-size:\s*48px/);
+
+    render(<MemoryRouter><AuthShell title="Welcome"><p>Form</p></AuthShell></MemoryRouter>);
+    for (const name of ["Norfold", "Back to Norfold", "Privacy", "Terms", "Community Guidelines"]) {
+      expect(screen.getByRole("link", { name }).className).toContain("min-h-12");
+    }
+  });
 });

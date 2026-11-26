@@ -64,13 +64,13 @@ export function SignInForm({
         <motion.div
           layoutId="auth-email-chip"
           transition={{ duration: motionDurations.standard, ease: motionEasings.out }}
-          className="flex min-h-[44px] flex-wrap items-center gap-2 rounded-m3-md border border-outline-variant bg-surface-container-low px-3.5 py-2"
+          className="flex min-h-12 flex-wrap items-center gap-2 rounded-m3-md border border-outline-variant bg-surface-container-low px-3.5 py-2"
         >
           <span className="min-w-0 flex-1 basis-[12ch] break-all text-sm font-medium">{initialEmail}</span>
           <button
             type="button"
             onClick={onRequestChangeEmail}
-            className="flex min-h-[44px] min-w-[44px] items-center px-2 text-sm font-medium text-on-surface underline focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="flex min-h-12 min-w-12 items-center px-2 text-sm font-medium text-on-surface underline focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             Change
           </button>
@@ -122,7 +122,7 @@ export function SignInForm({
         </Button>
         <Link
           to={`/forgot${addressParam}`}
-          className="min-h-[44px] self-center px-2 py-2 text-sm font-medium text-on-surface underline focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="min-h-12 self-center px-2 py-2 text-sm font-medium text-on-surface underline focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           Forgot password?
         </Link>

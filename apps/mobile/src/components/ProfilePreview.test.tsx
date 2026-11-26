@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { MemoryRouter, useLocation } from "react-router";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -246,4 +247,25 @@ it("returns focus to the identity from a touch card's Escape and Close", async (
   await waitFor(() => expect(screen.queryByTestId("profile-preview")).toBeNull());
   expect(document.activeElement).toBe(identity);
   expect(screen.queryByTestId("profile-preview")).toBeNull();
+});
+
+// The card is a preview surface, so its controls grow by height only: the bio
+// disclosure, the close control and both destinations meet the 48px density
+// floor while their type, radii and the card's column layout stay put.
+it("keeps every card control at the 48px density floor", () => {
+  const css = readFileSync("src/components/ProfilePreview.css", "utf8");
+  const rule = (selector: string) => {
+    const start = css.indexOf(`${selector} {`);
+    expect(start).toBeGreaterThan(-1);
+    return css.slice(start, css.indexOf("}", start));
+  };
+  // The label stays at the top of its target: the extra height sits below it.
+  const more = rule(".fb-profile-preview-more");
+  expect(more).toContain("min-height: 48px");
+  expect(more).toContain("font-size: 0.8125rem");
+  const close = rule(".fb-profile-preview-close");
+  expect(close).toContain("width: 48px");
+  expect(close).toContain("height: 48px");
+  expect(rule(".fb-profile-preview-actions .fb-peer-chat-primary")).toContain("min-height: 48px");
+  expect(rule(".fb-profile-preview-action")).toContain("min-height: 48px");
 });

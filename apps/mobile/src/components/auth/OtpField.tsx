@@ -33,7 +33,7 @@ export function OtpField({
         autoComplete="one-time-code"
         maxLength={maxLength}
         disabled={disabled}
-        className="min-h-11 w-full min-w-0 rounded-m3-sm border border-outline-variant bg-surface px-3.5 py-3 font-mono text-xl font-semibold tracking-wide text-on-surface focus:border-on-surface disabled:cursor-not-allowed disabled:bg-surface-container-low disabled:text-on-surface-variant"
+        className="min-h-12 w-full min-w-0 rounded-m3-sm border border-outline-variant bg-surface px-3.5 py-3 font-mono text-xl font-semibold tracking-wide text-on-surface focus:border-on-surface disabled:cursor-not-allowed disabled:bg-surface-container-low disabled:text-on-surface-variant"
       />
     </div>
   );

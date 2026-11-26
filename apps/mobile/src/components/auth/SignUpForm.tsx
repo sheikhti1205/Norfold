@@ -231,7 +231,7 @@ export function SignUpForm({
       <button
         type="button"
         onClick={onBackToSignin}
-        className="mt-4 flex min-h-[44px] w-full items-center justify-center px-2 text-sm font-medium text-on-surface underline focus-visible:outline-2 focus-visible:outline-offset-2"
+        className="mt-4 flex min-h-12 w-full items-center justify-center px-2 text-sm font-medium text-on-surface underline focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         Back to sign in
       </button>

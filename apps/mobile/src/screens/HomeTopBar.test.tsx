@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { useRef } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
@@ -43,6 +44,18 @@ describe("Home brand ownership", () => {
     expect(brand.textContent).toContain("Norfold");
     expect(brand.querySelector("img")).toBeTruthy();
     expect(brand.classList.contains("fb-home-brand")).toBe(true);
+    // The wordmark keeps its type size; the link's own box carries the 48px
+    // density floor. jsdom has no layout, so the stylesheet is the evidence.
+    expect(brand.classList.contains("fb-home-brand--target")).toBe(true);
+  });
+
+  it("gives the brand link a 48px target without growing the wordmark", () => {
+    const css = readFileSync("src/screens/HomeTopBar.css", "utf8");
+    const start = css.indexOf(".fb-home-brand.fb-home-brand--target {");
+    expect(start).toBeGreaterThan(-1);
+    const rule = css.slice(start, css.indexOf("}", start));
+    expect(rule).toContain("min-height: 48px");
+    expect(rule).not.toContain("font-size");
   });
 
   it("leaves the outside name to the shell while a rail is in flow", () => {

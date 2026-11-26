@@ -38,7 +38,7 @@ function DescriptionDisclosure({ text, lines }: { text: string; lines: 2 | 5 }) 
     </div>
     {(truncated || expanded) && <button type="button" data-testid="post-description-more"
       aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(!expanded)}
-      className="min-h-[44px] rounded-sm text-sm font-semibold text-on-surface underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-on-surface">
+      className="min-h-12 rounded-sm text-sm font-semibold text-on-surface underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-on-surface">
       {expanded ? "Show less" : "See more"}
     </button>}
   </div>;

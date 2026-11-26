@@ -153,9 +153,13 @@ describe("Verify pending-signup mode (no session yet)", () => {
 
   it("offers Back and a change-email exit that preserve backend behavior", () => {
     renderVerify();
-    expect(screen.getByRole("button", { name: "Back" })).toBeTruthy();
+    const back = screen.getByRole("button", { name: "Back" });
+    expect(back).toBeTruthy();
+    expect(back.className).toContain("min-h-12");
+    expect(back.className).toContain("min-w-12");
     const change = screen.getByRole("link", { name: /different email/i });
     expect(change.getAttribute("href")).toBe("/auth");
+    expect(change.className).toContain("min-h-12");
   });
 
   it("keeps backend OTP errors verbatim and preserves the typed code", async () => {

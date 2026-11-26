@@ -45,14 +45,14 @@ export function SignedOutEntry() {
             <ArrowRight size={18} className="hidden shrink-0 sm:block" aria-hidden="true" />
           </button>
           <button type="button" aria-label={`Remove ${account.displayName}, @${account.username} from this device`}
-            className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container focus-visible:outline-2 focus-visible:outline-primary"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container focus-visible:outline-2 focus-visible:outline-primary"
             onClick={() => {
               if (!removeRememberedAccount(account.id)) { setError("Couldn't remove this account. Try again."); return; }
               setError(""); setNotice(`Removed ${account.displayName} from this device.`); setFocusAfterRemoval(true);
             }}><Trash2 size={18} aria-hidden="true" /></button>
         </li>)}
       </ul> : <p className="text-sm text-on-surface-variant">No accounts saved on this device.</p>}
-      <button type="button" className="min-h-11 rounded-m3-sm px-3 text-primary hover:bg-surface-container-low focus-visible:outline-2 focus-visible:outline-primary" onClick={() => navigate("/auth")}>Use another account</button>
+      <button type="button" className="min-h-12 rounded-m3-sm px-3 text-primary hover:bg-surface-container-low focus-visible:outline-2 focus-visible:outline-primary" onClick={() => navigate("/auth")}>Use another account</button>
       <p role="status" className="sr-only">{notice}</p>
       {error && <p role="alert" className="text-sm text-error">{error}</p>}
     </div>

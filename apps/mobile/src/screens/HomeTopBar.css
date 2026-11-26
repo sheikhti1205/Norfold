@@ -1,0 +1,8 @@
+/* Home's brand link. The global surface stylesheet paints the lockup; this
+ * file owns the target's density. Two classes so the 48px floor beats that
+ * shared rule whatever order the two stylesheets land in the bundle, and
+ * `min-height` only, so the mark and the wordmark keep their sizes. The bar
+ * row is already 48px tall, so the taller link does not move anything. */
+.fb-home-brand.fb-home-brand--target {
+  min-height: 48px;
+}

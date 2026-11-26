@@ -8,6 +8,7 @@ import { BrandMark } from "../components/BrandMark";
 import { useInlineRail } from "../components/navLayout";
 import { useHoverLabel } from "../components/HoverLabel";
 import { motionDurations, motionEasings, pressFeedback, scaleInVariants } from "../components/uiMotion";
+import "./HomeTopBar.css";
 
 /** Shared swap timing for the one-row state change. */
 const swap = { duration: motionDurations.fast, ease: motionEasings.out } as const;
@@ -117,7 +118,7 @@ export function HomeTopBar({
           full lockup only when there is no rail. */}
       <h1 className="sr-only">Norfold</h1>
       {showBrand && !inlineRail && (
-        <Link to="/" aria-label="Norfold home" className="fb-home-brand">
+        <Link to="/" aria-label="Norfold home" className="fb-home-brand fb-home-brand--target">
           <BrandMark size={24} shape="tile" alt="" />
           <span className="fb-home-brand-name">Norfold</span>
         </Link>
