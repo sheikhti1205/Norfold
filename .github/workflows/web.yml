@@ -169,7 +169,25 @@ jobs:
       # The deploy step runs ONLY after the sourcemap upload + strip steps above
       # succeed: any upload failure stops this job before Azure, so production-web
       # is never deployed without matching symbols in Sentry.
+      # CI can complete out of order: a re-run of an older commit finishes after
+      # a newer commit already deployed, and Azure replaces the whole site. Only
+      # the current tip of main may publish, so production never rolls back.
+      - name: Confirm this build is still the tip of main
+        id: tip
+        if: github.event_name == 'workflow_run'
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main
+          HEAD_SHA=$(git rev-parse HEAD)
+          TIP_SHA=$(git rev-parse origin/main)
+          if [ "$HEAD_SHA" = "$TIP_SHA" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Superseded by $(git rev-parse --short origin/main); deploying that commit's own run instead."
+          fi
       - name: Deploy prebuilt site and read-only share renderer (same domain)
+        if: github.event_name != 'workflow_run' || steps.tip.outputs.current == 'true'
         uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
