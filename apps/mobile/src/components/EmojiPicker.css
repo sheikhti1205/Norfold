@@ -50,7 +50,7 @@
 .fb-peer-attach-menu { display: flex; flex-direction: column; padding: 6px; }
 .fb-peer-attach-menu button {
   display: flex; align-items: center; gap: 10px;
-  min-height: 44px; padding: 0 12px; border-radius: 10px;
+  min-height: 48px; padding: 0 12px; border-radius: 10px;
   font-size: 0.875rem; text-align: left; color: var(--fb-on-surface);
 }
 .fb-peer-attach-menu button:hover { background: var(--fb-surface-container); }
@@ -72,7 +72,7 @@
 .fb-expression-tabs::-webkit-scrollbar { display: none; }
 .fb-expression-tab {
   display: inline-flex; align-items: center; gap: 5px; flex: none;
-  min-height: 44px; padding: 0 10px; border-radius: 999px;
+  min-height: 48px; padding: 0 10px; border-radius: 999px;
   font-size: 0.75rem; font-weight: 600; color: var(--fb-on-surface-variant);
 }
 .fb-expression-tab[aria-selected="true"] {
@@ -81,7 +81,7 @@
 .fb-expression-tab:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 1px; }
 .fb-expression-close {
   display: inline-flex; align-items: center; justify-content: center; flex: none;
-  width: 44px; height: 44px; border-radius: 999px;
+  width: 48px; height: 48px; border-radius: 999px;
   color: var(--fb-on-surface-variant);
 }
 .fb-expression-close:hover { background: var(--fb-surface-container); }
@@ -103,7 +103,7 @@
 .fb-expression-recent-row::-webkit-scrollbar { display: none; }
 .fb-expression-recent {
   display: inline-flex; align-items: center; justify-content: center; flex: none;
-  width: 44px; height: 44px; border-radius: 10px;
+  width: 48px; height: 48px; border-radius: 10px;
 }
 .fb-expression-recent:hover { background: var(--fb-surface-container); }
 .fb-expression-recent:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: -2px; }
@@ -115,7 +115,7 @@
 .fb-emoji-picker { display: flex; flex-direction: column; max-height: 18rem; }
 .fb-emoji-search {
   margin: 8px 8px 0;
-  min-height: 40px;
+  min-height: 48px;
   border: 1px solid var(--fb-outline-variant);
   border-radius: 999px;
   background: var(--fb-surface-container-low);
@@ -138,13 +138,13 @@
 }
 /* Dense but never overflowing: columns fit whatever width the panel got, so a
    320dp phone does not show a horizontal scrollbar inside the palette. */
-.fb-emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(32px, 1fr)); gap: 2px; }
+.fb-emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); gap: 2px; }
 .fb-emoji-cell {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 0;
-  min-height: 32px;
+  min-height: 48px;
   aspect-ratio: 1;
   border-radius: 8px;
   font-size: 1.25rem;
@@ -171,22 +171,22 @@
   color: var(--fb-on-surface-variant); pointer-events: none;
 }
 .fb-klipy-search {
-  width: 100%; min-height: 40px; border-radius: 999px;
+  width: 100%; min-height: 48px; border-radius: 999px;
   border: 1px solid var(--fb-outline-variant);
   background: var(--fb-surface-container-low);
-  padding: 0 40px 0 34px; font: inherit; font-size: 0.8125rem; color: inherit;
+  padding: 0 52px 0 34px; font: inherit; font-size: 0.8125rem; color: inherit;
 }
 .fb-klipy-search:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 1px; }
 .fb-klipy-clear {
   position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
   display: inline-flex; align-items: center; justify-content: center;
-  width: 36px; height: 36px; border-radius: 999px; color: var(--fb-on-surface-variant);
+  width: 48px; height: 48px; border-radius: 999px; color: var(--fb-on-surface-variant);
 }
 .fb-klipy-clear:hover { background: var(--fb-surface-container-high); }
 .fb-klipy-tabs { display: flex; gap: 6px; padding: 8px 8px 0; }
 .fb-klipy-tab {
   display: inline-flex; align-items: center; gap: 6px;
-  min-height: 36px; padding: 0 12px; border-radius: 999px;
+  min-height: 48px; padding: 0 12px; border-radius: 999px;
   font-size: 0.75rem; font-weight: 600; color: var(--fb-on-surface-variant);
 }
 .fb-klipy-tab[aria-selected="true"] {
@@ -207,7 +207,7 @@
   color: var(--fb-on-surface-variant);
 }
 .fb-klipy-retry {
-  min-height: 40px; padding-inline: 16px; border-radius: 999px;
+  min-height: 48px; padding-inline: 16px; border-radius: 999px;
   background: var(--fb-surface-container-high); font-size: 0.75rem; font-weight: 600;
   color: var(--fb-on-surface);
 }

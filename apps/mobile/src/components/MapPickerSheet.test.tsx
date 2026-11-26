@@ -453,6 +453,15 @@ describe("MapPickerSheet (keyless fallback path)", () => {
     expect(screen.getByRole("button", { name: "Move pin north" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Zoom in" })).toBeDefined();
   });
+
+  it("gives every move and zoom control a 48px minimum box", () => {
+    renderSheet();
+    for (const name of ["Move pin north", "Move pin west", "Move pin south", "Move pin east", "Zoom in", "Zoom out"]) {
+      const control = screen.getByRole("button", { name });
+      expect(control.className).toContain("min-h-[48px]");
+      expect(control.className).toContain("min-w-[48px]");
+    }
+  });
 });
 
 describe("MapPickerSheet (Google web picker path)", () => {

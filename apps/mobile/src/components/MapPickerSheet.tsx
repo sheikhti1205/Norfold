@@ -127,7 +127,7 @@ function PickerControls({ onZoomIn, onZoomOut, onNudge, className }: PickerContr
             type="button"
             aria-label="Move pin north"
             onClick={() => onNudge(0, -1)}
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface text-on-surface"
+            className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-m3-sm border border-outline bg-surface text-on-surface"
           >
             <ChevronUp size={16} aria-hidden />
           </button>
@@ -136,7 +136,7 @@ function PickerControls({ onZoomIn, onZoomOut, onNudge, className }: PickerContr
             type="button"
             aria-label="Move pin west"
             onClick={() => onNudge(-1, 0)}
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface text-on-surface"
+            className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-m3-sm border border-outline bg-surface text-on-surface"
           >
             <ChevronLeft size={16} aria-hidden />
           </button>
@@ -144,7 +144,7 @@ function PickerControls({ onZoomIn, onZoomOut, onNudge, className }: PickerContr
             type="button"
             aria-label="Move pin south"
             onClick={() => onNudge(0, 1)}
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface text-on-surface"
+            className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-m3-sm border border-outline bg-surface text-on-surface"
           >
             <ChevronDown size={16} aria-hidden />
           </button>
@@ -152,7 +152,7 @@ function PickerControls({ onZoomIn, onZoomOut, onNudge, className }: PickerContr
             type="button"
             aria-label="Move pin east"
             onClick={() => onNudge(1, 0)}
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface text-on-surface"
+            className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-m3-sm border border-outline bg-surface text-on-surface"
           >
             <ChevronRight size={16} aria-hidden />
           </button>
@@ -164,7 +164,7 @@ function PickerControls({ onZoomIn, onZoomOut, onNudge, className }: PickerContr
             type="button"
             aria-label="Zoom in"
             onClick={onZoomIn}
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface px-2 text-on-surface"
+            className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-m3-sm border border-outline bg-surface px-2 text-on-surface"
           >
             <Plus size={16} aria-hidden />
           </button>
@@ -172,7 +172,7 @@ function PickerControls({ onZoomIn, onZoomOut, onNudge, className }: PickerContr
             type="button"
             aria-label="Zoom out"
             onClick={onZoomOut}
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface px-2 text-on-surface"
+            className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-m3-sm border border-outline bg-surface px-2 text-on-surface"
           >
             <Minus size={16} aria-hidden />
           </button>

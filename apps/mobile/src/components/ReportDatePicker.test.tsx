@@ -1085,7 +1085,7 @@ describe("ReportDatePicker", () => {
     expect(css).toMatch(/\.fb-date-actions\s*\{[^}]*bottom\s*:\s*0/);
   });
 
-  it("the sheet body scrolls when the jump view is open; day cells stay 44px", async () => {
+  it("the sheet body scrolls when the jump view is open; day cells stay 48px", async () => {
     await openSheet("2026-09-26");
     const sheet = screen.getByTestId("bottom-sheet");
     const body = screen.getByTestId("bottom-sheet-content");
@@ -1102,7 +1102,11 @@ describe("ReportDatePicker", () => {
     fireEvent.click(screen.getByRole("button", { name: /choose month and year/i }));
     expect(screen.getByTestId("calendar-jump-panel")).toBeTruthy();
     expect(sheet.contains(screen.getByTestId("calendar-jump-panel"))).toBe(true);
-    // Day cells keep the 44px tap target while the jump view is open.
-    expect(screen.getByRole("button", { name: /26.*selected/i }).className).toContain("h-11");
+    // Day cells keep the 48px tap target while the jump view is open.
+    expect(screen.getByRole("button", { name: /26.*selected/i }).className).toContain("min-h-[48px]");
+    // Every jump-panel control is a 48px target too.
+    for (const control of within(screen.getByTestId("calendar-jump-panel")).getAllByRole("button")) {
+      expect(control.className).toContain("min-h-[48px]");
+    }
   });
 });

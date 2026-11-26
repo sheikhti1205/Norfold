@@ -17,10 +17,10 @@
      covers the first frame before metadata reaches the overlay, never the
      message frame (which stays compact until it knows). */
   --fb-vp-ratio: 1.7777778;
-  /* The transport's real height: 44px seek, 44px control row and the bar's own
+  /* The transport's real height: 48px seek, 48px control row and the bar's own
      padding. A stage narrower than this would clip the bar, so it doubles as
      the stage's height floor. */
-  --fb-vp-bar-height: 100px;
+  --fb-vp-bar-height: 108px;
   pointer-events: auto;
   color: var(--fb-on-media, #fff);
   -webkit-tap-highlight-color: transparent;
@@ -51,9 +51,9 @@
   /* The stage is bounded by the height the overlay can actually give it, so a
      portrait source uses that height instead of being letterboxed. */
   --fb-vp-stage-max-height: calc(100dvh - 80px);
-  /* Two 44px rows fit at 320dp when Picture-in-Picture is available: the
-     transport is then 146px and the stage may never be shorter than that. */
-  --fb-vp-bar-height: 146px;
+  /* Two 48px rows fit at 320dp when Picture-in-Picture is available: the
+     transport is then 158px and the stage may never be shorter than that. */
+  --fb-vp-bar-height: 158px;
   padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
     max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   /* A video scrim is black in every theme, including light: the same rule the
@@ -196,7 +196,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 44px;
+  min-height: 48px;
   padding: 0 14px;
   border: 1px solid rgb(255 255 255 / 30%);
   border-radius: 999px;
@@ -245,13 +245,13 @@
 .fb-vp--idle .fb-vp-bar { opacity: 0; pointer-events: none; }
 .fb-vp--idle { cursor: none; }
 
-/* The seek is a real 44px control; the rail it draws stays a 4px line centred
+/* The seek is a real 48px control; the rail it draws stays a 4px line centred
    inside it, so the target is generous without covering the row below. */
 .fb-vp-track {
   position: relative;
   display: flex;
   align-items: center;
-  height: 44px;
+  height: 48px;
 }
 .fb-vp-rail,
 .fb-vp-buffered,
@@ -274,7 +274,7 @@
   background: transparent;
   cursor: pointer;
 }
-.fb-vp-seek { position: relative; width: 100%; height: 44px; }
+.fb-vp-seek { position: relative; width: 100%; height: 48px; }
 .fb-vp-seek::-webkit-slider-runnable-track { height: 4px; background: transparent; }
 .fb-vp-seek::-moz-range-track { height: 4px; background: transparent; }
 .fb-vp-seek::-webkit-slider-thumb {
@@ -296,7 +296,7 @@
 }
 .fb-vp-seek:disabled { cursor: default; opacity: 0.55; }
 
-.fb-vp-volume { width: 68px; height: 44px; }
+.fb-vp-volume { width: 68px; height: 48px; }
 .fb-vp-volume::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: rgb(255 255 255 / 34%); }
 .fb-vp-volume::-moz-range-track { height: 4px; border-radius: 2px; background: rgb(255 255 255 / 34%); }
 .fb-vp-volume::-webkit-slider-thumb {
@@ -325,7 +325,7 @@
 .fb-vp--inline .fb-vp-row { flex-wrap: wrap; row-gap: 2px; }
 .fb-vp-spacer { flex: 1; min-width: 0; }
 
-/* Every icon is a real 44x44 box: the house minimum, square, and separated by
+/* Every icon is a real 48x48 box: the house minimum, square, and separated by
    the row gap so two targets never overlap. The glyph inside stays compact. */
 .fb-vp-icon {
   position: relative;
@@ -333,8 +333,8 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   padding: 0;
   border: 0;
   border-radius: 8px;
@@ -359,33 +359,33 @@
 
 .fb-vp-rate {
   width: auto;
-  min-width: 44px;
+  min-width: 48px;
   padding-inline: 4px;
   font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.01em;
 }
-.fb-vp--expanded .fb-vp-rate { min-width: 44px; font-size: 0.75rem; }
+.fb-vp--expanded .fb-vp-rate { min-width: 48px; font-size: 0.75rem; }
 
 /* A 320dp bubble cannot hold the whole transport on one line. The message row
    keeps what playback and escape need (play/pause, seek, expand, close); mute,
    rate, volume and picture-in-picture live in the expanded overlay, so the row
-   needs three 44px boxes and no control is hidden while still in the focus
+   needs three 48px boxes and no control is hidden while still in the focus
    order. Below the widths where the clock fits, the clock alone leaves. */
 @container (max-width: 260px) {
   .fb-vp--inline .fb-vp-time { font-size: 0.625rem; }
 }
-/* Three 44px boxes, their gaps, the bar padding and an ordinary clock need
-   about 216px. Under that the clock alone leaves the row: it is aria-hidden,
-   and the seek slider carries the same value. If a large text scale still asks
-   for more than the row has, the clock gives way first instead of pushing a
-   control past the frame. */
+/* Three 48px boxes, their gaps and the bar padding need 158px. An ordinary
+   clock needs about 70px more, so under 232px the clock alone leaves the row:
+   it is aria-hidden, and the seek slider carries the same value. If a large
+   text scale still asks for more than the row has, the clock gives way first
+   instead of pushing a control past the frame. */
 .fb-vp--inline .fb-vp-time { flex: 0 1 auto; min-width: 0; overflow: hidden; }
 @container (max-width: 232px) {
   .fb-vp--inline .fb-vp-time { display: none; }
 }
 
-/* The expanded row keeps its 44px boxes and wraps onto a second line when
+/* The expanded row keeps its 48px boxes and wraps onto a second line when
    320dp cannot hold them; the stage's height floor reserves that line. */
 @media (max-width: 420px) {
   .fb-vp--expanded .fb-vp-time { font-size: 0.6875rem; }
@@ -409,7 +409,7 @@
   padding: 4px;
   color: var(--fb-on-surface);
 }
-/* The mini player's three actions are the same 44px boxes as everywhere else,
+/* The mini player's three actions are the same 48px boxes as everywhere else,
    with room above and below inside the card instead of a hit area clipped by
    its rounded edge. */
 .fb-vp-mini-actions .fb-vp-icon { color: var(--fb-on-surface); }

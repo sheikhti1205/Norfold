@@ -121,7 +121,7 @@ export function KlipyPicker({
       <div ref={root} className="fb-klipy-picker" data-testid={testId("panel")} role={showTabs ? "dialog" : "group"} aria-label="GIF and sticker picker">
         <div className="fb-klipy-search-row fb-klipy-search-row-plain">
           <p className="fb-klipy-unavailable-title">GIFs and stickers</p>
-          <button type="button" className="fb-klipy-clear min-h-[44px]" aria-label="Close"
+          <button type="button" className="fb-klipy-clear min-h-[48px]" aria-label="Close"
             onClick={onDismiss ?? onClose}>
             <X size={16} aria-hidden="true" />
           </button>
@@ -152,12 +152,12 @@ export function KlipyPicker({
             placeholder={KLIPY_SEARCH_PLACEHOLDER}
             aria-label="Search GIFs and stickers"
             enterKeyHint="search"
-            className="fb-klipy-search min-h-[44px]"
+            className="fb-klipy-search min-h-[48px]"
             autoComplete="off"
           />
           {query !== "" && (
             <button type="button" data-testid={testId("search-clear")} onClick={() => setQuery("")}
-              aria-label="Clear search" className="fb-klipy-clear min-h-[44px]">
+              aria-label="Clear search" className="fb-klipy-clear min-h-[48px]">
               <X size={14} aria-hidden="true" />
             </button>
           )}
@@ -174,7 +174,7 @@ export function KlipyPicker({
               aria-selected={tab === value}
               data-testid={testId(`tab-${value}`)}
               onClick={() => setTab(value)}
-              className="fb-klipy-tab min-h-[44px]"
+              className="fb-klipy-tab min-h-[48px]"
             >
               {value === "gifs" ? <Film size={14} aria-hidden="true" /> : <Sticker size={14} aria-hidden="true" />}
               {value === "gifs" ? "GIFs" : "Stickers"}
@@ -188,7 +188,7 @@ export function KlipyPicker({
           <div role="alert" className="fb-klipy-status">
             <ImageOff size={20} aria-hidden="true" />
             <p>{state.error ?? "Couldn't load GIFs."}</p>
-            <button type="button" data-testid={testId("retry")} onClick={() => current().search(query, tab)} className="fb-klipy-retry min-h-[44px]">
+            <button type="button" data-testid={testId("retry")} onClick={() => current().search(query, tab)} className="fb-klipy-retry min-h-[48px]">
               Try again
             </button>
           </div>

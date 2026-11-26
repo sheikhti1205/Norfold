@@ -265,7 +265,7 @@ describe("the one video player", () => {
     // Opening a source starts it, so the first inline control is the
     // play/pause toggle and its label follows the element rather than a fixed
     // word. Inline keeps play/pause, seek, expand and close; mute joins the
-    // overlay so the row needs three 44px boxes rather than four. The
+    // overlay so the row needs three 48px boxes rather than four. The
     // overlay-only controls are absent from the DOM, not merely hidden, so
     // nothing focusable sits off-frame and no box shrinks below the minimum.
     const toggle = within(group).getByRole("button", { name: /^(Play|Pause)$/ });
@@ -414,13 +414,15 @@ describe("transport hit boxes", () => {
 
   const size = (selector: string, property: string): number => values(selector, property)[0]!;
 
-  it("gives every touched control a real 44x44 box, not an overlay", () => {
-    expect(size(".fb-vp-icon", "width")).toBe(44);
-    expect(size(".fb-vp-icon", "height")).toBe(44);
+  it("gives every touched control a real 48x48 box, not an overlay", () => {
+    expect(size(".fb-vp-icon", "width")).toBe(48);
+    expect(size(".fb-vp-icon", "height")).toBe(48);
     // The seek and the volume slider are touched controls too.
-    expect(size(".fb-vp-seek", "height")).toBe(44);
-    expect(size(".fb-vp-volume", "height")).toBe(44);
-    expect(size(".fb-vp-error-action", "min-height")).toBe(44);
+    expect(size(".fb-vp-seek", "height")).toBe(48);
+    expect(size(".fb-vp-volume", "height")).toBe(48);
+    expect(size(".fb-vp-error-action", "min-height")).toBe(48);
+    // The rail inside the taller seek hit area stays a 4px line.
+    expect(size(".fb-vp-rail", "height")).toBe(4);
     // A box is the target: nothing extends over a neighbour and nothing can be
     // clipped by the surface that draws it.
     expect(css).not.toContain("::after");
@@ -428,7 +430,7 @@ describe("transport hit boxes", () => {
     expect(body(".fb-vp-icon", "width")).not.toMatch(/margin:\s*-/);
   });
 
-  it("fits three 44px boxes in the narrowest inline frame and keeps the clock last", () => {
+  it("fits three 48px boxes in the narrowest inline frame and keeps the clock last", () => {
     const box = size(".fb-vp-icon", "width");
     const gap = size(".fb-vp-row", "gap");
     const pad = size(".fb-vp-bar", "padding-inline");
@@ -436,9 +438,9 @@ describe("transport hit boxes", () => {
     // 78vw chat width and the shared min(30rem, 80vh) height under its ratio.
     const frame = Math.min(320 * 0.78, Math.min(30 * 16, 480 * 0.8) * (9 / 21));
     // Four in-flow children (play, spacer, expand, close) once the clock has
-    // gone: three 44px boxes, three gaps and the bar's inline padding.
+    // gone: three 48px boxes, three gaps and the bar's inline padding.
     const used = 3 * box + 3 * gap + 2 * pad;
-    expect(used).toBe(146);
+    expect(used).toBe(158);
     expect(used).toBeLessThan(frame);
     // The clock is not a control; it alone leaves when even it cannot fit.
     expect(css).toMatch(
@@ -458,7 +460,7 @@ describe("transport hit boxes", () => {
     // A row is as tall as its boxes; the gap between wrapped rows is positive,
     // so two lines never share a pixel.
     expect(rowGap).toBeGreaterThan(0);
-    expect(top! + track + bottom! + box).toBe(100);
+    expect(top! + track + bottom! + box).toBe(108);
     expect(top! + track + bottom! + 2 * box + rowGap).toBe(reserved);
     expect(css).toContain("min-height: min(var(--fb-vp-bar-height), var(--fb-vp-stage-max-height));");
   });

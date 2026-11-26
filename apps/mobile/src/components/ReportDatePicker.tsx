@@ -516,13 +516,13 @@ export function ReportDatePicker({
                   aria-label="Previous year"
                   disabled={jumpYear <= minYear}
                   onClick={() => stepJumpYear(-1)}
-                  className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-on-surface"
+                  className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-m3-sm text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-on-surface"
                 >
                   <ChevronLeft size={20} aria-hidden />
                 </button>
                 <button ref={yearButtonRef} type="button" data-testid="calendar-jump-year" aria-label={`Choose year, ${jumpYear}`}
                   aria-expanded={isYearGridOpen} onClick={() => setIsYearGridOpen(open => !open)}
-                  className="min-h-[44px] rounded-m3-sm px-2 text-sm font-semibold tabular-nums text-on-surface focus:ring-2 focus:ring-on-surface">
+                  className="min-h-[48px] rounded-m3-sm px-2 text-sm font-semibold tabular-nums text-on-surface focus:ring-2 focus:ring-on-surface">
                   {jumpYear}
                 </button>
                 <button
@@ -530,7 +530,7 @@ export function ReportDatePicker({
                   aria-label="Next year"
                   disabled={jumpYear >= maxJumpYear}
                   onClick={() => stepJumpYear(1)}
-                  className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-on-surface"
+                  className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-m3-sm text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-on-surface"
                 >
                   <ChevronRight size={20} aria-hidden />
                 </button>
@@ -541,7 +541,7 @@ export function ReportDatePicker({
                   <button key={year} type="button" disabled={year < minYear || year > maxJumpYear}
                     aria-pressed={year === jumpYear}
                     onClick={() => { setJumpYear(year); setIsYearGridOpen(false); yearButtonRef.current?.focus(); }}
-                    className="min-h-[44px] rounded-m3-sm text-sm text-on-surface hover:bg-surface-container-high disabled:opacity-40 focus:ring-2 focus:ring-on-surface">
+                    className="min-h-[48px] rounded-m3-sm text-sm text-on-surface hover:bg-surface-container-high disabled:opacity-40 focus:ring-2 focus:ring-on-surface">
                     {year}
                   </button>,
                 )}
@@ -555,7 +555,7 @@ export function ReportDatePicker({
                       aria-label={`${long} ${jumpYear}`}
                       disabled={isMonthUnavailable(jumpYear, month)}
                       onClick={() => chooseMonth(month)}
-                      className={`min-h-[44px] min-w-0 rounded-m3-sm text-sm text-on-surface transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-on-surface ${
+                      className={`min-h-[48px] min-w-0 rounded-m3-sm text-sm text-on-surface transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-on-surface ${
                         isVisibleMonth ? "bg-surface-container-high font-medium" : ""
                       }`}
                     >
@@ -596,7 +596,7 @@ export function ReportDatePicker({
                     isDisabled: boolean;
                   }) =>
                     [
-                      "relative flex items-center justify-center h-11 w-full rounded-full transition-colors",
+                      "relative flex items-center justify-center min-h-[48px] w-full rounded-full transition-colors",
                       isOutsideVisibleRange && "text-on-surface-variant/30",
                       isUnavailable && "text-on-surface-variant/30 line-through",
                       isDisabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",

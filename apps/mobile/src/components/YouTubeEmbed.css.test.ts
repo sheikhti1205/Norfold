@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 /**
  * R19-4 compact YouTube card geometry. The bubble already supplies the surface,
  * so these declarations pin the press targets and forbid a second painted card.
- * The domain link is its own in-flow 44px target with the small text centred in
+ * The domain link is its own in-flow 48px target with the small text centred in
  * it: no pill, no fill, no hidden overlay, so the target can never cover the
  * title line above or follow the pointer. The extra row height at 320px and at
  * large text is accepted accessible flow. Rendered confirmation in
@@ -40,11 +40,11 @@ function px(body: string, property: string): number {
 const PAINTED_BORDER = /(?:^|[;\s])border(?:-(?:top|right|bottom|left|block|inline)(?:-[a-z]+)?)?\s*:/;
 
 describe("YouTubeEmbed compact press targets", () => {
-  it("gives the domain link itself a 44px in-flow target", () => {
+  it("gives the domain link itself a 48px in-flow target", () => {
     const domain = bodies(".fb-yt-domain");
     // The element, not a pseudo box, owns the target: the extra height is real
     // row space and cannot sit over the title.
-    expect(px(domain, "min-height")).toBeGreaterThanOrEqual(44);
+    expect(px(domain, "min-height")).toBeGreaterThanOrEqual(48);
     expect(domain).toContain("display: inline-flex;");
     expect(domain).toContain("text-decoration: underline;");
     expect(domain).not.toMatch(/(?:^|[;\s])background(?:-color)?\s*:/);
@@ -62,14 +62,14 @@ describe("YouTubeEmbed compact press targets", () => {
     expect(domain).not.toMatch(/(?:^|[;\s])margin(?:-block|-top|-bottom)?\s*:\s*-/);
   });
 
-  it("keeps the play and expand controls at the 44px minimum", () => {
+  it("keeps the play and expand controls at the 48px minimum", () => {
     const play = bodies(".fb-yt-play");
-    expect(px(play, "width")).toBeGreaterThanOrEqual(44);
-    expect(px(play, "height")).toBeGreaterThanOrEqual(44);
+    expect(px(play, "width")).toBeGreaterThanOrEqual(48);
+    expect(px(play, "height")).toBeGreaterThanOrEqual(48);
 
     const expand = bodies(".fb-yt-expand");
-    expect(px(expand, "width")).toBeGreaterThanOrEqual(44);
-    expect(px(expand, "height")).toBeGreaterThanOrEqual(44);
+    expect(px(expand, "width")).toBeGreaterThanOrEqual(48);
+    expect(px(expand, "height")).toBeGreaterThanOrEqual(48);
   });
 
   it("makes the whole reserved frame the play target", () => {

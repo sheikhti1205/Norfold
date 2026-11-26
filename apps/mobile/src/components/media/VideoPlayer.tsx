@@ -539,7 +539,7 @@ export function VideoPlayer({ src, name, poster, mode, onMinimize, onExpand, onC
           <span className="fb-vp-time" aria-hidden="true">{formatTime(time)} / {formatTime(duration)}</span>
           <span className="fb-vp-spacer" />
           {/* Mute is a keyboard action everywhere ("m"), but its button lives in
-              the overlay: a 44px target is the house minimum, and the message
+              the overlay: a 48px target is the house minimum, and the message
               row can only hold three of them at the narrowest portrait. */}
           {expanded ? <button type="button" className="fb-vp-icon" onClick={toggleMute} aria-label={volumeLabel}
             {...hoverLabel(volumeLabel)}>
