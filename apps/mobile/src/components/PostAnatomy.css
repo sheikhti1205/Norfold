@@ -7,7 +7,10 @@
 /* Flex centring follows the line box, which carries descender space the name
    does not use; lift the mark by a hair so it sits optically on the text. */
 .fb-post-name-badge .fb-verified-badge { position: relative; top: -.06em; }
-.fb-post-identity .fb-identity-link { min-width: 0; flex-shrink: 1; font-size: .875rem; font-weight: 600; }
+/* The post's author link is a full 48px target; its 28px avatar and the name
+   centre in the taller row. Scoped here so comment rows and the chat header keep
+   the shared inline layout in UserIdentityTrigger.css unchanged. */
+.fb-post-identity .fb-identity-link { min-width: 0; flex-shrink: 1; min-height: 48px; align-items: center; font-size: .875rem; font-weight: 600; }
 .fb-post-identity .fb-identity-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fb-post-time { flex-shrink: 0; color: var(--fb-on-surface-variant); font-size: .75rem; }
 /* Category and location sit beside the overflow menu as quiet, labelled
@@ -21,7 +24,12 @@
 .fb-post-title-main { flex: 1 1 auto; min-width: 0; }
 .fb-post-title-row > [data-testid="post-status-chip"] { flex: 0 0 auto; }
 .fb-post-status { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; color: var(--fb-on-surface-variant); font-size: .75rem; }
-.fb-post-title-link { display: block; border-radius: .25rem; }
+/* A one-line title is only ~22px of text, so the link itself takes the 48px
+   card and centres the heading. The heading stretches to the link's width, so
+   wrapping and the two-line clamp are unchanged, and because the box sits in
+   normal flow it cannot reach the status above or the description below. */
+.fb-post-title-link { display: flex; align-items: center; min-height: 48px; border-radius: .25rem; }
+.fb-post-title-link > * { flex: 1 1 auto; min-width: 0; }
 .fb-post-title-link:focus-visible, .fb-post-photo:focus-visible { outline: 2px solid var(--fb-on-surface); outline-offset: 2px; }
 .fb-post-facts { display: flex; flex-wrap: wrap; gap: .25rem .75rem; color: var(--fb-on-surface-variant); font-size: .75rem; }
 .fb-post-facts p { display: flex; align-items: center; gap: .25rem; min-width: 0; overflow-wrap: anywhere; }
