@@ -24,6 +24,12 @@ beforeAll(async () => {
 });
 afterAll(() => vi.unstubAllEnvs());
 
+/** Usage/attributes live only in the span's attribute map. */
+function spanAttributes(span: { options: unknown }): Record<string, unknown> {
+  const options = span.options as { attributes?: Record<string, unknown> } | undefined;
+  return options?.attributes ?? {};
+}
+
 function controller(complete: ProviderAdapter["complete"]) {
   const store = new ChatStore();
   const chatId = store.createChat("private-account", "Private title").id;
@@ -104,5 +110,16 @@ it("does not attribute a failed attempt's usage to the successful retry", async 
   expect(calls).toBe(2);
   expect(sdk.spans[0]).toMatchObject({ ended: true, status: { code: 1 } });
   expect(sdk.spans[0]?.options).not.toHaveProperty("attributes.gen_ai.usage.input_tokens");
-  expect(JSON.stringify(sdk.spans)).not.toContain("999");
+  // The failed attempt reported 999/999 and the successful retry reported no
+  // usage, so no span may carry a usage count. Assert the attributes
+  // themselves: span options also hold a generated conversation UUID, so a
+  // serialized-substring check flaked whenever that UUID contained "999".
+  const usageValues = sdk.spans.flatMap((span) => {
+    const attributes = spanAttributes(span);
+    return [
+      attributes["gen_ai.usage.input_tokens"],
+      attributes["gen_ai.usage.output_tokens"],
+    ];
+  });
+  expect(usageValues.filter((value) => value !== undefined)).toEqual([]);
 });
