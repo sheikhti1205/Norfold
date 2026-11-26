@@ -1,0 +1,18 @@
+/* Each dot is a 24px button in a 24px row, and the pointer target still has to
+ * reach 48px. The pseudo-element gives it that height without growing the row:
+ * 16px upward (the column's 8px gap, then 8px over the photo the dot pages) and
+ * 8px downward, which stops exactly at the action row's edge — touching it,
+ * never covering it. 24 + 16 + 8 = 48px.
+ *
+ * Horizontally the dots sit 28px apart (24px box + 4px gap), so 2px per side
+ * gives 28px: neighbouring targets meet at their edges and never overlap.
+ * 48px of width is impossible here — the arithmetic allows 28px — so the dot
+ * stays narrow rather than taking a neighbour's half of the row. */
+.fb-report-carousel-dot {
+  position: relative;
+}
+.fb-report-carousel-dot::after {
+  content: "";
+  position: absolute;
+  inset: -16px -2px -8px;
+}

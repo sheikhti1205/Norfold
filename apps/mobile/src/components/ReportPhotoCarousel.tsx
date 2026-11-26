@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ImageOff } from "lucide-react";
 import { usePagerTap, useSnapPager } from "./photoPager";
 import { motionDurations, motionEasings } from "./uiMotion";
+import "./ReportPhotoCarousel.css";
 
 /**
  * Narrow structural view of a selected report photo; `PickedPhoto` satisfies it.
@@ -45,7 +46,9 @@ const MIN_SLIDE_HEIGHT_PX = 180;
 const MAX_SLIDE_HEIGHT = "min(58vh, 460px)";
 const DEFAULT_SLIDE_RATIO = "4 / 3";
 
-/** Dot visual size inside a 24px minimum target (WCAG 2.2 target size). */
+/** Dot visual size inside the 24px button box. The 48px pointer target is the
+ *  invisible pseudo-element in `ReportPhotoCarousel.css`; the box itself stays
+ *  24px so the row's height and the dot's spacing do not change. */
 const DOT_TARGET_PX = 24;
 const DOT_VISUAL_PX = 8;
 
@@ -203,7 +206,7 @@ export function ReportPhotoCarousel({
               aria-label={`Go to photo ${index + 1}`}
               onClick={() => goTo(index)}
               disabled={disabled}
-              className="flex items-center justify-center"
+              className="fb-report-carousel-dot flex items-center justify-center"
               style={{ width: DOT_TARGET_PX, height: DOT_TARGET_PX }}
             >
               <span

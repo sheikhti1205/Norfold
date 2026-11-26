@@ -1,0 +1,22 @@
+/* The dot row sits inside the photo and is a real control, so each dot carries
+ * an invisible 48px-tall target. The visible dot keeps its 6px (the active one
+ * its 16px): the pseudo-element only extends the hit area.
+ *
+ * Vertically: 34px upward into the photo, 8px down. The dot's bottom edge is
+ * 12px above the clipped frame (4px of pill padding plus the pill's 8px
+ * offset), so 8px downward still clears the frame edge while upward has the
+ * whole photo. 6 + 34 + 8 = 48px.
+ *
+ * Horizontally: 3px per side, exactly half of the 6px gap. Two 6px dots sit
+ * 12px apart, so 6 + 3 + 3 = 12px meets the neighbour at the edge without
+ * covering it; an active 16px dot and its neighbour consume their 6px gap the
+ * same way. Width cannot reach 48px here without covering the neighbouring
+ * dot's photo, and paging to the wrong photo is worse than a narrow target. */
+.fb-feed-carousel-dot {
+  position: relative;
+}
+.fb-feed-carousel-dot::after {
+  content: "";
+  position: absolute;
+  inset: -34px -3px -8px;
+}

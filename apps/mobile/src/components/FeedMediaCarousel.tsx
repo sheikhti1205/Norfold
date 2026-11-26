@@ -5,6 +5,7 @@ import { ImageOff } from "lucide-react";
 import { fadeVariants, motionDurations, motionEasings } from "./uiMotion";
 import { usePagerTap, useSnapPager } from "./photoPager";
 import { useMediaUrl } from "../services/media/privateMedia";
+import "./FeedMediaCarousel.css";
 
 export interface FeedCarouselImage {
   id: string;
@@ -115,7 +116,7 @@ export function FeedMediaCarousel({ images, sharedMediaId, onOpenReport }: FeedM
                 aria-current={entry === active ? "true" : undefined}
                 aria-label={`Go to photo ${entry + 1}`}
                 onClick={() => goTo(entry)}
-                className={`h-1.5 rounded-full transition-all ${
+                className={`fb-feed-carousel-dot h-1.5 rounded-full transition-all ${
                   entry === active ? "w-4 bg-white" : "w-1.5 bg-white/60"
                 }`}
               />

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FeedMediaCarousel, type FeedCarouselImage } from "./FeedMediaCarousel";
@@ -103,6 +104,21 @@ describe("FeedMediaCarousel dots", () => {
     render(<FeedMediaCarousel images={images(4)} onOpenReport={() => {}} />);
     fireEvent.click(screen.getAllByTestId("carousel-dot")[2]!);
     expect(activeDotIndex()).toBe("2");
+  });
+
+  it("gives each dot an invisible 48px-tall hit area", () => {
+    render(<FeedMediaCarousel images={images(4)} onOpenReport={() => {}} />);
+    for (const dot of screen.getAllByTestId("carousel-dot")) {
+      expect(dot.classList.contains("fb-feed-carousel-dot")).toBe(true);
+      // The visible dot is unchanged: the target is the pseudo-element.
+      expect(dot.classList.contains("h-1.5")).toBe(true);
+    }
+    // jsdom has no layout, so the stylesheet carries the geometry: 6px of dot
+    // plus 34px upward into the photo plus 8px downward = 48px, and 3px per
+    // side stops at the neighbour's edge (6px dot + 6px gap).
+    const css = readFileSync("src/components/FeedMediaCarousel.css", "utf8");
+    expect(css).toContain(".fb-feed-carousel-dot::after");
+    expect(css).toContain("inset: -34px -3px -8px");
   });
 });
 
