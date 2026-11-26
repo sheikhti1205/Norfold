@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Keyless MapLibre picker/viewer (MAP pivot). Plain LinearLayout stack — no
+  Google Maps picker/viewer (MAP migration). Plain LinearLayout stack — no
   overlap tricks, no WebView hosting: the MapView owns its own Activity, so
   there is no transparency/z-order contract. All touch targets ≥ 48dp.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/map_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
@@ -84,7 +85,7 @@
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <org.maplibre.android.maps.MapView
+        <com.google.android.gms.maps.MapView
             android:id="@+id/map_view"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />

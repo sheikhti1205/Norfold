@@ -20,19 +20,23 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import com.findback.app.BuildConfig
 import com.findback.app.R
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.MapView
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.MapColorScheme
 import com.google.android.gms.tasks.CancellationTokenSource
-import org.maplibre.android.camera.CameraPosition
-import org.maplibre.android.camera.CameraUpdateFactory
-import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.maps.MapLibreMap
-import org.maplibre.android.maps.MapView
 
 /**
- * Keyless native map surface (MAP pivot): MapLibre Native [MapView] in its own
+ * Native map surface (MAP migration): Google Maps SDK [MapView] in its own
  * Activity — never embedded under the Capacitor WebView, so there is no
  * transparency/z-order/container-sync contract.
  *
@@ -45,6 +49,9 @@ import org.maplibre.android.maps.MapView
  * Search is explicit-submit Nominatim (≤1 req/s, ≤5 results, app User-Agent);
  * a result recenters the camera but never commits. Location is one-shot via
  * the fused provider — no tracking, no background permission.
+ *
+ * The map object is created only when the build carried a Maps key: a blank
+ * key fails closed to the load-failure surface instead of an empty map.
  */
 class FindbackMapActivity : AppCompatActivity() {
 
@@ -67,6 +74,14 @@ class FindbackMapActivity : AppCompatActivity() {
         private const val SEARCH_CAMERA_ANIMATION_MS = 1200
 
         /**
+         * Stall budget for the SDK handshake (getMapAsync + first render).
+         * Mirrors MapSnapshotService.SNAPSHOT_TIMEOUT_MS: a map that neither
+         * delivers a GoogleMap nor finishes rendering reports the load failure
+         * instead of spinning forever.
+         */
+        private const val MAP_LOAD_TIMEOUT_MS = 20_000L
+
+        /**
          * Display-only neutral camera (central Bangladesh): used when no valid
          * initial coordinate was supplied. The draft stays null, so this can
          * never become a committed pin — Confirm waits for a user gesture.
@@ -75,13 +90,16 @@ class FindbackMapActivity : AppCompatActivity() {
         private const val NEUTRAL_ZOOM = 6.0
     }
 
+    private lateinit var rootView: View
     private lateinit var mapView: MapView
-    private var map: MapLibreMap? = null
-    private var idleListener: MapLibreMap.OnCameraIdleListener? = null
-    private var moveStartedListener: MapLibreMap.OnCameraMoveStartedListener? = null
+    private lateinit var centerPin: View
+    private var map: GoogleMap? = null
+    private var mapEnabled = false
+    private var mapViewInitialized = false
+    private var mapLoaded = false
+    private var mapFailed = false
+    private val mapLoadTimeout = Handler(Looper.getMainLooper())
     private var destroyed = false
-    private var styleLoaded = false
-    private var styleFailed = false
 
     private var isPicker = true
     private var draftLat: Double? = null
@@ -116,10 +134,18 @@ class FindbackMapActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Edge-to-edge with the system-bar padding owned by the root view
+        // below: the title clears the status bar and the footer clears the
+        // gesture bar. WindowCompat.enableEdgeToEdge is 1.17.0+; the app
+        // compiles against core 1.15.0 (appcompat 1.7.1 requires 1.13.0,
+        // credentials 1.6.0 requires 1.15.0), so use the 1.5.0 call that
+        // enableEdgeToEdge itself wraps.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_findback_map)
 
         isPicker = intent.getStringExtra(EXTRA_MODE) != MODE_VIEWER
         bindViews()
+        applyWindowInsets()
         restoreDraft(savedInstanceState)
 
         titleView.text = initialTitle()
@@ -131,44 +157,18 @@ class FindbackMapActivity : AppCompatActivity() {
         confirmButton.isEnabled = draftLat != null && draftLng != null
         updateReadout()
 
-        mapView.onCreate(savedInstanceState)
-        mapView.getMapAsync { mapLibreMap ->
-            // Backed out before the map loaded: touch nothing — the Activity
-            // is finishing and the MapView is (being) destroyed.
-            if (destroyed || isFinishing || isDestroyed) return@getMapAsync
-            map = mapLibreMap
-            val ui = mapLibreMap.uiSettings
-            ui.isAttributionEnabled = true
-            ui.isLogoEnabled = true
-            mapLibreMap.moveCamera(CameraUpdateFactory.newLatLngZoom(initialCamera(), draftZoom))
-            val moveStarted = MapLibreMap.OnCameraMoveStartedListener { reason ->
-                if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
-                    lastGestureMove = true
-                }
-            }
-            moveStartedListener = moveStarted
-            mapLibreMap.addOnCameraMoveStartedListener(moveStarted)
-            val idle = MapLibreMap.OnCameraIdleListener {
-                val camera = mapLibreMap.cameraPosition
-                val target = camera.target ?: return@OnCameraIdleListener
-                draftZoom = camera.zoom
-                if (isPicker && lastGestureMove) {
-                    lastGestureMove = false
-                    draftLat = target.latitude
-                    draftLng = target.longitude
-                    confirmButton.isEnabled = true
-                    updateReadout()
-                } else if (!isPicker) {
-                    updateReadout()
-                }
-            }
-            idleListener = idle
-            mapLibreMap.addOnCameraIdleListener(idle)
-            val styleUrl = MapValidation.validateStyleUrl(BuildConfig.MAP_STYLE_URL)
-            mapLibreMap.setStyle(styleUrl) { onStyleLoaded() }
+        // Fail closed before the MapView is ever created: a build without a
+        // key must not initialise the SDK or show an empty map rectangle.
+        mapEnabled = BuildConfig.GOOGLE_MAPS_ANDROID_API_KEY.isNotBlank()
+        if (mapEnabled) {
+            mapViewInitialized = true
+            mapView.onCreate(savedInstanceState)
+            requestMap()
+        } else {
+            mapView.visibility = View.GONE
+            centerPin.visibility = View.GONE
+            onMapUnavailable()
         }
-        mapView.addOnDidFinishLoadingMapListener { hideLoading() }
-        mapView.addOnDidFailLoadingMapListener { onStyleFailed() }
 
         findViewById<ImageButton>(R.id.map_back).setOnClickListener { cancelAndClose() }
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
@@ -185,33 +185,33 @@ class FindbackMapActivity : AppCompatActivity() {
         resultsList.setOnItemClickListener { _, _, position, _ ->
             searchResults.getOrNull(position)?.let { pickSearchResult(it) }
         }
-        retryButton.setOnClickListener { retryStyle() }
+        retryButton.setOnClickListener { retryMapLoad() }
         myLocationButton.setOnClickListener { useMyLocationOnce() }
     }
 
     override fun onStart() {
         super.onStart()
-        mapView.onStart()
+        if (mapViewInitialized) mapView.onStart()
     }
 
     override fun onResume() {
         super.onResume()
-        mapView.onResume()
+        if (mapViewInitialized) mapView.onResume()
     }
 
     override fun onPause() {
         super.onPause()
-        mapView.onPause()
+        if (mapViewInitialized) mapView.onPause()
     }
 
     override fun onStop() {
         super.onStop()
-        mapView.onStop()
+        if (mapViewInitialized) mapView.onStop()
     }
 
     override fun onLowMemory() {
         super.onLowMemory()
-        mapView.onLowMemory()
+        if (mapViewInitialized) mapView.onLowMemory()
     }
 
     override fun onDestroy() {
@@ -219,17 +219,15 @@ class FindbackMapActivity : AppCompatActivity() {
         searchGeneration += 1
         locationTimeout.removeCallbacksAndMessages(null)
         locationCancel?.cancel()
-        idleListener?.let { map?.removeOnCameraIdleListener(it) }
-        idleListener = null
-        moveStartedListener?.let { map?.removeOnCameraMoveStartedListener(it) }
-        moveStartedListener = null
-        mapView.onDestroy()
+        mapLoadTimeout.removeCallbacksAndMessages(null)
+        map = null
+        if (mapViewInitialized) mapView.onDestroy()
         super.onDestroy()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        mapView.onSaveInstanceState(outState)
+        if (mapViewInitialized) mapView.onSaveInstanceState(outState)
         draftLat?.let { outState.putDouble(STATE_DRAFT_LAT, it) }
         draftLng?.let { outState.putDouble(STATE_DRAFT_LNG, it) }
         outState.putDouble(STATE_ZOOM, draftZoom)
@@ -240,7 +238,9 @@ class FindbackMapActivity : AppCompatActivity() {
     // region picker state
 
     private fun bindViews() {
+        rootView = findViewById(R.id.map_root)
         mapView = findViewById(R.id.map_view)
+        centerPin = findViewById(R.id.map_center_pin)
         titleView = findViewById(R.id.map_title)
         confirmButton = findViewById(R.id.map_confirm)
         searchRow = findViewById(R.id.map_search_row)
@@ -254,6 +254,41 @@ class FindbackMapActivity : AppCompatActivity() {
         retryButton = findViewById(R.id.map_retry)
         footer = findViewById(R.id.map_footer)
         myLocationButton = findViewById(R.id.map_my_location)
+        // Footer/readout geometry can change (visibility, font scale, insets):
+        // keep the map's padding in step so the Google logo stays visible.
+        (readout.parent as? View)?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            applyMapPadding()
+        }
+    }
+
+    private fun applyWindowInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
+            val bars = windowInsets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or
+                    WindowInsetsCompat.Type.displayCutout() or
+                    // Preserves adjustResize now that the window is edge-to-edge:
+                    // the IME is no longer applied by the framework.
+                    WindowInsetsCompat.Type.ime(),
+            )
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            // setPadding is a no-op until the map is ready; re-apply on every
+            // inset pass (and on layout changes, see bindViews).
+            applyMapPadding()
+            windowInsets
+        }
+        ViewCompat.requestApplyInsets(rootView)
+    }
+
+    /**
+     * Padding is the sanctioned way to keep the Google logo and legal notices
+     * unobscured: the SDK lays them out inside the padded region instead of
+     * letting the bottom readout strip cover them.
+     */
+    private fun applyMapPadding() {
+        val googleMap = map ?: return
+        if (destroyed) return
+        val bottom = (readout.parent as? View)?.height ?: 0
+        googleMap.setPadding(0, 0, 0, bottom)
     }
 
     private fun restoreDraft(saved: Bundle?) {
@@ -329,21 +364,92 @@ class FindbackMapActivity : AppCompatActivity() {
 
     // endregion
 
-    // region style loading
+    // region map loading
 
-    private fun onStyleLoaded() {
-        styleLoaded = true
-        styleFailed = false
-        hideLoading()
-        hideStatus()
+    /**
+     * Requests the map through [MapView.getMapAsync] and arms the stall budget
+     * first, so a callback that never arrives still reports the load failure.
+     */
+    private fun requestMap() {
+        if (!mapEnabled || destroyed) return
+        armMapLoadTimeout()
+        mapView.getMapAsync { googleMap -> onMapReady(googleMap) }
     }
 
-    private fun onStyleFailed() {
-        if (styleLoaded) return
-        styleFailed = true
+    private fun armMapLoadTimeout() {
+        mapLoadTimeout.removeCallbacksAndMessages(null)
+        mapLoadTimeout.postDelayed({
+            if (!mapLoaded && !destroyed) onMapLoadFailed()
+        }, MAP_LOAD_TIMEOUT_MS)
+    }
+
+    private fun onMapReady(googleMap: GoogleMap) {
+        // Backed out before the map loaded: touch nothing — the Activity
+        // is finishing and the MapView is (being) destroyed.
+        if (destroyed || isFinishing || isDestroyed) return
+        val firstReady = map == null
+        map = googleMap
+        // FOLLOW_SYSTEM inherits the device theme (including dark mode); a
+        // JSON style override would disable it, and no map ID is used.
+        googleMap.setMapColorScheme(MapColorScheme.FOLLOW_SYSTEM)
+        if (firstReady) {
+            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(initialCamera(), draftZoom.toFloat()))
+        }
+        googleMap.setOnCameraMoveStartedListener { reason ->
+            if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
+                lastGestureMove = true
+            }
+        }
+        googleMap.setOnCameraIdleListener {
+            val camera = googleMap.cameraPosition ?: return@setOnCameraIdleListener
+            val target = camera.target ?: return@setOnCameraIdleListener
+            draftZoom = camera.zoom.toDouble()
+            if (isPicker && lastGestureMove) {
+                lastGestureMove = false
+                draftLat = target.latitude
+                draftLng = target.longitude
+                confirmButton.isEnabled = true
+                updateReadout()
+            } else if (!isPicker) {
+                updateReadout()
+            }
+        }
+        if (!mapLoaded) {
+            googleMap.setOnMapLoadedCallback { onMapLoaded() }
+        }
+        applyMapPadding()
+    }
+
+    private fun onMapLoaded() {
+        mapLoaded = true
+        mapLoadTimeout.removeCallbacksAndMessages(null)
+        hideLoading()
+        // Only clear the failure surface this callback owns — a search or
+        // location status may be on screen by the time rendering finishes.
+        if (mapFailed) {
+            mapFailed = false
+            hideStatus()
+        }
+        applyMapPadding()
+    }
+
+    private fun onMapLoadFailed() {
+        if (mapLoaded) return
+        mapFailed = true
+        mapLoadTimeout.removeCallbacksAndMessages(null)
         hideLoading()
         // Truthful failure: retry offered, Cancel works, and Confirm stays
         // available when a valid draft exists — never a fake loaded map.
+        showStatus(getString(R.string.findback_map_style_failed), showRetry = true)
+    }
+
+    /**
+     * No key means no map: same failure surface as a load failure, so Confirm
+     * (and the viewer's location readout) stay usable instead of a dead frame.
+     */
+    private fun onMapUnavailable() {
+        mapFailed = true
+        hideLoading()
         showStatus(getString(R.string.findback_map_style_failed), showRetry = true)
     }
 
@@ -351,12 +457,15 @@ class FindbackMapActivity : AppCompatActivity() {
         loading.visibility = View.GONE
     }
 
-    private fun retryStyle() {
+    private fun retryMapLoad() {
         hideStatus()
-        styleFailed = false
+        if (!mapEnabled) {
+            onMapUnavailable()
+            return
+        }
+        if (mapLoaded) return
         loading.visibility = View.VISIBLE
-        val styleUrl = MapValidation.validateStyleUrl(BuildConfig.MAP_STYLE_URL)
-        map?.setStyle(styleUrl) { onStyleLoaded() }
+        requestMap()
     }
 
     private fun showStatus(message: String, showRetry: Boolean) {
@@ -467,9 +576,10 @@ class FindbackMapActivity : AppCompatActivity() {
         resultsList.visibility = View.GONE
         map?.animateCamera(
             CameraUpdateFactory.newCameraPosition(
-                CameraPosition.Builder().target(center).zoom(draftZoom).build(),
+                CameraPosition.Builder().target(center).zoom(draftZoom.toFloat()).build(),
             ),
             SEARCH_CAMERA_ANIMATION_MS,
+            null,
         )
     }
 
@@ -551,7 +661,7 @@ class FindbackMapActivity : AppCompatActivity() {
                     confirmButton.isEnabled = true
                     updateReadout()
                     map?.animateCamera(
-                        CameraUpdateFactory.newLatLngZoom(LatLng(location.latitude, location.longitude), draftZoom),
+                        CameraUpdateFactory.newLatLngZoom(LatLng(location.latitude, location.longitude), draftZoom.toFloat()),
                     )
                     showStatus(getString(R.string.findback_map_location_ready), showRetry = false)
                 }
