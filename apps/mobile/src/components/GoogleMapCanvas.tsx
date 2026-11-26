@@ -23,6 +23,8 @@ interface PickableMap extends GoogleMapsMap {
   addListener?: (event: string, handler: () => void) => { remove?: () => void } | undefined;
   getCenter?: () => { lat: () => number; lng: () => number } | null | undefined;
   setCenter?: (center: MapCenter) => void;
+  getZoom?: () => number | undefined;
+  setZoom?: (zoom: number) => void;
 }
 
 interface PickableMarker extends GoogleMapsMarker {
@@ -50,6 +52,11 @@ interface GoogleMapCanvasProps {
    * calls it.
    */
   onCenterChange?: (center: MapCenter) => void;
+  /**
+   * Picking only: fires when the user settles on a different zoom (a pinch),
+   * so the caller's zoom buttons step from the value the map now shows.
+   */
+  onZoomChange?: (zoom: number) => void;
   onFailure?: (reason: GoogleMapsAuthFailureReason) => void;
 }
 
@@ -76,16 +83,21 @@ export function GoogleMapCanvas({
   interactive = false,
   picking = false,
   onCenterChange,
+  onZoomChange,
   onFailure,
 }: GoogleMapCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const onFailureRef = useRef(onFailure);
   const onCenterChangeRef = useRef(onCenterChange);
+  const onZoomChangeRef = useRef(onZoomChange);
   const mapRef = useRef<PickableMap | null>(null);
   const markerRef = useRef<PickableMarker | null>(null);
   // The centre this canvas last put the pin on. A picker compares the map's
   // own centre against it, so a user move is told apart from our own recentre.
   const pinnedRef = useRef<MapCenter | null>(null);
+  // The zoom this canvas last reported (or created the map at). A pinch is
+  // reported only when it differs, so repeated idles stay quiet.
+  const reportedZoomRef = useRef<number | null>(null);
   const [failed, setFailed] = useState(false);
   // Part of the effect's identity: a rebuilt bundle with a different key must
   // not keep a map created for the old one.
@@ -103,6 +115,7 @@ export function GoogleMapCanvas({
   useEffect(() => {
     onFailureRef.current = onFailure;
     onCenterChangeRef.current = onCenterChange;
+    onZoomChangeRef.current = onZoomChange;
   });
 
   useEffect(() => {
@@ -159,12 +172,20 @@ export function GoogleMapCanvas({
         mapRef.current = instance;
         markerRef.current = marker;
         pinnedRef.current = { lat: view.latitude, lng: view.longitude };
+        reportedZoomRef.current = view.zoom;
         if (!picking) return;
         // `idle` is the only event that fires once a pan OR a pinch settles, so
         // the pin lands on the centre the user actually stopped at. The
         // opening idle carries the centre just created, so it reports nothing:
         // a picker never fabricates a pin for a view nobody moved.
         idleListener = instance.addListener?.("idle", () => {
+          // Zoom first: a pinch settles at the same centre, so the centre
+          // guard below would otherwise swallow the change.
+          const nextZoom = instance.getZoom?.();
+          if (nextZoom != null && nextZoom !== reportedZoomRef.current) {
+            reportedZoomRef.current = nextZoom;
+            onZoomChangeRef.current?.(nextZoom);
+          }
           const center = instance.getCenter?.();
           if (!center) return;
           const next = { lat: center.lat(), lng: center.lng() };
@@ -188,6 +209,7 @@ export function GoogleMapCanvas({
       mapRef.current = null;
       markerRef.current = null;
       pinnedRef.current = null;
+      reportedZoomRef.current = null;
       // The Maps API exposes no destroy(): clearing the host and dropping the
       // marker reference is the supported release.
       host.replaceChildren();
@@ -196,7 +218,8 @@ export function GoogleMapCanvas({
 
   // Picking: adopt a caller-side recentre (a search result, a GPS snap) on the
   // map that already exists, and never echo a centre this canvas reported.
-  // Zoom is deliberately not re-applied — a pinch must survive a recentre.
+  // Zoom is re-applied only when the caller changes the prop, never on its
+  // own, so a pinch survives a recentre.
   useEffect(() => {
     if (!picking) return;
     const map = mapRef.current;
@@ -208,6 +231,18 @@ export function GoogleMapCanvas({
     map.setCenter?.(next);
     markerRef.current?.setPosition?.(next);
   }, [picking, latitude, longitude]);
+
+  // Picking: honour a caller-side zoom change (the move/zoom buttons) on the
+  // existing map. The equality guard returns a zoom this canvas reported to
+  // the caller unchanged, so a pinch report can never loop into a write.
+  // Preview keeps driving zoom through the creation options above.
+  useEffect(() => {
+    if (!picking) return;
+    const map = mapRef.current;
+    if (!map) return;
+    if (map.getZoom?.() === zoom) return;
+    map.setZoom?.(zoom);
+  }, [picking, zoom]);
 
   if (failed) return null;
 

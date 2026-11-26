@@ -14,8 +14,9 @@ vi.mock("./LiveRegion", () => ({ announce: vi.fn() }));
 const providerState = vi.hoisted(() => ({ provider: "osm" as "google" | "osm" }));
 const platformState = vi.hoisted(() => ({ native: false }));
 const canvasState = vi.hoisted(() => ({
-  props: [] as { picking?: boolean; latitude?: number; longitude?: number }[],
+  props: [] as { picking?: boolean; latitude?: number; longitude?: number; zoom?: number }[],
   center: null as ((center: { lat: number; lng: number }) => void) | null,
+  zoomChange: null as ((zoom: number) => void) | null,
   failure: null as ((reason: string) => void) | null,
 }));
 
@@ -48,10 +49,12 @@ vi.mock("./GoogleMapCanvas", async () => {
       label?: string;
       picking?: boolean;
       onCenterChange?: (center: { lat: number; lng: number }) => void;
+      onZoomChange?: (zoom: number) => void;
       onFailure?: (reason: string) => void;
     }) => {
       canvasState.props.push(props);
       canvasState.center = props.onCenterChange ?? null;
+      canvasState.zoomChange = props.onZoomChange ?? null;
       canvasState.failure = props.onFailure ?? null;
       return createElement("div", {
         "data-testid": "google-map-canvas",
@@ -109,6 +112,7 @@ afterEach(() => {
   platformState.native = false;
   canvasState.props = [];
   canvasState.center = null;
+  canvasState.zoomChange = null;
   canvasState.failure = null;
 });
 
@@ -462,6 +466,50 @@ describe("MapPickerSheet (Google web picker path)", () => {
     expect(screen.queryByText("© OpenStreetMap contributors")).toBeNull();
     // The sheet asks for picking, not a preview.
     expect(canvasState.props[canvasState.props.length - 1]?.picking).toBe(true);
+  });
+
+  it("offers the same move and zoom controls as the raster picker", () => {
+    providerState.provider = "google";
+    renderSheet();
+
+    // A keyboard or screen-reader user needs the pad, not only the drag.
+    expect(screen.getByTestId("google-map-canvas")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Move pin north" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Zoom in" })).toBeDefined();
+  });
+
+  it("places a draft with the move buttons on the Google path", () => {
+    providerState.provider = "google";
+    renderSheet();
+    expect(screen.getByRole("button", { name: "Confirm location" })).toHaveProperty("disabled", true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Move pin north" }));
+
+    // The nudge is the pin: the draft exists and the readout follows it.
+    expect(screen.getByRole("button", { name: "Confirm location" })).toHaveProperty("disabled", false);
+    expect(screen.getByText("85.036, 0.000")).toBeDefined();
+  });
+
+  it("steps the canvas zoom from the zoom buttons", () => {
+    providerState.provider = "google";
+    // A real pin starts the camera at PIN_ZOOM, the value the buttons step from.
+    renderSheet({ value: PINNED_VALUE });
+    expect(canvasState.props[canvasState.props.length - 1]?.zoom).toBe(15);
+
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+
+    expect(canvasState.props[canvasState.props.length - 1]?.zoom).toBe(16);
+  });
+
+  it("steps from the zoom a pinch reported instead of the opening value", () => {
+    providerState.provider = "google";
+    renderSheet({ value: PINNED_VALUE });
+
+    act(() => canvasState.zoomChange?.(17));
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+
+    // A pinch to 17 makes "+" reach 18, not restart from the opening 15.
+    expect(canvasState.props[canvasState.props.length - 1]?.zoom).toBe(18);
   });
 
   it("adopts the dragged centre as the picked location", () => {

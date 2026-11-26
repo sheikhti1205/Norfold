@@ -20,6 +20,7 @@ class FakeMap {
   readonly element: HTMLElement;
   readonly options: Record<string, unknown>;
   center: { lat: number; lng: number };
+  zoom: number;
   private readonly idleHandlers = new Set<() => void>();
 
   constructor(element: HTMLElement, options: Record<string, unknown>) {
@@ -27,6 +28,7 @@ class FakeMap {
     this.options = options;
     const center = options.center as { lat: number; lng: number } | undefined;
     this.center = center ?? { lat: 0, lng: 0 };
+    this.zoom = typeof options.zoom === "number" ? options.zoom : 15;
     FakeMap.instances.push(this);
   }
 
@@ -44,6 +46,14 @@ class FakeMap {
 
   setCenter(center: { lat: number; lng: number }): void {
     this.center = center;
+  }
+
+  getZoom(): number {
+    return this.zoom;
+  }
+
+  setZoom(zoom: number): void {
+    this.zoom = zoom;
   }
 
   /** Test helper: the user finished moving the map to `center`. */
@@ -283,5 +293,46 @@ describe("GoogleMapCanvas", () => {
     expect(FakeMap.instances[0]?.center).toEqual({ lat: 22.35, lng: 91.78 });
     expect(FakeMarker.instances[0]?.position).toEqual({ lat: 22.35, lng: 91.78 });
     expect(onCenterChange).not.toHaveBeenCalled();
+  });
+
+  it("applies a caller zoom change in picking mode without rebuilding the map", async () => {
+    loadGoogleMapsMock.mockResolvedValue(API);
+    const { rerender } = render(
+      <GoogleMapCanvas latitude={23.81} longitude={90.41} zoom={15} picking />,
+    );
+    await waitFor(() => expect(FakeMap.instances).toHaveLength(1));
+
+    rerender(<GoogleMapCanvas latitude={23.81} longitude={90.41} zoom={16} picking />);
+
+    // The zoom buttons step the existing map; a rebuild would drop the drag.
+    expect(FakeMap.instances).toHaveLength(1);
+    expect(FakeMap.instances[0]?.zoom).toBe(16);
+  });
+
+  it("reports a pinch zoom that differs from the creation zoom", async () => {
+    loadGoogleMapsMock.mockResolvedValue(API);
+    const onZoomChange = vi.fn();
+    render(
+      <GoogleMapCanvas
+        latitude={23.81}
+        longitude={90.41}
+        zoom={15}
+        picking
+        onZoomChange={onZoomChange}
+      />,
+    );
+    await waitFor(() => expect(FakeMap.instances).toHaveLength(1));
+    const map = FakeMap.instances[0];
+    expect(map).toBeDefined();
+    if (!map) return;
+
+    act(() => {
+      // A pinch settles at the same centre with a new zoom.
+      map.zoom = 17;
+      map.emitIdle();
+    });
+
+    expect(onZoomChange).toHaveBeenCalledTimes(1);
+    expect(onZoomChange).toHaveBeenCalledWith(17);
   });
 });

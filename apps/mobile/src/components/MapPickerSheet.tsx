@@ -101,6 +101,87 @@ interface PickerRasterMapProps {
   onNudge: (dxTiles: number, dyTiles: number) => void;
 }
 
+interface PickerControlsProps {
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onNudge: (dxTiles: number, dyTiles: number) => void;
+  /**
+   * Position classes for the cluster: the move pad sits on the left and the
+   * zoom pair on the right. The wrapper ignores pointer events so a drag
+   * between the two groups still reaches the map underneath.
+   */
+  className?: string;
+}
+
+/**
+ * Move pad + zoom pair shared by both picking surfaces, so the keyless raster
+ * map and the Google map offer the same keyboard and screen-reader controls.
+ */
+function PickerControls({ onZoomIn, onZoomOut, onNudge, className }: PickerControlsProps) {
+  return (
+    <div className={`pointer-events-none flex justify-between ${className ?? ""}`}>
+      <div className="pointer-events-auto">
+        <div role="group" aria-label="Move pin" className="grid grid-cols-3 gap-0.5">
+          <span />
+          <button
+            type="button"
+            aria-label="Move pin north"
+            onClick={() => onNudge(0, -1)}
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface text-on-surface"
+          >
+            <ChevronUp size={16} aria-hidden />
+          </button>
+          <span />
+          <button
+            type="button"
+            aria-label="Move pin west"
+            onClick={() => onNudge(-1, 0)}
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface text-on-surface"
+          >
+            <ChevronLeft size={16} aria-hidden />
+          </button>
+          <button
+            type="button"
+            aria-label="Move pin south"
+            onClick={() => onNudge(0, 1)}
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface text-on-surface"
+          >
+            <ChevronDown size={16} aria-hidden />
+          </button>
+          <button
+            type="button"
+            aria-label="Move pin east"
+            onClick={() => onNudge(1, 0)}
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface text-on-surface"
+          >
+            <ChevronRight size={16} aria-hidden />
+          </button>
+        </div>
+      </div>
+      <div className="pointer-events-auto">
+        <div role="group" aria-label="Map zoom" className="flex gap-1">
+          <button
+            type="button"
+            aria-label="Zoom in"
+            onClick={onZoomIn}
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface px-2 text-on-surface"
+          >
+            <Plus size={16} aria-hidden />
+          </button>
+          <button
+            type="button"
+            aria-label="Zoom out"
+            onClick={onZoomOut}
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface px-2 text-on-surface"
+          >
+            <Minus size={16} aria-hidden />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Dependency-free keyless map: a plain-<img> 3x3 OSM tile grid under a fixed
  * center pin, with zoom and nudge controls. The draft lives outside the tile
@@ -129,64 +210,12 @@ function PickerRasterMap({ center, zoom, onZoomIn, onZoomOut, onNudge }: PickerR
           <MapPin size={32} className="text-on-surface drop-shadow" />
         </motion.div>
       </div>
-      <div
-        role="group"
-        aria-label="Move pin"
-        className="absolute bottom-2 left-2 grid grid-cols-3 gap-0.5"
-      >
-        <span />
-        <button
-          type="button"
-          aria-label="Move pin north"
-          onClick={() => onNudge(0, -1)}
-          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface text-on-surface"
-        >
-          <ChevronUp size={16} aria-hidden />
-        </button>
-        <span />
-        <button
-          type="button"
-          aria-label="Move pin west"
-          onClick={() => onNudge(-1, 0)}
-          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface text-on-surface"
-        >
-          <ChevronLeft size={16} aria-hidden />
-        </button>
-        <button
-          type="button"
-          aria-label="Move pin south"
-          onClick={() => onNudge(0, 1)}
-          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface text-on-surface"
-        >
-          <ChevronDown size={16} aria-hidden />
-        </button>
-        <button
-          type="button"
-          aria-label="Move pin east"
-          onClick={() => onNudge(1, 0)}
-          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface text-on-surface"
-        >
-          <ChevronRight size={16} aria-hidden />
-        </button>
-      </div>
-      <div className="absolute bottom-2 right-2 flex gap-1">
-        <button
-          type="button"
-          aria-label="Zoom in"
-          onClick={onZoomIn}
-          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface px-2 text-on-surface"
-        >
-          <Plus size={16} aria-hidden />
-        </button>
-        <button
-          type="button"
-          aria-label="Zoom out"
-          onClick={onZoomOut}
-          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-m3-sm border border-outline bg-surface px-2 text-on-surface"
-        >
-          <Minus size={16} aria-hidden />
-        </button>
-      </div>
+      <PickerControls
+        className="absolute inset-x-2 bottom-2 items-end"
+        onZoomIn={onZoomIn}
+        onZoomOut={onZoomOut}
+        onNudge={onNudge}
+      />
     </div>
   );
 }
@@ -576,16 +605,28 @@ export function MapPickerSheet({
                 {mapProviderFallbackNotice(mapFailure)}
               </p>
             ) : (
-              <GoogleMapCanvas
-                latitude={fallbackCenter.lat}
-                longitude={fallbackCenter.lng}
-                zoom={fallbackZoom}
-                className="absolute inset-0"
-                label="Map. Drag to place the pin."
-                picking
-                onCenterChange={handleMapCenterChange}
-                onFailure={(reason) => setMapFailure(reason)}
-              />
+              <>
+                <GoogleMapCanvas
+                  latitude={fallbackCenter.lat}
+                  longitude={fallbackCenter.lng}
+                  zoom={fallbackZoom}
+                  className="absolute inset-0"
+                  label="Map. Drag, or use the move and zoom buttons, to position the pin."
+                  picking
+                  onCenterChange={handleMapCenterChange}
+                  onZoomChange={(zoom) => setFallbackZoom(clampRasterZoom(zoom))}
+                  onFailure={(reason) => setMapFailure(reason)}
+                />
+                {/* Google draws its logo bottom-left and its attribution
+                  bottom-right, so the shared controls sit at the top and never
+                  cover either. */}
+                <PickerControls
+                  className="absolute inset-x-2 top-2 z-10 items-start"
+                  onZoomIn={() => setFallbackZoom((zoom) => clampRasterZoom(zoom + 1))}
+                  onZoomOut={() => setFallbackZoom((zoom) => clampRasterZoom(zoom - 1))}
+                  onNudge={nudgeFallback}
+                />
+              </>
             )
           ) : (
             <PickerRasterMap
