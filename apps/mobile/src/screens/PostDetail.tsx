@@ -1099,7 +1099,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
             type="button"
             onClick={() => jumpToComment(c.parentId as string)}
             aria-label={`Jump to parent comment by ${parentName}`}
-            className="mb-1 inline-flex min-h-12 items-center rounded-full text-xs font-semibold text-on-surface-variant underline"
+            className="mb-1 inline-flex min-h-12 min-w-12 items-center rounded-full text-xs font-semibold text-on-surface-variant underline"
           >
             @{parentName}
           </button>
