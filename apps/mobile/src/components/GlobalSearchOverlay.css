@@ -258,24 +258,14 @@
 }
 .fb-search-pill[data-open] .fb-search-pill-chevron { transform: rotate(180deg); }
 
-/* Clear is a real pill next to the filter button whenever filters are in
-   force; it is not an underlined link under the pills. */
+/* Clearing filters is a real control beside the filter button whenever filters
+   are in force; it is not an underlined link under the pills. It borrows the
+   icon button's circular 48px treatment, so only the identity class lives here,
+   and it is hidden entirely when nothing is active. */
 .fb-search-clear-filters {
-  flex: none;
-  min-height: 48px;
-  padding: 0 10px;
-  border: 1px solid var(--fb-outline-variant);
-  border-radius: 999px;
-  background: var(--fb-surface-container-low);
-  color: var(--fb-on-surface);
-  font: inherit;
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
+  width: 48px;
+  height: 48px;
 }
-.fb-search-clear-filters:hover { background: var(--fb-surface-container); border-color: var(--fb-outline); }
-.fb-search-clear-filters:disabled { opacity: .45; cursor: not-allowed; }
-.fb-search-clear-filters:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; }
 
 .fb-search-menu {
   display: flex;
@@ -487,6 +477,5 @@
   .fb-search-bar { min-height: 48px; }
   /* Search-surface controls keep the 48px tap target at phone width. */
   .fb-search-pill { min-height: 48px; font-size: 0.8125rem; }
-  .fb-search-clear-filters { min-height: 48px; padding: 0 9px; }
   .fb-search-menu-option { min-height: 48px; }
 }

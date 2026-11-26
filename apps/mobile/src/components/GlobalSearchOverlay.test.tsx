@@ -242,13 +242,17 @@ describe("app-wide search", () => {
     io.extract.mockResolvedValue({ category: "Electronics" });
     render(<Harness />);
     const { overlay } = await openSearch();
+    // With nothing in force the bar carries no Clear control at all.
+    expect(within(overlay).queryByRole("button", { name: "Clear filters" })).toBeNull();
     const field = within(overlay).getByRole("searchbox");
     fireEvent.change(field, { target: { value: "lost phone" } });
     await waitFor(() => expect(io.fetchFeed).toHaveBeenCalledWith(
       expect.objectContaining({ q: "lost phone", category: "Electronics" }),
     ));
     expect(field).toHaveProperty("value", "lost phone");
-    expect(within(overlay).getByRole("button", { name: "Clear filters" })).toBeTruthy();
+    // The extracted category is a live filter, so Clear appears beside it.
+    const clear = within(overlay).getByRole("button", { name: "Clear filters" }) as HTMLButtonElement;
+    expect(clear.disabled).toBe(false);
   });
 
   it("ignores an extraction that finishes after a manual filter selection", async () => {
@@ -729,6 +733,9 @@ describe("app-wide search", () => {
   it("counts active filters, clears them from the bar, and keeps the query", async () => {
     render(<Harness />);
     const { overlay, bar } = await openFilters();
+    // No filter is in force yet, so the control that would clear them is not
+    // rendered; the bar spends its width on the field instead.
+    expect(within(overlay).queryByRole("button", { name: "Clear filters" })).toBeNull();
     fireEvent.click(within(overlay).getByRole("searchbox"));
     fireEvent.change(within(overlay).getByRole("searchbox"), { target: { value: "wallet" } });
 
@@ -741,8 +748,9 @@ describe("app-wide search", () => {
     expect(within(toggle).getByText("2")).toBeTruthy();
 
     // Clear is a real button beside the filter icon, not an underlined link
-    // hiding at the end of the pill row.
-    const clear = within(overlay).getByRole("button", { name: "Clear filters" });
+    // hiding at the end of the pill row, and it is live while filters are.
+    const clear = within(overlay).getByRole("button", { name: "Clear filters" }) as HTMLButtonElement;
+    expect(clear.disabled).toBe(false);
     expect(clear.nextElementSibling).toBe(toggle);
     expect(within(bar).queryByRole("button", { name: "Clear filters" })).toBeNull();
 
@@ -751,7 +759,8 @@ describe("app-wide search", () => {
     expect(within(bar).getByRole("button", { name: "Type" })).toBeTruthy();
     expect(within(bar).getByRole("button", { name: "Status" })).toBeTruthy();
     expect(within(overlay).getByRole("searchbox")).toHaveProperty("value", "wallet");
-    expect((within(overlay).getByRole("button", { name: "Clear filters" }) as HTMLButtonElement).disabled).toBe(true);
+    // Every filter is gone, so the control that clears them is gone too.
+    expect(within(overlay).queryByRole("button", { name: "Clear filters" })).toBeNull();
   });
 
   it("closes the shared date sheet, the date panel, the filter row and the search one Escape at a time", async () => {

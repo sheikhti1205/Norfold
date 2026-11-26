@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   Clock,
+  FilterX,
   ImageOff,
   Search,
   SlidersHorizontal,
@@ -651,17 +652,18 @@ function SearchSurface() {
             },
           }}
         />
-        {/* Clearing filters is a real control next to the filter button, not
-            an underlined link hiding at the end of the pill row. */}
-          <button
-            type="button"
-            className="fb-search-clear-filters"
-            aria-label="Clear filters"
-            onClick={clearFilters}
-            disabled={activeCount === 0}
-          >
-            Clear filters
-          </button>
+        {/* Clearing filters is a real control beside the filter button, not
+            an underlined link hiding at the end of the pill row. It exists
+            only while a filter is in force: a disabled button would spend the
+            phone bar's width on nothing. */}
+        {activeCount > 0 && <button
+          type="button"
+          className="fb-search-iconbtn fb-search-clear-filters"
+          aria-label="Clear filters"
+          onClick={clearFilters}
+        >
+          <FilterX size={18} aria-hidden="true" />
+        </button>}
         <button
           ref={filterToggle}
           type="button"
