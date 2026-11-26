@@ -31,11 +31,14 @@
 }
 
 /* ── Identity hero ─────────────────────────────────────────────────────── */
+/* The 20px gap (plus the portrait's 2.4px bottom margin) puts the name row at
+   portrait bottom + 22.4, so its edit target starts at +14.4 and the
+   portrait's ends at +12: the two 48px hit areas no longer touch. */
 .fb-profile-hero {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
+  gap: 1.25rem;
   padding: 0.5rem 0.5rem 1rem;
   text-align: center;
 }
