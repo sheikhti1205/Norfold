@@ -405,8 +405,13 @@ body:has(#report-editor-overlay) .fb-nav-rail { display: none; }
 
    The control is the Norfold app tile itself, not a hamburger in a disc. The
    tile asset is opaque and self-contrasting (its own squircle field carries the
-   glyph), so it needs no plate, border or shadow to sit over a photo; hover
-   still answers with a surface fill behind the mark. */
+   glyph), so it needs no plate or border to sit over a photo; hover still
+   answers with a surface fill behind the mark. */
+/* The tile carries its own field, so it needs no plate. But when the content
+   behind it is the same tone as that field the silhouette disappears and only
+   the glyph appears to float. These two drop-shadows restore the edge without
+   adding chrome: the offset pass gives depth and the 0.5px pass is a hairline
+   ring that follows the tile's alpha, so the squared corners stay square. */
 .fb-nav-drawer-trigger {
   position: fixed;
   inset-inline-start: max(14px, env(safe-area-inset-left));
@@ -422,7 +427,15 @@ body:has(#report-editor-overlay) .fb-nav-rail { display: none; }
   border-radius: 12px;
   background: transparent;
   box-shadow: none;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.45)) drop-shadow(0 0 0.5px rgb(0 0 0 / 0.35));
   cursor: pointer;
+}
+/* Dark theme flips the tile's polarity: a dark field under a light glyph. The
+   dark hairline then separates nothing against dark content, so keep the soft
+   shadow and swap the ring for a light one. `.dark` is the resolved-theme class
+   theme.tsx already toggles on <html>; it also covers `.amoled`. */
+.dark .fb-nav-drawer-trigger {
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.55)) drop-shadow(0 0 0.5px rgb(255 255 255 / 0.4));
 }
 .fb-nav-drawer-trigger:hover { background: var(--fb-surface-container); }
 .fb-nav-drawer-trigger:active { transform: scale(0.96); }
