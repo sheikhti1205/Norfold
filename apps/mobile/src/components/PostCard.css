@@ -29,15 +29,31 @@
   transition: opacity 120ms ease;
 }
 
-.fb-report-card:hover .fb-report-hide,
 .fb-report-hide:focus-visible {
   opacity: 1;
   pointer-events: auto;
 }
 
 @media (hover: hover) and (pointer: fine) {
+  .fb-report-card:hover .fb-report-hide {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
   .fb-report-card[data-hideable="true"] .fb-post-identity {
     padding-inline-end: 44px;
+  }
+}
+
+/*
+ * No fine pointer, no control. A tap leaves :hover stuck on touch screens, and
+ * the header's action cluster never reserves the 44px slot there, so the cross
+ * would land on top of the kebab. Touch readers use the labelled row in the
+ * report menu instead.
+ */
+@media (hover: none), (pointer: coarse) {
+  .fb-report-hide {
+    display: none;
   }
 }
 
