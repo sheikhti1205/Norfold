@@ -134,6 +134,15 @@ const PINNED_VALUE: LocationValue = {
   preciseLongitude: 90.4125,
 };
 
+const EXACT_VALUE: LocationValue = {
+  label: "Dhaka",
+  latitude: 23.8103,
+  longitude: 90.4125,
+  precision: "EXACT",
+  preciseLatitude: 23.8103,
+  preciseLongitude: 90.4125,
+};
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -479,6 +488,74 @@ describe("MapPickerSheet (keyless fallback path)", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe("MapPickerSheet (reopening seeds the precision toggle)", () => {
+  it("reopens an EXACT pin in exact mode and re-confirm keeps EXACT", () => {
+    const { onConfirm } = renderSheet({ value: EXACT_VALUE });
+
+    // Exact mode is visible before any tap: the warning plus the Round action,
+    // never the approximate opt-in.
+    expect(
+      screen.getByText(/Warning: this is an exact pin and will be shown publicly/),
+    ).toBeDefined();
+    expect(screen.getByRole("button", { name: "Round to ~100 m" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Use exact pin" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm location" }));
+
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    const committed = onConfirm.mock.calls[0]?.[0] as LocationValue;
+    // Re-confirming is a no-op: the exact pin survives, coordinates and all.
+    expect(committed.precision).toBe("EXACT");
+    expect(committed.latitude).toBe(23.8103);
+    expect(committed.longitude).toBe(90.4125);
+    expect(committed.preciseLatitude).toBe(23.8103);
+    expect(committed.preciseLongitude).toBe(90.4125);
+  });
+
+  it("still opens an APPROXIMATE pin in approximate mode", () => {
+    const { onConfirm } = renderSheet({ value: PINNED_VALUE });
+
+    expect(screen.getByRole("button", { name: "Use exact pin" })).toBeDefined();
+    expect(screen.queryByText(/Warning: this is an exact pin/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm location" }));
+
+    const committed = onConfirm.mock.calls[0]?.[0] as LocationValue;
+    expect(committed.precision).toBe("APPROXIMATE");
+    expect(committed.latitude).toBe(23.81);
+    expect(committed.longitude).toBe(90.412);
+  });
+
+  it("clearing the location returns the toggle to approximate", () => {
+    const onConfirm = vi.fn();
+    const onClose = vi.fn();
+    const view = (value: LocationValue) => (
+      <MapPickerSheet
+        open
+        onClose={onClose}
+        value={value}
+        onConfirm={onConfirm}
+        nativePicker={null}
+      />
+    );
+    const { rerender } = render(view(EXACT_VALUE));
+    expect(screen.getByRole("button", { name: "Round to ~100 m" })).toBeDefined();
+
+    rerender(view(EMPTY_VALUE));
+
+    // No pin, no exact mode: an exact toggle must never seed the next pin.
+    expect(screen.getByText("No location yet — search or move the pin to place it.")).toBeDefined();
+    expect(screen.queryByText(/Warning: this is an exact pin/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Confirm location" })).toHaveProperty("disabled", true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Move pin north" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm location" }));
+
+    const committed = onConfirm.mock.calls[0]?.[0] as LocationValue;
+    expect(committed.precision).toBe("APPROXIMATE");
   });
 });
 

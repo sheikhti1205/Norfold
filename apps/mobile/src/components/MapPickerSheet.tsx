@@ -385,7 +385,9 @@ export function MapPickerSheet({
         setFallbackCenter(initial.center);
         setFallbackZoom(initial.zoom);
         setDraftLabel(label);
-        setExact(false);
+        // Keep an exact pin exact when the native picker hands over: reopening
+        // must not silently downgrade it on the next Confirm.
+        setExact(initial.source === "report-pin" && launchValue.precision === "EXACT");
         setSearchInput("");
         setSearchError(null);
         setResults([]);
@@ -428,7 +430,10 @@ export function MapPickerSheet({
     setDraftLabel(
       initialSearchResult?.label.trim() || value.label.trim() || "Pinned location",
     );
-    setExact(false);
+    // Seed the toggle from the value being edited: an existing EXACT pin opens
+    // in exact mode (warning shown) so re-confirming is a no-op, not a silent
+    // downgrade. A cleared or approximate value stays approximate.
+    setExact(initial.source === "report-pin" && value.precision === "EXACT");
     setSearchInput("");
     setSearchError(null);
     setResults([]);
@@ -441,7 +446,7 @@ export function MapPickerSheet({
     setEnablingServices(false);
     setGpsPreview(null);
     setMapFailure(null);
-  }, [open, resolvedPicker, value.latitude, value.longitude, value.label, initialSearchResult]);
+  }, [open, resolvedPicker, value.latitude, value.longitude, value.label, value.precision, initialSearchResult]);
 
   /** Moves the fallback camera (the draft is updated by the caller). */
   function recenterCamera(center: MapCenter): void {
