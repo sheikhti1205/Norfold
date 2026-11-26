@@ -7,6 +7,11 @@ import { MAX_REPORT_PHOTOS } from "../services/media/prepareImages";
 
 export type { ReportMediaPhoto };
 
+// MAX_REPORT_PHOTOS is a literal type, so the plural test needs a widened
+// operand; the branch is still resolved when the bundle is built.
+const CAP: number = MAX_REPORT_PHOTOS;
+const CAP_PHOTO = CAP === 1 ? "photo" : "photos";
+
 export interface ReportMediaPickerProps {
   photos: readonly ReportMediaPhoto[];
   onAddCamera: () => void;
@@ -162,7 +167,7 @@ export function ReportMediaPicker({
       </header>
 
       {atLimit && (
-        <p className="text-xs text-on-surface-variant">Maximum of {MAX_REPORT_PHOTOS} photo{MAX_REPORT_PHOTOS === 1 ? "" : "s"} reached</p>
+        <p className="text-xs text-on-surface-variant">Maximum of {MAX_REPORT_PHOTOS} {CAP_PHOTO} reached</p>
       )}
 
       {photos.length > 0 ? (
@@ -177,7 +182,7 @@ export function ReportMediaPicker({
         />
       ) : (
         <p className="text-xs text-on-surface-variant">
-          Add up to {MAX_REPORT_PHOTOS} photo{MAX_REPORT_PHOTOS === 1 ? "" : "s"}. The first photo is the cover.
+          Add up to {MAX_REPORT_PHOTOS} {CAP_PHOTO}. The first photo is the cover.
         </p>
       )}
 
