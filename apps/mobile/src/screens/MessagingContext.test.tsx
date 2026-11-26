@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { ChatLocation, ChatReportContext } from "./Messaging";
@@ -158,17 +158,38 @@ it("ignores unrelated feed changes and cannot restore a stale read after revocat
   expect(screen.queryByText("Stale private wallet")).toBeNull();
 });
 
-it("shows one static coordinate set with its accuracy and an explicit map link", () => {
+it("opens one static coordinate set in an in-app sheet instead of a map link", async () => {
   render(<ChatLocation location={{ lat: 23.8103, lng: 90.4125, accuracy: 25 }} />);
   expect(screen.getByText("Location shared")).toBeTruthy();
   expect(screen.getByText(/23\.81030, 90\.41250 · device estimate 25 m/)).toBeTruthy();
-  const map = screen.getByRole("link", { name: "Open map" });
-  expect(map.getAttribute("href")).toContain("mlat=23.81030");
-  expect(map.getAttribute("rel")).toContain("noopener");
+  // The panel is the control now; no raw map link leaves the app.
+  expect(screen.queryByRole("link")).toBeNull();
+  expect(screen.queryByText("Open map")).toBeNull();
+  const panel = screen.getByRole("button", { name: "Open shared location 23.81030, 90.41250" });
+  expect(panel.getAttribute("aria-haspopup")).toBe("dialog");
+  expect(panel.getAttribute("aria-expanded")).toBe("false");
+
+  fireEvent.click(panel);
+  const dialog = await screen.findByRole("dialog", { name: "Shared location" });
+  expect(panel.getAttribute("aria-expanded")).toBe("true");
+  // A read-only preview of the shared pin, its coordinates and accuracy, then
+  // exactly two actions: no picker, no confirm, no place name.
+  expect(await within(dialog).findByTestId("interactive-fallback-map")).toBeTruthy();
+  expect(within(dialog).getByText("23.81030, 90.41250")).toBeTruthy();
+  expect(within(dialog).getByText("Device estimate ±25 m")).toBeTruthy();
+  expect(within(dialog).getByRole("button", { name: "Directions" })).toBeTruthy();
+  expect(within(dialog).getByRole("button", { name: "Open in Maps" })).toBeTruthy();
+  expect(within(dialog).queryByRole("button", { name: /confirm|send|use this/i })).toBeNull();
+
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull(), { timeout: 3000 });
+  expect(panel.getAttribute("aria-expanded")).toBe("false");
+  expect(document.activeElement).toBe(panel);
 });
 
 it("shows a manual static pin without inventing an accuracy estimate", () => {
   render(<ChatLocation location={{ lat: 23.81, lng: 90.41, accuracy: null }} />);
   expect(screen.getByText("23.81000, 90.41000")).toBeTruthy();
   expect(screen.queryByText(/estimate|within/)).toBeNull();
+  expect(screen.getByRole("button", { name: "Open shared location 23.81000, 90.41000" })).toBeTruthy();
 });

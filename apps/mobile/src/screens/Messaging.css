@@ -622,10 +622,22 @@
   border-radius:.6rem; background:var(--fb-surface-container); text-decoration:none; font-size:.85rem; }
 a.fb-chat-context:hover, a.fb-chat-context:focus-visible { text-decoration:underline; }
 .fb-chat-context span:last-child { font-weight:600; overflow-wrap:anywhere; }
-.fb-chat-location { display:grid; grid-template-columns:17px minmax(0,1fr); align-items:start; gap:.25rem .5rem; margin-bottom:.35rem; }
-.fb-chat-location > div { min-width:0; }
-.fb-chat-location p { margin:0; }
-.fb-chat-location a { grid-column:2; justify-self:start; white-space:nowrap; font-size:.85rem; text-decoration:underline; min-height:48px; display:inline-flex; align-items:center; }
+/* The shared-location panel is the control itself: one 48px target that opens
+   the in-app pin, not a row of text beside a link. The fill comes from the
+   current text colour so it reads on both own and received bubbles. */
+.fb-chat-location { display:grid; grid-template-columns:17px minmax(0,1fr); align-items:start; gap:.25rem .5rem;
+  width:100%; min-height:48px; margin:0 0 .35rem; padding:.3rem .4rem; border:0; border-radius:.6rem;
+  background:transparent; color:inherit; font:inherit; text-align:start; cursor:pointer; }
+.fb-chat-location:hover { background:color-mix(in srgb, currentColor 8%, transparent); }
+.fb-chat-location:active { background:color-mix(in srgb, currentColor 12%, transparent); }
+.fb-chat-location-copy, .fb-chat-location-copy > span { display:block; min-width:0; }
+/* The sheet: one map, one coordinate line, two actions. */
+.fb-chat-location-sheet { display:flex; flex-direction:column; gap:.35rem; }
+.fb-chat-location-sheet p { margin:0; }
+.fb-chat-location-sheet .fb-chat-location-coords { margin-top:.45rem; font-size:.9rem; font-variant-numeric:tabular-nums; }
+.fb-chat-location-actions { display:flex; gap:.5rem; padding-top:.75rem; }
+.fb-chat-location-actions .fb-surface-button { flex:1 1 0; gap:.4rem; }
+.fb-chat-location-actions :is(button,a):focus-visible { outline:2px solid var(--fb-focus); outline-offset:2px; }
 .fb-chat-context-banner { display:flex; align-items:center; flex-wrap:wrap; gap:.25rem .75rem; margin:0;
   padding:.25rem .8rem; font-size:.8rem; color:var(--fb-on-surface-variant); }
 .fb-chat-context-banner button { min-height:48px; text-decoration:underline; }

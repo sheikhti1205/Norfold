@@ -402,9 +402,28 @@ export function mapsSearchUrl(lat: number | null, lng: number | null, label: str
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(label)}`;
 }
 
+/**
+ * Build a keyless Google Maps navigation URL for a coordinate pair.
+ *
+ * `dir_action=navigate` starts guidance to the destination instead of showing
+ * a search result or a place page. The payload has only coordinates, so the
+ * destination is the coordinate pair itself.
+ */
+export function mapsDirectionsUrl(lat: number, lng: number): string {
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&dir_action=navigate`;
+}
+
 /** Open a location in the external Maps app via ACTION_VIEW. */
 export function openInMaps(lat: number | null, lng: number | null, label: string): void {
   void openInMapsNative(lat, lng, label);
+}
+
+/**
+ * Start navigation to a coordinate pair in the external Maps app through the
+ * same handoff as every other Maps action.
+ */
+export function openDirectionsInMaps(lat: number, lng: number): void {
+  void openExternalMaps(mapsDirectionsUrl(lat, lng));
 }
 
 /** Universal Maps URL (openable everywhere) for a coordinate pair or label. */
@@ -415,21 +434,26 @@ export function universalMapsUrl(lat: number | null, lng: number | null, label: 
 /**
  * External map handoff.
  *
- * On Android we open the universal Maps URL through AppLauncher, which
- * starts a real external ACTION_VIEW (the installed Maps app claims it via App
- * Links). Falling back to a new WebView window keeps the web build working.
+ * On Android we open the URL through AppLauncher, which starts a real external
+ * ACTION_VIEW (the installed Maps app claims it via App Links). Falling back to
+ * a new WebView window keeps the web build working. One platform branch serves
+ * every Maps action so search, place and navigation cannot drift apart.
  */
-export async function openInMapsNative(lat: number | null, lng: number | null, label: string): Promise<void> {
-  const universal = universalMapsUrl(lat, lng, label);
+async function openExternalMaps(url: string): Promise<void> {
   if (Capacitor.isNativePlatform()) {
     try {
-      await AppLauncher.openUrl({ url: universal });
+      await AppLauncher.openUrl({ url });
       return;
     } catch {
       /* fall through to the browser handoff */
     }
   }
-  window.open(universal, "_blank", "noopener,noreferrer");
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+/** Open a search or place destination in the external Maps app. */
+export async function openInMapsNative(lat: number | null, lng: number | null, label: string): Promise<void> {
+  await openExternalMaps(universalMapsUrl(lat, lng, label));
 }
 
 /** Helper text for the Find-in-Maps flow. */

@@ -5,7 +5,9 @@ import {
   extractCoordsFromMapsUrl,
   geoUri,
   isAllowlistedShortLink,
+  mapsDirectionsUrl,
   mapsSearchUrl,
+  openDirectionsInMaps,
   openInMaps,
   parseLocationInput,
   resolveShortLink,
@@ -387,6 +389,24 @@ describe("maps helpers", () => {
     openInMaps(null, null, "Chittagong");
     expect(open).toHaveBeenCalledWith(
       "https://www.google.com/maps/search/?api=1&query=Chittagong",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it("builds a navigation URL for a coordinate pair", () => {
+    expect(mapsDirectionsUrl(23.8, 90.4)).toBe(
+      "https://www.google.com/maps/dir/?api=1&destination=23.8,90.4&dir_action=navigate",
+    );
+  });
+
+  it("starts directions through the same external handoff (web)", () => {
+    const open = vi.fn();
+    vi.stubGlobal("open", open);
+    openDirectionsInMaps(-33.8688, 151.2093);
+    expect(open).toHaveBeenCalledWith(
+      "https://www.google.com/maps/dir/?api=1&destination=-33.8688,151.2093&dir_action=navigate",
       "_blank",
       "noopener,noreferrer",
     );

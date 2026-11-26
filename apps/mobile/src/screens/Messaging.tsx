@@ -1,7 +1,8 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { motion, type PanInfo } from "framer-motion";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { Archive, ArrowLeft, BellOff, ChevronDown, ChevronUp, Film, Flag, ImageOff, Images, Info, ListFilter, LogOut, MapPin, Maximize2, PanelLeftClose, PanelLeftOpen, Pin, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound, X } from "lucide-react";
+import { Archive, ArrowLeft, BellOff, ChevronDown, ChevronUp, ExternalLink, Film, Flag, ImageOff, Images, Info, ListFilter, LogOut, MapPin, Maximize2, Navigation, PanelLeftClose, PanelLeftOpen, Pin, RefreshCw, Search, Settings2, ShieldBan, Trash2, UserRound, X } from "lucide-react";
 import { Button, Dialog, DialogTrigger } from "react-aria-components";
 import { Capacitor } from "@capacitor/core";
 import type { PostItem } from "@norfold/shared";
@@ -14,6 +15,7 @@ import { UserAvatar } from "../components/UserAvatar";
 import { ChatIdentity } from "../components/ChatIdentity";
 import { PostLink } from "../components/PostNavigation";
 import { formatChatDay, timeAgo } from "../utils/dates";
+import { openDirectionsInMaps, openInMaps } from "../utils/location";
 import { klipyPreviewLabel, messagePreview } from "../utils/messagePreview";
 import { haptic } from "../utils/haptics";
 import { convertEmoticons, isEmojiOnly } from "../utils/emoji";
@@ -47,6 +49,8 @@ import { PeopleSearch } from "../components/PeopleSearch";
 import { PeerChatComposer } from "../components/PeerChatComposer";
 import { CameraCapture } from "../components/CameraCapture";
 import { ChatLocationComposer } from "../components/ChatLocationComposer";
+import { BottomSheet } from "../components/BottomSheet";
+import { InteractiveLocationMap } from "../components/InteractiveLocationMap";
 import { AdaptiveTaskSurface, ConfirmDialog } from "../components/AdaptiveTaskSurface";
 import { ReportSheet } from "../components/ReportSheet";
 import { MediaViewer, type MediaViewerItem } from "../components/MediaViewer";
@@ -201,18 +205,58 @@ function ReportContextSession({ reportId, preview }: { reportId: string; preview
   return <ChatReportPreview post={post} reportId={reportId} coverSrc={firstImageSrc} />;
 }
 
-/** One static coordinate set the sender chose to share. No live position. */
+/**
+ * One static coordinate set the sender chose to share. No live position.
+ *
+ * The whole panel is the control: a real button with a 48 px target opens the
+ * shared pin in an in-app sheet instead of handing the reader to another site.
+ * The sheet is portalled out of the message list, so the transcript's scroll
+ * container and swipe transforms cannot clip or reposition it, and the sheet's
+ * own focus trap returns focus to this panel on close.
+ */
 export function ChatLocation({ location }: { location: StaticLocation }) {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
   const lat = location.lat.toFixed(5), lng = location.lng.toFixed(5);
-  return <div className="fb-chat-location" data-chat-location>
-    <MapPin size={17} aria-hidden="true" />
-    <div>
-      <p>Location shared</p>
-      <p className="fb-chat-secondary">{lat}, {lng}{location.accuracy !== null ? ` · device estimate ${Math.max(1, Math.round(location.accuracy))} m` : ""}</p>
-    </div>
-    <a href={`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`}
-      target="_blank" rel="noreferrer noopener">Open map</a>
-  </div>;
+  const accuracy = location.accuracy !== null ? Math.max(1, Math.round(location.accuracy)) : null;
+  const accuracyLine = accuracy !== null ? `device estimate ${accuracy} m` : null;
+  return <>
+    <button ref={trigger} type="button" className="fb-chat-location" data-chat-location
+      aria-haspopup="dialog" aria-expanded={open}
+      aria-label={`Open shared location ${lat}, ${lng}`}
+      onClick={() => {
+        // Take focus before the sheet mounts so the trap records this panel as
+        // the launcher on platforms that do not focus a tapped button.
+        trigger.current?.focus({ preventScroll: true });
+        setOpen(true);
+      }}>
+      <MapPin size={17} aria-hidden="true" />
+      <span className="fb-chat-location-copy">
+        <span>Location shared</span>
+        <span className="fb-chat-secondary">{lat}, {lng}{accuracyLine ? ` · ${accuracyLine}` : ""}</span>
+      </span>
+    </button>
+    {createPortal(
+      <BottomSheet open={open} onClose={() => setOpen(false)} title="Shared location">
+        <div className="fb-chat-location-sheet">
+          <InteractiveLocationMap lat={location.lat} lng={location.lng} />
+          <p className="fb-chat-location-coords">{lat}, {lng}</p>
+          {accuracy !== null && <p className="fb-chat-secondary">Device estimate ±{accuracy} m</p>}
+          <div className="fb-chat-location-actions">
+            <button type="button" className="fb-surface-button fb-confirm-primary"
+              onClick={() => openDirectionsInMaps(location.lat, location.lng)}>
+              <Navigation size={17} aria-hidden="true" />Directions
+            </button>
+            <button type="button" className="fb-surface-button"
+              onClick={() => openInMaps(location.lat, location.lng, "")}>
+              <ExternalLink size={17} aria-hidden="true" />Open in Maps
+            </button>
+          </div>
+        </div>
+      </BottomSheet>,
+      document.body,
+    )}
+  </>;
 }
 
 function useLabels(accountId: string, peerIds: string[]) {
