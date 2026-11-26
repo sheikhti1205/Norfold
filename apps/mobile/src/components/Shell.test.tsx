@@ -981,8 +981,8 @@ describe("Shell adaptive navigation", () => {
       expect(getComputedStyle(collapsedWordmark as HTMLElement).display).toBe("none");
       expect(getComputedStyle(collapsedMark as HTMLElement).display).not.toBe("none");
       // The outside name reads its vertical anchor from the same head geometry:
-      // 8px rail padding plus half of the 40px head, declared once.
-      expect(rail.getPropertyValue("--fb-rail-head-center").trim()).toBe("28px");
+      // 8px rail padding plus half of the 48px head, declared once.
+      expect(rail.getPropertyValue("--fb-rail-head-center").trim()).toBe("32px");
       // Positioned only so the resize handle can anchor to the rail's inner
       // edge. It stays an in-flow flex column (never fixed/absolute), which is
       // what keeps it from covering the content.
@@ -990,9 +990,9 @@ describe("Shell adaptive navigation", () => {
       const item = getComputedStyle(
         within(nav).getByRole("link", { name: "My Reports" }),
       );
-      // Compact rows: ten destinations plus the identity control fit a
-      // 640px-tall window without the rail becoming a scroller.
-      expect(item.minHeight).toBe("38px");
+      // Every destination keeps the 48px target floor; a short window
+      // scrolls the list rather than shrinking the rows.
+      expect(item.minHeight).toBe("48px");
       expect(item.flexDirection).toBe("column");
       // Pinned, the same head names the app beside the mark, so the outside
       // copy is free to yield and the name never appears twice.

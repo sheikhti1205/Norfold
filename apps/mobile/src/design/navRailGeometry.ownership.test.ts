@@ -17,7 +17,7 @@ import { describe, expect, it } from "vitest";
  * alone owns that width: the surface is always the column minus the 8px inline
  * frame (64/56, 72/64, 192/184, 196/188). Four pixels of frame plus the
  * existing 6px rail padding still gives 44/52px of content, the 32/36px icon
- * axis and the 44px target; no top inset keeps the 28px head centre. The
+ * axis and the 44px target; no top inset keeps the 32px head centre. The
  * outside name and the in-rail copy share one 1.125rem/700 wordmark - the same
  * size as an AppBar screen title, because the owner rejected a name smaller
  * than the Chat title - and the name's reservation is 5rem: its measured
@@ -193,9 +193,9 @@ describe("R19-4 inset navigation rail", () => {
     expect(navCss).toMatch(/\.fb-nav-rail\[data-pinned="false"\] \.fb-nav-rail-head \{[^}]*justify-content: center;/);
   });
 
-  it("keeps the 28px head centre and the outside name's box", () => {
-    expect(navCss).toMatch(/--fb-rail-head-center: 28px;/);
-    expect(navCss).toMatch(/\.fb-nav-rail-head \{[^}]*min-height: 40px;/);
+  it("keeps the 32px head centre and the outside name's box", () => {
+    expect(navCss).toMatch(/--fb-rail-head-center: 32px;/);
+    expect(navCss).toMatch(/\.fb-nav-rail-head \{[^}]*min-height: 48px;/);
     expect(railColumn).toContain("padding: 0 4px 8px;");
     expect(railColumn).not.toMatch(/padding-top|padding-block-start/);
     expect(outsideCss).toMatch(/\.fb-nav-outside-brand \{[^}]*inset-inline-start: 100%;[^}]*top: var\(--fb-rail-head-center, 28px\);[^}]*margin-inline-start: 7px;/);

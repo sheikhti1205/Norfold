@@ -90,14 +90,14 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
 }
 /* Canonical rail geometry. The column and the app name painted outside it read
    the same numbers, so the name can never drift to a route's own content
-   origin. `--fb-rail-head-center` is the vertical centre of the head's 40px
+   origin. `--fb-rail-head-center` is the vertical centre of the head's 48px
    brand row (8px rail padding plus half the row) and follows the same padding
    tiers as the rail itself. */
 .fb-nav-rail,
 .fb-app-viewport {
   --fb-rail-collapsed: 64px;
   --fb-rail-expanded: 196px;
-  --fb-rail-head-center: 28px;
+  --fb-rail-head-center: 32px;
 }
 @media (min-width: 1200px) {
   .fb-nav-rail,
@@ -105,11 +105,11 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
 }
 @media (max-height: 600px) {
   .fb-nav-rail,
-  .fb-app-viewport { --fb-rail-head-center: 26px; }
+  .fb-app-viewport { --fb-rail-head-center: 30px; }
 }
 @media (max-height: 520px) {
   .fb-nav-rail,
-  .fb-app-viewport { --fb-rail-head-center: 24px; }
+  .fb-app-viewport { --fb-rail-head-center: 28px; }
 }
 /* Adaptive navigation: at the compact breakpoint and up a
    reader who picks "Side rail" gets a vertical column that takes layout space
@@ -155,7 +155,7 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
    surface rule and covers that band.
    Four pixels of frame beside the existing 6px padding keep the 44px hit
    target and the same 32/36px icon axis. No top inset: the head centre stays
-   8px padding plus half the 40px head. The phone drawer lives outside
+   8px padding plus half the 48px head. The phone drawer lives outside
    `.fb-rail-anchor`, so its own border and width are untouched. */
 @media (min-width: 600px) {
   .fb-rail-anchor:has(> .fb-nav-rail) {
@@ -233,18 +233,21 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
   padding-inline: 10px; font-size: 0.6875rem; font-weight: 600;
   letter-spacing: 0.02em; color: var(--fb-on-surface-variant);
 }
-/* Vertical items keep the bar's grammar (rounded row, active pill) but are
-   compact: 38px rows and 20px glyphs let all ten destinations plus the
-   identity control fit a 640px-tall window without scrolling. The row takes
-   its inline size from the rail, so the bar's floor cannot widen it past the
-   collapsed column's content box and shift the icon axis. */
+/* Vertical items keep the bar's grammar (rounded row, active pill) but stack
+   icon over label. Every row keeps the 48px target floor, so a short window
+   scrolls the destination list (`.fb-nav-rail-scroll`) instead of shrinking
+   it. The row takes its inline size from the rail, so the bar's floor cannot
+   widen it past the collapsed column's content box and shift the icon axis. */
 .fb-nav-rail .fb-nav-link {
-  flex: none; width: 100%; min-width: 0; min-height: 38px;
+  flex: none; width: 100%; min-width: 0; min-height: 48px;
   flex-direction: column; gap: 2px;
   padding: 6px 4px; border-radius: 12px;
 }
 .fb-nav-rail .fb-nav-icon { width: 20px; height: 20px; }
 .fb-nav-rail .fb-nav-link-active { flex: none; }
+/* The identity control is a `.fb-nav-link` too, so it inherits the 48px floor;
+   this keeps that floor explicit for the rail and the phone drawer alike. */
+.fb-nav-rail .fb-account-trigger { min-height: 48px; }
 /* Every destination is named in the rail, selected or not. The label wraps
    rather than truncating, so "My Reports" stays readable at large text. */
 .fb-nav-tooltip { z-index: 120; max-width: 16rem; padding: 6px 10px; border-radius: 8px; background: var(--fb-on-surface); color: var(--fb-surface); font-size: .875rem; overflow-wrap: anywhere; }
@@ -278,25 +281,22 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
 html.fb-reduce-motion .fb-nav-rail { transition: none; }
 html.fb-reduce-motion .fb-rail-anchor:has(> .fb-nav-rail) { transition: none; }
 /* Very short windows (landscape phone, or a laptop with a shallow viewport):
-   tighten the same geometry rather than introducing a scroller. */
+   tighten only the gaps and padding. The 48px target floors stay put, so the
+   destination list scrolls inside `.fb-nav-rail-scroll` instead of shrinking. */
 @media (max-height: 600px) {
   .fb-nav-rail { gap: 4px; padding-block: 6px; }
   .fb-nav-rail[data-pinned="true"] { padding-block: 6px; }
-  .fb-nav-rail .fb-nav-link { min-height: 34px; padding-block: 4px; }
+  .fb-nav-rail .fb-nav-link { padding-block: 4px; }
   .fb-nav-rail-scroll { gap: 4px; }
-  .fb-nav-rail .fb-account-trigger { min-height: 44px; }
 }
-/* A shallow desktop window (or a split-screen pane) still shows every
-   destination: the rows tighten once more instead of turning the rail into
-   a scroller. */
+/* A shallow desktop window (or a split-screen pane) tightens the same gaps
+   once more; those destinations remain full-size and scroll. */
 @media (max-height: 520px) {
   .fb-nav-rail { gap: 2px; padding-block: 4px; }
   .fb-nav-rail[data-pinned="true"] { padding-block: 4px; }
-  .fb-nav-rail .fb-nav-link { min-height: 30px; padding-block: 2px; }
-  .fb-nav-rail .fb-nav-icon { width: 18px; height: 18px; }
+  .fb-nav-rail .fb-nav-link { padding-block: 2px; }
   .fb-nav-rail-scroll { gap: 2px; }
   .fb-nav-rail-group { padding-block-start: 4px; }
-  .fb-nav-rail .fb-account-trigger { min-height: 40px; }
 }
 /* The unread badge stays next to the bell icon rather than the far edge. */
 /* Fullscreen editor is a body-level portal: never leave shell chrome behind it
@@ -306,7 +306,7 @@ html.fb-reduce-motion .fb-rail-anchor:has(> .fb-nav-rail) { transition: none; }
    panel is a width change on the existing column rather than a drawer or an
    overlay: nothing covers the page and <main> reflows in the same frame. */
 .fb-nav-rail-head {
-  display: flex; align-items: center; width: 100%; min-height: 40px;
+  display: flex; align-items: center; width: 100%; min-height: 48px;
 }
 /* Icon rail: the 48px brand button centres its mark on the same axis as the
    destination glyphs. Any state that names rows (pinned, hover, keyboard focus)
@@ -319,7 +319,7 @@ html.fb-reduce-motion .fb-rail-anchor:has(> .fb-nav-rail) { transition: none; }
    nothing. */
 .fb-nav-brand {
   display: inline-flex; align-items: center; justify-content: center; gap: 10px;
-  max-width: 100%; min-height: 40px; padding: 0 10px;
+  max-width: 100%; min-height: 48px; padding: 0 10px;
   border: 0; border-radius: 12px; background: transparent;
   color: var(--fb-on-surface); cursor: pointer;
 }
@@ -490,8 +490,8 @@ html.fb-reduce-motion .fb-nav-drawer-inline:active { transform: none; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   margin-inline-start: auto;
   border-radius: 999px;
   color: var(--fb-on-surface-variant);
