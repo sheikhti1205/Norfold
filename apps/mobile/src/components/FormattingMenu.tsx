@@ -157,6 +157,7 @@ export function FormattingMenu({
           id={baseId}
           role="listbox"
           aria-label={label}
+          data-formatting-menu="true"
           className="overflow-y-auto overscroll-contain rounded-m3-sm border border-outline-variant bg-surface-container p-1 shadow-lg"
           initial="hidden"
           animate="visible"

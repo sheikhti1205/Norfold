@@ -1514,11 +1514,12 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
     editor,
     enabled: Boolean(editor) && !disabled,
     runCommand: runSlashCommand,
-    // The menu is portalled outside this component's subtree; name it so an
-    // outside press can tell it apart from the form around it.
+    // The menu is portalled outside this component's subtree; mark it so an
+    // outside press can tell it apart from the form around it. Never key this
+    // off the accessible name: renaming the menu must not make its rows dead.
     isMenuTarget: (target) =>
       target instanceof Element
-      && target.closest('[role="listbox"][aria-label="Formatting commands"]') !== null,
+      && target.closest("[data-formatting-menu]") !== null,
   });
 
   // A command that is guaranteed to no-op is not offered at all. Redo is never

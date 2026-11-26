@@ -469,6 +469,24 @@ describe("RichTextEditor slash commands", () => {
     expect(ref.current?.getText()).toBe("/bold");
   });
 
+  it("keeps the menu open through a press on one of its own rows", () => {
+    const ref = createRef<Editor | null>();
+    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    act(() => ref.current?.commands.insertContent("/bold"));
+    const menu = screen.getByRole("listbox", { name: "Formatting commands" });
+    const row = within(menu).getByRole("option", { name: "Bold" });
+    // A real press hits the document's capture handler on the way down, before
+    // the row's click. The menu must survive that press or no row is clickable.
+    fireEvent.pointerDown(row);
+    expect(screen.getByRole("listbox", { name: "Formatting commands" })).toBeTruthy();
+
+    fireEvent.click(row);
+
+    expect(screen.queryByRole("listbox", { name: "Formatting commands" })).toBeNull();
+    act(() => ref.current?.commands.insertContent("word"));
+    expect(tiptapToMarkdown(ref.current?.getJSON())).toBe("**word**");
+  });
+
   it("closes the typed menu when focus leaves the editor", () => {
     const ref = createRef<Editor | null>();
     render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
