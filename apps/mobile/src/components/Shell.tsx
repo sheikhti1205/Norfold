@@ -77,7 +77,7 @@ const BAR_NAV = [
   { to: "/settings", label: "Settings", icon: SettingsIcon },
 ] as const;
 
-const HIDE_NAV = ["/help", "/posts/", "/ai-connection", "/connections/", "/chats/"];
+const HIDE_NAV = ["/help", "/posts/", "/ai-connection", "/connections/", "/chats/", "/report", "/my/"];
 
 /**
  * The floating settings window's path for a rendered link, or null.

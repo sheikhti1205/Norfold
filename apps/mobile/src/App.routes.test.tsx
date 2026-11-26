@@ -631,7 +631,6 @@ describe("consumer route map", () => {
     ["/my", "MyPosts screen"],
     ["/notifications", "Notifications screen"],
     ["/search", "Search screen"],
-    ["/report", "CreateReport screen"],
   ])("renders signed route %s inside the shell", (route, markerText) => {
     signedIn();
     renderAt(route);
@@ -676,6 +675,7 @@ describe("consumer route map", () => {
   it.each([
     ["/help", "Help screen"],
     ["/ai-connection", "AiConnection screen"],
+    ["/report", "CreateReport screen"],
   ])("renders %s without bottom nav (hidden by Shell design)", (route, markerText) => {
     signedIn();
     renderAt(route);

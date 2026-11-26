@@ -178,7 +178,7 @@ describe("Shell floating primary navigation", () => {
     ["/my", "My Reports"],
     ["/chats", "Chats"], ["/settings", "Settings"], ["/profile", "Settings"],
     ["/profile/edit", "Settings"],
-    ["/settings/appearance", "Settings"], ["/my/report/edit", "My Reports"],
+    ["/settings/appearance", "Settings"], ["/chats/thread", "Chats"],
   ])("selects only %s's destination with a visible label", (path, label) => {
     renderShell(path);
     const nav = screen.getByRole("navigation", { name: "Primary" });
@@ -212,8 +212,8 @@ describe("Shell floating primary navigation", () => {
     expect(screen.getByRole("link", { name: "My Reports" }).getAttribute("aria-current")).toBe("page");
   });
 
-  it("leaves all tabs unselected on /report while keeping the create action available", () => {
-    renderShell("/report");
+  it("leaves all tabs unselected on a non-destination route while keeping the create action available", () => {
+    renderShell("/brand");
     const nav = screen.getByRole("navigation", { name: "Primary" });
     expect(within(nav).getAllByRole("link").every((link) => !link.hasAttribute("aria-current"))).toBe(true);
     expect(within(nav).getByRole("link", { name: "Create report" }).getAttribute("href")).toBe("/report");
@@ -281,6 +281,30 @@ describe("Shell floating primary navigation", () => {
   it.each(["/help", "/posts/example"])('keeps chrome hidden on %s', (path) => {
     renderShell(path);
     expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
+  });
+
+  it("hides the primary navigation on the create report surface", () => {
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout: "bottom", navLayoutChosen: true }));
+    renderShell("/report");
+    expect(screen.getByText("Report screen")).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
+    localStorage.clear();
+  });
+
+  it("hides the primary navigation on the edit report surface", () => {
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout: "bottom", navLayoutChosen: true }));
+    renderShell("/my/123/edit");
+    expect(screen.getByText("Edit report screen")).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
+    localStorage.clear();
+  });
+
+  it("keeps the primary navigation on the My Reports list", () => {
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_APPEARANCE, navLayout: "bottom", navLayoutChosen: true }));
+    renderShell("/my");
+    expect(screen.getByText("My Reports screen")).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "Primary" })).toBeTruthy();
+    localStorage.clear();
   });
 
   it("removes nav during fullscreen and restores it on exit", () => {
