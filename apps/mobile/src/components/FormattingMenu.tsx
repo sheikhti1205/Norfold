@@ -11,6 +11,7 @@ import {
 } from "@floating-ui/react";
 import { motion } from "framer-motion";
 import { FORMATTING_GROUPS, type FormattingCommand, type FormattingGroupId } from "./formattingCommands";
+import { announceQuietly } from "./LiveRegion";
 import { motionDurations, popoverVariants } from "./uiMotion";
 
 export interface FormattingMenuProps {
@@ -52,6 +53,9 @@ export function FormattingMenu({
 }: FormattingMenuProps) {
   const baseId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
+  // Tracks the index this panel last accounted for. `null` means no baseline
+  // yet: the first pass after opening records it without speaking.
+  const announcedIndexRef = useRef<number | null>(null);
 
   const { refs, floatingStyles } = useFloating({
     open,
@@ -81,6 +85,25 @@ export function FormattingMenu({
     });
   }, [open, getAnchorRect, refs]);
 
+  // Focus stays in the contenteditable, so `aria-selected` alone changes a
+  // purely visual highlight. Announce real index moves through the single
+  // polite region; opening the panel and the initial index are not moves.
+  useEffect(() => {
+    if (!open) {
+      announcedIndexRef.current = null;
+      return;
+    }
+    if (announcedIndexRef.current === null) {
+      announcedIndexRef.current = activeIndex;
+      return;
+    }
+    if (announcedIndexRef.current === activeIndex) return;
+    announcedIndexRef.current = activeIndex;
+    const item = items[activeIndex];
+    if (!item) return;
+    announceQuietly(`${item.label}, ${activeIndex + 1} of ${items.length}`);
+  }, [open, activeIndex, items]);
+
   if (!open || items.length === 0) return null;
 
   const rows: ReactNode[] = [];
@@ -109,7 +132,7 @@ export function FormattingMenu({
         aria-selected={index === activeIndex}
         onPointerEnter={() => onHover(index)}
         onClick={() => onPick(index)}
-        className={`flex min-h-[44px] cursor-pointer items-center rounded-m3-xs px-3 py-2 text-sm text-on-surface ${
+        className={`flex min-h-[48px] cursor-pointer items-center rounded-m3-xs px-3 py-2 text-sm text-on-surface ${
           index === activeIndex ? "bg-surface-container-high" : ""
         }`}
       >

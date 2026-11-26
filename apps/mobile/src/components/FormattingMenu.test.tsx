@@ -26,7 +26,25 @@ function headings(): Element[] {
   return Array.from(document.querySelectorAll('[role="presentation"]'));
 }
 
-afterEach(cleanup);
+const quietListeners: Array<(event: Event) => void> = [];
+
+/** Captures every quiet announcement, mirroring the sibling suites' spy. */
+function collectQuietAnnouncements(): string[] {
+  const messages: string[] = [];
+  const listener = (event: Event) => {
+    messages.push((event as CustomEvent<string>).detail);
+  };
+  quietListeners.push(listener);
+  window.addEventListener("findback:announce-quietly", listener);
+  return messages;
+}
+
+afterEach(() => {
+  cleanup();
+  for (const listener of quietListeners.splice(0)) {
+    window.removeEventListener("findback:announce-quietly", listener);
+  }
+});
 
 describe("FormattingMenu", () => {
   it("renders nothing while closed", () => {
@@ -96,5 +114,38 @@ describe("FormattingMenu", () => {
     const getAnchorRect = vi.fn(() => new DOMRect(24, 96, 0, 20));
     renderMenu({ getAnchorRect });
     await waitFor(() => expect(getAnchorRect).toHaveBeenCalled());
+  });
+
+  it("gives every row the app's 48px menu touch target", () => {
+    renderMenu();
+    for (const option of screen.getAllByRole("option")) {
+      expect(option.className).toContain("min-h-[48px]");
+      expect(option.className).not.toContain("min-h-[44px]");
+    }
+  });
+
+  it("announces the newly active row when the index actually moves", () => {
+    const messages = collectQuietAnnouncements();
+    const view = renderMenu({ activeIndex: 0 });
+    // The index the panel opens with is not a move, so it stays silent.
+    expect(messages).toEqual([]);
+    view.rerender(<FormattingMenu {...BASE_PROPS} activeIndex={2} />);
+    expect(messages).toEqual([`${TWO_GROUPS[2]!.label}, 3 of 4`]);
+  });
+
+  it("stays silent when the panel opens and while it is closed", () => {
+    const messages = collectQuietAnnouncements();
+    const view = renderMenu({ open: false, activeIndex: 0 });
+    view.rerender(<FormattingMenu {...BASE_PROPS} open activeIndex={1} />);
+    expect(messages).toEqual([]);
+    view.rerender(<FormattingMenu {...BASE_PROPS} open={false} activeIndex={3} />);
+    expect(messages).toEqual([]);
+  });
+
+  it("announces nothing for an out-of-range active index", () => {
+    const messages = collectQuietAnnouncements();
+    const view = renderMenu({ activeIndex: 0 });
+    view.rerender(<FormattingMenu {...BASE_PROPS} activeIndex={-1} />);
+    expect(messages).toEqual([]);
   });
 });
