@@ -43,6 +43,7 @@ import { useKeyboardInset } from "../hooks/keyboardInset";
 import { profileFor } from "../services/ai/modelProfiles";
 import type { GenerateFn } from "../services/ai/types";
 import {
+  LocalRouteError,
   NARROW_TASK_PROFILE_ID,
   generateForCategoryLive,
   generateForFieldsLive,
@@ -221,6 +222,18 @@ const aiSuggestDeps: {
   generateForFields: generateForFieldsLive,
   generateForCategory: generateForCategoryLive,
 };
+
+/**
+ * The live route's own timeout receipt.
+ *
+ * The field op deliberately collapses every non-abort engine failure into
+ * `RUNTIME_ERROR` before it returns (see `nlHelperCopy`), so a route timeout is
+ * no longer distinguishable in the `AiResult`. The thrown error at the generate
+ * seam still carries the route's denial reason; capture it there.
+ */
+function isRouteTimeoutError(error: unknown): boolean {
+  return error instanceof LocalRouteError && error.denialReason === "TIMEOUT";
+}
 
 /**
  * §8 keyboard composition mode, in one place:
@@ -641,14 +654,28 @@ function ReportForm() {
     setAiCatDropped(false);
     setAiSuggestResolved({});
     try {
-      const [fieldsResult, categoryResult] = await Promise.all([
-        suggestReportFields(aiSuggestDeps.generateForFields, text, profile, {
-          signal: controller.signal,
-        }),
-        suggestCategoryForText(aiSuggestDeps.generateForCategory, text.slice(0, 280), profile, {
-          signal: controller.signal,
-        }),
-      ]);
+      // The on-device router serves ONE inference at a time: a competing route
+      // begun while the first is still settling is rejected as busy (the
+      // `extract-report-fields` op keeps its lease until native completion
+      // settles). Run the field extraction first, render it, and only then ask
+      // for the optional category — never two native operations at once.
+      // The op flattens an engine failure into `RUNTIME_ERROR`, so observe the
+      // route's own timeout receipt at the generate seam before that happens.
+      let fieldRouteTimedOut = false;
+      const generateForFields: GenerateFn = async (prompt, options) => {
+        try {
+          return await aiSuggestDeps.generateForFields(prompt, options);
+        } catch (error) {
+          if (isRouteTimeoutError(error)) fieldRouteTimedOut = true;
+          throw error;
+        }
+      };
+      const fieldsResult = await suggestReportFields(
+        generateForFields,
+        text,
+        profile,
+        { signal: controller.signal },
+      );
       if (aiSuggestGen.current !== gen) return; // stale: drop, never render
       if (fieldsResult.ok) {
         setAiFieldPatches([...fieldsResult.value.suggestions]);
@@ -661,6 +688,39 @@ function ReportForm() {
         const note = await aiSuggestFailureNote(gen);
         if (note !== null) setAiSuggestError(note);
       }
+      // Stop, a newer attempt, or unmount invalidates the rest of this run:
+      // the category op must never start under a stale generation.
+      if (aiSuggestGen.current !== gen) return;
+      if (controller.signal.aborted) {
+        // A Stop that landed while a failure note was being read must not leave
+        // that note (or its install affordance) standing with no op left to
+        // cancel — the person's last action was Stop.
+        setAiSuggestManageModels(false);
+        setAiSuggestError("Suggestion stopped.");
+        return;
+      }
+      // A timed-out field route very likely still holds the native lease: the
+      // visible request returns at its bound while the coordinator keeps the
+      // gate busy until tracked native work settles. Starting the optional
+      // category op into that window only earns a "runtime is busy" failure, so
+      // skip it. Genuine non-timeout failures still get the category fallback,
+      // and the field result (or its failure note) is already rendered.
+      if (fieldRouteTimedOut) return;
+      // Field patches are already reviewable at this point. Ask the classifier
+      // only when the extraction did not itself assign a released category —
+      // asking again would duplicate the same useful answer and spend a second
+      // serial native operation.
+      const fieldAssignedCategory =
+        fieldsResult.ok &&
+        fieldsResult.value.suggestions.some((patch) => patch.field === "category");
+      if (fieldAssignedCategory) return;
+      const categoryResult = await suggestCategoryForText(
+        aiSuggestDeps.generateForCategory,
+        text.slice(0, 280),
+        profile,
+        { signal: controller.signal },
+      );
+      if (aiSuggestGen.current !== gen) return; // stale: drop
       if (categoryResult.ok) {
         setAiCatSuggestion(categoryResult.value.suggestion);
         setAiCatDropped(categoryResult.value.dropped);
@@ -2097,6 +2157,9 @@ function ReportForm() {
               </div>
             )}
             {(aiFieldPatches.length > 0 || aiCatSuggestion) &&
+              // Field patches are reviewable while the optional category op is
+              // still running; "everything found" waits for the whole run.
+              !aiSuggestBusy &&
               aiFieldPatches.every((patch) => aiSuggestResolved[`field:${patch.field}`]) &&
               (!aiCatSuggestion || aiSuggestResolved.categorySuggestion) && (
                 <p role="status" className="text-xs text-on-surface-variant">

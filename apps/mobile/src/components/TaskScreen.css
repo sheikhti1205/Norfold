@@ -11,22 +11,25 @@
 }
 
 /* The bar stays put while the body scrolls, so Back and the title are always
-   reachable. The inset matches the shell's own safe-area rule. */
+   reachable. .fb-app-viewport (index.css) is the one owner of the top and
+   bottom safe area, so this row spends none of it again: one compact row,
+   at most 8px from the shell's content edge. */
 .fb-task-screen-header {
   position: sticky;
   top: 0;
   z-index: 2;
   flex: none;
-  padding: max(0.5rem, env(safe-area-inset-top)) 0 0.5rem;
+  padding-block: 8px;
   background: var(--fb-surface);
   border-bottom: 1px solid var(--fb-outline-variant);
 }
 
 /* Back | centred title | actions. The equal outer columns keep the title on
-   the screen's centre line whatever the action slot holds. */
+   the screen's centre line whatever the action slot holds; the title column
+   can shrink to zero so a large text scale ellipsizes instead of overflowing. */
 .fb-task-screen-bar {
   display: grid;
-  grid-template-columns: minmax(48px, 1fr) auto minmax(48px, 1fr);
+  grid-template-columns: minmax(48px, 1fr) minmax(0, auto) minmax(48px, 1fr);
   align-items: center;
   gap: 8px;
   min-height: 48px;
@@ -39,6 +42,8 @@
   align-items: center;
   justify-content: center;
   justify-self: start;
+  min-width: 48px;
+  min-height: 48px;
   border-radius: var(--radius-m3-md, 12px);
   color: var(--fb-on-surface);
   background: transparent;
@@ -51,7 +56,8 @@
 
 /* A real heading, centred like the description editor's takeover bar. It is
    focused programmatically on arrival so focus never lands in a field, and its
-   tabIndex of -1 keeps it out of the tab order, so nothing is drawn on it. */
+   tabIndex of -1 keeps it out of the tab order, so nothing is drawn on it.
+   One line with an ellipsis keeps the row compact at the largest text scale. */
 .fb-task-screen-title {
   min-width: 0;
   margin: 0;
@@ -59,7 +65,9 @@
   font-weight: 600;
   line-height: 1.35;
   text-align: center;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   outline: none;
 }
 
@@ -80,11 +88,13 @@
 .fb-task-screen-actions:disabled { opacity: .45; }
 
 /* The body keeps the app's page padding on a phone, and the form's own 40rem
-   measure once the window has room. No card, no gutter around the screen. */
+   measure once the window has room. No card, no gutter around the screen.
+   The shell already pads the bottom safe area, so the foot is content space
+   only, never a second inset. */
 .fb-task-screen-body {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 16px 16px calc(28px + env(safe-area-inset-bottom));
+  padding: 16px 16px 28px;
 }
 
 .fb-task-screen-description {
@@ -104,5 +114,4 @@
   }
 
   .fb-task-screen-bar { padding-inline: 0; }
-  .fb-task-screen-header { padding-top: max(0.75rem, env(safe-area-inset-top)); }
 }

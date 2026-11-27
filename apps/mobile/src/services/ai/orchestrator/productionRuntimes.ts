@@ -105,7 +105,12 @@ export class RouteCancelledError extends Error {
  * abort; the orphaned native call can no longer resolve into a route value.
  */
 function raceWithSignal<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) return Promise.reject(new RouteCancelledError());
+  if (signal.aborted) {
+    // The route is already gone: observe the orphaned work so a late native
+    // rejection cannot surface as an unhandled rejection.
+    void work.catch(() => {});
+    return Promise.reject(new RouteCancelledError());
+  }
   return new Promise<T>((resolve, reject) => {
     const onAbort = (): void => reject(new RouteCancelledError());
     signal.addEventListener("abort", onAbort, { once: true });
@@ -166,6 +171,9 @@ function textRuntime(manager: OfflineModelManager, backend: ProductionTextBacken
     available: () => managerReady(manager, backend.modelId),
     servesTask: servesRoles(backend.taskRoles),
     invoke: async (input) => {
+      // A route cancelled before dispatch launches no native work and spends
+      // no readiness probe.
+      if (input.signal.aborted) return { ok: false, error: "Text generation cancelled.", denialReason: "CANCELLED" };
       let ready: boolean;
       try {
         ready = await backend.isReady();
@@ -176,6 +184,9 @@ function textRuntime(manager: OfflineModelManager, backend: ProductionTextBacken
         // would send the reader to reinstall a sound file.
         return runtimeError(error);
       }
+      // Readiness is async: the route may abort while it is pending. Re-check
+      // before any native invocation so an abandoned route launches nothing.
+      if (input.signal.aborted) return { ok: false, error: "Text generation cancelled.", denialReason: "CANCELLED" };
       if (!ready) return notReady(backend.modelId);
       // The task interpreter owns generation mode AND interpretation: the
       // adapter executes raw model output and never parses it. A task without
@@ -225,12 +236,18 @@ function embeddingRuntime(
     available: () => managerReady(manager, backend.modelId),
     servesTask: servesRoles(backend.taskRoles),
     invoke: async (input) => {
+      // A route cancelled before dispatch launches no native work and spends
+      // no readiness probe.
+      if (input.signal.aborted) return { ok: false, error: "Embedding cancelled.", denialReason: "CANCELLED" };
       let ready: boolean;
       try {
         ready = await backend.isReady();
       } catch (error) {
         return runtimeError(error);
       }
+      // Readiness is async: the route may abort while it is pending. Re-check
+      // before any native invocation so an abandoned route launches nothing.
+      if (input.signal.aborted) return { ok: false, error: "Embedding cancelled.", denialReason: "CANCELLED" };
       if (!ready) return notReady(backend.modelId);
       const interpreter = interpreterFor(input.taskId);
       if (interpreter === undefined || interpreter.generation !== "typed") {

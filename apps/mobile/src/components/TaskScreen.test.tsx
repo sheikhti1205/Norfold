@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TaskScreen, type TaskScreenProps } from "./TaskScreen";
@@ -80,5 +81,45 @@ describe("TaskScreen", () => {
     expect(actions).toBeTruthy();
     expect(actions?.disabled).toBe(true);
     expect(document.body.contains(actions)).toBe(true);
+  });
+});
+
+describe("TaskScreen compact header contract", () => {
+  const css = readFileSync("src/components/TaskScreen.css", "utf8");
+
+  function rule(selector: string): string {
+    const start = css.indexOf(`${selector} {`);
+    expect(start, selector).toBeGreaterThanOrEqual(0);
+    return css.slice(start).split("}")[0]!;
+  }
+
+  it("spends the shell's vertical safe area exactly once", () => {
+    // .fb-app-viewport already pads the routed area at the top and bottom.
+    // A second inset here would double the shell's own padding.
+    expect(css).not.toContain("safe-area-inset-top");
+    expect(css).not.toContain("safe-area-inset-bottom");
+    expect(rule(".fb-task-screen-header")).toMatch(/padding-block:\s*8px/);
+  });
+
+  it("keeps one compact navigation row with 48px Back and action targets", () => {
+    const bar = rule(".fb-task-screen-bar");
+    expect(bar).toMatch(/min-height:\s*48px/);
+    expect(bar).toMatch(/grid-template-columns:[\s\S]*minmax\(0,\s*auto\)/);
+
+    const back = rule(".fb-task-screen-back");
+    expect(back).toMatch(/min-width:\s*48px/);
+    expect(back).toMatch(/min-height:\s*48px/);
+
+    const actions = rule(".fb-task-screen-actions");
+    expect(actions).toMatch(/min-width:\s*48px/);
+    expect(actions).toMatch(/min-height:\s*48px/);
+  });
+
+  it("keeps the title centred and ellipsized instead of overflowing at large text", () => {
+    const title = rule(".fb-task-screen-title");
+    expect(title).toMatch(/text-align:\s*center/);
+    expect(title).toMatch(/overflow:\s*hidden/);
+    expect(title).toMatch(/text-overflow:\s*ellipsis/);
+    expect(title).toMatch(/white-space:\s*nowrap/);
   });
 });

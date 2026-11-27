@@ -47,7 +47,10 @@ const SPECS: Readonly<Record<AiTaskId, AiTaskSpec>> = {
     maxBytes: 8_192,
     maxImages: 0,
     runtimes: ["deterministic-local", "local-text"],
-    timeoutMs: 8_000,
+    // Report extraction includes model initialization and structured
+    // generation, so it gets a larger finite budget than the other narrow
+    // tasks. Every other budget is unchanged.
+    timeoutMs: 15_000,
     schema: "report-slots/v1",
     maxInputChars: 2000,
     maxOutputTokens: 256,

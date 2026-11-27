@@ -12,11 +12,20 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { publishReportMock, suggestFieldsMock, suggestCategoryMock, nlHelperStateMock, photo, nativeMedia } =
+const {
+  publishReportMock,
+  suggestFieldsMock,
+  suggestCategoryMock,
+  fieldComposerMock,
+  nlHelperStateMock,
+  photo,
+  nativeMedia,
+} =
   vi.hoisted(() => ({
     publishReportMock: vi.fn(),
     suggestFieldsMock: vi.fn(),
     suggestCategoryMock: vi.fn(),
+    fieldComposerMock: vi.fn(),
     nlHelperStateMock: vi.fn(),
     photo: {
       isNativeCameraAvailable: vi.fn(() => false),
@@ -60,8 +69,14 @@ vi.mock("../services/reportFieldSuggestions", async (importOriginal) => {
 vi.mock("../services/liveNarrowTasks", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/liveNarrowTasks")>();
   // The device probe is the whole point of these tests: inject the state
-  // instead of asking a runtime that does not exist under jsdom.
-  return { ...actual, nlHelperState: () => nlHelperStateMock() };
+  // instead of asking a runtime that does not exist under jsdom. The field
+  // composer is the seam where the route's own TIMEOUT receipt is still
+  // visible before the op flattens it.
+  return {
+    ...actual,
+    nlHelperState: () => nlHelperStateMock(),
+    generateForFieldsLive: (...args: unknown[]) => fieldComposerMock(...args),
+  };
 });
 vi.mock("../services/categorySuggestion", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/categorySuggestion")>();
@@ -69,6 +84,8 @@ vi.mock("../services/categorySuggestion", async (importOriginal) => {
 });
 
 import { CreateReport } from "./CreateReport";
+import { LocalRouteError } from "../services/liveNarrowTasks";
+import type { GenerateFn } from "../services/ai/types";
 import { NEEDLE_DESCRIPTOR } from "../services/ai/modelDescriptors";
 import { clearDraft, saveDraft } from "../services/reportDraft";
 import { clearPhotoStore } from "../services/photoStore";
@@ -132,6 +149,7 @@ beforeEach(() => {
   publishReportMock.mockReset();
   suggestFieldsMock.mockReset();
   suggestCategoryMock.mockReset();
+  fieldComposerMock.mockReset();
   nlHelperStateMock.mockReset();
   // Default: the helper is installed and works. The device states are their own
   // test below — a failure must say what the device is, not what the text is not.
@@ -187,7 +205,9 @@ describe("CreateReport field suggestions from what is written", () => {
   it("shows source-labelled chips and applies one field while keeping others reviewable", async () => {
     await requestSuggestions("Black umbrella lost yesterday near the central market.");
     expect(screen.getByText("Suggested title")).toBeTruthy();
-    expect(screen.getByText("Suggested category")).toBeTruthy();
+    // The optional category op now runs after the field op settles; its chip
+    // arrives in that follow-up.
+    expect(await screen.findByText("Suggested category")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Use this title" }));
     expect((screen.getByLabelText(/what did you lose/i) as HTMLInputElement).value).toBe("Black umbrella");
@@ -200,6 +220,9 @@ describe("CreateReport field suggestions from what is written", () => {
 
   it("Keep sends nothing: no setters, no network, no publish", async () => {
     await requestSuggestions("Black umbrella lost yesterday.");
+    // The category follow-up is a serial second op: wait for its chip so this
+    // test observes the settled single category run, not a mid-flight state.
+    await screen.findByText("Suggested category");
     const callsBefore = suggestFieldsMock.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: "Use this title" }));
     // Keep the description (title chip already resolved away, so the first
@@ -224,7 +247,8 @@ describe("CreateReport field suggestions from what is written", () => {
    */
   it("the category Keep resolves its own suggestion and sends nothing", async () => {
     await requestSuggestions("Black umbrella lost yesterday near the central market.");
-    expect(screen.getByText("Suggested category")).toBeTruthy();
+    // The category card arrives after the serial classify op settles.
+    expect(await screen.findByText("Suggested category")).toBeTruthy();
     const callsBefore = suggestFieldsMock.mock.calls.length;
 
     const categoryCard = screen.getByRole("button", { name: "Use this category" }).parentElement;
@@ -333,9 +357,11 @@ describe("CreateReport field suggestions from what is written", () => {
     fireEvent.click(suggestButton());
     fireEvent.click(screen.getByRole("button", { name: "Stop" }));
     await screen.findByText("Suggestion stopped.");
-    // No retry, no second op, no chips, no publish.
+    // No retry, no chips, no publish. The category op is serial behind the
+    // field op, so stopping while the field op is in flight means it never
+    // starts at all.
     expect(suggestFieldsMock.mock.calls.length).toBe(1);
-    expect(suggestCategoryMock.mock.calls.length).toBe(1);
+    expect(suggestCategoryMock.mock.calls.length).toBe(0);
     expect(screen.queryByText("Suggested title")).toBeNull();
     expect(publishReportMock).not.toHaveBeenCalled();
   });
@@ -387,6 +413,7 @@ describe("CreateReport field suggestions from what is written", () => {
       expect.arrayContaining(["extract-report-fields", "classify-category"]),
     );
     await requestSuggestions("Black umbrella lost yesterday near the central market.");
+    await waitFor(() => expect(suggestCategoryMock).toHaveBeenCalledTimes(1));
     for (const op of [suggestFieldsMock, suggestCategoryMock]) {
       const profile = op.mock.calls[0]![2] as { id: string; thoughtEnvelope?: unknown };
       expect(profile.id).toBe(NEEDLE_DESCRIPTOR.modelId);
@@ -465,5 +492,161 @@ describe("CreateReport field suggestions from what is written", () => {
     expect(screen.queryByText("Suggested category")).toBeNull();
     expect(screen.queryByText(/Couldn't get a suggestion this time/i)).toBeNull();
     expect(screen.queryByText("Suggestion stopped.")).toBeNull();
+  });
+
+  it("runs the field extraction first and never starts category before it settles", async () => {
+    // One inference lease: ApplicationAiService.route rejects a competing
+    // route as busy while the first is still settling. The deferred field
+    // route proves the optional category op is not even started early.
+    let releaseFields!: (value: unknown) => void;
+    suggestFieldsMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseFields = resolve;
+        }),
+    );
+    render(<CreateReport />);
+    await screen.findByRole("toolbar", { name: /description formatting/i });
+    fireEvent.change(screen.getByLabelText(/what did you lose/i), {
+      target: { value: "Black umbrella lost yesterday." },
+    });
+    fireEvent.click(suggestButton());
+    await waitFor(() => expect(suggestFieldsMock).toHaveBeenCalledTimes(1));
+    expect(suggestCategoryMock).not.toHaveBeenCalled();
+
+    releaseFields(FIELDS_OK);
+    await screen.findByText("Black umbrella");
+    await waitFor(() => expect(suggestCategoryMock).toHaveBeenCalledTimes(1));
+    expect(suggestFieldsMock.mock.invocationCallOrder[0]).toBeLessThan(
+      suggestCategoryMock.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("never starts a second op for a replaced attempt whose field result lands late", async () => {
+    let releaseFirst!: (value: unknown) => void;
+    suggestFieldsMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseFirst = resolve;
+        }),
+    );
+    render(<CreateReport />);
+    await screen.findByRole("toolbar", { name: /description formatting/i });
+    const input = screen.getByLabelText(/what did you lose/i);
+    fireEvent.change(input, { target: { value: "first text" } });
+    fireEvent.click(suggestButton());
+    await waitFor(() => expect(suggestFieldsMock).toHaveBeenCalledTimes(1));
+
+    // A newer attempt supersedes the deferred one before it settles.
+    fireEvent.change(input, { target: { value: "second text" } });
+    fireEvent.click(suggestButton());
+    await screen.findByText("Black umbrella");
+    await waitFor(() => expect(suggestCategoryMock).toHaveBeenCalledTimes(1));
+
+    // The replaced attempt's late field result is stale: it renders nothing
+    // and must not launch the serial category op under the newer attempt.
+    releaseFirst({
+      ok: true,
+      value: {
+        suggestions: [
+          { field: "title", suggestedValue: "Stale title", source: "extract-report-fields" },
+        ],
+        droppedCategory: false,
+        action: { action: "NONE" },
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByText("Stale title")).toBeNull();
+    expect(suggestCategoryMock.mock.calls.length).toBe(1);
+  });
+
+  it("skips the optional category after a field-route timeout", async () => {
+    // Production contract: `extract-report-fields` collapses every non-abort
+    // engine failure into RUNTIME_ERROR, so a route timeout is only still
+    // visible as the receipt thrown at the generate seam. A timed-out field
+    // route very likely still holds the native lease until it settles, so the
+    // category op must not be started into that window.
+    fieldComposerMock.mockRejectedValueOnce(
+      new LocalRouteError("TIMEOUT", "The runtime exceeded its bound."),
+    );
+    suggestFieldsMock.mockImplementationOnce(async (generate: GenerateFn) => {
+      try {
+        await generate("prompt", { maxOutputTokens: 8, temperature: 0 });
+      } catch {
+        // Mirrors the op: the thrown receipt becomes the same RUNTIME_ERROR
+        // every other engine failure produces.
+      }
+      return {
+        ok: false,
+        error: { errorClass: "RUNTIME_ERROR", diagnostic: "FIELDS_GENERATION_FAILED" },
+      };
+    });
+    render(<CreateReport />);
+    await screen.findByRole("toolbar", { name: /description formatting/i });
+    fireEvent.change(screen.getByLabelText(/what did you lose/i), {
+      target: { value: "Black umbrella lost yesterday." },
+    });
+    fireEvent.click(suggestButton());
+
+    await screen.findByText(/Couldn't get a suggestion this time/i);
+    // A follow-up started into the settling lease would only fail busy; give it
+    // a full tick to prove it never starts.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fieldComposerMock).toHaveBeenCalledTimes(1);
+    expect(suggestCategoryMock).not.toHaveBeenCalled();
+    expect(publishReportMock).not.toHaveBeenCalled();
+  });
+
+  it("does not ask for a category twice when the field result already assigns one", async () => {
+    suggestFieldsMock.mockImplementation(
+      cancellable({
+        ok: true,
+        value: {
+          suggestions: [
+            { field: "title", suggestedValue: "Black umbrella", source: "extract-report-fields" },
+            { field: "category", suggestedValue: "Keys", source: "extract-report-fields" },
+          ],
+          droppedCategory: false,
+          action: { action: "NONE" },
+        },
+      }),
+    );
+    render(<CreateReport />);
+    await screen.findByRole("toolbar", { name: /description formatting/i });
+    fireEvent.change(screen.getByLabelText(/what did you lose/i), {
+      target: { value: "Black umbrella lost yesterday." },
+    });
+    fireEvent.click(suggestButton());
+
+    // The extraction's own released category is reviewable; the standalone
+    // classifier would only repeat it, so it is never started.
+    await screen.findByText("Suggested category");
+    expect(screen.getByRole("button", { name: "Use this category" })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("button", { name: /^suggest details$/i })).toBeTruthy());
+    expect(suggestCategoryMock).not.toHaveBeenCalled();
+    expect(publishReportMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps field suggestions reviewable while the optional category is still running", async () => {
+    // The category op can be slow; the field patches must not be held back for
+    // it. Stop still cancels cleanly and the settled field patches survive.
+    suggestCategoryMock.mockImplementation(cancellable(undefined));
+    render(<CreateReport />);
+    await screen.findByRole("toolbar", { name: /description formatting/i });
+    fireEvent.change(screen.getByLabelText(/what did you lose/i), {
+      target: { value: "Black umbrella lost yesterday." },
+    });
+    fireEvent.click(suggestButton());
+
+    await screen.findByText("Black umbrella");
+    expect(screen.getByRole("button", { name: "Use this title" })).toBeTruthy();
+    // The category classify is the only thing still in flight.
+    await waitFor(() => expect(suggestCategoryMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    await screen.findByText("Suggestion stopped.");
+    expect(screen.getByText("Suggested title")).toBeTruthy();
+    expect(screen.queryByText("Suggested category")).toBeNull();
+    expect(publishReportMock).not.toHaveBeenCalled();
   });
 });

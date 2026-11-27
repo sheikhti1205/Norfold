@@ -52,6 +52,21 @@ describe("taskRegistry", () => {
     }
   });
 
+  it("bounds report-field extraction at a finite 15s without widening other tasks", () => {
+    // The larger report budget covers model initialization plus structured
+    // generation. Only extract-report-fields may exceed 10s, and every budget
+    // stays finite.
+    expect(getTaskSpec("extract-report-fields")?.timeoutMs).toBe(15_000);
+    for (const taskId of TASK_IDS) {
+      const timeout = getTaskSpec(taskId)!.timeoutMs;
+      expect(Number.isFinite(timeout)).toBe(true);
+      if (taskId === "extract-report-fields") continue;
+      expect(timeout).toBeLessThanOrEqual(10_000);
+    }
+    expect(getTaskSpec("extract-search-filters")?.timeoutMs).toBe(5_000);
+    expect(getTaskSpec("classify-category")?.timeoutMs).toBe(5_000);
+  });
+
   it("returns undefined for an unknown task id", () => {
     expect(getTaskSpec("teleport")).toBeUndefined();
     expect(isTaskId("teleport")).toBe(false);

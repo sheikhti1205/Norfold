@@ -45,6 +45,14 @@ function install(manager: OfflineModelManager, pin: OfflineAssetPin): void {
   manager.dispatch(pin.modelId, { type: "VERIFY_OK", actualSha256: pin.sha256 });
 }
 
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}
+
 function depsWithFakes(manager: OfflineModelManager): ProductionRuntimeDeps {
   return {
     manager,
@@ -250,5 +258,125 @@ describe("registerProductionRuntimes", () => {
       expect(result.provenance.modelId).toBe(EMBEDDING_PIN.modelId);
       expect(result.value).toEqual({ vectors: [[0.5, -0.25, 0.125, -0.0625]] });
     }
+  });
+
+  it("cancels an already-aborted text route without probing readiness or generating", async () => {
+    const manager = new OfflineModelManager([TEXT_PIN]);
+    install(manager, TEXT_PIN);
+    const controller = new AbortController();
+    controller.abort();
+    let readinessProbes = 0;
+    let nativeCalls = 0;
+    const registry = new RuntimeRegistry();
+    registerProductionRuntimes(registry, {
+      manager,
+      text: {
+        modelId: TEXT_PIN.modelId,
+        runtimeId: "test-text",
+        taskRoles: TEXT_ROLES,
+        isReady: async () => {
+          readinessProbes += 1;
+          return true;
+        },
+        completeStructured: async () => {
+          nativeCalls += 1;
+          return "{}";
+        },
+      },
+    });
+    const outcome = await registry.get(LOCAL_TEXT_RUNTIME_ID)?.invoke({
+      taskId: "extract-report-fields",
+      input: "a wallet found downtown",
+      timeoutMs: 1000,
+      traceId: "trace-aborted-entry",
+      signal: controller.signal,
+    });
+    expect(readinessProbes).toBe(0);
+    expect(nativeCalls).toBe(0);
+    expect(outcome?.ok).toBe(false);
+    if (outcome !== undefined && !outcome.ok) {
+      expect(outcome.denialReason).toBe("CANCELLED");
+    }
+  });
+
+  it("cancels a text route aborted while readiness is pending and never generates", async () => {
+    const manager = new OfflineModelManager([TEXT_PIN]);
+    install(manager, TEXT_PIN);
+    const readiness = deferred<boolean>();
+    const controller = new AbortController();
+    let nativeCalls = 0;
+    let settlements = 0;
+    const registry = new RuntimeRegistry();
+    registerProductionRuntimes(registry, {
+      manager,
+      text: {
+        modelId: TEXT_PIN.modelId,
+        runtimeId: "test-text",
+        taskRoles: TEXT_ROLES,
+        isReady: () => readiness.promise,
+        completeStructured: async () => {
+          nativeCalls += 1;
+          return "{}";
+        },
+      },
+    });
+    const pending = registry.get(LOCAL_TEXT_RUNTIME_ID)!.invoke({
+      taskId: "extract-report-fields",
+      input: "a wallet found downtown",
+      timeoutMs: 1000,
+      traceId: "trace-abort-during-readiness",
+      signal: controller.signal,
+      trackSettlement: () => {
+        settlements += 1;
+      },
+    });
+    controller.abort();
+    readiness.resolve(true);
+    const outcome = await pending;
+    expect(nativeCalls).toBe(0);
+    expect(settlements).toBe(0);
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.denialReason).toBe("CANCELLED");
+  });
+
+  it("cancels an embedding route aborted while readiness is pending and never embeds", async () => {
+    const manager = new OfflineModelManager([EMBEDDING_PIN]);
+    install(manager, EMBEDDING_PIN);
+    const readiness = deferred<boolean>();
+    const controller = new AbortController();
+    let nativeCalls = 0;
+    let settlements = 0;
+    const registry = new RuntimeRegistry();
+    registerProductionRuntimes(registry, {
+      manager,
+      embedding: {
+        modelId: EMBEDDING_PIN.modelId,
+        runtimeId: "test-embedding",
+        taskRoles: ["embed-texts"],
+        dimension: 4,
+        isReady: () => readiness.promise,
+        embed: async (texts: string[]) => {
+          nativeCalls += 1;
+          return texts.map(() => [0.5, -0.25, 0.125, -0.0625]);
+        },
+      },
+    });
+    const pending = registry.get(LOCAL_EMBEDDING_RUNTIME_ID)!.invoke({
+      taskId: "embed-texts",
+      input: { texts: ["red umbrella"] },
+      timeoutMs: 1000,
+      traceId: "trace-embed-abort-during-readiness",
+      signal: controller.signal,
+      trackSettlement: () => {
+        settlements += 1;
+      },
+    });
+    controller.abort();
+    readiness.resolve(true);
+    const outcome = await pending;
+    expect(nativeCalls).toBe(0);
+    expect(settlements).toBe(0);
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.denialReason).toBe("CANCELLED");
   });
 });

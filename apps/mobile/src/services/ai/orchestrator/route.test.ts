@@ -71,6 +71,40 @@ describe("AiOrchestrator.route", () => {
     expect(seen).toEqual(["RESOLVING", "INVOKING", "COMPLETE"]);
   });
 
+  it("hands extract-report-fields its 15s spec budget and never lets a caller raise it", async () => {
+    // The registry is the only budget authority: a route with no caller
+    // timeout uses the spec, and a longer caller timeout is clamped by
+    // Math.min.
+    const budgets: number[] = [];
+    const invoke = vi.fn(async (input: RuntimeInvokeInput): Promise<RuntimeResult> => {
+      budgets.push(input.timeoutMs);
+      return {
+        ok: true,
+        value: { fields: { title: "red umbrella" } },
+        modelId: "local-text",
+        backend: "local-text",
+        runtimeId: "local-text",
+      };
+    });
+    const { runtime } = modelRuntime("local-text", undefined, invoke);
+    const registry = new RuntimeRegistry();
+    registry.register(runtime);
+    const orchestrator = new AiOrchestrator();
+    const input = { text: "xqzzy incomprehensible wobble query 42" };
+    const defaulted = await orchestrator.route("extract-report-fields", input, {
+      traceId: "trace-report-budget-default",
+      registry,
+    });
+    const raised = await orchestrator.route("extract-report-fields", input, {
+      traceId: "trace-report-budget-raised",
+      registry,
+      timeoutMs: 60_000,
+    });
+    expect(defaulted.ok).toBe(true);
+    expect(raised.ok).toBe(true);
+    expect(budgets).toEqual([15_000, 15_000]);
+  });
+
   it("denies a destructive model proposal and records the denial", async () => {
     // Retained tools accept only their narrow data contracts: an action
     // proposal is rejected before it can reach the independent action gate.
