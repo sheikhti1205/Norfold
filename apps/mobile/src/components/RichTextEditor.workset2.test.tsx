@@ -1,16 +1,19 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { createRef } from "react";
 import type { Editor } from "@tiptap/react";
 import { RichTextEditor, markdownToTiptap, tiptapToMarkdown } from "./RichTextEditor";
 import { settleSelectionRender } from "../test-utils/editorSelection";
+import { openSoftKeyboard, renderFocused, restoreSoftKeyboard } from "../test-utils/softKeyboard";
 
+beforeEach(openSoftKeyboard);
+afterEach(restoreSoftKeyboard);
 afterEach(cleanup);
 
 describe("RichTextEditor workset2 mobile layout", () => {
   it("orders label, editor, toolbar, count for mobile", () => {
-    const { container } = render(<RichTextEditor label="Description" value="" onChange={() => {}} />);
+    const { container } = renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} />);
     const root = container.firstElementChild as HTMLElement;
     const order = Array.from(root.children).map((el) => {
       if (el.tagName === "SPAN" && el.textContent === "Description") return "label";
@@ -22,14 +25,17 @@ describe("RichTextEditor workset2 mobile layout", () => {
     expect(order).toEqual(["label", "editor", "toolbar", "count"]);
   });
 
-  it("keeps the toolbar on one row with 48px touch targets and no scroller", () => {
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} />);
+  it("keeps the toolbar on one unwrapped row with 48px touch targets", () => {
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} />);
     const toolbar = screen.getByRole("toolbar", { name: "Description formatting" });
     // jsdom has no layout, so geometry is verified in the deployed build. The
-    // slot contract below is what makes one non-scrolling row possible.
+    // slot contract below is what keeps the row from wrapping; the six
+    // composing slots pan inside their own labelled group so 320px never
+    // squeezes a target.
     expect(toolbar.className).not.toMatch(/overflow-x-auto/);
     expect(toolbar.className).not.toMatch(/flex-wrap/);
     expect(toolbar.className).toMatch(/flex-nowrap/);
+    expect(toolbar.querySelectorAll('[data-testid="rich-text-rail-scroll"] button')).toHaveLength(6);
     const names: Array<string | RegExp> = ["Undo", /^Block type: Body$/, "Bold", "Italic", "Bullets", "Link", "More"];
     const slots = toolbar.querySelectorAll("button");
     expect(slots).toHaveLength(names.length);
@@ -46,7 +52,7 @@ describe("RichTextEditor workset2 visual marks", () => {
   it("bolds the selected word with a visual mark and no literal markdown", () => {
     const seen: string[] = [];
     const ref = createRef<Editor | null>();
-    const { container } = render(
+    const { container } = renderFocused(
       <RichTextEditor label="Description" value="hello world" onChange={(md) => seen.push(md)} editorRef={ref} />,
     );
     expect(ref.current).toBeTruthy();
@@ -64,7 +70,7 @@ describe("RichTextEditor workset2 visual marks", () => {
 
   it("keeps combined Bold and Italic on only the selected word across Markdown restore", () => {
     const ref = createRef<Editor | null>();
-    const { container } = render(<RichTextEditor label="Description" value="The phone has a black case." onChange={() => {}} editorRef={ref} />);
+    const { container } = renderFocused(<RichTextEditor label="Description" value="The phone has a black case." onChange={() => {}} editorRef={ref} />);
     act(() => ref.current?.commands.setTextSelection({ from: 17, to: 22 }));
     fireEvent.click(screen.getByRole("button", { name: "Bold" }));
     fireEvent.click(screen.getByRole("button", { name: "Italic" }));
@@ -78,7 +84,7 @@ describe("RichTextEditor workset2 visual marks", () => {
     try {
       const seen: string[] = [];
       const ref = createRef<Editor | null>();
-      const { container } = render(
+      const { container } = renderFocused(
         <RichTextEditor label="Description" value="see map here" onChange={(md) => seen.push(md)} editorRef={ref} />,
       );
       expect(ref.current).toBeTruthy();
@@ -107,7 +113,7 @@ describe("RichTextEditor workset2 visual marks", () => {
 
   it("leaves the selected word unchanged when the link sheet is cancelled", async () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="see map here" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="see map here" onChange={() => {}} editorRef={ref} />);
     act(() => ref.current?.commands.setTextSelection({ from: 5, to: 8 }));
     await settleSelectionRender();
     fireEvent.click(screen.getByRole("button", { name: "Link" }));
@@ -117,7 +123,7 @@ describe("RichTextEditor workset2 visual marks", () => {
 
   it("disables Link at an unlinked caret and rejects unsafe URLs without changing marks", async () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="see map here" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="see map here" onChange={() => {}} editorRef={ref} />);
     expect((screen.getByRole("button", { name: "Link" }) as HTMLButtonElement).disabled).toBe(true);
     act(() => ref.current?.commands.setTextSelection({ from: 5, to: 8 }));
     await settleSelectionRender();
@@ -133,7 +139,7 @@ describe("RichTextEditor selection preservation (toolbar focus loss)", () => {
   it("bolds only the originally selected word after the visible selection collapses (focus moved to toolbar)", () => {
     const seen: string[] = [];
     const ref = createRef<Editor | null>();
-    render(
+    renderFocused(
       <RichTextEditor label="Description" value="hello world" onChange={(md) => seen.push(md)} editorRef={ref} />,
     );
     expect(ref.current).toBeTruthy();
@@ -154,7 +160,7 @@ describe("RichTextEditor selection preservation (toolbar focus loss)", () => {
   it("italicizes only the originally selected word after the visible selection collapses", () => {
     const seen: string[] = [];
     const ref = createRef<Editor | null>();
-    render(
+    renderFocused(
       <RichTextEditor label="Description" value="hello world" onChange={(md) => seen.push(md)} editorRef={ref} />,
     );
     expect(ref.current).toBeTruthy();
@@ -174,7 +180,7 @@ describe("RichTextEditor selection preservation (toolbar focus loss)", () => {
   it("applies the link to the pre-dialog range even though focus moved to the toolbar/dialog", async () => {
     const seen: string[] = [];
     const ref = createRef<Editor | null>();
-    render(
+    renderFocused(
       <RichTextEditor label="Description" value="see map here" onChange={(md) => seen.push(md)} editorRef={ref} />,
     );
     act(() => {

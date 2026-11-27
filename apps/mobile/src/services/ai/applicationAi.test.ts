@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ApplicationAiService, compatibilityOf, DEVICE_INCOMPATIBLE_REASON } from "./applicationAi";
 import { localSearchFailureOf } from "./localSearchDiagnosis";
 import { NEEDLE_DESCRIPTOR, type ModelDescriptor } from "./modelDescriptors";
-import { NEEDLE_MODEL_ID } from "./needle/embedder";
+import { NEEDLE_MODEL_ID, NeedleLowMemoryError } from "./needle/embedder";
 import { CapacitorModelDownloadDriver, type ModelDownloadDriver } from "./download/driver";
 import { appActivityBusy } from "../appActivity";
 
@@ -403,5 +403,214 @@ describe("local intelligence lifecycle", () => {
     // A task with no interpreter never succeeds silently.
     const unknown = await service.route("not-a-task" as never, { prompt: "x" }, { traceId: "t" });
     expect(unknown.ok).toBe(false);
+  });
+});
+
+describe("report AI prewarm", () => {
+  it("is a no-op on web (no native seam, no download)", async () => {
+    const service = new ApplicationAiService({ android: false });
+    await service.ready;
+    await expect(service.prewarmNeedle()).resolves.toBe(false);
+  });
+
+  it("loads an installed and verified model only: no download, no generation", async () => {
+    const p = platform();
+    const service = new ApplicationAiService({ android: true, ...p });
+    await service.ready;
+    await service.download(NEEDLE_MODEL_ID);
+    p.calls.length = 0;
+
+    await expect(service.prewarmNeedle()).resolves.toBe(true);
+    expect(p.calls).toEqual(["needle-load"]);
+    expect(service.residency.owner).toBe("needle");
+  });
+
+  it("does not load when the model is not installed and never throws", async () => {
+    const p = platform();
+    const service = new ApplicationAiService({ android: true, ...p });
+    await service.ready;
+
+    await expect(service.prewarmNeedle()).resolves.toBe(false);
+    expect(p.calls).not.toContain("needle-load");
+  });
+
+  it("shares one load with a suggestion that arrives while the warm-up is pending", async () => {
+    const p = platform();
+    let resident = false;
+    let releaseLoad!: () => void;
+    const loadGate = new Promise<void>((resolve) => { releaseLoad = resolve; });
+    let loads = 0;
+    p.needle.isNeedleAvailable = async () => resident;
+    p.needle.loadModel = async () => {
+      loads += 1;
+      await loadGate;
+      resident = true;
+      return 2;
+    };
+    const service = new ApplicationAiService({ android: true, ...p });
+    await service.ready;
+    await service.download(NEEDLE_MODEL_ID);
+
+    const warm = service.prewarmNeedle();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // The route begins while the load is still pending. It must join the same
+    // warm-up, not fail busy and not start a second load.
+    const flight = service.route("extract-report-fields", { prompt: "red umbrella" }, { traceId: "t" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    releaseLoad();
+
+    await expect(warm).resolves.toBe(true);
+    await expect(flight).resolves.toMatchObject({ ok: true });
+    expect(loads).toBe(1);
+  });
+
+  it("does not resurrect the resident when an account reset lands during the load", async () => {
+    const p = platform();
+    let resident = false;
+    let releaseLoad!: () => void;
+    const loadGate = new Promise<void>((resolve) => { releaseLoad = resolve; });
+    p.needle.isNeedleAvailable = async () => resident;
+    p.needle.loadModel = async () => {
+      await loadGate;
+      resident = true;
+      return 2;
+    };
+    const service = new ApplicationAiService({ android: true, ...p });
+    await service.ready;
+    await service.download(NEEDLE_MODEL_ID);
+
+    const warm = service.prewarmNeedle();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await service.resetForAccount();
+    releaseLoad();
+
+    await expect(warm).resolves.toBe(false);
+    expect(service.residency.owner).toBe("none");
+  });
+
+  it("does not resurrect the resident when a concurrent removal releases it", async () => {
+    const p = platform();
+    let resident = false;
+    let releaseLoad!: () => void;
+    const loadGate = new Promise<void>((resolve) => { releaseLoad = resolve; });
+    p.needle.isNeedleAvailable = async () => resident;
+    p.needle.loadModel = async () => {
+      await loadGate;
+      resident = true;
+      return 2;
+    };
+    const service = new ApplicationAiService({ android: true, ...p });
+    await service.ready;
+    await service.download(NEEDLE_MODEL_ID);
+
+    const warm = service.prewarmNeedle();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await service.remove(NEEDLE_MODEL_ID);
+    releaseLoad();
+
+    await expect(warm).resolves.toBe(false);
+    expect(service.residency.owner).toBe("none");
+    expect(service.manager.statusOf(NEEDLE_MODEL_ID)?.download).toBe("not-installed");
+  });
+
+  it("maps the native low-memory refusal to a LOW_MEMORY route denial", async () => {
+    const p = platform();
+    p.needle.loadModel = async () => { throw new NeedleLowMemoryError(); };
+    const service = new ApplicationAiService({ android: true, ...p });
+    await service.ready;
+    await service.download(NEEDLE_MODEL_ID);
+
+    const result = await service.route("extract-report-fields", { prompt: "red umbrella" }, { traceId: "t" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.denialReason).toBe("LOW_MEMORY");
+    // Warm-up is swallowed: report entry must not surface an AI error.
+    await expect(service.prewarmNeedle()).resolves.toBe(false);
+  });
+});
+
+describe("structured generation readiness", () => {
+  /**
+   * The route probes readiness (loads), then the generation seam probes again.
+   * The seam's probe can lose the resident to a reset and `ensureNeedle`
+   * reports `false` rather than resurrecting it. Tool installation and the
+   * completion call must not start on that flight.
+   *
+   * The mock engine's residency probe always answers "not resident", so both
+   * readiness probes enter the load path: the first load is immediate and the
+   * second is the boundary under test. That second load reports
+   * `secondLoadStarted` before it blocks, so the test resumes at the exact
+   * boundary instead of sleeping and hoping it arrived.
+   */
+  function gatedSecondLoad() {
+    const p = platform();
+    let releaseLoad!: () => void;
+    const loadGate = new Promise<void>((resolve) => { releaseLoad = resolve; });
+    let secondLoadStarted!: () => void;
+    const started = new Promise<void>((resolve) => { secondLoadStarted = resolve; });
+    let loads = 0;
+    let toolStarts = 0;
+    p.needle.isNeedleAvailable = async () => false;
+    p.needle.loadModel = async () => {
+      loads += 1;
+      if (loads === 2) {
+        secondLoadStarted();
+        await loadGate;
+      }
+      return 2;
+    };
+    p.needle.initTools = async () => { toolStarts += 1; };
+    p.needle.completeJson = async () => {
+      toolStarts += 1;
+      return JSON.stringify({ function_calls: [{ name: "record_item", arguments: { title: "red umbrella" } }] });
+    };
+    return { p, releaseLoad, started, loads: () => loads, toolStarts: () => toolStarts };
+  }
+
+  it("does not install tools or complete when a reset retires readiness between probe and generation", async () => {
+    const { p, releaseLoad, started, loads, toolStarts } = gatedSecondLoad();
+    const service = new ApplicationAiService({ android: true, ...p });
+    await service.ready;
+    await service.download(NEEDLE_MODEL_ID);
+
+    const flight = service.route("extract-report-fields", { prompt: "red umbrella" }, { traceId: "t" });
+    // Explicit barrier: the seam's readiness probe has re-entered the load path.
+    await started;
+    expect(loads()).toBe(2);
+
+    // Reset while that load is blocked. `resetForAccount` settles only after
+    // tracked native work settles, so reaching the assertions below proves the
+    // seam guard has already run.
+    const resetting = service.resetForAccount();
+    releaseLoad();
+    await resetting;
+    await expect(flight).resolves.toMatchObject({ ok: false });
+    expect(toolStarts()).toBe(0);
+    expect(service.residency.owner).toBe("none");
+  });
+
+  it("does not install tools or complete when the route is cancelled after the probe", async () => {
+    const { p, releaseLoad, started, loads, toolStarts } = gatedSecondLoad();
+    const service = new ApplicationAiService({ android: true, ...p });
+    await service.ready;
+    await service.download(NEEDLE_MODEL_ID);
+
+    const controller = new AbortController();
+    const flight = service.route(
+      "extract-report-fields",
+      { prompt: "red umbrella" },
+      { traceId: "t", signal: controller.signal },
+    );
+    await started;
+    expect(loads()).toBe(2);
+
+    controller.abort();
+    // Join the still-blocked readiness load BEFORE releasing it: the warm-up
+    // resolves only after the seam's abort guard has run, so "no tool work" is
+    // proven rather than merely sampled before the guard could execute.
+    const joined = service.prewarmNeedle();
+    releaseLoad();
+    await joined;
+    await expect(flight).resolves.toMatchObject({ ok: false, denialReason: "CANCELLED" });
+    expect(toolStarts()).toBe(0);
   });
 });

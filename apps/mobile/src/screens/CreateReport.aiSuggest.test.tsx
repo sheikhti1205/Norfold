@@ -18,6 +18,7 @@ const {
   suggestCategoryMock,
   fieldComposerMock,
   nlHelperStateMock,
+  prewarmNeedleMock,
   photo,
   nativeMedia,
 } =
@@ -27,6 +28,7 @@ const {
     suggestCategoryMock: vi.fn(),
     fieldComposerMock: vi.fn(),
     nlHelperStateMock: vi.fn(),
+    prewarmNeedleMock: vi.fn(),
     photo: {
       isNativeCameraAvailable: vi.fn(() => false),
       takePhoto: vi.fn(),
@@ -42,10 +44,17 @@ const {
     },
   }));
 
-vi.mock("@capacitor/core", () => ({
-  Capacitor: { isNativePlatform: () => false, getPlatform: () => "web" },
-  Plugins: { ShortLinkResolver: { resolve: vi.fn() } },
-}));
+// Report AI is Android-only; these tests exercise that surface.
+vi.mock("@capacitor/core", () => {
+  // `utils/location` registers the short-link resolver at module scope on
+  // Android, so the partial core mock must expose the real export.
+  const shortLinks = { resolve: vi.fn(async ({ url }: { url: string }) => ({ url })) };
+  return {
+    Capacitor: { isNativePlatform: () => true, getPlatform: () => "android" },
+    registerPlugin: (name: string) => name === "ShortLinkResolver" ? shortLinks : {},
+    Plugins: { ShortLinkResolver: shortLinks },
+  };
+});
 vi.mock("react-router", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "u1", username: "tester" } }) }));
 vi.mock("../services/posts", async (importOriginal) => {
@@ -81,6 +90,15 @@ vi.mock("../services/liveNarrowTasks", async (importOriginal) => {
 vi.mock("../services/categorySuggestion", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/categorySuggestion")>();
   return { ...actual, suggestCategoryForText: (...args: unknown[]) => suggestCategoryMock(...args) };
+});
+// The load-only warm-up runs on entry; a real service would construct the
+// native runtime seams under jsdom.
+vi.mock("../services/ai/applicationAi", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../services/ai/applicationAi")>();
+  return {
+    ...actual,
+    getApplicationAi: () => ({ android: true, prewarmNeedle: prewarmNeedleMock }),
+  };
 });
 
 import { CreateReport } from "./CreateReport";
@@ -151,6 +169,8 @@ beforeEach(() => {
   suggestCategoryMock.mockReset();
   fieldComposerMock.mockReset();
   nlHelperStateMock.mockReset();
+  prewarmNeedleMock.mockReset();
+  prewarmNeedleMock.mockResolvedValue(true);
   // Default: the helper is installed and works. The device states are their own
   // test below — a failure must say what the device is, not what the text is not.
   nlHelperStateMock.mockResolvedValue("ready");
@@ -196,7 +216,7 @@ function suggestButton(): HTMLElement {
 async function requestSuggestions(itemText: string) {
   seedDescription(itemText);
   render(<CreateReport />);
-  await screen.findByRole("toolbar", { name: /description formatting/i });
+  await screen.findByRole("textbox", { name: "Description" });
   fireEvent.click(suggestButton());
   await screen.findByText("Black umbrella");
 }
@@ -266,7 +286,7 @@ describe("CreateReport field suggestions from what is written", () => {
 
   it("a declined replace keeps the suggestion visible instead of resolving it away", async () => {
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), { target: { value: "My own title" } });
     fireEvent.click(suggestButton());
     await screen.findByText("Black umbrella");
@@ -321,7 +341,7 @@ describe("CreateReport field suggestions from what is written", () => {
     });
     suggestFieldsMock.mockImplementationOnce(() => firstGate);
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     const input = screen.getByLabelText(/what did you lose/i);
     fireEvent.change(input, { target: { value: "first text" } });
     fireEvent.click(suggestButton());
@@ -350,7 +370,7 @@ describe("CreateReport field suggestions from what is written", () => {
     suggestFieldsMock.mockImplementation(cancellable(undefined));
     suggestCategoryMock.mockImplementation(cancellable(undefined));
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: "Black umbrella lost yesterday." },
     });
@@ -383,7 +403,7 @@ describe("CreateReport field suggestions from what is written", () => {
       cancellable({ ok: true, value: { suggestion: null, dropped: true } }),
     );
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: "Black umbrella lost yesterday." },
     });
@@ -431,7 +451,7 @@ describe("CreateReport field suggestions from what is written", () => {
       }),
     );
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: "Black umbrella lost yesterday." },
     });
@@ -450,7 +470,7 @@ describe("CreateReport field suggestions from what is written", () => {
     suggestFieldsMock.mockImplementation(cancellable(engineFailure));
     suggestCategoryMock.mockImplementation(cancellable(engineFailure));
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: "Black umbrella lost yesterday." },
     });
@@ -470,7 +490,7 @@ describe("CreateReport field suggestions from what is written", () => {
     // that changes the outcome, so the sentence names it instead of the text.
     nlHelperStateMock.mockResolvedValue("not-set-up");
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: "Black umbrella lost yesterday." },
     });
@@ -506,7 +526,7 @@ describe("CreateReport field suggestions from what is written", () => {
         }),
     );
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: "Black umbrella lost yesterday." },
     });
@@ -531,7 +551,7 @@ describe("CreateReport field suggestions from what is written", () => {
         }),
     );
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     const input = screen.getByLabelText(/what did you lose/i);
     fireEvent.change(input, { target: { value: "first text" } });
     fireEvent.click(suggestButton());
@@ -582,7 +602,7 @@ describe("CreateReport field suggestions from what is written", () => {
       };
     });
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: "Black umbrella lost yesterday." },
     });
@@ -612,7 +632,7 @@ describe("CreateReport field suggestions from what is written", () => {
       }),
     );
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: "Black umbrella lost yesterday." },
     });
@@ -632,7 +652,7 @@ describe("CreateReport field suggestions from what is written", () => {
     // it. Stop still cancels cleanly and the settled field patches survive.
     suggestCategoryMock.mockImplementation(cancellable(undefined));
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: "Black umbrella lost yesterday." },
     });

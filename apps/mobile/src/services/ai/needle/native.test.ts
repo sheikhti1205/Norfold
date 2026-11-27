@@ -3,7 +3,12 @@
  * fails closed without the engine. Fake bridge — no JNI, no weights.
  */
 import { describe, expect, it } from "vitest";
-import { NEEDLE_MODEL_ID, type NativeNeedleBridge } from "./embedder";
+import {
+  NEEDLE_MODEL_ID,
+  NeedleLowMemoryError,
+  isNeedleLowMemoryError,
+  type NativeNeedleBridge,
+} from "./embedder";
 import { createNativeNeedleEmbedder } from "./native";
 
 function fakeLoadableBridge(opts?: {
@@ -43,5 +48,21 @@ describe("createNativeNeedleEmbedder", () => {
   it("fails closed while weights are absent", async () => {
     const bridge = fakeLoadableBridge({ loadThrows: true });
     await expect(createNativeNeedleEmbedder(bridge)).rejects.toThrow(/model_not_installed/);
+  });
+});
+
+describe("isNeedleLowMemoryError", () => {
+  it("recognises the plugin's code, the typed error, and the native message", () => {
+    expect(isNeedleLowMemoryError(new NeedleLowMemoryError())).toBe(true);
+    expect(isNeedleLowMemoryError({ code: "insufficient_memory" })).toBe(true);
+    expect(isNeedleLowMemoryError({ code: "LOW_MEMORY" })).toBe(true);
+    expect(isNeedleLowMemoryError(new Error("insufficient_memory: load refused"))).toBe(true);
+    expect(isNeedleLowMemoryError(new Error("Not enough free memory to load the on-device helper right now."))).toBe(true);
+  });
+
+  it("does not claim an unrelated runtime failure", () => {
+    expect(isNeedleLowMemoryError(new Error("runtime_load_failed"))).toBe(false);
+    expect(isNeedleLowMemoryError({ code: "runtime_unavailable" })).toBe(false);
+    expect(isNeedleLowMemoryError(null)).toBe(false);
   });
 });

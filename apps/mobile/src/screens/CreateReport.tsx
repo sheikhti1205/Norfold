@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import { Capacitor } from "@capacitor/core";
 import { isReleasedCategory, type Category, type PostType } from "@norfold/shared";
 import { useAuth } from "../auth";
 import { Button } from "../components/Button";
@@ -49,7 +50,8 @@ import {
   generateForFieldsLive,
   nlHelperState,
 } from "../services/liveNarrowTasks";
-import { NL_SUGGESTION_FAILURE_NOTE } from "./nlHelperCopy";
+import { NL_SUGGESTION_FAILURE_NOTE, NL_SUGGESTION_LOW_MEMORY_NOTE } from "./nlHelperCopy";
+import { getApplicationAi } from "../services/ai/applicationAi";
 import { DROPPED_CATEGORY_NOTE } from "../services/reportSuggestionNotes";
 import {
   suggestReportFields,
@@ -233,6 +235,22 @@ const aiSuggestDeps: {
  */
 function isRouteTimeoutError(error: unknown): boolean {
   return error instanceof LocalRouteError && error.denialReason === "TIMEOUT";
+}
+
+/**
+ * The native helper refused the load because the device is under memory
+ * pressure. It is a recoverable "not now", never a missing or broken install.
+ */
+function isRouteLowMemoryError(error: unknown): boolean {
+  return error instanceof LocalRouteError && error.denialReason === "LOW_MEMORY";
+}
+
+/**
+ * Report AI is an Android-only on-device capability: the canonical platform
+ * predicate, not the generic native one (iOS builds do not ship the helper).
+ */
+function reportAiAvailable(): boolean {
+  return Capacitor.isNativePlatform() === true && Capacitor.getPlatform?.() === "android";
 }
 
 /**
@@ -493,6 +511,14 @@ function ReportForm() {
   const traceIdRef = useRef<string | null>(null);
   const descriptionEditorRef = useRef<Editor | null>(null);
   const descriptionLiveRef = useRef(description);
+  // Report AI is Android-only, and opening this form is the eligibility
+  // signal for the load-only warm-up: no download, no generation, and a warm-up
+  // failure stays silent so entering the form never shows an AI error.
+  const reportAiEligible = reportAiAvailable();
+  useEffect(() => {
+    if (!reportAiEligible) return;
+    void getApplicationAi().prewarmNeedle().catch(() => {});
+  }, [reportAiEligible]);
   // --- Suggest details from what is written (§11 narrow helper) -----------
   // The local text/category helper reads the title and description the person
   // already wrote and surfaces reviewable per-field patches.
@@ -653,6 +679,12 @@ function ReportForm() {
     setAiCatSuggestion(null);
     setAiCatDropped(false);
     setAiSuggestResolved({});
+    // The generate seam's own receipts for THIS attempt. They live outside the
+    // `try` because a throw from the op still has to answer with the memory
+    // condition the seam already observed; a `catch` cannot read a binding
+    // scoped to the `try` block.
+    let fieldRouteTimedOut = false;
+    let fieldRouteLowMemory = false;
     try {
       // The on-device router serves ONE inference at a time: a competing route
       // begun while the first is still settling is rejected as busy (the
@@ -660,13 +692,14 @@ function ReportForm() {
       // settles). Run the field extraction first, render it, and only then ask
       // for the optional category — never two native operations at once.
       // The op flattens an engine failure into `RUNTIME_ERROR`, so observe the
-      // route's own timeout receipt at the generate seam before that happens.
-      let fieldRouteTimedOut = false;
+      // route's own timeout and memory receipts at the generate seam before
+      // that happens.
       const generateForFields: GenerateFn = async (prompt, options) => {
         try {
           return await aiSuggestDeps.generateForFields(prompt, options);
         } catch (error) {
           if (isRouteTimeoutError(error)) fieldRouteTimedOut = true;
+          if (isRouteLowMemoryError(error)) fieldRouteLowMemory = true;
           throw error;
         }
       };
@@ -684,6 +717,11 @@ function ReportForm() {
         // No affordance to clear here: the flag is reset at the top of every
         // attempt, so a cancelled field op cannot be observing a live one.
         setAiSuggestError("Suggestion stopped.");
+      } else if (fieldRouteLowMemory) {
+        // Memory pressure is the device's answer, not a missing install: say so
+        // calmly, offer no reinstall, and keep the form usable.
+        setAiSuggestManageModels(false);
+        setAiSuggestError(NL_SUGGESTION_LOW_MEMORY_NOTE);
       } else {
         const note = await aiSuggestFailureNote(gen);
         if (note !== null) setAiSuggestError(note);
@@ -706,6 +744,10 @@ function ReportForm() {
       // skip it. Genuine non-timeout failures still get the category fallback,
       // and the field result (or its failure note) is already rendered.
       if (fieldRouteTimedOut) return;
+      // The same memory condition would refuse the category op too, and the
+      // calm note is already on screen: do not spend a second load or replace
+      // that note with a generic failure.
+      if (fieldRouteLowMemory) return;
       // Field patches are already reviewable at this point. Ask the classifier
       // only when the extraction did not itself assign a released category —
       // asking again would duplicate the same useful answer and spend a second
@@ -714,8 +756,17 @@ function ReportForm() {
         fieldsResult.ok &&
         fieldsResult.value.suggestions.some((patch) => patch.field === "category");
       if (fieldAssignedCategory) return;
+      let categoryLowMemory = false;
+      const generateForCategory: GenerateFn = async (prompt, options) => {
+        try {
+          return await aiSuggestDeps.generateForCategory(prompt, options);
+        } catch (error) {
+          if (isRouteLowMemoryError(error)) categoryLowMemory = true;
+          throw error;
+        }
+      };
       const categoryResult = await suggestCategoryForText(
-        aiSuggestDeps.generateForCategory,
+        generateForCategory,
         text.slice(0, 280),
         profile,
         { signal: controller.signal },
@@ -727,6 +778,9 @@ function ReportForm() {
       } else if (categoryResult.error.errorClass === "CANCELLED") {
         setAiSuggestManageModels(false);
         setAiSuggestError("Suggestion stopped.");
+      } else if (categoryLowMemory) {
+        setAiSuggestManageModels(false);
+        setAiSuggestError(NL_SUGGESTION_LOW_MEMORY_NOTE);
       } else if (fieldsResult.ok) {
         // A failed category op never blocks field patches; the failure shows
         // only when there is nothing else to review.
@@ -737,6 +791,11 @@ function ReportForm() {
       }
     } catch {
       if (aiSuggestGen.current !== gen) return; // stale: drop
+      if (fieldRouteLowMemory) {
+        setAiSuggestManageModels(false);
+        setAiSuggestError(NL_SUGGESTION_LOW_MEMORY_NOTE);
+        return;
+      }
       const note = await aiSuggestFailureNote(gen);
       if (note !== null) setAiSuggestError(note);
     } finally {
@@ -1992,10 +2051,7 @@ function ReportForm() {
           </>
         }
         afterDescription={
-          <div
-            data-testid="report-suggest-details"
-            className="flex flex-col gap-2"
-          >
+          <>
             {savedNote && (
               // A note restored from the retired free-text helper. It is shown
               // only after an explicit review tap and only moves into the
@@ -2039,134 +2095,142 @@ function ReportForm() {
                 )}
               </div>
             )}
-            {/* §11 narrow helper: suggests details from the title and description
-                the person already wrote. Additive and reviewable — each suggestion
-                is applied only by an explicit tap on that field, and Keep leaves
-                the form alone. */}
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="md"
-                onClick={() => void aiSuggestRequest()}
-              >
-                {aiSuggestBusy ? "Suggesting…" : "Suggest details"}
-              </Button>
-              {aiSuggestBusy && (
-                <Button type="button" variant="text" size="md" onClick={aiSuggestStop}>
-                  Stop
-                </Button>
-              )}
-            </div>
-            {aiSuggestError && (
+            {reportAiEligible && (
+              // §11 narrow helper: suggests details from the title and
+              // description the person already wrote. Additive and reviewable —
+              // each suggestion is applied only by an explicit tap on that
+              // field, and Keep leaves the form alone. Android-only: web builds
+              // never render or start this capability.
               <div
-                role="alert"
-                className="flex flex-wrap items-center gap-2 text-sm text-error"
-                data-testid="report-suggestion-note-row"
+                data-testid="report-suggest-details"
+                className="flex flex-col gap-2"
               >
-                <span>{aiSuggestError}</span>
-                {aiSuggestManageModels && (
-                  // A real link, not a button: the models screen is a destination, so
-                  // it keeps link semantics and keyboard activation while navigation
-                  // still happens in-app. The href must be the HashRouter-canonical
-                  // form (`#/…`) because a hash-less literal does not match any route
-                  // this app can serve. Modifier clicks and non-primary buttons are
-                  // left alone so the browser's own new-tab/new-window handling wins,
-                  // exactly as a router <Link> would do — a <Link> itself is not
-                  // usable here because the frozen retry-7 suite mocks `react-router`
-                  // with `useNavigate` only.
-                  <a
-                    href="#/settings/local-intelligence/downloads"
-                    data-testid="report-suggestion-manage-models"
-                    onClick={(event) => {
-                      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
-                        return;
-                      }
-                      event.preventDefault();
-                      navigate("/settings/local-intelligence/downloads");
-                    }}
-                    className="inline-flex min-h-[48px] items-center justify-center rounded-m3-md border border-outline px-5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container"
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="md"
+                    onClick={() => void aiSuggestRequest()}
                   >
-                    Manage local tools
-                  </a>
-                )}
-              </div>
-            )}
-            {aiFieldDroppedCategory && (
-              <p role="status" className="text-sm text-on-surface-variant">
-                {DROPPED_CATEGORY_NOTE}
-              </p>
-            )}
-            {aiCatDropped && !aiFieldDroppedCategory && (
-              <p role="status" className="text-sm text-on-surface-variant">
-                {DROPPED_CATEGORY_NOTE}
-              </p>
-            )}
-            {aiFieldPatches
-              .filter((patch) => !aiSuggestResolved[`field:${patch.field}`])
-              .map((patch) => {
-                const dateApplicable =
-                  patch.field !== "date" ||
-                  (isValidCalendarDate(patch.suggestedValue) && !isFutureDate(patch.suggestedValue));
-                return (
+                    {aiSuggestBusy ? "Suggesting…" : "Suggest details"}
+                  </Button>
+                  {aiSuggestBusy && (
+                    <Button type="button" variant="text" size="md" onClick={aiSuggestStop}>
+                      Stop
+                    </Button>
+                  )}
+                </div>
+                {aiSuggestError && (
                   <div
-                    key={`ai-field-${patch.field}`}
-                    className="flex flex-col gap-1 rounded-m3-sm border border-outline-variant p-2"
+                    role="alert"
+                    className="flex flex-wrap items-center gap-2 text-sm text-error"
+                    data-testid="report-suggestion-note-row"
                   >
-                    <p className="text-xs text-on-surface-variant">Suggested {patch.field}</p>
-                    <p className="text-sm">{patch.suggestedValue}</p>
+                    <span>{aiSuggestError}</span>
+                    {aiSuggestManageModels && (
+                      // A real link, not a button: the models screen is a destination, so
+                      // it keeps link semantics and keyboard activation while navigation
+                      // still happens in-app. The href must be the HashRouter-canonical
+                      // form (`#/…`) because a hash-less literal does not match any route
+                      // this app can serve. Modifier clicks and non-primary buttons are
+                      // left alone so the browser's own new-tab/new-window handling wins,
+                      // exactly as a router <Link> would do — a <Link> itself is not
+                      // usable here because the frozen retry-7 suite mocks `react-router`
+                      // with `useNavigate` only.
+                      <a
+                        href="#/settings/local-intelligence/downloads"
+                        data-testid="report-suggestion-manage-models"
+                        onClick={(event) => {
+                          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+                            return;
+                          }
+                          event.preventDefault();
+                          navigate("/settings/local-intelligence/downloads");
+                        }}
+                        className="inline-flex min-h-[48px] items-center justify-center rounded-m3-md border border-outline px-5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container"
+                      >
+                        Manage local tools
+                      </a>
+                    )}
+                  </div>
+                )}
+                {aiFieldDroppedCategory && (
+                  <p role="status" className="text-sm text-on-surface-variant">
+                    {DROPPED_CATEGORY_NOTE}
+                  </p>
+                )}
+                {aiCatDropped && !aiFieldDroppedCategory && (
+                  <p role="status" className="text-sm text-on-surface-variant">
+                    {DROPPED_CATEGORY_NOTE}
+                  </p>
+                )}
+                {aiFieldPatches
+                  .filter((patch) => !aiSuggestResolved[`field:${patch.field}`])
+                  .map((patch) => {
+                    const dateApplicable =
+                      patch.field !== "date" ||
+                      (isValidCalendarDate(patch.suggestedValue) && !isFutureDate(patch.suggestedValue));
+                    return (
+                      <div
+                        key={`ai-field-${patch.field}`}
+                        className="flex flex-col gap-1 rounded-m3-sm border border-outline-variant p-2"
+                      >
+                        <p className="text-xs text-on-surface-variant">Suggested {patch.field}</p>
+                        <p className="text-sm">{patch.suggestedValue}</p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="primary"
+                            size="md"
+                            onClick={() => aiSuggestApplyField(patch)}
+                            disabled={!dateApplicable}
+                          >
+                            Use this {patch.field}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="md"
+                            onClick={() => aiSuggestResolve(`field:${patch.field}`)}
+                          >
+                            Keep mine
+                          </Button>
+                        </div>
+                        {!dateApplicable && (
+                          <p className="text-xs text-on-surface-variant">
+                            That date needs a calendar date — pick it in the date field instead.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                {aiCatSuggestion && !aiSuggestResolved.categorySuggestion && (
+                  <div className="flex flex-col gap-1 rounded-m3-sm border border-outline-variant p-2">
+                    <p className="text-xs text-on-surface-variant">Suggested category</p>
+                    <p className="text-sm">{aiCatSuggestion.suggestedCategory}</p>
                     <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="primary"
-                        size="md"
-                        onClick={() => aiSuggestApplyField(patch)}
-                        disabled={!dateApplicable}
-                      >
-                        Use this {patch.field}
+                      <Button type="button" variant="primary" size="md" onClick={() => aiSuggestApplyCategory(aiCatSuggestion)}>
+                        Use this category
                       </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="md"
-                        onClick={() => aiSuggestResolve(`field:${patch.field}`)}
-                      >
+                      <Button type="button" variant="outline" size="md" onClick={() => aiSuggestResolve("categorySuggestion")}>
                         Keep mine
                       </Button>
                     </div>
-                    {!dateApplicable && (
-                      <p className="text-xs text-on-surface-variant">
-                        That date needs a calendar date — pick it in the date field instead.
-                      </p>
-                    )}
                   </div>
-                );
-              })}
-            {aiCatSuggestion && !aiSuggestResolved.categorySuggestion && (
-              <div className="flex flex-col gap-1 rounded-m3-sm border border-outline-variant p-2">
-                <p className="text-xs text-on-surface-variant">Suggested category</p>
-                <p className="text-sm">{aiCatSuggestion.suggestedCategory}</p>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="primary" size="md" onClick={() => aiSuggestApplyCategory(aiCatSuggestion)}>
-                    Use this category
-                  </Button>
-                  <Button type="button" variant="outline" size="md" onClick={() => aiSuggestResolve("categorySuggestion")}>
-                    Keep mine
-                  </Button>
-                </div>
+                )}
+                {(aiFieldPatches.length > 0 || aiCatSuggestion) &&
+                  // Field patches are reviewable while the optional category op is
+                  // still running; "everything found" waits for the whole run.
+                  !aiSuggestBusy &&
+                  aiFieldPatches.every((patch) => aiSuggestResolved[`field:${patch.field}`]) &&
+                  (!aiCatSuggestion || aiSuggestResolved.categorySuggestion) && (
+                    <p role="status" className="text-xs text-on-surface-variant">
+                      That's everything found in that description.
+                    </p>
+                  )}
               </div>
             )}
-            {(aiFieldPatches.length > 0 || aiCatSuggestion) &&
-              // Field patches are reviewable while the optional category op is
-              // still running; "everything found" waits for the whole run.
-              !aiSuggestBusy &&
-              aiFieldPatches.every((patch) => aiSuggestResolved[`field:${patch.field}`]) &&
-              (!aiCatSuggestion || aiSuggestResolved.categorySuggestion) && (
-                <p role="status" className="text-xs text-on-surface-variant">
-                  That's everything found in that description.
-                </p>
-              )}
-          </div>
+          </>
         }
       />
 

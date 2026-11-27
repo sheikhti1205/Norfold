@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { focusDescriptionEditor, openSoftKeyboard, restoreSoftKeyboard } from "../test-utils/softKeyboard";
+
+beforeEach(openSoftKeyboard);
+afterEach(restoreSoftKeyboard);
 
 vi.mock("@capacitor/core", () => ({
   Capacitor: { isNativePlatform: () => false },
@@ -96,6 +100,8 @@ describe("ReportEditor", () => {
     rerender(<ReportEditor values={values()} onChange={() => {}} />);
     expect(description.getAttribute("contenteditable")).toBe("true");
     expect(dateTrigger.disabled).toBe(false);
+    // The rail belongs to the focused field; re-enabling alone does not focus.
+    focusDescriptionEditor();
     expect(screen.getByRole("toolbar", { name: "Description formatting" })).toBeTruthy();
   });
   it("hydrates the stored report into the fields", () => {

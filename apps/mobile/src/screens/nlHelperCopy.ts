@@ -52,6 +52,15 @@ const SEARCH_EMPTY_NOTE = "No extra filters found — searching your words.";
 const SUGGESTION_FAILED_NOTE = "Couldn't get a suggestion this time — try again, or keep writing.";
 
 /**
+ * Memory pressure on the device, said as what it is: a "not right now" that
+ * passes. It deliberately names no install or download — the helper is sound,
+ * the phone is just short of memory — and it promises the person's words are
+ * kept.
+ */
+export const NL_SUGGESTION_LOW_MEMORY_NOTE =
+  "Not enough free memory to load the on-device helper right now. Your words are kept — try again in a moment.";
+
+/**
  * The extractor failed outright. The words are searched normally, so the
  * sentence says that and never blames the reader's sentence.
  */
@@ -155,12 +164,15 @@ export const NL_SUGGESTION_FAILURE_NOTE: Record<NlHelperState, string> = {
  * nothing, which is exactly the claim a failed attempt cannot make.
  *
  * `helper`, `storage`, `hash` and `promotion` are recoverable on this device,
- * so those stages also keep the helper row (install/repair) on screen.
+ * so those stages also keep the helper row (install/repair) on screen. Memory
+ * pressure is recoverable too, but no install or repair changes it: it gets a
+ * calm "not now" sentence and no helper row.
  */
 export const LOCAL_SEARCH_FAILURE_NOTE: Record<LocalSearchStage, string> = {
   helper: "Smart Search couldn't start on this device. Searching your words normally.",
   plugin: "Smart Search isn't available on this device. Searching your words normally.",
   storage: "Norfold couldn't read the search helper's files on this device. Searching your words normally.",
+  memory: "Not enough free memory to load the helper right now. Searching your words normally.",
   source: "The search helper needs to download again. Searching your words normally.",
   hash: "The search helper's files didn't pass their check. Searching your words normally.",
   promotion: "The search helper couldn't finish installing. Searching your words normally.",
@@ -199,5 +211,8 @@ export function localSearchFailureNote(failure: LocalSearchFailure): string {
  */
 export function localSearchFailureOffersHelper(failure: LocalSearchFailure): boolean {
   if (failure.code === "NOT_SET_UP") return true;
+  // Memory pressure is a recoverable "not now" that an install/repair cannot
+  // change: the helper is sound, the device is short of RAM. No helper row.
+  if (failure.stage === "memory") return false;
   return failure.stage === "storage" || failure.stage === "hash" || failure.stage === "promotion";
 }

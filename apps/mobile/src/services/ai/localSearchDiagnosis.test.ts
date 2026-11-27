@@ -12,6 +12,7 @@ describe("local search stage receipts", () => {
     ["MODEL_NOT_READY", "helper"],
     ["DRIVER_UNAVAILABLE", "plugin"],
     ["INSUFFICIENT_STORAGE", "storage"],
+    ["LOW_MEMORY", "memory"],
     ["BAD_SOURCE", "source"],
     ["HTTP_404", "source"],
     ["HTTP_503", "source"],
@@ -43,6 +44,12 @@ describe("local search stage receipts", () => {
     expect(localSearchFailureOf(new Error("On-device runtime is busy")).stage).toBe("busy");
     expect(localSearchFailureOf(new Error("not enough free storage for this download")).stage).toBe("storage");
     expect(localSearchFailureOf(new Error("Model storage is unavailable on this build")).stage).toBe("storage");
+    // Memory pressure is its own boundary: no unreadable-files claim and no
+    // storage recovery is inferred from it.
+    expect(localSearchFailureOf(new Error("Not enough free memory to load the on-device helper.")).stage).toBe("memory");
+    expect(localSearchFailureOf(new Error("out of memory during generation")).stage).toBe("memory");
+    expect(localSearchFailureOf({ code: "LOW_MEMORY", message: "not enough free storage" }))
+      .toEqual({ stage: "memory", code: "LOW_MEMORY" });
     expect(localSearchFailureOf(new Error("verified bytes could not be promoted")).stage).toBe("promotion");
     expect(localSearchFailureOf(new Error("staged bytes failed pin verification")).stage).toBe("hash");
     expect(localSearchFailureOf(new Error("HTTP redirect refused")).stage).toBe("source");
@@ -80,7 +87,7 @@ describe("local search stage receipts", () => {
   it("covers every stage with a consumer sentence", async () => {
     const { LOCAL_SEARCH_FAILURE_NOTE } = await import("../../screens/nlHelperCopy");
     const stages: LocalSearchStage[] = [
-      "helper", "plugin", "storage", "source", "hash", "promotion", "runtime", "output", "busy",
+      "helper", "plugin", "storage", "memory", "source", "hash", "promotion", "runtime", "output", "busy",
     ];
     for (const stage of stages) {
       expect(LOCAL_SEARCH_FAILURE_NOTE[stage].length).toBeGreaterThan(0);

@@ -18,6 +18,8 @@ export type LocalSearchStage =
   | "plugin"
   /** Model root unreadable, or not enough free space. */
   | "storage"
+  /** Device short of free RAM while loading the helper. */
+  | "memory"
   /** HTTPS source, redirect or resume. */
   | "source"
   /** Checksum, size or manifest pin. */
@@ -50,7 +52,8 @@ const STAGE_BY_CODE: Readonly<Record<string, LocalSearchStage>> = {
   UNSUPPORTED_REQUEST: "plugin",
   // Storage
   INSUFFICIENT_STORAGE: "storage",
-  LOW_MEMORY: "storage",
+  // Device memory: a recoverable "not now", never a storage or install fault.
+  LOW_MEMORY: "memory",
   // Transfer
   BAD_SOURCE: "source",
   TIMEOUT: "source",
@@ -92,6 +95,9 @@ const STAGE_BY_MESSAGE: readonly (readonly [RegExp, LocalSearchStage])[] = [
   [/unavailable on this device|incompatible/i, "plugin"],
   [/not installed|not resident|needs the local search helper|no qualified on-device/i, "helper"],
   [/busy|in use|already running|already downloading/i, "busy"],
+  // Memory pressure is not a storage fault: it names no unreadable files and
+  // has no install/repair recovery. Checked before the free-space patterns.
+  [/not enough free memory|out of memory|low memory|insufficient_memory/i, "memory"],
   [/not enough free storage|free space|free_bytes|out of space/i, "storage"],
   [/storage could not be verified|could not be read|model storage is unavailable/i, "storage"],
   [/promot/i, "promotion"],

@@ -29,6 +29,44 @@ export const NEEDLE_MODEL_SHA256 =
   "c9d915eca282ed42d1a09b143b592adb4cc6744ffe2d294adf5cfc5548170c38";
 export const NEEDLE_MODEL_BYTES = 35335380;
 
+/**
+ * The native load point's typed low-memory refusal.
+ *
+ * The Android plugin checks the live `ActivityManager.MemoryInfo` before it
+ * touches the engine. This error carries that cause across the bridge so the
+ * route can report a memory condition instead of flattening it into a generic
+ * runtime failure (which a surface could wrongly read as "reinstall the model").
+ */
+export const NEEDLE_LOW_MEMORY_CODE = "LOW_MEMORY" as const;
+
+export class NeedleLowMemoryError extends Error {
+  readonly code = NEEDLE_LOW_MEMORY_CODE;
+
+  constructor(message = "Not enough free memory to load the on-device helper right now.") {
+    super(message);
+    this.name = "NeedleLowMemoryError";
+  }
+}
+
+/**
+ * Recognise the native low-memory refusal in every shape it can arrive:
+ * the typed error, a Capacitor rejection carrying `code`, or a rejection whose
+ * message is the plugin's code. Unrelated runtime failures stay unrelated.
+ */
+export function isNeedleLowMemoryError(error: unknown): boolean {
+  if (error instanceof NeedleLowMemoryError) return true;
+  if (typeof error === "string") return /insufficient_memory|not enough free memory/i.test(error);
+  if (typeof error !== "object" || error === null) return false;
+  const record = error as Record<string, unknown>;
+  const code = typeof record.code === "string" ? record.code : "";
+  const message = typeof record.message === "string" ? record.message : "";
+  return (
+    code === "insufficient_memory" ||
+    code === NEEDLE_LOW_MEMORY_CODE ||
+    /insufficient_memory|not enough free memory/i.test(message)
+  );
+}
+
 const MAX_TEXT_LENGTH = 5000;
 
 /** Minimal challenger embedder contract ( challenger side only ). */

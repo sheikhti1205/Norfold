@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { createRef } from "react";
 import type { Editor } from "@tiptap/react";
 import { RichTextEditor, tiptapToMarkdown } from "./RichTextEditor";
 import { settleSelectionRender } from "../test-utils/editorSelection";
 import { openRailMore, pickRailMore } from "../test-utils/editorRail";
+import { openSoftKeyboard, renderFocused, restoreSoftKeyboard } from "../test-utils/softKeyboard";
 
+beforeEach(openSoftKeyboard);
+afterEach(restoreSoftKeyboard);
 afterEach(cleanup);
 // jsdom does not implement Range geometry used by ProseMirror's scroll-to-selection.
 if (!("getClientRects" in Range.prototype)) {
@@ -22,7 +25,7 @@ if (!("getBoundingClientRect" in Range.prototype)) {
 describe("Report editor caret formatting", () => {
   it("toggles Bold at an empty caret on and off without formatting subsequent plain typing", async () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="intro" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="intro" onChange={() => {}} editorRef={ref} />);
     act(() => {
       ref.current?.commands.setContent({ type: "doc", content: [
         { type: "paragraph", content: [{ type: "text", text: "intro" }] },
@@ -46,7 +49,7 @@ describe("Report editor caret formatting", () => {
 
   it("toggles selected text twice without losing the selected range", async () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="hello world" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="hello world" onChange={() => {}} editorRef={ref} />);
     act(() => ref.current?.commands.setTextSelection({ from: 1, to: 6 }));
     await settleSelectionRender();
     const bold = screen.getByRole("button", { name: "Bold" });
@@ -60,7 +63,7 @@ describe("Report editor caret formatting", () => {
 
   it("updates Bold when moving the caret between bold and plain text", async () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="**bold** plain" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="**bold** plain" onChange={() => {}} editorRef={ref} />);
     const bold = screen.getByRole("button", { name: "Bold" });
     act(() => ref.current?.commands.setTextSelection(3));
     await settleSelectionRender();
@@ -73,7 +76,7 @@ describe("Report editor caret formatting", () => {
 
 describe("Report editor formatting rail", () => {
   it("keeps the composing slots in both modes and the rest one tap away", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     for (const mode of ["inline", "fullscreen"]) {
       if (mode === "fullscreen") pickRailMore("Expand editor");
       const rail = screen.getByRole("toolbar", { name: "Description formatting" });
@@ -92,7 +95,7 @@ describe("Report editor formatting rail", () => {
   });
 
   it("keeps one independently scrolling content area above the pinned rail inside the visual viewport", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     pickRailMore("Expand editor");
     const overlay = document.getElementById("report-editor-overlay")!;
     const scroller = screen.getByTestId("report-editor-scroller");
@@ -102,7 +105,10 @@ describe("Report editor formatting rail", () => {
     expect(scroller.contains(rail)).toBe(false);
     expect(scroller.compareDocumentPosition(rail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(rail.parentElement?.className).toContain("flex-shrink-0");
-    expect(rail.parentElement?.getAttribute("style")).toContain("safe-area-inset-bottom");
+    // The overlay itself ends at the IME top, so the rail is flush with no
+    // second safe area and no gap.
+    expect(rail.parentElement?.getAttribute("style")).toContain("padding-bottom: 0px");
+    expect(rail.parentElement?.getAttribute("style")).not.toContain("safe-area-inset-bottom");
     expect(scroller.querySelector(".tiptap")?.className).not.toContain("overflow-y-auto");
   });
 
@@ -112,7 +118,7 @@ describe("Report editor formatting rail", () => {
     const readText = vi.fn(() => new Promise<string>((resolve) => { resolveClipboard = resolve; }));
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { readText } });
     try {
-      render(<RichTextEditor label="Description" value="before after" onChange={() => {}} editorRef={ref} />);
+      renderFocused(<RichTextEditor label="Description" value="before after" onChange={() => {}} editorRef={ref} />);
       act(() => ref.current?.commands.setTextSelection({ from: 8, to: 13 }));
       await settleSelectionRender();
       pickRailMore("Paste as Markdown");
@@ -130,7 +136,7 @@ describe("Report editor formatting rail", () => {
     let resolveClipboard!: (value: string) => void;
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { readText: () => new Promise<string>((resolve) => { resolveClipboard = resolve; }) } });
     try {
-      const { rerender } = render(<RichTextEditor label="Description" value="before after" onChange={onChange} editorRef={ref} />);
+      const { rerender } = renderFocused(<RichTextEditor label="Description" value="before after" onChange={onChange} editorRef={ref} />);
       pickRailMore("Paste as Markdown");
       rerender(<RichTextEditor label="Description" value="before after" onChange={onChange} editorRef={ref} disabled />);
       rerender(<RichTextEditor label="Description" value="before after" onChange={onChange} editorRef={ref} />);

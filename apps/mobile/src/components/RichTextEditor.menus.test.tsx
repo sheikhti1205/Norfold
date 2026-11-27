@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { createRef } from "react";
 import type { Editor } from "@tiptap/react";
 import {
@@ -11,12 +11,15 @@ import {
 } from "./RichTextEditor";
 import { settleSelectionRender } from "../test-utils/editorSelection";
 import { openRailMore } from "../test-utils/editorRail";
+import { openSoftKeyboard, renderFocused, restoreSoftKeyboard } from "../test-utils/softKeyboard";
 
+beforeEach(openSoftKeyboard);
+afterEach(restoreSoftKeyboard);
 afterEach(cleanup);
 
 describe("menu keyboard handling", () => {
   it("moves focus with ArrowDown/ArrowUp (wrapping) and Home/End in the Block menu", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /Block type/i }));
     const menu = screen.getByRole("menu", { name: "Block type" });
     const body = screen.getByRole("menuitemradio", { name: "Body" });
@@ -40,7 +43,7 @@ describe("menu keyboard handling", () => {
   });
 
   it("Escape closes the menu and restores focus to the menu button", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     const menuButton = screen.getByRole("button", { name: /Block type/i });
     fireEvent.click(menuButton);
     expect(screen.getByRole("menu", { name: "Block type" })).toBeTruthy();
@@ -50,7 +53,7 @@ describe("menu keyboard handling", () => {
   });
 
   it("closes the More menu on Tab without trapping the focus move", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     openRailMore();
     expect(screen.getByRole("listbox", { name: "More formatting actions" })).toBeTruthy();
     const trigger = screen.getByRole("button", { name: "More" });
@@ -60,7 +63,7 @@ describe("menu keyboard handling", () => {
   });
 
   it("outside pointerdown closes an open menu", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /Block type/i }));
     expect(screen.getByRole("menu", { name: "Block type" })).toBeTruthy();
     fireEvent.pointerDown(document.body);
@@ -68,7 +71,7 @@ describe("menu keyboard handling", () => {
   });
 
   it("offers only the history actions that can run on a fresh editor", () => {
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} />);
     expect((screen.getByRole("button", { name: "Undo" }) as HTMLButtonElement).disabled).toBe(true);
     const more = openRailMore();
     // Redo would be a guaranteed no-op here, so it is not offered at all.
@@ -79,7 +82,7 @@ describe("menu keyboard handling", () => {
 
 describe("narrow-viewport/IME-safe popup positioning", () => {
   it("constrains menus to the viewport with internal scroll and keeps 48px targets", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     for (const buttonName of [/Block type/i] as const) {
       fireEvent.click(screen.getByRole("button", { name: buttonName }));
       const menu = document.querySelector('[role="menu"]') as HTMLElement;
@@ -155,7 +158,7 @@ describe("ED-09 list-simplification honesty", () => {
 
   it("shows a user-visible notice while the document simplifies lists", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} editorRef={ref} />);
     expect(screen.queryByLabelText("List simplification notice")).toBeNull();
     act(() => {
       ref.current?.commands.setContent({
@@ -195,7 +198,7 @@ describe("ED-09 list-simplification honesty", () => {
 describe("ED-07 link Open preview", () => {
   it("offers a safe Open link action when editing an existing link", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="see map here" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="see map here" onChange={() => {}} editorRef={ref} />);
     act(() => {
       ref.current?.commands.setContent(markdownToTiptap("see [map](https://example.com/map) here"));
       ref.current?.commands.setTextSelection({ from: 6, to: 6 });
@@ -209,7 +212,7 @@ describe("ED-07 link Open preview", () => {
 
   it("shows no Open link action when adding a fresh link", async () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="see map here" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="see map here" onChange={() => {}} editorRef={ref} />);
     act(() => {
       ref.current?.commands.setContent(markdownToTiptap("see map here"));
       ref.current?.commands.setTextSelection({ from: 5, to: 8 });

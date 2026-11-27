@@ -19,7 +19,7 @@
  * and the pinned revision (never "unknown-model").
  */
 import { profileFor } from "../modelProfiles";
-import { validateNeedleVectors } from "../needle/embedder";
+import { isNeedleLowMemoryError, validateNeedleVectors } from "../needle/embedder";
 import { describeOfflineReadiness } from "../modelReadiness";
 import type { OfflineModelManager } from "../offlineModelManager";
 import { LOCAL_TASK_INVALID } from "./routeValidation";
@@ -152,6 +152,16 @@ function notReady(modelId: string): RuntimeResult {
 }
 
 function runtimeError(error: unknown): RuntimeResult {
+  // Low memory is a recoverable device condition, not a broken install: keep
+  // it distinct so the report surface never sends the person to reinstall a
+  // sound model file.
+  if (isNeedleLowMemoryError(error)) {
+    return {
+      ok: false,
+      error: "Not enough free memory to load the on-device helper right now.",
+      denialReason: "LOW_MEMORY",
+    };
+  }
   const message = error instanceof Error ? error.message : "The runtime failed.";
   return { ok: false, error: message.slice(0, 400), denialReason: "RUNTIME_ERROR" };
 }

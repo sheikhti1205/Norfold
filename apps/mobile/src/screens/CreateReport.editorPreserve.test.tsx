@@ -92,7 +92,7 @@ describe("CreateReport editor preservation (ED-05 guard)", () => {
   it("adding/removing photos never remounts the description editor", async () => {
     seedBasics();
     render(<CreateReport />);
-    const toolbar = await screen.findByRole("toolbar", { name: /description formatting/i });
+    const editor = await screen.findByRole("textbox", { name: "Description" });
 
     // Add two photos: the editor instance must stay the exact same DOM node
     // (a remount would drop cursor/selection).
@@ -100,27 +100,27 @@ describe("CreateReport editor preservation (ED-05 guard)", () => {
     await screen.findByRole("img", { name: /photo 1 of/i });
     pickFile(new File(["two"], "two.jpg", { type: "image/jpeg" }));
     await screen.findByRole("img", { name: /photo 2 of/i });
-    expect(screen.getByRole("toolbar", { name: /description formatting/i })).toBe(toolbar);
+    expect(screen.getByRole("textbox", { name: "Description" })).toBe(editor);
 
     // Reorder + remove: still the same editor node. The action row acts on the
     // visible slide, and a reorder moves that photo instead of swapping the one
     // on screen — so the photo is now position 1 and the row renames with it.
     fireEvent.click(screen.getByRole("button", { name: "Go to photo 2" }));
     fireEvent.click(screen.getByRole("button", { name: /move photo 2 left/i }));
-    expect(screen.getByRole("toolbar", { name: /description formatting/i })).toBe(toolbar);
+    expect(screen.getByRole("textbox", { name: "Description" })).toBe(editor);
     fireEvent.click(screen.getByRole("button", { name: /remove photo 1/i }));
     await waitFor(() =>
       expect(screen.queryByRole("img", { name: /photo 2 of/i })).toBeNull(),
     );
-    expect(screen.getByRole("toolbar", { name: /description formatting/i })).toBe(toolbar);
+    expect(screen.getByRole("textbox", { name: "Description" })).toBe(editor);
   });
 
   it("durable restore on mount never remounts the description editor", async () => {
     seedBasics();
     render(<CreateReport />);
-    const toolbar = await screen.findByRole("toolbar", { name: /description formatting/i });
+    const editor = await screen.findByRole("textbox", { name: "Description" });
     // Let any async durable-restore effect settle, then confirm identity.
     await waitFor(() => expect(publishReportMock).not.toHaveBeenCalled());
-    expect(screen.getByRole("toolbar", { name: /description formatting/i })).toBe(toolbar);
+    expect(screen.getByRole("textbox", { name: "Description" })).toBe(editor);
   });
 });

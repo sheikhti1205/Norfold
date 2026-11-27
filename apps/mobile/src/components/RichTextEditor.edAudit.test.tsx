@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createRef } from "react";
 import type { Editor } from "@tiptap/react";
@@ -7,12 +7,15 @@ import { RichTextEditor, markdownToTiptap, tiptapToMarkdown } from "./RichTextEd
 import { MarkdownView } from "./MarkdownView";
 import { measureDescription } from "../services/richText";
 import { openRailMore } from "../test-utils/editorRail";
+import { openSoftKeyboard, renderFocused, restoreSoftKeyboard } from "../test-utils/softKeyboard";
 
+beforeEach(openSoftKeyboard);
+afterEach(restoreSoftKeyboard);
 afterEach(cleanup);
 
 describe("ED-02/ED-06 heading + toolbar menus", () => {
   it("offers Body/H1/H2/H3 menu with current-block label and aria-expanded", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     const bodyMenu = screen.getByRole("button", { name: /Body|Block type|Heading/i });
     expect(bodyMenu.getAttribute("aria-haspopup")).toMatch(/menu|listbox|dialog/);
     fireEvent.click(bodyMenu);
@@ -24,7 +27,7 @@ describe("ED-02/ED-06 heading + toolbar menus", () => {
 
   it("sets H1 via menu and keeps H2 when re-chosen (no toggle-off)", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} editorRef={ref} />);
     fireEvent.click(screen.getByRole("button", { name: /Body|Block type|Heading/i }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Heading 1" }));
     expect(ref.current?.isActive("heading", { level: 1 })).toBe(true);
@@ -43,7 +46,7 @@ describe("ED-02/ED-06 heading + toolbar menus", () => {
   });
 
   it("keeps structure and cleanup actions one tap from the rail", () => {
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} />);
     // Composing actions keep their own slot; block-level insertion, cleanup and
     // the secondary clipboard action live in the trailing menu.
     expect(screen.getByRole("button", { name: "Bullets" })).toBeTruthy();
@@ -58,7 +61,7 @@ describe("ED-04 stale selection safety", () => {
   it("does NOT bold stale text after intentional editor navigation (tap + caret move)", () => {
     const seen: string[] = [];
     const ref = createRef<Editor | null>();
-    const { container } = render(
+    const { container } = renderFocused(
       <RichTextEditor label="Description" value="hello world" onChange={(md) => seen.push(md)} editorRef={ref} />,
     );
     act(() => {
@@ -79,7 +82,7 @@ describe("ED-04 stale selection safety", () => {
   it("invalidates stashed range after draft restore replaces content", () => {
     const ref = createRef<Editor | null>();
     const seen: string[] = [];
-    const { rerender } = render(
+    const { rerender } = renderFocused(
       <RichTextEditor label="Description" value="hello world" onChange={(md) => seen.push(md)} editorRef={ref} />,
     );
     act(() => {
@@ -119,7 +122,7 @@ describe("ED-05 truthful counting", () => {
 
   it("editor count reflects stored size when formatting is present", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} editorRef={ref} maxLength={3000} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} editorRef={ref} maxLength={3000} />);
     act(() => {
       ref.current?.commands.setContent(markdownToTiptap("**hello** world"));
     });
@@ -132,7 +135,7 @@ describe("ED-05 truthful counting", () => {
 describe("ED-07 safe link edit/remove", () => {
   it("opens an edit dialog (not instant delete) at a collapsed caret inside a link", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="see map here" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="see map here" onChange={() => {}} editorRef={ref} />);
     act(() => {
       ref.current?.commands.setContent(markdownToTiptap("see [map](https://example.com/map) here"));
       // Caret inside "map" (collapsed).
@@ -146,7 +149,7 @@ describe("ED-07 safe link edit/remove", () => {
 
   it("removes the link via explicit Remove action but keeps display text", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="see map here" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="see map here" onChange={() => {}} editorRef={ref} />);
     act(() => {
       ref.current?.commands.setContent(markdownToTiptap("see [map](https://example.com/map) here"));
       ref.current?.commands.setTextSelection({ from: 6, to: 6 });

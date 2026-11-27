@@ -1,17 +1,20 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { createRef } from "react";
 import type { Editor } from "@tiptap/react";
 import { RichTextEditor, tiptapToMarkdown } from "./RichTextEditor";
 import { settleSelectionRender } from "../test-utils/editorSelection";
 import { openRailMore, pickRailMore } from "../test-utils/editorRail";
+import { openSoftKeyboard, renderFocused, restoreSoftKeyboard } from "../test-utils/softKeyboard";
 
+beforeEach(openSoftKeyboard);
+afterEach(restoreSoftKeyboard);
 afterEach(cleanup);
 
 describe("RichTextEditor report pass — bounded inline growth", () => {
   it("has min-height ~120px and max-height ~240px via CSS classes", () => {
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} />);
     const editorEl = document.querySelector(".tiptap") as HTMLElement;
     expect(editorEl).toBeTruthy();
     // Initial min-height ~120px (4-5 lines) via CSS class
@@ -25,14 +28,14 @@ describe("RichTextEditor report pass — bounded inline growth", () => {
 
 describe("RichTextEditor report pass — Expand/Collapse full-screen overlay", () => {
   it("offers Expand as a named row in the rail's trailing menu", () => {
-    render(<RichTextEditor label="Description" value="hello world" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello world" onChange={() => {}} />);
     const more = openRailMore();
     const expand = within(more).getByRole("option", { name: "Expand editor" });
     expect(expand.textContent).toBe("Expand editor");
   });
 
   it("opens full-screen overlay on Expand", () => {
-    render(<RichTextEditor label="Description" value="hello world" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello world" onChange={() => {}} />);
     pickRailMore("Expand editor");
     // Overlay should be rendered via portal to document.body
     const overlay = document.getElementById("report-editor-overlay");
@@ -43,7 +46,7 @@ describe("RichTextEditor report pass — Expand/Collapse full-screen overlay", (
 
   it("preserves exact Markdown content when expanding", () => {
     const ref = createRef<Editor | null>();
-    render(
+    renderFocused(
       <RichTextEditor label="Description" value="**bold** and *italic*" onChange={() => {}} editorRef={ref} />,
     );
     const initialMarkdown = tiptapToMarkdown(ref.current?.getJSON());
@@ -55,7 +58,7 @@ describe("RichTextEditor report pass — Expand/Collapse full-screen overlay", (
   it("preserves selection when expanding", () => {
     const ref = createRef<Editor | null>();
     const seen: string[] = [];
-    render(
+    renderFocused(
       <RichTextEditor
         label="Description"
         value="hello world"
@@ -77,7 +80,7 @@ describe("RichTextEditor report pass — Expand/Collapse full-screen overlay", (
   it("collapses back to inline on Done click with latest content", () => {
     const ref = createRef<Editor | null>();
     const seen: string[] = [];
-    render(
+    renderFocused(
       <RichTextEditor
         label="Description"
         value="hello"
@@ -101,7 +104,7 @@ describe("RichTextEditor report pass — Expand/Collapse full-screen overlay", (
   });
 
   it("Android Back (Escape) dismisses menu first, then overlay", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     pickRailMore("Expand editor");
     // Open a menu in overlay
     fireEvent.click(screen.getByRole("button", { name: /Block type/i }));
@@ -119,7 +122,7 @@ describe("RichTextEditor report pass — Expand/Collapse full-screen overlay", (
 
   it("Escape closes the link dialog first, never the overlay beneath it", async () => {
     const ref = createRef<Editor | null>();
-    render(
+    renderFocused(
       <RichTextEditor label="Description" value="see map here" onChange={() => {}} editorRef={ref} />,
     );
     pickRailMore("Expand editor");
@@ -141,8 +144,8 @@ describe("RichTextEditor report pass — Expand/Collapse full-screen overlay", (
 });
 
 describe("RichTextEditor report pass — formatting rail keyboard visibility", () => {
-  it("rail sits at bottom of usable screen when IME hidden (replaces tab bar position)", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+  it("rail sits at the bottom of the overlay's flex column", () => {
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     pickRailMore("Expand editor");
     const overlay = document.getElementById("report-editor-overlay");
     const rail = overlay?.querySelector('[role="toolbar"]');
@@ -153,7 +156,7 @@ describe("RichTextEditor report pass — formatting rail keyboard visibility", (
   });
 
   it("overlay uses CSS custom properties for visualViewport positioning", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     pickRailMore("Expand editor");
     const overlay = document.getElementById("report-editor-overlay");
     // The overlay should use visualViewport.height/offsetTop for positioning
@@ -173,7 +176,7 @@ describe("RichTextEditor report pass — formatting rail keyboard visibility", (
     });
     Object.defineProperty(window, "visualViewport", { configurable: true, value: viewport });
     try {
-      render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+      renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
       pickRailMore("Expand editor");
       const overlay = document.getElementById("report-editor-overlay")!;
       expect(overlay.style.getPropertyValue("--fb-visible-height")).toBe("430px");
@@ -193,7 +196,7 @@ describe("RichTextEditor report pass — formatting rail keyboard visibility", (
 
 describe("RichTextEditor report pass — collision-safe formatting menus (Floating UI)", () => {
   it("uses Floating UI for menu positioning with flip, shift, size middleware", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /Block type/i }));
     const menu = screen.getByRole("menu", { name: "Block type" });
     expect(menu).toBeTruthy();
@@ -205,7 +208,7 @@ describe("RichTextEditor report pass — collision-safe formatting menus (Floati
   });
 
   it("menu caps height and scrolls internally when taller than visible area", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /Block type/i }));
     const menu = screen.getByRole("menu", { name: "Block type" });
     // Menu should use Floating UI transform-based positioning (not absolute left-0 top-full)
@@ -219,7 +222,7 @@ describe("RichTextEditor report pass — collision-safe formatting menus (Floati
 
   it("link dialog is portaled out of the editor subtree with reachable actions", async () => {
     const ref = createRef<Editor | null>();
-    const { container } = render(
+    const { container } = renderFocused(
       <RichTextEditor label="Description" value="see map here" onChange={() => {}} editorRef={ref} />,
     );
     act(() => {
@@ -240,7 +243,7 @@ describe("RichTextEditor report pass — collision-safe formatting menus (Floati
   });
 
   it("Escape/Back/outside click closes one layer at a time", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     pickRailMore("Expand editor");
     fireEvent.click(screen.getByRole("button", { name: /Block type/i }));
     fireEvent.keyDown(document, { key: "Escape" });
@@ -254,7 +257,7 @@ describe("RichTextEditor report pass — selection and undo preservation across 
   it("undo/redo works identically in inline and full-screen modes", () => {
     const ref = createRef<Editor | null>();
     const seen: string[] = [];
-    render(
+    renderFocused(
       <RichTextEditor
         label="Description"
         value="hello"
@@ -278,7 +281,7 @@ describe("RichTextEditor report pass — selection and undo preservation across 
 
   it("no duplicate transactions in history when switching modes", () => {
     const ref = createRef<Editor | null>();
-    render(
+    renderFocused(
       <RichTextEditor label="Description" value="hello" onChange={() => {}} editorRef={ref} />,
     );
     const historyBefore = ref.current?.state.doc.content.size;
@@ -291,7 +294,7 @@ describe("RichTextEditor report pass — selection and undo preservation across 
 
 describe("RichTextEditor report pass — accessibility", () => {
   it("overlay has proper ARIA: role=dialog, aria-modal=true, labelled header", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     pickRailMore("Expand editor");
     const overlay = document.getElementById("report-editor-overlay");
     expect(overlay?.getAttribute("role")).toBe("dialog");
@@ -300,7 +303,7 @@ describe("RichTextEditor report pass — accessibility", () => {
   });
 
   it("rail slots have ≥48dp touch targets and accessible labels", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     pickRailMore("Expand editor");
     const rail = screen.getByRole("toolbar", { name: "Description formatting" });
     const names: Array<string | RegExp> = ["Undo", /^Block type: Body$/, "Bold", "Italic", "Bullets", "Link", "More"];
@@ -317,7 +320,7 @@ describe("RichTextEditor report pass — accessibility", () => {
   });
 
   it("focus trap in overlay, focus restored on close", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     const moreBtn = screen.getByRole("button", { name: "More" });
     // Focus the always-mounted More slot, which is also the element this test
     // expects to receive focus back. The detached-launcher fallback is not
@@ -336,7 +339,7 @@ describe("RichTextEditor report pass — accessibility", () => {
   });
 
   it("gives the dialog the initial focus, not the close control", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     const moreBtn = screen.getByRole("button", { name: "More" });
     moreBtn.focus();
     pickRailMore("Expand editor");
@@ -352,7 +355,7 @@ describe("RichTextEditor report pass — accessibility", () => {
   });
 
   it("opts the full-screen writing surface into the fill rule only", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     // The inline field lives outside the overlay, so the scoped fill cannot
     // reach it and its 120-240px box is unchanged.
     const inline = document.querySelector(".tiptap") as HTMLElement;

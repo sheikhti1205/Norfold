@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, screen, waitFor } from "@testing-library/react";
 import { createRef } from "react";
 import type { Editor } from "@tiptap/react";
 import { RichTextEditor, markdownToTiptap, tiptapToMarkdown } from "./RichTextEditor";
 import { pickRailMore } from "../test-utils/editorRail";
+import { openSoftKeyboard, renderFocused, restoreSoftKeyboard } from "../test-utils/softKeyboard";
 
+beforeEach(openSoftKeyboard);
+afterEach(restoreSoftKeyboard);
 afterEach(cleanup);
 
 // jsdom Range lacks getClientRects, which prosemirror-view's
@@ -57,7 +60,7 @@ describe("RichTextEditor Markdown paste", () => {
   it("parses recognizably-Markdown plain text into formatted nodes", () => {
     const seen: string[] = [];
     const ref = createRef<Editor | null>();
-    const { container } = render(
+    const { container } = renderFocused(
       <RichTextEditor label="Description" value="" onChange={(md) => seen.push(md)} editorRef={ref} />,
     );
     expect(ref.current).toBeTruthy();
@@ -76,7 +79,7 @@ describe("RichTextEditor Markdown paste", () => {
 
   it("leaves rich clipboard (text/html) to the native path", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="plain" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="plain" onChange={() => {}} editorRef={ref} />);
     const handled = runHandlePaste(ref, fakePasteEvent(CHATGPT_MD, "<h1>rich</h1>"));
     expect(handled).toBe(false);
     expect(tiptapToMarkdown(ref.current?.getJSON())).toBe("plain");
@@ -84,7 +87,7 @@ describe("RichTextEditor Markdown paste", () => {
 
   it("leaves ordinary prose to the native path", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
     const handled = runHandlePaste(ref, fakePasteEvent("Pinkish wallet, kinda worn out"));
     expect(handled).toBe(false);
     expect(tiptapToMarkdown(ref.current?.getJSON())).toBe("");
@@ -92,7 +95,7 @@ describe("RichTextEditor Markdown paste", () => {
 
   it("replaces only the selected range, preserving surrounding text", () => {
     const ref = createRef<Editor | null>();
-    render(
+    renderFocused(
       <RichTextEditor label="Description" value="before after" onChange={() => {}} editorRef={ref} />,
     );
     act(() => {
@@ -112,7 +115,7 @@ describe("RichTextEditor Markdown paste", () => {
     Object.defineProperty(navigator, "clipboard", { value: { readText }, configurable: true });
     try {
       const ref = createRef<Editor | null>();
-      const { container } = render(
+      const { container } = renderFocused(
         <RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />,
       );
       pickRailMore("Paste as Markdown");
@@ -131,7 +134,7 @@ describe("RichTextEditor Markdown paste", () => {
     const readText = vi.fn().mockRejectedValue(new Error("denied"));
     Object.defineProperty(navigator, "clipboard", { value: { readText }, configurable: true });
     try {
-      render(<RichTextEditor label="Description" value="" onChange={() => {}} />);
+      renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} />);
       pickRailMore("Paste as Markdown");
       await waitFor(() => {
         expect(screen.getByRole("status", { name: "Formatting status" }).textContent).toMatch(
@@ -146,7 +149,7 @@ describe("RichTextEditor Markdown paste", () => {
 
 describe("RichTextEditor fullscreen scroller contract", () => {
   it("owns one scrolling region with min-height content and a safe-area header", () => {
-    const { container } = render(
+    const { container } = renderFocused(
       <RichTextEditor label="Description" value="hello" onChange={() => {}} />,
     );
     pickRailMore("Expand editor");

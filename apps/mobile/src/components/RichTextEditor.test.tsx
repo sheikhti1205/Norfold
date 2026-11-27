@@ -1,13 +1,16 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { createRef } from "react";
 import type { Editor } from "@tiptap/react";
 import { TextSelection } from "@tiptap/pm/state";
 import { RichTextEditor, markdownToTiptap, tiptapToMarkdown } from "./RichTextEditor";
 import { openRailMore, pickRailMore } from "../test-utils/editorRail";
 import { settleSelectionRender } from "../test-utils/editorSelection";
+import { closeSoftKeyboard, openSoftKeyboard, renderFocused, restoreSoftKeyboard } from "../test-utils/softKeyboard";
 
+beforeEach(openSoftKeyboard);
+afterEach(restoreSoftKeyboard);
 afterEach(cleanup);
 
 describe("richTextEditor converters", () => {
@@ -124,7 +127,7 @@ describe("richTextEditor converters", () => {
 
 describe("RichTextEditor", () => {
   it("exposes the description as a named multiline textbox with its editing state", () => {
-    const { rerender } = render(<RichTextEditor label="Description" value="Blue wallet" onChange={() => {}} />);
+    const { rerender } = renderFocused(<RichTextEditor label="Description" value="Blue wallet" onChange={() => {}} />);
     const input = screen.getByRole("textbox", { name: "Description" });
     expect(input.textContent).toBe("Blue wallet");
     expect(input.getAttribute("aria-multiline")).toBe("true");
@@ -138,7 +141,7 @@ describe("RichTextEditor", () => {
 
   it("locks the same editor in fullscreen and drops the dead rail while read-only", () => {
     const ref = createRef<Editor | null>();
-    const { rerender } = render(<RichTextEditor label="Description" value="Wallet" onChange={() => {}} editorRef={ref} />);
+    const { rerender } = renderFocused(<RichTextEditor label="Description" value="Wallet" onChange={() => {}} editorRef={ref} />);
     pickRailMore("Expand editor");
     rerender(<RichTextEditor label="Description" value="Wallet" onChange={() => {}} editorRef={ref} disabled />);
     expect(ref.current?.isEditable).toBe(false);
@@ -157,14 +160,17 @@ describe("RichTextEditor", () => {
     expect(screen.getByRole("button", { name: "Bold" })).toHaveProperty("disabled", false);
   });
 
-  it("fits every formatting slot in one row without a horizontal scroller", () => {
-    render(<RichTextEditor label="Description" value="Wallet" onChange={() => {}} />);
+  it("keeps the seven slots in one unwrapped row and the six composing slots pannable", () => {
+    renderFocused(<RichTextEditor label="Description" value="Wallet" onChange={() => {}} />);
     const rail = screen.getByRole("toolbar", { name: "Description formatting" });
     // jsdom has no layout, so pixel geometry is verified in the deployed build.
-    // Here we pin the slot contract that makes one row possible: exact names,
-    // the 48px minimum each slot declares, and no scrolling affordance.
+    // Here we pin the slot contract: the row never wraps or scrolls itself, and
+    // the six composing slots share a labelled horizontal group instead of
+    // squeezing targets below 48px at 320px.
     expect(rail.className).not.toContain("overflow-x-auto");
     expect(rail.className).toContain("flex-nowrap");
+    const scroller = rail.querySelector('[data-testid="rich-text-rail-scroll"]');
+    expect(scroller?.querySelectorAll("button")).toHaveLength(6);
     const names: Array<string | RegExp> = ["Undo", /^Block type: Body$/, "Bold", "Italic", "Bullets", "Link", "More"];
     const slots = within(rail).getAllByRole("button");
     expect(slots).toHaveLength(names.length);
@@ -178,7 +184,7 @@ describe("RichTextEditor", () => {
   });
 
   it("renders the composing actions, placeholder text, and character count", () => {
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} placeholder="Describe the item" />);
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} placeholder="Describe the item" />);
     for (const name of ["Bold", "Italic", "Link", "Bullets", "Undo"]) {
       expect(screen.getByRole("button", { name })).toBeTruthy();
     }
@@ -201,14 +207,14 @@ describe("RichTextEditor", () => {
   });
 
   it("shows the initial markdown value", () => {
-    const { container } = render(<RichTextEditor label="Description" value="# Lost wallet" onChange={() => {}} />);
+    const { container } = renderFocused(<RichTextEditor label="Description" value="# Lost wallet" onChange={() => {}} />);
     expect(container.querySelector(".tiptap")?.textContent).toContain("Lost wallet");
   });
 
   it("reports edits immediately so submit/unmount keeps final keystrokes", () => {
     const seen: string[] = [];
     const ref = createRef<Editor | null>();
-    const { unmount } = render(
+    const { unmount } = renderFocused(
       <RichTextEditor label="Description" value="" onChange={(md) => seen.push(md)} editorRef={ref} />,
     );
     expect(ref.current).toBeTruthy();
@@ -223,7 +229,7 @@ describe("RichTextEditor", () => {
   it("applies external value changes without change loops", () => {
     const onChange = vi.fn();
     const ref = createRef<Editor | null>();
-    const { rerender } = render(
+    const { rerender } = renderFocused(
       <RichTextEditor label="Description" value="first" onChange={onChange} editorRef={ref} />,
     );
     expect(ref.current?.getText()).toContain("first");
@@ -240,7 +246,7 @@ describe("RichTextEditor", () => {
       emitted = md;
     });
     const ref = createRef<Editor | null>();
-    const { rerender } = render(
+    const { rerender } = renderFocused(
       <RichTextEditor label="Description" value="" onChange={onChange} editorRef={ref} />,
     );
     act(() => {
@@ -256,7 +262,7 @@ describe("RichTextEditor", () => {
   it("resets to empty on external clear", () => {
     const onChange = vi.fn();
     const ref = createRef<Editor | null>();
-    const { rerender } = render(
+    const { rerender } = renderFocused(
       <RichTextEditor label="Description" value="**typed**" onChange={onChange} editorRef={ref} />,
     );
     expect(ref.current?.getText()).toContain("typed");
@@ -266,7 +272,7 @@ describe("RichTextEditor", () => {
 
   it("shows a live character count", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="hi" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="hi" onChange={() => {}} editorRef={ref} />);
     expect(screen.getByLabelText("Character count").textContent).toBe("2 characters");
     act(() => {
       ref.current?.commands.setContent(markdownToTiptap("hello world"));
@@ -276,7 +282,7 @@ describe("RichTextEditor", () => {
 
   it("supports undo and redo from the toolbar", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
     act(() => {
       ref.current?.commands.insertContent("hello");
     });
@@ -289,7 +295,7 @@ describe("RichTextEditor", () => {
 
   it("clears formatting back to plain text", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
     act(() => {
       ref.current?.commands.setContent(markdownToTiptap("**bold** and *italic*"));
       ref.current?.commands.selectAll();
@@ -300,7 +306,7 @@ describe("RichTextEditor", () => {
 
   it("toggles a numbered list from the toolbar", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
     act(() => {
       ref.current?.commands.insertContent("item");
     });
@@ -331,30 +337,53 @@ describe("RichTextEditor formatting rail pointer class", () => {
     return () => Object.defineProperty(window, "matchMedia", { configurable: true, value: original });
   }
 
-  it("attaches the rail to focus on a touch pointer", () => {
+  it("does not attach a rail to focus on a touch pointer without a soft keyboard", () => {
     const restore = stubMatchMedia(false);
+    closeSoftKeyboard();
     try {
-      render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
-      expect(screen.queryByRole("toolbar", { name: "Description formatting" })).toBeNull();
+      renderFocused(
+        <div>
+          <RichTextEditor label="Description" value="hello" onChange={() => {}} />
+          <input aria-label="Title" />
+        </div>,
+      );
       const textbox = screen.getByRole("textbox", { name: "Description" });
       act(() => textbox.focus());
+      expect(screen.queryByRole("toolbar", { name: "Description formatting" })).toBeNull();
+      // A real viewport shrink is the trigger, not the pointer class.
+      openSoftKeyboard();
+      act(() => window.dispatchEvent(new Event("resize")));
       expect(screen.getByRole("toolbar", { name: "Description formatting" })).toBeTruthy();
-      act(() => textbox.blur());
+      // Focus belongs to another field: the rail does not sit over its keyboard.
+      act(() => screen.getByRole("textbox", { name: "Title" }).focus());
+      expect(screen.queryByRole("toolbar", { name: "Description formatting" })).toBeNull();
+      act(() => textbox.focus());
+      closeSoftKeyboard();
+      act(() => window.dispatchEvent(new Event("resize")));
       expect(screen.queryByRole("toolbar", { name: "Description formatting" })).toBeNull();
     } finally {
       restore();
     }
   });
 
-  it("keeps the rail visible on a fine pointer, focused or not", () => {
+  it("keeps the rail off a fine pointer until a soft keyboard is proved", () => {
     const restore = stubMatchMedia(true);
+    closeSoftKeyboard();
     try {
-      render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+      renderFocused(
+        <div>
+          <RichTextEditor label="Description" value="hello" onChange={() => {}} />
+          <input aria-label="Title" />
+        </div>,
+      );
       const textbox = screen.getByRole("textbox", { name: "Description" });
-      expect(screen.getByRole("toolbar", { name: "Description formatting" })).toBeTruthy();
       act(() => textbox.focus());
-      act(() => textbox.blur());
+      expect(screen.queryByRole("toolbar", { name: "Description formatting" })).toBeNull();
+      openSoftKeyboard();
+      act(() => window.dispatchEvent(new Event("resize")));
       expect(screen.getByRole("toolbar", { name: "Description formatting" })).toBeTruthy();
+      act(() => screen.getByRole("textbox", { name: "Title" }).focus());
+      expect(screen.queryByRole("toolbar", { name: "Description formatting" })).toBeNull();
     } finally {
       restore();
     }
@@ -364,7 +393,7 @@ describe("RichTextEditor formatting rail pointer class", () => {
     const restore = stubMatchMedia(false);
     try {
       const ref = createRef<Editor | null>();
-      render(<RichTextEditor label="Description" value="see map here" onChange={() => {}} editorRef={ref} />);
+      renderFocused(<RichTextEditor label="Description" value="see map here" onChange={() => {}} editorRef={ref} />);
       const textbox = screen.getByRole("textbox", { name: "Description" });
       act(() => textbox.focus());
       act(() => ref.current?.commands.setTextSelection({ from: 5, to: 8 }));
@@ -387,7 +416,7 @@ describe("RichTextEditor formatting rail pointer class", () => {
   });
 
   it("keeps the caret in the field when a rail slot is pressed", () => {
-    render(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
+    renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     const textbox = screen.getByRole("textbox", { name: "Description" });
     act(() => textbox.focus());
     const bold = screen.getByRole("button", { name: "Bold" });
@@ -400,7 +429,7 @@ describe("RichTextEditor formatting rail pointer class", () => {
 
   it("reaches every action from the seven-slot rail, including redo once it can run", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
     for (const name of ["Undo", "Bold", "Italic", "Bullets", "Link", "More"]) {
       expect(screen.getByRole("button", { name })).toBeTruthy();
     }
@@ -420,7 +449,7 @@ describe("RichTextEditor formatting rail pointer class", () => {
 describe("RichTextEditor slash commands", () => {
   it("opens on a line-leading slash, narrows to matching commands, and accepts with keyboard", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
     const viewDom = ref.current!.view.dom;
     act(() => ref.current?.commands.insertContent("/"));
     const menu = screen.getByRole("listbox", { name: "Formatting commands" });
@@ -438,7 +467,7 @@ describe("RichTextEditor slash commands", () => {
 
   it("dismisses on Escape without closing the surface around it", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
     pickRailMore("Expand editor");
     const overlay = document.getElementById("report-editor-overlay");
     expect(overlay).not.toBeNull();
@@ -452,14 +481,14 @@ describe("RichTextEditor slash commands", () => {
 
   it("leaves a slash in ordinary prose alone", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
     act(() => ref.current?.commands.insertContent("see pages 1/2"));
     expect(screen.queryByRole("listbox", { name: "Formatting commands" })).toBeNull();
   });
 
   it("closes on an outside tap without deleting the typed query", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
     act(() => ref.current?.commands.insertContent("/bold"));
     expect(screen.getByRole("listbox", { name: "Formatting commands" })).toBeTruthy();
 
@@ -471,7 +500,7 @@ describe("RichTextEditor slash commands", () => {
 
   it("keeps the menu open through a press on one of its own rows", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
     act(() => ref.current?.commands.insertContent("/bold"));
     const menu = screen.getByRole("listbox", { name: "Formatting commands" });
     const row = within(menu).getByRole("option", { name: "Bold" });
@@ -489,7 +518,7 @@ describe("RichTextEditor slash commands", () => {
 
   it("closes the typed menu when focus leaves the editor", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
     const outside = document.createElement("button");
     document.body.append(outside);
     try {
@@ -507,7 +536,7 @@ describe("RichTextEditor slash commands", () => {
 
   it("keeps redo out of the typed menu even while the redo stack is live", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
     act(() => ref.current?.commands.insertContent("x"));
     act(() => ref.current?.commands.undo());
     expect(ref.current?.can().redo()).toBe(true);
@@ -538,7 +567,7 @@ describe("RichTextEditor slash commands", () => {
     ["/clear", "Clear formatting"],
   ])("restores the typed trigger after one undo for %s", (trigger, option) => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
     act(() => ref.current?.commands.insertContent(trigger));
     const menu = screen.getByRole("listbox", { name: "Formatting commands" });
     fireEvent.click(within(menu).getByRole("option", { name: option }));
@@ -560,7 +589,7 @@ describe("RichTextEditor slash commands", () => {
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { readText } });
     try {
       const ref = createRef<Editor | null>();
-      render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+      renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
       act(() => ref.current?.commands.insertContent("/paste"));
       const menu = screen.getByRole("listbox", { name: "Formatting commands" });
       fireEvent.click(within(menu).getByRole("option", { name: "Paste as Markdown" }));
@@ -611,7 +640,7 @@ describe("RichTextEditor security", () => {
 
   it("neutralizes pasted HTML and script-like content", () => {
     const ref = createRef<Editor | null>();
-    render(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
+    renderFocused(<RichTextEditor label="Description" value="" onChange={() => {}} editorRef={ref} />);
     act(() => {
       ref.current?.commands.insertContent(
         '<p>Hello <script>alert("x")</script> <b>raw</b> <img src="x" onerror="alert(1)"></p><p><a href="javascript:alert(1)">evil</a> <a href="https://example.com">safe</a></p>',

@@ -8,12 +8,13 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { publishReportMock, suggestFieldsMock, suggestCategoryMock, nlHelperStateMock, navigateMock, photo, nativeMedia } =
+const { publishReportMock, suggestFieldsMock, suggestCategoryMock, nlHelperStateMock, prewarmNeedleMock, navigateMock, photo, nativeMedia } =
   vi.hoisted(() => ({
     publishReportMock: vi.fn(),
     suggestFieldsMock: vi.fn(),
     suggestCategoryMock: vi.fn(),
     nlHelperStateMock: vi.fn(),
+    prewarmNeedleMock: vi.fn(),
     navigateMock: vi.fn(),
     photo: {
       isNativeCameraAvailable: vi.fn(() => false),
@@ -30,10 +31,17 @@ const { publishReportMock, suggestFieldsMock, suggestCategoryMock, nlHelperState
     },
   }));
 
-vi.mock("@capacitor/core", () => ({
-  Capacitor: { isNativePlatform: () => false, getPlatform: () => "web" },
-  Plugins: { ShortLinkResolver: { resolve: vi.fn() } },
-}));
+// Report AI is Android-only; these tests exercise that surface.
+vi.mock("@capacitor/core", () => {
+  // `utils/location` registers the short-link resolver at module scope on
+  // Android, so the partial core mock must expose the real export.
+  const shortLinks = { resolve: vi.fn(async ({ url }: { url: string }) => ({ url })) };
+  return {
+    Capacitor: { isNativePlatform: () => true, getPlatform: () => "android" },
+    registerPlugin: (name: string) => name === "ShortLinkResolver" ? shortLinks : {},
+    Plugins: { ShortLinkResolver: shortLinks },
+  };
+});
 vi.mock("react-router", () => ({ useNavigate: () => navigateMock }));
 vi.mock("../auth", () => ({ useAuth: () => ({ user: { id: "u1", username: "tester" } }) }));
 vi.mock("../services/posts", async (importOriginal) => {
@@ -63,6 +71,15 @@ vi.mock("../services/liveNarrowTasks", async (importOriginal) => {
 vi.mock("../services/categorySuggestion", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/categorySuggestion")>();
   return { ...actual, suggestCategoryForText: (...args: unknown[]) => suggestCategoryMock(...args) };
+});
+// The load-only warm-up runs on entry; a real service would construct the
+// native runtime seams under jsdom.
+vi.mock("../services/ai/applicationAi", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../services/ai/applicationAi")>();
+  return {
+    ...actual,
+    getApplicationAi: () => ({ android: true, prewarmNeedle: prewarmNeedleMock }),
+  };
 });
 
 import { CreateReport } from "./CreateReport";
@@ -154,6 +171,8 @@ beforeEach(() => {
   suggestFieldsMock.mockReset();
   suggestCategoryMock.mockReset();
   nlHelperStateMock.mockReset();
+  prewarmNeedleMock.mockReset();
+  prewarmNeedleMock.mockResolvedValue(true);
   navigateMock.mockReset();
   // Default: the helper is installed and works. The device states are their own
   // test below — a failure must say what the device is, not what the text is not.
@@ -182,7 +201,7 @@ describe("CreateReport suggestion failure — Manage local tools affordance (MIN
 
   async function failSuggestion(itemText = "Black umbrella lost yesterday.") {
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: itemText },
     });
@@ -276,7 +295,7 @@ describe("CreateReport suggestion failure — Manage local tools affordance (MIN
     // back. What the person already wrote must survive that trip, exactly like
     // the draft it belongs to.
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     const input = screen.getByLabelText(/what did you lose/i);
     fireEvent.change(input, { target: { value: "Lost umbrella" } });
 
@@ -286,7 +305,7 @@ describe("CreateReport suggestion failure — Manage local tools affordance (MIN
 
     cleanup();
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     expect((screen.getByLabelText(/what did you lose/i) as HTMLInputElement).value).toBe(
       "Lost umbrella",
     );
@@ -296,7 +315,7 @@ describe("CreateReport suggestion failure — Manage local tools affordance (MIN
     // The title is draft content: a draft holding nothing else must still be
     // discardable, and the discard must not leave it behind for the next report.
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: "Lost umbrella" },
     });
@@ -323,7 +342,7 @@ describe("CreateReport suggestion failure — Manage local tools affordance (MIN
     suggestCategoryMock.mockImplementation(cancellable(CANCELLED));
     seedDescription("a black umbrella lost near the market");
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), { target: { value: "Lost umbrella" } });
     await chooseCategory("Electronics");
 
@@ -397,7 +416,7 @@ describe("CreateReport suggestion lifecycle — round-3 review closures (revisio
     suggestCategoryMock.mockImplementation(cancellable(ENGINE_FAILURE));
     const probe = deferredProbe();
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: "Lost umbrella" },
     });
@@ -430,7 +449,7 @@ describe("CreateReport suggestion lifecycle — round-3 review closures (revisio
     suggestCategoryMock.mockImplementation(cancellable(ENGINE_FAILURE));
     const probe = deferredProbe();
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     const box = screen.getByLabelText(/what did you lose/i);
     fireEvent.change(box, { target: { value: "Lost umbrella" } });
     fireEvent.click(suggestButton());
@@ -451,7 +470,7 @@ describe("CreateReport suggestion lifecycle — round-3 review closures (revisio
     suggestCategoryMock.mockImplementation(cancellable(ENGINE_FAILURE));
     nlHelperStateMock.mockResolvedValue("not-set-up");
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: "Lost umbrella" },
     });
@@ -468,7 +487,7 @@ describe("CreateReport suggestion lifecycle — round-3 review closures (revisio
     // The second text box is gone, so the draft must not grow an
     // `aiSuggestInput` key either: the title and description are the input.
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), { target: { value: "Lost umbrella" } });
     await waitFor(() => {
       expect(loadDraft("u1")?.title).toBe("Lost umbrella");

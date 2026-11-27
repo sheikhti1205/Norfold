@@ -46,6 +46,23 @@ describe("truthful helper failure copy", () => {
     expect(localSearchFailureNote({ stage: "runtime", code: "NO_PROFILE" }))
       .not.toMatch(/needs the local search helper/);
   });
+
+  it("treats memory pressure as a wait, never as unreadable files or an install", () => {
+    const failure = { stage: "memory" as const, code: "LOW_MEMORY" };
+    const note = localSearchFailureNote(failure);
+    expect(note).toMatch(/free memory/i);
+    // Smart Search still searched the words, and the helper is sound.
+    expect(note).toMatch(/searching your words normally/i);
+    expect(note).not.toMatch(/couldn't read|files/i);
+    expect(note).not.toMatch(/manage local tools|install|reinstall|repair|local search helper/i);
+    expect(localSearchFailureOffersHelper(failure)).toBe(false);
+  });
+
+  it("still keeps the helper row for an actual storage failure", () => {
+    const failure = { stage: "storage" as const, code: "INSUFFICIENT_STORAGE" };
+    expect(localSearchFailureNote(failure)).toMatch(/files/i);
+    expect(localSearchFailureOffersHelper(failure)).toBe(true);
+  });
 });
 
 const MAPS = [NL_EMPTY_PATCH_NOTE, NL_SUGGESTION_FAILURE_NOTE];

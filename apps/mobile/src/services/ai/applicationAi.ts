@@ -7,7 +7,7 @@ import { NEEDLE_MODEL_ID, type NativeNeedleEmbedder } from "./needle/embedder";
 import { CapacitorModelDownloadDriver, runManagedDownload, removeManagedModel, validatedDeviceAbis, type ModelDownloadDriver } from "./download/driver";
 import type { AiTaskId } from "./types";
 import type { RouteContext } from "./orchestrator/AiOrchestrator";
-import type { ProductionTextCompletion } from "./orchestrator/productionRuntimes";
+import { RouteCancelledError, type ProductionTextCompletion } from "./orchestrator/productionRuntimes";
 import { createModelRegistry, NEEDLE_RUNTIME_ID, productionModelRegistry, distributionPolicyOf, modelSupportsAbi, type ModelDescriptor, type ModelRegistry } from "./modelDescriptors";
 import { ResidencyCoordinator, ResidencyBusyError } from "./residencyCoordinator";
 import { sourcesFor, validateArtifactMirrors, type ArtifactMirrors } from "./modelSupply";
@@ -162,6 +162,19 @@ export function compatibilityOf(
   return { compatible: true };
 }
 type NeedleBridge = Pick<CapacitorNeedleBridge, "bridgeName" | "isNeedleAvailable" | "embeddingDimension" | "loadModel" | "embedNeedleTexts" | "initTools" | "completeJson" | "unload">;
+
+/**
+ * Internal signal that the install/resident this load was pointed at changed
+ * while the engine was loading: an account reset landed (which retires the
+ * resident) or a removal already tore it down. It is not a model failure, so
+ * the warm-up reports "not warm" instead of advertising an AI error.
+ */
+class NeedleLoadInterrupted extends Error {
+  constructor() {
+    super("Needle load interrupted");
+    this.name = "NeedleLoadInterrupted";
+  }
+}
 
 export class ApplicationAiService {
   readonly boot: ProductionBoot;
@@ -540,9 +553,18 @@ export class ApplicationAiService {
     }
   }
   /** Tool-constrained structured generation stays on Needle (the proven tool model). */
-  private async completeNeedleStructured(taskId: string, input: string, _signal?: AbortSignal): Promise<ProductionTextCompletion> {
+  private async completeNeedleStructured(taskId: string, input: string, signal?: AbortSignal): Promise<ProductionTextCompletion> {
     if (this.needle === undefined) throw new Error("No qualified on-device structured runtime is installed");
-    await this.ensureNeedle();
+    // Readiness is a second async probe on the real path. An account reset or a
+    // removal that lands during it retires the resident and `ensureNeedle`
+    // reports `false` instead of resurrecting the engine. Never begin tool
+    // installation or completion on a flight that can no longer be served.
+    const resetVersion = this.coordinator.resetVersion;
+    const ready = await this.ensureNeedle();
+    if (signal?.aborted) throw new RouteCancelledError();
+    if (!ready || resetVersion !== this.coordinator.resetVersion) {
+      throw new Error("Needle readiness was interrupted before generation");
+    }
     return { text: await this.extractTaskFields(taskId, input), modelId: NEEDLE_MODEL_ID, runtimeId: NEEDLE_RUNTIME_ID };
   }
   private async ensureNeedle(): Promise<boolean> {
@@ -554,6 +576,9 @@ export class ApplicationAiService {
     if (needleDescriptor === undefined) return false;
     const abis = await this.deviceAbis();
     if (abis === undefined || !compatibilityOf(needleDescriptor, abis, this.bridges()).compatible) return false;
+    // Captured BEFORE the load starts: a reset that lands while the engine is
+    // loading has already retired the resident, and this load must not claim it.
+    const resetVersion = this.coordinator.resetVersion;
     if (!this.loadingNeedle) this.loadingNeedle = (async () => {
       if (!this.embedder || !(await this.needle!.isNeedleAvailable())) {
         // Single-resident rule via the coordinator: Needle is the only
@@ -561,12 +586,42 @@ export class ApplicationAiService {
         await this.coordinator.switchTo("needle", {
           evict: async () => { this.embedder = undefined; },
           load: async () => {
-            this.embedder = await createNativeNeedleEmbedder(this.needle!, { installedPath: this.paths(NEEDLE_MODEL_ID).installedPath });
+            const embedder = await createNativeNeedleEmbedder(this.needle!, { installedPath: this.paths(NEEDLE_MODEL_ID).installedPath });
+            // Both an account reset and a removal invalidate the install this
+            // load was reading. Assigning the embedder or owner now would
+            // resurrect an engine the cleanup already released, so unload the
+            // one we just built and report "not warm".
+            if (
+              resetVersion !== this.coordinator.resetVersion ||
+              !describeOfflineReadiness(this.manager, NEEDLE_MODEL_ID).ready
+            ) {
+              await this.needle!.unload().catch(() => {});
+              throw new NeedleLoadInterrupted();
+            }
+            this.embedder = embedder;
           },
         });
+        // `switchTo` claims the owner after `load` resolves; a reset or removal
+        // that lands in that gap has already retired the resident, so release
+        // the claim it just made instead of leaving a live owner behind.
+        if (
+          resetVersion !== this.coordinator.resetVersion ||
+          !describeOfflineReadiness(this.manager, NEEDLE_MODEL_ID).ready
+        ) {
+          this.embedder = undefined;
+          this.coordinator.released("needle");
+          await this.needle!.unload().catch(() => {});
+          throw new NeedleLoadInterrupted();
+        }
       }
     })().finally(() => { this.loadingNeedle = undefined; });
-    await this.loadingNeedle; return true;
+    try {
+      await this.loadingNeedle;
+    } catch (error) {
+      if (error instanceof NeedleLoadInterrupted) return false;
+      throw error;
+    }
+    return true;
   }
   private async extractTaskFields(taskId: string, input: string): Promise<string> {
     const strategy = STRUCTURED_STRATEGIES[taskId];
@@ -616,6 +671,24 @@ export class ApplicationAiService {
       });
     }
     finally { lease.requestSettled(); }
+  }
+  /**
+   * Load-only warm-up for the report form.
+   *
+   * Never downloads, never generates and never throws: the form calls it when
+   * the person is already on Create Report, so the first "Suggest details" tap
+   * does not pay the cold engine load. It shares the single `ensureNeedle`
+   * flight and residency with a suggestion that starts while the load is still
+   * pending (that route joins this load instead of failing busy). Web builds
+   * answer false without touching an engine.
+   */
+  async prewarmNeedle(): Promise<boolean> {
+    if (!this.android) return false;
+    try {
+      return await this.ensureNeedle();
+    } catch {
+      return false;
+    }
   }
   async embedNeedle(texts: string[]) {
     this.requireAndroid(); await this.ready;

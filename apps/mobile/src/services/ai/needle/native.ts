@@ -9,7 +9,9 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import {
   NEEDLE_MODEL_ID,
+  NeedleLowMemoryError,
   NativeNeedleEmbedder,
+  isNeedleLowMemoryError,
   type NativeNeedleBridge,
 } from "./embedder";
 
@@ -56,9 +58,17 @@ export class CapacitorNeedleBridge implements NativeNeedleBridge {
   }
 
   async loadModel(args: { modelId: string; installedPath?: string }): Promise<number> {
-    const result = await this.plugin().loadNeedleModel(args);
-    if (result.ready !== true) throw new Error("Needle engine failed to load");
-    return result.dimension;
+    try {
+      const result = await this.plugin().loadNeedleModel(args);
+      if (result.ready !== true) throw new Error("Needle engine failed to load");
+      return result.dimension;
+    } catch (error) {
+      // The plugin's one native load point refuses heavyweight initialization
+      // under memory pressure. Keep that cause typed; every other failure
+      // passes through unchanged.
+      if (isNeedleLowMemoryError(error)) throw new NeedleLowMemoryError();
+      throw error;
+    }
   }
 
   async completeJson(input: string, maxNewTokens = 256): Promise<string> {

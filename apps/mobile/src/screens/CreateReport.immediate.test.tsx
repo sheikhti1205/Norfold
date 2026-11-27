@@ -104,7 +104,7 @@ describe("CreateReport immediate submit", () => {
       photoFormat: null,
     }, "u1");
     render(<CreateReport />);
-    await screen.findByRole("toolbar", { name: /description formatting/i });
+    await screen.findByRole("textbox", { name: "Description" });
     expect(capturedOnChange).not.toBeNull();
 
     const finalMarkdown = "final keystrokes that stay valid and long enough";

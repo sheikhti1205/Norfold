@@ -43,6 +43,11 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(NorfoldDeviceIdentityPlugin.class);
         registerPlugin(SystemColorsPlugin.class);
         registerPlugin(DataEpochPlugin.class);
+        // Read-only IME state for the editor rail: the adjusting window reports
+        // equal layout and visual heights with the keyboard up, so JS cannot
+        // detect it. This plugin only reads WindowInsetsCompat; it installs no
+        // insets listener of its own.
+        registerPlugin(ImeInsetsPlugin.class);
         super.onCreate(savedInstanceState);
         if (savedInstanceState != null && savedInstanceState.getBundle("findbackMediaRequest") != null) {
             mediaPlugin().restoreMediaRequestState(savedInstanceState.getBundle("findbackMediaRequest"));

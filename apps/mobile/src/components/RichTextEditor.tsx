@@ -34,7 +34,8 @@ import { motionDurations, popoverVariants, pressFeedback } from "./uiMotion";
 import { FormattingMenu } from "./FormattingMenu";
 import { FORMATTING_COMMANDS } from "./formattingCommands";
 import { useSlashCommands } from "../hooks/useSlashCommands";
-import { FINE_POINTER_QUERY } from "./inputCapabilities";
+import { KEYBOARD_OPEN_THRESHOLD_PX, useKeyboardInset } from "../hooks/keyboardInset";
+import { subscribeNativeIme, type NativeImeState } from "../native/ime";
 
 export const RICH_TEXT_DEBOUNCE_MS = 300;
 
@@ -52,28 +53,165 @@ const MORE_COMMAND_IDS: ReadonlyArray<string> = ["redo", "list.number", "quote",
 const EDITOR_OVERLAY_Z_INDEX = 91;
 const EDITOR_MENU_Z_INDEX = 92;
 const EDITOR_DIALOG_Z_INDEX = 93;
+/** Above the report form, below every portalled menu/dialog. */
+const INLINE_RAIL_Z_INDEX = 30;
+/** Border (1px) + the 48px action row. */
+const INLINE_RAIL_FLOW_HEIGHT_PX = 49;
+
+/** `inputCapabilities` tracks the fine pointer; this hook needs the opposite. */
+const COARSE_POINTER_QUERY = "(pointer: coarse)";
 
 /**
- * `inputCapabilities.useFinePointer` with the opposite missing-API fallback:
- * the rail is a formatting surface, so an environment without matchMedia
- * (jsdom, SSR, an old WebView) keeps it visible instead of removing every
- * action. Pointer class, never viewport width: a touch laptop is still touch.
+ * A soft keyboard, not a narrower viewport.
+ *
+ * The Android shell answers *whether* directly (`WindowInsetsCompat.Type.ime()`
+ * through `src/native/ime.ts`), because its resizing window reports the same
+ * layout and visual height with the keyboard up. Everywhere else two honest
+ * geometries answer it, because browsers split on which viewport they resize:
+ *
+ * - an overlaying IME shrinks only `visualViewport`, so `useKeyboardInset`
+ *   measures the covered band directly and the rail docks to its top;
+ * - a resizing IME (`interactive-widget=resizes-content`) shrinks the layout
+ *   viewport itself, so the covered band is `visualViewport`-invisible. There
+ *   the keyboard is proved by a large, transient layout-height loss on a
+ *   coarse-pointer device whose width did not change (a rotation or a desktop
+ *   window drag resets the baseline, a hardware keyboard never shrinks the
+ *   layout at all).
+ *
+ * Ordinary browser chrome moves the layout height by tens of pixels and pinch
+ * zoom changes `visualViewport.scale`, so neither summons a rail.
  */
-function useRailFinePointer(): boolean {
-  const [fine, setFine] = useState(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return true;
-    return window.matchMedia(FINE_POINTER_QUERY).matches;
+function currentOrientationAngle(): number | null {
+  if (typeof window === "undefined") return null;
+  const angle = window.screen?.orientation?.angle;
+  return typeof angle === "number" ? angle : null;
+}
+
+interface LayoutBaseline {
+  width: number;
+  height: number;
+  angle: number | null;
+}
+
+interface LayoutLoss {
+  /** On this device that loss is a keyboard, not browser chrome. */
+  keyboard: boolean;
+}
+
+const NO_LAYOUT_LOSS: LayoutLoss = { keyboard: false };
+
+/**
+ * The Android shell's own IME reading, or `known: false` everywhere else. It is
+ * the authority on *whether* a keyboard is up; the WebView's own geometry only
+ * decides where the rail sits.
+ */
+function useNativeIme(): NativeImeState {
+  const [state, setState] = useState<NativeImeState>({ known: false, visible: false });
+  useEffect(() => subscribeNativeIme(setState), []);
+  return state;
+}
+
+function useSoftKeyboard(): { open: boolean; insetPx: number } {
+  const inset = useKeyboardInset();
+  const nativeIme = useNativeIme();
+  const [zoomed, setZoomed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return (window.visualViewport?.scale ?? 1) > 1.01;
+  });
+  const [layout, setLayout] = useState<LayoutLoss>(NO_LAYOUT_LOSS);
+  const baselineRef = useRef<LayoutBaseline>({
+    width: typeof window === "undefined" ? 0 : window.innerWidth,
+    height: typeof window === "undefined" ? 0 : window.innerHeight,
+    angle: currentOrientationAngle(),
   });
   useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
-    const query = window.matchMedia(FINE_POINTER_QUERY);
-    const onChange = (event: MediaQueryListEvent) => setFine(event.matches);
-    setFine(query.matches);
-    if (typeof query.addEventListener !== "function") return;
-    query.addEventListener("change", onChange);
-    return () => query.removeEventListener("change", onChange);
+    if (typeof window === "undefined") return;
+    const viewport = window.visualViewport;
+    const updateZoom = () => setZoomed(viewport ? (viewport.scale ?? 1) > 1.01 : false);
+    updateZoom();
+    viewport?.addEventListener("resize", updateZoom);
+    viewport?.addEventListener("scroll", updateZoom);
+
+    const updateLayout = () => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const angle = currentOrientationAngle();
+      const baseline = baselineRef.current;
+      // Rotation, a desktop window drag or any real layout change other than a
+      // keyboard moves the width too; re-learn the resting height from there.
+      if (angle !== baseline.angle || Math.abs(width - baseline.width) > 2) {
+        baselineRef.current = { width, height, angle };
+        setLayout(NO_LAYOUT_LOSS);
+        return;
+      }
+      if (height >= baseline.height) {
+        baselineRef.current = { ...baseline, height };
+        setLayout(NO_LAYOUT_LOSS);
+        return;
+      }
+      const coveredPx = baseline.height - height;
+      const coarse = typeof window.matchMedia === "function"
+        && window.matchMedia(COARSE_POINTER_QUERY).matches;
+      setLayout({
+        keyboard: coarse
+          && coveredPx > KEYBOARD_OPEN_THRESHOLD_PX
+          // A keyboard never eats nearly the whole window; a window that did is
+          // not one (rotation and desktop drags are already excluded above).
+          && coveredPx < baseline.height * 0.85,
+      });
+    };
+    updateLayout();
+    window.addEventListener("resize", updateLayout);
+    window.addEventListener("orientationchange", updateLayout);
+    return () => {
+      viewport?.removeEventListener("resize", updateZoom);
+      viewport?.removeEventListener("scroll", updateZoom);
+      window.removeEventListener("resize", updateLayout);
+      window.removeEventListener("orientationchange", updateLayout);
+    };
   }, []);
-  return fine;
+
+  // Native, where available, is the authority on *whether*: `adjustResize`
+  // leaves the layout and visual viewports equal even with the keyboard up, so
+  // geometry would call a proven-open IME closed. A proven native IME also
+  // outranks pinch zoom, which is a geometry artefact, not a keyboard state.
+  const open = nativeIme.known
+    ? nativeIme.visible
+    : !zoomed && (inset.open || layout.keyboard);
+  // Native never says *where*. Its root IME inset is measured before a resizing
+  // window consumes it, so subtracting it again would lift the rail into the
+  // form. The CSS offset is the WebView's measured occlusion only: zero when
+  // the layout and visual viewports already end together at the IME's top, the
+  // covered band when the IME overlays the page.
+  const insetPx = open ? inset.insetPx : 0;
+  return { open, insetPx };
+}
+
+/**
+ * Whether this field is the active one. Only elements inside the field's own
+ * root prove it — the editor, its inline rail, its hint. `body`/`null` never
+ * do: nothing is focused, so any keyboard on screen belongs to something else.
+ * Portalled menus and the link dialog live outside the root and are owned by
+ * their open state instead (see `railAnchored`).
+ */
+function useDescriptionActive(rootRef: RefObject<HTMLDivElement | null>): boolean {
+  const [active, setActive] = useState(false);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const sync = () => {
+      const element = document.activeElement;
+      setActive(element instanceof Node && root.contains(element));
+    };
+    sync();
+    document.addEventListener("focusin", sync);
+    document.addEventListener("focusout", sync);
+    return () => {
+      document.removeEventListener("focusin", sync);
+      document.removeEventListener("focusout", sync);
+    };
+  }, [rootRef]);
+  return active;
 }
 
 interface LinkSelection {
@@ -84,9 +222,11 @@ interface LinkSelection {
   href: string;
 }
 
-function LinkSheet({ selection, triggerRef, onCancel, onSave, onRemove }: {
+function LinkSheet({ selection, triggerRef, fallbackElement, onCancel, onSave, onRemove }: {
   selection: LinkSelection;
-  triggerRef: RefObject<HTMLButtonElement | null>;
+  triggerRef?: RefObject<HTMLButtonElement | null>;
+  /** Stable in-page anchor when the rail has unmounted (keyboard closed). */
+  fallbackElement?: HTMLElement;
   onCancel: () => void;
   onSave: (url: string) => string | null;
   onRemove: () => void;
@@ -147,8 +287,23 @@ function LinkSheet({ selection, triggerRef, onCancel, onSave, onRemove }: {
   });
 
   useEffect(() => {
-    refs.setReference(triggerRef.current);
-  }, [refs, triggerRef]);
+    // The rail only exists above a soft keyboard, so it can unmount while this
+    // dialog is open. Measure live: the tapped button while it is connected,
+    // otherwise the editor box, instead of anchoring to a detached node.
+    refs.setReference({
+      getBoundingClientRect: () => {
+        const trigger = triggerRef?.current;
+        if (trigger?.isConnected) return trigger.getBoundingClientRect();
+        if (fallbackElement?.isConnected) return fallbackElement.getBoundingClientRect();
+        // Neither node survived (no rail, editor unmounted): centre on the
+        // window instead of anchoring to the origin. A plain rect, not DOMRect,
+        // so the dialog does not depend on that constructor existing.
+        const x = Math.max(0, window.innerWidth / 2);
+        const y = Math.max(0, window.innerHeight / 2);
+        return { x, y, width: 0, height: 0, top: y, right: x, bottom: y, left: x };
+      },
+    });
+  }, [refs, triggerRef, fallbackElement]);
 
   return (
     <FloatingPortal>
@@ -231,12 +386,17 @@ interface FloatingMenuProps {
   open: boolean;
   onClose: () => void;
   triggerRef: RefObject<HTMLButtonElement | null>;
+  /**
+   * Live anchor, re-read on every reposition. The trigger is inside the rail,
+   * which unmounts with the keyboard, so it can be gone while this menu is open.
+   */
+  getAnchorRect: () => DOMRect | null;
   children: React.ReactNode;
   label: string;
   placement?: "top" | "bottom";
 }
 
-function FloatingMenu({ open, onClose, triggerRef, children, label, placement = "top" }: FloatingMenuProps) {
+function FloatingMenu({ open, onClose, triggerRef, getAnchorRect, children, label, placement = "top" }: FloatingMenuProps) {
   const floatingRef = useRef<HTMLDivElement>(null);
   const { refs, floatingStyles } = useFloating({
     open,
@@ -262,8 +422,14 @@ function FloatingMenu({ open, onClose, triggerRef, children, label, placement = 
   });
 
   useEffect(() => {
-    if (open) refs.setReference(triggerRef.current);
-  }, [open, refs, triggerRef]);
+    if (!open) return;
+    // A virtual element re-reads the anchor on every measurement, exactly like
+    // FormattingMenu and the link sheet: a detached trigger measures as zero and
+    // would drop the menu at the viewport origin.
+    refs.setReference({
+      getBoundingClientRect: () => getAnchorRect() ?? new DOMRect(0, 0, 0, 0),
+    });
+  }, [open, refs, getAnchorRect]);
 
   // Auto-focus the selected/first menu item when menu opens - using ref callback for synchronous focus
   const setFloatingRef = (el: HTMLDivElement | null) => {
@@ -677,9 +843,15 @@ export function tiptapToMarkdown(json: unknown): string {
  *
  * Rail: seven stable slots for the actions used while composing (Undo, block
  * type, Bold, Italic, Bullets, Link, More); the trailing menu holds history
- * replay, block-level insertion, clipboard, cleanup and full screen. It is
- * attached to focus on touch/coarse pointers and always visible on fine ones,
- * and a line-leading "/" opens the same actions as a typed command menu.
+ * replay, block-level insertion, clipboard, cleanup and full screen. The rail
+ * is not permanent chrome: it exists only while this Description owns focus AND
+ * a real soft keyboard is proved — by the Android shell's WindowInsets reading,
+ * by an overlaying IME that shrinks the visible viewport, or by a resizing IME
+ * that shrinks the layout on a touch device — and is docked to the IME's top
+ * edge. Without that proof (desktop web, a hardware keyboard, an IME that
+ * changes no measurable geometry) a line-leading "/" still opens the same
+ * actions as a typed command menu, and a short hint names it. A menu opened from
+ * the rail outlives the keyboard, but the rail itself never does.
  *
  * Selection safety (ED-04): a toolbar `pointerdown` captures the pending range
  * before Android/WebView focus loss collapses the DOM selection; the stashed
@@ -700,14 +872,14 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
   const [status, setStatus] = useState<string | null>(null);
   const [listNotice, setListNotice] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [editorFocused, setEditorFocused] = useState(false);
   const [moreActive, setMoreActive] = useState(0);
-  const finePointer = useRailFinePointer();
   const rootRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const overlayPreviouslyFocusedRef = useRef<HTMLElement | null>(null);
   const initialFocusClaimedRef = useRef(false);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const softKeyboard = useSoftKeyboard();
+  const descriptionActive = useDescriptionActive(rootRef);
   const setOverlayRef = useFocusTrap(overlayRef, () => setIsExpanded(false), isExpanded, overlayPreviouslyFocusedRef);
   useModalBack(isExpanded, () => setIsExpanded(false));
 
@@ -749,25 +921,19 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
     if (overlay.contains(document.activeElement)) claim();
     return () => overlay.removeEventListener("focusin", claim);
   }, [isExpanded]);
-  // The rail is attached to focus on touch: "focused" means focus is anywhere
-  // in this field's own chrome (the contenteditable or a rail control), read
-  // from the live active element so a menu that moves focus out and back does
-  // not flicker the rail.
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-    const sync = () => setEditorFocused(root.contains(document.activeElement));
-    document.addEventListener("focusin", sync);
-    document.addEventListener("focusout", sync);
-    return () => {
-      document.removeEventListener("focusin", sync);
-      document.removeEventListener("focusout", sync);
-    };
-  }, []);
   const baseId = useId();
   const errorId = `${baseId}-error`;
   const countId = `${baseId}-count`;
   const statusId = `${baseId}-status`;
+  const hintId = `${baseId}-slash-hint`;
+  // A portalled menu or the link dialog belongs to this field while it is open,
+  // even though it lives outside the root. Ownership is not visibility: the
+  // rail itself is never shown without a proved IME (see `showInlineRail`).
+  const railAnchored = openMenu !== null || linkSelection !== null;
+  // The hint is the fallback surface when no rail can be shown: it is never a
+  // permanent rail, and it stays out of the way while the rail is on screen or
+  // a menu opened from the field is already explaining its actions.
+  const showHint = !disabled && !softKeyboard.open && !railAnchored;
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const valueRef = useRef(value);
@@ -955,14 +1121,15 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
   useEffect(() => {
     const dom = editor?.view.dom as HTMLElement | undefined;
     if (!dom) return;
-    dom.setAttribute("aria-describedby", error ? `${errorId} ${countId}` : countId);
+    const describedBy = [error ? errorId : null, countId, showHint ? hintId : null].filter(Boolean).join(" ");
+    dom.setAttribute("aria-describedby", describedBy);
     if (error) dom.setAttribute("aria-invalid", "true");
     else dom.removeAttribute("aria-invalid");
     if (required) dom.setAttribute("aria-required", "true");
     else dom.removeAttribute("aria-required");
     if (inputId) dom.setAttribute("id", inputId);
     else dom.removeAttribute("id");
-  }, [editor, error, required, inputId, errorId, countId]);
+  }, [editor, error, required, inputId, errorId, countId, hintId, showHint]);
 
   useEffect(() => {
     const dom = editor?.view.dom as HTMLElement | undefined;
@@ -1018,7 +1185,10 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
       const target = event.target as Node;
       const element = target instanceof Element ? target : null;
       const inMenu = element?.closest('[role="menu"], [aria-label="More formatting actions"]') != null;
-      if (toolbarRef.current && !toolbarRef.current.contains(target) && !inMenu) setOpenMenu(null);
+      // The rail unmounts with the keyboard, so a missing toolbar means the
+      // press cannot be inside it; it still dismisses the menu.
+      const inRail = toolbarRef.current?.contains(target) === true;
+      if (!inRail && !inMenu) setOpenMenu(null);
     }
     function onDocKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -1637,6 +1807,18 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
   const menuItemCls =
     "flex min-h-[48px] w-full items-center gap-2 rounded-m3-xs px-3 text-left text-on-surface hover:bg-surface-container";
 
+  /**
+   * Where a rail menu points. The rail only exists above the IME, so its button
+   * can vanish while the menu it opened is still up (Android dismisses the IME
+   * as soon as the block menu takes focus). Fall back to the editor box — the
+   * surface the menu acts on — instead of anchoring to a detached node.
+   */
+  function menuAnchorRect(button: HTMLButtonElement | null): DOMRect | null {
+    if (button?.isConnected) return button.getBoundingClientRect();
+    const dom = editor?.view.dom as HTMLElement | undefined;
+    return dom?.isConnected ? dom.getBoundingClientRect() : null;
+  }
+
   function toggleMenu(kind: "block" | "more", button: RefObject<HTMLButtonElement | null>) {
     if (disabledRef.current) return;
     if (openMenu === kind) {
@@ -1655,60 +1837,19 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
     { name: "Heading 3", kind: 3, preview: { fontSize: "1.1rem", fontWeight: 600 } },
   ];
 
-  function renderFormattingRail(inline: boolean) {
-    // A read-only editor has no rail: a strip of disabled buttons is dead
-    // chrome, and the full-screen route lives inside its More menu.
-    if (disabled) return null;
-    // Rail buttons keep their stable slot (no layout animation) and confirm
-    // every press with a fast spring scale plus the active background.
-    const action = (name: string, Icon: typeof Bold, onClick: () => void, active = false, unavailable = false) => (
-      <motion.button type="button" title={name} aria-label={name} aria-pressed={active}
-        disabled={!editor || disabled || unavailable} onClick={onClick} className={toolButtonCls(active)}
-        whileTap={pressFeedback.rail} transition={{ duration: motionDurations.instant }}>
-        <Icon size={18} aria-hidden />
-      </motion.button>
-    );
-    // The block style is shown by its level, so the slot stays 48px wide
-    // instead of spending 63px on a text label.
-    const BlockTypeIcon = currentBlock === "Heading 1" ? Heading1
-      : currentBlock === "Heading 2" ? Heading2
-      : currentBlock === "Heading 3" ? Heading3
-      : Pilcrow;
+  /**
+   * The rail's two portalled menus. They are rendered outside the rail on
+   * purpose: only a proved soft keyboard docks the rail, and Android dismisses
+   * the IME as soon as the Block menu takes focus. Unmounting the rail must not
+   * take an open menu with it — the menu is anchored through `menuAnchorRect`,
+   * which falls back to the editor box once the trigger is gone.
+   */
+  function renderRailMenus() {
     return (
-      <div ref={toolbarRef} className="relative flex-shrink-0 border-t border-outline-variant bg-surface-container px-2 shadow-[0_-4px_16px_rgba(0,0,0,0.12)]"
-        style={inline ? undefined : { paddingBottom: "max(4px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))" }}>
-        {/* Six action slots plus the trailing More slot: 7 x 48px fits the
-          390px composer and the 374px overlay with no clipped action. */}
-        <div role="toolbar" aria-label={`${label} formatting`}
-          className="flex flex-nowrap items-center gap-0.5"
-          onPointerDownCapture={captureToolbarRange} onMouseDownCapture={captureToolbarRange} onTouchStartCapture={captureToolbarRange}
-          onMouseDown={(event) => event.preventDefault()}
-          onPointerDown={(event) => event.preventDefault()}>
-          {action("Undo", Undo2, applyUndo, false, !canUndo)}
-          <motion.button ref={blockButtonRef} type="button" title={`Block type: ${currentBlock}`}
-            aria-label={`Block type: ${currentBlock}`} aria-haspopup="menu" aria-expanded={openMenu === "block"}
-            disabled={!editor || disabled} onClick={() => toggleMenu("block", blockButtonRef)}
-            className={toolButtonCls(currentBlock !== "Body")}
-            whileTap={pressFeedback.rail} transition={{ duration: motionDurations.instant }}>
-            <BlockTypeIcon size={18} aria-hidden />
-          </motion.button>
-          {action("Bold", Bold, () => toggleMarkWithSavedSelection("bold"), boldActive)}
-          {action("Italic", Italic, () => toggleMarkWithSavedSelection("italic"), italicActive)}
-          {action("Bullets", List, () => applyList("bullet"), bulletActive)}
-          <motion.button ref={linkButtonRef} type="button" title={linkDisabled ? "Select text to add a link" : "Link"}
-            aria-label="Link" aria-pressed={linkActive} disabled={!editor || disabled || linkDisabled}
-            onClick={applyLink} className={toolButtonCls(linkActive)}
-            whileTap={pressFeedback.rail} transition={{ duration: motionDurations.instant }}><Link2 size={18} aria-hidden /></motion.button>
-          <motion.button ref={moreButtonRef} type="button" title="More" aria-label="More"
-            aria-haspopup="listbox" aria-expanded={openMenu === "more"}
-            disabled={!editor || disabled} onClick={() => toggleMenu("more", moreButtonRef)}
-            onKeyDown={handleMoreKeyDown} className={toolButtonCls(openMenu === "more")}
-            whileTap={pressFeedback.rail} transition={{ duration: motionDurations.instant }}>
-            <MoreHorizontal size={18} aria-hidden />
-          </motion.button>
-        </div>
+      <>
         <FloatingMenu open={!disabled && openMenu === "block"} onClose={() => setOpenMenu(null)}
-          triggerRef={blockButtonRef} label="Block type" placement="top">
+          triggerRef={blockButtonRef} getAnchorRect={() => menuAnchorRect(blockButtonRef.current)}
+          label="Block type" placement="top">
           <div onKeyDown={handleMenuKeyDown}>
             {blockOptions.map((option) => {
               const checked = currentBlock === option.name;
@@ -1724,11 +1865,91 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
           open={!disabled && openMenu === "more"}
           items={moreCommands}
           activeIndex={moreActiveIndex}
-          getAnchorRect={() => moreButtonRef.current?.getBoundingClientRect() ?? null}
+          getAnchorRect={() => menuAnchorRect(moreButtonRef.current)}
           onHover={setMoreActive}
           onPick={pickMore}
           label="More formatting actions"
         />
+      </>
+    );
+  }
+
+  function renderFormattingRail(inline: boolean) {
+    // A read-only editor has no rail: a strip of disabled buttons is dead
+    // chrome, and the full-screen route lives inside its More menu.
+    if (disabled) return null;
+    // Rail buttons keep their stable slot (no layout animation) and confirm
+    // every press with a fast spring scale plus the active background.
+    const action = (name: string, Icon: typeof Bold, onClick: () => void, active = false, unavailable = false) => (
+      <motion.button type="button" title={name} aria-label={name} aria-pressed={active}
+        disabled={!editor || disabled || unavailable} onClick={onClick} className={toolButtonCls(active)}
+        whileTap={pressFeedback.rail} transition={{ duration: motionDurations.instant }}>
+        <Icon size={18} aria-hidden />
+      </motion.button>
+    );
+    // Preserve the caret and selection when a control is pressed, but let a
+    // finger pan the narrow-width action row. Preventing pointerdown on the
+    // scroller itself would turn horizontal overflow into a dead strip.
+    const preventFocusLoss = (event: React.SyntheticEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("button, a")) event.preventDefault();
+    };
+    // The block style is shown by its level, so the slot stays 48px wide
+    // instead of spending 63px on a text label.
+    const BlockTypeIcon = currentBlock === "Heading 1" ? Heading1
+      : currentBlock === "Heading 2" ? Heading2
+      : currentBlock === "Heading 3" ? Heading3
+      : Pilcrow;
+    return (
+      <div ref={toolbarRef} data-testid="rich-text-rail" data-docked={inline ? "true" : undefined}
+        className={`${inline ? "fixed inset-x-0" : "relative flex-shrink-0"} border-t border-outline-variant bg-surface-container px-2 shadow-[0_-4px_16px_rgba(0,0,0,0.12)]`}
+        style={inline
+          // The soft keyboard owns the bottom edge. `insetPx` is the covered
+          // area measured once from the visual viewport: using it alone keeps
+          // the rail exactly on the IME top, never a second subtraction.
+          ? { bottom: `${softKeyboard.insetPx}px`, zIndex: INLINE_RAIL_Z_INDEX }
+          // The overlay already ends at the IME top, so the rail is flush: no
+          // bottom safe area and no spacer between it and the keyboard.
+          : { paddingBottom: "0px" }}>
+        {/* One action row. More stays outside the overflow scroller: at 320px
+          the six composing slots can be panned, and the full command menu is
+          always one visible tap away — no squeezed or clipped target. */}
+        <div role="toolbar" aria-label={`${label} formatting`}
+          className="flex flex-nowrap items-center gap-0.5"
+          onPointerDownCapture={captureToolbarRange} onMouseDownCapture={captureToolbarRange} onTouchStartCapture={captureToolbarRange}
+          onMouseDown={preventFocusLoss}
+          onPointerDown={preventFocusLoss}>
+          <div
+            data-testid="rich-text-rail-scroll"
+            role="group"
+            aria-label={`${label} formatting actions`}
+            tabIndex={0}
+            className="flex min-w-0 flex-1 flex-nowrap items-center gap-0.5 overflow-x-auto overscroll-x-contain"
+          >
+            {action("Undo", Undo2, applyUndo, false, !canUndo)}
+            <motion.button ref={blockButtonRef} type="button" title={`Block type: ${currentBlock}`}
+              aria-label={`Block type: ${currentBlock}`} aria-haspopup="menu" aria-expanded={openMenu === "block"}
+              disabled={!editor || disabled} onClick={() => toggleMenu("block", blockButtonRef)}
+              className={toolButtonCls(currentBlock !== "Body")}
+              whileTap={pressFeedback.rail} transition={{ duration: motionDurations.instant }}>
+              <BlockTypeIcon size={18} aria-hidden />
+            </motion.button>
+            {action("Bold", Bold, () => toggleMarkWithSavedSelection("bold"), boldActive)}
+            {action("Italic", Italic, () => toggleMarkWithSavedSelection("italic"), italicActive)}
+            {action("Bullets", List, () => applyList("bullet"), bulletActive)}
+            <motion.button ref={linkButtonRef} type="button" title={linkDisabled ? "Select text to add a link" : "Link"}
+              aria-label="Link" aria-pressed={linkActive} disabled={!editor || disabled || linkDisabled}
+              onClick={applyLink} className={toolButtonCls(linkActive)}
+              whileTap={pressFeedback.rail} transition={{ duration: motionDurations.instant }}><Link2 size={18} aria-hidden /></motion.button>
+          </div>
+          <motion.button ref={moreButtonRef} type="button" title="More" aria-label="More"
+            aria-haspopup="listbox" aria-expanded={openMenu === "more"}
+            disabled={!editor || disabled} onClick={() => toggleMenu("more", moreButtonRef)}
+            onKeyDown={handleMoreKeyDown} className={`${toolButtonCls(openMenu === "more")} shrink-0`}
+            whileTap={pressFeedback.rail} transition={{ duration: motionDurations.instant }}>
+            <MoreHorizontal size={18} aria-hidden />
+          </motion.button>
+        </div>
       </div>
     );
   }
@@ -1737,6 +1958,14 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
     maxLength !== undefined
       ? `${counts.stored} / ${maxLength} ${counts.stored === 1 ? "character" : "characters"}${counts.stored !== counts.visible ? ` (${counts.visible} visible)` : ""}`
       : `${counts.stored} ${counts.stored === 1 ? "character" : "characters"}${counts.stored !== counts.visible ? ` (${counts.visible} visible)` : ""}`;
+
+  const railActive = descriptionActive || railAnchored;
+  // The rail is a keyboard companion, not permanent chrome: no proved soft
+  // keyboard, no dock, even while a menu it opened is still up. That menu keeps
+  // working from its own live anchor (menuAnchorRect), never from a rail left
+  // behind over a keyboard that is gone.
+  const showInlineRail = !disabled && !isExpanded && softKeyboard.open && railActive;
+  const showExpandedRail = !disabled && isExpanded && softKeyboard.open;
 
   return (
     <div ref={rootRef} className="flex flex-col gap-2">
@@ -1754,10 +1983,20 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
           </div>
         ) : null}
       </div>
-      {/* The link dialog traps focus, so the rail must stay mounted while it is
-          open or the dialog's trigger node is detached and it anchors to the
-          viewport origin instead of the tapped button. */}
-      {!isExpanded && (finePointer || editorFocused || openMenu !== null || slash.open || linkSelection !== null) && renderFormattingRail(true)}
+      {showHint && !isExpanded && (
+        <p id={hintId} data-testid="rich-text-slash-hint" className="text-xs leading-5 text-on-surface-variant">
+          Type <kbd className="rounded-m3-xs border border-outline-variant px-1 font-mono">/</kbd> for formatting
+        </p>
+      )}
+      {showInlineRail && (
+        // The rail is fixed to the IME top, so this in-flow dock keeps its old
+        // height and opening the keyboard does not pull the fields below up.
+        <div data-testid="rich-text-rail-dock" style={{ height: INLINE_RAIL_FLOW_HEIGHT_PX }}>
+          {renderFormattingRail(true)}
+        </div>
+      )}
+      {/* Independent of the rail: an open menu outlives a keyboard dismissal. */}
+      {renderRailMenus()}
       <FormattingMenu
         open={!disabled && slash.open && slashItems.length > 0}
         items={slashItems}
@@ -1770,7 +2009,7 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
         onPick={acceptSlash}
         label="Formatting commands"
       />
-      {linkSelection && <LinkSheet selection={linkSelection} triggerRef={linkButtonRef} onCancel={() => setLinkSelection(null)} onSave={saveLink} onRemove={removeLink} />}
+      {linkSelection && <LinkSheet selection={linkSelection} triggerRef={linkButtonRef} fallbackElement={editor?.view.dom as HTMLElement | undefined} onCancel={() => setLinkSelection(null)} onSave={saveLink} onRemove={removeLink} />}
       {listNotice ? (
         <p role="status" aria-label="List simplification notice" className="text-xs text-on-surface-variant">
           Nested or multi-part list items are saved as a simple flat list.
@@ -1839,7 +2078,19 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
             onPointerDown={handleEditorIntentionalInteraction} onTouchStart={handleEditorIntentionalInteraction} onKeyDown={handleEditorIntentionalInteraction}>
             <EditorContent editor={editor} />
           </div>
-          {renderFormattingRail(false)}
+          {showHint && (
+            // The inline hint is behind the modal, so the full-screen surface
+            // carries the same fallback; only one of the two is ever mounted.
+            <p
+              id={hintId}
+              data-testid="rich-text-slash-hint"
+              className="flex-shrink-0 border-t border-outline-variant px-3 py-2 text-xs leading-5 text-on-surface-variant"
+              style={{ paddingBottom: "max(8px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))" }}
+            >
+              Type <kbd className="rounded-m3-xs border border-outline-variant px-1 font-mono">/</kbd> for formatting
+            </p>
+          )}
+          {showExpandedRail && renderFormattingRail(false)}
         </div>,
         document.body
       )}

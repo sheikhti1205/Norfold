@@ -1,5 +1,7 @@
 package com.findback.app.needle
 
+import android.app.ActivityManager
+import android.content.Context
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -52,6 +54,13 @@ class FindbackNeedle : Plugin() {
         val modelFile = resolveModelFile(modelId, call.getString("installedPath"))
         if (modelFile == null) {
             call.reject("model_not_installed")
+            return
+        }
+        // One load-time memory gate for BOTH callers: the report form's
+        // load-only warm-up and the lazy first-use load both arrive here.
+        // Refuse before touching the engine; a refusal is recoverable.
+        if (!hasMemoryForLoad(modelFile)) {
+            call.reject(INSUFFICIENT_MEMORY)
             return
         }
         try {
@@ -203,6 +212,28 @@ class FindbackNeedle : Plugin() {
         call.resolve()
     }
 
+    /**
+     * Live `ActivityManager.MemoryInfo` gate. Unreadable facts fail closed: a
+     * guess from total RAM is exactly the wrong signal, and a refused load is
+     * a recoverable "not now" rather than a broken install.
+     */
+    private fun hasMemoryForLoad(modelFile: File): Boolean {
+        return try {
+            val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+                ?: return false
+            val info = ActivityManager.MemoryInfo()
+            manager.getMemoryInfo(info)
+            NeedleMemoryPolicy.canLoad(
+                availMemBytes = info.availMem,
+                thresholdBytes = info.threshold,
+                lowMemory = info.lowMemory,
+                modelBytes = modelFile.length(),
+            )
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     private fun resolveModelFile(modelId: String, installedPath: String?): File? {
         if (!installedPath.isNullOrBlank()) {
             val candidate = File(installedPath)
@@ -246,6 +277,8 @@ class FindbackNeedle : Plugin() {
         private const val AI_MODELS_DIR = "ai-models"
         private const val MAX_TEXT_LENGTH = 5000
         private const val NEEDLE_TEXT = 1
+        /** Typed refusal understood by the TS bridge (maps to LOW_MEMORY). */
+        private const val INSUFFICIENT_MEMORY = "insufficient_memory"
         private val MODEL_ID_PATTERN = Regex("[A-Za-z0-9._-]+")
     }
 }

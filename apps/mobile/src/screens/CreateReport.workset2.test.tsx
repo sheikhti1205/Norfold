@@ -64,7 +64,7 @@ describe("CreateReport workset2 editor", () => {
     expect(screen.queryByRole("tab", { name: /write/i })).toBeNull();
     expect(screen.queryByRole("tab", { name: /preview/i })).toBeNull();
     expect(screen.queryByText(/markdown supported/i)).toBeNull();
-    expect(screen.getByRole("toolbar", { name: /description formatting/i })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Description" })).toBeTruthy();
     expect(screen.getByLabelText("Character count")).toBeTruthy();
   });
 });
