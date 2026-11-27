@@ -167,7 +167,7 @@ export type NlHelperState =
  */
 export type NlHelperSource = Pick<
   ApplicationAiService,
-  "android" | "ready" | "manager" | "compatibility"
+  "android" | "ready" | "manager" | "compatibility" | "ensureCompatibility"
 >;
 
 /**
@@ -186,10 +186,14 @@ export type NlHelperSource = Pick<
  *
  * - `unsupported-platform` — the web build, where no install can ever help;
  * - `unsupported-device` — Android, but this device cannot run the runtime
- *   (ABI/runtime mismatch). Uses the canonical compatibility snapshot including
- *   its known limit: device facts that were never collected read as
- *   incompatible here exactly as they do on the models screen — one shared
- *   answer, not two.
+ *   (ABI/runtime mismatch). This is a claim about the hardware, so it is only
+ *   made from an explicit incompatible answer: `compatibility()` is a cache
+ *   that starts `{ compatible: false, state: "unknown" }` on a freshly started
+ *   service, and reading it before `ensureCompatibility()` has collected the
+ *   device facts labelled every cold Android start as an incompatible device.
+ *   The diagnostic therefore refreshes the same snapshot the Local intelligence
+ *   helper row renders before reading it, and a snapshot that is still unknown
+ *   (or could not be refreshed) stays `unknown` — never a device verdict.
  *
  * Readiness is read **after** boot reconciliation settles: before `ready`
  * resolves, an installed model still reports `not-installed`, which would be
@@ -204,7 +208,17 @@ export async function nlHelperState(source?: NlHelperSource): Promise<NlHelperSt
     const ai = source ?? getApplicationAi();
     if (!ai.android) return "unsupported-platform";
     await ai.ready;
-    if (!ai.compatibility(NARROW_TASK_PROFILE_ID).compatible) return "unsupported-device";
+    // `compatibility()` returns a cached snapshot, not a probe. On a freshly
+    // started Android service it is `{ compatible: false, state: "unknown" }`
+    // until the device's ABI and runtime facts are collected, so reading it
+    // first described every cold start as an incompatible device. Refresh the
+    // canonical snapshot exactly as the Local intelligence row does.
+    await ai.ensureCompatibility();
+    const compatibility = ai.compatibility(NARROW_TASK_PROFILE_ID);
+    // Only an explicit incompatible answer is a statement about the device.
+    // Unknown (facts still unreadable) is not evidence of a hardware limit.
+    if (compatibility.state === "incompatible") return "unsupported-device";
+    if (!compatibility.compatible) return "unknown";
     return describeOfflineReadiness(ai.manager, NARROW_TASK_PROFILE_ID).ready
       ? "ready"
       : "not-set-up";

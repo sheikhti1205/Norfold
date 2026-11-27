@@ -15,6 +15,7 @@ vi.mock("./ai/applicationAi", () => ({
     android: state.helper.android,
     ready: Promise.resolve(),
     compatibility: () => ({ compatible: state.helper.compatible }),
+    ensureCompatibility: async () => {},
     manager: {
       statusOf: () => state.helper.installed
         ? { modelId: "needle", download: "installed", residency: "resident", downloadedBytes: 1, checksumVerified: true, updatedAt: "2026-11-05T00:00:00.000Z" }
@@ -377,6 +378,7 @@ describe("nlHelperState (Smart Search readiness)", () => {
       android,
       ready,
       compatibility: () => ({ compatible }),
+      ensureCompatibility: async () => {},
       manager: { statusOf } as NlHelperSource["manager"],
     };
   }
@@ -421,21 +423,108 @@ describe("nlHelperState (Smart Search readiness)", () => {
   });
 
   it("reports a device that cannot run the runtime as terminal, not as an install to do", async () => {
-    // Android, but the compatibility snapshot says this device cannot run the
-    // model. Offering an install here would promise something that cannot
-    // happen; the state has to be terminal (REVIEW-CF040-RESIDUAL-R2 N1).
+    // Android, but a REFRESHED compatibility snapshot says this device cannot
+    // run the model. Offering an install here would promise something that
+    // cannot happen; the state has to be terminal (REVIEW-CF040-RESIDUAL-R2 N1).
     const asked: string[] = [];
     const seam: NlHelperSource = {
       android: true,
       ready: Promise.resolve(),
       compatibility: (modelId: string) => {
         asked.push(modelId);
-        return { compatible: false, reason: "Unavailable on this device." };
+        return { compatible: false, state: "incompatible", reason: "Unavailable on this device." };
       },
+      ensureCompatibility: async () => {},
       manager: { statusOf: () => status() } as unknown as NlHelperSource["manager"],
     };
     await expect(nlHelperState(seam)).resolves.toBe("unsupported-device");
     expect(asked).toEqual([NARROW_TASK_PROFILE_ID]);
+  });
+
+  it("refreshes a cold Android compatibility snapshot instead of calling the device unsupported", async () => {
+    // Regression: `ApplicationAiService.compatibility()` is a cache that starts
+    // `{ compatible: false, state: "unknown" }`, and only the Local
+    // intelligence/models surfaces ever warm it. A freshly started Android app
+    // therefore reported every capable device as `unsupported-device`, even
+    // though the installed APK registers the native Needle plugin. The
+    // diagnostic must collect the device facts first — the same call the
+    // helper row makes — and then read the answer.
+    let refreshed = false;
+    const events: string[] = [];
+    const seam: NlHelperSource = {
+      android: true,
+      ready: Promise.resolve(),
+      ensureCompatibility: async () => {
+        events.push("ensure");
+        refreshed = true;
+      },
+      compatibility: (modelId: string) => {
+        events.push(`read:${modelId}`);
+        return refreshed
+          ? { compatible: true, state: "compatible" }
+          : { compatible: false, state: "unknown" };
+      },
+      manager: { statusOf: () => status() } as unknown as NlHelperSource["manager"],
+    };
+    await expect(nlHelperState(seam)).resolves.toBe("ready");
+    expect(events).toEqual(["ensure", `read:${NARROW_TASK_PROFILE_ID}`]);
+  });
+
+  it("treats a cold unknown snapshot with no installed helper as not set up", async () => {
+    // Same cold start, but the model was never downloaded: the honest answer is
+    // the install state, not a hardware verdict.
+    let refreshed = false;
+    const seam: NlHelperSource = {
+      android: true,
+      ready: Promise.resolve(),
+      ensureCompatibility: async () => {
+        refreshed = true;
+      },
+      compatibility: () => refreshed
+        ? { compatible: true, state: "compatible" }
+        : { compatible: false, state: "unknown" },
+      manager: { statusOf: () => undefined } as unknown as NlHelperSource["manager"],
+    };
+    await expect(nlHelperState(seam)).resolves.toBe("not-set-up");
+  });
+
+  it("keeps an unresolved device check unknown instead of inventing an incompatibility", async () => {
+    // `ensureCompatibility` finished but could not read the ABI facts (for
+    // example a bridge that returned nothing): the snapshot stays `unknown`.
+    // That is not evidence the device cannot run the helper.
+    const seam: NlHelperSource = {
+      android: true,
+      ready: Promise.resolve(),
+      ensureCompatibility: async () => {},
+      compatibility: () => ({ compatible: false, state: "unknown" }),
+      manager: { statusOf: () => status() } as unknown as NlHelperSource["manager"],
+    };
+    await expect(nlHelperState(seam)).resolves.toBe("unknown");
+  });
+
+  it("reports a failed compatibility refresh as unknown, never as a device claim", async () => {
+    const seam: NlHelperSource = {
+      android: true,
+      ready: Promise.resolve(),
+      ensureCompatibility: async () => {
+        throw new Error("native ABI probe failed");
+      },
+      compatibility: () => ({ compatible: false, state: "unknown" }),
+      manager: { statusOf: () => status() } as unknown as NlHelperSource["manager"],
+    };
+    await expect(nlHelperState(seam)).resolves.toBe("unknown");
+  });
+
+  it("does not probe device compatibility on a build that has no on-device runtime", async () => {
+    let probed = false;
+    const seam: NlHelperSource = {
+      ...source(() => status(), Promise.resolve(), false),
+      ensureCompatibility: async () => {
+        probed = true;
+      },
+    };
+    await expect(nlHelperState(seam)).resolves.toBe("unsupported-platform");
+    expect(probed).toBe(false);
   });
 
   it("asks the device before claiming an install is missing, and never rejects", async () => {
