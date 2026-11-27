@@ -4,10 +4,15 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.TypedValue
 import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.ArrayAdapter
@@ -18,11 +23,13 @@ import android.widget.ListView
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.findback.app.BuildConfig
 import com.findback.app.R
 import com.google.android.gms.location.LocationServices
@@ -33,6 +40,8 @@ import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapColorScheme
+import com.google.android.gms.maps.model.Marker
+import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.tasks.CancellationTokenSource
 
 /**
@@ -44,7 +53,9 @@ import com.google.android.gms.tasks.CancellationTokenSource
  * - picker: fixed center pin; the map moves underneath it. Camera-idle after
  *   a user gesture updates the DRAFT only — nothing is written to the report
  *   until Confirm. Cancel/system-Back returns CANCELED with no mutation.
- * - viewer: read-only camera on a committed coordinate (post detail tap).
+ * - viewer: read-only camera on a committed coordinate (post detail tap). The
+ *   saved coordinate is marked by a display-only SDK marker; the picker pin
+ *   never appears.
  *
  * Search is explicit-submit Nominatim (≤1 req/s, ≤5 results, app User-Agent);
  * a result recenters the camera but never commits. Location is one-shot via
@@ -64,6 +75,8 @@ class FindbackMapActivity : AppCompatActivity() {
         const val EXTRA_ZOOM = "zoom"
         const val EXTRA_LABEL = "label"
         const val EXTRA_ALLOW_CURRENT_LOCATION = "allowCurrentLocation"
+        const val EXTRA_APPEARANCE_THEME = "appearanceTheme"
+        const val EXTRA_TEXT_SCALE = "textScale"
 
         private const val STATE_DRAFT_LAT = "draftLat"
         private const val STATE_DRAFT_LNG = "draftLng"
@@ -102,6 +115,7 @@ class FindbackMapActivity : AppCompatActivity() {
     private var destroyed = false
 
     private var isPicker = true
+    private var nightMode = false
     private var draftLat: Double? = null
     private var draftLng: Double? = null
     private var draftZoom: Double = MapValidation.DEFAULT_ZOOM
@@ -122,17 +136,28 @@ class FindbackMapActivity : AppCompatActivity() {
     private lateinit var searchInput: EditText
     private lateinit var searchButton: Button
     private lateinit var resultsList: ListView
+    private lateinit var resultsCard: View
     private lateinit var loading: ProgressBar
     private lateinit var readout: TextView
     private lateinit var statusRow: View
     private lateinit var statusText: TextView
     private lateinit var retryButton: Button
     private lateinit var footer: View
-    private lateinit var myLocationButton: Button
+    private lateinit var myLocationButton: ImageButton
+    private var viewerMarker: Marker? = null
+    private var appearanceTheme: String? = null
+    private var uiTextScale = 1f
 
     // region lifecycle
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // The picker/viewer follows the app's resolved theme, not only the OS.
+        // AppCompat applies the local mode before the hierarchy is inflated.
+        appearanceTheme = MapValidation.appearanceTheme(intent.getStringExtra(EXTRA_APPEARANCE_THEME))
+        when (appearanceTheme) {
+            "light" -> delegate.localNightMode = AppCompatDelegate.MODE_NIGHT_NO
+            "dark", "amoled" -> delegate.localNightMode = AppCompatDelegate.MODE_NIGHT_YES
+        }
         super.onCreate(savedInstanceState)
         // Edge-to-edge with the system-bar padding owned by the root view
         // below: the title clears the status bar and the footer clears the
@@ -144,14 +169,19 @@ class FindbackMapActivity : AppCompatActivity() {
         setContentView(R.layout.activity_findback_map)
 
         isPicker = intent.getStringExtra(EXTRA_MODE) != MODE_VIEWER
+        nightMode = isNightMode()
         bindViews()
+        applyAppTextScale()
+        applyAmoledSurface()
         applyWindowInsets()
+        applySystemBarAppearance()
         restoreDraft(savedInstanceState)
 
         titleView.text = initialTitle()
         confirmButton.visibility = if (isPicker) View.VISIBLE else View.GONE
         searchRow.visibility = if (isPicker) View.VISIBLE else View.GONE
-        footer.visibility =
+        footer.visibility = if (isPicker) View.VISIBLE else View.GONE
+        myLocationButton.visibility =
             if (isPicker && intent.getBooleanExtra(EXTRA_ALLOW_CURRENT_LOCATION, true)) View.VISIBLE else View.GONE
 
         confirmButton.isEnabled = draftLat != null && draftLng != null
@@ -160,13 +190,14 @@ class FindbackMapActivity : AppCompatActivity() {
         // Fail closed before the MapView is ever created: a build without a
         // key must not initialise the SDK or show an empty map rectangle.
         mapEnabled = BuildConfig.GOOGLE_MAPS_ANDROID_API_KEY.isNotBlank()
+        centerPin.visibility =
+            if (MapValidation.showsCenterPin(isPicker, mapEnabled)) View.VISIBLE else View.GONE
         if (mapEnabled) {
             mapViewInitialized = true
             mapView.onCreate(savedInstanceState)
             requestMap()
         } else {
             mapView.visibility = View.GONE
-            centerPin.visibility = View.GONE
             onMapUnavailable()
         }
 
@@ -220,6 +251,7 @@ class FindbackMapActivity : AppCompatActivity() {
         locationTimeout.removeCallbacksAndMessages(null)
         locationCancel?.cancel()
         mapLoadTimeout.removeCallbacksAndMessages(null)
+        viewerMarker = null
         map = null
         if (mapViewInitialized) mapView.onDestroy()
         super.onDestroy()
@@ -231,6 +263,29 @@ class FindbackMapActivity : AppCompatActivity() {
         draftLat?.let { outState.putDouble(STATE_DRAFT_LAT, it) }
         draftLng?.let { outState.putDouble(STATE_DRAFT_LNG, it) }
         outState.putDouble(STATE_ZOOM, draftZoom)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // The manifest keeps the Activity alive across uiMode changes. The
+        // screen is colour-scoped to the DayNight palette, so the hierarchy is
+        // rebuilt for a theme switch instead of keeping the previous
+        // configuration's resolved colours; the map, draft and camera are
+        // restored through the normal saved-state path.
+        val night = (newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
+        if (appearanceTheme == null && night != nightMode) {
+            recreate()
+            return
+        }
+        applySystemBarAppearance()
+        if (resultsCard.visibility == View.VISIBLE) {
+            // Wait for the new orientation to lay out before re-capping the
+            // overlay against the map's new height.
+            resultsCard.post {
+                if (!destroyed && resultsCard.visibility == View.VISIBLE) showResultsCard()
+            }
+        }
     }
 
     // endregion
@@ -247,6 +302,7 @@ class FindbackMapActivity : AppCompatActivity() {
         searchInput = findViewById(R.id.map_search_input)
         searchButton = findViewById(R.id.map_search_button)
         resultsList = findViewById(R.id.map_results)
+        resultsCard = findViewById(R.id.map_results_card)
         loading = findViewById(R.id.map_loading)
         readout = findViewById(R.id.map_readout)
         statusRow = findViewById(R.id.map_status_row)
@@ -254,11 +310,6 @@ class FindbackMapActivity : AppCompatActivity() {
         retryButton = findViewById(R.id.map_retry)
         footer = findViewById(R.id.map_footer)
         myLocationButton = findViewById(R.id.map_my_location)
-        // Footer/readout geometry can change (visibility, font scale, insets):
-        // keep the map's padding in step so the Google logo stays visible.
-        (readout.parent as? View)?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            applyMapPadding()
-        }
     }
 
     private fun applyWindowInsets() {
@@ -271,24 +322,70 @@ class FindbackMapActivity : AppCompatActivity() {
                     WindowInsetsCompat.Type.ime(),
             )
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
-            // setPadding is a no-op until the map is ready; re-apply on every
-            // inset pass (and on layout changes, see bindViews).
-            applyMapPadding()
             windowInsets
         }
         ViewCompat.requestApplyInsets(rootView)
     }
 
     /**
-     * Padding is the sanctioned way to keep the Google logo and legal notices
-     * unobscured: the SDK lays them out inside the padded region instead of
-     * letting the bottom readout strip cover them.
+     * The map is no longer overlaid by a readout strip, so the SDK's default
+     * padding already keeps the Google logo and legal notices visible. System
+     * bar icons follow the DayNight surface behind them; API 24-25 cannot draw
+     * dark navigation icons, so those releases keep an opaque dark nav bar.
      */
-    private fun applyMapPadding() {
-        val googleMap = map ?: return
-        if (destroyed) return
-        val bottom = (readout.parent as? View)?.height ?: 0
-        googleMap.setPadding(0, 0, 0, bottom)
+    @Suppress("DEPRECATION")
+    private fun applySystemBarAppearance() {
+        val night = isNightMode()
+        window.statusBarColor = Color.TRANSPARENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            window.navigationBarColor = Color.TRANSPARENT
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                window.isNavigationBarContrastEnforced = false
+            }
+        } else {
+            window.navigationBarColor = Color.BLACK
+        }
+        WindowInsetsControllerCompat(window, rootView).apply {
+            isAppearanceLightStatusBars = !night
+            isAppearanceLightNavigationBars = !night
+        }
+    }
+
+    /**
+     * Norfold's app text scale is a root font multiplier. Native `sp` already
+     * carries the platform font scale, so the app/platform ratio replaces that
+     * scale instead of stacking a second one. Rows created after inflation
+     * reuse [uiTextScale] in their adapter; both text paths therefore end at
+     * the app's chosen size exactly once.
+     */
+    private fun applyAppTextScale() {
+        val appScale = MapValidation.appTextScale(
+            intent.getDoubleExtra(EXTRA_TEXT_SCALE, Double.NaN).takeIf { it.isFinite() },
+        ) ?: return
+        val systemScale = resources.configuration.fontScale
+            .takeIf { it.isFinite() && it > 0f } ?: 1f
+        val ratio = appScale / systemScale
+        if (!ratio.isFinite() || ratio <= 0f) return
+        uiTextScale = ratio
+        if (ratio != 1f) scaleText(rootView, ratio)
+    }
+
+    private fun scaleText(view: View, ratio: Float) {
+        if (view is TextView) view.setTextSize(TypedValue.COMPLEX_UNIT_PX, view.textSize * ratio)
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) scaleText(view.getChildAt(index), ratio)
+        }
+    }
+
+    /**
+     * AMOLED differs from dark only in the page surface role and in having no
+     * shadows; every other map role already matches the same dark tokens.
+     */
+    private fun applyAmoledSurface() {
+        if (appearanceTheme != "amoled") return
+        rootView.setBackgroundColor(Color.BLACK)
+        resultsCard.elevation = 0f
+        findViewById<View>(R.id.map_action_panel)?.elevation = 0f
     }
 
     private fun restoreDraft(saved: Bundle?) {
@@ -341,7 +438,9 @@ class FindbackMapActivity : AppCompatActivity() {
         readout.text = if (lat != null && lng != null) {
             String.format(java.util.Locale.US, "%.5f, %.5f", lat, lng)
         } else {
-            getString(R.string.findback_map_no_pin)
+            getString(
+                if (isPicker) R.string.findback_map_no_pin else R.string.findback_map_no_location,
+            )
         }
     }
 
@@ -389,11 +488,23 @@ class FindbackMapActivity : AppCompatActivity() {
         if (destroyed || isFinishing || isDestroyed) return
         val firstReady = map == null
         map = googleMap
-        // FOLLOW_SYSTEM inherits the device theme (including dark mode); a
-        // JSON style override would disable it, and no map ID is used.
-        googleMap.setMapColorScheme(MapColorScheme.FOLLOW_SYSTEM)
+        // Match the app's resolved theme even when it differs from the OS
+        // setting; with no bridged appearance the SDK keeps FOLLOW_SYSTEM.
+        googleMap.setMapColorScheme(
+            when (appearanceTheme) {
+                "light" -> MapColorScheme.LIGHT
+                "dark", "amoled" -> MapColorScheme.DARK
+                else -> MapColorScheme.FOLLOW_SYSTEM
+            },
+        )
         if (firstReady) {
+            viewerMarker = null
             googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(initialCamera(), draftZoom.toFloat()))
+        }
+        if (MapValidation.showsViewerMarker(isPicker, draftLat, draftLng) && viewerMarker == null) {
+            // Display-only SDK marker for the committed coordinate: not
+            // movable, not clickable, and it never feeds the result payload.
+            viewerMarker = googleMap.addMarker(MarkerOptions().position(initialCamera()))
         }
         googleMap.setOnCameraMoveStartedListener { reason ->
             if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
@@ -417,7 +528,6 @@ class FindbackMapActivity : AppCompatActivity() {
         if (!mapLoaded) {
             googleMap.setOnMapLoadedCallback { onMapLoaded() }
         }
-        applyMapPadding()
     }
 
     private fun onMapLoaded() {
@@ -430,7 +540,6 @@ class FindbackMapActivity : AppCompatActivity() {
             mapFailed = false
             hideStatus()
         }
-        applyMapPadding()
     }
 
     private fun onMapLoadFailed() {
@@ -444,18 +553,22 @@ class FindbackMapActivity : AppCompatActivity() {
     }
 
     /**
-     * No key means no map: same failure surface as a load failure, so Confirm
-     * (and the viewer's location readout) stay usable instead of a dead frame.
+     * No key means no map in this build: a truthful, non-retryable message.
+     * A real transient load failure keeps its own message and Retry action.
      */
     private fun onMapUnavailable() {
         mapFailed = true
         hideLoading()
-        showStatus(getString(R.string.findback_map_style_failed), showRetry = true)
+        showStatus(getString(R.string.findback_map_unavailable_build), showRetry = false)
     }
 
     private fun hideLoading() {
         loading.visibility = View.GONE
     }
+
+    private fun isNightMode(): Boolean =
+        (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
 
     private fun retryMapLoad() {
         hideStatus()
@@ -469,6 +582,9 @@ class FindbackMapActivity : AppCompatActivity() {
     }
 
     private fun showStatus(message: String, showRetry: Boolean) {
+        // A message supersedes the floating result card: the map and its
+        // attribution stay clear while the panel explains what happened.
+        resultsCard.visibility = View.GONE
         statusRow.visibility = View.VISIBLE
         statusText.text = message
         retryButton.visibility = if (showRetry) View.VISIBLE else View.GONE
@@ -531,30 +647,26 @@ class FindbackMapActivity : AppCompatActivity() {
         searching = false
         searchButton.isEnabled = true
         // A stale response (newer search started) never overwrites the list:
-        // the input must still match the submitted query.
-        if (searchInput.text?.toString()?.trim() != query) return
+        // the input must still match the submitted query. Its "Searching…"
+        // status is stale too, so clear it instead of leaving it on screen.
+        if (searchInput.text?.toString()?.trim() != query) {
+            hideStatus()
+            return
+        }
         outcome.fold(
             onSuccess = { places ->
                 searchResults = places
                 if (places.isEmpty()) {
-                    resultsList.visibility = View.GONE
+                    resultsCard.visibility = View.GONE
                     showStatus(getString(R.string.findback_map_no_results), showRetry = false)
                 } else {
                     hideStatus()
-                    resultsList.visibility = View.VISIBLE
-                    resultsList.adapter = ArrayAdapter(
-                        this,
-                        android.R.layout.simple_list_item_2,
-                        android.R.id.text1,
-                        places.map { result ->
-                            "${result.displayName}\n" +
-                                String.format(java.util.Locale.US, "%.5f, %.5f", result.latitude, result.longitude)
-                        },
-                    )
+                    resultsList.adapter = SearchResultAdapter(places)
+                    showResultsCard()
                 }
             },
             onFailure = { error ->
-                resultsList.visibility = View.GONE
+                resultsCard.visibility = View.GONE
                 val message = when ((error as? NominatimException)?.kind) {
                     NominatimException.Kind.RATE_LIMITED ->
                         getString(R.string.findback_map_rate_limited)
@@ -567,13 +679,60 @@ class FindbackMapActivity : AppCompatActivity() {
         )
     }
 
+    /**
+     * The results card is capped to the upper share of the current map height
+     * so a 320dp/large-font screen never gets an overlay taller than the map
+     * it belongs to and the centre pin plus map attribution stay visible.
+     * The list stays scrollable to all five results.
+     */
+    private fun showResultsCard() {
+        val canvasHeight = (resultsCard.parent as? View)?.height ?: 0
+        if (canvasHeight > 0) {
+            val preferred = (200 * resources.displayMetrics.density).toInt()
+            val params = resultsCard.layoutParams
+            params.height = minOf(preferred, (canvasHeight * 0.4f).toInt())
+            resultsCard.layoutParams = params
+        }
+        resultsCard.visibility = View.VISIBLE
+    }
+
+    /**
+     * Two-line result row in app colours: place name (wraps to two lines) and
+     * the coordinate pair the result would recenter to. Selection only
+     * recenters the camera — nothing is committed until Confirm. The row owns
+     * its 48dp target and reuses the app text ratio for dynamic rows.
+     */
+    private inner class SearchResultAdapter(results: List<NominatimResult>) :
+        ArrayAdapter<NominatimResult>(
+            this,
+            R.layout.findback_map_result_row,
+            R.id.map_result_name,
+            results,
+        ) {
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+            val view = super.getView(position, convertView, parent)
+            val result = getItem(position)
+            view.findViewById<TextView>(R.id.map_result_name)?.apply {
+                text = result?.displayName.orEmpty()
+                if (uiTextScale != 1f) setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f * uiTextScale)
+            }
+            view.findViewById<TextView>(R.id.map_result_coords)?.apply {
+                text = result?.let {
+                    String.format(java.util.Locale.US, "%.5f, %.5f", it.latitude, it.longitude)
+                }.orEmpty()
+                if (uiTextScale != 1f) setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f * uiTextScale)
+            }
+            return view
+        }
+    }
+
     private fun pickSearchResult(result: NominatimResult) {
         val center = LatLng(result.latitude, result.longitude)
         draftLat = result.latitude
         draftLng = result.longitude
         confirmButton.isEnabled = true
         updateReadout()
-        resultsList.visibility = View.GONE
+        resultsCard.visibility = View.GONE
         map?.animateCamera(
             CameraUpdateFactory.newCameraPosition(
                 CameraPosition.Builder().target(center).zoom(draftZoom.toFloat()).build(),

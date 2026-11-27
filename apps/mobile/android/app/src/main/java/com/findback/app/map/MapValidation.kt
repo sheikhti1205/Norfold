@@ -34,6 +34,14 @@ object MapValidation {
     /** Bounded snapshot cache (LRU-by-mtime eviction in the service). */
     const val MAX_SNAPSHOT_CACHE_BYTES = 24L * 1024 * 1024
 
+    /**
+     * App appearance bridge bounds: Norfold's root text scale is one of
+     * 87.5/100/112.5/125 percent. Anything outside this range keeps the
+     * platform font scale instead of inventing a size.
+     */
+    const val MIN_APP_TEXT_SCALE = 0.875
+    const val MAX_APP_TEXT_SCALE = 1.25
+
     fun isValidLatitude(lat: Double?): Boolean =
         lat != null && lat.isFinite() && lat >= MIN_LATITUDE && lat <= MAX_LATITUDE
 
@@ -70,6 +78,30 @@ object MapValidation {
     }
 
     fun clampSnapshotEdge(px: Int): Int = px.coerceIn(MIN_SNAPSHOT_EDGE_PX, MAX_SNAPSHOT_EDGE_PX)
+
+    /**
+     * Allowlist for the resolved app theme carried by the bridge. Only the
+     * three resolved states are accepted; anything else keeps the platform
+     * DayNight default.
+     */
+    fun appearanceTheme(raw: String?): String? =
+        raw?.trim()?.lowercase()?.takeIf { it == "light" || it == "dark" || it == "amoled" }
+
+    /** Bounded app text multiplier; null keeps the platform font scale. */
+    fun appTextScale(raw: Double?): Float? =
+        raw?.takeIf { it.isFinite() && it >= MIN_APP_TEXT_SCALE && it <= MAX_APP_TEXT_SCALE }
+            ?.toFloat()
+
+    /**
+     * The centre overlay is the picker's movable target. A viewer shows the
+     * committed coordinate as a real map marker instead, so the picker pin
+     * must never float over a panned viewer.
+     */
+    fun showsCenterPin(isPicker: Boolean, mapEnabled: Boolean): Boolean = isPicker && mapEnabled
+
+    /** A viewer adds a marker only for a real committed coordinate. */
+    fun showsViewerMarker(isPicker: Boolean, lat: Double?, lng: Double?): Boolean =
+        !isPicker && isValidCenter(lat, lng)
 
     /**
      * Renderer-neutral style provider for diagnostics: "openfreemap" only

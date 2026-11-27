@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Map screen palette, mirrored from the product colour system's default
+      neutral + blue accent roles (design/colorSystem.ts). Map-scoped only:
+      these names never override the app theme.
+    -->
+    <color name="findback_map_surface">#f8f9fa</color>
+    <color name="findback_map_surface_low">#ffffff</color>
+    <color name="findback_map_surface_container">#e9ecef</color>
+    <color name="findback_map_on_surface">#212529</color>
+    <color name="findback_map_on_surface_variant">#495057</color>
+    <color name="findback_map_on_surface_disabled">#61212529</color>
+    <color name="findback_map_divider">#ced4da</color>
+    <color name="findback_map_primary">#3568d4</color>
+    <color name="findback_map_on_primary">#ffffff</color>
+    <color name="findback_map_primary_container">#e8eeff</color>
+    <color name="findback_map_control_ripple">#1f3568d4</color>
+    <color name="findback_map_on_primary_ripple">#33ffffff</color>
+</resources>

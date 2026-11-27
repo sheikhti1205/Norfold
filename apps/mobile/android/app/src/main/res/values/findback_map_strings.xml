@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Keyless MapLibre map Activity (MAP pivot). Consumer copy only — no dev jargon. -->
+    <!-- Native map picker/viewer. Consumer copy only — no dev jargon. -->
     <string name="findback_map_choose_location">Choose location</string>
     <string name="findback_map_back">Back</string>
-    <string name="findback_map_confirm">Confirm</string>
+    <string name="findback_map_confirm">Confirm location</string>
     <string name="findback_map_close">Close</string>
     <string name="findback_map_search_hint">Search for a place</string>
     <string name="findback_map_search">Search</string>
@@ -21,8 +21,10 @@
     <string name="findback_map_location_timeout">Locating took too long — try again or pan the map instead.</string>
     <string name="findback_map_loading">Loading map…</string>
     <string name="findback_map_style_failed">The map could not load — check your connection.</string>
+    <string name="findback_map_unavailable_build">Map isn’t available in this build</string>
     <string name="findback_map_retry">Try again</string>
     <string name="findback_map_no_pin">No location yet — pan the map to place the pin.</string>
+    <string name="findback_map_no_location">No location available.</string>
     <string name="findback_map_pin_description">Map pin — the map moves underneath it</string>
     <string name="findback_map_view">Location map</string>
 </resources>

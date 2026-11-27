@@ -80,6 +80,42 @@ export interface MapPickerInput {
   allowCurrentLocation?: boolean;
 }
 
+/**
+ * Resolved app appearance handed to the native picker/viewer. Only the owner
+ * hooks are read: the resolved theme classes on `<html>` and the root font
+ * percentage written by the appearance store. An absent hook keeps the
+ * platform default instead of guessing.
+ */
+export interface MapNativeAppearance {
+  theme?: "light" | "dark" | "amoled";
+  textScale?: number;
+}
+
+const MAP_APP_TEXT_SCALE_MIN = 0.875;
+const MAP_APP_TEXT_SCALE_MAX = 1.25;
+
+function resolveNativeMapAppearance(): MapNativeAppearance | undefined {
+  if (typeof document === "undefined") return undefined;
+  const root = document.documentElement;
+  const theme: MapNativeAppearance["theme"] | undefined = root.classList.contains("amoled")
+    ? "amoled"
+    : root.classList.contains("dark")
+      ? "dark"
+      : root.classList.contains("light")
+        ? "light"
+        : undefined;
+  const match = /^(\d+(?:\.\d+)?)%$/.exec(root.style.fontSize.trim());
+  const percent = match ? Number(match[1]) : Number.NaN;
+  const textScale =
+    Number.isFinite(percent) &&
+    percent >= MAP_APP_TEXT_SCALE_MIN * 100 &&
+    percent <= MAP_APP_TEXT_SCALE_MAX * 100
+      ? percent / 100
+      : undefined;
+  if (!theme && !textScale) return undefined;
+  return { ...(theme ? { theme } : {}), ...(textScale ? { textScale } : {}) };
+}
+
 export type MapPickerResult =
   | { cancelled: true }
   | { cancelled: false; latitude: number; longitude: number; zoom: number };
@@ -115,8 +151,15 @@ interface NativeFindbackMap {
     zoom?: number;
     label?: string;
     allowCurrentLocation?: boolean;
+    appearance?: MapNativeAppearance;
   }): Promise<MapPickerResult>;
-  openViewer(options: { latitude: number; longitude: number; zoom?: number; label?: string }): Promise<{
+  openViewer(options: {
+    latitude: number;
+    longitude: number;
+    zoom?: number;
+    label?: string;
+    appearance?: MapNativeAppearance;
+  }): Promise<{
     closed: boolean;
   }>;
   renderSnapshot(options: {
@@ -184,6 +227,7 @@ function sanitizePickerResult(result: unknown): MapPickerResult {
 export async function openMapPickerNative(input: MapPickerInput): Promise<MapPickerResult> {
   const bridge = nativeBridge();
   if (!bridge) throw new FindbackMapError("unavailable");
+  const appearance = resolveNativeMapAppearance();
   let raw: MapPickerResult;
   try {
     raw = await bridge.openPicker({
@@ -192,6 +236,7 @@ export async function openMapPickerNative(input: MapPickerInput): Promise<MapPic
       zoom: input.zoom,
       label: input.label,
       allowCurrentLocation: input.allowCurrentLocation ?? true,
+      ...(appearance ? { appearance } : {}),
     });
   } catch (err) {
     throw new FindbackMapError(fromNativeCode((err as { code?: unknown } | null)?.code));
@@ -206,12 +251,14 @@ export async function openMapViewerNative(input: MapViewerInput): Promise<{ clos
   }
   const bridge = nativeBridge();
   if (!bridge) throw new FindbackMapError("unavailable");
+  const appearance = resolveNativeMapAppearance();
   try {
     await bridge.openViewer({
       latitude: input.latitude,
       longitude: input.longitude,
       zoom: input.zoom,
       label: input.label,
+      ...(appearance ? { appearance } : {}),
     });
     return { closed: true };
   } catch (err) {

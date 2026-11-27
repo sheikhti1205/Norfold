@@ -58,6 +58,8 @@ function nativeBridge() {
 afterEach(() => {
   bridgeState.isNative = false;
   bridgeState.registerImpl = null;
+  document.documentElement.className = "";
+  document.documentElement.style.fontSize = "";
   bridgeState.capabilities = {
     native: true,
     renderer: "maplibre-native",
@@ -203,5 +205,43 @@ describe("mapLibreMaps bridge facade", () => {
   it("never exposes map secrets (the facade has no key parameter at all)", () => {
     expect(openMapPickerNative.length).toBe(1);
     expect(renderMapSnapshotNative.length).toBe(1);
+  });
+
+  it("forwards the resolved app theme and bounded text scale to the native picker", async () => {
+    bridgeState.isNative = true;
+    const bridge = nativeBridge();
+    bridgeState.registerImpl = () => bridge;
+    document.documentElement.classList.add("dark");
+    document.documentElement.style.fontSize = "112.5%";
+    await openMapPickerNative({});
+    expect(bridge.openPicker).toHaveBeenCalledWith(
+      expect.objectContaining({ appearance: { theme: "dark", textScale: 1.125 } }),
+    );
+  });
+
+  it("resolves AMOLED over dark and drops an out-of-range app scale", async () => {
+    bridgeState.isNative = true;
+    const bridge = nativeBridge();
+    bridgeState.registerImpl = () => bridge;
+    document.documentElement.classList.add("dark", "amoled");
+    document.documentElement.style.fontSize = "900%";
+    await openMapViewerNative({ latitude: 23.8, longitude: 90.4 });
+    expect(bridge.openViewer).toHaveBeenCalledWith(
+      expect.objectContaining({ appearance: { theme: "amoled" } }),
+    );
+  });
+
+  it("leaves platform defaults when no appearance owner hook is present", async () => {
+    bridgeState.isNative = true;
+    const bridge = nativeBridge();
+    bridgeState.registerImpl = () => bridge;
+    await openMapPickerNative({});
+    expect(bridge.openPicker).toHaveBeenCalledWith({
+      latitude: undefined,
+      longitude: undefined,
+      zoom: undefined,
+      label: undefined,
+      allowCurrentLocation: true,
+    });
   });
 });

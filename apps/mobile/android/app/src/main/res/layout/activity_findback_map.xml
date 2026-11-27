@@ -1,53 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Google Maps picker/viewer (MAP migration). Plain LinearLayout stack — no
-  overlap tricks, no WebView hosting: the MapView owns its own Activity, so
-  there is no transparency/z-order contract. All touch targets ≥ 48dp.
+  Google Maps picker/viewer (MAP migration). The map keeps the remaining
+  height; one compact bottom panel owns the readout, one-shot location and the
+  single primary Confirm. No edit control is painted over the map, so the
+  Google logo and legal notices keep their own space inside the MapView.
+  All touch targets are 48dp or larger.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/map_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/findback_map_surface"
     android:orientation="vertical">
 
-    <!-- Top bar -->
+    <!-- Compact navigation row: Back + title. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
-        android:minHeight="56dp"
+        android:minHeight="52dp"
         android:orientation="horizontal"
         android:paddingStart="4dp"
-        android:paddingEnd="8dp">
+        android:paddingEnd="12dp">
 
         <ImageButton
             android:id="@+id/map_back"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/findback_map_icon_ripple"
             android:contentDescription="@string/findback_map_back"
-            android:src="?attr/homeAsUpIndicator" />
+            android:src="@drawable/findback_map_ic_back" />
 
         <TextView
             android:id="@+id/map_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
             android:layout_weight="1"
             android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
             android:maxLines="1"
             android:text="@string/findback_map_choose_location"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/map_confirm"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp"
-            android:text="@string/findback_map_confirm" />
+            android:textColor="@color/findback_map_on_surface"
+            android:textSize="19sp" />
     </LinearLayout>
 
-    <!-- Explicit-submit search (no keystroke autocomplete, per usage policy) -->
+    <!-- Explicit-submit search (no keystroke autocomplete, per usage policy). -->
     <LinearLayout
         android:id="@+id/map_search_row"
         android:layout_width="match_parent"
@@ -61,29 +59,47 @@
         <EditText
             android:id="@+id/map_search_input"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="48dp"
             android:layout_weight="1"
+            android:background="@drawable/findback_map_search_field"
+            android:backgroundTint="@null"
+            android:gravity="center_vertical"
             android:hint="@string/findback_map_search_hint"
             android:imeOptions="actionSearch"
+            android:importantForAutofill="no"
             android:inputType="text"
             android:maxLength="120"
+            android:maxLines="1"
             android:minHeight="48dp"
-            android:importantForAutofill="no" />
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:paddingTop="0dp"
+            android:paddingBottom="0dp"
+            android:textColor="@color/findback_map_on_surface"
+            android:textColorHighlight="@color/findback_map_primary_container"
+            android:textColorHint="@color/findback_map_on_surface_variant"
+            android:textSize="15sp" />
 
         <Button
             android:id="@+id/map_search_button"
+            style="@style/FindbackMapActionButton"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="48dp"
             android:layout_marginStart="8dp"
+            android:background="@drawable/findback_map_secondary_button"
             android:minHeight="48dp"
-            android:text="@string/findback_map_search" />
+            android:text="@string/findback_map_search"
+            android:textAllCaps="false"
+            android:textColor="@color/findback_map_secondary_button_text" />
     </LinearLayout>
 
-    <!-- Map + fixed center pin -->
+    <!-- Map + fixed center pin + floating search results. -->
     <FrameLayout
+        android:id="@+id/map_canvas"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_weight="1"
+        android:background="@color/findback_map_surface_container">
 
         <com.google.android.gms.maps.MapView
             android:id="@+id/map_view"
@@ -96,8 +112,8 @@
             android:layout_height="40dp"
             android:layout_gravity="center"
             android:clickable="false"
-            android:focusable="false"
             android:contentDescription="@string/findback_map_pin_description"
+            android:focusable="false"
             android:src="@drawable/map_center_pin" />
 
         <ProgressBar
@@ -105,89 +121,137 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
-            android:contentDescription="@string/findback_map_loading" />
+            android:contentDescription="@string/findback_map_loading"
+            android:indeterminateTint="@color/findback_map_primary" />
 
-        <!--
-          Readout strip. The Maps SDK draws the Google logo and its own legal
-          notices inside the map, so this strip carries no attribution text;
-          the map's bottom padding is set to the strip height so the logo and
-          notices stay visible above it. Surface and text come from the
-          DayNight theme, and the readout wraps instead of truncating.
-        -->
+        <!-- Floating results card at the top; attribution stays clear below. -->
+        <FrameLayout
+            android:id="@+id/map_results_card"
+            android:layout_width="match_parent"
+            android:layout_height="216dp"
+            android:layout_gravity="top"
+            android:layout_marginStart="12dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="12dp"
+            android:background="@drawable/findback_map_results_card"
+            android:clipToOutline="true"
+            android:elevation="6dp"
+            android:visibility="gone">
+
+            <ListView
+                android:id="@+id/map_results"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@android:color/transparent"
+                android:cacheColorHint="@android:color/transparent"
+                android:divider="@color/findback_map_divider"
+                android:dividerHeight="1dp"
+                android:drawSelectorOnTop="false"
+                android:listSelector="@drawable/findback_map_result_ripple"
+                android:overScrollMode="never"
+                android:padding="4dp" />
+        </FrameLayout>
+    </FrameLayout>
+
+    <!-- One cohesive action panel outside the map. -->
+    <LinearLayout
+        android:id="@+id/map_action_panel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="8dp"
+        android:background="@drawable/findback_map_action_panel"
+        android:elevation="2dp"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <!-- Status line + retry (style/search/location states). -->
+        <LinearLayout
+            android:id="@+id/map_status_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/map_status"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:accessibilityLiveRegion="polite"
+                android:textColor="@color/findback_map_on_surface_variant"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/map_retry"
+                style="@style/FindbackMapActionButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/findback_map_secondary_button"
+                android:minHeight="48dp"
+                android:text="@string/findback_map_retry"
+                android:textAllCaps="false"
+                android:textColor="@color/findback_map_secondary_button_text"
+                android:textSize="14sp"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Pin readout + one-shot location. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="bottom"
-            android:background="?android:attr/colorBackground"
             android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp">
+            android:orientation="horizontal">
 
             <TextView
                 android:id="@+id/map_readout"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:lineSpacingExtra="1dp"
+                android:text="@string/findback_map_no_pin"
+                android:textColor="@color/findback_map_on_surface_variant"
+                android:textSize="13sp" />
+
+            <ImageButton
+                android:id="@+id/map_my_location"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/findback_map_secondary_button"
+                android:backgroundTint="@null"
+                android:contentDescription="@string/findback_map_use_my_location"
+                android:padding="12dp"
+                android:src="@drawable/findback_map_ic_my_location"
+                android:tint="@color/findback_map_icon_tint" />
+        </LinearLayout>
+
+        <!-- Single primary action. -->
+        <LinearLayout
+            android:id="@+id/map_footer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="vertical">
+
+            <Button
+                android:id="@+id/map_confirm"
+                style="@style/FindbackMapActionButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/findback_map_no_pin"
-                android:textColor="?android:attr/textColorPrimary"
-                android:textSize="12sp" />
+                android:background="@drawable/findback_map_primary_button"
+                android:maxLines="2"
+                android:minHeight="52dp"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"
+                android:text="@string/findback_map_confirm"
+                android:textAllCaps="false"
+                android:textColor="@color/findback_map_primary_button_text" />
         </LinearLayout>
-    </FrameLayout>
-
-    <!-- Search results (max 5, explicit tap recenters — never commits) -->
-    <ListView
-        android:id="@+id/map_results"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:maxHeight="168dp"
-        android:visibility="gone" />
-
-    <!-- Status line + retry (style/search/location states) -->
-    <LinearLayout
-        android:id="@+id/map_status_row"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingTop="4dp"
-        android:paddingBottom="4dp"
-        android:visibility="gone">
-
-        <TextView
-            android:id="@+id/map_status"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:textSize="13sp" />
-
-        <Button
-            android:id="@+id/map_retry"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp"
-            android:text="@string/findback_map_retry"
-            android:visibility="gone" />
-    </LinearLayout>
-
-    <!-- One-shot location (picker only) -->
-    <LinearLayout
-        android:id="@+id/map_footer"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingBottom="12dp">
-
-        <Button
-            android:id="@+id/map_my_location"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp"
-            android:text="@string/findback_map_use_my_location" />
     </LinearLayout>
 </LinearLayout>

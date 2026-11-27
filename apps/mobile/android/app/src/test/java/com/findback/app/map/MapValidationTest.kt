@@ -71,6 +71,31 @@ class MapValidationTest {
         assertEquals(custom, MapValidation.validateSearchEndpoint(custom))
     }
 
+    @Test fun appAppearanceBridgeIsAllowlistedAndBounded() {
+        assertEquals("light", MapValidation.appearanceTheme(" Light "))
+        assertEquals("dark", MapValidation.appearanceTheme("dark"))
+        assertEquals("amoled", MapValidation.appearanceTheme("AMOLED"))
+        assertEquals(null, MapValidation.appearanceTheme("system"))
+        assertEquals(null, MapValidation.appearanceTheme(null))
+        assertEquals(1.125f, MapValidation.appTextScale(1.125))
+        assertEquals(0.875f, MapValidation.appTextScale(0.875))
+        assertEquals(1.25f, MapValidation.appTextScale(1.25))
+        assertEquals(null, MapValidation.appTextScale(0.5))
+        assertEquals(null, MapValidation.appTextScale(1.5))
+        assertEquals(null, MapValidation.appTextScale(Double.NaN))
+        assertEquals(null, MapValidation.appTextScale(null))
+    }
+
+    @Test fun viewerNeverKeepsThePickerPinOverASavedCoordinate() {
+        assertTrue(MapValidation.showsCenterPin(isPicker = true, mapEnabled = true))
+        assertFalse(MapValidation.showsCenterPin(isPicker = false, mapEnabled = true))
+        assertFalse(MapValidation.showsCenterPin(isPicker = true, mapEnabled = false))
+        assertTrue(MapValidation.showsViewerMarker(isPicker = false, lat = 23.8, lng = 90.4))
+        assertFalse(MapValidation.showsViewerMarker(isPicker = true, lat = 23.8, lng = 90.4))
+        assertFalse(MapValidation.showsViewerMarker(isPicker = false, lat = null, lng = 90.4))
+        assertFalse(MapValidation.showsViewerMarker(isPicker = false, lat = 123.0, lng = 90.4))
+    }
+
     @Test fun searchDeliveryDiesOnStaleOrDestroyed() {
         assertTrue(MapValidation.isSearchDeliveryAlive(3, 3, destroyed = false, finishing = false))
         // A newer search started: the stale response must die silently.

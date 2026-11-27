@@ -7,10 +7,12 @@ import androidx.activity.result.ActivityResult
 import com.findback.app.BuildConfig
 import com.findback.app.FindbackApp
 import com.findback.app.map.FindbackMapActivity.Companion.EXTRA_ALLOW_CURRENT_LOCATION
+import com.findback.app.map.FindbackMapActivity.Companion.EXTRA_APPEARANCE_THEME
 import com.findback.app.map.FindbackMapActivity.Companion.EXTRA_LABEL
 import com.findback.app.map.FindbackMapActivity.Companion.EXTRA_LATITUDE
 import com.findback.app.map.FindbackMapActivity.Companion.EXTRA_LONGITUDE
 import com.findback.app.map.FindbackMapActivity.Companion.EXTRA_MODE
+import com.findback.app.map.FindbackMapActivity.Companion.EXTRA_TEXT_SCALE
 import com.findback.app.map.FindbackMapActivity.Companion.EXTRA_ZOOM
 import com.findback.app.map.FindbackMapActivity.Companion.MODE_PICKER
 import com.findback.app.map.FindbackMapActivity.Companion.MODE_VIEWER
@@ -87,6 +89,7 @@ class FindbackMapPlugin : Plugin() {
         if (MapValidation.isValidCenter(lat, lng)) {
             intent.putExtra(EXTRA_LATITUDE, lat!!).putExtra(EXTRA_LONGITUDE, lng!!)
         }
+        putResolvedAppearance(call, intent)
         activity.runOnUiThread {
             try {
                 startActivityForResult(call, intent, "mapPicked")
@@ -138,6 +141,7 @@ class FindbackMapPlugin : Plugin() {
             .putExtra(EXTRA_LONGITUDE, lng!!)
             .putExtra(EXTRA_ZOOM, MapValidation.clampZoom(call.getDouble(EXTRA_ZOOM)))
             .putExtra(EXTRA_LABEL, call.getString(EXTRA_LABEL, ""))
+        putResolvedAppearance(call, intent)
         activity.runOnUiThread {
             try {
                 startActivityForResult(call, intent, "mapViewed")
@@ -153,6 +157,23 @@ class FindbackMapPlugin : Plugin() {
         val closed = JSObject()
         closed.put("closed", true)
         call.resolve(closed)
+    }
+
+    /**
+     * App appearance bridge: only the resolved, allowlisted theme and a bounded
+     * text multiplier travel. Missing values leave the platform defaults in
+     * place — the native screen never guesses.
+     */
+    private fun putResolvedAppearance(call: PluginCall, intent: Intent) {
+        val appearance = call.getObject("appearance") ?: return
+        MapValidation.appearanceTheme(appearance.getString("theme"))?.let {
+            intent.putExtra(EXTRA_APPEARANCE_THEME, it)
+        }
+        MapValidation.appTextScale(
+            appearance.optDouble("textScale", Double.NaN).takeIf { it.isFinite() },
+        )?.let {
+            intent.putExtra(EXTRA_TEXT_SCALE, it.toDouble())
+        }
     }
 
     @PluginMethod

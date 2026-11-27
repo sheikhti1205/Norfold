@@ -2,7 +2,9 @@
 .fb-notifications { display:flex; flex-direction:column; min-width:0; color:var(--fb-on-surface); }
 .fb-notifications--full { width:100%; max-width:44rem; margin-inline:auto; min-height:100%; }
 .fb-notification-header { display:flex; flex-wrap:wrap; align-items:center; gap:.35rem; flex:none; padding:.4rem .75rem; background:var(--fb-surface); }
-.fb-notifications--full .fb-notification-header { position:sticky; top:0; z-index:1; padding-top:max(.4rem,env(safe-area-inset-top)); }
+/* .fb-app-viewport owns the safe area; this in-flow bar keeps the base 6.4px
+   top inset instead of spending the system inset a second time. */
+.fb-notifications--full .fb-notification-header { position:sticky; top:0; z-index:1; }
 .fb-notification-title { flex:1; min-width:0; font-size:1.125rem; font-weight:650; overflow-wrap:anywhere; }
 @media (max-width:599px) {
   .fb-notifications--full .fb-notification-header > div { flex-basis:100%; }
@@ -59,7 +61,9 @@ a.fb-notification-body:hover { background:var(--fb-surface-container); }
 }
 .fb-notification-undo button { color:var(--fb-surface); background:color-mix(in srgb, var(--fb-surface) 16%, transparent); }
 .fb-notification-undo button:hover { background:color-mix(in srgb, var(--fb-surface) 26%, transparent); }
-.fb-notifications--full .fb-notification-undo { position:sticky; bottom:max(.5rem,env(safe-area-inset-bottom)); margin-top:auto; }
+/* The bottom bar is an in-flow sibling that reserves its own row, so the
+   viewport's bottom inset already separates this undo from it. */
+.fb-notifications--full .fb-notification-undo { position:sticky; bottom:.5rem; margin-top:auto; }
 .fb-notification-see-all { display:flex; align-items:center; justify-content:center; flex:none; min-height:48px; padding:.5rem .75rem; font-size:.875rem; font-weight:600; border-radius:.6rem; }
 .fb-notification-see-all:hover { background:var(--fb-surface-container); }
 .fb-notification-body:focus-visible, .fb-notification-filters button:focus-visible, .fb-notification-see-all:focus-visible, .fb-notification-undo button:focus-visible { outline:2px solid var(--fb-focus); outline-offset:-2px; }

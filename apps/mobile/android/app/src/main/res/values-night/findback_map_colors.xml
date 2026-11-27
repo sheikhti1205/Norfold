@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark counterparts of the map-scoped palette. -->
+    <color name="findback_map_surface">#18191b</color>
+    <color name="findback_map_surface_low">#202124</color>
+    <color name="findback_map_surface_container">#26272b</color>
+    <color name="findback_map_on_surface">#f1f3f5</color>
+    <color name="findback_map_on_surface_variant">#b7bbc2</color>
+    <color name="findback_map_on_surface_disabled">#61f1f3f5</color>
+    <color name="findback_map_divider">#34363b</color>
+    <color name="findback_map_primary">#adc7ff</color>
+    <color name="findback_map_on_primary">#082b60</color>
+    <color name="findback_map_primary_container">#1c355c</color>
+    <color name="findback_map_control_ripple">#33adc7ff</color>
+    <color name="findback_map_on_primary_ripple">#33082b60</color>
+</resources>
