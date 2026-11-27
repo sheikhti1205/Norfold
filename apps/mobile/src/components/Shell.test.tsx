@@ -813,7 +813,11 @@ describe("Shell adaptive navigation", () => {
     expect(within(nav).queryByRole("button", { name: "Search" })).toBeNull();
     expect(within(nav).queryByRole("link", { name: "Activity" })).toBeNull();
     const more = within(nav).getByRole("button", { name: "More" });
-    expect(more.getAttribute("aria-haspopup")).toBe("menu");
+    // React Aria emits the token `aria-haspopup="true"` for a menu trigger.
+    // WAI-ARIA defines "true" as equivalent to "menu", so both are valid for
+    // this primitive; the popup behaviour itself is asserted below and by the
+    // menu-opening tests.
+    expect(["menu", "true"]).toContain(more.getAttribute("aria-haspopup"));
     expect(more.getAttribute("aria-expanded")).toBe("false");
     expect(more.hasAttribute("aria-current")).toBe(false);
     const account = within(nav).getByRole("button", { name: /^Account/ });
