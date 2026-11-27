@@ -882,6 +882,7 @@ it("shows a location permission failure without sending or losing the draft", as
 });
 it("shares a manual approximate pin without a permission request or invented accuracy", async () => {
   const geo = geolocation(); await open(); const picker = await locationPicker();
+  fireEvent.click(within(picker).getByRole("button", { name: "Enter location" }));
   fireEvent.change(within(picker).getByRole("textbox", { name: "Approximate location" }), { target: { value: "23.810332, 90.412518" } });
   expect(within(picker).getByText("23.810, 90.413")).toBeTruthy();
   fireEvent.click(within(picker).getByRole("button", { name: "Send location" }));
@@ -890,11 +891,13 @@ it("shares a manual approximate pin without a permission request or invented acc
 });
 it("cancels the location picker without sending and rejects duplicate send activation", async () => {
   await open(); let picker = await locationPicker();
+  fireEvent.click(within(picker).getByRole("button", { name: "Enter location" }));
   fireEvent.change(within(picker).getByRole("textbox", { name: "Approximate location" }), { target: { value: "23, 90" } });
   fireEvent.click(within(picker).getByRole("button", { name: "Cancel" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull()); expect(m.location).not.toHaveBeenCalled();
   picker = await locationPicker();
   expect(within(picker).getByRole("button", { name: "Send location" })).toHaveProperty("disabled", true);
+  fireEvent.click(within(picker).getByRole("button", { name: "Enter location" }));
   fireEvent.change(within(picker).getByRole("textbox", { name: "Approximate location" }), { target: { value: "23, 90" } });
   let done!: () => void; m.location.mockReturnValue(new Promise<void>(resolve => { done = resolve; }));
   const send = within(picker).getByRole("button", { name: "Send location" }); fireEvent.click(send); fireEvent.click(send);

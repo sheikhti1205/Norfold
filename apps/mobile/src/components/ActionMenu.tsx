@@ -5,7 +5,7 @@ import { ChevronRight, MoreHorizontal } from "lucide-react";
 import { LayeredPopover } from "./overlayFoundation";
 import { useFinePointer } from "./inputCapabilities";
 import { COMPACT_MAX_PX, useViewportWidth } from "./responsive";
-import { useHoverLabel } from "./HoverLabel";
+import { useHoverLabel, type HoverLabelPlacement } from "./HoverLabel";
 
 export interface MenuAction {
   id: string;
@@ -37,7 +37,7 @@ function actionRows(items: readonly MenuAction[]) {
 }
 
 /** Anchored actions on every input/width. Never turns a simple action into a sheet. */
-export function ActionMenu({ label, items, icon, disabled = false, open: controlledOpen, onOpenChange, triggerClassName = "fb-icon-control", anchor = false, feedback, placement, hoverName }: {
+export function ActionMenu({ label, items, icon, disabled = false, open: controlledOpen, onOpenChange, triggerClassName = "fb-icon-control", anchor = false, feedback, placement, hoverName, labelPlacement }: {
   label: string;
   items: readonly (MenuAction | MenuGroup)[];
   icon?: ReactNode;
@@ -55,6 +55,9 @@ export function ActionMenu({ label, items, icon, disabled = false, open: control
   /** Short pointer-only name when the accessible label is longer than the
    * gesture needs ("Share report" names itself "Share"). */
   hoverName?: string;
+  /** Edge the pointer-only name grows from. A row inside an icon column names
+   * itself to the right; a top pill would cover the row above it. */
+  labelPlacement?: HoverLabelPlacement;
 }) {
   const [localOpen, setLocalOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -78,7 +81,7 @@ export function ActionMenu({ label, items, icon, disabled = false, open: control
     <Button ref={trigger} aria-label={label} isDisabled={disabled}
       className={anchor ? `fb-longpress-anchor ${triggerClassName}` : triggerClassName}
       excludeFromTabOrder={anchor} aria-hidden={anchor || undefined}
-      {...(anchor ? {} : hoverLabel(hoverName ?? label))}>
+      {...(anchor ? {} : hoverLabel(hoverName ?? label, labelPlacement))}>
       {icon ?? <MoreHorizontal size={20} aria-hidden="true" />}
     </Button>
     <LayeredPopover placement={placement ?? (anchor ? "bottom start" : "bottom end")} offset={4}>

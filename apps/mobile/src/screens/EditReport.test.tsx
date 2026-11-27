@@ -85,6 +85,11 @@ function renderEditor(props: { postId?: string } = {}) {
   return render(<RouterProvider router={router} />);
 }
 
+/** The place field is a secondary disclosure; a reader opens it before typing. */
+function openLocationEntry() {
+  fireEvent.click(screen.getByRole("button", { name: "Enter location" }));
+}
+
 const routers: ReturnType<typeof createMemoryRouter>[] = [];
 function makeRouter(...args: Parameters<typeof createMemoryRouter>) {
   const router = createMemoryRouter(...args);
@@ -501,6 +506,7 @@ describe("EditReport", () => {
   it("asks the server to CLEAR the location when the owner empties it", async () => {
     renderEditor({ postId: "p1" });
     await waitFor(() => expect(screen.getByLabelText("What did you lose?")).toBeTruthy());
+    openLocationEntry();
     fireEvent.change(screen.getByPlaceholderText("Place, decimal coords, or a Google Maps link"), {
       target: { value: "" },
     });
@@ -519,6 +525,7 @@ describe("EditReport", () => {
     // place removes it.
     renderEditor({ postId: "p1" });
     await waitFor(() => expect(screen.getByLabelText("What did you lose?")).toBeTruthy());
+    openLocationEntry();
     fireEvent.change(screen.getByPlaceholderText("Place, decimal coords, or a Google Maps link"), {
       target: { value: "Dhaka Cantonment" },
     });
@@ -550,6 +557,7 @@ describe("EditReport", () => {
   it("shows and saves the published pin after clearing then retyping the place", async () => {
     renderEditor();
     await waitFor(() => expect(screen.getByLabelText("What did you lose?")).toBeTruthy());
+    openLocationEntry();
     const place = screen.getByPlaceholderText("Place, decimal coords, or a Google Maps link");
     fireEvent.change(place, { target: { value: "" } });
     fireEvent.change(place, { target: { value: "Dhaka Cantonment" } });
@@ -569,6 +577,7 @@ describe("EditReport", () => {
     fetchPostMock.mockResolvedValue(post({ longitude: null }));
     renderEditor({ postId: "p1" });
     await waitFor(() => expect(screen.getByLabelText("What did you lose?")).toBeTruthy());
+    openLocationEntry();
     fireEvent.change(screen.getByPlaceholderText("Place, decimal coords, or a Google Maps link"), {
       target: { value: "" },
     });

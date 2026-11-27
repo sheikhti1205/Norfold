@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 /**
- * §11: the local text/category helper wired into CreateReport as
- * user-confirmed suggestions. Consumer copy only — no model/provider name and
- * no confidence number reaches the screen. Every chip offers Use this <field> /
- * Keep mine, applying one field keeps the others reviewable, Keep sends
- * nothing, cancellation aborts cleanly with no fallback, stale generations are
- * dropped, unreleased categories downgrade with a notice, and nothing ever
- * publishes without the explicit form submit.
+ * §11: the local text/category helper is one "Suggest details" action beside
+ * the report's own title and description — there is no second text box and no
+ * separate panel. Consumer copy only — no model/provider name and no confidence
+ * number reaches the screen. Every chip offers Use this <field> / Keep mine,
+ * applying one field keeps the others reviewable, Keep sends nothing,
+ * cancellation aborts cleanly with no fallback, stale generations are dropped,
+ * unreleased categories downgrade with a notice, and nothing ever publishes
+ * without the explicit form submit.
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -69,8 +70,9 @@ vi.mock("../services/categorySuggestion", async (importOriginal) => {
 
 import { CreateReport } from "./CreateReport";
 import { NEEDLE_DESCRIPTOR } from "../services/ai/modelDescriptors";
-import { clearDraft } from "../services/reportDraft";
+import { clearDraft, saveDraft } from "../services/reportDraft";
 import { clearPhotoStore } from "../services/photoStore";
+import { todayInputValue } from "../utils/dates";
 
 const FIELDS_OK = {
   ok: true,
@@ -149,17 +151,39 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** The report's own description is the input; there is no second text box. */
+function seedDescription(description: string): void {
+  saveDraft(
+    {
+      type: "LOST",
+      title: "",
+      description,
+      category: "",
+      eventDate: todayInputValue(),
+      location: { label: "", latitude: null, longitude: null },
+      youtubeUrl: "",
+      photoId: null,
+      photoNativeUri: null,
+      photoWebPath: null,
+      photoFormat: null,
+    },
+    "u1",
+  );
+}
+
+function suggestButton(): HTMLElement {
+  return screen.getByRole("button", { name: /^(suggest details|suggesting…)$/i });
+}
+
 async function requestSuggestions(itemText: string) {
+  seedDescription(itemText);
   render(<CreateReport />);
   await screen.findByRole("toolbar", { name: /description formatting/i });
-  fireEvent.change(screen.getByLabelText(/describe the item/i), {
-    target: { value: itemText },
-  });
-  fireEvent.click(screen.getByRole("button", { name: /^fill missing details$/i }));
+  fireEvent.click(suggestButton());
   await screen.findByText("Black umbrella");
 }
 
-describe("CreateReport field suggestions from description", () => {
+describe("CreateReport field suggestions from what is written", () => {
   it("shows source-labelled chips and applies one field while keeping others reviewable", async () => {
     await requestSuggestions("Black umbrella lost yesterday near the central market.");
     expect(screen.getByText("Suggested title")).toBeTruthy();
@@ -220,7 +244,7 @@ describe("CreateReport field suggestions from description", () => {
     render(<CreateReport />);
     await screen.findByRole("toolbar", { name: /description formatting/i });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), { target: { value: "My own title" } });
-    fireEvent.click(screen.getByRole("button", { name: /^fill missing details$/i }));
+    fireEvent.click(suggestButton());
     await screen.findByText("Black umbrella");
 
     // The description field starts empty, so its first suggestion applies
@@ -235,7 +259,7 @@ describe("CreateReport field suggestions from description", () => {
     // holds content that a stray write during the title cancel would destroy,
     // and replacing it must ask through the canonical dialog.
     suggestFieldsMock.mockImplementation(cancellable(FIELDS_SECOND));
-    fireEvent.click(screen.getByRole("button", { name: /^(filling…|fill missing details)$/i }));
+    fireEvent.click(suggestButton());
     await screen.findByText("Lost near the river");
     fireEvent.click(screen.getByRole("button", { name: "Use this description" }));
     const replaceDescription = await screen.findByRole("alertdialog", {
@@ -274,12 +298,12 @@ describe("CreateReport field suggestions from description", () => {
     suggestFieldsMock.mockImplementationOnce(() => firstGate);
     render(<CreateReport />);
     await screen.findByRole("toolbar", { name: /description formatting/i });
-    const input = screen.getByLabelText(/describe the item/i);
+    const input = screen.getByLabelText(/what did you lose/i);
     fireEvent.change(input, { target: { value: "first text" } });
-    fireEvent.click(screen.getByRole("button", { name: /^(filling…|fill missing details)$/i }));
+    fireEvent.click(suggestButton());
     // A newer request supersedes the first before it resolves.
     fireEvent.change(input, { target: { value: "second text" } });
-    fireEvent.click(screen.getByRole("button", { name: /^(filling…|fill missing details)$/i }));
+    fireEvent.click(suggestButton());
     await screen.findByText("Black umbrella");
     // The stale first response resolves late with different content: dropped.
     releaseFirst({
@@ -303,10 +327,10 @@ describe("CreateReport field suggestions from description", () => {
     suggestCategoryMock.mockImplementation(cancellable(undefined));
     render(<CreateReport />);
     await screen.findByRole("toolbar", { name: /description formatting/i });
-    fireEvent.change(screen.getByLabelText(/describe the item/i), {
+    fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: "Black umbrella lost yesterday." },
     });
-    fireEvent.click(screen.getByRole("button", { name: /^(filling…|fill missing details)$/i }));
+    fireEvent.click(suggestButton());
     fireEvent.click(screen.getByRole("button", { name: "Stop" }));
     await screen.findByText("Suggestion stopped.");
     // No retry, no second op, no chips, no publish.
@@ -334,10 +358,10 @@ describe("CreateReport field suggestions from description", () => {
     );
     render(<CreateReport />);
     await screen.findByRole("toolbar", { name: /description formatting/i });
-    fireEvent.change(screen.getByLabelText(/describe the item/i), {
+    fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: "Black umbrella lost yesterday." },
     });
-    fireEvent.click(screen.getByRole("button", { name: /^fill missing details$/i }));
+    fireEvent.click(suggestButton());
     await screen.findByText(/isn't available yet/);
     expect(screen.queryByRole("button", { name: "Use this category" })).toBeNull();
     expect(screen.getByRole("button", { name: "Use this title" })).toBeTruthy();
@@ -381,10 +405,10 @@ describe("CreateReport field suggestions from description", () => {
     );
     render(<CreateReport />);
     await screen.findByRole("toolbar", { name: /description formatting/i });
-    fireEvent.change(screen.getByLabelText(/describe the item/i), {
+    fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: "Black umbrella lost yesterday." },
     });
-    fireEvent.click(screen.getByRole("button", { name: /^fill missing details$/i }));
+    fireEvent.click(suggestButton());
     // Deterministic settle: the category op succeeded, so its chip appears.
     await screen.findByText("Suggested category");
     expect(screen.getByText(/Couldn't get a suggestion this time/i)).toBeTruthy();
@@ -400,10 +424,10 @@ describe("CreateReport field suggestions from description", () => {
     suggestCategoryMock.mockImplementation(cancellable(engineFailure));
     render(<CreateReport />);
     await screen.findByRole("toolbar", { name: /description formatting/i });
-    fireEvent.change(screen.getByLabelText(/describe the item/i), {
+    fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: "Black umbrella lost yesterday." },
     });
-    fireEvent.click(screen.getByRole("button", { name: /^fill missing details$/i }));
+    fireEvent.click(suggestButton());
     await screen.findByText(/Couldn't get a suggestion this time/i);
     expect(screen.queryByText("Suggestion stopped.")).toBeNull();
   });
@@ -420,10 +444,10 @@ describe("CreateReport field suggestions from description", () => {
     nlHelperStateMock.mockResolvedValue("not-set-up");
     render(<CreateReport />);
     await screen.findByRole("toolbar", { name: /description formatting/i });
-    fireEvent.change(screen.getByLabelText(/describe the item/i), {
+    fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: "Black umbrella lost yesterday." },
     });
-    fireEvent.click(screen.getByRole("button", { name: /^fill missing details$/i }));
+    fireEvent.click(suggestButton());
 
     await screen.findByText(/open Manage local tools to install it/i);
     expect(screen.queryByText(/keep writing/i)).toBeNull();

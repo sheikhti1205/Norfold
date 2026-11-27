@@ -79,8 +79,9 @@ export interface ReportEditorProps {
    */
   media?: ReactNode;
   /**
-   * Optional slot directly after the description — the create screen's
-   * "fill missing details" helper reads the description it follows.
+   * Optional slot directly after the description — the create screen's saved
+   * legacy-note recovery and "Suggest details" action live there, and both
+   * read the title and description they follow.
    */
   afterDescription?: ReactNode;
   /**

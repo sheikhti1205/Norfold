@@ -39,8 +39,8 @@
   gap: 4px; border-radius: 999px;
   text-decoration: none; padding: 4px 2px;
 }
-/* Search is the one row that opens an overlay instead of navigating: it is a
-   button wearing the same row treatment as its link siblings. */
+/* The identity control and the More disclosure are buttons wearing the same
+   row treatment as their link siblings. */
 button.fb-nav-link {
   border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer;
 }
@@ -220,19 +220,8 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
      rows paint over Insights instead of extending the scroll range. */
   flex: none;
 }
-/* The prototype's "Others" shelf. A hairline plus a small label is the whole
-   device: secondary destinations stay distinguishable without a second card,
-   and the label appears whenever the rail has room to name it (pinned or
-   hovered), not in the icon-only state. */
-.fb-nav-rail-group {
-  display: flex; flex-direction: column; gap: 2px; flex: none;
-  padding-block-start: 6px;
-  border-block-start: 1px solid var(--fb-outline-variant);
-}
-.fb-nav-rail-section {
-  padding-inline: 10px; font-size: 0.6875rem; font-weight: 600;
-  letter-spacing: 0.02em; color: var(--fb-on-surface-variant);
-}
+/* Secondary destinations are not a second shelf of icons: they live behind the
+   named More row, which wears the same 48px destination geometry. */
 /* Vertical items keep the bar's grammar (rounded row, active pill) but stack
    icon over label. Every row keeps the 48px target floor, so a short window
    scrolls the destination list (`.fb-nav-rail-scroll`) instead of shrinking
@@ -272,8 +261,7 @@ html.fb-reduce-motion .fb-nav-link-active .fb-nav-icon { transform: none; }
   text-align: start; white-space: nowrap;
   font-size: 0.8125rem; font-weight: 500;
 }
-.fb-nav-rail[data-pinned="false"] .fb-nav-rail-section { display: none; }
-.fb-nav-rail[data-pinned="false"]:is([data-hover-expanded="true"], :has(:focus-visible)) .fb-nav-rail-section { display: block; }
+
 @media (prefers-reduced-motion: reduce) {
   .fb-nav-rail { transition: none; }
   .fb-rail-anchor:has(> .fb-nav-rail) { transition: none; }
@@ -296,7 +284,6 @@ html.fb-reduce-motion .fb-rail-anchor:has(> .fb-nav-rail) { transition: none; }
   .fb-nav-rail[data-pinned="true"] { padding-block: 4px; }
   .fb-nav-rail .fb-nav-link { padding-block: 2px; }
   .fb-nav-rail-scroll { gap: 2px; }
-  .fb-nav-rail-group { padding-block-start: 4px; }
 }
 /* The unread badge stays next to the bell icon rather than the far edge. */
 /* Fullscreen editor is a body-level portal: never leave shell chrome behind it

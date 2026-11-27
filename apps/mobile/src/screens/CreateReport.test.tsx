@@ -209,6 +209,7 @@ describe("CreateReport", () => {
 
   it("resets the location picker UI when the draft is discarded", async () => {
     render(<CreateReport />);
+    fireEvent.click(screen.getByRole("button", { name: "Enter location" }));
     const locationInput = screen.getByLabelText(/approximate location/i) as HTMLInputElement;
     fireEvent.change(locationInput, { target: { value: "23.810332, 90.412518" } });
     expect(locationInput.value).toBe("23.810332, 90.412518");
@@ -220,17 +221,19 @@ describe("CreateReport", () => {
 
   it("keeps an exact pin (with its warning) across navigation", async () => {
     const { unmount } = render(<CreateReport />);
+    fireEvent.click(screen.getByRole("button", { name: "Enter location" }));
     const locationInput = screen.getByLabelText(/approximate location/i);
     fireEvent.change(locationInput, { target: { value: "23.810332, 90.412518" } });
     // Exact selection moved into the map picker sheet; the form only has one row.
     fireEvent.click(await screen.findByRole("button", { name: /choose on map/i }));
     fireEvent.click(await screen.findByRole("button", { name: /use exact pin/i }));
     fireEvent.click(screen.getByRole("button", { name: /confirm location/i }));
-    await screen.findByText(/exact pin and will be shown publicly/i);
+    const warning = await screen.findByTestId("exact-warning");
+    expect(warning.textContent).toBe("Exact pin will be public");
 
     unmount();
     render(<CreateReport />);
-    expect(await screen.findByText(/exact pin and will be shown publicly/i)).toBeTruthy();
+    expect((await screen.findByTestId("exact-warning")).textContent).toBe("Exact pin will be public");
   });
 
   it("clears the selected file and preview when the photo is removed", async () => {
@@ -927,6 +930,7 @@ describe("CreateReport", () => {
     fireEvent.change(screen.getByLabelText(/what did you lose/i), { target: { value: "Lost phone" } });
     await chooseCategory("Electronics");
     const longLocation = "A".repeat(201);
+    fireEvent.click(screen.getByRole("button", { name: "Enter location" }));
     const locationInput = screen.getByLabelText(/approximate location/i) as HTMLInputElement;
     fireEvent.change(locationInput, { target: { value: longLocation } });
     fireEvent.submit(screen.getByRole("button", { name: /publish/i }).closest("form")!);

@@ -495,12 +495,11 @@ describe("MapPickerSheet (reopening seeds the precision toggle)", () => {
   it("reopens an EXACT pin in exact mode and re-confirm keeps EXACT", () => {
     const { onConfirm } = renderSheet({ value: EXACT_VALUE });
 
-    // Exact mode is visible before any tap: the warning plus the Round action,
-    // never the approximate opt-in.
-    expect(
-      screen.getByText(/Warning: this is an exact pin and will be shown publicly/),
-    ).toBeDefined();
-    expect(screen.getByRole("button", { name: "Round to ~100 m" })).toBeDefined();
+    // Exact mode is visible before any tap: the warning plus the explicit
+    // Use approximate action, never the approximate opt-in.
+    expect(screen.getByText("Exact pin will be public")).toBeDefined();
+    expect(screen.getAllByText("Exact pin will be public")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Use approximate" })).toBeDefined();
     expect(screen.queryByRole("button", { name: "Use exact pin" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm location" }));
@@ -519,7 +518,7 @@ describe("MapPickerSheet (reopening seeds the precision toggle)", () => {
     const { onConfirm } = renderSheet({ value: PINNED_VALUE });
 
     expect(screen.getByRole("button", { name: "Use exact pin" })).toBeDefined();
-    expect(screen.queryByText(/Warning: this is an exact pin/)).toBeNull();
+    expect(screen.queryByText("Exact pin will be public")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm location" }));
 
@@ -542,13 +541,13 @@ describe("MapPickerSheet (reopening seeds the precision toggle)", () => {
       />
     );
     const { rerender } = render(view(EXACT_VALUE));
-    expect(screen.getByRole("button", { name: "Round to ~100 m" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Use approximate" })).toBeDefined();
 
     rerender(view(EMPTY_VALUE));
 
     // No pin, no exact mode: an exact toggle must never seed the next pin.
     expect(screen.getByText("No location yet — search or move the pin to place it.")).toBeDefined();
-    expect(screen.queryByText(/Warning: this is an exact pin/)).toBeNull();
+    expect(screen.queryByText("Exact pin will be public")).toBeNull();
     expect(screen.getByRole("button", { name: "Confirm location" })).toHaveProperty("disabled", true);
 
     fireEvent.click(screen.getByRole("button", { name: "Move pin north" }));
@@ -668,5 +667,56 @@ describe("MapPickerSheet (Google web picker path)", () => {
     // constructs the web Google canvas.
     expect(screen.queryByTestId("google-map-canvas")).toBeNull();
     expect(screen.getByTestId("map-picker-map")).toBeDefined();
+  });
+});
+
+describe("MapPickerSheet (compact precision warning)", () => {
+  it("shows the compact public warning with an explicit Use approximate action", () => {
+    const { onConfirm } = renderSheet({ value: EXACT_VALUE });
+
+    const warning = screen.getByText("Exact pin will be public");
+    expect(warning).toBeDefined();
+    // One sentence, announced once: no hidden duplicate of the warning.
+    expect(screen.getAllByText("Exact pin will be public")).toHaveLength(1);
+    // The warning and its action stack rather than clipping at a large text size.
+    expect(warning.closest("p")?.parentElement?.className).toContain("flex-wrap");
+    const action = screen.getByRole("button", { name: "Use approximate" });
+    expect(action.className).toContain("min-h-[48px]");
+
+    fireEvent.click(action);
+    expect(screen.getByText("Pin rounded to ~100 m precision.")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Use exact pin" })).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm location" }));
+    const committed = onConfirm.mock.calls[0]?.[0] as LocationValue;
+    expect(committed.precision).toBe("APPROXIMATE");
+  });
+
+  it("names the chat consequence instead of the public one", () => {
+    renderSheet({ value: EXACT_VALUE, visibility: "conversation" });
+
+    expect(screen.getByText("Exact pin will be shared in this chat")).toBeDefined();
+    expect(screen.getAllByText("Exact pin will be shared in this chat")).toHaveLength(1);
+    expect(screen.queryByText("Exact pin will be public")).toBeNull();
+    expect(screen.getByRole("button", { name: "Use approximate" })).toBeDefined();
+  });
+
+  it("wraps a long place result instead of ellipsising it", async () => {
+    const name = "A very long place name ".repeat(8).trim();
+    searchState.places = [{ displayName: name, latitude: 23.8, longitude: 90.4 }];
+    renderSheet();
+
+    fireEvent.change(screen.getByLabelText("Search for a place"), { target: { value: "long" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    const result = await screen.findByText(name);
+    expect(result.className).toContain("break-words");
+    expect(result.className).not.toContain("truncate");
+  });
+
+  it("lets the search row stack when the sheet narrows", () => {
+    renderSheet();
+
+    expect(screen.getByRole("button", { name: "Search" }).parentElement?.className).toContain("flex-wrap");
   });
 });

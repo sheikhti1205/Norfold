@@ -2,7 +2,7 @@ import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, u
 import { Capacitor } from "@capacitor/core";
 import { Link, UNSAFE_NavigationContext, useLocation, useNavigate } from "react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { Archive, BarChart3, Bell, Bookmark, ClipboardList, Heart, Home, MessageCircle, Plus, Search, Settings as SettingsIcon, UserRound, X, type LucideIcon } from "lucide-react";
+import { Archive, BarChart3, Bell, Bookmark, ClipboardList, Heart, Home, MessageCircle, MoreHorizontal, Plus, Settings as SettingsIcon, UserRound, X, type LucideIcon } from "lucide-react";
 import { Focusable, Tooltip, TooltipTrigger } from "react-aria-components";
 import { TabTapProvider, useTabTap } from "./TabTap";
 import { LiveRegion } from "./LiveRegion";
@@ -22,7 +22,8 @@ import { SettingsWindow } from "./SettingsWindow";
 import { OverlayDepthProvider } from "./overlayFoundation";
 import { ChatDock } from "./ChatDock";
 import { GlobalSearchOverlay } from "./GlobalSearchOverlay";
-import { openGlobalSearch, toggleGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
+import { openGlobalSearch, useGlobalSearchOpen } from "./globalSearch";
+import { ActionMenu } from "./ActionMenu";
 import {
   fadeUpVariants,
   fadeVariants,
@@ -37,34 +38,35 @@ import "./Shell.nav.css";
 const MotionLink = motion.create(Link);
 
 /**
- * The rail's destinations: the work you came to do first, then the secondary
- * shelves under a named group. The phone bar keeps its own four-destination
- * list below; a nine-item pill on a 320px screen would be a row of glyphs.
+ * The rail's primary destinations: the work you came to do first. The phone
+ * bar keeps its own four-destination list below; a long pill on a 320px screen
+ * would be a row of glyphs.
  */
-/**
- * One row that opens the shared search overlay instead of navigating: search
- * is not a destination, while `/search` survives as a deep link.
- */
-type NavRow =
-  | { to: string; label: string; icon: LucideIcon; search?: false }
-  | { label: string; icon: LucideIcon; search: true };
+type NavRow = { to: string; label: string; icon: LucideIcon };
 
 const NAV: readonly NavRow[] = [
   { to: "/", label: "Home", icon: Home },
   { to: "/my", label: "My Reports", icon: ClipboardList },
-  { label: "Search", icon: Search, search: true },
   { to: "/chats", label: "Chats", icon: MessageCircle },
-  { to: "/notifications", label: "Activity", icon: Bell },
   { to: "/insights", label: "Insights", icon: BarChart3 },
 ];
 
-/** The prototype's `Others` group. Every row lands on a surface that exists. */
-const NAV_OTHERS = [
+/**
+ * Secondary destinations, still reachable and named behind More. Search is
+ * deliberately absent: the header's search control and this rail's old row
+ * called the same `toggleGlobalSearch`, so the rail carried a duplicate
+ * control. Activity stays here as the named route to the full inbox; the
+ * header's notification control remains the one persistent notifications
+ * access (and on a wide window it is a quick-inbox disclosure, not the same
+ * action as opening the Activity page).
+ */
+const NAV_MORE: readonly NavRow[] = [
+  { to: "/notifications", label: "Activity", icon: Bell },
   { to: "/search?scope=people", label: "People", icon: UserRound },
   { to: "/reactions", label: "Liked / Disliked", icon: Heart },
   { to: "/saved", label: "Saved", icon: Bookmark },
   { to: "/settings/returns", label: "Recovered", icon: Archive },
-] as const;
+];
 
 /**
  * The bottom bar stays four destinations plus the create action, which is what
@@ -592,8 +594,10 @@ export function Shell() {
  * Both layouts share destinations and selection. The rail no longer carries the
  * large create button: it moved beside the bell in TopUtilities, so the phone
  * bar keeps its floating + and the rail head is the app mark that pins the
- * column. Notifications belong to TopUtilities, never this list. `activePath`
- * allows a deterministic visual fixture; normal navigation is router-owned.
+ * column. Search and notification controls belong to TopUtilities, never this
+ * list; the rail's secondary destinations live behind one named More menu.
+ * `activePath` allows a deterministic visual fixture; normal navigation is
+ * router-owned.
  */
 export function PrimaryNav({
   layout = "bottom",
@@ -628,7 +632,7 @@ export function PrimaryNav({
 }) {
   const { notifyTabTap } = useTabTap();
   const { pathname, search } = useLocation();
-  const searchOpen = useGlobalSearchOpen();
+  const navigate = useNavigate();
   // One pointer-only naming gesture for the rail and the phone bar's create
   // action. The panel still expands after two seconds; the shared pill only
   // answers "what is this icon?" and hides the moment the panel names rows in
@@ -732,9 +736,9 @@ export function PrimaryNav({
   // keyboard or fullscreen flipped.)
 
   const belongsTo = (root: string) => pathname === root || pathname.startsWith(`${root}/`);
-  // Search and Connect share one route and differ by scope, so the selection
-  // cannot be read from the pathname alone. Recovered is a Settings child but a
-  // first-class rail destination, so it is claimed before the Settings fallback.
+  // People is a Search scope, so the selection cannot be read from the
+  // pathname alone. Recovered is a Settings child but a named More
+  // destination, so it is claimed before the Settings fallback.
   const peopleScope = new URLSearchParams(search).get("scope") === "people";
   const selectedPath = activePath ?? (belongsTo("/chats") || belongsTo("/connections") ? "/chats"
     : pathname === "/settings/returns" ? "/settings/returns"
@@ -779,9 +783,8 @@ export function PrimaryNav({
   }, [railPinned, hoverExpanded, dismissHoverLabel]);
   if (fullscreen || (keyboardOpen && !rail)) return null;
   const renderDestination = (destination: NavRow) => {
-    const { label, icon: Icon } = destination;
-    const isSearch = destination.search === true;
-    const selected = !isSearch && selectedPath === destination.to;
+    const { label, icon: Icon, to } = destination;
+    const selected = selectedPath === to;
     const body = <>
       {selected && (
         <motion.span
@@ -823,33 +826,17 @@ export function PrimaryNav({
         </AnimatePresence>
       )}
     </>;
-    // Search opens the floating overlay; it is a button, not a destination, so
-    // no route is ever current for it.
-    const trigger = isSearch ? (
-      <motion.button
-        key={label}
-        type="button"
-        aria-label={label}
-        aria-expanded={searchOpen}
-        onClick={(event) => toggleGlobalSearch(event.currentTarget)}
-        {...(rail ? hoverLabel(label, "right") : {})}
-        whileTap={pressFeedback.iconButton}
-        transition={{ duration: motionDurations.instant }}
-        className="fb-nav-link text-on-surface-variant"
-      >
-        {body}
-      </motion.button>
-    ) : (
+    const trigger = (
       <MotionLink
-        key={destination.to}
-        to={destination.to}
+        key={to}
+        to={to}
         aria-label={selected ? undefined : label}
         aria-current={selected ? "page" : undefined}
         {...(rail ? hoverLabel(label, "right") : {})}
         onClick={() => {
           if (selected) {
             notifyTabTap();
-            if (destination.to === "/") requestHistorySuppression("/");
+            if (to === "/") requestHistorySuppression("/");
           }
         }}
         whileTap={pressFeedback.iconButton}
@@ -871,8 +858,42 @@ export function PrimaryNav({
   };
 
   const railPrimary = NAV.map(renderDestination);
-  const railOthers = NAV_OTHERS.map(renderDestination);
   const barItems = BAR_NAV.map(renderDestination);
+  // Secondary destinations stay reachable behind one named menu. The trigger
+  // wears the same 48px row as a destination and names itself in the expanded
+  // panel, so "More" is never an unlabelled glyph. Its pointer-only name grows
+  // to the right like the rows above it; a top name would sit on its neighbour.
+  const moreActive = NAV_MORE.some((destination) => selectedPath === destination.to);
+  const moreRow = (
+    <ActionMenu
+      key="fb-nav-more"
+      label="More"
+      triggerClassName={`fb-nav-link ${moreActive ? "fb-nav-link-active text-on-primary-container" : "text-on-surface-variant"}`}
+      placement="bottom start"
+      labelPlacement="right"
+      icon={<>
+        {moreActive && (
+          <motion.span
+            layoutId={`fb-nav-active-${layout}-${layoutScope}`}
+            className="fb-nav-active-bg bg-primary-container"
+            transition={motionSprings.snappy}
+            aria-hidden="true"
+          />
+        )}
+        <MoreHorizontal size={22} className="fb-nav-icon" aria-hidden="true" />
+        <span className={`fb-nav-label${railPinned ? "" : " sr-only"}`}>More</span>
+      </>}
+      items={NAV_MORE.map((destination) => {
+        const Icon = destination.icon;
+        return {
+          id: destination.to,
+          label: destination.label,
+          icon: <Icon size={18} aria-hidden="true" />,
+          onAction: () => navigate(destination.to),
+        };
+      })}
+    />
+  );
 
   if (rail) {
     return (
@@ -929,11 +950,8 @@ export function PrimaryNav({
             inside that control (R1), so it has to stay reachable however many
             destinations the rail carries. */}
         <div className="fb-nav-rail-scroll">
-          <div className="fb-nav-rail-list">{railPrimary}</div>
-          <div className="fb-nav-rail-group">
-            <span className="fb-nav-rail-section">Others</span>
-            <div className="fb-nav-rail-list">{railOthers}</div>
-          </div>
+          {/* Four primary destinations, then the named More disclosure. */}
+          <div className="fb-nav-rail-list">{railPrimary}{moreRow}</div>
         </div>
         {drawer
           ? <OverlayDepthProvider depth={4}><AccountMenu onOpenSettings={onOpenSettings} /></OverlayDepthProvider>

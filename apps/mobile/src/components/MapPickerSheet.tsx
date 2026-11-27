@@ -10,6 +10,7 @@ import {
   MapPin,
   Minus,
   Plus,
+  TriangleAlert,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { BottomSheet } from "./BottomSheet";
@@ -648,6 +649,11 @@ export function MapPickerSheet({
       )
     : null;
   const readout = pending ? formatCoordinateReadout(pending) : null;
+  // One short, prospective sentence: the consequence is announced once, and
+  // the explicit Use approximate action below is the remedy.
+  const exactWarning = visibility === "conversation"
+    ? "Exact pin will be shared in this chat"
+    : "Exact pin will be public";
 
   return (
     <BottomSheet
@@ -716,8 +722,8 @@ export function MapPickerSheet({
           <form> (BottomSheet mounts in the component tree, not a portal), and
           an inner submit would propagate to it and could publish the report.
           Enter searches via the input key handler instead. */}
-        <div className="flex gap-2">
-          <label className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="min-w-[10rem] flex-1">
             <span className="sr-only">Search for a place</span>
             <input
               value={searchInput}
@@ -754,7 +760,7 @@ export function MapPickerSheet({
                   onClick={() => pickResult(place)}
                   className="w-full rounded-m3-sm px-3 py-3 text-left text-sm text-on-surface hover:bg-surface-container"
                 >
-                  <span className="block truncate">{place.displayName}</span>
+                  <span className="block break-words">{place.displayName}</span>
                   <span className="block text-xs text-on-surface-variant">
                     {place.latitude.toFixed(5)}, {place.longitude.toFixed(5)}
                   </span>
@@ -826,10 +832,9 @@ export function MapPickerSheet({
 
         {draft && exact ? (
           <div className="flex flex-wrap items-center gap-2 rounded-m3-sm border border-error px-3 py-2">
-            <p className="text-xs text-error">
-              {visibility === "conversation"
-                ? "Warning: this is an exact pin and will be shared in this chat. Prefer the approximate area."
-                : "Warning: this is an exact pin and will be shown publicly. Prefer the approximate area."}
+            <p className="flex min-w-[8rem] flex-1 items-start gap-1.5 text-xs font-medium text-error">
+              <TriangleAlert size={14} aria-hidden className="mt-0.5 shrink-0" />
+              <span>{exactWarning}</span>
             </p>
             <Button
               type="button"
@@ -837,7 +842,7 @@ export function MapPickerSheet({
               size="md"
               onClick={() => setExact(false)}
             >
-              Round to ~100 m
+              Use approximate
             </Button>
           </div>
         ) : null}

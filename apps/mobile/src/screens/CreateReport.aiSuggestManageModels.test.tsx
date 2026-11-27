@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 /**
- * CF-020 MINOR-2: the report form's "Fill missing details" failure copy tells a
+ * CF-020 MINOR-2: the report form's "Suggest details" failure copy tells a
  * person on a device without the on-device model to "open Manage local tools" —
- * so this screen must offer that control. The frozen retry-7 suite cannot be
- * edited (byte-frozen), hence a separate focused file for the new affordance.
+ * so this screen must offer that control. The compact entry has no second text
+ * box; the title and description the person already wrote are the input.
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -145,6 +145,10 @@ function pickFile(file: File) {
   fireEvent.change(input, { target: { files: [file] } });
 }
 
+function suggestButton(): HTMLElement {
+  return screen.getByRole("button", { name: /^(suggest details|suggesting…)$/i });
+}
+
 beforeEach(() => {
   publishReportMock.mockReset();
   suggestFieldsMock.mockReset();
@@ -179,10 +183,10 @@ describe("CreateReport suggestion failure — Manage local tools affordance (MIN
   async function failSuggestion(itemText = "Black umbrella lost yesterday.") {
     render(<CreateReport />);
     await screen.findByRole("toolbar", { name: /description formatting/i });
-    fireEvent.change(screen.getByLabelText(/describe the item/i), {
+    fireEvent.change(screen.getByLabelText(/what did you lose/i), {
       target: { value: itemText },
     });
-    fireEvent.click(screen.getByRole("button", { name: /^fill missing details$/i }));
+    fireEvent.click(suggestButton());
   }
 
   it("offers the single action its copy names, and opens the models screen", async () => {
@@ -243,11 +247,11 @@ describe("CreateReport suggestion failure — Manage local tools affordance (MIN
     await failSuggestion();
     await screen.findByTestId("report-suggestion-manage-models");
 
-    // Second press with the box cleared: this failure is about the missing text,
-    // not the device, so the install control must not linger.
-    fireEvent.change(screen.getByLabelText(/describe the item/i), { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: /^fill missing details$/i }));
-    await screen.findByText(/Describe the item first/i);
+    // Second press with the form cleared: this failure is about the missing
+    // text, not the device, so the install control must not linger.
+    fireEvent.change(screen.getByLabelText(/what did you lose/i), { target: { value: "" } });
+    fireEvent.click(suggestButton());
+    await screen.findByText(/Add a title or a description first/i);
     expect(screen.queryByTestId("report-suggestion-manage-models")).toBeNull();
   });
 
@@ -267,55 +271,54 @@ describe("CreateReport suggestion failure — Manage local tools affordance (MIN
     expect(screen.queryByTestId("report-suggestion-manage-models")).toBeNull();
   });
 
-  it("keeps the typed helper sentence across the install round-trip", async () => {
+  it("keeps the typed title across the install round-trip", async () => {
     // The copy this affordance serves says to open Manage local tools and come
-    // back. The sentence typed into the helper must survive that trip, exactly
-    // like the title and description do.
+    // back. What the person already wrote must survive that trip, exactly like
+    // the draft it belongs to.
     render(<CreateReport />);
     await screen.findByRole("toolbar", { name: /description formatting/i });
-    const input = screen.getByLabelText(/describe the item/i);
-    fireEvent.change(input, { target: { value: "Black umbrella lost yesterday" } });
+    const input = screen.getByLabelText(/what did you lose/i);
+    fireEvent.change(input, { target: { value: "Lost umbrella" } });
 
     await waitFor(() => {
-      expect(loadDraft("u1")?.aiSuggestInput).toBe("Black umbrella lost yesterday");
+      expect(loadDraft("u1")?.title).toBe("Lost umbrella");
     });
 
     cleanup();
     render(<CreateReport />);
     await screen.findByRole("toolbar", { name: /description formatting/i });
-    expect((screen.getByLabelText(/describe the item/i) as HTMLTextAreaElement).value).toBe(
-      "Black umbrella lost yesterday",
+    expect((screen.getByLabelText(/what did you lose/i) as HTMLInputElement).value).toBe(
+      "Lost umbrella",
     );
   });
 
-  it("treats the helper sentence as draft content, so discard clears it", async () => {
-    // The sentence is persisted with the draft, therefore it is draft content:
-    // a draft holding nothing else must still be discardable, and the discard
-    // must not leave the sentence behind for the next report.
+  it("treats the typed title as draft content, so discard clears it", async () => {
+    // The title is draft content: a draft holding nothing else must still be
+    // discardable, and the discard must not leave it behind for the next report.
     render(<CreateReport />);
     await screen.findByRole("toolbar", { name: /description formatting/i });
-    fireEvent.change(screen.getByLabelText(/describe the item/i), {
-      target: { value: "Black umbrella lost yesterday" },
+    fireEvent.change(screen.getByLabelText(/what did you lose/i), {
+      target: { value: "Lost umbrella" },
     });
     await waitFor(() => {
-      expect(loadDraft("u1")?.aiSuggestInput).toBe("Black umbrella lost yesterday");
+      expect(loadDraft("u1")?.title).toBe("Lost umbrella");
     });
 
     fireEvent.click(screen.getByRole("button", { name: /discard draft/i }));
     expect(screen.getByRole("alertdialog").textContent).toMatch(/discard this report/i);
     confirmDiscardDraft();
-    expect((screen.getByLabelText(/describe the item/i) as HTMLTextAreaElement).value).toBe("");
+    expect((screen.getByLabelText(/what did you lose/i) as HTMLInputElement).value).toBe("");
     await waitFor(() => {
-      expect(loadDraft("u1")?.aiSuggestInput ?? "").toBe("");
+      expect(loadDraft("u1")?.title ?? "").toBe("");
     });
   });
 
-  it("does not leave the helper sentence behind after the report is published", async () => {
+  it("does not leave the draft behind after the report is published", async () => {
     publishReportMock.mockResolvedValue("p1");
-    // This test covers the helper sentence across publish, not field
-    // suggestions. Keep suggestion results out of the form: a late result under
-    // CI load could rewrite a field after it was filled and make the submit
-    // invalid, which is a different scenario.
+    // This test covers the draft across publish, not field suggestions. Keep
+    // suggestion results out of the form: a late result under CI load could
+    // rewrite a field after it was filled and make the submit invalid, which is
+    // a different scenario.
     suggestFieldsMock.mockImplementation(cancellable(CANCELLED));
     suggestCategoryMock.mockImplementation(cancellable(CANCELLED));
     seedDescription("a black umbrella lost near the market");
@@ -323,12 +326,6 @@ describe("CreateReport suggestion failure — Manage local tools affordance (MIN
     await screen.findByRole("toolbar", { name: /description formatting/i });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), { target: { value: "Lost umbrella" } });
     await chooseCategory("Electronics");
-    fireEvent.change(screen.getByLabelText(/describe the item/i), {
-      target: { value: "Black umbrella lost yesterday" },
-    });
-    await waitFor(() => {
-      expect(loadDraft("u1")?.aiSuggestInput).toBe("Black umbrella lost yesterday");
-    });
 
     pickFile(new File(["abc"], "p.jpg", { type: "image/jpeg" }));
     await screen.findByRole("button", { name: /remove photo/i });
@@ -342,9 +339,9 @@ describe("CreateReport suggestion failure — Manage local tools affordance (MIN
     // into React state. Tiptap mounts after the first paint and the category
     // sheet closes asynchronously, so on a loaded runner a submit can arrive
     // before either holds the value and then fail as "fix the highlighted
-    // fields", which is a different scenario from the helper sentence this
-    // test owns. Wait for every required value to be visible in the form
-    // itself, which also names the field if this ever regresses again.
+    // fields", which is a different scenario from the draft this test owns.
+    // Wait for every required value to be visible in the form itself, which
+    // also names the field if this ever regresses again.
     await waitFor(() => {
       expect((screen.getByLabelText(/what did you lose/i) as HTMLInputElement).value).toBe("Lost umbrella");
       expect(categoryValue()).toBe("Electronics");
@@ -354,9 +351,11 @@ describe("CreateReport suggestion failure — Manage local tools affordance (MIN
     fireEvent.submit(publishButton.closest("form")!);
     await waitFor(() => expect(publishReportMock).toHaveBeenCalled(), { timeout: 15_000 });
 
-    expect((screen.getByLabelText(/describe the item/i) as HTMLTextAreaElement).value).toBe("");
     await waitFor(() => {
-      expect(loadDraft("u1")?.aiSuggestInput ?? "").toBe("");
+      expect((screen.getByLabelText(/what did you lose/i) as HTMLInputElement).value).toBe("");
+    });
+    await waitFor(() => {
+      expect(loadDraft("u1")?.title ?? "").toBe("");
     });
   }, 40_000);
 });
@@ -399,19 +398,19 @@ describe("CreateReport suggestion lifecycle — round-3 review closures (revisio
     const probe = deferredProbe();
     render(<CreateReport />);
     await screen.findByRole("toolbar", { name: /description formatting/i });
-    fireEvent.change(screen.getByLabelText(/describe the item/i), {
-      target: { value: "Black umbrella lost yesterday." },
+    fireEvent.change(screen.getByLabelText(/what did you lose/i), {
+      target: { value: "Lost umbrella" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /^fill missing details$/i }));
+    fireEvent.click(suggestButton());
     await waitFor(() => expect(probe.started).toBe(1));
 
-    // The sentence alone makes this a draft worth discarding.
+    // The title alone makes this a draft worth discarding.
     await waitFor(() => {
-      expect(loadDraft("u1")?.aiSuggestInput).toBe("Black umbrella lost yesterday.");
+      expect(loadDraft("u1")?.title).toBe("Lost umbrella");
     });
     fireEvent.click(screen.getByRole("button", { name: /discard draft/i }));
       confirmDiscardDraft();
-    expect((screen.getByLabelText(/describe the item/i) as HTMLTextAreaElement).value).toBe("");
+    expect((screen.getByLabelText(/what did you lose/i) as HTMLInputElement).value).toBe("");
 
     probe.release("not-set-up");
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -419,12 +418,12 @@ describe("CreateReport suggestion lifecycle — round-3 review closures (revisio
     expect(screen.queryByTestId("report-suggestion-manage-models")).toBeNull();
     // The stale attempt's `finally` cannot clear the flag either, so the discard
     // itself must: the control is a request again, not a stuck one.
-    expect(screen.getByRole("button", { name: /^fill missing details$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^suggest details$/i })).toBeTruthy();
   });
 
   it("does not let an older attempt's device probe overwrite a later validation error", async () => {
     // A second press while the first attempt is still awaiting the probe: the
-    // box is empty, so this attempt fails synchronously and never asks the
+    // title is empty, so this attempt fails synchronously and never asks the
     // device — which is exactly why it must invalidate the older attempt by
     // generation (round-3 review NIT-1).
     suggestFieldsMock.mockImplementation(cancellable(ENGINE_FAILURE));
@@ -432,18 +431,18 @@ describe("CreateReport suggestion lifecycle — round-3 review closures (revisio
     const probe = deferredProbe();
     render(<CreateReport />);
     await screen.findByRole("toolbar", { name: /description formatting/i });
-    const box = screen.getByLabelText(/describe the item/i);
-    fireEvent.change(box, { target: { value: "Black umbrella lost yesterday." } });
-    fireEvent.click(screen.getByRole("button", { name: /^fill missing details$/i }));
+    const box = screen.getByLabelText(/what did you lose/i);
+    fireEvent.change(box, { target: { value: "Lost umbrella" } });
+    fireEvent.click(suggestButton());
     await waitFor(() => expect(probe.started).toBe(1));
 
     fireEvent.change(box, { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: /^filling/i }));
-    await screen.findByText(/Describe the item first/i);
+    fireEvent.click(suggestButton());
+    await screen.findByText(/Add a title or a description first/i);
 
     probe.release("not-set-up");
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(screen.getByText(/Describe the item first/i)).toBeTruthy();
+    expect(screen.getByText(/Add a title or a description first/i)).toBeTruthy();
     expect(screen.queryByTestId("report-suggestion-manage-models")).toBeNull();
   });
 
@@ -453,10 +452,10 @@ describe("CreateReport suggestion lifecycle — round-3 review closures (revisio
     nlHelperStateMock.mockResolvedValue("not-set-up");
     render(<CreateReport />);
     await screen.findByRole("toolbar", { name: /description formatting/i });
-    fireEvent.change(screen.getByLabelText(/describe the item/i), {
-      target: { value: "Black umbrella lost yesterday." },
+    fireEvent.change(screen.getByLabelText(/what did you lose/i), {
+      target: { value: "Lost umbrella" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /^fill missing details$/i }));
+    fireEvent.click(suggestButton());
     await screen.findByTestId("report-suggestion-note-row");
 
     fireEvent.click(screen.getByRole("button", { name: /discard draft/i }));
@@ -465,10 +464,9 @@ describe("CreateReport suggestion lifecycle — round-3 review closures (revisio
     expect(screen.queryByTestId("report-suggestion-manage-models")).toBeNull();
   });
 
-  it("does not persist an empty helper sentence as a draft field", async () => {
-    // Round-3 review NIT-2: the loader fix alone left `aiSuggestInput: undefined`
-    // as an own key on the in-memory draft — the round-2 BLOCKER's shape, from
-    // the save path this time. The key exists only when it holds something.
+  it("does not persist a removed helper field as a draft field", async () => {
+    // The second text box is gone, so the draft must not grow an
+    // `aiSuggestInput` key either: the title and description are the input.
     render(<CreateReport />);
     await screen.findByRole("toolbar", { name: /description formatting/i });
     fireEvent.change(screen.getByLabelText(/what did you lose/i), { target: { value: "Lost umbrella" } });

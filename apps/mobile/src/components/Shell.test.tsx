@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { MotionConfig } from "framer-motion";
 import { PrimaryNav, Shell } from "./Shell";
 import { AppBar } from "./AppBar";
+import { TopUtilities } from "./TopUtilities";
 import { HoverLabelProvider } from "./HoverLabel";
 import { TabTapProvider } from "./TabTap";
 import { resetBackInterceptors } from "./backNavigation";
@@ -768,59 +769,60 @@ describe("Shell adaptive navigation", () => {
     expect((document.activeElement as HTMLElement).getAttribute("href")).toBe("/chats");
   });
 
-  // The rail carries destinations the phone bar deliberately does not. Search
-  // and Connect share a route, and Recovered is a Settings child, so these
-  // selections cannot be inferred from the pathname alone.
-  it.each<[string, string[]]>([
-    // Search is an overlay button now, so `/search` highlights no rail row.
-    ["/search", []],
-    ["/search?scope=people", ["People"]],
-    ["/saved", ["Saved"]],
-    ["/settings/returns", ["Recovered"]],
-    ["/reactions", ["Liked / Disliked"]],
-    ["/notifications", ["Activity"]],
-  ])("selects only the rail destination for %s", (path, label) => {
+  // Secondary destinations live behind More, so no top-level link claims them.
+  // The More row carries the visual current treatment instead; `/search` is a
+  // deep link to the search surface and selects nothing because the header owns
+  // the one search control.
+  it.each<[string, boolean]>([
+    ["/search", false],
+    ["/search?scope=people", true],
+    ["/saved", true],
+    ["/settings/returns", true],
+    ["/reactions", true],
+    ["/notifications", true],
+  ])("leaves the primary rail unselected on %s and marks More", (path, moreCurrent) => {
     setWidth(800);
     storeNavLayout("rail");
     renderShell(path);
     const nav = screen.getByRole("navigation", { name: "Primary" });
     expect(
-      within(nav)
-        .getAllByRole("link")
-        .filter((link) => link.getAttribute("aria-current") === "page")
-        .map((link) => link.getAttribute("aria-label") ?? link.textContent),
-    ).toEqual(label);
+      within(nav).getAllByRole("link").filter((link) => link.getAttribute("aria-current") === "page"),
+    ).toEqual([]);
+    const more = within(nav).getByRole("button", { name: "More" });
+    expect(more.querySelector(".fb-nav-active-bg") !== null).toBe(moreCurrent);
+    expect(more.className.includes("text-on-primary-container")).toBe(moreCurrent);
   });
 
-  it("keeps the rail's destinations, order, targets, names and active treatment", () => {
+  it("keeps four primary destinations and one named More menu for the rest", () => {
     setWidth(800);
     storeNavLayout("rail");
     renderShell("/my");
     const nav = screen.getByRole("navigation", { name: "Primary" });
     const links = within(nav).getAllByRole("link");
-    // Top-to-bottom DOM order is also the visual and keyboard order. The
-    // primary six come first, then the prototype's "Others" shelf. Search is
-    // the one primary row that is a button (it opens the overlay).
+    // Top-to-bottom DOM order is also the visual and keyboard order. Four
+    // primary destinations, then the More disclosure that names the secondary
+    // destinations.
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
-      "/", "/my", "/chats", "/notifications", "/insights",
-      "/search?scope=people", "/reactions", "/saved", "/settings/returns",
+      "/", "/my", "/chats", "/insights",
     ]);
     expect(
       links.map((link) => link.getAttribute("aria-label") ?? link.textContent?.trim()),
-    ).toEqual([
-      "Home", "My Reports", "Chats", "Activity", "Insights",
-      "People", "Liked / Disliked", "Saved", "Recovered",
-    ]);
-    const searchRow = within(nav).getByRole("button", { name: "Search" });
-    expect(searchRow.getAttribute("aria-expanded")).toBe("false");
-    expect(searchRow.hasAttribute("aria-current")).toBe(false);
+    ).toEqual(["Home", "My Reports", "Chats", "Insights"]);
+    // The header owns the one persistent search and notification control; the
+    // rail does not paint a second copy of either.
+    expect(within(nav).queryByRole("button", { name: "Search" })).toBeNull();
+    expect(within(nav).queryByRole("link", { name: "Activity" })).toBeNull();
+    const more = within(nav).getByRole("button", { name: "More" });
+    expect(more.getAttribute("aria-haspopup")).toBe("menu");
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    expect(more.hasAttribute("aria-current")).toBe(false);
     const account = within(nav).getByRole("button", { name: /^Account/ });
     expect(account.getAttribute("aria-expanded")).toBe("false");
     expect(account.hasAttribute("aria-current")).toBe(false);
     // One identity control in the footer: no sibling settings glyph (R1).
     const pin = within(nav).getByRole("button", { name: "Expand navigation" });
     expect([...nav.querySelectorAll("a, button")]).toEqual([
-      pin, links[0], links[1], searchRow, ...links.slice(2), account,
+      pin, links[0], links[1], links[2], links[3], more, account,
     ]);
     expect(
       links
@@ -837,6 +839,29 @@ describe("Shell adaptive navigation", () => {
     expect(nav.querySelector(".fb-nav-pin")).toBeNull();
   });
 
+  it("leaves search and notifications to the one header utility, not the rail", () => {
+    setWidth(800);
+    render(
+      <HoverLabelProvider>
+        <MemoryRouter initialEntries={["/"]}>
+          <TabTapProvider>
+            <TopUtilities liveBadge={false} />
+            <PrimaryNav layout="rail" />
+          </TabTapProvider>
+        </MemoryRouter>
+      </HoverLabelProvider>,
+    );
+    // The header's utilities are the one persistent access to both actions.
+    const utilities = screen.getByRole("navigation", { name: "App utilities" });
+    expect(within(utilities).getByRole("button", { name: "Search" })).toBeTruthy();
+    expect(within(utilities).getByRole("button", { name: "Notifications" })).toBeTruthy();
+    // The rail no longer repeats either control.
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(within(nav).queryByRole("button", { name: "Search" })).toBeNull();
+    expect(within(nav).queryByRole("link", { name: "Activity" })).toBeNull();
+    expect(within(nav).queryByRole("button", { name: "Notifications" })).toBeNull();
+  });
+
   it("pins the rail into a labelled panel and remembers the choice", () => {
     setWidth(800);
     storeNavLayout("rail");
@@ -847,13 +872,44 @@ describe("Shell adaptive navigation", () => {
     const pinned = screen.getByRole("navigation", { name: "Primary" });
     expect(pinned.getAttribute("data-pinned")).toBe("true");
     expect(loadAppearance().railPinned).toBe(true);
-    // Every destination is named in place, and the pin now collapses it again.
-    for (const label of ["Home", "My Reports", "Search", "Chats", "Activity", "Insights", "Others", "People", "Liked / Disliked", "Saved", "Recovered"]) {
+    // Every persistent row is named in place, and the pin now collapses it
+    // again. Secondary names live in the More menu, one press away.
+    for (const label of ["Home", "My Reports", "Chats", "Insights", "More"]) {
       expect(within(pinned).getByText(label)).toBeTruthy();
     }
     fireEvent.click(within(pinned).getByRole("button", { name: "Collapse navigation" }));
     expect(screen.getByRole("navigation", { name: "Primary" }).getAttribute("data-pinned")).toBe("false");
     expect(loadAppearance().railPinned).toBe(false);
+  });
+
+  it("names every secondary destination in More and follows it", async () => {
+    setWidth(800);
+    storeNavLayout("rail");
+    renderShell("/");
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    fireEvent.click(within(nav).getByRole("button", { name: "More" }));
+    const menu = await screen.findByRole("menu", { name: "More" });
+    expect(
+      within(menu).getAllByRole("menuitem").map((item) => item.textContent?.trim()),
+    ).toEqual(["Activity", "People", "Liked / Disliked", "Saved", "Recovered"]);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Saved" }));
+    await waitFor(() => expect(screen.getByText("Saved screen")).toBeTruthy());
+    await waitFor(() => expect(screen.queryByRole("menu", { name: "More" })).toBeNull());
+  });
+
+  it("opens Recovered from More in the settings window, not a page swap", async () => {
+    setWidth(800);
+    storeNavLayout("rail");
+    renderShell("/");
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    fireEvent.click(within(nav).getByRole("button", { name: "More" }));
+    const menu = await screen.findByRole("menu", { name: "More" });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Recovered" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("settings-window").textContent).toBe("/settings/returns"),
+    );
+    // The page behind the window never swapped to a separate settings page.
+    expect(screen.getByText("Home screen")).toBeTruthy();
   });
 
   it("names a rail destination on pointer dwell without widening the column", () => {
@@ -1102,12 +1158,26 @@ describe("Shell adaptive navigation", () => {
       // scrolls the list rather than shrinking the rows.
       expect(item.minHeight).toBe("48px");
       expect(item.flexDirection).toBe("column");
+      // The More disclosure is a destination row too: same 48px target floor
+      // and the same stacked icon-over-label geometry as its siblings.
+      const more = within(nav).getByRole("button", { name: "More" });
+      const moreStyle = getComputedStyle(more);
+      expect(moreStyle.minHeight).toBe("48px");
+      expect(moreStyle.flexDirection).toBe("column");
+      expect(more.querySelector(".fb-nav-label")?.className).toContain("sr-only");
       // Pinned, the same head names the app beside the mark, so the outside
       // copy is free to yield and the name never appears twice.
       fireEvent.click(within(nav).getByRole("button", { name: "Expand navigation" }));
       const pinned = screen.getByRole("navigation", { name: "Primary" });
       expect(getComputedStyle(pinned.querySelector(".fb-nav-wordmark") as HTMLElement).display).not.toBe("none");
       expect(getComputedStyle(pinned.querySelector(".fb-nav-brand-mark") as HTMLElement).display).not.toBe("none");
+      // The label is already in the expanded panel; it is not left sr-only.
+      expect(
+        within(pinned)
+          .getByRole("button", { name: "More" })
+          .querySelector(".fb-nav-label")
+          ?.className,
+      ).not.toContain("sr-only");
     } finally {
       style.remove();
     }

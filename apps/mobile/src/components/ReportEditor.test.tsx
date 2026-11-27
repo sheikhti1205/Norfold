@@ -76,10 +76,10 @@ describe("ReportEditor", () => {
     expect(screen.queryByText(/photos can’t be changed/i)).toBeNull();
   });
 
-  it("renders the details helper directly after the description", () => {
-    render(<ReportEditor values={values()} onChange={() => {}} afterDescription={<p>Fill missing details</p>} />);
+  it("renders the details action directly after the description", () => {
+    render(<ReportEditor values={values()} onChange={() => {}} afterDescription={<p>Suggest details</p>} />);
     const description = screen.getByTestId("report-description");
-    expect(description.nextElementSibling?.textContent).toContain("Fill missing details");
+    expect(description.nextElementSibling?.textContent).toContain("Suggest details");
   });
 
   it("makes the real description editor and date trigger read-only while disabled", () => {

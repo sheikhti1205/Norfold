@@ -63,9 +63,6 @@ import { diag, startActionTrace, clearAmbientTrace } from "../services/diag";
 import { PublishOutcomeUncertainError, UploadCancelledError } from "../services/publishOutcome";
 
 
-const inputCls =
-  "w-full rounded-m3-sm border border-outline-variant bg-surface px-3.5 py-3 text-base placeholder:text-on-surface-variant focus:border-on-surface focus:outline-none";
-
 /** Batch status notice crossfade (queued -> processing -> ready/failed). */
 const statusCrossfade = {
   type: "tween",
@@ -208,7 +205,7 @@ function findPendingNativeRestores(
 }
 
 /**
- * The "fill missing details" panel's transports.
+ * The "Suggest details" action's transports.
  *
  * Live on-device composers (`liveNarrowTasks`, strictly local: a natural-language
  * description of someone's lost property must never leave the device, so a local
@@ -308,6 +305,18 @@ function ReportForm() {
     },
   );
   const [youtubeUrl, setYoutubeUrl] = useState(initialDraft?.youtubeUrl ?? "");
+  /**
+   * Text restored from the retired free-text helper. Older drafts can hold a
+   * note the person typed there and nowhere else, so it is preserved verbatim
+   * (only the edges are trimmed) until they explicitly recover it into the
+   * description or discard it. It is never merged into the description by
+   * itself, never sent to the suggestion helper, and never published alone.
+   */
+  const [savedNote, setSavedNote] = useState<string | null>(() => {
+    const note = (initialDraft?.aiSuggestInput ?? "").trim();
+    return note ? note : null;
+  });
+  const [savedNoteOpen, setSavedNoteOpen] = useState(false);
   /** Ordered report photos (0–5), restored from the durable per-account draft. */
   interface ReportPhoto {
     id: string;
@@ -471,14 +480,14 @@ function ReportForm() {
   const traceIdRef = useRef<string | null>(null);
   const descriptionEditorRef = useRef<Editor | null>(null);
   const descriptionLiveRef = useRef(description);
-  // --- Fill missing details from description (§11 narrow helper) -----------
-  // The local text/category helper surfaces reviewable per-field patches.
+  // --- Suggest details from what is written (§11 narrow helper) -----------
+  // The local text/category helper reads the title and description the person
+  // already wrote and surfaces reviewable per-field patches.
   // Suggestions only: accepting one writes exactly that one field, after an
   // explicit confirm when it would replace existing text; Keep sends nothing
   // (no setter, no network). Nothing here publishes, auto-applies, or touches
   // draft/photo lifecycle, and nothing here names a model, a provider or a
   // confidence score — those are diagnostics, not consumer copy.
-  const [aiSuggestInput, setAiSuggestInput] = useState(initialDraft?.aiSuggestInput ?? "");
   const [aiFieldPatches, setAiFieldPatches] = useState<ReportFieldSuggestion[]>([]);
   const [aiFieldDroppedCategory, setAiFieldDroppedCategory] = useState(false);
   const [aiCatSuggestion, setAiCatSuggestion] = useState<CategorySuggestion | null>(null);
@@ -598,13 +607,16 @@ function ReportForm() {
     const controller = new AbortController();
     aiSuggestAbort.current = controller;
     setAiSuggestManageModels(false);
-    const text = aiSuggestInput.trim() || `${title} ${description}`.trim();
+    // The one primary description (plus the title beside it) is the input. There
+    // is no second text box to fall back to, and nothing is sent until the
+    // person asks.
+    const text = `${title} ${description}`.trim();
     if (!text) {
       // This attempt never reaches the model, so it is not busy: the older
       // attempt's `finally` is stale by generation and will not clear the flag.
       aiSuggestAbort.current = null;
       setAiSuggestBusy(false);
-      setAiSuggestError("Describe the item first — in the box above or in your title and description.");
+      setAiSuggestError("Add a title or a description first, then choose Suggest details.");
       return;
     }
     // IF-108: both ops are served by the same on-device structured (tool) model
@@ -861,13 +873,10 @@ function ReportForm() {
         eventDate,
         location,
         youtubeUrl,
-        // MINOR-2: the install copy prescribes leaving this screen and coming
-        // back, so the sentence the person typed into the helper must survive
-        // the same draft round-trip as the title and description do. The key is
-        // materialised only when it holds something: the restored shape must be
-        // exactly what the form reads, nothing extra (round-3 review NIT-2 —
-        // the loader's fix alone left this own-key in the in-memory draft).
-        ...(aiSuggestInput.trim() ? { aiSuggestInput } : {}),
+        // Keep a restored legacy note inside its own draft lifetime: it survives
+        // autosave and navigation until the person recovers or discards it, and
+        // a draft that never had one never grows the key.
+        ...(savedNote ? { aiSuggestInput: savedNote } : {}),
         photoId: photoRecoveryReady ? first?.id ?? null : initialDraft?.photoId ?? null,
         photoNativeUri: photoRecoveryReady ? first?.picked?.nativeUri ?? null : initialDraft?.photoNativeUri ?? null,
         photoWebPath: photoRecoveryReady ? first?.picked?.webPath ?? first?.previewUrl ?? null : initialDraft?.photoWebPath ?? null,
@@ -887,7 +896,7 @@ function ReportForm() {
       accountId,
       renderGeneration,
     );
-  }, [type, title, description, category, eventDate, location, youtubeUrl, aiSuggestInput, photos, accountId, renderGeneration, uncertain, photoRecoveryReady]);
+  }, [type, title, description, category, eventDate, location, youtubeUrl, savedNote, photos, accountId, renderGeneration, uncertain, photoRecoveryReady]);
 
   // Photo bytes follow the photo set only (not every keystroke): the registry
   // mirrors memory authoritatively, so removals are pruned on write.
@@ -964,6 +973,29 @@ function ReportForm() {
   }
 
   /**
+   * Explicit recovery of a note restored from the retired helper. Before this
+   * tap the note is only kept in the draft: it is never written into the
+   * description, never folded into suggestion input, and never published. An
+   * empty description takes the note as-is; a written one is appended to,
+   * never replaced, so the person's own text always wins. The note then leaves
+   * the draft, so a clean draft carries no legacy key.
+   */
+  function recoverSavedNote(): void {
+    if (!savedNote) return;
+    const current = descriptionLiveRef.current;
+    patchEditor({ description: current.trim() ? `${current}\n\n${savedNote}` : savedNote });
+    setSavedNote(null);
+    setSavedNoteOpen(false);
+    announce("Saved note moved to the description.");
+  }
+
+  function discardSavedNote(): void {
+    setSavedNote(null);
+    setSavedNoteOpen(false);
+    announce("Saved note discarded.");
+  }
+
+  /**
    * An uncertain publish pauses the form until the person reconciles it. They
    * come back from My Reports to the same content, so the pause is lifted here
    * and nothing else changes: only the outcome flag, never a field or a photo.
@@ -986,13 +1018,22 @@ function ReportForm() {
   // phantom photo behind. A form holding nothing has nothing to discard, so the
   // control is unavailable rather than silently doing nothing.
   const draftHasContent = useMemo(() => {
-    const current = { type, title, description, category, eventDate, location, youtubeUrl, aiSuggestInput };
+    const current = {
+      type,
+      title,
+      description,
+      category,
+      eventDate,
+      location,
+      youtubeUrl,
+      aiSuggestInput: savedNote ?? undefined,
+    };
     const hasPhotos =
       photos.length > 0 ||
       failedPhotoIds.length > 0 ||
       (!photoRecoveryReady && draftPhotoIds(initialDraft).length > 0);
     return draftIsMeaningful(current) || hasPhotos;
-  }, [type, title, description, category, eventDate, location, youtubeUrl, aiSuggestInput, photos, failedPhotoIds, accountId, initialDraft, photoRecoveryReady]);
+  }, [type, title, description, category, eventDate, location, youtubeUrl, savedNote, photos, failedPhotoIds, accountId, initialDraft, photoRecoveryReady]);
 
   function clearDraftAndReset() {
     clearDraft(accountId);
@@ -1014,14 +1055,14 @@ function ReportForm() {
     setEventDate(todayInputValue());
     setLocation({ label: "", latitude: null, longitude: null });
     setYoutubeUrl("");
-    // MINOR-2: the persisted helper sentence is part of the draft, so it is part
-    // of the reset. Leaving it behind re-persists the previous report's sentence
-    // (the autosave effect depends on it) and makes the discard a no-op for a
-    // draft that holds nothing else. The helper's note travels with that
-    // sentence, so the affordance and its error clear together with it.
-    setAiSuggestInput("");
+    // The helper's note and install affordance belong to this draft, so they
+    // clear with it.
     setAiSuggestManageModels(false);
     setAiSuggestError(null);
+    // A restored legacy note belongs to the discarded draft too: once the draft
+    // is gone there is nothing left to recover it into.
+    setSavedNote(null);
+    setSavedNoteOpen(false);
     clearPhotos();
     // A failed recovery must never wedge the screen: discarding resolves the
     // recovery gate so a completely new report can be started immediately.
@@ -1543,20 +1584,18 @@ function ReportForm() {
       setEventDate(todayInputValue());
       setLocation({ label: "", latitude: null, longitude: null });
       setYoutubeUrl("");
-      // MINOR-2: the helper sentence is persisted with the draft, so a published
-      // report must not leave it behind for the next one (the autosave effect
-      // would re-persist it against the fresh, empty form). The helper's own
-      // affordance and error state travel with that sentence for the same
-      // reason, and any in-flight suggestion is invalidated so it cannot write
-      // them back (round-3 review MINOR-1; defensive here, since success
-      // navigates away).
+      // A published report must not leave the helper's affordance or error
+      // state behind for the next one, and any in-flight suggestion is
+      // invalidated so it cannot write them back (round-3 review MINOR-1;
+      // defensive here, since success navigates away).
       aiSuggestAbort.current?.abort();
       aiSuggestGen.current++;
       aiSuggestAbort.current = null;
       setAiSuggestBusy(false);
-      setAiSuggestInput("");
       setAiSuggestManageModels(false);
       setAiSuggestError(null);
+      setSavedNote(null);
+      setSavedNoteOpen(false);
       setFieldErrors({});
       setUncertain(false);
       setEditorResetKey((key) => key + 1);
@@ -1893,37 +1932,65 @@ function ReportForm() {
           </>
         }
         afterDescription={
-          <>
-          {/* §11 narrow helper: fill missing details from a description the person
-              writes here. Additive and reviewable — each suggestion is applied only
-              by an explicit tap on that field, and Keep leaves the form alone. */}
-          <section
-            aria-label="Fill missing details from description"
-            className="flex flex-col gap-2 rounded-m3-md border border-outline-variant p-3"
+          <div
+            data-testid="report-suggest-details"
+            className="flex flex-col gap-2"
           >
-            <p className="text-sm font-medium">Fill missing details from description</p>
-            <p className="text-sm text-on-surface-variant">
-              Describe the item in your own words. Suggestions appear here one at a time — nothing changes
-              unless you accept it.
-            </p>
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium">Describe the item in your own words</span>
-              <textarea
-                value={aiSuggestInput}
-                onChange={(e) => setAiSuggestInput(e.target.value)}
-                placeholder="e.g. Black umbrella lost yesterday near the central market"
-                className={`${inputCls} min-h-[60px]`}
-                rows={2}
-              />
-            </label>
-            <div className="flex flex-wrap gap-2">
+            {savedNote && (
+              // A note restored from the retired free-text helper. It is shown
+              // only after an explicit review tap and only moves into the
+              // description on an explicit recovery tap — never by autosave,
+              // never into suggestion input.
+              <div
+                data-testid="report-saved-note"
+                className="flex flex-col gap-1"
+              >
+                <p className="text-xs text-on-surface-variant">Saved note from an earlier draft</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="md"
+                    aria-expanded={savedNoteOpen}
+                    aria-controls={savedNoteOpen ? "report-saved-note-text" : undefined}
+                    onClick={() => setSavedNoteOpen((open) => !open)}
+                  >
+                    {savedNoteOpen ? "Hide saved note" : "Recover saved note"}
+                  </Button>
+                </div>
+                {savedNoteOpen && (
+                  <>
+                    <p
+                      id="report-saved-note-text"
+                      data-testid="report-saved-note-text"
+                      className="whitespace-pre-wrap break-words rounded-m3-sm bg-surface-container px-2 py-1 text-sm"
+                    >
+                      {savedNote}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" variant="primary" size="md" onClick={recoverSavedNote}>
+                        {description.trim() ? "Append to description" : "Use as description"}
+                      </Button>
+                      <Button type="button" variant="text" size="md" onClick={discardSavedNote}>
+                        Discard note
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+            {/* §11 narrow helper: suggests details from the title and description
+                the person already wrote. Additive and reviewable — each suggestion
+                is applied only by an explicit tap on that field, and Keep leaves
+                the form alone. */}
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
                 size="md"
                 onClick={() => void aiSuggestRequest()}
               >
-                {aiSuggestBusy ? "Filling…" : "Fill missing details"}
+                {aiSuggestBusy ? "Suggesting…" : "Suggest details"}
               </Button>
               {aiSuggestBusy && (
                 <Button type="button" variant="text" size="md" onClick={aiSuggestStop}>
@@ -1988,7 +2055,7 @@ function ReportForm() {
                   >
                     <p className="text-xs text-on-surface-variant">Suggested {patch.field}</p>
                     <p className="text-sm">{patch.suggestedValue}</p>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         type="button"
                         variant="primary"
@@ -2019,7 +2086,7 @@ function ReportForm() {
               <div className="flex flex-col gap-1 rounded-m3-sm border border-outline-variant p-2">
                 <p className="text-xs text-on-surface-variant">Suggested category</p>
                 <p className="text-sm">{aiCatSuggestion.suggestedCategory}</p>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="primary" size="md" onClick={() => aiSuggestApplyCategory(aiCatSuggestion)}>
                     Use this category
                   </Button>
@@ -2036,8 +2103,7 @@ function ReportForm() {
                   That's everything found in that description.
                 </p>
               )}
-          </section>
-          </>
+          </div>
         }
       />
 

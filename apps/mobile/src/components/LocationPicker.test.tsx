@@ -295,7 +295,7 @@ describe("LocationPicker single map row", () => {
     fireEvent.click(screen.getByRole("button", { name: "stub-confirm-exact" }));
     expect(screen.getByText("23.810332, 90.412518")).toBeTruthy();
     expect(
-      screen.getByText(/exact pin and will be shown publicly/i),
+      screen.getByText("Exact pin will be public"),
     ).toBeTruthy();
   });
 
@@ -318,6 +318,7 @@ describe("LocationPicker single map row", () => {
   it("typed coordinates keep working without ever opening the map", () => {
     const { onChange } = renderPicker(emptyValue);
     expect(screen.queryByTestId("map-picker-stub")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Enter location" }));
     fireEvent.change(input(), { target: { value: "23.810332, 90.412518" } });
     expect(onChange).toHaveBeenCalledWith({
       label: "Pinned location",
@@ -331,6 +332,7 @@ describe("LocationPicker single map row", () => {
 
   it("typed place text stays usable and does not open the sheet", () => {
     const { onChange } = renderPicker(emptyValue);
+    fireEvent.click(screen.getByRole("button", { name: "Enter location" }));
     fireEvent.change(input(), { target: { value: "Dhanmondi Lake" } });
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({ label: "Dhanmondi Lake", latitude: null, longitude: null }),
@@ -359,6 +361,7 @@ describe("LocationPicker input hygiene", () => {
     vi.stubGlobal("fetch", () => new Promise<Response>((resolve) => { resolveLink = resolve; }));
     const onChange = vi.fn();
     const { rerender } = render(<LocationPicker value={emptyValue} onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "Enter location" }));
     fireEvent.change(screen.getByPlaceholderText(/place, decimal coords/i), { target: { value: "https://maps.app.goo.gl/fixture" } });
     expect(resolveLink).toBeTypeOf("function");
     rerender(<LocationPicker value={emptyValue} onChange={onChange} disabled />);
@@ -390,5 +393,105 @@ describe("LocationPicker input hygiene", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe("LocationPicker compact layout", () => {
+  function disclosure(): HTMLButtonElement {
+    return screen.getByRole("button", { name: "Enter location" }) as HTMLButtonElement;
+  }
+
+  function manualPanel(): HTMLElement {
+    return document.getElementById("location-manual-entry")!;
+  }
+
+  it("makes Choose on map primary and keeps manual entry behind a disclosure", () => {
+    renderPicker(emptyValue);
+    const row = locationRow();
+    const toggle = disclosure();
+
+    // Primary action first; the optional text path second.
+    expect(row.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.getAttribute("aria-controls")).toBe("location-manual-entry");
+    // Native hidden removes the collapsed field from layout and tab order.
+    expect(manualPanel().hasAttribute("hidden")).toBe(true);
+    expect(manualPanel().className).not.toContain("flex");
+    // The field is mounted, so a collapse retains typed text, but it is not
+    // reachable while closed.
+    expect(manualPanel().contains(screen.getByLabelText("Approximate location"))).toBe(true);
+    expect(row.className).toContain("min-h-[48px]");
+    expect(toggle.className).toContain("min-h-[48px]");
+    // The short label must never clip or ellipsise.
+    expect(toggle.className).toContain("flex-wrap");
+    expect(toggle.textContent).toContain("Enter location");
+  });
+
+  it("expands manual entry from the disclosure and keeps existing parsing", () => {
+    const { onChange } = renderPicker(emptyValue);
+    fireEvent.click(disclosure());
+
+    expect(disclosure().getAttribute("aria-expanded")).toBe("true");
+    expect(manualPanel().hasAttribute("hidden")).toBe(false);
+    fireEvent.change(screen.getByLabelText("Approximate location"), {
+      target: { value: "23.810332, 90.412518" },
+    });
+    expect(onChange).toHaveBeenCalledWith({
+      label: "Pinned location",
+      latitude: 23.81,
+      longitude: 90.413,
+      precision: "APPROXIMATE",
+      preciseLatitude: 23.810332,
+      preciseLongitude: 90.412518,
+    });
+  });
+
+  it("auto-opens manual entry for a restored place label with no pin", () => {
+    renderPicker({
+      label: "Dhanmondi Lake",
+      latitude: null,
+      longitude: null,
+      precision: "APPROXIMATE",
+    });
+
+    expect(disclosure().getAttribute("aria-expanded")).toBe("true");
+    expect(manualPanel().hasAttribute("hidden")).toBe(false);
+    expect(locationRow().textContent).toContain("Dhanmondi Lake");
+    expect((screen.getByLabelText("Approximate location") as HTMLInputElement).value).toBe("Dhanmondi Lake");
+  });
+
+  it("shows a compact prospective exact warning on public and chat surfaces", () => {
+    const exact: LocationValue = {
+      ...approxValue,
+      latitude: 23.810332,
+      longitude: 90.412518,
+      precision: "EXACT",
+    };
+    const { unmount } = render(<LocationPicker value={exact} onChange={vi.fn()} />);
+    // One visible sentence: no second, hidden copy of the same warning.
+    expect(screen.getByTestId("exact-warning").textContent).toBe("Exact pin will be public");
+    expect(screen.getAllByText("Exact pin will be public")).toHaveLength(1);
+    unmount();
+
+    render(<LocationPicker value={exact} onChange={vi.fn()} visibility="conversation" />);
+    expect(screen.getByText("Exact pin will be shared in this chat")).toBeTruthy();
+    expect(screen.queryByText("Exact pin will be public")).toBeNull();
+  });
+
+  it("wraps the selected label and readout instead of truncating them", () => {
+    renderPicker(approxValue);
+    const detail = screen.getByTestId("location-detail");
+    expect(detail.textContent).toBe("Pinned location · 23.810, 90.412");
+    expect(detail.className).toContain("break-words");
+    expect(detail.className).not.toContain("truncate");
+  });
+
+  it("wraps a long restored place label instead of ellipsising it", () => {
+    const longLabel = "L".repeat(200);
+    renderPicker({ ...approxValue, label: longLabel });
+    const detail = screen.getByTestId("location-detail");
+    expect(detail.textContent).toBe(`${longLabel} · 23.810, 90.412`);
+    expect(detail.className).toContain("break-words");
+    expect(detail.className).not.toContain("truncate");
   });
 });

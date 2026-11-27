@@ -3,7 +3,7 @@
  *
  * One home for the sentence a person reads when a local helper returns nothing.
  * Two surfaces ask the same question — Smart Search ("no extra filters") and
- * the report form's "fill missing details" (§11) — and if they each kept their
+ * the report form's "Suggest details" action (§11) — and if they each kept their
  * own copy they could tell different stories about the same device.
  *
  * Only `not-set-up` may offer an action, because only there can installing
@@ -40,7 +40,7 @@ const NL_HELPER_NOT_SET_UP_NOTE =
  * owed a sentence about search filters.
  */
 const SUGGESTION_NOT_SET_UP_NOTE =
-  "Fill missing details needs the on-device model, which isn't set up on this device yet — open Manage local tools to install it.";
+  "Suggest details needs the on-device model, which isn't set up on this device yet — open Manage local tools to install it.";
 
 const SEARCH_EMPTY_NOTE = "No extra filters found — searching your words.";
 /**
@@ -133,7 +133,7 @@ export const NL_EMPTY_PATCH_NOTE: Record<NlHelperState, string> = {
 };
 
 /**
- * The report form's "fill missing details" (§11): a failed/empty suggestion is
+ * The report form's "Suggest details" action (§11): a failed/empty suggestion is
  * a statement about the device, not a verdict on the sentence someone wrote.
  * The device truths replace the default wherever the helper cannot run; only
  * `not-set-up` offers an install, because only there can one change the outcome.

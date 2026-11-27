@@ -30,8 +30,10 @@ export interface ReportDraft {
   eventDate: string;
   location: LocationValue;
   youtubeUrl: string;
-  /** The "Fill missing details" sentence, kept across navigation and process
-   *  death so the install round-trip its copy prescribes does not lose it. */
+  /** Text from the retired free-text helper, kept as legacy state only. A
+   *  restored draft holds it across navigation and autosave until the person
+   *  recovers the note into the description or discards it; new drafts never
+   *  write it. */
   aiSuggestInput?: string;
   /** In-session key for the picked File (see services/photoStore). */
   photoId?: string | null;
