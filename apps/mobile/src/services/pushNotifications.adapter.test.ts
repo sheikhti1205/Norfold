@@ -40,7 +40,7 @@ const { bridge, listeners, nativePromise, nativeCallback } = vi.hoisted(() => {
       },
       // Open-settings goes through the separate synchronous accessor at
       // `pushNotifications.ts:190`, not through the PushNotifications plugin.
-      { name: "FindbackNotifications", methods: [{ name: "openSettings", rtype: "promise" }] },
+      { name: "FindbackNotifications", methods: [{ name: "openSettings", rtype: "promise" }, { name: "setActiveRoute", rtype: "promise" }] },
     ],
     nativePromise,
     nativeCallback,
@@ -135,6 +135,20 @@ describe("createCapacitorPushAdapter with the installed Capacitor runtime", () =
     const { adapter, nativePromise } = nativeAdapter();
     await expect(adapter.openSettings!()).resolves.toBeUndefined();
     expect(nativePromise).toHaveBeenCalledExactlyOnceWith("FindbackNotifications", "openSettings", undefined);
+  });
+
+  it("reports the active route on native and does nothing on web", async () => {
+    const { adapter, nativePromise } = nativeAdapter();
+    await expect(adapter.setActiveRoute!("/chats/abc")).resolves.toBeUndefined();
+    expect(nativePromise).toHaveBeenCalledExactlyOnceWith("FindbackNotifications", "setActiveRoute", { route: "/chats/abc" });
+    nativePromise.mockClear();
+    delete (globalThis as Record<string, unknown>).androidBridge;
+    try {
+      await expect(adapter.setActiveRoute!("/posts/p1")).resolves.toBeUndefined();
+      expect(nativePromise).not.toHaveBeenCalled();
+    } finally {
+      (globalThis as Record<string, unknown>).androidBridge = { postMessage: () => {} };
+    }
   });
 
   it("delivers registration tokens and removes the same native listener", async () => {

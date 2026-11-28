@@ -76,21 +76,21 @@ object ChatPushState {
     /** Called before Capacitor sees chat data. Reserve dedupe before notify:
      * a crash may lose one nudge, but cannot replay it after dismissal. At the
      * bound, suppress new nudges rather than evict live dedupe entries. */
-    @Synchronized fun deliver(context: Context, push: ChatPushData, foreground: Boolean, forward: () -> Unit) {
+    @Synchronized fun deliver(context: Context, push: ChatPushData, onScreen: Boolean, forward: () -> Unit) {
         if (!storageReady) return
         val state = load(context)
         if (state.optString("account") != push.recipientId) return
         val seen = entries(state)
         val duplicate = (0 until seen.length()).any { seen.getJSONObject(it).getString("wake") == push.notificationId }
-        if (duplicate) { if (foreground) forward(); return }
-        if (seen.length() >= LIMIT) { if (foreground) forward(); return }
+        if (duplicate) { if (onScreen) forward(); return }
+        if (seen.length() >= LIMIT) { if (onScreen) forward(); return }
         val tap = UUID.randomUUID().toString()
         seen.put(JSONObject().put("wake", push.notificationId).put("account", push.recipientId)
             .put("conversation", push.conversationId).put("at", System.currentTimeMillis()).put("tap", tap))
         save(context, state)
-        if (foreground) {
-            // The app is visible: update in-app state; never stack a duplicate
-            // OS notification on top of the conversation the user is reading.
+        if (onScreen) {
+            // This conversation is the visible screen: update in-app state;
+            // never stack a duplicate OS notification on top of it.
             forward()
             return
         }

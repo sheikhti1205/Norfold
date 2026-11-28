@@ -63,6 +63,7 @@ vi.mock("../services/pushRuntime", () => ({
   takeChatPushTap: async () => null,
   listenForChatPushTap: async () => () => {},
   acknowledgeChatPushTap: async () => {},
+  reportActiveRoute: async () => {},
 }));
 
 import { App, createAppRouter } from "../App";

@@ -10,6 +10,7 @@ import com.getcapacitor.JSObject;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.findback.app.push.ChatPushData;
 import com.findback.app.push.ChatPushState;
+import com.findback.app.push.PushPresence;
 import com.google.firebase.FirebaseOptions;
 
 /**
@@ -58,6 +59,18 @@ public class FindbackNotificationsPlugin extends Plugin {
             ChatPushState.bind(getContext(), account);
             call.resolve();
         } catch (Exception error) { call.reject("Notification account could not be saved"); }
+    }
+
+    /**
+     * The router path JS is showing right now.
+     *
+     * The FCM service cannot read the WebView from its own thread, so this is
+     * the only route signal it trusts when deciding whether an incoming chat is
+     * already on screen. An absent or empty route means "no specific screen".
+     */
+    @PluginMethod
+    public void setActiveRoute(PluginCall call) {
+        call.resolve(new JSObject().put("route", PushPresence.setRoute(call.getString("route", ""))));
     }
 
     @PluginMethod

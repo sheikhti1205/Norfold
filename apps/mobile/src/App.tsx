@@ -31,6 +31,7 @@ import { About } from "./screens/About";
 import { UpdatePrompt } from "./components/UpdatePrompt";
 import { DesktopNotifications } from "./components/DesktopNotifications";
 import { NativeUpdateLifecycle } from "./services/updates/nativeRuntime";
+import { reportActiveRoute } from "./services/pushRuntime";
 import { MyPosts } from "./screens/MyPosts";
 import { EditReport } from "./screens/EditReport";
 import { SavedReports } from "./screens/SavedReports";
@@ -161,6 +162,13 @@ function AppRouteTree() {
   useEffect(() => {
     if (user && peekAuthReturnTo() === `${location.pathname}${location.search}${location.hash}`) clearAuthReturnTo();
   }, [user, location.pathname, location.search, location.hash]);
+  // Native chat pushes may suppress their notification only when the pushed
+  // conversation is the visible screen. The FCM service cannot read the
+  // WebView, so this one effect is the app's route signal; it reports on mount
+  // and on every path change, and the adapter makes it a no-op off-native.
+  useEffect(() => {
+    void reportActiveRoute(location.pathname);
+  }, [location.pathname]);
   const reportPath = REPORT_PATH.test(location.pathname);
   const lastPage = useRef<{ location: Location; viewerId: string } | null>(null);
   const previousLocation = useRef<{ location: Location; closesToFeed: boolean } | null>(null);

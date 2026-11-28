@@ -10,19 +10,27 @@ import com.google.firebase.messaging.RemoteMessage
  * manifest) so data-only messages can be presented natively with a RemoteInput
  * reply action while still forwarding to the plugin when a bridge is alive.
  *
- * Foreground (an activity is started AND a bridge exists): the plugin delivers
- * `pushNotificationReceived` to JS and the in-app inbox updates; no system
- * notification is posted. Background, including a warm process with no started
- * activity: the app owns presentation and posts the notification itself.
+ * Chat: only the conversation that is actually on screen (foreground AND the
+ * reported route is that conversation) skips presentation; JS is still told so
+ * the open thread refreshes. Any other screen, or a backgrounded app, posts the
+ * notification.
+ *
+ * Comment, like, dislike and the rest: always presented, wherever the app is,
+ * and also forwarded when a bridge exists so the in-app Activity list and bell
+ * keep updating live. `PushChannels.notificationsAllowed` stays the single
+ * authority on whether Android may show anything at all.
  */
 class FindbackMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         if (message.data["type"].orEmpty().startsWith("CHAT_")) {
             val chat = ChatPushData.fromData(message.data) ?: return
-            val foreground = FindbackApp.foreground && PushNotificationsPlugin.getPushNotificationsInstance() != null
+            // "Already on screen", not merely "foreground": being elsewhere in
+            // the app still needs a notification.
+            val onScreen = PushPresence.isChatOpen(
+                PushPresence.activeRoute, chat.conversationId, FindbackApp.foreground)
             try {
-                ChatPushState.deliver(this, chat, foreground) { PushNotificationsPlugin.sendRemoteMessage(message) }
+                ChatPushState.deliver(this, chat, onScreen) { PushNotificationsPlugin.sendRemoteMessage(message) }
             } catch (_: Exception) { /* Cached admission/persistence failed: never forward or present. */ }
             return
         }
@@ -30,13 +38,10 @@ class FindbackMessagingService : FirebaseMessagingService() {
         // stash for a cold/background launch.
         PushNotificationsPlugin.sendRemoteMessage(message)
 
-        // `FindbackApp.foreground` is the real lifecycle signal. The plugin
-        // instance only tells us a bridge/WebView exists, which is also true for
-        // a warm app sitting in the background — so it is a secondary guard,
-        // never the definition of "foreground".
-        val bridgeAlive = PushNotificationsPlugin.getPushNotificationsInstance() != null
-        if (FindbackApp.foreground && bridgeAlive) return
-
+        // Engagement is never gated on the open screen: the in-app Activity
+        // list gets the event through the forward above, and the OS
+        // notification is posted here as well. The presenter applies
+        // `PushChannels.notificationsAllowed` and the per-type channel.
         val push = PushData.fromData(message.data) ?: return
         NotificationPresenter(this).show(push)
     }

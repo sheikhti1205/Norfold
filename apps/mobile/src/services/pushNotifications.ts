@@ -50,6 +50,13 @@ export interface PushAdapter {
   deleteToken?(): Promise<void>;
   /** Android cached admission only; called by the canonical auth/push owner. */
   setChatAccount?(accountId: string | null): Promise<void>;
+  /**
+   * Android: the route the SPA is showing. The FCM service cannot read the
+   * WebView off the UI thread, so this is the only signal that lets it tell the
+   * conversation on screen from the rest of a foregrounded app. Inert
+   * off-native, where nothing is presented natively anyway.
+   */
+  setActiveRoute?(route: string): Promise<void>;
   takeChatTap?(accountId: string): Promise<unknown>;
   acknowledgeChatTap?(accountId: string, notificationId: string): Promise<void>;
   onChatTap?(cb: () => void): Promise<() => void>;
@@ -313,6 +320,7 @@ export function createCapacitorPushAdapter(): PushAdapter {
       openSettings(): Promise<void>;
       isPushConfigured(): Promise<{ configured?: boolean }>;
       setChatAccount(options: { accountId: string | null }): Promise<void>;
+      setActiveRoute(options: { route: string }): Promise<{ route?: string }>;
       takeChatTap(options: { accountId: string }): Promise<{ data?: unknown }>;
       acknowledgeChatTap(options: { accountId: string; notificationId: string }): Promise<void>;
       addListener(event: "chatTapAvailable", cb: () => void): Promise<{ remove(): Promise<void> }>;
@@ -335,6 +343,9 @@ export function createCapacitorPushAdapter(): PushAdapter {
     },
     async setChatAccount(accountId) {
       if (native() && platform() === "android") await settingsPlugin().setChatAccount({ accountId });
+    },
+    async setActiveRoute(route) {
+      if (native() && platform() === "android") await settingsPlugin().setActiveRoute({ route });
     },
     async takeChatTap(accountId) {
       if (!native() || platform() !== "android") return null;

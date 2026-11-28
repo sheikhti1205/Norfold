@@ -20,6 +20,17 @@ function chatWake(account: string): void {
   }).catch(() => {});
 }
 
+/**
+ * The one route report for native chat presentation. Native cannot read the
+ * WebView off the UI thread, so this path is what lets the FCM service suppress
+ * a notification only for the conversation actually on screen. The adapter
+ * makes it a no-op off-native; a rejected report just leaves native on "no
+ * specific screen", which presents the notification instead of hiding it.
+ */
+export async function reportActiveRoute(route: string): Promise<void> {
+  try { await adapter.setActiveRoute?.(route); } catch { /* presence is an enhancement */ }
+}
+
 /** Taps use this bridge, never FCM action extras. Auth and bind generation are
  * checked both sides of the await; cold cached admission cannot navigate. */
 export async function takeChatPushTap(account: string) {
