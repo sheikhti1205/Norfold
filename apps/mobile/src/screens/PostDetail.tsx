@@ -88,7 +88,7 @@ function scrollToSection(id: string, focusOnly = false) {
   // setting layers on top of prefers-reduced-motion — see shouldReduceMotion.
   const reduced = shouldReduceMotion();
   el.focus({ preventScroll: true });
-  if (!focusOnly) el.scrollIntoView({ behavior: reduced ? "instant" : "smooth", block: "start" });
+  if (!focusOnly) el.scrollIntoView?.({ behavior: reduced ? "instant" : "smooth", block: "start" });
 }
 
 /**
@@ -515,7 +515,7 @@ export function PostDetail({ contextual = false }: { contextual?: boolean } = {}
       const field = composerAnchorRef.current?.querySelector<HTMLTextAreaElement>('[data-testid="comment-input"]');
       if (!field) return;
       field.focus({ preventScroll: true });
-      field.scrollIntoView({ block: "center", behavior: "smooth" });
+      field.scrollIntoView?.({ block: "center", behavior: "smooth" });
     });
     return () => cancelAnimationFrame(frame);
   }, [replyRequested, loading, post, commentsLoading, id, locationKey]);
