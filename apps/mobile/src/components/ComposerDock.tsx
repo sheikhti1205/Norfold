@@ -41,10 +41,9 @@ export interface ComposerDockState {
  * Open/closed state shared by the trigger in the row and the pane in the
  * shell's panel slot.
  *
- * The phone contract is that the pane replaces the keyboard instead of stacking
- * on it: opening blurs the field (the draft stays in the caller's state, never
- * in the DOM), and closing puts the caret back, which is what returns the IME.
- * Focus is never the reason the pane closes.
+ * The pane replaces the keyboard instead of stacking on it: opening blurs the
+ * field (the draft stays in the caller's state, never in the DOM), and focusing
+ * the field again is the keyboard coming back, so it closes the pane.
  */
 export function useComposerDock(fieldRef: RefObject<HTMLTextAreaElement | null>): ComposerDockState {
   const [open, setOpen] = useState(false);
@@ -65,6 +64,17 @@ export function useComposerDock(fieldRef: RefObject<HTMLTextAreaElement | null>)
     fieldRef.current?.blur();
     setOpen(true);
   }, [open, close, fieldRef]);
+
+  // Tapping the field while the pane is open brings the IME back, so the pane
+  // must go. Close directly instead of `close()`: the field already has focus,
+  // and re-focusing it on the next frame would be a pointless no-op.
+  useEffect(() => {
+    const field = fieldRef.current;
+    if (!open || !field) return;
+    const onFocus = () => setOpen(false);
+    field.addEventListener("focus", onFocus);
+    return () => field.removeEventListener("focus", onFocus);
+  }, [open, fieldRef]);
 
   return { open, heightPx, toggle, close };
 }

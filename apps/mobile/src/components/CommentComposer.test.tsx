@@ -322,6 +322,17 @@ describe("CommentComposer expression dock", () => {
     expect(screen.queryByRole("dialog", { name: "Emoji, GIFs and stickers picker" })).toBeNull();
     await waitFor(() => expect(document.activeElement).toBe(input));
   });
+
+  it("closes when the field takes focus again, because that is the keyboard returning", () => {
+    render(<CommentComposer {...baseProps()} />);
+    const input = screen.getByTestId("comment-input") as HTMLTextAreaElement;
+    fireEvent.click(screen.getByRole("button", { name: /emoji, gifs and stickers/i }));
+    expect(screen.getByRole("dialog", { name: "Emoji, GIFs and stickers picker" })).toBeTruthy();
+    act(() => input.focus());
+    expect(screen.queryByRole("dialog", { name: "Emoji, GIFs and stickers picker" })).toBeNull();
+    // Closing on focus never steals the caret back: the field already has it.
+    expect(document.activeElement).toBe(input);
+  });
 });
 
 describe("CommentComposer attachments", () => {
