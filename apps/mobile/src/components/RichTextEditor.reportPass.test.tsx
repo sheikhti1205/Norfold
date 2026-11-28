@@ -6,9 +6,12 @@ import type { Editor } from "@tiptap/react";
 import { RichTextEditor, tiptapToMarkdown } from "./RichTextEditor";
 import { settleSelectionRender } from "../test-utils/editorSelection";
 import { openRailMore, pickRailMore } from "../test-utils/editorRail";
+import { polyfillRangeGeometry, restoreRangeGeometry } from "../test-utils/jsdomRangeGeometry";
 import { openSoftKeyboard, renderFocused, restoreSoftKeyboard } from "../test-utils/softKeyboard";
 
 beforeEach(openSoftKeyboard);
+beforeEach(polyfillRangeGeometry);
+afterEach(restoreRangeGeometry);
 afterEach(restoreSoftKeyboard);
 afterEach(cleanup);
 

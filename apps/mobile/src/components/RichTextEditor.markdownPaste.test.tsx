@@ -5,31 +5,14 @@ import { createRef } from "react";
 import type { Editor } from "@tiptap/react";
 import { RichTextEditor, markdownToTiptap, tiptapToMarkdown } from "./RichTextEditor";
 import { pickRailMore } from "../test-utils/editorRail";
+import { polyfillRangeGeometry, restoreRangeGeometry } from "../test-utils/jsdomRangeGeometry";
 import { openSoftKeyboard, renderFocused, restoreSoftKeyboard } from "../test-utils/softKeyboard";
 
 beforeEach(openSoftKeyboard);
+beforeEach(polyfillRangeGeometry);
+afterEach(restoreRangeGeometry);
 afterEach(restoreSoftKeyboard);
 afterEach(cleanup);
-
-// jsdom Range lacks getClientRects, which prosemirror-view's
-// scrollToSelection calls (via textRange) on selection-changing dispatches.
-// Polyfill it so paste/insert tests exercise the real dispatch path without
-// unhandled errors (production browsers implement it natively).
-if (typeof Range !== "undefined") {
-  const zeroRect = () => ({ top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 });
-  if (!("getClientRects" in Range.prototype)) {
-    Object.defineProperty(Range.prototype, "getClientRects", {
-      value: () => [],
-      configurable: true,
-    });
-  }
-  if (!("getBoundingClientRect" in Range.prototype)) {
-    Object.defineProperty(Range.prototype, "getBoundingClientRect", {
-      value: zeroRect,
-      configurable: true,
-    });
-  }
-}
 
 const CHATGPT_MD = ["# Lost Wallet", "", "Found near the **library**.", "", "- Black", "- Empty"].join("\n");
 

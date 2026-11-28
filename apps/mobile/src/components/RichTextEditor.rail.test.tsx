@@ -6,21 +6,14 @@ import type { Editor } from "@tiptap/react";
 import { RichTextEditor, tiptapToMarkdown } from "./RichTextEditor";
 import { settleSelectionRender } from "../test-utils/editorSelection";
 import { openRailMore, pickRailMore } from "../test-utils/editorRail";
+import { polyfillRangeGeometry, restoreRangeGeometry } from "../test-utils/jsdomRangeGeometry";
 import { openSoftKeyboard, renderFocused, restoreSoftKeyboard } from "../test-utils/softKeyboard";
 
 beforeEach(openSoftKeyboard);
+beforeEach(polyfillRangeGeometry);
+afterEach(restoreRangeGeometry);
 afterEach(restoreSoftKeyboard);
 afterEach(cleanup);
-// jsdom does not implement Range geometry used by ProseMirror's scroll-to-selection.
-if (!("getClientRects" in Range.prototype)) {
-  Object.defineProperty(Range.prototype, "getClientRects", { configurable: true, value: () => [] });
-}
-if (!("getBoundingClientRect" in Range.prototype)) {
-  Object.defineProperty(Range.prototype, "getBoundingClientRect", {
-    configurable: true,
-    value: () => ({ top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 }),
-  });
-}
 
 describe("Report editor caret formatting", () => {
   it("toggles Bold at an empty caret on and off without formatting subsequent plain typing", async () => {

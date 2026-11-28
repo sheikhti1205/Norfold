@@ -7,9 +7,12 @@ import { TextSelection } from "@tiptap/pm/state";
 import { RichTextEditor, markdownToTiptap, tiptapToMarkdown } from "./RichTextEditor";
 import { openRailMore, pickRailMore } from "../test-utils/editorRail";
 import { settleSelectionRender } from "../test-utils/editorSelection";
+import { polyfillRangeGeometry, restoreRangeGeometry } from "../test-utils/jsdomRangeGeometry";
 import { closeSoftKeyboard, openSoftKeyboard, renderFocused, restoreSoftKeyboard } from "../test-utils/softKeyboard";
 
 beforeEach(openSoftKeyboard);
+beforeEach(polyfillRangeGeometry);
+afterEach(restoreRangeGeometry);
 afterEach(restoreSoftKeyboard);
 afterEach(cleanup);
 

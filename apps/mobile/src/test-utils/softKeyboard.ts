@@ -16,10 +16,16 @@ const originalVisualViewport = Object.getOwnPropertyDescriptor(window, "visualVi
 /** Visible-height loss that a keyboard causes, not browser chrome (which is tens of px). */
 export const TEST_KEYBOARD_COVER_PX = 300;
 
-export function openSoftKeyboard(coverPx = TEST_KEYBOARD_COVER_PX): void {
+export function openSoftKeyboard(coverPx: unknown = TEST_KEYBOARD_COVER_PX): void {
+  // `beforeEach(openSoftKeyboard)` passes Vitest's TestContext as the first
+  // argument. Only an explicit positive number is a cover height; anything else
+  // (the context object included) must fall back to the real keyboard size.
+  const cover = typeof coverPx === "number" && Number.isFinite(coverPx) && coverPx > 0
+    ? coverPx
+    : TEST_KEYBOARD_COVER_PX;
   const viewport = new EventTarget() as VisualViewport;
   Object.defineProperties(viewport, {
-    height: { configurable: true, writable: true, value: Math.max(1, window.innerHeight - coverPx) },
+    height: { configurable: true, writable: true, value: Math.max(1, window.innerHeight - cover) },
     offsetTop: { configurable: true, writable: true, value: 0 },
     scale: { configurable: true, writable: true, value: 1 },
   });

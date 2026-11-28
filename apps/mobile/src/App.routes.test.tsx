@@ -39,10 +39,23 @@ vi.mock("./auth", () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useAuth: () => ({ ...auth }),
 }));
-vi.mock("@capacitor/core", () => ({
-  Capacitor: { isNativePlatform: () => native.platform, getPlatform: () => native.platform ? "android" : "web" },
-  registerPlugin: () => ({ getColors: async () => ({ supported: false }), addListener: async () => ({ remove: async () => {} }) }),
-}));
+vi.mock("@capacitor/core", () => {
+  // The editor subscribes to `FindbackIme`: only the app shell can read IME
+  // insets, so this JS double answers "unknown" and leaves the keyboard
+  // decision to the geometry fallback. Every other plugin keeps the generic
+  // double these route tests already relied on.
+  const findbackIme = {
+    getImeState: async () => ({ known: false, visible: false }),
+    addListener: async () => ({ remove: async () => {} }),
+  };
+  return {
+    Capacitor: { isNativePlatform: () => native.platform, getPlatform: () => native.platform ? "android" : "web" },
+    registerPlugin: (name: string) =>
+      name === "FindbackIme"
+        ? findbackIme
+        : { getColors: async () => ({ supported: false }), addListener: async () => ({ remove: async () => {} }) },
+  };
+});
 vi.mock("@capacitor/app", () => ({
   App: {
     getLaunchUrl: async () => undefined,

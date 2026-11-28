@@ -32,11 +32,19 @@ const { suggestFieldsMock, suggestCategoryMock, nlHelperStateMock, prewarmNeedle
 // Report AI is Android-only; these tests exercise that surface.
 vi.mock("@capacitor/core", () => {
   // `utils/location` registers the short-link resolver at module scope on
-  // Android, so the partial core mock must expose the real export.
+  // Android, so the partial core mock must expose the real export. The editor
+  // also subscribes to `FindbackIme`: only the app shell can read IME insets,
+  // so this JS double answers "unknown" and leaves the keyboard decision to the
+  // real geometry fallback these AI tests never model.
   const shortLinks = { resolve: vi.fn(async ({ url }: { url: string }) => ({ url })) };
+  const findbackIme = {
+    getImeState: async () => ({ known: false, visible: false }),
+    addListener: async () => ({ remove: async () => {} }),
+  };
   return {
     Capacitor: { isNativePlatform: () => true, getPlatform: () => "android" },
-    registerPlugin: (name: string) => name === "ShortLinkResolver" ? shortLinks : {},
+    registerPlugin: (name: string) =>
+      name === "ShortLinkResolver" ? shortLinks : name === "FindbackIme" ? findbackIme : {},
     Plugins: { ShortLinkResolver: shortLinks },
   };
 });

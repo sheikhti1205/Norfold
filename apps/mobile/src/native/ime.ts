@@ -44,8 +44,13 @@ function isAndroidApp(): boolean {
 
 function native(): NativeImeBridge | null {
   if (!isAndroidApp() || typeof registerPlugin !== "function") return null;
-  bridge ??= registerPlugin<NativeImeBridge>("FindbackIme");
-  return bridge;
+  const api = bridge ?? registerPlugin<NativeImeBridge>("FindbackIme");
+  // A partial or stale registration (an older build, or a test double) must read
+  // as "unknown" and let the caller fall back to geometry. Throwing here would
+  // take the whole editor tree down instead.
+  if (typeof api?.getImeState !== "function" || typeof api?.addListener !== "function") return null;
+  bridge = api;
+  return api;
 }
 
 /**
@@ -65,16 +70,26 @@ export function subscribeNativeIme(sink: (state: NativeImeState) => void): () =>
       visible: state.visible === true,
     });
   };
-  void api.getImeState().then(deliver).catch(() => {});
-  void api.addListener("imeStateChanged", deliver)
+  // `Promise.resolve().then(...)` also catches a synchronous throw and tolerates
+  // a non-promise return from a partially implemented shell.
+  void Promise.resolve()
+    .then(() => api.getImeState())
+    .then(deliver)
+    .catch(() => {});
+  void Promise.resolve()
+    .then(() => api.addListener("imeStateChanged", deliver))
     .then((attached) => {
-      if (cancelled) void attached.remove();
-      else handle = attached;
+      if (cancelled) {
+        if (typeof attached?.remove === "function") void attached.remove();
+      } else {
+        handle = attached;
+      }
     })
     .catch(() => {});
   return () => {
     cancelled = true;
-    void handle?.remove();
+    const attached = handle;
     handle = null;
+    if (attached && typeof attached.remove === "function") void attached.remove();
   };
 }

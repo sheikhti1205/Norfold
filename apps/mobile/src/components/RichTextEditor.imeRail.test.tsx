@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createRef } from "react";
 import type { Editor } from "@tiptap/react";
 import { RichTextEditor } from "./RichTextEditor";
 import { pickRailMore } from "../test-utils/editorRail";
+import { polyfillRangeGeometry, restoreRangeGeometry } from "../test-utils/jsdomRangeGeometry";
 import {
   closeSoftKeyboard,
   focusDescriptionEditor,
@@ -12,9 +13,11 @@ import {
   restoreSoftKeyboard,
 } from "../test-utils/softKeyboard";
 
+beforeEach(polyfillRangeGeometry);
 afterEach(() => {
   cleanup();
   restoreSoftKeyboard();
+  restoreRangeGeometry();
 });
 
 /** Install the viewport geometry a browser reports for the current window. */
@@ -45,7 +48,9 @@ function expandFromSlash(ref: { current: Editor | null }): void {
   const editor = ref.current;
   if (!editor) throw new Error("editor is not mounted");
   act(() => {
+    // The trigger only opens at the start of a line, so start a fresh one.
     editor.commands.setTextSelection(editor.state.doc.content.size);
+    editor.commands.splitBlock();
     editor.commands.insertContent("/expand");
   });
   const menu = screen.getByRole("listbox", { name: "Formatting commands" });

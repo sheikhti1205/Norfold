@@ -46,10 +46,18 @@ function setPlatform(platform: "web" | "ios" | "android"): void {
 vi.mock("@capacitor/core", () => {
   // `utils/location` registers the short-link resolver at module scope on
   // Android; the Android renders in this suite need the real export present.
+  // The editor also subscribes to `FindbackIme`: only the app shell can read
+  // IME insets, so this JS double answers "unknown" and leaves the keyboard
+  // decision to the real geometry fallback this suite never models.
   const shortLinks = { resolve: vi.fn(async ({ url }: { url: string }) => ({ url })) };
+  const findbackIme = {
+    getImeState: async () => ({ known: false, visible: false }),
+    addListener: async () => ({ remove: async () => {} }),
+  };
   return {
     Capacitor: { isNativePlatform: () => state.native, getPlatform: () => state.platform },
-    registerPlugin: (name: string) => name === "ShortLinkResolver" ? shortLinks : {},
+    registerPlugin: (name: string) =>
+      name === "ShortLinkResolver" ? shortLinks : name === "FindbackIme" ? findbackIme : {},
     Plugins: { ShortLinkResolver: shortLinks },
   };
 });

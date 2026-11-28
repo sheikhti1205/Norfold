@@ -11,9 +11,12 @@ import {
 } from "./RichTextEditor";
 import { settleSelectionRender } from "../test-utils/editorSelection";
 import { openRailMore } from "../test-utils/editorRail";
+import { polyfillRangeGeometry, restoreRangeGeometry } from "../test-utils/jsdomRangeGeometry";
 import { openSoftKeyboard, renderFocused, restoreSoftKeyboard } from "../test-utils/softKeyboard";
 
 beforeEach(openSoftKeyboard);
+beforeEach(polyfillRangeGeometry);
+afterEach(restoreRangeGeometry);
 afterEach(restoreSoftKeyboard);
 afterEach(cleanup);
 
