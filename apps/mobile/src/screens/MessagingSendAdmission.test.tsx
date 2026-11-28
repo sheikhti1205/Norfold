@@ -311,7 +311,7 @@ it("ignores a document pick while a text admission still owns the composer", asy
   fireEvent.change(field(), { target: { value: "In flight" } });
   fireEvent.click(sendButton());
   // A picker result that lands inside the same admission is not a second send.
-  fireEvent.change(screen.getByLabelText("Choose document"), {
+  fireEvent.change(screen.getByLabelText("Choose documents or audio"), {
     target: { files: [new File(["notes"], "notes.txt", { type: "text/plain" })] },
   });
   await act(async () => undefined);
@@ -321,7 +321,7 @@ it("ignores a document pick while a text admission still owns the composer", asy
 
   await act(async () => { admission.admitted()(); admission.finish("saved"); });
   // After the admission settles the same pick is a deliberate new message.
-  fireEvent.change(screen.getByLabelText("Choose document"), {
+  fireEvent.change(screen.getByLabelText("Choose documents or audio"), {
     target: { files: [new File(["notes"], "notes.txt", { type: "text/plain" })] },
   });
   await waitFor(() => expect(m.upload).toHaveBeenCalledTimes(1));
