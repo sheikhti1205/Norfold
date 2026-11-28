@@ -67,9 +67,13 @@ const HoverLabelContext = createContext<HoverLabelApi | null>(null);
  * A layer that replaces the page owns the pointer: a name hovering a control
  * that is no longer the thing on screen is a lie. These are the app's overlay
  * roots — dialogs/task surfaces, the photo viewer, and the picker layer.
+ *
+ * The composer's docked picker is a labelled dialog too, but it sits in the
+ * composer's own flow: the transcript and the composer row above it stay on
+ * screen and stay true, so the inline pane is not an overlay here.
  */
 const OVERLAY_SELECTOR = [
-  '[role="dialog"]',
+  '[role="dialog"]:not(.fb-composer-pane)',
   '[aria-modal="true"]',
   "dialog[open]",
   ".fb-media-viewer",

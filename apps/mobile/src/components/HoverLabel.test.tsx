@@ -260,6 +260,30 @@ describe("shared hover label", () => {
     dialog.remove();
   });
 
+  it("keeps naming controls while the inline composer pane is open", async () => {
+    vi.useFakeTimers();
+    render(<HoverLabelProvider><Probe /></HoverLabelProvider>);
+    const button = screen.getByRole("button", { name: "Save" });
+    fireEvent.pointerEnter(button, { pointerType: "mouse" });
+    act(() => { vi.advanceTimersByTime(HOVER_LABEL_MS); });
+    expect(pill()).not.toBeNull();
+    // The docked picker is a labelled dialog in the composer's own flow, not a
+    // replacement for the page: it must neither clear a name nor stop the
+    // composer's still-visible controls from being named.
+    const pane = document.createElement("div");
+    pane.className = "fb-composer-pane";
+    pane.setAttribute("role", "dialog");
+    pane.innerHTML = '<div class="fb-expression-picker fb-expression-dock" data-dock="ime"></div>';
+    await act(async () => { document.body.appendChild(pane); });
+    expect(pill()).not.toBeNull();
+    fireEvent.pointerLeave(button, { pointerType: "mouse" });
+    expect(pill()).toBeNull();
+    fireEvent.pointerEnter(button, { pointerType: "mouse" });
+    act(() => { vi.advanceTimersByTime(HOVER_LABEL_MS); });
+    expect(pill()?.textContent).toBe("Save");
+    pane.remove();
+  });
+
   it("cancels a pending dwell when an overlay opens", async () => {
     vi.useFakeTimers();
     render(<HoverLabelProvider><Probe /></HoverLabelProvider>);

@@ -875,8 +875,13 @@ function stagedKindOf(file: File): "photo" | "video" | null {
  * Layers that own the next Escape/Back even when focus sits outside them: the
  * canonical modal stack covers dialogs and sheets, and this selector covers the
  * ones that are not registered there (the phone navigation drawer and the
- * composer pickers). A plain `role="dialog"` is deliberately absent: the
- * navigation setup popover stays mounted and must never trap Escape.
+ * floating composer picker layer). A plain `role="dialog"` is deliberately
+ * absent: the navigation setup popover stays mounted and must never trap Escape.
+ *
+ * The docked composer picker (`[data-dock="ime"]`) is deliberately absent too.
+ * It is not an overlay: dismissal belongs to the composer, and this selector
+ * only stands this screen down and dispatches a body-level synthetic Escape,
+ * which cannot reach the pane's own React key handler to close it.
  */
 const OPEN_LAYER_SELECTOR = "[aria-modal='true'], [role='menu'], [role='listbox'], .fb-picker-layer";
 
