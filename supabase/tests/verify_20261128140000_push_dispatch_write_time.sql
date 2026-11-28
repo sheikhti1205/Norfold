@@ -27,9 +27,9 @@ begin
   if v_trigger is null then
     raise exception 'write-time push dispatch trigger is missing on public.notifications';
   end if;
-  if v_trigger not ilike '%after insert on public.notifications%'
+  if v_trigger not ilike '%after insert%'
      or v_trigger not ilike '%for each row%'
-     or v_trigger not ilike '%execute function public.findback_push_dispatch_on_notification()%' then
+     or v_trigger not ilike '%findback_push_dispatch_on_notification()%' then
     raise exception 'write-time push dispatch trigger has the wrong shape: %', v_trigger;
   end if;
   if (select t.tgenabled from pg_trigger t

@@ -142,6 +142,7 @@ jobs:
             exit 1
           fi
           command -v psql >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y postgresql-client; }
+          command -v jq >/dev/null 2>&1 || { echo '::error::jq is required to read the pooler configuration.'; exit 1; }
           # The runner has no IPv6 route, so the IPv4 Supavisor pooler is used
           # instead of the direct db.<ref> host. Host and port come from the
           # project's own pooler configuration: the hostname carries a pooler
