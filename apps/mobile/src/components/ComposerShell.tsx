@@ -19,11 +19,19 @@ export interface ComposerShellProps {
   context?: ReactNode;
   attachments?: ReactNode;
   actions?: ReactNode;
+  /** Controls between the field and Send (the picker toggle keeps its slot there). */
+  trailing?: ReactNode;
   inputRef?: RefObject<HTMLTextAreaElement | null>;
   inputOverlay?: ReactNode;
   sendLabel?: string;
   sendTestId?: string;
   inputProps?: Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "onChange" | "disabled" | "aria-label" | "placeholder">;
+  /**
+   * A pane docked under the row, inside this form: the expression picker takes
+   * the band the keyboard would use. Absent means no element at all, so nothing
+   * about the row's layout changes.
+   */
+  panel?: ReactNode;
 }
 
 /**
@@ -39,8 +47,8 @@ export interface ComposerShellProps {
  * cannot leave the caret somewhere else.
  */
 export function ComposerShell({ value, onChange, onSend, inputLabel, placeholder, disabled = false, busy = false,
-  canSend = Boolean(value.trim()), enterSends, context, attachments, actions, inputProps,
-  inputRef, inputOverlay, sendLabel = "Send", sendTestId }: ComposerShellProps) {
+  canSend = Boolean(value.trim()), enterSends, context, attachments, actions, trailing, inputProps,
+  inputRef, inputOverlay, sendLabel = "Send", sendTestId, panel }: ComposerShellProps) {
   const localInput = useRef<HTMLTextAreaElement>(null);
   const input = inputRef ?? localInput;
   const composing = useRef(false);
@@ -86,6 +94,7 @@ export function ComposerShell({ value, onChange, onSend, inputLabel, placeholder
         }} />
       {inputOverlay}
       </div>
+      {trailing && <div className="fb-composer-trailing">{trailing}</div>}
       <button type="submit" aria-label={sendLabel} data-testid={sendTestId} disabled={!available} className="fb-icon-control fb-composer-send"
         {...hoverLabel(sendLabel)}
         onMouseDown={(event) => {
@@ -98,5 +107,6 @@ export function ComposerShell({ value, onChange, onSend, inputLabel, placeholder
         <SendHorizonal size={20} aria-hidden="true" />
       </button>
     </div>
+    {panel}
   </form>;
 }

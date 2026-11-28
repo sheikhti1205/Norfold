@@ -84,3 +84,27 @@ it("puts the caret back when a send that started in the field settles", () => {
   view.rerender(<ComposerShell value="" onChange={vi.fn()} onSend={send} inputLabel="Message" enterSends />);
   expect(document.activeElement).toBe(input);
 });
+
+it("renders the docked panel after the row, in the same form, and nothing when absent", () => {
+  const view = render(<ComposerShell value="" onChange={vi.fn()} onSend={vi.fn()} inputLabel="Message" />);
+  expect(document.querySelector(".fb-composer-pane")).toBeNull();
+  view.rerender(<ComposerShell value="" onChange={vi.fn()} onSend={vi.fn()} inputLabel="Message"
+    panel={<div data-testid="composer-panel-fixture" className="fb-composer-pane">Pane</div>} />);
+  const row = document.querySelector(".fb-composer-row")!;
+  const panel = screen.getByTestId("composer-panel-fixture");
+  expect(row.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // Same form and stacking context, one row: the pane docks instead of floating.
+  expect(panel.closest("form")).toBe(row.closest("form"));
+  expect(document.querySelectorAll(".fb-composer-row")).toHaveLength(1);
+});
+
+it("keeps a trailing control in its slot between the field and Send", () => {
+  render(<ComposerShell value="hi" onChange={vi.fn()} onSend={vi.fn()} inputLabel="Message"
+    trailing={<button type="button" aria-label="Emoji, GIFs and stickers" />} />);
+  const input = screen.getByRole("textbox", { name: "Message" });
+  const trailing = screen.getByRole("button", { name: "Emoji, GIFs and stickers" });
+  const send = screen.getByRole("button", { name: "Send" });
+  expect(input.compareDocumentPosition(trailing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(trailing.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(document.querySelector(".fb-composer-row")?.contains(trailing)).toBe(true);
+});

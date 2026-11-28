@@ -1,0 +1,172 @@
+/* The composer's attachment disclosure and its docked picker pane.
+   The tray owns the leading cluster in both composers; the pane owns the band
+   the on-screen keyboard would otherwise take. Nothing here restyles a shared
+   sheet: the container blocks at the end only place the new slots inside a row
+   that has already reflowed. */
+
+.fb-attachment-tray {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.fb-attachment-disclosure,
+.fb-attachment-shortcut {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 999px;
+  color: var(--fb-on-surface-variant);
+}
+
+/* Messenger's measured row: a 40 dp leading slot and 40 dp inline shortcuts,
+   with a 44 px hit area where one control stands alone. */
+.fb-attachment-disclosure {
+  width: 44px;
+  height: 44px;
+  min-width: 40px;
+  min-height: 40px;
+}
+
+.fb-attachment-shortcut {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+}
+
+.fb-attachment-disclosure:hover,
+.fb-attachment-shortcut:hover { background: var(--fb-surface-container); }
+
+.fb-attachment-disclosure:focus-visible,
+.fb-attachment-shortcut:focus-visible {
+  outline: 2px solid var(--fb-focus);
+  outline-offset: 2px;
+}
+
+.fb-composer-pane:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: -2px; }
+
+.fb-attachment-disclosure:disabled,
+.fb-attachment-shortcut:disabled { opacity: .4; }
+
+/* The glyph reads "+" while folded and a cross while the shortcuts are out, so
+   the same control both opens and closes them. */
+.fb-attachment-disclosure svg { transition: transform 140ms ease; }
+.fb-attachment-tray[data-expanded] .fb-attachment-disclosure svg { transform: rotate(45deg); }
+@media (prefers-reduced-motion: reduce) {
+  .fb-attachment-disclosure svg { transition: none; }
+}
+
+/* Inline shortcuts. The strip scrolls rather than wrapping or pushing the
+   field past its floor, so a 320px row never overflows. */
+.fb-attachment-shortcuts {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.fb-attachment-shortcuts::-webkit-scrollbar { display: none; }
+
+/* The field keeps a readable floor and the cluster gives way: the strip, not
+   the row, is what scrolls. Scoped to the two composers that mount the tray. */
+.fb-comment-composer .fb-composer-field { min-width: 72px; }
+.fb-comment-composer .fb-composer-actions { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+.fb-peer-composer-row .fb-peer-field { min-width: 72px; }
+
+/* The docked pane: the caller measures the band, this only caps it so a short
+   phone keeps the conversation above the composer. */
+.fb-composer-pane {
+  width: 100%;
+  min-height: 0;
+  max-height: 45vh;
+  overflow: hidden;
+}
+.fb-composer-pane .fb-expression-dock {
+  height: 100%;
+  min-height: 0;
+  border-radius: 0;
+}
+
+/* Below these widths the rows already keep the field on its own line
+   (adaptiveFoundation.css at 16rem, peerComposer.css at 20rem). The control
+   those sheets did not know about is placed explicitly on that second line,
+   and the shortcuts column is allowed to shrink so the strip scrolls instead
+   of overflowing the row. */
+@container composer (max-width: 16rem) {
+  .fb-composer-shell .fb-composer-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .fb-composer-row .fb-composer-actions { grid-column: 1; grid-row: 2; }
+  .fb-composer-row .fb-composer-trailing { grid-column: 2; grid-row: 2; }
+  .fb-composer-row .fb-composer-send { grid-column: 3; grid-row: 2; }
+}
+
+@container composer (max-width: 20rem) {
+  .fb-peer-composer .fb-peer-composer-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .fb-peer-composer-row .fb-attachment-tray { grid-column: 1; grid-row: 2; }
+  .fb-peer-composer-row .fb-peer-icon:not(.fb-peer-send) { grid-column: 2; grid-row: 2; }
+  .fb-peer-composer-row .fb-peer-send { grid-column: 3; grid-row: 2; justify-self: end; }
+}
+
+/* Narrow presentation. The tray sets `data-presentation` only when it measured
+   a composer too narrow for the inline row (< 26rem), so none of this can
+   reach the wide row: there the strip above stays the only presentation.
+   The list is a `fb-picker-layer`, so it is the app's known overlay: same
+   frame, same dismissal registries. It is positioned by this tray (the layer's
+   nearest positioned ancestor) to read as anchored to the `+` that opened it. */
+.fb-attachment-tray[data-presentation="narrow"] { position: relative; }
+
+.fb-attachment-tray[data-presentation="narrow"] > .fb-attachment-menu {
+  /* A percentage width would resolve against the 44px tray, not the composer,
+     so the panel takes its own measure bounded by the composer it belongs to
+     (the shapes the app already sizes pickers with). */
+  width: min(16rem, calc(100cqw - 8px));
+  max-width: none;
+  max-height: min(18rem, 60vh);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* One labelled row per capability: the icon the inline strip shows, plus the
+   name it could only announce there. A real 48px target, never a 40px glyph. */
+.fb-attachment-menu-item,
+.fb-attachment-menu-extra > button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  line-height: 1.25;
+  text-align: left;
+}
+
+.fb-attachment-menu-item { color: var(--fb-on-surface); }
+.fb-attachment-menu-item > svg { flex: none; color: var(--fb-on-surface-variant); }
+.fb-attachment-menu-item > span { min-width: 0; }
+/* The per-surface extra keeps its own control; inside the list it fills the
+   row instead of standing as a 40px glyph among labelled ones. */
+.fb-attachment-menu-extra { display: flex; }
+
+.fb-attachment-menu-item:hover,
+.fb-attachment-menu-extra > button:hover { background: var(--fb-surface-container); }
+
+.fb-attachment-menu-item:focus-visible,
+.fb-attachment-menu-extra > button:focus-visible {
+  outline: 2px solid var(--fb-focus);
+  outline-offset: -2px;
+}
+
+.fb-attachment-menu-item:disabled { opacity: .45; }
