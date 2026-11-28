@@ -35,8 +35,17 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
   mediaFactory?: MediaTransportFactory, admission?: (signal: AbortSignal) => Promise<void>) {
   const scope = Object.freeze({ accountId: uuid(identity.accountId), deviceId: uuid(identity.deviceId) });
   const controller = new AbortController();
-  let flushing: Promise<void> | null = null;
+  let flushing: Promise<{ sync: number | null }> | null = null;
   let stateTail: Promise<unknown> = Promise.resolve();
+  /**
+   * The state one flush pass settled. Steps inside that same pass — the reconcile
+   * before its SEND, the echo sync after it — read what the pass already applied
+   * instead of repeating STATE_ACK/STATE_SYNC, which returned the same unchanged
+   * page on every call. A step that runs before the pass's own read still
+   * performs the real sync, so ACK-before-apply and the durable cursor order are
+   * unchanged.
+   */
+  let statePass: { synced: boolean } | null = null;
   const assertOpen = () => { if (controller.signal.aborted) throw new Error("Messaging session closed"); };
   const prepare = async () => { assertOpen(); await admission?.(controller.signal); assertOpen(); };
   const mediaUnavailable = () => new Error("Photo could not sync. Try again.");
@@ -107,9 +116,14 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
       .find((row) => row.conversationId === conversationId);
     return summary?.cachedProjection?.epoch;
   };
-  const syncState = (): Promise<void> => {
+  const syncState = (reusePassState = false): Promise<void> => {
+    const pass = statePass;
+    // A closed session is refused before anything is dispatched, settled or not.
+    if (reusePassState && pass?.synced) return Promise.resolve().then(assertOpen);
     const run = async () => {
       assertOpen();
+      // The pass may have settled state while this call waited for the tail.
+      if (reusePassState && pass?.synced) return;
       let cursor = await history.getStateCursor();
       // Retry an ACK lost after a prior local commit. Server ACK state is never
       // used to skip local application after reinstall/lost history.
@@ -129,7 +143,10 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
           assertOpen();
           await call("STATE_ACK", { ...cursor });
         }
-        if (envelopes.length < 100) return;
+        if (envelopes.length < 100) {
+          if (pass) pass.synced = true;
+          return;
+        }
       }
       throw new Error("Message state sync is incomplete. Try again.");
     };
@@ -137,8 +154,8 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
     stateTail = next.catch(() => undefined);
     return next;
   };
-  const sync = async (onRestore?: (missing: number) => void) => {
-    await syncState();
+  const sync = async (onRestore?: (missing: number) => void, reusePassState = false) => {
+    await syncState(reusePassState);
     const response = await call("SYNC");
     if (!Array.isArray(response) || response.length > 100) throw new Error("Invalid messaging batch");
     // Reject a malformed batch before applying any of its entries.
@@ -159,11 +176,12 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
     }
     return envelopes.length;
   };
-  const reconcileConversation = async (conversationId: string, onGate?: (gate: ConversationGate) => void) => {
+  const reconcileConversation = async (conversationId: string, onGate?: (gate: ConversationGate) => void,
+    reusePassState = false) => {
     const id = uuid(conversationId);
     // Surviving-account suppression precedes thread repair, even if the peer or
     // conversation no longer exists and therefore cannot supply a readable HEAD.
-    await syncState(); assertOpen();
+    await syncState(reusePassState); assertOpen();
     const head = copyConversationHead(await call("HEAD", { conversationId: id }));
     if (head.accountId !== scope.accountId || head.conversationId !== id) throw new Error("Invalid conversation scope");
     const checkpoint = await history.getConversationCheckpoint(id); assertOpen();
@@ -222,10 +240,25 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
     }
     throw new Error("Conversation sync is incomplete. Try again.");
   };
-  const flush = (): Promise<void> => {
+  /**
+   * Moves the durable outbox and settles its echoes.
+   *
+   * `sync` is the number of mailbox envelopes this pass itself settled, or
+   * `null` when nothing was queued and therefore no mailbox read happened. A
+   * caller that would otherwise run its own sync immediately after this pass uses
+   * that to avoid repeating the read it just performed.
+   */
+  const flush = (): Promise<{ sync: number | null }> => {
     if (flushing) return flushing;
     const run = async () => {
       assertOpen();
+      // With nothing queued this pass has no send to settle. Flush exists to move
+      // the outbox and persist its echoes, so the caller's mailbox read is this
+      // pass's state read: repeating it here was two round trips that always
+      // returned the same unchanged page.
+      if (!(await history.listOutbox()).length) return { sync: null };
+      statePass = { synced: false };
+      let settled: number | null = null;
       await syncState();
       // One undeliverable row must not starve the rest of the queue: a refused
       // stale boundary is a permanent failure until the user retries it, and
@@ -250,7 +283,9 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
             if (!attachments.some((row) => row.messageId === message.id)) throw new Error("Attachment unavailable");
           }
           if (message.authorId !== scope.accountId) throw new Error("Invalid messaging author");
-          const expectedHead = await reconcileConversation(message.conversationId);
+          // This pass already applied account state, so the thread repair reads
+          // the HEAD it is gated on instead of re-ACKing and re-syncing first.
+          const expectedHead = await reconcileConversation(message.conversationId, undefined, true);
           // A local erase can win after the claim, removing both parent visibility
           // and attachment metadata. Never downgrade its captured caption to TEXT.
           const live = await history.getMessage(message.id);
@@ -285,16 +320,21 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
           continue;
         }
         // Echo persistence, not the HTTP result, removes the durable outbox entry.
-        await sync();
+        settled = await sync(undefined, true);
       }
       // A prior HTTP send can succeed before persistence/ACK fails. Retry its
-      // mailbox even while the durable outbox lease remains active.
-      await sync();
+      // mailbox even while the durable outbox lease remains active. A pass that
+      // already settled its last echo, and left nothing behind, has nothing to
+      // fetch: the caller's own read then waits for the next wake instead.
+      if ((await history.listOutbox()).length > 0) settled = await sync(undefined, true);
       // The queue drained as far as it can; surface the first real failure so
       // callers still see the error contract they test against.
       if (firstError) throw firstError;
+      return { sync: settled };
     };
-    flushing = run().finally(() => { flushing = null; });
+    // The pass's state scope ends with it, on success or failure. `flushing`
+    // stays set until here, so no second pass can own it.
+    flushing = run().finally(() => { flushing = null; statePass = null; });
     return flushing;
   };
 

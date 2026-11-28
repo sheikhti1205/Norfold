@@ -862,6 +862,54 @@ describe("foreground fast path", () => {
     expect(requestLog).not.toContain("REGISTER");
     expect(runtime.getMessagingRuntimeSnapshot().currentProjections?.[CONV]?.mode).toBe("CONNECTED");
   });
+  it("meets the open thread once for a queued send instead of reconciling it twice", async () => {
+    runtime.setMessagingAccount(A);
+    await waitForState((state) => state.status === "ready" && !!state.currentProjections);
+    let gateMark = 0;
+    const detach = runtime.watchMessagingThread(A, CONV);
+    await waitForState((state) => {
+      if (state.threadSync?.mode !== "ready") return false;
+      // Synchronous at the gate publication, inside the pass that published it.
+      gateMark = requestLog.length;
+      return true;
+    });
+    // That pass still owes its own mailbox read and media sweep; its delivery
+    // probe is the last call it makes, so counting from here starts settled.
+    await vi.waitFor(() => expect(requestLog.slice(gateMark)).toContain("delivery"), { timeout: 3000 });
+    requestLog.length = 0;
+    await runtime.sendMessagingText(A, CONV, B, "hello");
+    await vi.waitFor(() => expect(sent.map((fields) => fields.body)).toContain("hello"), { timeout: 3000 });
+    await vi.waitFor(async () =>
+      expect((await runtime.readMessagingThreadState(A, CONV)).outbox).toEqual([]), { timeout: 3000 });
+    // A warm send into a thread that already holds a settled gate performs one
+    // state read, one HEAD, the SEND, one echo page and its mailbox ACK. A
+    // repeated read-path reconcile would add a second STATE_SYNC/HEAD before the
+    // SEND, and a repeated trailing sync a second STATE_SYNC/SYNC after it.
+    expect(requestLog).toEqual(["STATE_SYNC", "HEAD", "SEND", "SYNC", "ACK"]);
+    expect(runtime.getMessagingRuntimeSnapshot().threadSync).toMatchObject({ conversationId: CONV, mode: "ready" });
+    detach();
+  });
+  it("replays a send queued while offline once the connection returns", async () => {
+    runtime.setMessagingAccount(A);
+    await waitForState((state) => state.status === "ready" && !!state.currentProjections);
+    const detach = runtime.watchMessagingThread(A, CONV);
+    await waitForState((state) => state.threadSync?.mode === "ready");
+    online = false;
+    const result = await runtime.sendMessagingText(A, CONV, B, "queued offline");
+    const messageId = typeof result === "string" ? result : result.id;
+    // Durable immediately: the row is captured intent, not an attempted send.
+    expect((await runtime.readMessagingThreadState(A, CONV)).outbox.map((row) => row.messageId)).toEqual([messageId]);
+    await waitForState((state) => state.status === "offline");
+    expect(sent).toEqual([]);
+    online = true;
+    window.dispatchEvent(new Event("online"));
+    await vi.waitFor(async () =>
+      expect((await runtime.readMessagingThreadState(A, CONV)).outbox).toEqual([]), { timeout: 3000 });
+    expect(sent.map((fields) => fields.body)).toContain("queued offline");
+    expect((await runtime.readMessagingThreadState(A, CONV)).messages
+      .find((message) => message.id === messageId)?.server).toBeDefined();
+    detach();
+  });
   it("falls back to the account-wide fast pass for a conversation this device does not know", async () => {
     runtime.setMessagingAccount(A);
     await waitForState((state) => state.status === "ready" && !!state.currentProjections);

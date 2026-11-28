@@ -263,6 +263,29 @@ function invalidateAuthority(owner: Owner, options?: { keepDisplay?: boolean }) 
     threadSync: owner.activeThread ? { ...owner.activeThread, mode: "checking", missing: null } : null });
 }
 
+/**
+ * True when this pass's flush will meet the open thread before any SEND: the
+ * thread already holds a settled gate and a claimable row is queued for it.
+ * Flush reconciles that conversation itself, so repeating the state/HEAD read
+ * here would only re-publish the gate the reader already has. A thread with no
+ * settled gate, with only a leased or unclassified row, or with no queued row at
+ * all keeps the read-path reconcile.
+ */
+async function flushMeetsActiveThread(owner: Owner): Promise<boolean> {
+  const thread = owner.activeThread, gate = snapshot.threadSync;
+  if (!thread || !gate || gate.conversationId !== thread.conversationId || gate.mode !== "ready") return false;
+  const now = Date.now();
+  for (const row of await owner.handle.history.listOutbox()) {
+    // The rows claimNextOutgoing will actually dispatch: a live lease or an
+    // unclassified parent is durable quarantine, not work this pass performs.
+    if (row.status === "SENDING" && (row.leaseUntil ?? Infinity) > now) continue;
+    const message = await owner.handle.history.getMessage(row.messageId);
+    if (!message || message.server || !message.messageType) continue;
+    if (message.conversationId === thread.conversationId) return true;
+  }
+  return false;
+}
+
 async function reconcileActiveThread(owner: Owner) {
   const thread = owner.activeThread;
   if (!thread) return;
@@ -456,9 +479,19 @@ function requestRefresh(owner: Owner, mode: RefreshMode, conversationId?: string
       }
       // Open/reconnect compare the active thread before pending SEND admission.
       // A thread failure stays gated while unrelated mailbox recovery can proceed.
-      await reconcileActiveThread(owner); assertOwner(owner);
+      // A ready thread with a claimable row is met by flush's own reconcile before
+      // that SEND, so this pass does not repeat the same state/HEAD read for it.
+      const flushMeetsThread = await flushMeetsActiveThread(owner);
+      if (!flushMeetsThread) await reconcileActiveThread(owner);
+      assertOwner(owner);
       let sendFailed = false;
-      try { await owner.session.flush(); } catch { sendFailed = true; }
+      let flushSync: number | null = null;
+      try { flushSync = (await owner.session.flush()).sync; } catch { sendFailed = true; }
+      assertOwner(owner);
+      // A pass that left the open thread to flush still owns a failed pass's gate:
+      // meet it now, so a thread this pass could not progress is published as such
+      // exactly as the read-path reconcile would have before dispatch.
+      if (sendFailed && flushMeetsThread) await reconcileActiveThread(owner);
       assertOwner(owner);
       if (run === "full") {
         // Fetch is bounded to 100. Drain ordinary replay rather than treating
@@ -467,11 +500,17 @@ function requestRefresh(owner: Owner, mode: RefreshMode, conversationId?: string
           assertOwner(owner);
           if (await owner.session.sync(onRestore) < 100) break;
         }
-      } else if (await owner.session.sync(onRestore) > 0) {
-        // The fast path drains the newest authorized page (persist + ACK). A
-        // full page means more is waiting: ask for one bounded follow-up pass
-        // rather than looping here and holding the hint open. The follow-up
-        // stays scoped to the same conversation when this pass was.
+      } else if (flushSync === null) {
+        // Nothing was queued, so this pass still owes the mailbox read: it drains
+        // the newest authorized page (persist + ACK). A non-empty page means more
+        // is waiting: ask for one bounded follow-up pass rather than looping here
+        // and holding the hint open. The follow-up stays scoped to the same
+        // conversation when this pass was.
+        if (await owner.session.sync(onRestore) > 0) {
+          owner.pendingRefresh = mergeRefresh(owner.pendingRefresh, ticketFor("fast", target));
+        }
+      } else if (flushSync >= 100) {
+        // Flush's own read settled this page; only a full one leaves more waiting.
         owner.pendingRefresh = mergeRefresh(owner.pendingRefresh, ticketFor("fast", target));
       }
       // A committed incoming MEDIA parent is durable now, but the fast path

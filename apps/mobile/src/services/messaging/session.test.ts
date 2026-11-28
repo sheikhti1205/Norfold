@@ -191,4 +191,77 @@ describe("human messaging session delivery",()=>{
    {messageId:SECOND,status:"FAILED",attempts:3,expectedEpoch:EPOCH_A},
   ]);
  });
+ it("settles one state read for one send instead of repeating it at every step",async()=>{
+  const factory=new IDBFactory();
+  const history=await openWebMessagingHistory(scope,{indexedDB:factory}); handles.push(history);
+  const actions:string[]=[];
+  const OTHER="00000000-0000-4000-8000-00000000001f";
+  let statePages=1;
+  let envelope:MailboxEnvelope|null=null;
+  const rpc:MessagingRpc=async(input)=>{
+   actions.push(input.action);
+   // One authorized state event creates the durable cursor every later read
+   // would re-ACK; it targets another conversation so it cannot touch this send.
+   if(input.action==="STATE_SYNC") return statePages-->0?[{...scope,change:{kind:"CLEAR_FOR_ME",
+     eventId:"00000000-0000-4000-8000-00000000000d",sequence:1,conversationId:OTHER,peerId:B,throughSequence:1,
+     occurredAt:1}}]:[];
+   if(input.action==="HEAD") return emptyConversationHead(A,input.args.conversationId as string);
+   if(input.action==="CONVERSATION_SYNC") return emptyConversationRange(input.args.head);
+   if(input.action==="SEND") {
+    envelope={...scope,mailboxId:MAIL,event:{kind:"TEXT",eventId:ID,sequence:1,message}};
+    return ID;
+   }
+   if(input.action==="SYNC") return envelope?[envelope]:[];
+   if(input.action==="ACK") { envelope=null; return null; }
+   return null;
+  };
+  const session=createMessagingSession(scope,history,rpc);
+  await session.syncState();
+  expect(await history.getStateCursor()).toMatchObject({sequence:1});
+  await session.send(message);
+  actions.length=0;
+  await session.flush();
+  // The ACK the pass owed for its own applied state, then one state page, one
+  // HEAD, the SEND and the echo page. Four state reads would re-ACK the same
+  // cursor and re-fetch the same unchanged page for each of those steps.
+  expect(actions.slice(0,3)).toEqual(["STATE_ACK","STATE_SYNC","HEAD"]);
+  expect(actions.filter(action=>action==="STATE_ACK")).toHaveLength(1);
+  expect(actions.filter(action=>action==="STATE_SYNC")).toHaveLength(1);
+  expect(actions.filter(action=>action==="HEAD")).toHaveLength(1);
+  expect(actions.filter(action=>action==="SEND")).toHaveLength(1);
+  expect(actions.filter(action=>action==="SYNC")).toHaveLength(1);
+  expect(actions.indexOf("SEND")).toBeGreaterThan(actions.indexOf("HEAD"));
+  expect(actions.indexOf("SYNC")).toBeGreaterThan(actions.indexOf("SEND"));
+  expect(await history.listOutbox()).toEqual([]);
+ });
+ it("keeps a send durable while offline and delivers it on the next flush",async()=>{
+  const factory=new IDBFactory();
+  const history=await openWebMessagingHistory(scope,{indexedDB:factory}); handles.push(history);
+  let online=true;
+  let envelope:MailboxEnvelope|null=null;
+  const rpc:MessagingRpc=async(input)=>{
+   if(!online) throw new Error("Offline");
+   if(input.action==="HEAD") return emptyConversationHead(A,input.args.conversationId as string);
+   if(input.action==="CONVERSATION_SYNC") return emptyConversationRange(input.args.head);
+   if(input.action==="SEND") {
+    envelope={...scope,mailboxId:MAIL,event:{kind:"TEXT",eventId:ID,sequence:1,message}};
+    return ID;
+   }
+   if(input.action==="SYNC") return envelope?[envelope]:[];
+   if(input.action==="STATE_SYNC") return [];
+   if(input.action==="ACK") { envelope=null; return null; }
+   return null;
+  };
+  const session=createMessagingSession(scope,history,rpc);
+  await session.send(message);
+  online=false;
+  await expect(session.flush()).rejects.toThrow("Offline");
+  // No attempt was admitted, so the row is still exactly the captured intent.
+  expect(await history.listOutbox()).toEqual([expect.objectContaining({messageId:ID,status:"QUEUED"})]);
+  expect((await history.getMessage(ID))?.server).toBeUndefined();
+  online=true;
+  await session.flush();
+  expect(await history.listOutbox()).toEqual([]);
+  expect((await history.getMessage(ID))?.server).toMatchObject({eventId:ID});
+ });
 });
