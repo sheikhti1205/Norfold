@@ -3,17 +3,65 @@ begin;
 insert into public.users(id,username,email,phone,created_at,updated_at)
 select '00000000-0000-4000-9700-'||lpad(n::text,12,'0'),'mute_person_'||n,
  'mute_'||n||'@example.invalid','+100009700'||n,now(),now() from generate_series(1,3)n;
-insert into public.device_tokens(id,user_id,token,platform,created_at,updated_at) values
- ('00000000-0000-4000-9700-000000000021','00000000-0000-4000-9700-000000000002','synthetic-mute-device','android',now(),now());
-create function pg_temp.mute_view(p_device text) returns jsonb language sql as $$
- select value from jsonb_array_elements(public.findback_chat_exchange(auth.uid()::text,p_device,'VIEWS','{}')) value
- where value->>'conversationId'=current_setting('mute.conversation')
-$$;
-grant execute on function pg_temp.mute_view(text) to authenticated;
+-- Device authority: a wake resolves its token through an admitted installation,
+-- so the fixture seeds the rows enrollment creates (auth session, bound
+-- installation, generation, public key). Synthetic rows: no hosted Auth, JWT
+-- validation or revocation is claimed here.
+insert into auth.users(id,email) values
+ ('00000000-0000-4000-9700-000000000001','mute_1@example.invalid'),
+ ('00000000-0000-4000-9700-000000000002','mute_2@example.invalid'),
+ ('00000000-0000-4000-9700-000000000003','mute_3@example.invalid');
+insert into auth.sessions(id,user_id) values
+ ('00000000-0000-4000-9700-000000000041','00000000-0000-4000-9700-000000000001'),
+ ('00000000-0000-4000-9700-000000000042','00000000-0000-4000-9700-000000000002'),
+ ('00000000-0000-4000-9700-000000000043','00000000-0000-4000-9700-000000000002'),
+ ('00000000-0000-4000-9700-000000000044','00000000-0000-4000-9700-000000000003');
+insert into public.chat_devices(user_id,device_id,platform,public_key,auth_session_id,enrollment_generation) values
+ ('00000000-0000-4000-9700-000000000001','00000000-0000-4000-9700-000000000011','web','04'||repeat('ab',64),
+  '00000000-0000-4000-9700-000000000041','00000000-0000-4000-9700-000000000051'),
+ ('00000000-0000-4000-9700-000000000002','00000000-0000-4000-9700-000000000021','android','04'||repeat('ab',64),
+  '00000000-0000-4000-9700-000000000042','00000000-0000-4000-9700-000000000052'),
+ ('00000000-0000-4000-9700-000000000002','00000000-0000-4000-9700-000000000022','web','04'||repeat('ab',64),
+  '00000000-0000-4000-9700-000000000043','00000000-0000-4000-9700-000000000053'),
+ ('00000000-0000-4000-9700-000000000003','00000000-0000-4000-9700-000000000031','web','04'||repeat('ab',64),
+  '00000000-0000-4000-9700-000000000044','00000000-0000-4000-9700-000000000054');
+insert into public.chat_device_sessions(session_id,user_id,device_id,generation) values
+ ('00000000-0000-4000-9700-000000000041','00000000-0000-4000-9700-000000000001','00000000-0000-4000-9700-000000000011','00000000-0000-4000-9700-000000000051'),
+ ('00000000-0000-4000-9700-000000000042','00000000-0000-4000-9700-000000000002','00000000-0000-4000-9700-000000000021','00000000-0000-4000-9700-000000000052'),
+ ('00000000-0000-4000-9700-000000000043','00000000-0000-4000-9700-000000000002','00000000-0000-4000-9700-000000000022','00000000-0000-4000-9700-000000000053'),
+ ('00000000-0000-4000-9700-000000000044','00000000-0000-4000-9700-000000000003','00000000-0000-4000-9700-000000000031','00000000-0000-4000-9700-000000000054');
+-- The recipient's token is admitted: installation, session and generation here
+-- are the same triple the gate re-reads before it hands out an FCM payload.
+insert into public.device_tokens(id,user_id,token,platform,installation_id,auth_session_id,enrollment_generation,created_at,updated_at) values
+ ('00000000-0000-4000-9700-000000000021','00000000-0000-4000-9700-000000000002','synthetic-mute-device','android',
+  '00000000-0000-4000-9700-000000000021','00000000-0000-4000-9700-000000000042','00000000-0000-4000-9700-000000000052',now(),now());
+-- Admission resolves the JWT session against the installation it was bound to,
+-- so each call states which installation it acts for.
+create function pg_temp.mute_use(p_device text) returns text language plpgsql as $$
+declare s text;
+begin
+ s:=case p_device
+  when '00000000-0000-4000-9700-000000000011' then '00000000-0000-4000-9700-000000000041'
+  when '00000000-0000-4000-9700-000000000021' then '00000000-0000-4000-9700-000000000042'
+  when '00000000-0000-4000-9700-000000000022' then '00000000-0000-4000-9700-000000000043'
+  when '00000000-0000-4000-9700-000000000031' then '00000000-0000-4000-9700-000000000044'
+ end;
+ perform set_config('request.jwt.claims',jsonb_build_object('session_id',s)::text,true);
+ return s;
+end $$;
+create function pg_temp.mute_view(p_device text) returns jsonb language plpgsql as $$
+begin
+ perform pg_temp.mute_use(p_device);
+ return (select value from jsonb_array_elements(public.findback_chat_exchange(auth.uid()::text,p_device,'VIEWS','{}')) value
+  where value->>'conversationId'=current_setting('mute.conversation'));
+end $$;
+grant execute on function pg_temp.mute_use(text),pg_temp.mute_view(text) to authenticated;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-9700-000000000002',true);
+select pg_temp.mute_use('00000000-0000-4000-9700-000000000021');
 select public.findback_chat_exchange(auth.uid()::text,'00000000-0000-4000-9700-000000000021','REGISTER','{"platform":"android"}');
 select set_config('request.jwt.claim.sub','00000000-0000-4000-9700-000000000001',true);
+select pg_temp.mute_use('00000000-0000-4000-9700-000000000011');
 select public.findback_chat_exchange(auth.uid()::text,'00000000-0000-4000-9700-000000000011','REGISTER','{"platform":"web"}');
 select set_config('mute.conversation',public.findback_chat_exchange(auth.uid()::text,'00000000-0000-4000-9700-000000000011','CREATE','{"otherId":"00000000-0000-4000-9700-000000000002"}')#>>'{}',true);
 -- CREATE deliberately does not expose a member to the peer. First contact does.
@@ -23,7 +71,9 @@ select public.findback_chat_exchange(auth.uid()::text,'00000000-0000-4000-9700-0
  'expectedEpoch',pg_temp.mute_view('00000000-0000-4000-9700-000000000011')->>'epoch'));
 select set_config('mute.a_revision',pg_temp.mute_view('00000000-0000-4000-9700-000000000011')->>'revision',true);
 select set_config('request.jwt.claim.sub','00000000-0000-4000-9700-000000000002',true);
+select pg_temp.mute_use('00000000-0000-4000-9700-000000000021');
 select public.findback_chat_exchange(auth.uid()::text,'00000000-0000-4000-9700-000000000021','REGISTER','{"platform":"android"}');
+select pg_temp.mute_use('00000000-0000-4000-9700-000000000022');
 select public.findback_chat_exchange(auth.uid()::text,'00000000-0000-4000-9700-000000000022','REGISTER','{"platform":"web"}');
 do $$ declare v jsonb:=pg_temp.mute_view('00000000-0000-4000-9700-000000000021'); begin
  assert v->'ownMuted'='false'::jsonb,'new member exposes own mute default, not peer state';
@@ -33,12 +83,14 @@ do $$ declare v jsonb:=pg_temp.mute_view('00000000-0000-4000-9700-000000000021')
  assert v->'ownMuted'='true'::jsonb and (v->>'revision')::bigint=current_setting('mute.revision')::bigint+1,'other own installation sees changed member revision';
  assert v->>'epoch'=current_setting('mute.epoch') and v->>'mode'='REQUEST','mute is not a relationship boundary';
  assert not(v?'peerMuted'),'no peer mute disclosure';
+ perform pg_temp.mute_use('00000000-0000-4000-9700-000000000021');
  perform public.findback_chat_set_muted(auth.uid()::text,'00000000-0000-4000-9700-000000000021',current_setting('mute.conversation'),true);
  assert pg_temp.mute_view('00000000-0000-4000-9700-000000000022')->>'revision'=v->>'revision','idempotent mute does not create a new revision';
  begin
   perform public.findback_chat_set_muted(auth.uid()::text,'00000000-0000-4000-9700-000000000099',current_setting('mute.conversation'),false);
   raise exception 'unknown device accepted';
  exception when insufficient_privilege then null; end;
+ perform pg_temp.mute_use('00000000-0000-4000-9700-000000000021');
  begin
   perform public.findback_chat_set_muted('00000000-0000-4000-9700-000000000001','00000000-0000-4000-9700-000000000021',current_setting('mute.conversation'),false);
   raise exception 'foreign account accepted';
@@ -49,6 +101,7 @@ do $$ declare v jsonb:=pg_temp.mute_view('00000000-0000-4000-9700-000000000021')
  exception when invalid_parameter_value then null; end;
 end $$;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-9700-000000000003',true);
+select pg_temp.mute_use('00000000-0000-4000-9700-000000000031');
 select public.findback_chat_exchange(auth.uid()::text,'00000000-0000-4000-9700-000000000031','REGISTER','{"platform":"web"}');
 do $$ begin
  begin
@@ -75,6 +128,7 @@ end $$;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-9700-000000000002',true);
 do $$ begin
+ perform pg_temp.mute_use('00000000-0000-4000-9700-000000000022');
  assert not public.findback_chat_set_muted(auth.uid()::text,'00000000-0000-4000-9700-000000000022',current_setting('mute.conversation'),false),'unmute confirms false';
 end $$;
 reset role;
@@ -82,9 +136,11 @@ do $$ begin
  assert public.findback_chat_external_wake_delivery(current_setting('mute.wake_id'),'00000000-0000-4000-9700-000000000021',current_setting('mute.claim'))->>'kind'='CHAT_REQUEST','unmute restores eligible request nudge';
 end $$;
 set local role authenticated;
+select pg_temp.mute_use('00000000-0000-4000-9700-000000000021');
 select public.findback_chat_exchange(auth.uid()::text,'00000000-0000-4000-9700-000000000021','ACCEPT',jsonb_build_object('conversationId',current_setting('mute.conversation'),'expectedEpoch',pg_temp.mute_view('00000000-0000-4000-9700-000000000021')->>'epoch'));
 select public.findback_chat_set_muted(auth.uid()::text,'00000000-0000-4000-9700-000000000021',current_setting('mute.conversation'),true);
 select set_config('request.jwt.claim.sub','00000000-0000-4000-9700-000000000001',true);
+select pg_temp.mute_use('00000000-0000-4000-9700-000000000011');
 select public.findback_chat_exchange(auth.uid()::text,'00000000-0000-4000-9700-000000000011','SEND',jsonb_build_object(
  'conversationId',current_setting('mute.conversation'),'recipientId','00000000-0000-4000-9700-000000000002',
  'messageId','00000000-0000-4000-9700-000000000102','body','Connected delivery still works','messageType','TEXT',
@@ -100,6 +156,7 @@ end $$;
 -- Preference survives relationship changes; it is not relationship authority.
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-9700-000000000002',true);
+select pg_temp.mute_use('00000000-0000-4000-9700-000000000021');
 select public.findback_chat_exchange(auth.uid()::text,'00000000-0000-4000-9700-000000000021','END',jsonb_build_object('conversationId',current_setting('mute.conversation')));
 do $$ begin
  assert pg_temp.mute_view('00000000-0000-4000-9700-000000000022')->'ownMuted'='true'::jsonb,'own mute survives end without creating new preference owner';
@@ -108,6 +165,7 @@ reset role;
 insert into public.account_deletion_fences(user_id) values('00000000-0000-4000-9700-000000000002');
 set local role authenticated;
 do $$ begin
+ perform pg_temp.mute_use('00000000-0000-4000-9700-000000000021');
  begin
   perform public.findback_chat_set_muted(auth.uid()::text,'00000000-0000-4000-9700-000000000021',current_setting('mute.conversation'),false);
   raise exception 'deleting account accepted';

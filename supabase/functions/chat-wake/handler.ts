@@ -49,7 +49,14 @@ type Database = {
         Returns: unknown;
       };
       findback_finish_chat_external_wake: {
-        Args: { p_wake_id: string; p_device_id: string; p_claim_token: string; p_result: string };
+        Args: {
+          p_wake_id: string;
+          p_device_id: string;
+          p_claim_token: string;
+          p_result: string;
+          p_status?: number | null;
+          p_error?: string | null;
+        };
         Returns: boolean;
       };
     };

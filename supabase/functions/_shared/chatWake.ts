@@ -20,6 +20,9 @@ const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 export const CHAT_CLAIM_CHUNK = 1;
 export const CHAT_MAX_CLAIMS_PER_INVOCATION = 100;
 
+/** Longest FCM answer text kept as a diagnostic (the column is bounded too). */
+const DIAGNOSTIC_LIMIT = 240;
+
 export interface ChatClaim {
   wake_id: string;
   device_id: string;
@@ -40,6 +43,8 @@ export interface FcmSendResult {
   ok: boolean;
   prune: boolean;
   status: number;
+  /** FCM's error text on failure; undefined when the send succeeded. */
+  body?: string;
 }
 
 /** Structural view of the service-role client this module needs. */
@@ -143,7 +148,26 @@ export async function sendFcm(
   });
   if (response.ok) return { ok: true, prune: false, status: response.status };
   const body = await response.text();
-  return { ok: false, prune: shouldPruneToken(response.status, body), status: response.status };
+  return { ok: false, prune: shouldPruneToken(response.status, body), status: response.status, body };
+}
+
+/**
+ * FCM's error text as it may be stored: whitespace-collapsed, bounded, and with
+ * the device token removed in case the service ever echoes it back. Null when
+ * there is no usable body.
+ */
+export function fcmErrorDetail(body: string | undefined, token?: string): string | null {
+  const collapsed = body?.replace(/\s+/g, " ").trim();
+  if (!collapsed) return null;
+  const safe = token && collapsed.includes(token) ? collapsed.split(token).join("[token]") : collapsed;
+  return safe.slice(0, DIAGNOSTIC_LIMIT);
+}
+
+/** `FCM <status> <detail>` for a lane that stores one diagnostic string. */
+export function describeFcmFailure(result: FcmSendResult, token?: string): string {
+  const detail = fcmErrorDetail(result.body, token);
+  const head = `FCM ${result.status}`;
+  return detail ? `${head} ${detail}`.slice(0, DIAGNOSTIC_LIMIT) : head;
 }
 
 /** Data-only, content-free; a stable wake ID supports collapse/native dedupe. */
@@ -156,14 +180,16 @@ export function buildChatFcmMessage(delivery: ChatWakeDelivery): Record<string, 
       conversationId: delivery.conversationId,
       notificationId: delivery.wakeId,
     },
-    android: { priority: "normal", ttl: "86400s", collapse_key: delivery.wakeId },
+    // High priority: a chat wake must not wait for a Doze maintenance window,
+    // which is exactly what "normal" permits.
+    android: { priority: "high", ttl: "86400s", collapse_key: delivery.wakeId },
   };
 }
 
 /**
- * One claimed device: re-read eligibility, send once, write the disposition.
- * Any failure becomes RETRY so the row is reclaimed after its lease, never a
- * silent loss. Returns the disposition it wrote.
+ * One claimed device: re-read eligibility, send once, write the disposition
+ * together with its cause. Any failure becomes RETRY so the row is reclaimed
+ * after its lease, never a silent loss. Returns the disposition it wrote.
  */
 export async function deliverClaimedChatWake(
   admin: ChatWakeAdmin,
@@ -174,13 +200,22 @@ export async function deliverClaimedChatWake(
 ): Promise<ChatDisposition> {
   let disposition: ChatDisposition = "RETRY";
   let delivery: ChatWakeDelivery | null = null;
+  // Persisted with the disposition so a non-SENT row explains itself: FCM's
+  // status when there was an answer, otherwise a short reason. Never the device
+  // token, and never the access token.
+  let fcmStatus: number | null = null;
+  let lastError: string | null = null;
+  const fail = (reason: string): never => {
+    lastError = reason;
+    throw new Error(reason);
+  };
   try {
     const result = await admin.rpc("findback_chat_external_wake_delivery", {
       p_wake_id: claim.wake_id,
       p_device_id: claim.device_id,
       p_claim_token: claim.claim_token,
     });
-    if (result.error) throw new Error("Chat wake eligibility unavailable");
+    if (result.error) fail("eligibility");
     if (result.data === null) {
       disposition = "SUPPRESSED";
     } else {
@@ -192,27 +227,32 @@ export async function deliverClaimedChatWake(
         typeof value.token !== "string" ||
         (value.kind !== "CHAT_REQUEST" && value.kind !== "CHAT_CONNECTED")
       ) {
-        throw new Error("Invalid chat wake delivery");
+        fail("malformed");
       }
       delivery = value as unknown as ChatWakeDelivery;
+      const deviceToken = delivery.token;
       if (!tokenCache?.token) {
-        const token = await getChatAccessToken(JSON.parse(senderJson), AbortSignal.timeout(30_000));
-        if (tokenCache) tokenCache.token = token;
-        else tokenCache = { token };
+        try {
+          const token = await getChatAccessToken(JSON.parse(senderJson), AbortSignal.timeout(30_000));
+          if (tokenCache) tokenCache.token = token;
+          else tokenCache = { token };
+        } catch {
+          fail("oauth");
+        }
       }
       const accessToken = tokenCache?.token;
-      if (!accessToken) throw new Error("Chat wake token unavailable");
+      if (!accessToken) fail("oauth");
       // Recheck after OAuth, immediately before the device send.
       const recheck = await admin.rpc("findback_chat_external_wake_delivery", {
         p_wake_id: claim.wake_id,
         p_device_id: claim.device_id,
         p_claim_token: claim.claim_token,
       });
-      if (recheck.error) throw new Error("Chat wake eligibility unavailable");
+      if (recheck.error) fail("eligibility");
       if (recheck.data === null) {
         disposition = "SUPPRESSED";
       } else if (JSON.stringify(recheck.data) !== JSON.stringify(value)) {
-        throw new Error("Chat wake changed");
+        fail("eligibility");
       } else {
         const sent = await sendFcm(
           projectId,
@@ -220,7 +260,9 @@ export async function deliverClaimedChatWake(
           buildChatFcmMessage(delivery),
           AbortSignal.timeout(30_000),
         );
+        fcmStatus = sent.status;
         disposition = sent.ok ? "SENT" : sent.prune ? "INVALID" : "RETRY";
+        if (!sent.ok) lastError = fcmErrorDetail(sent.body, deviceToken);
       }
     }
   } catch {
@@ -228,12 +270,16 @@ export async function deliverClaimedChatWake(
     // the row reclaimable after the 2-minute lease and bounded by the SQL
     // attempt ceiling (5), so it can never retry forever.
     disposition = "RETRY";
+    if (!lastError) lastError = "network";
   }
   const finish = await admin.rpc("findback_finish_chat_external_wake", {
     p_wake_id: claim.wake_id,
     p_device_id: claim.device_id,
     p_claim_token: claim.claim_token,
     p_result: disposition,
+    // A SENT row proves the send worked; the SQL clears both columns on SENT.
+    p_status: disposition === "SENT" ? null : fcmStatus,
+    p_error: disposition === "SENT" ? null : lastError,
   });
   if (finish.error || finish.data !== true) throw new Error("Chat wake disposition unavailable");
   if (disposition === "INVALID" && delivery) {

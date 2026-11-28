@@ -20,6 +20,11 @@ import {
   type Delivery,
   type DispatchNotification,
 } from "./index.ts";
+import {
+  buildChatFcmMessage,
+  deliverClaimedChatWake,
+  type ChatWakeAdmin,
+} from "../_shared/chatWake.ts";
 
 const notification = (overrides: Partial<DispatchNotification> = {}): DispatchNotification => ({
   id: "n1",
@@ -178,6 +183,91 @@ Deno.test("shouldPruneToken only prunes permanently invalid tokens", () => {
   assert(!shouldPruneToken(500, "UNREGISTERED"));
   assert(!shouldPruneToken(429, "quota"));
   assert(!shouldPruneToken(400, "some other invalid request"));
+});
+
+Deno.test("buildChatFcmMessage wakes a device at high priority with the same four data keys", () => {
+  const message = buildChatFcmMessage({
+    wakeId: "w1",
+    recipientId: "u1",
+    conversationId: "c1",
+    kind: "CHAT_CONNECTED",
+    token: "test-device",
+  }) as {
+    token: string;
+    data: Record<string, string>;
+    android: { priority: string; ttl: string; collapse_key: string };
+  };
+  assertEquals(message.token, "test-device");
+  assertEquals(message.data, {
+    type: "CHAT_CONNECTED",
+    recipientId: "u1",
+    conversationId: "c1",
+    notificationId: "w1",
+  });
+  // "normal" lets Doze defer a chat wake to a maintenance window: the one
+  // known payload defect behind a queued wake that never arrives.
+  assertEquals(message.android.priority, "high");
+  assertEquals(message.android.ttl, "86400s");
+  assertEquals(message.android.collapse_key, "w1");
+});
+
+Deno.test("a failed chat wake stores FCM's status and answer instead of a silent RETRY", async () => {
+  const deliveryRow = {
+    wakeId: "w1",
+    recipientId: "u1",
+    conversationId: "c1",
+    kind: "CHAT_CONNECTED",
+    token: "test-device",
+  };
+  const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+  const admin: ChatWakeAdmin = {
+    rpc(name, args) {
+      calls.push({ name, args: args ?? {} });
+      if (name === "findback_chat_external_wake_delivery") {
+        return Promise.resolve({ data: deliveryRow, error: null });
+      }
+      if (name === "findback_finish_chat_external_wake") {
+        return Promise.resolve({ data: true, error: null });
+      }
+      return Promise.resolve({ data: null, error: null });
+    },
+    from() {
+      // Only an INVALID disposition may prune a token; RETRY never does.
+      throw new Error("unexpected table access");
+    },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(new Request(input, init).url);
+    assertEquals(url.hostname, "fcm.googleapis.com");
+    // A real Google body carries newlines and runs of spaces.
+    return new Response(
+      '{"error":{"code":500,"message":"Internal  error\nencountered."}}',
+      { status: 500 },
+    );
+  };
+  let disposition: string;
+  try {
+    disposition = await deliverClaimedChatWake(
+      admin,
+      "test-project",
+      "{}",
+      { wake_id: "w1", device_id: "d1", claim_token: "claim" },
+      // Pre-minted so the test never performs an OAuth exchange.
+      { token: "test-only-access" },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assertEquals(disposition, "RETRY");
+  const finish = calls.find((call) => call.name === "findback_finish_chat_external_wake");
+  assert(finish, "the disposition is written back");
+  assertEquals(finish.args.p_result, "RETRY");
+  assertEquals(finish.args.p_status, 500);
+  assertEquals(
+    finish.args.p_error,
+    '{"error":{"code":500,"message":"Internal error encountered."}}',
+  );
 });
 
 Deno.test("planDispatchOutcomes retires delivered, device-less and terminal-failure rows", () => {

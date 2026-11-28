@@ -27,6 +27,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { generateReplyToken, hashToken, REPLY_TOKEN_TTL_MS } from "../_shared/replyTokens.ts";
 import { runDispatchLanes, type LaneResponse } from "../_shared/dispatchLanes.ts";
 import {
+  describeFcmFailure,
   drainChatWakes,
   getChatAccessToken,
   sendFcm,
@@ -484,10 +485,17 @@ async function dispatchReportLane(
   let failed = 0;
   const pruned: string[] = [];
   const outcomes: SendOutcome[] = [];
+  // Why each notification is being retried, so the row keeps its own cause
+  // instead of one constant string covering every failure in the batch.
+  const failureDetails = new Map<string, string>();
+  const noteFailure = (id: string, detail: string) => {
+    if (!failureDetails.has(id)) failureDetails.set(id, detail);
+  };
   for (const delivery of deliveries) {
     if (suppressed.has(delivery.notificationId)) continue;
     if (deferred.has(delivery.notificationId)) {
       outcomes.push({ notificationId: delivery.notificationId, ok: false, prune: false });
+      noteFailure(delivery.notificationId, "eligibility");
       continue;
     }
     // Eligibility can change while OAuth or token writes are in flight. Check
@@ -505,6 +513,7 @@ async function dispatchReportLane(
     } catch {
       deferred.add(delivery.notificationId);
       outcomes.push({ notificationId: delivery.notificationId, ok: false, prune: false });
+      noteFailure(delivery.notificationId, "eligibility");
       continue;
     }
     const result = await sendFcm(
@@ -517,6 +526,7 @@ async function dispatchReportLane(
     else {
       failed += 1;
       if (result.prune) pruned.push(delivery.token);
+      else noteFailure(delivery.notificationId, describeFcmFailure(result, delivery.token));
     }
   }
 
@@ -531,12 +541,23 @@ async function dispatchReportLane(
   }
   let retired = 0;
   if (retry.length > 0) {
-    const { data } = await admin.rpc("findback_record_push_failure", {
-      p_ids: retry,
-      p_error: "temporary FCM failure",
-      p_max_attempts: MAX_PUSH_ATTEMPTS,
-    });
-    retired = Number(data ?? 0);
+    // One call per distinct cause: the batch RPC stores a single `p_error`, and
+    // the groups are disjoint, so every id still advances exactly one attempt.
+    const groups = new Map<string, string[]>();
+    for (const id of retry) {
+      const detail = failureDetails.get(id) ?? "temporary FCM failure";
+      const group = groups.get(detail);
+      if (group) group.push(id);
+      else groups.set(detail, [id]);
+    }
+    for (const [detail, ids] of groups) {
+      const { data } = await admin.rpc("findback_record_push_failure", {
+        p_ids: ids,
+        p_error: detail,
+        p_max_attempts: MAX_PUSH_ATTEMPTS,
+      });
+      retired += Number(data ?? 0);
+    }
   }
 
   if (pruned.length > 0) {
