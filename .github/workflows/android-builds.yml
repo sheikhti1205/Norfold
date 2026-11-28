@@ -1,10 +1,11 @@
 # Candidate Android builds after successful main CI, plus manual dispatch.
 #
 # This workflow BUILDS signed candidate APKs and uploads them as Actions
-# artifacts. It NEVER creates a GitHub Release, uploads release metadata, edits
-# a release or pushes a tag: numbered releases are produced by release.yml from
-# a v<app version> tag. Keep this path build-only so the two workflows never
-# compete over the same release.
+# artifacts. A manual dispatch may also request a Play-uploadable AAB (input
+# `aab`); it is built and uploaded, never published. This workflow NEVER creates
+# a GitHub Release, uploads release metadata, edits a release or pushes a tag:
+# numbered releases are produced by release.yml from a v<app version> tag. Keep
+# this path build-only so the two workflows never compete over the same release.
 #
 # One switch controls what this workflow does: repo variable
 # ANDROID_BUILD_MODE = none | build (unset means build).
@@ -13,7 +14,9 @@
 #           create or touch a release
 # The legacy value `publish` is still accepted but is treated as `build` with a
 # notice: it no longer publishes, because release.yml owns numbered releases.
-# A manual run may override the mode for that run alone.
+# A manual run may override the mode for that run alone. Its optional `aab`
+# input adds `:app:bundleRelease` to the same signed Gradle invocation; every
+# automatic workflow_run is APK-only.
 
 name: Android builds
 
@@ -26,6 +29,10 @@ on:
         type: choice
         options: [auto, none, build, publish]
         default: auto
+      aab:
+        description: "Manual build-only: also build a Play-uploadable AAB (never published)"
+        type: boolean
+        default: false
   workflow_run:
     workflows: [CI]
     types: [completed]
@@ -197,11 +204,37 @@ jobs:
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/findback-release.jks
-      - name: Signed assembleRelease (per-ABI APKs)
+      - name: Resolve AAB request (manual dispatch only)
+        # `aab` is a manual, build-only convenience: it is honoured only on a
+        # workflow_dispatch run. A workflow_run can never set BUILD_AAB, and the
+        # resulting AAB is uploaded as an artifact only — never published.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_AAB: ${{ inputs.aab }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$INPUT_AAB" = "true" ]; then
+            echo "BUILD_AAB=true" >> "$GITHUB_ENV"
+            echo "AAB requested: bundleRelease runs in the same signed Gradle invocation."
+          else
+            echo "BUILD_AAB=false" >> "$GITHUB_ENV"
+            echo "AAB not requested: APK-only build."
+          fi
+      - name: Signed release build (per-ABI APKs; AAB when requested)
         # VERSION_CODE_OVERRIDE arrives via $GITHUB_ENV from the resolve step;
         # build.gradle reads it from the environment (System.getenv), never a
-        # -P property, so no explicit pass is needed here.
-        run: cd apps/mobile/android && ./gradlew --max-workers=2 :app:assembleRelease
+        # -P property, so no explicit pass is needed here. BUILD_AAB is set only
+        # for a manual dispatch that asked for the AAB, so the default and every
+        # workflow_run build exactly as before: assembleRelease alone.
+        run: |
+          set -euo pipefail
+          cd apps/mobile/android
+          TASKS=":app:assembleRelease"
+          if [ "${BUILD_AAB:-false}" = "true" ]; then
+            # Both tasks in ONE invocation so splits/signing stay identical.
+            TASKS="$TASKS :app:bundleRelease"
+          fi
+          ./gradlew --max-workers=2 $TASKS
         env:
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/findback-release.jks
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -215,17 +248,141 @@ jobs:
         # The expected versionCode is the same resolver-derived value passed to
         # Gradle above; VERSION_CODE_OVERRIDE is in the environment from the
         # resolve step. --expected-version-code wins over the env fallback.
+        # When an AAB was built it is verified against the same pinned
+        # certificate; the APK-only invocation is otherwise unchanged.
         run: |
+          set -euo pipefail
           export EXPECTED_VERSION_NAME="$(node -p "require('./apps/mobile/package.json').version")"
-          bash scripts/verify-release-apks.sh \
-            --apk-dir apps/mobile/android/app/build/outputs/apk/release \
-            --expected-version-code "$VERSION_CODE_OVERRIDE" \
-            --facts-out "$RUNNER_TEMP/apk-facts.json"
+          if [ "${BUILD_AAB:-false}" = "true" ]; then
+            bash scripts/verify-release-apks.sh \
+              --apk-dir apps/mobile/android/app/build/outputs/apk/release \
+              --expected-version-code "$VERSION_CODE_OVERRIDE" \
+              --aab apps/mobile/android/app/build/outputs/bundle/release/app-release.aab \
+              --facts-out "$RUNNER_TEMP/apk-facts.json"
+          else
+            bash scripts/verify-release-apks.sh \
+              --apk-dir apps/mobile/android/app/build/outputs/apk/release \
+              --expected-version-code "$VERSION_CODE_OVERRIDE" \
+              --facts-out "$RUNNER_TEMP/apk-facts.json"
+          fi
         env:
           ANDROID_SIGNING_CERT_SHA256: ${{ secrets.ANDROID_SIGNING_CERT_SHA256 }}
           EXPECTED_APP_ID: com.findback.app
 
-      - name: Stage APKs under candidate filenames
+      - name: Audit 16 KiB alignment of 64-bit native libraries (informational)
+        # Read-only evidence for Play's future 16 KiB page requirement: prints
+        # PASS/FAIL per 64-bit .so. It NEVER fails this job (the requirement is
+        # not enforced yet) and publishes nothing.
+        if: always()
+        continue-on-error: true
+        run: |
+          # Deliberately non-fatal: no `set -e`, and an explicit `exit 0`.
+          set +eu
+
+          APK="apps/mobile/android/app/build/outputs/apk/release/app-universal-release.apk"
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          READELF=""
+          if [ -n "$SDK_ROOT" ]; then
+            for CAND in \
+              "$SDK_ROOT/ndk/29.0.13113456/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" \
+              "$(find "$SDK_ROOT/ndk" -maxdepth 8 -path '*/toolchains/llvm/prebuilt/*/bin/llvm-readelf' -type f 2>/dev/null | sort | tail -1)"; do
+              if [ -n "$CAND" ] && [ -x "$CAND" ]; then READELF="$CAND"; break; fi
+            done
+          fi
+
+          if [ -z "$READELF" ]; then
+            echo "16KB-CHECK: cannot resolve the NDK llvm-readelf (ANDROID_HOME=${SDK_ROOT:-<unset>}); 16 KiB alignment is UNVERIFIED, not silently skipped."
+            exit 0
+          fi
+          echo "16KB-CHECK: using $READELF"
+
+          if [ ! -f "$APK" ]; then
+            echo "16KB-CHECK: universal APK not found at $APK; nothing to audit."
+            exit 0
+          fi
+
+          TMP="$(mktemp -d)"
+          trap 'rm -rf "$TMP"' EXIT
+
+          # 64-bit ABIs only: arm64-v8a and x86_64.
+          mapfile -t ENTRIES < <(unzip -Z1 "$APK" | grep -E '^lib/(arm64-v8a|x86_64)/[^/]+\.so$' | sort)
+          if [ "${#ENTRIES[@]}" -eq 0 ]; then
+            echo "16KB-CHECK: no 64-bit .so entries found in $(basename "$APK"); nothing to audit."
+            exit 0
+          fi
+          echo "16KB-CHECK: auditing ${#ENTRIES[@]} 64-bit libraries from $(basename "$APK")"
+
+          TOTAL=0
+          PASSED=0
+          FAILED=0
+          for ENTRY in "${ENTRIES[@]}"; do
+            ABI="$(printf '%s' "$ENTRY" | cut -d/ -f2)"
+            BASE="$(basename "$ENTRY")"
+            DEST="$TMP/${ABI}__${BASE}"
+            unzip -p "$APK" "$ENTRY" > "$DEST" 2>/dev/null
+            TOTAL=$((TOTAL + 1))
+            if [ ! -s "$DEST" ]; then
+              FAILED=$((FAILED + 1))
+              echo "16KB-CHECK FAIL ${ABI}/${BASE}: could not extract the library from the APK"
+              continue
+            fi
+
+            HEADER="$("$READELF" -lW "$DEST" 2>/dev/null)"
+            if [ -z "$HEADER" ]; then
+              FAILED=$((FAILED + 1))
+              echo "16KB-CHECK FAIL ${ABI}/${BASE}: llvm-readelf produced no program headers"
+              continue
+            fi
+
+            LOADS=0
+            BAD_LOADS=0
+            ALIGN_LIST=""
+            RELRO_OK="absent"
+            RELRO_DESC="GNU_RELRO absent"
+            INPH=0
+            while IFS= read -r LINE; do
+              case "$LINE" in
+                "Program Headers:"*) INPH=1; continue ;;
+              esac
+              [ "$INPH" -eq 1 ] || continue
+              if [ -z "$LINE" ]; then INPH=0; continue; fi
+              set -- $LINE
+              case "$1" in
+                LOAD)
+                  LOADS=$((LOADS + 1))
+                  ALIGN="${@: -1}"
+                  ALIGN_LIST="${ALIGN_LIST:+$ALIGN_LIST,}$ALIGN"
+                  if ! (( ALIGN >= 0x4000 )); then BAD_LOADS=$((BAD_LOADS + 1)); fi
+                  ;;
+                GNU_RELRO)
+                  RELRO_END=$(( $3 + $6 ))
+                  if [ $(( RELRO_END % 16384 )) -eq 0 ]; then
+                    RELRO_OK="yes"
+                    RELRO_DESC="GNU_RELRO end $(printf '0x%x' "$RELRO_END") 16 KiB-aligned"
+                  else
+                    RELRO_OK="no"
+                    RELRO_DESC="GNU_RELRO end $(printf '0x%x' "$RELRO_END") NOT 16 KiB-aligned"
+                  fi
+                  ;;
+              esac
+            done <<< "$HEADER"
+
+            if [ "$LOADS" -eq 0 ]; then
+              FAILED=$((FAILED + 1))
+              echo "16KB-CHECK FAIL ${ABI}/${BASE}: no PT_LOAD program headers parsed"
+            elif [ "$BAD_LOADS" -eq 0 ] && { [ "$RELRO_OK" = "yes" ] || [ "$RELRO_OK" = "absent" ]; }; then
+              PASSED=$((PASSED + 1))
+              echo "16KB-CHECK PASS ${ABI}/${BASE}: PT_LOAD aligns [${ALIGN_LIST}] (all >= 16 KiB); ${RELRO_DESC}"
+            else
+              FAILED=$((FAILED + 1))
+              echo "16KB-CHECK FAIL ${ABI}/${BASE}: PT_LOAD aligns [${ALIGN_LIST}] (${BAD_LOADS}/${LOADS} below 16 KiB); ${RELRO_DESC}"
+            fi
+          done
+
+          echo "16KB-CHECK summary: ${PASSED}/${TOTAL} PASS, ${FAILED}/${TOTAL} FAIL (informational only; does not fail the job)"
+          exit 0
+
+      - name: Stage artifacts under candidate filenames
         run: |
           set -euo pipefail
           SHA12="${BUILD_SHA:0:12}"
@@ -242,6 +399,10 @@ jobs:
             esac
             cp "$APK" "release-stage/Norfold-${SHA12}-${ABI}.apk"
           done
+          if [ "${BUILD_AAB:-false}" = "true" ]; then
+            cp apps/mobile/android/app/build/outputs/bundle/release/app-release.aab \
+              "release-stage/Norfold-${SHA12}.aab"
+          fi
           ls -l release-stage/
 
       - name: Preserve the signed build as an artifact
@@ -249,6 +410,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: norfold-chat-candidate-${{ github.sha }}
-          path: release-stage/Norfold-*.apk
+          path: |
+            release-stage/Norfold-*.apk
+            release-stage/Norfold-*.aab
           if-no-files-found: error
           retention-days: 7
