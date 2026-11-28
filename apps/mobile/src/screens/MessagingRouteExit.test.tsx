@@ -175,6 +175,18 @@ async function openThread(options: { inlineRail?: boolean } = {}) {
   await waitFor(() => expect(typeof native.back).toBe("function"));
 }
 
+/** The attachment shortcuts are sticky: expand only when the disclosure is folded. */
+function openAttachments() {
+  const disclosure = screen.getByRole("button", { name: "Add attachment" });
+  if (disclosure.getAttribute("aria-expanded") !== "true") fireEvent.click(disclosure);
+  return screen.getByRole("group", { name: "Add attachment" });
+}
+
+/** Voice is one of the tray's shortcuts now, not a standalone microphone. */
+function startVoiceCapture() {
+  fireEvent.click(within(openAttachments()).getByRole("button", { name: "Voice note" }));
+}
+
 /** The press Capacitor delivers for the Android Back button/gesture. */
 function pressBack() {
   act(() => native.back!());
@@ -349,8 +361,8 @@ it("keeps the microphone open until an explicit leave releases it", async () => 
   vi.stubGlobal("MediaRecorder", Recorder);
 
   await openThread();
-  // Voice is its own control beside the expression picker, not a menu row.
-  fireEvent.click(screen.getByRole("button", { name: "Voice message" }));
+  // Voice is the tray's own shortcut now, not a control beside the picker.
+  startVoiceCapture();
   await screen.findByRole("button", { name: "Pause recording" });
   expect(track.stop).not.toHaveBeenCalled();
 
@@ -374,7 +386,7 @@ it("keeps the microphone open until an explicit leave releases it", async () => 
 it("sends a live recording that was never paused, once, with its real duration", async () => {
   const capture = stubVoiceCapture();
   await openThread();
-  fireEvent.click(screen.getByRole("button", { name: "Voice message" }));
+  startVoiceCapture();
   await screen.findByRole("button", { name: "Pause recording" });
   // Two and a half seconds of take end at the Send press, with no pause first.
   capture.advance(2_500);
@@ -394,7 +406,7 @@ it("leaves at once once the voice send is in flight, keeping the draft", async (
   const capture = stubVoiceCapture();
   await openThread();
   fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Unsent words" } });
-  fireEvent.click(screen.getByRole("button", { name: "Voice message" }));
+  startVoiceCapture();
   await screen.findByRole("button", { name: "Pause recording" });
   capture.advance(1_500);
   // The service holds the note: it is in the durable outbox now, so no leave can
@@ -416,7 +428,7 @@ it("leaves at once once the voice send is in flight, keeping the draft", async (
 it("keeps a finalizing note as this screen's own until admission, and never sends after an explicit discard", async () => {
   const capture = stubVoiceCapture({ holdHash: true });
   await openThread();
-  fireEvent.click(screen.getByRole("button", { name: "Voice message" }));
+  startVoiceCapture();
   await screen.findByRole("button", { name: "Pause recording" });
   capture.advance(2_000);
   fireEvent.click(screen.getByRole("button", { name: "Send voice message" }));
@@ -448,14 +460,14 @@ it("keeps a finalizing note as this screen's own until admission, and never send
   expect(m.voice).not.toHaveBeenCalled();
 });
 
-it("lets the attachment sheet consume Escape, keeping the conversation and the draft", async () => {
+it("lets the attachment shortcuts consume Escape, keeping the conversation and the draft", async () => {
   await openThread();
   const field = screen.getByRole("textbox", { name: "Message" });
   fireEvent.change(field, { target: { value: "Draft stays" } });
   fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
-  const menu = screen.getByRole("menu", { name: "Add attachment" });
-  fireEvent.keyDown(within(menu).getByRole("menuitem", { name: "Photos" }), { key: "Escape" });
-  expect(screen.queryByRole("menu", { name: "Add attachment" })).toBeNull();
+  const strip = screen.getByRole("group", { name: "Add attachment" });
+  fireEvent.keyDown(within(strip).getByRole("button", { name: "Photos and videos" }), { key: "Escape" });
+  expect(screen.queryByRole("group", { name: "Add attachment" })).toBeNull();
   expect(screen.queryByRole("alertdialog")).toBeNull();
   expect(path()).toBe("/chats/chat");
   expect(screen.getByRole("textbox", { name: "Message" })).toHaveProperty("value", "Draft stays");
@@ -572,10 +584,10 @@ it("lets an open layer consume Android Back before the leave guard", async () =>
   const field = screen.getByRole("textbox", { name: "Message" });
   fireEvent.change(field, { target: { value: "Unsent words" } });
   fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
-  expect(screen.getByRole("menu", { name: "Add attachment" })).toBeTruthy();
+  expect(screen.getByRole("group", { name: "Add attachment" })).toBeTruthy();
 
   pressBack();
-  expect(screen.queryByRole("menu", { name: "Add attachment" })).toBeNull();
+  expect(screen.queryByRole("group", { name: "Add attachment" })).toBeNull();
   expect(screen.queryByRole("alertdialog")).toBeNull();
   expect(path()).toBe("/chats/chat");
   expect(field).toHaveProperty("value", "Unsent words");

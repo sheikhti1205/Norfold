@@ -118,8 +118,8 @@ it("replaces the composer with recording/review, resumes, and sends only the fin
   m.voice.mockReset().mockResolvedValue("voice-saved");
   await open();
   fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Keep my text draft" } });
-  // Voice is its own control beside the expression picker, not a menu row.
-  fireEvent.click(screen.getByRole("button", { name: "Voice message" }));
+  // Voice is the tray's own shortcut now, not a control beside the picker.
+  startVoiceCapture();
   await screen.findByRole("button", { name: "Pause recording" });
   expect(screen.queryByRole("textbox", { name: "Message" })).toBeNull();
   now += 3_000;
@@ -184,7 +184,7 @@ it("keeps the measured capture clock while the preview is still settling", async
   const recorder = fakeVoiceRecorder({ deferTrailer: true });
   m.voice.mockReset().mockResolvedValue("voice-saved");
   await open();
-  fireEvent.click(screen.getByRole("button", { name: "Voice message" }));
+  startVoiceCapture();
   await screen.findByRole("button", { name: "Pause recording" });
   now += 3_000;
   // Let the recorder publish its measured capture first, exactly as its 200 ms
@@ -210,7 +210,7 @@ it("stops at the five-minute ceiling for review instead of sending", async () =>
   fakeVoiceRecorder();
   m.voice.mockReset().mockResolvedValue("voice-saved");
   await open();
-  fireEvent.click(screen.getByRole("button", { name: "Voice message" }));
+  startVoiceCapture();
   await screen.findByRole("button", { name: "Pause recording" });
   now += 300_000;
   fireEvent.click(screen.getByRole("button", { name: "Pause recording" }));
@@ -227,7 +227,7 @@ it("locks the strip behind a send that starts while the take is still open", asy
   const recorder = fakeVoiceRecorder({ deferStop: true });
   m.voice.mockReset().mockResolvedValue("voice-saved");
   await open();
-  fireEvent.click(screen.getByRole("button", { name: "Voice message" }));
+  startVoiceCapture();
   await screen.findByRole("button", { name: "Pause recording" });
   now += 3_000;
   // Send works during the take: one press stops what has been recorded so far.
@@ -370,7 +370,7 @@ it("keeps the review clock after a paused preview instead of zeroing the take", 
   m.media = [voiceAttachment("message-a", 4_000)];
   m.read.mockResolvedValue(new ArrayBuffer(1));
   await open();
-  fireEvent.click(screen.getByRole("button", { name: "Voice message" }));
+  startVoiceCapture();
   await screen.findByRole("button", { name: "Pause recording" });
   now += 3_000;
   fireEvent.click(screen.getByRole("button", { name: "Pause recording" }));
@@ -465,10 +465,21 @@ async function open() {
   return rendered;
 }
 
+/** The attachment shortcuts are sticky: expand only when the disclosure is folded. */
+function openAttachments() {
+  const disclosure = screen.getByRole("button", { name: "Add attachment" });
+  if (disclosure.getAttribute("aria-expanded") !== "true") fireEvent.click(disclosure);
+  return screen.getByRole("group", { name: "Add attachment" });
+}
+
 /** The composer's one attachment control opens every real capability. */
 function chooseAttachment(name: string) {
-  fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
-  fireEvent.click(within(screen.getByRole("menu", { name: "Add attachment" })).getByRole("menuitem", { name }));
+  fireEvent.click(within(openAttachments()).getByRole("button", { name }));
+}
+
+/** Voice is one of the tray's shortcuts now, not a standalone microphone. */
+function startVoiceCapture() {
+  chooseAttachment("Voice note");
 }
 
 it("shows a pending outgoing message immediately and offers retry on admission failure", async () => {
@@ -1045,17 +1056,15 @@ it("sends desktop Enter once but preserves Shift+Enter and IME composition", asy
 });
 it("offers an accessible photo picker in a connected conversation", async () => {
   await open();
-  fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
-  const menu = screen.getByRole("menu", { name: "Add attachment" });
-  expect((within(menu).getByRole("menuitem", { name: "Photos" }) as HTMLButtonElement).disabled).toBe(false);
-  expect((within(menu).getByRole("menuitem", { name: "Camera" }) as HTMLButtonElement).disabled).toBe(false);
+  const strip = openAttachments();
+  expect((within(strip).getByRole("button", { name: "Photos and videos" }) as HTMLButtonElement).disabled).toBe(false);
+  expect((within(strip).getByRole("button", { name: "Camera" }) as HTMLButtonElement).disabled).toBe(false);
 });
 it("does not offer an active photo picker in a request", async () => {
   m.view.mode = "REQUEST"; await open();
-  fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
-  const menu = screen.getByRole("menu", { name: "Add attachment" });
-  expect((within(menu).getByRole("menuitem", { name: "Photos" }) as HTMLButtonElement).disabled).toBe(true);
-  expect((within(menu).getByRole("menuitem", { name: "Camera" }) as HTMLButtonElement).disabled).toBe(true);
+  const strip = openAttachments();
+  expect((within(strip).getByRole("button", { name: "Photos and videos" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((within(strip).getByRole("button", { name: "Camera" }) as HTMLButtonElement).disabled).toBe(true);
 });
 it("prepares a selected web photo and allows removing the draft", async () => {
   m.prepare.mockResolvedValue({ bytes: new Uint8Array([1]).buffer, sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 1, height: 1 });
@@ -1116,7 +1125,7 @@ it("sends a document without a bare YouTube caption and posts the link separatel
   m.upload.mockResolvedValue({ key: "files/account/chat/notes.pdf", name: "notes.pdf", mime: "application/pdf", byteSize: 3, kind: "pdf" });
   await open();
   fireEvent.change(screen.getByLabelText("Message"), { target: { value: link } });
-  fireEvent.change(screen.getByLabelText("Choose document"), { target: { files: [new File(["pdf"], "notes.pdf", { type: "application/pdf" })] } });
+  fireEvent.change(screen.getByLabelText("Choose documents or audio"), { target: { files: [new File(["pdf"], "notes.pdf", { type: "application/pdf" })] } });
   await waitFor(() => expect(m.text).toHaveBeenCalledTimes(2));
   const fileBody = String(m.text.mock.calls[0]?.[3]);
   // The file message is the marker only; the link is the next message.
@@ -1191,7 +1200,7 @@ it("sends a staged video without a bare link caption and posts the link separate
   stubPreviewFetch();
   m.upload.mockResolvedValue({ key: "files/account/chat/clip.mp4", name: "clip.mp4", mime: "video/mp4", byteSize: 12, kind: "video" });
   await open();
-  fireEvent.change(screen.getByLabelText("Choose video"), { target: { files: [new File(["video"], "clip.mp4", { type: "video/mp4" })] } });
+  fireEvent.change(screen.getByLabelText("Choose photos or videos"), { target: { files: [new File(["video"], "clip.mp4", { type: "video/mp4" })] } });
   await screen.findByText("1 attachment ready. Tap Send to share.");
   const field = screen.getByLabelText("Message");
   fireEvent.change(field, { target: { value: link } });
@@ -1392,7 +1401,7 @@ it("does not allow replacing or silently discarding an uncertain admission", asy
   await waitFor(() => expect(screen.getByText("1 photo ready. Tap one to review.")).toBeTruthy());
   fireEvent.click(screen.getByRole("button", { name: "Send message" }));
   await waitFor(() => expect(m.send).toHaveBeenCalledTimes(1));
-  // An uncertain admission owns the attachment controls: neither the sheet nor
+  // An uncertain admission owns the attachment controls: neither the tray nor
   // the staged photo can be used to replace or discard it.
   expect((screen.getByRole("button", { name: "Add attachment" }) as HTMLButtonElement).disabled).toBe(true);
   expect((screen.getByRole("button", { name: /remove photo/i }) as HTMLButtonElement).disabled).toBe(true);
@@ -1536,32 +1545,34 @@ it("can retry preparation after relationship loss aborted a draft", async () => 
   expect(within(strip()).queryByText("Preparing attachments…")).toBeNull();
   expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
 });
-it("uses the canonical Android URI import before preparing a selected photo", async () => {
+it("prepares a photo from the merged media picker on Android instead of the removed native row", async () => {
   vi.spyOn(Capacitor, "getPlatform").mockReturnValue("android");
-  const imported = { uri: "synthetic-import" }, source = new File(["x"], "photo.jpg");
-  m.choose.mockResolvedValue(["content://synthetic-photo"]); m.import.mockResolvedValue(imported); m.file.mockReturnValue(source);
+  const source = new File(["x"], "photo.jpg", { type: "image/jpeg" });
   m.prepare.mockResolvedValue({ bytes: new ArrayBuffer(1), sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
-  await open(); chooseAttachment("Photos");
+  await open();
+  chooseAttachment("Photos and videos");
+  fireEvent.change(screen.getByLabelText("Choose photos or videos"), { target: { files: [source] } });
   await screen.findByRole("button", { name: /^Review photo 1 of 1$/ });
-  expect(m.choose).toHaveBeenCalledWith({ source: "photos", limit: 10 });
-  // No abort signal: a projection refresh on resume used to cancel the very
-  // grant the picker had just returned, so the photo vanished silently.
-  expect(m.import).toHaveBeenCalledWith("content://synthetic-photo");
-  expect(m.file).toHaveBeenCalledWith(imported);
+  // The old "Photos" menu row opened the native multi-pick and imported each
+  // URI before preparing; the merged picker hands its File straight to the
+  // shared preparation lane, so no native grant is requested here.
+  expect(m.choose).not.toHaveBeenCalled();
+  expect(m.import).not.toHaveBeenCalled();
   expect(m.prepare).toHaveBeenCalledWith(source);
 });
 it("stages a bulk pick, reviews it in the shared viewer, and sends one message per photo", async () => {
-  vi.spyOn(Capacitor, "getPlatform").mockReturnValue("android");
-  m.choose.mockResolvedValue(["content://p1", "content://p2", "content://p3"]);
-  m.import.mockImplementation(async (uri: string) => ({ uri }));
-  m.file.mockImplementation((item: { uri: string }) => new File(["x"], `${item.uri}.jpg`));
+  const files = ["p1", "p2", "p3"].map((name) => new File(["x"], `${name}.jpg`, { type: "image/jpeg" }));
   m.prepare.mockImplementation(async (source: File) => ({
     bytes: new ArrayBuffer(1), sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 2, height: 1, name: source.name }));
   await open();
-  chooseAttachment("Photos");
+  chooseAttachment("Photos and videos");
+  const media = screen.getByLabelText("Choose photos or videos") as HTMLInputElement;
+  // The merged picker asks for a real bulk selection (stills and clips in one
+  // pick), and the tray keeps the order it returned them in.
+  expect(media.multiple).toBe(true);
+  expect(media.getAttribute("accept")).toBe("image/*,video/*");
+  fireEvent.change(media, { target: { files } });
   await screen.findByRole("button", { name: "Review photo 3 of 3" });
-  // The picker is asked for a real bulk selection, and the tray keeps order.
-  expect(m.choose).toHaveBeenCalledWith({ source: "photos", limit: 10 });
   expect(screen.getByText("3 photos ready. Tap one to review.")).toBeTruthy();
   // Reviewing reuses the shared photo viewer over the staged items.
   fireEvent.click(screen.getByRole("button", { name: "Review photo 2 of 3" }));
@@ -1634,9 +1645,10 @@ it("does not stage a non-photo, non-video file chosen through the attachment pic
 it("refuses a video chosen in a message request without staging or uploading it", async () => {
   m.view.mode = "REQUEST";
   await open();
-  // The file rows stay reachable in a request; the intake must refuse them
-  // instead of filling a tray that Send can never accept.
-  fireEvent.change(screen.getByLabelText("Choose video"), { target: { files: [new File(["v"], "clip.mp4", { type: "video/mp4" })] } });
+  // The intake, not the control, is the authority: a pick that still arrives
+  // in a request must be refused instead of filling a tray Send can never
+  // accept.
+  fireEvent.change(screen.getByLabelText("Choose photos or videos"), { target: { files: [new File(["v"], "clip.mp4", { type: "video/mp4" })] } });
   await waitFor(() => expect(screen.getByText("Photos and videos are available when you're friends.")).toBeTruthy());
   expect(screen.queryByRole("group", { name: /to send/ })).toBeNull();
   expect(m.upload).not.toHaveBeenCalled();
@@ -1646,26 +1658,29 @@ it("refuses a video that arrives while another file is still sending", async () 
   // resolves; its late result must not enter the tray or upload.
   m.upload.mockReturnValue(new Promise(() => {}));
   await open();
-  fireEvent.change(screen.getByLabelText("Choose document"), { target: { files: [new File(["x"], "notes.pdf", { type: "application/pdf" })] } });
+  fireEvent.change(screen.getByLabelText("Choose documents or audio"), { target: { files: [new File(["x"], "notes.pdf", { type: "application/pdf" })] } });
   await waitFor(() => expect(m.upload).toHaveBeenCalledTimes(1));
-  fireEvent.change(screen.getByLabelText("Choose video"), { target: { files: [new File(["v"], "clip.mp4", { type: "video/mp4" })] } });
+  fireEvent.change(screen.getByLabelText("Choose photos or videos"), { target: { files: [new File(["v"], "clip.mp4", { type: "video/mp4" })] } });
   await waitFor(() => expect(screen.getByText("Wait for the current send to finish before adding an attachment.")).toBeTruthy());
   expect(screen.queryByRole("group", { name: /to send/ })).toBeNull();
   expect(m.upload).toHaveBeenCalledTimes(1);
 });
-it("survives a projection refresh while the native picker is open", async () => {
-  vi.spyOn(Capacitor, "getPlatform").mockReturnValue("android");
-  const imported = { uri: "synthetic-import" }, source = new File(["x"], "photo.jpg");
-  let grant!: (uris: string[]) => void;
-  m.choose.mockReturnValue(new Promise((done) => { grant = done; }));
-  m.import.mockResolvedValue(imported); m.file.mockReturnValue(source);
-  m.prepare.mockResolvedValue({ bytes: new ArrayBuffer(1), sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
-  await open(); chooseAttachment("Photos");
-  // The app backgrounds while the picker is up, and the projection refresh
-  // that runs on resume drops the cached view. The selection must survive it.
+it("survives a projection refresh while a picked photo is still being prepared", async () => {
+  const source = new File(["x"], "photo.jpg", { type: "image/jpeg" });
+  let finish!: (value: unknown) => void;
+  m.prepare.mockReturnValue(new Promise((done) => { finish = done; }));
+  await open();
+  chooseAttachment("Photos and videos");
+  fireEvent.change(screen.getByLabelText("Choose photos or videos"), { target: { files: [source] } });
+  // The app backgrounds while the picked File is still being prepared, and the
+  // projection refresh that runs on resume drops the cached view. The selection
+  // must survive it. (The removed "Photos" row parked a native picker grant
+  // here instead; the merged picker owns no grant to lose.)
   await act(async () => { m.view = { ...m.view, mode: "REQUEST" }; });
   await act(async () => { m.view = { ...m.view, mode: "CONNECTED" }; });
-  await act(async () => { grant(["content://synthetic-photo"]); });
+  await act(async () => {
+    finish({ bytes: new ArrayBuffer(1), sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
+  });
   expect(await screen.findByRole("button", { name: /^Review photo 1 of 1$/ })).toBeTruthy();
 });
 it("ignores a late local read after leaving the thread without allocating a URL", async () => {

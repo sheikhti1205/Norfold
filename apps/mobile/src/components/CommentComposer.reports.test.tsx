@@ -28,8 +28,9 @@ function props() {
   return { postId: "parent", participants: [], onSubmit: vi.fn().mockResolvedValue(undefined), onError: vi.fn() };
 }
 function chooseAttachment(name: "Photo" | "Report") {
-  fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
-  fireEvent.click(screen.getByRole("menuitem", { name }));
+  const disclosure = screen.getByRole("button", { name: "Add attachment" });
+  if (disclosure.getAttribute("aria-expanded") !== "true") fireEvent.click(disclosure);
+  fireEvent.click(screen.getByRole("button", { name: name === "Report" ? "Reference a report" : "Attach photo" }));
 }
 async function stageReport() {
   chooseAttachment("Report");
@@ -54,7 +55,7 @@ describe("typed report references in the composer", () => {
     state.enabled = false;
     render(<CommentComposer {...props()} />);
     fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
-    expect(screen.queryByRole("menuitem", { name: "Report" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reference a report" })).toBeNull();
     expect(screen.queryByLabelText("Report link")).toBeNull();
   });
 
@@ -195,12 +196,9 @@ describe("typed report references in the composer", () => {
       fireEvent.click(screen.getByRole("button", { name: "Add report" }));
       await screen.findByRole("button", { name: `Remove report: ${id}` });
     }
-    fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
-    expect(screen.getByRole("menuitem", { name: "Report" }).getAttribute("aria-disabled")).toBe("true");
-    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(screen.getByRole("button", { name: "Reference a report" })).toHaveProperty("disabled", true);
     fireEvent.click(screen.getAllByRole("button", { name: /Remove report:/ })[0]!);
-    fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
-    expect(screen.getByRole("menuitem", { name: "Report" }).getAttribute("aria-disabled")).not.toBe("true");
+    expect(screen.getByRole("button", { name: "Reference a report" })).toHaveProperty("disabled", false);
   });
 
   it("reserves the final slot while native photo preparation overlaps a report-selection attempt", async () => {

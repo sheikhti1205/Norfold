@@ -1,8 +1,8 @@
 /* Peer composer: independent floating controls, no enclosing capsule.
-   The field, one attachment control, one
-   emoji/GIF/sticker control, one voice control when the conversation can
-   record, and Send. The chevron cluster is gone, so nothing here needs a width
-   rule that hides controls. */
+   One leading "+" disclosure, the field, the emoji/GIF/sticker trigger, and
+   Send. The disclosure is the shared attachment tray, whose shortcuts expand
+   inline; voice joins them when the conversation can record, and is never a
+   control of its own. Nothing here needs a width rule that hides controls. */
 .fb-peer-composer {
   position: relative;
   display: flex; flex-direction: column; min-width: 0; width: 100%;
@@ -47,19 +47,12 @@
 .fb-peer-field textarea:focus-visible,
 .fb-peer-composer .fb-peer-field textarea:focus-visible { outline: none; }
 .fb-peer-send { color: var(--fb-primary); }
-/* R19 dock composer at 320dp: the single inline row left the field about
-   108 CSS px, so a 27-character draft painted as "r19 / comp" over clipped
-   lines. Below 20rem the field takes the whole first row and the four actions
-   share a second row, each still a real 48px target. The DOM order stays
-   attach, field, expressions, voice, Send, so tab order and accessible names do
-   not move: the field is placed on row 1 and the actions auto-place after it,
-   with Send held at the row's trailing edge. Above 20rem the flex row is
-   untouched. No frame, background or border is added here. */
+/* composerDock.css (the attachment tray's sheet) owns the narrow row's template
+   and Send placement; this block only makes the row a grid and keeps the field
+   across the first row. */
 @container composer (max-width: 20rem) {
   .fb-peer-composer-row {
     display: grid;
-    grid-template-columns: repeat(3, minmax(48px, auto)) minmax(48px, 1fr);
   }
   .fb-peer-field { grid-row: 1; grid-column: 1 / -1; }
-  .fb-peer-send { grid-column: 4; justify-self: end; }
 }

@@ -1,30 +1,31 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { Camera, FileUp, ImagePlus, MapPin, Mic, Music, Plus, SendHorizontal, Video } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type ReactNode, type RefObject } from "react";
+import { Camera, FileUp, ImagePlus, MapPin, Mic, SendHorizontal } from "lucide-react";
 import { hasFinePointer } from "./inputCapabilities";
 import { useHoverLabel } from "./HoverLabel";
 import { convertEmoticonsLive } from "../utils/emoji";
-import { ExpressionPickerButton } from "./ExpressionPickerButton";
+import { AttachmentTray, type AttachmentOption } from "./AttachmentTray";
+import { ComposerDock, ExpressionDockTrigger, useComposerDock } from "./ComposerDock";
+import { ExpressionPicker } from "./ExpressionPicker";
 import { insertEmoji } from "./EmojiPicker";
 import { type KlipyItem } from "../services/klipy";
-import { registerBackInterceptor } from "./backNavigation";
 import "./peerComposer.css";
 
-/** The type a hidden picker offers. Each row opens exactly one kind. */
+/** The type a hidden picker offers, forwarded to the screen's own file owner. */
 export type ChatFileKind = "document" | "audio" | "video";
 
-const FILE_ACCEPT: Record<ChatFileKind, string> = {
-  // Documents and archives: the catch-all "File" row is gone, so a reader who
-  // wants a PDF is not shown a music library they never asked for.
-  document: ".pdf,.doc,.docx,.odt,.rtf,.txt,.md,.csv,.xls,.xlsx,.ppt,.pptx,.zip,.rar,.7z,.tar,.gz,application/pdf,text/*,application/msword,application/vnd.openxmlformats-officedocument.*,application/vnd.ms-*,application/vnd.oasis.opendocument.*,application/zip,application/x-zip-compressed,application/x-rar-compressed,application/x-7z-compressed,application/gzip,application/x-tar",
-  audio: "audio/*",
-  video: "video/*",
-};
+/**
+ * One media picker offers stills and clips together; the screen's file owner
+ * stages a mixed selection (`stageLocalFiles`), and the private file lane is the
+ * only chat path that can carry a video — the native photo intake is image-only
+ * by design.
+ */
+const MEDIA_ACCEPT = "image/*,video/*";
 
-const FILE_LABEL: Record<ChatFileKind, string> = {
-  document: "Choose document",
-  audio: "Choose audio",
-  video: "Choose video",
-};
+/**
+ * Documents and audio files are one capability on the owner's list, so one
+ * picker covers PDFs, archives and audio. The catch-all "File" row stays gone.
+ */
+const DOCUMENT_ACCEPT = ".pdf,.doc,.docx,.odt,.rtf,.txt,.md,.csv,.xls,.xlsx,.ppt,.pptx,.zip,.rar,.7z,.tar,.gz,application/pdf,text/*,application/msword,application/vnd.openxmlformats-officedocument.*,application/vnd.ms-*,application/vnd.oasis.opendocument.*,application/zip,application/x-zip-compressed,application/x-rar-compressed,application/x-7z-compressed,application/gzip,application/x-tar,audio/*";
 
 export interface PeerChatComposerProps {
   value: string;
@@ -75,13 +76,12 @@ export interface PeerChatComposerProps {
 /**
  * Human-to-human composer.
  *
- * One attachment control opens a sheet of real file capabilities (photos,
- * camera, video, document, audio, location) and each row starts a picker
- * narrowed to that type. One control carries
- * emoji, GIFs and stickers. Voice is a first-class control of its own: when the
- * conversation can record, a mic sits between that expression trigger and Send,
- * so recording never needs a menu first, and the sheet keeps no second copy of
- * it.
+ * One `+` disclosure carries every real file capability (documents and audio,
+ * photos and videos, camera, voice note, location), the same shared tray the
+ * comment composer mounts. Collapsed it is one control; expanded the shortcuts
+ * sit inline beside the field and the field gives up exactly their width, so
+ * the picker button and Send never move. Any draft text folds the row back to
+ * the single `+` until the field is empty again.
  *
  * The field keeps its own rounded surface; every other control floats
  * independently. There is no enclosing capsule. The field is `min-width: 0`, so
@@ -95,20 +95,15 @@ export function PeerChatComposer({
 }: PeerChatComposerProps) {
   const [focused, setFocused] = useState(false);
   const [intent, setIntent] = useState(false);
-  const [attachOpen, setAttachOpen] = useState(false);
   const field = inputRef;
-  const attachRoot = useRef<HTMLDivElement>(null);
+  const mediaInput = useRef<HTMLInputElement>(null);
   const documentInput = useRef<HTMLInputElement>(null);
-  const audioInput = useRef<HTMLInputElement>(null);
-  const videoInput = useRef<HTMLInputElement>(null);
-  const inputs: Record<ChatFileKind, RefObject<HTMLInputElement | null>> = {
-    document: documentInput, audio: audioInput, video: videoInput,
-  };
   const composing = useRef(false);
   // Live conversion changes the value, so the caret it produced is restored
   // after React commits instead of being left wherever the browser guessed.
   const caret = useRef<number | null>(null);
   const attachmentBusy = busy || locked || attachmentsLocked || fileSending;
+  const dock = useComposerDock(field);
   const { hoverLabel } = useHoverLabel();
 
   useLayoutEffect(() => {
@@ -132,28 +127,6 @@ export function PeerChatComposer({
     if (element.scrollHeight > 0) element.style.height = `${Math.min(cap, element.scrollHeight)}px`;
     element.style.overflowY = focused && element.scrollHeight > cap ? "auto" : "hidden";
   }, [value, field, focused]);
-
-  // Close the attachment sheet on an outside press, Escape or Android Back.
-  // Escape is consumed here, and the sheet registers as the topmost Back layer
-  // while open, so the conversation's own leave gesture never runs on the same
-  // press after this layer has already handled it.
-  useEffect(() => {
-    if (!attachOpen) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (attachRoot.current && !attachRoot.current.contains(event.target as Node)) setAttachOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { event.preventDefault(); setAttachOpen(false); }
-    };
-    window.addEventListener("pointerdown", onPointerDown, true);
-    window.addEventListener("keydown", onKeyDown, true);
-    const offBack = registerBackInterceptor(() => { setAttachOpen(false); return true; });
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("keydown", onKeyDown, true);
-      offBack();
-    };
-  }, [attachOpen]);
 
   // A press on the field is the earliest honest signal that this composer is
   // about to own the IME. The screen may advertise from it before the focus
@@ -193,72 +166,64 @@ export function PeerChatComposer({
     const inserted = insertEmoji(value, start, end, glyph);
     caret.current = inserted.caret;
     onChange(inserted.text);
-    element?.focus();
+    // A docked pane replaces the keyboard: inserting must not summon the IME
+    // back underneath the pane.
+    if (!dock.open) element?.focus();
   }
 
   function pickKlipy(item: KlipyItem) {
     onPickKlipy?.(item);
   }
 
-  function chooseFile(kind: ChatFileKind) {
-    setAttachOpen(false);
-    inputs[kind].current?.click();
+  function forwardFiles(event: ChangeEvent<HTMLInputElement>, kind: ChatFileKind) {
+    const files = [...(event.target.files ?? [])];
+    event.target.value = "";
+    if (files.length > 0) onFiles?.(files, kind);
+  }
+
+  function openMedia() {
+    // One picker for stills and clips. Without the file lane the surface's own
+    // photo owner is the only route, which is what it has always been.
+    if (onFiles) { mediaInput.current?.click(); return; }
+    onPhotos();
   }
 
   const canAttachPhotos = photoAllowed && !attachmentBusy;
+
+  const attachmentOptions: AttachmentOption[] = [];
+  if (onFiles) {
+    attachmentOptions.push({
+      id: "documents", label: "Documents", icon: <FileUp size={20} aria-hidden="true" />,
+      disabled: attachmentBusy, onSelect: () => documentInput.current?.click(),
+    });
+  }
+  attachmentOptions.push({
+    id: "media", label: "Photos and videos", icon: <ImagePlus size={20} aria-hidden="true" />,
+    disabled: !canAttachPhotos, onSelect: openMedia,
+  });
+  attachmentOptions.push({
+    id: "camera", label: "Camera", icon: <Camera size={20} aria-hidden="true" />,
+    disabled: !canAttachPhotos, onSelect: onCamera,
+  });
+  if (voiceAvailable && onVoice) {
+    attachmentOptions.push({
+      id: "voice", label: "Voice note", icon: <Mic size={20} aria-hidden="true" />,
+      disabled: busy || locked || attachmentsLocked, onSelect: onVoice,
+    });
+  }
+  if (onLocation) {
+    attachmentOptions.push({
+      id: "location", label: "Location", icon: <MapPin size={20} aria-hidden="true" />,
+      onSelect: onLocation,
+    });
+  }
 
   return <form className="fb-peer-composer" aria-busy={busy || fileSending || undefined}
     onSubmit={(event) => { event.preventDefault(); send(); }}>
     {context}
     <div className="fb-peer-composer-row">
-      <div className="relative" ref={attachRoot}>
-        <button type="button" className="fb-peer-icon" aria-label="Add attachment"
-          aria-haspopup="menu" aria-expanded={attachOpen}
-          disabled={attachmentBusy}
-          onClick={() => setAttachOpen((open) => !open)}
-          {...hoverLabel("Add attachment")}>
-          <Plus size={22} aria-hidden="true" />
-        </button>
-        {attachOpen && (
-          <div className="fb-picker-layer fb-peer-attach-menu" data-size="menu" role="menu" aria-label="Add attachment">
-            <button type="button" role="menuitem" disabled={!canAttachPhotos}
-              onClick={() => { setAttachOpen(false); onPhotos(); }}>
-              <ImagePlus size={20} aria-hidden="true" /> Photos
-            </button>
-            <button type="button" role="menuitem" disabled={!canAttachPhotos}
-              onClick={() => { setAttachOpen(false); onCamera(); }}>
-              <Camera size={20} aria-hidden="true" /> Camera
-            </button>
-            {onFiles && (
-              <>
-                <button type="button" role="menuitem" disabled={attachmentBusy} onClick={() => chooseFile("video")}>
-                  <Video size={20} aria-hidden="true" /> Video
-                </button>
-                <button type="button" role="menuitem" disabled={attachmentBusy} onClick={() => chooseFile("document")}>
-                  <FileUp size={20} aria-hidden="true" /> Document
-                </button>
-                <button type="button" role="menuitem" disabled={attachmentBusy} onClick={() => chooseFile("audio")}>
-                  <Music size={20} aria-hidden="true" /> Audio
-                </button>
-              </>
-            )}
-            {onLocation && (
-              <button type="button" role="menuitem" onClick={() => { setAttachOpen(false); onLocation(); }}>
-                <MapPin size={20} aria-hidden="true" /> Location
-              </button>
-            )}
-          </div>
-        )}
-        {onFiles && (Object.keys(FILE_ACCEPT) as ChatFileKind[]).map((kind) => (
-          <input key={kind} ref={inputs[kind]} type="file" multiple className="sr-only" tabIndex={-1}
-            accept={FILE_ACCEPT[kind]} aria-label={FILE_LABEL[kind]}
-            onChange={(event) => {
-              const files = [...(event.target.files ?? [])];
-              event.target.value = "";
-              if (files.length > 0) onFiles(files, kind);
-            }} />
-        ))}
-      </div>
+      <AttachmentTray options={attachmentOptions} hasText={value.trim() !== ""} text={value}
+        disabled={attachmentBusy} label="Add attachment" testIdPrefix="chat-attachment" />
       <div className="fb-peer-field">
         <textarea ref={field} value={value} aria-label="Message" placeholder="Message" rows={1}
           // `readOnly`, never `disabled`: a disabled field blurs, and the problem
@@ -316,13 +281,9 @@ export function PeerChatComposer({
             if (hasFinePointer()) { event.preventDefault(); if (!event.repeat) send(); }
           }} />
       </div>
-      <ExpressionPickerButton onPickEmoji={pickEmoji} onPickKlipy={pickKlipy}
-        userId={userId} disabled={busy || locked} align="end"
-        className="fb-peer-icon" testIdPrefix="chat-expression" />
-      {voiceAvailable && onVoice && <button type="button" className="fb-peer-icon" aria-label="Voice message"
-        disabled={busy || locked || attachmentsLocked} onClick={onVoice} {...hoverLabel("Voice message")}>
-        <Mic size={20} aria-hidden="true" />
-      </button>}
+      <ExpressionDockTrigger open={dock.open} onToggle={dock.toggle}
+        disabled={busy || locked} className="fb-peer-icon"
+        label="Emoji, GIFs and stickers" testId="chat-expression" />
       <button type="submit" className="fb-peer-icon fb-peer-send" aria-label="Send message" disabled={!available}
         {...hoverLabel("Send message")}
         onMouseDown={(event) => {
@@ -333,5 +294,23 @@ export function PeerChatComposer({
         <SendHorizontal size={20} aria-hidden="true" />
       </button>
     </div>
+    {onFiles && (
+      <>
+        <input ref={mediaInput} type="file" multiple className="sr-only" tabIndex={-1}
+          accept={MEDIA_ACCEPT} aria-label="Choose photos or videos"
+          onChange={(event) => forwardFiles(event, "video")} />
+        <input ref={documentInput} type="file" multiple className="sr-only" tabIndex={-1}
+          accept={DOCUMENT_ACCEPT} aria-label="Choose documents or audio"
+          onChange={(event) => forwardFiles(event, "document")} />
+      </>
+    )}
+    {dock.open && (
+      <ComposerDock heightPx={dock.heightPx} label="Emoji, GIFs and stickers picker"
+        onRequestClose={dock.close} testId="chat-expression-pane">
+        <ExpressionPicker dock="ime" userId={userId} testIdPrefix="chat-expression"
+          onPickEmoji={pickEmoji} onPickKlipy={pickKlipy}
+          onClose={dock.close} onDismiss={dock.close} />
+      </ComposerDock>
+    )}
   </form>;
 }

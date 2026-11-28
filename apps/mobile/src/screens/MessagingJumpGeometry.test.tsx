@@ -2,7 +2,6 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
-import { Capacitor } from "@capacitor/core";
 import { ThreadSession } from "./Messaging";
 import { LiveRegion } from "../components/LiveRegion";
 import { MessagingRestoration } from "../components/MessagingRestoration";
@@ -165,32 +164,32 @@ describe("jump-control viewport ownership", () => {
     expectViewportOwnership();
   });
 
-  it("holds ownership while the attachment sheet is open", async () => {
+  it("holds ownership while the attachment shortcuts are open", async () => {
     render(<Harness />);
     await screen.findByText("Caption");
     const geometry = scrollerGeometry();
     geometry.reveal();
     fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
-    const menu = await screen.findByRole("menu", { name: "Add attachment" });
-    expect(menu.closest(".fb-chat-viewport")).toBeNull();
+    const strip = await screen.findByRole("group", { name: "Add attachment" });
+    expect(strip.closest(".fb-chat-viewport")).toBeNull();
     expectViewportOwnership();
   });
 
   it("keeps the control clear of a staged photo strip that grows the composer stack", async () => {
-    vi.spyOn(Capacitor, "getPlatform").mockReturnValue("android");
-    const imported = { uri: "synthetic-import" }, source = new File(["x"], "photo.jpg");
-    m.choose.mockResolvedValue(["content://synthetic-photo"]);
-    m.import.mockResolvedValue(imported);
-    m.file.mockReturnValue(source);
     m.prepare.mockResolvedValue({ bytes: new ArrayBuffer(1), sha256: "a".repeat(64), mime: "image/jpeg", byteSize: 1, width: 2, height: 1 });
     render(<Harness />);
     await screen.findByText("Caption");
     const geometry = scrollerGeometry();
     geometry.reveal();
-    // The shipped native intake: picker → URI import → File → shared preparation,
-    // so the strip below is the real draft row rather than appended DOM.
+    // The merged media picker replaced the per-capability "Photos" row: the
+    // tray's shortcut opens the composer's one image/video input, and the pick
+    // is prepared by the shared codec before it takes a slot, so the strip
+    // below is the real draft row rather than appended DOM.
     fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
-    fireEvent.click(within(screen.getByRole("menu", { name: "Add attachment" })).getByRole("menuitem", { name: "Photos" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Add attachment" })).getByRole("button", { name: "Photos and videos" }));
+    fireEvent.change(screen.getByLabelText("Choose photos or videos"), {
+      target: { files: [new File(["x"], "photo.jpg", { type: "image/jpeg" })] },
+    });
     const strip = await screen.findByRole("group", { name: "1 photo to send" });
     // Proof the strip came from the real intake, not from appended DOM.
     expect(m.prepare).toHaveBeenCalledTimes(1);

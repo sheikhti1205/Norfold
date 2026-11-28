@@ -52,15 +52,19 @@ it("mention Enter inserts without sending, while the next desktop Enter sends th
   await waitFor(() => expect(submit).toHaveBeenCalledExactlyOnceWith("@sam"));
 });
 
-it("uses one anchored plus menu for attachment choices, with disabled providers absent", async () => {
+it("uses one inline plus disclosure for attachment choices, with provider-only tabs absent", async () => {
   setup();
-  expect(screen.queryByRole("menuitem", { name: "Photo" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Attach photo" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
-  expect(await screen.findByRole("menuitem", { name: "Photo" })).toBeTruthy();
-  expect(screen.queryByRole("menuitem", { name: "GIF" })).toBeNull();
-  expect(screen.queryByRole("menuitem", { name: "Sticker" })).toBeNull();
-  fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
-  await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  expect(await screen.findByRole("button", { name: "Attach photo" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "GIF" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Sticker" })).toBeNull();
+  const camera = screen.getByRole("button", { name: "Take photo" });
+  camera.focus();
+  const notCancelled = fireEvent.keyDown(camera, { key: "Escape" });
+  expect(notCancelled).toBe(false);
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Attach photo" })).toBeNull());
+  expect(screen.getByRole("button", { name: "Add attachment" })).toBe(document.activeElement);
 });
 
 it("does not replace a mention token during IME confirmation or Shift+Enter", async () => {

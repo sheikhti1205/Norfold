@@ -306,8 +306,10 @@ describe("PostDetail comments", () => {
     });
     try {
       renderDetail();
+      // The report reference is the tray's last shortcut; the removed "Report"
+      // menu row used to sit in the old attachment popover.
       fireEvent.click(await screen.findByRole("button", { name: "Add attachment" }));
-      fireEvent.click(await screen.findByRole("menuitem", { name: "Report" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Reference a report" }));
       fireEvent.change(screen.getByLabelText("Report link"), { target: { value: `https://findback.example/r/${id}` } });
       fireEvent.click(screen.getByRole("button", { name: "Add report" }));
       await screen.findByRole("button", { name: "Remove report: Found blue wallet" });

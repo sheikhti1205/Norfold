@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, FileText, ImagePlus, Plus, X } from "lucide-react";
-import { ActionMenu, type MenuAction } from "./ActionMenu";
+import { Camera, FileText, ImagePlus, X } from "lucide-react";
+import { AttachmentTray, type AttachmentOption } from "./AttachmentTray";
 import { ComposerShell } from "./ComposerShell";
+import { ComposerDock, ExpressionDockTrigger, useComposerDock } from "./ComposerDock";
 import { CommentReportPicker } from "./CommentReportPicker";
-import { ExpressionPickerButton } from "./ExpressionPickerButton";
+import { ExpressionPicker } from "./ExpressionPicker";
 import { insertEmoji } from "./EmojiPicker";
 import { CameraCapture } from "./CameraCapture";
 import { UserAvatar } from "./UserAvatar";
@@ -32,7 +33,6 @@ import type { CommentAttachmentDescriptor } from "../services/posts";
 import { ApiError } from "../services/session";
 import { friendlyError } from "../utils/friendlyErrors";
 import { isBlobMediaUrl, isHttpsMediaUrl, safeMediaSrc } from "../utils/mediaUrl";
-import { shouldReduceMotion } from "./uiMotion";
 import { interactionRefusalCopy } from "../utils/interactionRefusal";
 
 /**
@@ -41,9 +41,9 @@ import { interactionRefusalCopy } from "../utils/interactionRefusal";
  * - `@` mentions through the shared `MentionAutocomplete` (ranked
  *   participants > owner > server fallback, keyboard nav, caret insertion),
  *   anchored to the composer, keyboard/touch safe.
- * - Emoji through the shared `EmojiPicker` inside `ExpressionPickerButton`,
- *   inserted at the caret. The panel is the same one the conversation
- *   composer mounts.
+ * - Emoji through the shared `ExpressionPicker` docked in the composer's panel
+ *   slot, in the band the on-screen keyboard would take, inserted at the
+ *   caret. The pane is the same one the conversation composer mounts.
  * - Photo attach only (§7): new video intake is stopped at the
  *   picker's accept list and the client gate, while every stored video row
  *   keeps rendering. On Android photos come through the canonical native
@@ -205,6 +205,9 @@ export function CommentComposer({
   const [cameraOpen, setCameraOpen] = useState(false);
   const [attachNotice, setAttachNotice] = useState<string | null>(null);
   const fieldRef = useRef<HTMLTextAreaElement | null>(null);
+  // The picker pane replaces the keyboard instead of stacking on it; opening it
+  // never touches the draft.
+  const dock = useComposerDock(fieldRef);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const filesRef = useRef(new Map<string, File>());
   const attachmentsRef = useRef<ComposerAttachment[]>([]);
@@ -238,6 +241,8 @@ export function CommentComposer({
 
   // The report's comment action owns the intent, so the field takes the caret
   // even when the composer just mounted inside the phone's conversation sheet.
+  // The surface's own body-focus scroll (`AdaptiveTaskSurface`) is the single
+  // scroll on open: a second `scrollIntoView` here fought it on every open.
   const handledFocus = useRef(0);
   useEffect(() => {
     if (focusSignal <= 0 || focusSignal === handledFocus.current) return;
@@ -245,10 +250,6 @@ export function CommentComposer({
     const field = fieldRef.current;
     if (!field) return;
     field.focus({ preventScroll: true });
-    if (typeof field.scrollIntoView === "function") {
-      const reduced = shouldReduceMotion();
-      field.scrollIntoView({ block: "center", behavior: reduced ? "instant" : "smooth" });
-    }
   }, [focusSignal]);
 
   // Typing anywhere on the report surface starts the comment, never a search.
@@ -281,6 +282,17 @@ export function CommentComposer({
     });
   }
 
+  /** Move the caret without taking focus, so the docked pane keeps the keyboard. */
+  function placeCaret(caret: number) {
+    requestAnimationFrame(() => {
+      try {
+        fieldRef.current?.setSelectionRange(caret, caret);
+      } catch {
+        // Best-effort.
+      }
+    });
+  }
+
   function handleMentionInsert(next: string, caret: number) {
     setText(next);
     focusAt(caret);
@@ -292,7 +304,10 @@ export function CommentComposer({
     const end = field?.selectionEnd ?? start;
     const inserted = insertEmoji(text, start, end, glyph);
     setText(inserted.text);
-    focusAt(inserted.caret);
+    // A docked pane replaces the keyboard: inserting must move the caret, not
+    // summon the IME back underneath the pane.
+    if (dock.open) placeCaret(inserted.caret);
+    else focusAt(inserted.caret);
   }
 
   function patchAttachment(id: string, patch: Partial<CommentAttachment>) {
@@ -492,7 +507,7 @@ export function CommentComposer({
       title: item.title,
     });
     setAttachments((prev) => [...prev, entry]);
-    fieldRef.current?.focus();
+    if (!dock.open) fieldRef.current?.focus();
   }
 
   const uploading = attachments.some((a) => a.status === "uploading");
@@ -518,6 +533,9 @@ export function CommentComposer({
 
   async function onSend() {
     if (sendDisabled) return;
+    // A send settles the draft the pane was opened beside; the field takes the
+    // caret back rather than leaving the IME stacked under the pane.
+    if (dock.open) dock.close();
     // Free-text paste guard: attachments travel as `https://` remote URLs, so
     // a pasted `data:` URL in the text would inline base64 into the body
     // (payload bloat that never renders as gallery media). Block with copy —
@@ -583,13 +601,28 @@ export function CommentComposer({
   // The adjacent reply context names the target. Keep the field guidance short
   // enough to remain readable at large text; its accessible name stays full.
   const placeholder = replyToUsername ? "Reply…" : "Write…";
-  const attachmentActions: MenuAction[] = [
-    { id: "camera", label: "Camera", icon: <Camera size={18} aria-hidden />, disabled: attachments.length >= COMMENT_ATTACH_MAX, onAction: () => void handleCameraClick() },
-    { id: "photo", label: "Photo", icon: <ImagePlus size={18} aria-hidden />, onAction: () => void handleAttachClick() },
-    ...(COMMENT_REPORTS_ENABLED ? [{ id: "report", label: "Report", icon: <FileText size={18} aria-hidden />,
-      disabled: attachments.length >= COMMENT_ATTACH_MAX,
-      onAction: () => { setReportOpen(true); } }] : []),
+  // Public comments keep the agreed capability matrix (§7): photos and camera,
+  // plus the flagged report reference. Documents, voice notes, location and
+  // video are deliberately absent; the accept list and the client gate still
+  // refuse video. A pending native pick owns the slots, so the same three
+  // controls the old sheet disabled go inert together instead of looking live.
+  const attachInert = disabled || sending || preparingPhotos;
+  const attachmentOptions: AttachmentOption[] = [
+    { id: "photos", label: "Attach photo", icon: <ImagePlus size={20} aria-hidden />,
+      disabled: attachInert,
+      onSelect: () => void handleAttachClick() },
+    { id: "camera", label: "Take photo", icon: <Camera size={20} aria-hidden />,
+      disabled: attachInert || attachments.length >= COMMENT_ATTACH_MAX,
+      onSelect: () => void handleCameraClick() },
   ];
+  const reportReference = COMMENT_REPORTS_ENABLED ? (
+    <button type="button" className="fb-attachment-shortcut" aria-label="Reference a report"
+      data-testid="comment-attachment-report"
+      disabled={attachInert || attachments.length >= COMMENT_ATTACH_MAX}
+      onClick={() => setReportOpen(true)}>
+      <FileText size={20} aria-hidden />
+    </button>
+  ) : undefined;
 
   return (
     <div data-testid="comment-composer" className="fb-comment-composer">
@@ -644,18 +677,26 @@ export function CommentComposer({
           disabled={disabled} busy={sending} canSend={!sendDisabled}
           sendLabel={replyToUsername ? "Send reply" : "Send comment"} sendTestId="comment-send"
           inputOverlay={<MentionAutocomplete inputRef={fieldRef} value={text} participants={participants} owner={owner} onInsert={handleMentionInsert} />}
-          actions={<div ref={attachmentActionsRef} className="flex items-center">
-            <ActionMenu label="Add attachment" icon={<Plus size={20} aria-hidden />}
-              disabled={disabled || sending || preparingPhotos} items={attachmentActions} />
-            <ExpressionPickerButton
-              onPickEmoji={handleEmojiPick}
-              onPickKlipy={pickGif}
-              userId={currentUser?.id}
+          actions={<div ref={attachmentActionsRef} className="flex min-w-0 max-w-full items-center">
+            <AttachmentTray options={attachmentOptions}
+              hasText={text.trim() !== ""} text={text}
               disabled={disabled || sending || preparingPhotos}
-              onOpen={() => { setReportOpen(false); }}
-              testIdPrefix="comment-gif"
-            />
+              extra={reportReference}
+              testIdPrefix="comment-attachment" />
           </div>}
+          trailing={<ExpressionDockTrigger open={dock.open}
+            onToggle={() => { if (!dock.open) setReportOpen(false); dock.toggle(); }}
+            disabled={disabled || sending}
+            testId="comment-expression" />}
+          panel={dock.open ? (
+            <ComposerDock heightPx={dock.heightPx}
+              label="Emoji, GIFs and stickers picker" onRequestClose={dock.close}
+              testId="comment-expression-pane">
+              <ExpressionPicker dock="ime" userId={currentUser?.id} testIdPrefix="comment-gif"
+                onPickEmoji={handleEmojiPick} onPickKlipy={pickGif}
+                onClose={dock.close} onDismiss={dock.close} />
+            </ComposerDock>
+          ) : undefined}
           attachments={attachments.length > 0 && (
           <div
             data-testid="comment-attachments"

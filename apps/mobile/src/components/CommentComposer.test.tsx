@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CommentComposer, toCommentAttachmentDescriptors } from "./CommentComposer";
+import { consumeBackIntercept, resetBackInterceptors } from "./backNavigation";
 
 const { attachMock, profileMock } = vi.hoisted(() => ({
   attachMock: {
@@ -118,19 +119,26 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  resetBackInterceptors();
   vi.unstubAllEnvs();
 });
 
 function chooseAttachment(name: "GIF" | "Photo" | "Sticker") {
   // Emoji, GIFs and stickers share one control;
-  // the tab names the content. Photo still lives in the attachment menu.
+  // the tab names the content. Photo still lives in the attachment disclosure.
   if (name !== "Photo") {
     fireEvent.click(screen.getByRole("button", { name: /emoji, gifs and stickers/i }));
     fireEvent.click(screen.getByRole("tab", { name: name === "GIF" ? "GIFs" : "Stickers" }));
     return;
   }
-  fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
-  fireEvent.click(screen.getByRole("menuitem", { name }));
+  openAttachments();
+  fireEvent.click(screen.getByRole("button", { name: "Attach photo" }));
+}
+
+/** The shortcuts are sticky, so expand only when the disclosure is folded. */
+function openAttachments() {
+  const disclosure = screen.getByRole("button", { name: "Add attachment" });
+  if (disclosure.getAttribute("aria-expanded") !== "true") fireEvent.click(disclosure);
 }
 
 describe("CommentComposer social layout", () => {
@@ -270,7 +278,65 @@ describe("CommentComposer emoji affordance (R5)", () => {
   });
 });
 
+describe("CommentComposer expression dock", () => {
+  it("docks the picker under the row in the keyboard's band and keeps the draft", () => {
+    render(<CommentComposer {...baseProps()} />);
+    fireEvent.change(screen.getByTestId("comment-input"), { target: { value: "hello" } });
+    fireEvent.click(screen.getByRole("button", { name: /emoji, gifs and stickers/i }));
+    const pane = screen.getByRole("dialog", { name: "Emoji, GIFs and stickers picker" });
+    expect(pane.className).toContain("fb-composer-pane");
+    // Normal flow in the composer's own form, not a floating layer.
+    expect(pane.closest("form")).toBe(screen.getByTestId("comment-input").closest("form"));
+    expect((screen.getByTestId("comment-input") as HTMLTextAreaElement).value).toBe("hello");
+    expect(screen.getByRole("button", { name: /emoji, gifs and stickers/i })
+      .getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("closes on Android Back, leaving the draft and the caret in the field", async () => {
+    render(<CommentComposer {...baseProps()} />);
+    const input = screen.getByTestId("comment-input") as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "hello" } });
+    fireEvent.click(screen.getByRole("button", { name: /emoji, gifs and stickers/i }));
+    expect(screen.getByRole("dialog", { name: "Emoji, GIFs and stickers picker" })).toBeTruthy();
+    let handled = false;
+    act(() => { handled = consumeBackIntercept(); });
+    expect(handled).toBe(true);
+    expect(screen.queryByRole("dialog", { name: "Emoji, GIFs and stickers picker" })).toBeNull();
+    expect(input.value).toBe("hello");
+    await waitFor(() => expect(document.activeElement).toBe(input));
+  });
+
+  it("owns no Back press while the pane is closed", () => {
+    render(<CommentComposer {...baseProps()} />);
+    expect(consumeBackIntercept()).toBe(false);
+  });
+
+  it("closes on Escape from a tab inside the pane and consumes the press", async () => {
+    render(<CommentComposer {...baseProps()} />);
+    const input = screen.getByTestId("comment-input");
+    fireEvent.click(screen.getByRole("button", { name: /emoji, gifs and stickers/i }));
+    const tab = screen.getByRole("tab", { name: "GIFs" });
+    tab.focus();
+    const notCancelled = fireEvent.keyDown(tab, { key: "Escape" });
+    expect(notCancelled).toBe(false);
+    expect(screen.queryByRole("dialog", { name: "Emoji, GIFs and stickers picker" })).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(input));
+  });
+});
+
 describe("CommentComposer attachments", () => {
+  it("keeps the public capability matrix: photos and camera only", () => {
+    render(<CommentComposer {...baseProps()} />);
+    openAttachments();
+    expect(screen.getByRole("button", { name: "Attach photo" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Take photo" })).toBeTruthy();
+    // §7: no documents, no voice note, no location, no video, and no merged
+    // media option in public comments.
+    for (const name of ["Documents", "Voice note", "Location", "Photos and videos", "Video"]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+  });
+
   it("refuses a video pick with photos-only copy and stages nothing (§7)", async () => {
     render(<CommentComposer {...baseProps()} />);
     fireEvent.change(screen.getByTestId("comment-file-input") as HTMLInputElement, {
@@ -586,11 +652,13 @@ describe("CommentComposer Klipy", () => {
     expect(screen.getByTestId("comment-gif-panel")).toBeTruthy();
     expect(screen.getByTestId("comment-gif-unavailable")).toBeTruthy();
     expect(screen.queryByTestId("comment-gif-search")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
-    expect(screen.queryByRole("menuitem", { name: "GIF" })).toBeNull();
-    expect(screen.queryByRole("menuitem", { name: "Sticker" })).toBeNull();
-    // The camera is a real capture path in the menu, not a gallery alias.
-    expect(screen.getByRole("menuitem", { name: "Camera" })).toBeTruthy();
+    // GIFs and stickers are tabs of the one expression control, never extra
+    // attachment shortcuts.
+    openAttachments();
+    expect(screen.queryByRole("button", { name: "GIF" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Sticker" })).toBeNull();
+    // The camera is a real capture path in the disclosure, not a gallery alias.
+    expect(screen.getByRole("button", { name: "Take photo" })).toBeTruthy();
   });
 
   it("searches Klipy, picks a result, and tracks the share only on post", async () => {

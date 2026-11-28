@@ -9,16 +9,22 @@ import { describe, expect, it } from "vitest";
  * 108 CSS px wide, so a 27-character draft painted as "r19 / comp" over clipped
  * lines. jsdom has no container queries and no layout engine, so this file
  * pins the declared mechanism only: below 20rem the field owns the whole first
- * row, the actions keep four real 48px slots on a second row, Send sits at the
- * trailing edge, the wide flex row and the documented DOM order are unchanged,
- * and the field's over-cap draft stays scrollable instead of hidden. Rendered
- * geometry remains a deployed-browser acceptance item, not a claim from here.
+ * row, the attachment tray and the trailing controls keep a second row of real
+ * targets with Send at the trailing edge, the wide flex row is unchanged, the
+ * documented DOM order (tray, field, picker trigger, Send) holds, and the
+ * field's over-cap draft stays scrollable instead of hidden. Rendered geometry
+ * remains a deployed-browser acceptance item, not a claim from here.
+ *
+ * The tray and the docked picker live in the shared sheet the composer
+ * imports, so the narrow placement is declared there, not in this one.
  */
 const css = readFileSync(new URL("./peerComposer.css", import.meta.url), "utf8");
+const dockCss = readFileSync(new URL("./composerDock.css", import.meta.url), "utf8");
 const composerTsx = readFileSync(new URL("./PeerChatComposer.tsx", import.meta.url), "utf8");
 
 /** Comments removed and whitespace collapsed, so checks ignore line wrapping. */
 const flat = css.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\s+/g, " ");
+const dockFlat = dockCss.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\s+/g, " ");
 const tsxFlat = composerTsx.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\s+/g, " ");
 
 const QUERY = "@container composer (max-width: 20rem)";
@@ -58,6 +64,7 @@ function body(selector: string, source: string) {
 
 const narrow = containerBody(flat);
 const wide = flat.slice(0, flat.indexOf(QUERY));
+const dockNarrow = containerBody(dockFlat);
 
 describe("peer composer narrow container layout", () => {
   it("gives the field the whole first row in the narrow query", () => {
@@ -73,17 +80,36 @@ describe("peer composer narrow container layout", () => {
     expect(row).not.toMatch(/border|background|box-shadow/);
   });
 
-  it("keeps four 48px action slots with Send at the trailing edge", () => {
-    const row = body(".fb-peer-composer-row", narrow);
-    expect(row).toContain("grid-template-columns: repeat(3, minmax(48px, auto)) minmax(48px, 1fr);");
-    const send = body(".fb-peer-send", narrow);
-    expect(send).toContain("grid-column: 4;");
+  it("keeps every action at a real target with Send at the trailing edge", () => {
+    // The row's controls are the attachment tray, the picker trigger and Send.
+    // The voice slot moved into the tray, so the shipped narrow band places
+    // three tracks; the shared sheet declares that and outranks this sheet's
+    // still-present four-column rule on specificity.
+    const row = body(".fb-peer-composer .fb-peer-composer-row", dockNarrow);
+    expect(row).toContain("grid-template-columns: minmax(0, 1fr) auto auto;");
+    const tray = body(".fb-peer-composer-row .fb-attachment-tray", dockNarrow);
+    expect(tray).toContain("grid-column: 1;");
+    expect(tray).toContain("grid-row: 2;");
+    const trigger = body(".fb-peer-composer-row .fb-peer-icon:not(.fb-peer-send)", dockNarrow);
+    expect(trigger).toContain("grid-column: 2;");
+    expect(trigger).toContain("grid-row: 2;");
+    const send = body(".fb-peer-composer-row .fb-peer-send", dockNarrow);
+    expect(send).toContain("grid-column: 3;");
     expect(send).toContain("justify-self: end;");
-    // Every action keeps the base 48px target; the old 40px shrink is gone.
+    // Every action still declares a real target: the row icons keep 48px and
+    // the tray keeps Messenger's measured 44px disclosure and 40px shortcuts
+    // instead of the old one-size row shrink.
     const icon = body(".fb-peer-icon", wide);
     expect(icon).toContain("min-width: 48px;");
     expect(icon).toContain("min-height: 48px;");
-    expect(narrow).not.toMatch(/min-(?:width|height):\s*\d+px/);
+    const disclosure = body(".fb-attachment-disclosure", dockFlat);
+    expect(disclosure).toContain("width: 44px;");
+    expect(disclosure).toContain("height: 44px;");
+    const shortcut = body(".fb-attachment-shortcut", dockFlat);
+    expect(shortcut).toContain("width: 40px;");
+    expect(shortcut).toContain("height: 40px;");
+    // The narrow band squeezes no target below the size its sheet declares.
+    expect(dockNarrow).not.toMatch(/min-(?:width|height):\s*\d+px/);
     expect(narrow).not.toMatch(/min-width:\s*40px/);
   });
 
@@ -115,16 +141,24 @@ describe("peer composer narrow container layout", () => {
   });
 
   it("keeps the documented DOM order, so tab order and names do not move", () => {
-    const attach = tsxFlat.indexOf('aria-label="Add attachment"');
+    // Tray, field, picker trigger, Send. Voice is one of the tray's shortcuts
+    // now, never a fifth control between the trigger and Send.
+    const attach = tsxFlat.indexOf('label="Add attachment"');
     const field = tsxFlat.indexOf('className="fb-peer-field"');
-    const expressions = tsxFlat.indexOf("<ExpressionPickerButton");
-    const voice = tsxFlat.indexOf('aria-label="Voice message"');
+    const expressions = tsxFlat.indexOf("<ExpressionDockTrigger");
     const send = tsxFlat.indexOf('aria-label="Send message"');
     expect(attach).toBeGreaterThan(-1);
     expect(attach).toBeLessThan(field);
     expect(field).toBeLessThan(expressions);
-    expect(expressions).toBeLessThan(voice);
-    expect(voice).toBeLessThan(send);
+    expect(expressions).toBeLessThan(send);
+    // The option list, not the row, owns voice; the standalone microphone the
+    // old row carried has no control of its own.
+    const options = tsxFlat.indexOf("const attachmentOptions");
+    expect(tsxFlat.indexOf('label: "Voice note"')).toBeGreaterThan(options);
+    expect(tsxFlat).not.toContain('aria-label="Voice message"');
+    // The docked picker renders after the row inside the same form, so it can
+    // never stand between the field and Send.
+    expect(send).toBeLessThan(tsxFlat.indexOf("{dock.open && ("));
     // The second row comes from CSS placement only: one row element remains.
     expect(tsxFlat.match(/className="fb-peer-composer-row"/g)?.length).toBe(1);
   });
