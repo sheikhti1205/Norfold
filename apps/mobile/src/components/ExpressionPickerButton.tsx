@@ -17,6 +17,11 @@ export interface ExpressionPickerButtonProps {
   label?: string;
   /** Prefix for provider-panel test ids (kept per composer). */
   testIdPrefix?: string;
+  /**
+   * Presentation of the panel: a floating popover (default) or a docked pane
+   * rendered in the composer's flow, in the on-screen keyboard's place.
+   */
+  dock?: "popover" | "ime";
 }
 
 /**
@@ -25,10 +30,16 @@ export interface ExpressionPickerButtonProps {
  * The panel stays open after an emoji so several can be added in a row; a GIF
  * or sticker is a whole message, so that pick closes it. Escape or a press
  * outside closes it and focus returns to the trigger.
+ *
+ * Docked (`dock="ime"`), the panel is part of the composer rather than an
+ * overlay: it renders inline, and dismiss comes from its own close control or
+ * from the caller that mounts `ExpressionPicker` directly. No outside-press
+ * listener is installed in that mode, because a press on the composer is not a
+ * dismissal there.
  */
 export function ExpressionPickerButton({
   onPickEmoji, onPickKlipy, userId = null, disabled = false, onOpen, className = "fb-icon-control",
-  align = "start", label = "Emoji, GIFs and stickers", testIdPrefix = "expression",
+  align = "start", label = "Emoji, GIFs and stickers", testIdPrefix = "expression", dock = "popover",
 }: ExpressionPickerButtonProps) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -36,7 +47,7 @@ export function ExpressionPickerButton({
   const { hoverLabel } = useHoverLabel();
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || dock === "ime") return;
     const onPointerDown = (event: PointerEvent) => {
       if (root.current && !root.current.contains(event.target as Node)) setOpen(false);
     };
@@ -52,7 +63,19 @@ export function ExpressionPickerButton({
       window.removeEventListener("pointerdown", onPointerDown, true);
       window.removeEventListener("keydown", onKeyDown, true);
     };
-  }, [open]);
+  }, [open, dock]);
+
+  const picker = (
+    <ExpressionPicker
+      dock={dock}
+      userId={userId}
+      testIdPrefix={testIdPrefix}
+      onPickEmoji={onPickEmoji}
+      onPickKlipy={onPickKlipy}
+      onClose={() => setOpen(false)}
+      onDismiss={() => { setOpen(false); trigger.current?.focus(); }}
+    />
+  );
 
   return (
     // Not `position: relative`: the panel resolves against the composer that
@@ -63,7 +86,7 @@ export function ExpressionPickerButton({
         type="button"
         className={className}
         aria-label={label}
-        aria-haspopup="dialog"
+        aria-haspopup={dock === "ime" ? undefined : "dialog"}
         aria-expanded={open}
         disabled={disabled}
         onClick={() => setOpen((value) => {
@@ -74,18 +97,11 @@ export function ExpressionPickerButton({
       >
         <Smile size={20} aria-hidden="true" />
       </button>
-      {open && (
+      {open && (dock === "ime" ? picker : (
         <div className="fb-picker-layer" data-align={align} role="dialog" aria-label={`${label} picker`}>
-          <ExpressionPicker
-            userId={userId}
-            testIdPrefix={testIdPrefix}
-            onPickEmoji={onPickEmoji}
-            onPickKlipy={onPickKlipy}
-            onClose={() => setOpen(false)}
-            onDismiss={() => { setOpen(false); trigger.current?.focus(); }}
-          />
+          {picker}
         </div>
-      )}
+      ))}
     </div>
   );
 }
