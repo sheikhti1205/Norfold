@@ -325,9 +325,8 @@ describe("RichTextEditor report pass — accessibility", () => {
   it("focus trap in overlay, focus restored on close", () => {
     renderFocused(<RichTextEditor label="Description" value="hello" onChange={() => {}} />);
     const moreBtn = screen.getByRole("button", { name: "More" });
-    // Focus the always-mounted More slot, which is also the element this test
-    // expects to receive focus back. The detached-launcher fallback is not
-    // exercised here: the More slot survives, so the restore targets it.
+    // The rail is only mounted while the field is active, so the field itself is
+    // the restore target: the More slot is gone once the overlay owns focus.
     moreBtn.focus();
     expect(document.activeElement).toBe(moreBtn);
     pickRailMore("Expand editor");
@@ -335,10 +334,13 @@ describe("RichTextEditor report pass — accessibility", () => {
     // The focus trap moves focus into the overlay.
     expect(overlay?.contains(document.activeElement)).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: /Done/i }));
-    // Focus returns to the launcher, which is still mounted.
-    const activeEl = document.activeElement as HTMLElement | null;
-    expect(activeEl).not.toBeNull();
-    expect(activeEl?.getAttribute("aria-label")).toBe("More");
+    // Focus returns to the writer's field, and the rail it owns comes back with it.
+    const textbox = screen.getByRole("textbox", { name: "Description" });
+    expect(document.activeElement).toBe(textbox);
+    const rail = document.querySelector('[data-testid="rich-text-rail"]');
+    expect(rail).toBeTruthy();
+    expect(rail?.closest("#report-editor-overlay")).toBeNull();
+    expect(screen.getByRole("toolbar", { name: "Description formatting" })).toBeTruthy();
   });
 
   it("gives the dialog the initial focus, not the close control", () => {

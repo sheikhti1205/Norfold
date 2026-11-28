@@ -35,6 +35,10 @@ describe("ED-02/ED-06 heading + toolbar menus", () => {
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Heading 1" }));
     expect(ref.current?.isActive("heading", { level: 1 })).toBe(true);
     expect(tiptapToMarkdown(ref.current?.getJSON())).toBe("# hello");
+    // A rail action hands focus back synchronously, so the rail the next press
+    // needs is still mounted instead of waiting for a deferred editor focus.
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Description" }));
+    expect(screen.getByRole("toolbar", { name: "Description formatting" })).toBeTruthy();
     // Re-choose H2 twice: stays H2.
     fireEvent.click(screen.getByRole("button", { name: /Body|Block type|Heading|Heading 1/i }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Heading 2" }));

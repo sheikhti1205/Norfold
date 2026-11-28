@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, screen } from "@testing-library/react";
 import { RichTextEditor } from "./RichTextEditor";
+import { polyfillRangeGeometry, restoreRangeGeometry } from "../test-utils/jsdomRangeGeometry";
 import { closeSoftKeyboard, renderFocused, restoreSoftKeyboard } from "../test-utils/softKeyboard";
 
 /**
@@ -83,6 +84,11 @@ function railShell(): HTMLElement | null {
 function slashHint(): HTMLElement | null {
   return screen.queryByTestId("rich-text-slash-hint");
 }
+
+// File-level, not per test: ProseMirror's MutationObserver flush can run after an
+// individual test's teardown, so a per-test window would leave the same hole.
+beforeAll(polyfillRangeGeometry);
+afterAll(restoreRangeGeometry);
 
 beforeEach(() => {
   shell.reading = { known: false, visible: false };

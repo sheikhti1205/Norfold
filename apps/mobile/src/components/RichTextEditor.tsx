@@ -883,7 +883,8 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
   const setOverlayRef = useFocusTrap(overlayRef, () => setIsExpanded(false), isExpanded, overlayPreviouslyFocusedRef);
   useModalBack(isExpanded, () => setIsExpanded(false));
 
-  // Restore focus to expand button when overlay closes
+  // Return the writer to the field when the overlay closes: the rail that
+  // launched it unmounts with the overlay, so the field is the stable target.
   useEffect(() => {
     if (!isExpanded && overlayPreviouslyFocusedRef.current) {
       const previous = overlayPreviouslyFocusedRef.current;
@@ -891,8 +892,8 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
       if (document.contains(previous)) {
         previous.focus();
       } else if (moreButtonRef.current) {
-        // The More slot is the one trigger that stays mounted, so it is the
-        // stable place to return focus when the remember-ed element is gone.
+        // A caller that supplied a different launcher still falls back to the
+        // rail's More slot when the remembered element is gone.
         moreButtonRef.current.focus();
       }
     }
@@ -1327,6 +1328,17 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
     editor.commands.focus();
   }
 
+  /**
+   * Hand DOM focus back to the field in the same tick. tiptap's `focus` command
+   * defers `view.focus()` to the next animation frame on desktop (only iOS and
+   * Android focus `view.dom` immediately), and the rail is mounted only while
+   * this field is active: a deferred focus would drop the rail for a frame.
+   */
+  function focusDescriptionNow() {
+    const dom = editor?.view.dom as HTMLElement | undefined;
+    if (dom && dom.isConnected) dom.focus({ preventScroll: true });
+  }
+
   function toggleMarkWithSavedSelection(mark: "bold" | "italic") {
     if (!editor || disabledRef.current) return;
     const range = resolveFormatRange();
@@ -1345,6 +1357,7 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
     // setHeading (not toggle): re-choosing the current level keeps it (ED-02).
     if (kind === "body") editor.chain().focus().setParagraph().run();
     else editor.chain().focus().setHeading({ level: kind }).run();
+    focusDescriptionNow();
     setOpenMenu(null);
     finishOperation(kind === "body" ? "Body style applied" : `Heading ${kind} applied`);
   }
@@ -1355,6 +1368,7 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
     focusRangeOrCurrent(range);
     if (kind === "bullet") editor.chain().focus().toggleBulletList().run();
     else editor.chain().focus().toggleOrderedList().run();
+    focusDescriptionNow();
     setOpenMenu(null);
     finishOperation(kind === "bullet" ? "Bullet list toggled" : "Numbered list toggled");
   }
@@ -1364,6 +1378,7 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
     const range = resolveFormatRange();
     focusRangeOrCurrent(range);
     editor.chain().focus().toggleBlockquote().run();
+    focusDescriptionNow();
     setOpenMenu(null);
     finishOperation("Quote applied");
   }
@@ -1372,6 +1387,7 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
     if (!editor || disabledRef.current) return;
     // Clear-all targets the selection when present, else the current block.
     editor.chain().focus().clearNodes().unsetAllMarks().run();
+    focusDescriptionNow();
     setOpenMenu(null);
     finishOperation("All formatting cleared");
   }
@@ -1379,6 +1395,7 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
   function applyUndo() {
     if (!editor || disabledRef.current) return;
     editor.chain().focus().undo().run();
+    focusDescriptionNow();
     setOpenMenu(null);
     finishOperation("Undone");
   }
@@ -1414,12 +1431,14 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
     }
     if (range) editor.chain().focus().insertContentAt(range, markdownToTiptap(text)).run();
     else editor.chain().focus().insertContent(markdownToTiptap(text)).run();
+    focusDescriptionNow();
     finishOperation("Pasted as Markdown");
   }
 
   function applyRedo() {
     if (!editor || disabledRef.current) return;
     editor.chain().focus().redo().run();
+    focusDescriptionNow();
     setOpenMenu(null);
     finishOperation("Redone");
   }
@@ -1578,13 +1597,10 @@ export function RichTextEditor({ label, value, onChange, placeholder, editorRef,
 
   function openExpandedEditor() {
     if (disabledRef.current) return;
-    const active = document.activeElement;
-    // The inline route to full screen is the More menu, and its rows unmount
-    // with the menu. Remember the trigger only when it survives; otherwise
-    // focus returns to the always-mounted More slot instead of to <body>.
-    overlayPreviouslyFocusedRef.current = active instanceof HTMLElement && active !== document.body
-      ? active
-      : moreButtonRef.current;
+    // The overlay returns the writer to the field, not to a rail slot: the rail is
+    // mounted only while the field is active, so both it and its More trigger are
+    // gone once the overlay owns focus.
+    overlayPreviouslyFocusedRef.current = (editor?.view.dom as HTMLElement | undefined) ?? null;
     setOpenMenu(null);
     setIsExpanded(true);
   }
