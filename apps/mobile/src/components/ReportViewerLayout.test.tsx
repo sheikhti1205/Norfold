@@ -80,4 +80,13 @@ describe("ReportViewerLayout surface contract", () => {
     expect(css).toContain("linear-gradient(to bottom, var(--fb-surface), transparent)");
     expect(css).toContain("linear-gradient(to top, var(--fb-surface), transparent)");
   });
+
+  it("keeps the split conversation at its comfort width and the panel wide enough to hold it", () => {
+    expect(css).toContain("--fb-rv-conversation: clamp(420px, 40%, 44%);");
+    expect(css).toContain("width: var(--fb-rv-conversation);");
+    expect(css).toContain("min-width: 420px;");
+    expect(css).toContain("right: var(--fb-rv-conversation);");
+    expect(css).not.toContain("right: clamp(");
+    expect(css).toContain(".fb-modal-panel.fb-report-panel:has(.fb-rv[data-conversation=\"split\"]) { max-width: min(92%, 60rem); }");
+  });
 });

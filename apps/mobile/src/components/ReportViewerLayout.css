@@ -93,9 +93,9 @@
 /* The split is the wide-window composition. The screen chooses it from the same
    900px breakpoint used here, so the DOM and the CSS cannot disagree. */
 @media (width > 900px) {
-  .fb-rv[data-conversation="split"] { flex-direction: row; }
+  .fb-rv[data-conversation="split"] { flex-direction: row; --fb-rv-conversation: clamp(420px, 40%, 44%); }
   .fb-rv[data-conversation="split"] .fb-rv-conversation {
-    width: clamp(360px, 40%, 44%); min-width: 360px;
+    width: var(--fb-rv-conversation); min-width: 420px;
     border-left: 1px solid var(--fb-outline-variant);
     padding-top: 52px;
   }
@@ -108,10 +108,16 @@
      footer and never fades under the report's edge. The split report column has
      no sticky action row, so it carries the floor fade itself. */
   .fb-rv[data-conversation="split"]::before,
-  .fb-rv[data-conversation="split"]::after { right: clamp(360px, 40%, 44%); }
+  .fb-rv[data-conversation="split"]::after { right: var(--fb-rv-conversation); }
   .fb-rv[data-conversation="split"]::after {
     content: ""; position: absolute; bottom: 0; left: 0; height: 28px;
     z-index: 1; pointer-events: none;
     background: linear-gradient(to top, var(--fb-surface), transparent);
   }
+  /* The base 50rem panel cap (adaptiveFoundation.css) squeezes the conversation
+     to its 360px floor; the split composition needs the extra ~160px so the
+     comments column reaches its 420px comfort width while the report keeps its
+     32rem measure. This is only the split report surface: the separate
+     `.fb-comments-panel` thread surface is a different panel and stays as is. */
+  .fb-modal-panel.fb-report-panel:has(.fb-rv[data-conversation="split"]) { max-width: min(92%, 60rem); }
 }
