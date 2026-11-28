@@ -118,6 +118,72 @@ jobs:
           supabase link --project-ref "$PROJECT_REF"
           supabase db push --remote --skip-vault --dry-run
           supabase db push --remote --skip-vault --yes
+      # The database now calls the dispatcher itself, so it needs the dispatcher's
+      # credential: this seeds `push_dispatch_secret` into Vault. It is here rather
+      # than in the migration because `db push` runs with --skip-vault. The value
+      # must equal the push-dispatch function environment (`PUSH_DISPATCH_SECRET`),
+      # or every write-time call is rejected with 401. It travels only as an
+      # environment variable and a psql variable: never interpolated by the shell,
+      # never echoed, and xtrace stays off.
+      - name: Seed the push dispatch secret in Vault
+        if: inputs.push_migrations && !inputs.deploy_device_list && !inputs.deploy_chat_media_ack && !inputs.deploy_history_peers
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PUSH_DISPATCH_SECRET: ${{ secrets.PUSH_DISPATCH_SECRET }}
+        run: |
+          set -euo pipefail
+          set +x
+          if [ -z "${PUSH_DISPATCH_SECRET:-}" ]; then
+            echo '::error::PUSH_DISPATCH_SECRET is not provisioned; write-time dispatch would be rejected.'
+            exit 1
+          fi
+          if [ -z "${PROJECT_REF:-}" ]; then
+            echo '::error::PROJECT_REF is not set; the secret was not seeded.'
+            exit 1
+          fi
+          command -v psql >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y postgresql-client; }
+          # The runner has no IPv6 route, so the IPv4 Supavisor pooler is used
+          # instead of the direct db.<ref> host. Host and port come from the
+          # project's own pooler configuration: the hostname carries a pooler
+          # index and a region, and both are deployment details that must not be
+          # hardcoded here.
+          POOLER=$(curl -fsS -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$PROJECT_REF/config/database/pooler")
+          DB_HOST=$(printf '%s' "$POOLER" | jq -r 'if type == "array" then ([.[] | select(.database_type == "PRIMARY")][0] // .[0]) else . end | .db_host // empty')
+          DB_PORT=$(printf '%s' "$POOLER" | jq -r 'if type == "array" then ([.[] | select(.database_type == "PRIMARY")][0] // .[0]) else . end | .db_port // empty')
+          if [ -z "$DB_HOST" ] || [ -z "$DB_PORT" ]; then
+            echo '::error::Could not read the pooler host; the secret was not seeded.'
+            exit 1
+          fi
+          psql -X -q -v ON_ERROR_STOP=1 -v push_secret="$PUSH_DISPATCH_SECRET" \
+            -h "$DB_HOST" -p "$DB_PORT" \
+            -U "postgres.${PROJECT_REF}" -d postgres <<'SQL'
+          -- One transaction, so the local setting and the write it feeds cannot
+          -- land on different pooler backends. The result is discarded: the value
+          -- must never be printed.
+          begin;
+          select set_config('findback.push_dispatch_secret', :'push_secret', true) \g /dev/null
+          do $$
+          declare
+            v_id uuid;
+            v_value text := current_setting('findback.push_dispatch_secret', true);
+            v_desc constant text := 'x-findback-dispatch-secret presented by the write-time push dispatcher';
+          begin
+            if coalesce(v_value, '') = '' then
+              raise exception 'the push dispatch secret is empty';
+            end if;
+            if to_regclass('vault.secrets') is null then
+              raise exception 'Vault is not available on this database';
+            end if;
+            select id into v_id from vault.secrets where name = 'push_dispatch_secret' limit 1;
+            if v_id is null then
+              perform vault.create_secret(v_value, 'push_dispatch_secret', v_desc);
+            else
+              perform vault.update_secret(v_id, v_value, 'push_dispatch_secret', v_desc);
+            end if;
+          end $$;
+          commit;
+          SQL
       - uses: actions/setup-node@v5
         if: inputs.deploy_device_list || inputs.deploy_chat_media_ack || inputs.deploy_history_peers
         with:
