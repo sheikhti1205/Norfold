@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 import { Camera, FileText, ImagePlus, X } from "lucide-react";
 import { AttachmentTray, type AttachmentOption } from "./AttachmentTray";
 import { ComposerShell } from "./ComposerShell";
@@ -624,8 +625,12 @@ export function CommentComposer({
     </button>
   ) : undefined;
 
+  // The native shell composes like chat; web is the narrower column and keeps
+  // its avatar.
+  const nativeShell = Capacitor.isNativePlatform();
+
   return (
-    <div data-testid="comment-composer" className="fb-comment-composer">
+    <div data-testid="comment-composer" className={nativeShell ? "fb-comment-composer fb-comment-composer--native" : "fb-comment-composer"}>
       <span className="fb-comment-composer-avatar">
         <UserAvatar avatarUrl={currentUser?.avatarUrl} username={currentUser?.username} size={32} />
       </span>

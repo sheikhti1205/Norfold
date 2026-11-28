@@ -262,6 +262,18 @@
  * the inherited line height so large text keeps the same optical centre. */
 .fb-comment-composer { display: flex; align-items: flex-start; gap: .5rem; min-width: 0; }
 .fb-comment-composer-avatar { display: flex; flex: none; margin-top: calc(.75em - 1px); }
+/* Native shell: the composer is a chat-style row - disclosure, field pill,
+   expression trigger, Send - with no avatar and no enclosing capsule. Web
+   keeps the avatar: its comments column is narrower than the phone's. */
+.fb-comment-composer--native .fb-comment-composer-avatar { display: none; }
+.fb-comment-composer--native .fb-composer-shell { border: 0; background: transparent; border-radius: 0; }
+.fb-comment-composer--native .fb-composer-row { padding: 0; align-items: flex-end; }
+.fb-comment-composer--native .fb-composer-field {
+  border: 1px solid var(--fb-outline-variant); border-radius: 20px;
+  background: var(--fb-surface-container-low);
+}
+.fb-comment-composer--native .fb-composer-field:focus-within { border-color: var(--fb-focus); }
+.fb-comment-composer--native .fb-composer-row textarea:focus-visible { outline: none; }
 /* The focus ring belongs to the field the reader types in (the textarea rule
    below), never to the shell that also holds attach, emoji and send. */
 .fb-composer-row { display: flex; align-items: flex-end; gap: 4px; padding: 4px; }
