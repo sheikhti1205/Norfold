@@ -125,6 +125,16 @@ function reportMediaFailure(phase: "upload" | "download", error: unknown) {
   logError(`chat media ${phase} failed:`, error instanceof Error ? error.message : String(error));
 }
 
+/**
+ * A submit leaves on its own lane only while the platform reports a network.
+ * Offline, the durable outbox row is already the whole answer: the `online` wake
+ * replays it through the ordinary pass, instead of a lane whose only possible
+ * outcome is replacing an honest queued send with a failed one.
+ */
+function canSubmitNow(): boolean {
+  return typeof navigator === "undefined" || navigator.onLine !== false;
+}
+
 function publish(value: MessagingRuntimeSnapshot) {
   snapshot = value;
   for (const listener of listeners) listener();
@@ -829,10 +839,16 @@ export async function downloadMessagingMedia(accountId: string, conversationId: 
  * it never changes a plain text send into a different capability.
  *
  * `onAdmitted` marks the durable boundary: the captured epoch and the committed
- * local outbox row exist, but the network relay has not been attempted. It runs
- * before the view refresh so the composer can settle its submitted draft without
- * waiting for a read. It is fenced to this exact live owner and it can never
- * reopen an admission that already committed.
+ * local outbox row exist. It runs as soon as that row is durable, without waiting
+ * for the row's own SEND or the view refresh, so the composer can settle its
+ * submitted draft immediately. It is fenced to this exact live owner and it can
+ * never reopen an admission that already committed.
+ *
+ * A submit is dispatched on the session's own lane instead of behind the refresh
+ * pass: the SEND leaves as soon as the row is durable, so views, the active
+ * thread, state reads and any pass already running cannot delay it. A refusal or
+ * a disconnected device only leaves the row in the outbox, where the ordinary
+ * pass still settles its echo or retries it.
  *
  * `createdAt` is when the item was composed, not when it reached the network.
  * Items the user selected together share one value, so a receiver's media run
@@ -849,6 +865,13 @@ export async function sendMessagingText(accountId: string, conversationId: strin
     createdAt: createdAt ?? Date.now(),
     ...(contextReportId ? { messageType: "TEXT" as const, contextReportId: uuid(contextReportId) } : {}),
     ...(replyToId ? { replyToId: uuid(replyToId) } : {}) });
+  // The row is durable and the person is waiting, so its SEND leaves now on the
+  // submit lane, ahead of the view read and the pass below. A lane failure is not
+  // an admission failure: the row keeps its place in the outbox and the pass
+  // reports the same way it always has.
+  const dispatched = canSubmitNow() ? owner.session.sendNow(conversation, id).catch((error: unknown) => {
+    logError("[messaging] chat submit lane failed", error);
+  }) : Promise.resolve();
   // The row and its exact identity are durable now. Report that boundary under
   // the same fence as assertOwner, without throwing: an account switch must not
   // call back into the previous thread, and presentation work must not turn a
@@ -860,9 +883,14 @@ export async function sendMessagingText(accountId: string, conversationId: strin
     assertOwner(owner);
     await reload(owner); // Queued send appears without waiting for connectivity.
   } catch {
+    void dispatched;
     if (current === owner && owner.generation === generation) void requestRefresh(owner, "fast", conversation);
     return { id, viewStale: true };
   }
+  // The submit's SEND settles before the pass starts: it must be the first
+  // request this send makes, and the pass's flush must see its lease instead of
+  // racing a second attempt at the same row.
+  await dispatched;
   // Settle this send and the peer's echo in the conversation that already named
   // itself: a targeted fast pass reconciles that thread instead of rescanning
   // every projection. Projections/media stay on full passes.

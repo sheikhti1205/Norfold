@@ -12,6 +12,7 @@ const DEVICE="00000000-0000-4000-8000-000000000003";
 const ID="00000000-0000-4000-8000-000000000004";
 const CONV="00000000-0000-4000-8000-000000000005";
 const MAIL="00000000-0000-4000-8000-000000000006";
+const mailbox=(n:number)=>`00000000-0000-4000-8000-${(500+n).toString(16).padStart(12,"0")}`;
 const scope={accountId:A,deviceId:DEVICE};
 const message:HumanMessage={id:ID,conversationId:CONV,authorId:A,recipientId:B,body:"I found your bag."};
 const handles:MessagingHistory[]=[];
@@ -263,5 +264,120 @@ describe("human messaging session delivery",()=>{
   await session.flush();
   expect(await history.listOutbox()).toEqual([]);
   expect((await history.getMessage(ID))?.server).toMatchObject({eventId:ID});
+ });
+ it("sends with the head this device applied and repairs one stale-head refusal",async()=>{
+  const factory=new IDBFactory();
+  const history=await openWebMessagingHistory(scope,{indexedDB:factory}); handles.push(history);
+  const actions:string[]=[]; const heads:number[]=[];
+  let position=0;
+  // The one head the gateway discloses, in the shape findback_chat_head_internal
+  // publishes. Advancing a position is a message arriving after our checkpoint.
+  const liveHead=()=>({accountId:A,conversationId:CONV,streamId:"fixture-stream",epoch:"fixture-epoch",
+   revision:1+position,position,messageHead:position,stateHead:0,serverTime:1_000});
+  const identity=(head:Record<string,unknown>)=>JSON.stringify({...head,serverTime:0});
+  const rpc:MessagingRpc=async(input)=>{
+   actions.push(input.action);
+   if(input.action==="HEAD") return liveHead();
+   if(input.action==="CONVERSATION_SYNC") return emptyConversationRange(input.args.head);
+   if(input.action==="STATE_SYNC") return [];
+   if(input.action==="SYNC") return [];
+   if(input.action==="SEND"){
+    const args=input.args as {messageId:string;expectedHead:Record<string,unknown>};
+    heads.push((args.expectedHead as {position:number}).position);
+    // The gateway refuses a head that no longer matches the live one, ignoring
+    // only the server instant.
+    if(identity(args.expectedHead)!==identity(liveHead())) throw new Error("Chat could not sync. Try again.");
+    return args.messageId;
+   }
+   return null;
+  };
+  const session=createMessagingSession(scope,history,rpc);
+  // A reconcile applies and commits the head this device then holds.
+  await session.reconcileConversation(CONV);
+  expect(await history.getConversationCheckpoint(CONV)).toMatchObject({position:0,revision:1});
+  // A message arrives after that checkpoint: the cached head is now stale.
+  position=1;
+  await session.send(message);
+  actions.length=0;
+  await session.sendNow(CONV,ID);
+  // One SEND from the cached head, one HEAD that proves the head moved, one retry.
+  // No state read is on that path.
+  expect(actions).toEqual(["SEND","HEAD","SEND"]);
+  expect(heads).toEqual([0,1]);
+  expect((await history.listOutbox())[0]).toMatchObject({messageId:ID,status:"SENDING"});
+ });
+ it("keeps one attempt and the ordinary failure path when the refusal is not a stale head",async()=>{
+  const factory=new IDBFactory();
+  const history=await openWebMessagingHistory(scope,{indexedDB:factory}); handles.push(history);
+  const actions:string[]=[]; let refuse=true; const envelopes=new Map<string,MailboxEnvelope>();
+  const rpc:MessagingRpc=async(input)=>{
+   actions.push(input.action);
+   if(input.action==="HEAD") return emptyConversationHead(A,input.args.conversationId as string);
+   if(input.action==="CONVERSATION_SYNC") return emptyConversationRange(input.args.head);
+   if(input.action==="STATE_SYNC") return [];
+   if(input.action==="SEND"){
+    if(refuse) throw new Error("Chat could not sync. Try again.");
+    const args=input.args as {messageId:string;body:string};
+    envelopes.set(args.messageId,{...scope,mailboxId:mailbox(1),event:{kind:"TEXT",eventId:args.messageId,sequence:1,
+     message:{id:args.messageId,conversationId:CONV,authorId:A,recipientId:B,body:args.body}}});
+    return args.messageId;
+   }
+   if(input.action==="SYNC") return [...envelopes.values()];
+   if(input.action==="ACK"){ envelopes.clear(); return null; }
+   return null;
+  };
+  const session=createMessagingSession(scope,history,rpc);
+  await session.reconcileConversation(CONV);
+  await session.send(message);
+  actions.length=0;
+  await expect(session.sendNow(CONV,ID)).rejects.toThrow("Chat could not sync. Try again.");
+  // The head this device holds is still the live one, so this was not staleness:
+  // the lane does not resend, and the row takes the ordinary failure path.
+  expect(actions).toEqual(["SEND","HEAD"]);
+  expect((await history.listOutbox())[0]).toMatchObject({messageId:ID,status:"FAILED",attempts:1});
+  // The durable outbox is still the retry record: the background pass drains it.
+  refuse=false;
+  await session.flush();
+  expect(await history.listOutbox()).toEqual([]);
+  expect((await history.getMessage(ID))?.server).toMatchObject({eventId:ID});
+ });
+ it("claims only the submitted row and leaves the rest of the queue to the pass",async()=>{
+  const SECOND="00000000-0000-4000-8000-00000000000c";
+  const factory=new IDBFactory();
+  const history=await openWebMessagingHistory(scope,{indexedDB:factory}); handles.push(history);
+  const envelopes=new Map<string,MailboxEnvelope>(); let sequence=0;
+  const rpc:MessagingRpc=async(input)=>{
+   if(input.action==="HEAD") return emptyConversationHead(A,input.args.conversationId as string);
+   if(input.action==="CONVERSATION_SYNC") return emptyConversationRange(input.args.head);
+   if(input.action==="STATE_SYNC") return [];
+   if(input.action==="SEND"){
+    const args=input.args as {messageId:string;body:string};
+    sequence+=1;
+    envelopes.set(args.messageId,{...scope,mailboxId:mailbox(sequence),event:{kind:"TEXT",eventId:args.messageId,
+     sequence,message:{id:args.messageId,conversationId:CONV,authorId:A,recipientId:B,body:args.body}}});
+    return args.messageId;
+   }
+   if(input.action==="SYNC") return [...envelopes.values()];
+   if(input.action==="ACK"){
+    for(const [id,envelope] of envelopes) if(envelope.mailboxId===input.args.mailboxId){ envelopes.delete(id); break; }
+    return null;
+   }
+   return null;
+  };
+  const session=createMessagingSession(scope,history,rpc);
+  await session.send(message);
+  await session.send({...message,id:SECOND,body:"Second"});
+  await session.sendNow(CONV,SECOND);
+  const rows=async()=>new Map((await history.listOutbox())
+   .map((row)=>[row.messageId,{status:row.status,attempts:row.attempts}] as const));
+  // The submitted row is the one claimable row for this lane; the older row keeps
+  // its place in the queue instead of being leased and abandoned.
+  expect(await rows()).toEqual(new Map([[ID,{status:"QUEUED",attempts:0}],
+   [SECOND,{status:"SENDING",attempts:1}]]));
+  // One background pass then drains both, settling the lease the lane left.
+  await session.flush();
+  expect(await rows()).toEqual(new Map());
+  expect((await history.getMessage(ID))?.server).toMatchObject({eventId:ID});
+  expect((await history.getMessage(SECOND))?.server).toMatchObject({eventId:SECOND});
  });
 });

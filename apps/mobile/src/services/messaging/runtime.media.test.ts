@@ -881,13 +881,59 @@ describe("foreground fast path", () => {
     await vi.waitFor(() => expect(sent.map((fields) => fields.body)).toContain("hello"), { timeout: 3000 });
     await vi.waitFor(async () =>
       expect((await runtime.readMessagingThreadState(A, CONV)).outbox).toEqual([]), { timeout: 3000 });
-    // A warm send into a thread that already holds a settled gate performs one
-    // state read, one HEAD, the SEND, one echo page and its mailbox ACK. A
-    // repeated read-path reconcile would add a second STATE_SYNC/HEAD before the
-    // SEND, and a repeated trailing sync a second STATE_SYNC/SYNC after it.
-    expect(requestLog).toEqual(["STATE_SYNC", "HEAD", "SEND", "SYNC", "ACK"]);
+    // The submit lane sends first, from the head this device already applied; the
+    // pass then reads state for the open thread's gate, reads it once more for its
+    // own flush pass, and settles the echo. A lane-less pass put both reads and a
+    // HEAD in front of the SEND.
+    expect(requestLog.filter((entry) => entry !== "delivery"))
+      .toEqual(["SEND", "STATE_SYNC", "HEAD", "STATE_SYNC", "SYNC", "ACK"]);
     expect(runtime.getMessagingRuntimeSnapshot().threadSync).toMatchObject({ conversationId: CONV, mode: "ready" });
     detach();
+  });
+  it("issues a user submit's SEND before any refresh request", async () => {
+    runtime.setMessagingAccount(A);
+    await waitForState((state) => state.status === "ready" && !!state.currentProjections);
+    // A watched thread is the warm case: the head this device applied is already
+    // durable, so not even a HEAD precedes the SEND.
+    const detach = runtime.watchMessagingThread(A, CONV);
+    await waitForState((state) => state.threadSync?.mode === "ready");
+    await vi.waitFor(() => expect(requestLog).toContain("delivery"), { timeout: 3000 });
+    requestLog.length = 0;
+    await expect(runtime.sendMessagingText(A, CONV, B, "straight to the relay")).resolves.toEqual(expect.any(String));
+    // The first request this submit makes is the person's own send: projections,
+    // state reads, HEAD and the mailbox all wait until it is settled.
+    expect(requestLog[0]).toBe("SEND");
+    expect(sent.map((fields) => fields.body)).toEqual(["straight to the relay"]);
+    // The ordinary pass still settles the echo afterwards, off the send path.
+    await vi.waitFor(async () =>
+      expect((await runtime.readMessagingThreadState(A, CONV)).outbox).toEqual([]), { timeout: 3000 });
+    expect(requestLog).toContain("SYNC");
+    detach();
+  });
+  it("dispatches a submit while a refresh pass is still running", async () => {
+    runtime.setMessagingAccount(A);
+    await waitForState((state) => state.status === "ready" && !!state.currentProjections);
+    // An inbound photo parks the next full pass in its download sweep, so the
+    // pass owns the refresh owner for the whole submit below.
+    const inbound = await mediaFixture(id(212), id(112), { direction: "IN", expiresAt: Date.now() + 60_000 });
+    remote.set(id(212), inbound);
+    await boundary.handles[0]!.history.persistInbound({ accountId: A, deviceId: DEVICE, mailboxId: id(412),
+      event: { kind: "TEXT", eventId: id(312), sequence: 3,
+        message: { id: id(112), conversationId: CONV, authorId: B, recipientId: A, body: "", messageType: "MEDIA" } } });
+    deliveryGate = deferred();
+    const running = runtime.refreshMessaging(A);
+    await entered.promise;
+    requestLog.length = 0;
+    await expect(runtime.sendMessagingText(A, CONV, B, "while parked")).resolves.toEqual(expect.any(String));
+    // The row is on the wire while the pass is still parked: the submit was not
+    // queued behind it, and nothing was deferred to its follow-up ticket.
+    expect(sent.map((fields) => fields.body)).toContain("while parked");
+    expect(requestLog).toContain("SEND");
+    expect(requestLog).not.toContain("VIEWS");
+    deliveryGate.resolve(); deliveryGate = null;
+    await running;
+    await vi.waitFor(async () =>
+      expect((await runtime.readMessagingThreadState(A, CONV)).outbox).toEqual([]), { timeout: 3000 });
   });
   it("replays a send queued while offline once the connection returns", async () => {
     runtime.setMessagingAccount(A);
@@ -901,6 +947,9 @@ describe("foreground fast path", () => {
     expect((await runtime.readMessagingThreadState(A, CONV)).outbox.map((row) => row.messageId)).toEqual([messageId]);
     await waitForState((state) => state.status === "offline");
     expect(sent).toEqual([]);
+    // With no connection the submit lane attempts nothing, so the row keeps the
+    // queued state the reader already shows instead of failing an untried send.
+    expect((await runtime.readMessagingThreadState(A, CONV)).outbox.map((row) => row.status)).toEqual(["QUEUED"]);
     online = true;
     window.dispatchEvent(new Event("online"));
     await vi.waitFor(async () =>
@@ -937,8 +986,12 @@ describe("foreground fast path", () => {
     rangeMail.set(1, prefixBody(2, "Late reply"));
     const history = boundary.handles[0]!.history;
     const claim = history.claimNextOutgoing.bind(history), claimed = deferred(), release = deferred();
-    vi.spyOn(history, "claimNextOutgoing").mockImplementationOnce(async () => {
-      claimed.resolve(); await release.promise; return claim();
+    let claims = 0;
+    vi.spyOn(history, "claimNextOutgoing").mockImplementation(async (...args) => {
+      // The submit lane claims its own row first; parking the pass's later drain
+      // proves what the pass does after that row is already on its way.
+      if (++claims === 2) { claimed.resolve(); await release.promise; }
+      return claim(...args);
     });
     try {
       await runtime.sendMessagingText(A, CONV, B, "hello");
@@ -946,7 +999,9 @@ describe("foreground fast path", () => {
       await claimed.promise;
       expect(runtime.getMessagingRuntimeSnapshot().conversations
         .find((value) => value.conversationId === CONV)?.unreadCount).toBe(1);
-      expect(sent).toEqual([]);
+      // The person's own send already left on its lane; what is still pending at
+      // this point is the pass's unrelated drain, not the row's dispatch.
+      expect(sent.map((fields) => fields.body)).toContain("hello");
     } finally { release.resolve(); }
     await vi.waitFor(() => expect(sent.map((fields) => fields.body)).toContain("hello"), { timeout: 3000 });
     expect((await runtime.readMessagingThreadState(A, CONV)).messages.map((message) => message.body))
@@ -960,8 +1015,12 @@ describe("foreground fast path", () => {
     rangeGate = deferred(); rangeEntered = deferred();
     const history = boundary.handles[0]!.history;
     const claim = history.claimNextOutgoing.bind(history), claimed = deferred(), release = deferred();
-    vi.spyOn(history, "claimNextOutgoing").mockImplementationOnce(async () => {
-      claimed.resolve(); await release.promise; return claim();
+    let claims = 0;
+    vi.spyOn(history, "claimNextOutgoing").mockImplementation(async (...args) => {
+      // The submit lane claims its own row first; parking the pass's later drain
+      // proves what the pass does after that row is already on its way.
+      if (++claims === 2) { claimed.resolve(); await release.promise; }
+      return claim(...args);
     });
     try {
       await runtime.sendMessagingText(A, CONV, B, "hello");
@@ -999,8 +1058,12 @@ describe("foreground fast path", () => {
       return rows;
     });
     const claim = history.claimNextOutgoing.bind(history), claimed = deferred(), release = deferred();
-    vi.spyOn(history, "claimNextOutgoing").mockImplementationOnce(async () => {
-      claimed.resolve(); await release.promise; return claim();
+    let claims = 0;
+    vi.spyOn(history, "claimNextOutgoing").mockImplementation(async (...args) => {
+      // The submit lane claims its own row first; parking the pass's later drain
+      // proves what the pass does after that row is already on its way.
+      if (++claims === 2) { claimed.resolve(); await release.promise; }
+      return claim(...args);
     });
     try {
       await runtime.sendMessagingText(A, CONV, B, "hello");
@@ -1025,8 +1088,12 @@ describe("foreground fast path", () => {
     rangeMail.set(1, prefixBody(2, "Late reply"));
     const history = boundary.handles[0]!.history;
     const claim = history.claimNextOutgoing.bind(history), claimed = deferred(), release = deferred();
-    vi.spyOn(history, "claimNextOutgoing").mockImplementationOnce(async () => {
-      claimed.resolve(); await release.promise; return claim();
+    let claims = 0;
+    vi.spyOn(history, "claimNextOutgoing").mockImplementation(async (...args) => {
+      // The submit lane claims its own row first; parking the pass's later drain
+      // proves what the pass does after that row is already on its way.
+      if (++claims === 2) { claimed.resolve(); await release.promise; }
+      return claim(...args);
     });
     try {
       await runtime.sendMessagingText(A, CONV, B, "hello");
@@ -1036,9 +1103,13 @@ describe("foreground fast path", () => {
       expect(runtime.getMessagingRuntimeSnapshot().conversations
         .find((value) => value.conversationId === CONV)?.unreadCount ?? 0).toBe(0);
     } finally { release.resolve(); }
-    // The flush's own reconcile succeeds, so the final reload still shows it.
+    // The refused page left the prefix owed. The row was already dispatched on its
+    // lane, so the retry that repairs it is the thread's own reconcile: opening
+    // this conversation applies the late reply and publishes it.
+    const detach = runtime.watchMessagingThread(A, CONV);
     await vi.waitFor(() => expect(runtime.getMessagingRuntimeSnapshot().conversations
       .find((value) => value.conversationId === CONV)?.unreadCount).toBe(1), { timeout: 3000 });
+    detach();
   });
   it("cannot publish a reconciled frame after the account was replaced", async () => {
     runtime.setMessagingAccount(A);

@@ -1,7 +1,7 @@
-import type { HumanMessage, MessagingHistory, MessagingScope } from "./history";
+import type { HumanMessage, MessageType, MessagingHistory, MessagingScope, OutgoingAttempt } from "./history";
 import { copyContextMessage, copyLocationMessage, copyMediaMessage, copyOutgoingMessage, copyMessage, positiveSequence, uuid } from "./validation";
 import { copyMailboxEnvelope as mailbox } from "./mailbox";
-import { assessConversationHead, copyConversationHead, type ConversationGate } from "./conversationHead";
+import { assessConversationHead, copyConversationHead, type ConversationGate, type ConversationHead } from "./conversationHead";
 import { reconcileConversation as applyConversationPrefix } from "./conversationReconciliation";
 import { copyConversationProjection, type ConversationProjection } from "./conversationIndex";
 import { copyStateEnvelope, type StateChangeEnvelope } from "./stateChanges";
@@ -24,6 +24,17 @@ export type MessagingRpc = (input: MessagingScope & {
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid messaging response");
   return value as Record<string, unknown>;
+}
+
+/**
+ * The fields the server compares when it accepts a SEND. A head that moved
+ * since this device applied it is the one refusal a resend can repair.
+ */
+function headMoved(applied: ConversationHead, live: ConversationHead): boolean {
+  return applied.accountId !== live.accountId || applied.conversationId !== live.conversationId
+    || applied.streamId !== live.streamId || applied.epoch !== live.epoch || applied.revision !== live.revision
+    || applied.position !== live.position || applied.messageHead !== live.messageHead
+    || applied.stateHead !== live.stateHead;
 }
 
 /**
@@ -241,6 +252,65 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
     throw new Error("Conversation sync is incomplete. Try again.");
   };
   /**
+   * The captured payload of one claimed row, revalidated against the durable
+   * record it names. The background pass and the submit lane both send through
+   * this, so a row reaches the wire identically whichever lane moves it.
+   */
+  const outbound = async (attempt: OutgoingAttempt) => {
+    const kind = attempt.message.messageType;
+    if (!kind) throw new Error("Message classification unavailable");
+    const hasMedia = kind === "MEDIA" || kind === "VOICE";
+    // A captured report context or location keeps its own classification; a
+    // retry must never recast it to plain text.
+    const message = hasMedia ? copyMediaMessage(attempt.message)
+      : kind === "LOCATION" ? copyLocationMessage(attempt.message)
+        : attempt.message.contextReportId ? copyContextMessage(attempt.message) : copyMessage(attempt.message);
+    if (hasMedia) {
+      mediaContext().live();
+      const attachments = await history.listMedia(message.conversationId);
+      if (!attachments.some((row) => row.messageId === message.id)) throw new Error("Attachment unavailable");
+    }
+    if (message.authorId !== scope.accountId) throw new Error("Invalid messaging author");
+    return { kind, message, hasMedia };
+  };
+  /**
+   * A local erase can win after the claim, removing both parent visibility and
+   * attachment metadata. Never downgrade its captured caption to TEXT.
+   */
+  const stillPending = async (message: HumanMessage) => {
+    const live = await history.getMessage(message.id);
+    assertOpen();
+    if (!live || live.server || live.unsentAt !== undefined || live.messageType !== message.messageType
+      || live.contextReportId !== message.contextReportId
+      || live.replyToId !== message.replyToId
+      || JSON.stringify(live.location ?? null) !== JSON.stringify(message.location ?? null)) {
+      throw new Error("Message is no longer pending");
+    }
+  };
+  const sendWire = (kind: MessageType, message: HumanMessage, attempt: OutgoingAttempt,
+    expectedHead: ConversationHead) => ({
+    conversationId: message.conversationId, recipientId: message.recipientId,
+    messageId: message.id, body: message.body,
+    expectedHead,
+    ...(kind !== "TEXT" ? { messageType: kind } : {}),
+    ...(message.contextReportId ? { contextReportId: message.contextReportId } : {}),
+    ...(message.replyToId ? { replyToId: message.replyToId } : {}),
+    ...(message.location ? { location: message.location } : {}),
+    // The instant the user composed it, so a receiver's transcript and
+    // photo-run detector do not depend on delivery latency.
+    ...(message.createdAt !== undefined && message.createdAt > 0 ? { createdAt: message.createdAt } : {}),
+    // Absent for a pre-v8 queued row: the server refuses it rather than
+    // letting this client re-bind an old send to a newer boundary.
+    ...(attempt.expectedEpoch ? { expectedEpoch: attempt.expectedEpoch } : {}),
+  });
+  const dispatch = async (kind: MessageType, message: HumanMessage, hasMedia: boolean,
+    attempt: OutgoingAttempt, expectedHead: ConversationHead) => {
+    await stillPending(message);
+    if (hasMedia) mediaContext().live();
+    const accepted = await call("SEND", sendWire(kind, message, attempt, expectedHead));
+    if (accepted !== message.id) throw new Error("Invalid messaging acknowledgement");
+  };
+  /**
    * Moves the durable outbox and settles its echoes.
    *
    * `sync` is the number of mailbox envelopes this pass itself settled, or
@@ -269,50 +339,11 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
         const attempt = await history.claimNextOutgoing(failed);
         if (!attempt) break;
         try {
-          const kind = attempt.message.messageType;
-          if (!kind) throw new Error("Message classification unavailable");
-          const hasMedia = kind === "MEDIA" || kind === "VOICE";
-          // A captured report context or location keeps its own classification;
-          // a retry must never recast it to plain text.
-          const message = hasMedia ? copyMediaMessage(attempt.message)
-            : kind === "LOCATION" ? copyLocationMessage(attempt.message)
-              : attempt.message.contextReportId ? copyContextMessage(attempt.message) : copyMessage(attempt.message);
-          if (hasMedia) {
-            mediaContext().live();
-            const attachments = await history.listMedia(message.conversationId);
-            if (!attachments.some((row) => row.messageId === message.id)) throw new Error("Attachment unavailable");
-          }
-          if (message.authorId !== scope.accountId) throw new Error("Invalid messaging author");
+          const { kind, message, hasMedia } = await outbound(attempt);
           // This pass already applied account state, so the thread repair reads
           // the HEAD it is gated on instead of re-ACKing and re-syncing first.
           const expectedHead = await reconcileConversation(message.conversationId, undefined, true);
-          // A local erase can win after the claim, removing both parent visibility
-          // and attachment metadata. Never downgrade its captured caption to TEXT.
-          const live = await history.getMessage(message.id);
-          assertOpen();
-          if (!live || live.server || live.unsentAt !== undefined || live.messageType !== message.messageType
-            || live.contextReportId !== message.contextReportId
-            || live.replyToId !== message.replyToId
-            || JSON.stringify(live.location ?? null) !== JSON.stringify(message.location ?? null)) {
-            throw new Error("Message is no longer pending");
-          }
-          if (hasMedia) mediaContext().live();
-          const accepted = await call("SEND", {
-            conversationId: message.conversationId, recipientId: message.recipientId,
-            messageId: message.id, body: message.body,
-            expectedHead,
-            ...(kind !== "TEXT" ? { messageType: kind } : {}),
-            ...(message.contextReportId ? { contextReportId: message.contextReportId } : {}),
-            ...(message.replyToId ? { replyToId: message.replyToId } : {}),
-            ...(message.location ? { location: message.location } : {}),
-            // The instant the user composed it, so a receiver's transcript and
-            // photo-run detector do not depend on delivery latency.
-            ...(message.createdAt !== undefined && message.createdAt > 0 ? { createdAt: message.createdAt } : {}),
-            // Absent for a pre-v8 queued row: the server refuses it rather than
-            // letting this client re-bind an old send to a newer boundary.
-            ...(attempt.expectedEpoch ? { expectedEpoch: attempt.expectedEpoch } : {}),
-          });
-          if (accepted !== message.id) throw new Error("Invalid messaging acknowledgement");
+          await dispatch(kind, message, hasMedia, attempt, expectedHead);
         } catch (error) {
           await history.failOutgoing(attempt);
           failed.push(attempt.message.id);
@@ -336,6 +367,67 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
     // stays set until here, so no second pass can own it.
     flushing = run().finally(() => { flushing = null; statePass = null; });
     return flushing;
+  };
+  /**
+   * The submit lane: dispatch one user send that is already durable.
+   *
+   * A submit otherwise waits for a whole refresh pass — projections, the active
+   * thread and any pass already running — before its SEND is even attempted.
+   * This lane claims the same durable row, builds the same wire payload and
+   * sends it with the head this device already applied instead of a fresh HEAD.
+   * Everything that keeps the row safe is unchanged: the client identity, the
+   * captured boundary, the claim lease and echo settlement. A row this lane does
+   * not settle stays queued for the next background pass.
+   */
+  const sendNow = async (conversationId: string, messageId: string): Promise<void> => {
+    assertOpen();
+    const conversation = uuid(conversationId), id = uuid(messageId);
+    // Claim only this row: every other queued row is excluded, so a submit never
+    // holds a lease for work it is not going to attempt.
+    const queued = await history.listOutbox();
+    assertOpen();
+    if (!queued.some((row) => row.messageId === id)) return;
+    const attempt = await history.claimNextOutgoing(queued.filter((row) => row.messageId !== id)
+      .map((row) => row.messageId));
+    assertOpen();
+    // A pass holds the lease, or the echo already settled the row.
+    if (!attempt) return;
+    if (attempt.message.id !== id) {
+      // Another row was admitted between the read and the claim. Release the
+      // lease this lane will not use and leave that row to the ordinary pass.
+      await history.failOutgoing(attempt);
+      return;
+    }
+    try {
+      const { kind, message, hasMedia } = await outbound(attempt);
+      if (message.conversationId !== conversation) throw new Error("Invalid messaging conversation");
+      // The head this device last applied is what a SEND is compared against, so
+      // the common case needs no HEAD at all. A device that never applied one
+      // reads it once instead of inventing a value the server would refuse.
+      const applied = await history.getConversationCheckpoint(conversation);
+      assertOpen();
+      const expectedHead = applied ?? copyConversationHead(await call("HEAD", { conversationId: conversation }));
+      try {
+        await dispatch(kind, message, hasMedia, attempt, expectedHead);
+      } catch (error) {
+        // The shared transport reports a refusal as one message, so staleness is
+        // established by asking for the live head once: only a head that moved
+        // since this device applied it can be repaired, and it is repaired with
+        // exactly one HEAD and one retry. Anything else takes the ordinary
+        // failure path below.
+        let live: ConversationHead | null = null;
+        try { live = copyConversationHead(await call("HEAD", { conversationId: conversation })); }
+        catch { /* a head read that also fails proves nothing: the failure stands */ }
+        if (!live) throw error;
+        if (!headMoved(expectedHead, live)) throw error;
+        await dispatch(kind, message, hasMedia, attempt, live);
+      }
+    } catch (error) {
+      await history.failOutgoing(attempt);
+      throw error;
+    }
+    // The SEND is on the wire. Its echo, and with it the durable outbox entry,
+    // is still persisted by the ordinary pass exactly as before.
   };
 
   const flushMedia = (): Promise<void> => {
@@ -625,7 +717,7 @@ export function createMessagingSession(identity: MessagingScope, history: Messag
       if (!await history.retryOutgoing(id, epoch)) throw new Error("Message is no longer retryable");
       assertOpen();
     },
-    sync, syncState, flush, refreshConversations, flushMedia, syncMedia, clearMediaRetry,
+    sync, syncState, flush, sendNow, refreshConversations, flushMedia, syncMedia, clearMediaRetry,
     reconcileConversation,
     needsMediaDiscovery: () => mediaDiscoveryRevision !== discoveredMediaRevision,
     close() { controller.abort(); mediaController.abort(); return Promise.resolve(history.close()); },
