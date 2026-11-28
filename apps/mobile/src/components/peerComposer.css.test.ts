@@ -46,17 +46,26 @@ function containerBody(source: string) {
   return "";
 }
 
-/** One selector's declaration body in flat source. No body here nests braces. */
+/**
+ * Every declaration body for a selector in flat source, joined with one space.
+ *
+ * A selector can be declared by more than one rule: it may share a grouped
+ * appearance rule (`.a, .b { ... }`) and own a later geometry rule of its own,
+ * so stopping at the first match hides its real declarations. All matches at a
+ * token boundary are collected instead. No body here nests braces.
+ */
 function body(selector: string, source: string) {
+  const bodies: string[] = [];
   let from = 0;
   for (;;) {
     const at = source.indexOf(`${selector} {`, from);
-    if (at < 0) return "";
+    if (at < 0) return bodies.join(" ");
     const boundary = at === 0 ? "" : source[at - 1]!;
     if (boundary === "" || /[\s;}]/.test(boundary)) {
       const open = source.indexOf("{", at);
-      const close = source.indexOf("}", open);
-      return close < 0 ? "" : source.slice(open + 1, close);
+      const close = open < 0 ? -1 : source.indexOf("}", open);
+      if (close < 0) return bodies.join(" ");
+      bodies.push(source.slice(open + 1, close));
     }
     from = at + selector.length;
   }
