@@ -105,15 +105,15 @@ describe("peer composer narrow container layout", () => {
     const send = body(".fb-peer-composer-row .fb-peer-send", dockNarrow);
     expect(send).toContain("grid-column: 3;");
     expect(send).toContain("justify-self: end;");
-    // Every action still declares a real target: the row icons keep 48px and
-    // the tray keeps Messenger's measured 44px disclosure and 40px shortcuts
-    // instead of the old one-size row shrink.
+    // Every action still declares a real target: the row icons keep 48px, the
+    // tray's standalone disclosure is a 48px target, and the shortcuts keep
+    // their 40px glyph boxes instead of the old one-size row shrink.
     const icon = body(".fb-peer-icon", wide);
     expect(icon).toContain("min-width: 48px;");
     expect(icon).toContain("min-height: 48px;");
     const disclosure = body(".fb-attachment-disclosure", dockFlat);
-    expect(disclosure).toContain("width: 44px;");
-    expect(disclosure).toContain("height: 44px;");
+    expect(disclosure).toContain("width: 48px;");
+    expect(disclosure).toContain("height: 48px;");
     const shortcut = body(".fb-attachment-shortcut", dockFlat);
     expect(shortcut).toContain("width: 40px;");
     expect(shortcut).toContain("height: 40px;");

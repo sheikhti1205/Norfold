@@ -22,11 +22,11 @@
   color: var(--fb-on-surface-variant);
 }
 
-/* Messenger's measured row: a 40 dp leading slot and 40 dp inline shortcuts,
-   with a 44 px hit area where one control stands alone. */
+/* The standalone disclosure — the only control in the narrow tray — is a 48px
+   target; the inline shortcuts keep their 40px glyph boxes in the wide strip. */
 .fb-attachment-disclosure {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   min-width: 40px;
   min-height: 40px;
 }
@@ -122,7 +122,7 @@
 .fb-attachment-tray[data-presentation="narrow"] { position: relative; }
 
 .fb-attachment-tray[data-presentation="narrow"] > .fb-attachment-menu {
-  /* A percentage width would resolve against the 44px tray, not the composer,
+  /* A percentage width would resolve against the 48px tray, not the composer,
      so the panel takes its own measure bounded by the composer it belongs to
      (the shapes the app already sizes pickers with). */
   width: min(16rem, calc(100cqw - 8px));
@@ -170,3 +170,24 @@
 }
 
 .fb-attachment-menu-item:disabled { opacity: .45; }
+
+/* The room the narrow list needs. It opens upward from a `+` that sits in a
+   composer pinned to the foot of the comments sheet, and that sheet clips at
+   its own top edge: `.fb-comments-body` is `overflow: hidden` on a phone so the
+   thread owns the scroll and the composer never moves (adaptiveFoundation.css).
+   With an empty thread the sheet is only as tall as the composer, so the panel
+   — two 48px rows, 6px padding above and below, the 2px gap, the layer's 2px
+   border and its 8px offset above the tray, 120px in all — did not fit above
+   the tray. Its top was clipped away instead of scrolled: the panel's own
+   `overflow-y: auto` has nothing to scroll while every row is already painted,
+   which is why swiping inside it never brought the first row back, and why the
+   row survived as soon as the thread itself gave the sheet some height.
+   The thread therefore owns that room for exactly as long as the list is open.
+   `:has()` keeps this off every other surface: the wide strip renders no panel,
+   and the chat composer already has a full-height pane above it. A thread
+   taller than 128px keeps its own height. */
+@media (max-width: 767px) {
+  .fb-modal-backdrop:has(.fb-comments-panel .fb-attachment-menu) .fb-comment-thread {
+    min-height: 128px;
+  }
+}
