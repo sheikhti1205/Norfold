@@ -9,6 +9,16 @@ import { BottomSheet } from "./BottomSheet";
 import { consumeBackIntercept, resetBackInterceptors } from "./backNavigation";
 import { resetModalLayers } from "../hooks/modalLayers";
 
+// The shell's IME bridge is native-only; jsdom never reaches it. A controllable
+// sink lets a test drive the visibility the docked comments sheet keys on.
+const imeSink = vi.hoisted(() => ({ current: null as null | ((state: { known: boolean; visible: boolean }) => void) }));
+vi.mock("../native/ime", () => ({
+  subscribeNativeIme: (sink: (state: { known: boolean; visible: boolean }) => void) => {
+    imeSink.current = sink;
+    return () => { if (imeSink.current === sink) imeSink.current = null; };
+  },
+}));
+
 afterEach(() => { cleanup(); resetBackInterceptors(); resetModalLayers(); });
 
 it("keeps Cancel available when confirmation authority disappears without an operation in flight", () => {
@@ -150,6 +160,57 @@ it("gives the report viewer its own panel", async () => {
   expect(viewer.closest(".fb-modal-panel")?.classList.contains("fb-report-panel")).toBe(true);
 });
 
+it("renders the comments conversation on its own panel at a phone viewport", async () => {
+  const previous = window.innerWidth;
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 393 });
+  try {
+    render(<AdaptiveTaskSurface open onClose={() => {}} title="Comments" width="comments" bodyClassName="fb-comments-body"><p>Thread</p></AdaptiveTaskSurface>);
+    const dialog = await screen.findByRole("dialog", { name: "Comments" });
+    const panel = dialog.closest(".fb-modal-panel");
+    expect(panel?.classList.contains("fb-comments-panel")).toBe(true);
+    expect(panel?.classList.contains("fb-task-panel")).toBe(false);
+    // The docking itself is a media rule: jsdom does not apply media queries,
+    // so the phone geometry is asserted against the declarations below.
+    expect(document.querySelector(".fb-modal-backdrop")?.contains(panel ?? null)).toBe(true);
+    expect(dialog.querySelector(".fb-surface-body.fb-comments-body")).toBeTruthy();
+  } finally {
+    cleanup();
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: previous });
+  }
+});
+
+it("leaves every other overlay variant on its own panel", async () => {
+  for (const [width, variant] of [["standard", "fb-task-panel"], ["compact", "fb-compact-panel"], ["report", "fb-report-panel"]] as const) {
+    const rendered = render(<AdaptiveTaskSurface open onClose={() => {}} title={`Surface ${width}`} width={width}><p>Body</p></AdaptiveTaskSurface>);
+    const dialog = await screen.findByRole("dialog", { name: `Surface ${width}` });
+    const panel = dialog.closest(".fb-modal-panel");
+    expect(panel?.classList.contains(variant)).toBe(true);
+    expect(panel?.classList.contains("fb-comments-panel")).toBe(false);
+    rendered.unmount();
+  }
+});
+
+it("marks the comments panel only while the shell reports the IME", async () => {
+  render(<AdaptiveTaskSurface open onClose={() => {}} title="Comments" width="comments"><p>Thread</p></AdaptiveTaskSurface>);
+  await screen.findByRole("dialog", { name: "Comments" });
+  const panel = document.querySelector(".fb-comments-panel") as HTMLElement;
+  expect(panel.hasAttribute("data-ime")).toBe(false);
+  act(() => imeSink.current?.({ known: true, visible: true }));
+  expect(panel.getAttribute("data-ime")).toBe("open");
+  act(() => imeSink.current?.({ known: true, visible: false }));
+  expect(panel.hasAttribute("data-ime")).toBe(false);
+  // A shell that cannot read the IME is not treated as open.
+  act(() => imeSink.current?.({ known: false, visible: true }));
+  expect(panel.hasAttribute("data-ime")).toBe(false);
+});
+
+it("does not subscribe an overlay that is not the docked comments sheet", async () => {
+  render(<AdaptiveTaskSurface open onClose={() => {}} title="Edit report"><input aria-label="Report title" /></AdaptiveTaskSurface>);
+  await screen.findByRole("dialog", { name: "Edit report" });
+  expect(imeSink.current).toBeNull();
+  expect(document.querySelector(".fb-modal-panel")?.hasAttribute("data-ime")).toBe(false);
+});
+
 it("takes the whole phone screen only when a surface opts in", async () => {
   const card = render(<AdaptiveTaskSurface open onClose={() => {}} title="Report a problem"><p>Card</p></AdaptiveTaskSurface>);
   const plain = await screen.findByRole("dialog", { name: "Report a problem" });
@@ -232,6 +293,56 @@ describe("compact surface declarations", () => {
     const commentsBody = rule(".fb-surface-body.fb-comments-body");
     expect(commentsBody).toContain("flex: 1 1 auto;");
     expect(commentsBody).not.toContain("flex: 1;");
+  });
+
+  it("docks only the comments variant to the phone's keyboard edge", () => {
+    const backdrop = phoneRule(".fb-modal-backdrop:has(.fb-comments-panel)");
+    expect(backdrop).toContain("align-items: flex-end;");
+    expect(backdrop).toContain("padding-inline: 0;");
+    expect(backdrop).toContain("padding-bottom: 0;");
+    const docked = phoneRule(".fb-modal-backdrop:has(.fb-comments-panel) .fb-comments-panel");
+    expect(docked).toContain("width: 100%;");
+    expect(docked).toContain("max-width: none;");
+    expect(docked).toContain("max-height: calc(100% - 24px);");
+    expect(docked).toContain("border-radius: 24px 24px 0 0;");
+    // Desktop and the tablet card keep the centred surface on its own measure.
+    expect(rule(".fb-modal-backdrop")).toContain("align-items: center;");
+    expect(rule(".fb-comments-panel")).toContain("max-width: 36rem;");
+  });
+
+  it("makes the thread the comments scroller and the composer the panel's foot", () => {
+    const body = phoneRule(".fb-modal-backdrop:has(.fb-comments-panel) .fb-surface-body.fb-comments-body");
+    expect(body).toContain("overflow: hidden;");
+    const thread = phoneRule(".fb-modal-backdrop:has(.fb-comments-panel) .fb-comment-thread");
+    expect(thread).toContain("flex: 1 1 auto;");
+    expect(thread).toContain("min-height: 0;");
+    expect(thread).toContain("overflow-y: auto;");
+    const foot = phoneRule(".fb-modal-backdrop:has(.fb-comments-panel) .fb-comments-composer");
+    expect(foot).toContain("position: static;");
+    expect(foot).toContain("flex: none;");
+    // The safe-area tail survives for the closed keyboard. Only the shell's own
+    // IME reading zeroes it, and only while the keyboard is actually up.
+    expect(foot).not.toContain("padding-bottom");
+    const gated = phoneRule('.fb-comments-panel[data-ime="open"] .fb-comments-composer');
+    expect(gated).toContain("padding-bottom: 8px;");
+    expect(gated).not.toContain("env(safe-area-inset-bottom)");
+    // Outside the docked phone case the body still scrolls and the foot sticks.
+    expect(rule(".fb-surface-body.fb-comments-body")).toContain("flex: 1 1 auto;");
+    expect(rule(".fb-comments-composer")).toContain("position: sticky;");
+    expect(rule(".fb-comments-composer")).toContain("env(safe-area-inset-bottom)");
+  });
+
+  it("adds no docking rule to any other overlay variant", () => {
+    const block = media("max-width: 767px");
+    const inner = block.slice(block.indexOf("{") + 1, block.lastIndexOf("}"));
+    const docked = [...inner.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+      .filter(([, , body]) => /align-items: flex-end|max-width: none;/.test(body ?? ""))
+      .map(([, selector]) => (selector ?? "").trim().replace(/\s+/g, " "));
+    expect(docked.length).toBeGreaterThan(0);
+    for (const selector of docked) expect(selector).toContain("fb-comments-panel");
+    // The task card, the immersive opt-in and the report keep their own rules.
+    expect(phoneRule(".fb-modal-backdrop:has(.fb-task-panel)")).toContain("padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));");
+    expect(phoneRule(".fb-task-panel")).toContain("border-radius: 20px;");
   });
 
   it("keeps a phone task dialog a card instead of a full screen", () => {

@@ -301,6 +301,48 @@
     padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
   }
   .fb-modal-panel[data-immersive="true"] .fb-surface-dialog { height: 100%; }
+  /* The comments conversation is a sheet on the keyboard's edge, never a card
+     centred in the band above it. The overlay already ends at the IME top
+     (AdaptiveTaskSurface measures the visual viewport), so the panel takes the
+     band's foot: no inline gutter and no bottom padding. The 24px ceiling keeps
+     the scrim and the rounded top edge visible. Wide windows and the tablet card
+     keep the centred surface; this is not a full-screen sheet and drops no other
+     variant. */
+  .fb-modal-backdrop:has(.fb-comments-panel) {
+    align-items: flex-end;
+    padding-inline: 0;
+    padding-bottom: 0;
+  }
+  .fb-modal-backdrop:has(.fb-comments-panel) .fb-comments-panel {
+    width: 100%;
+    max-width: none;
+    max-height: calc(100% - 24px);
+    border-radius: 24px 24px 0 0;
+  }
+  /* Two parts, not two scrollers: the thread owns the scroll and the composer
+     is the panel's foot. `sticky` did nothing while the auto-height card had no
+     overflow of its own, and the foot always touches the keyboard edge. */
+  .fb-modal-backdrop:has(.fb-comments-panel) .fb-surface-body.fb-comments-body {
+    overflow: hidden;
+  }
+  .fb-modal-backdrop:has(.fb-comments-panel) .fb-comment-thread {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  /* The safe-area tail stays in the base `.fb-comments-composer` rule for the
+     closed keyboard. Only the shell's own IME reading (the `data-ime` marker
+     from `src/native/ime.ts`) proves the keyboard covers that inset, so only
+     then does the foot drop it. An older shell that cannot report reads as
+     unknown and keeps the inset rather than guessing. */
+  .fb-modal-backdrop:has(.fb-comments-panel) .fb-comments-composer {
+    position: static;
+    flex: none;
+  }
+  .fb-comments-panel[data-ime="open"] .fb-comments-composer {
+    padding-bottom: 8px;
+  }
 }
 /* No spatial entrance travel: effective reduced motion has no hidden animation
    path. Feedback is local background/focus state, not springing whole panels. */

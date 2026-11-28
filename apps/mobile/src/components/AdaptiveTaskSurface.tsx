@@ -1,7 +1,8 @@
-import { useId, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { Button, Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 import { X } from "lucide-react";
 import { useKeyboardInset } from "../hooks/keyboardInset";
+import { subscribeNativeIme } from "../native/ime";
 import { useHoverLabel } from "./HoverLabel";
 import { OverlayDepthProvider, OverlayStackBridge, useOverlayDepth } from "./overlayFoundation";
 
@@ -39,10 +40,30 @@ function panelClass(width: SurfaceProps["width"], confirmation: boolean) {
   return "fb-task-panel";
 }
 
+/**
+ * Whether the shell reports the soft keyboard as visible.
+ *
+ * This reuses the editor's existing channel (`src/native/ime.ts`) instead of
+ * deriving a second one: the Android shell resizes its window with the IME, so
+ * layout and visual heights are equal and no viewport geometry can tell the
+ * keyboard apart from a short screen. `known: false` (a browser, iOS, or an
+ * older shell) is not guessed at — the marker simply stays off. Only the open
+ * docked comments sheet subscribes, so every other overlay reads nothing.
+ */
+function useNativeImeOpen(enabled: boolean): boolean {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (!enabled) return;
+    return subscribeNativeIme((state) => setVisible(state.known && state.visible));
+  }, [enabled]);
+  return enabled && visible;
+}
+
 function DialogSurface({ open, onClose, title, description, children, footer, busy = false, confirmation = false, width = "standard", bodyClassName, headerless = false, immersive = false }: SurfaceProps & { confirmation?: boolean }) {
   const depth = useOverlayDepth();
   const descriptionId = useId();
   const viewport = useKeyboardInset();
+  const imeOpen = useNativeImeOpen(width === "comments" && open);
   const { hoverLabel } = useHoverLabel();
   return <ModalOverlay isOpen={open} onOpenChange={(value) => { if (!value && !busy) onClose(); }}
     isDismissable={!confirmation && !busy} isKeyboardDismissDisabled
@@ -52,7 +73,7 @@ function DialogSurface({ open, onClose, title, description, children, footer, bu
       top: Math.max(0, window.innerHeight - viewport.insetPx - viewport.viewportHeightPx),
       bottom: "auto",
     }}>
-    <Modal className={`fb-modal-panel ${panelClass(width, confirmation)}`} data-immersive={immersive ? "true" : undefined}>
+    <Modal className={`fb-modal-panel ${panelClass(width, confirmation)}`} data-immersive={immersive ? "true" : undefined} data-ime={imeOpen ? "open" : undefined}>
       <OverlayDepthProvider depth={depth}>
         <OverlayStackBridge onClose={onClose} dismissible={!busy} />
         <Dialog role={confirmation ? "alertdialog" : "dialog"}
