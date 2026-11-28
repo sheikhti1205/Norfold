@@ -496,6 +496,21 @@ dependencies {
     // Real org.json so Capacitor JSObject/JSArray serialization is exercised on
     // the JVM instead of the throwing mockable android.jar stubs.
     testImplementation "org.json:json:20240303"
+    // 16 KiB page compliance (Play page-size requirement). Constraints raise a
+    // transitively selected version without adding a dependency of their own.
+    constraints {
+        // CameraX 1.4.2 (transitive via @capacitor/camera →
+        // io.ionic.libs:ioncamera-android) ships libimage_processing_util_jni.so
+        // and libsurface_util_jni.so whose GNU_RELRO ends on a page that still
+        // holds writable data, which faults on 16 KB page-size devices. 1.6.2
+        // is verified compliant on arm64-v8a and x86_64.
+        implementation "androidx.camera:camera-core:$cameraCoreVersion"
+        // DataStore 1.1.7 (transitive via firebase-messaging → firebase-common)
+        // ships libdatastore_shared_counter.so with the same unaligned GNU_RELRO
+        // end; 1.3.0 is verified compliant on both 64-bit ABIs.
+        implementation "androidx.datastore:datastore-preferences:$datastoreVersion"
+        implementation "androidx.datastore:datastore-core:$datastoreVersion"
+    }
 }
 
 apply from: 'capacitor.build.gradle'

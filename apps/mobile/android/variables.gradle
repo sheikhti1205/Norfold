@@ -15,6 +15,16 @@ ext {
     cordovaAndroidVersion = '14.0.1'
     kotlinVersion = '2.4.0'
     androidxExifInterfaceVersion = '1.4.2'
+    // 16 KiB page compliance: CameraX 1.4.2's libimage_processing_util_jni.so
+    // and libsurface_util_jni.so end their GNU_RELRO segment on a page that
+    // still holds writable data, which faults on 16 KB page-size devices.
+    // 1.6.2 is verified compliant on arm64-v8a and x86_64. Applied as a
+    // constraint in app/build.gradle so every transitive path resolves it.
+    cameraCoreVersion = '1.6.2'
+    // Same rule for DataStore: 1.1.7's libdatastore_shared_counter.so is
+    // non-compliant on both 64-bit ABIs; 1.3.0 is verified compliant.
+    // Constrained in app/build.gradle.
+    datastoreVersion = '1.3.0'
     // On-device vision (SmolVLM2-500M via LiteRT-LM). Pinned exact — never
     // dynamic — so every build resolves the same AAR. Verified present on
     // Google Maven stable 0.18.0; current Qwen3 1.7B requires >=0.18.0.

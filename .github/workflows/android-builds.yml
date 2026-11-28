@@ -337,6 +337,7 @@ jobs:
             LOADS=0
             BAD_LOADS=0
             ALIGN_LIST=""
+            LOAD_END=0
             RELRO_OK="absent"
             RELRO_DESC="GNU_RELRO absent"
             INPH=0
@@ -352,6 +353,8 @@ jobs:
                   LOADS=$((LOADS + 1))
                   ALIGN="${@: -1}"
                   ALIGN_LIST="${ALIGN_LIST:+$ALIGN_LIST,}$ALIGN"
+                  # Last PT_LOAD before GNU_RELRO is the one that contains it.
+                  LOAD_END=$(( $3 + $6 ))
                   if ! (( ALIGN >= 0x4000 )); then BAD_LOADS=$((BAD_LOADS + 1)); fi
                   ;;
                 GNU_RELRO)
@@ -359,9 +362,12 @@ jobs:
                   if [ $(( RELRO_END % 16384 )) -eq 0 ]; then
                     RELRO_OK="yes"
                     RELRO_DESC="GNU_RELRO end $(printf '0x%x' "$RELRO_END") 16 KiB-aligned"
+                  elif [ "$RELRO_END" -eq "$LOAD_END" ]; then
+                    RELRO_OK="yes"
+                    RELRO_DESC="GNU_RELRO end $(printf '0x%x' "$RELRO_END") = LOAD tail (no writable data after)"
                   else
                     RELRO_OK="no"
-                    RELRO_DESC="GNU_RELRO end $(printf '0x%x' "$RELRO_END") NOT 16 KiB-aligned"
+                    RELRO_DESC="GNU_RELRO end $(printf '0x%x' "$RELRO_END") not 16 KiB-aligned and not the LOAD tail $(printf '0x%x' "$LOAD_END") (writable data follows)"
                   fi
                   ;;
               esac
